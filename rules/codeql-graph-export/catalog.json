@@ -1711,6 +1711,218 @@
           ]
         }
       ]
+    },
+    "swift": {
+      "model_library": "codeql/swift-all",
+      "export_pack": "appsec-review/graph-export-swift",
+      "sinks": [
+        {
+          "rule_id": "swift.sink.api.datatask",
+          "match": {
+            "api": "dataTask",
+            "declared_in": [
+              "Foundation.URLSession",
+              "FoundationNetworking.URLSession"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "swift.sink.api.downloadtask",
+          "match": {
+            "api": "downloadTask",
+            "declared_in": [
+              "Foundation.URLSession",
+              "FoundationNetworking.URLSession"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "swift.sink.api.unarchivetoplevelobjectwithdata",
+          "match": {
+            "api": "unarchiveTopLevelObjectWithData",
+            "declared_in": [
+              "Foundation.NSKeyedUnarchiver"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "swift.sink.api.unarchiveobject",
+          "match": {
+            "api": "unarchiveObject",
+            "declared_in": [
+              "Foundation.NSKeyedUnarchiver"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "swift.sink.api.allocate",
+          "match": {
+            "api": "allocate",
+            "declared_in": [
+              "Swift.UnsafeMutablePointer",
+              "Swift.UnsafeMutableRawPointer"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-789"
+        },
+        {
+          "rule_id": "swift.sink.model.sqlinjectionsink",
+          "match": {
+            "model": "SqlInjectionSink"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "swift.sink.model.commandinjectionsink",
+          "match": {
+            "model": "CommandInjectionSink"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "swift.sink.model.pathinjectionsink",
+          "match": {
+            "model": "PathInjectionSink"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "swift.sink.model.unsafeunpacksink",
+          "match": {
+            "model": "UnsafeUnpackSink"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "swift.sink.model.xxesink",
+          "match": {
+            "model": "XxeSink"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "swift.sink.model.unsafejsevalsink",
+          "match": {
+            "model": "UnsafeJsEvalSink"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "swift.sink.model.uncontrolledformatstringsink",
+          "match": {
+            "model": "UncontrolledFormatStringSink"
+          },
+          "sink_class": "format_string",
+          "cwe_family": "CWE-134"
+        },
+        {
+          "rule_id": "swift.sink.model.unsafewebviewfetchsink",
+          "match": {
+            "model": "UnsafeWebViewFetchSink"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "swift.sink.model.cleartextloggingsink",
+          "match": {
+            "model": "CleartextLoggingSink"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-312"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "swift.source.api.arguments",
+          "match": {
+            "api": "arguments",
+            "declared_in": [
+              "Swift.CommandLine"
+            ],
+            "index": -1
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "swift.source.api.environment",
+          "match": {
+            "api": "environment",
+            "declared_in": [
+              "Foundation.ProcessInfo"
+            ],
+            "index": -1
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "swift.source.model.remoteflowsource",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "swift.source.model.localflowsource",
+          "match": {
+            "model": "LocalFlowSource"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "swift.sanitizer.resolvingsymlinksinpath",
+          "api": "resolvingSymlinksInPath",
+          "declared_in": [
+            "Foundation.URL",
+            "Foundation.NSURL"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "swift.sanitizer.lexicallynormalized",
+          "api": "lexicallyNormalized",
+          "declared_in": [
+            "System.FilePath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "swift.sanitizer.sqlite3_bind_text",
+          "api": "sqlite3_bind_text",
+          "declared_in": [
+            "SQLite3"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        }
+      ]
     }
   }
 }
