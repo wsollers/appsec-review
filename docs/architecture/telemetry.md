@@ -40,10 +40,21 @@ Lifecycle families are:
   scope available to the metrics derivation without copying mutable aggregate counters into events.
 
 `appsec-review metrics --run-id <id>` deterministically rebuilds and persists
-`data/telemetry/summary.json` using `appsec-review/run-metrics/3`. It separates end-to-end wall time, per-job wall spans, summed
+`data/telemetry/summary.json` using `appsec-review/run-metrics/4`. It separates end-to-end wall time, per-job wall spans, summed
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
 events remain authoritative; the summary is a regenerable operator view.
+
+Version 4 adds the top-level `codeql` section (`appsec-review/codeql-execution-metrics/1`). Every
+CodeQL action (database, analyze, compile, export) is one row derived from its
+`TOOL_INVOCATION_COMPLETED`, `CODEQL_ACTION_SKIPPED`, or `CODEQL_ACTION_FAILED` event. Each event
+carries language, source languages, build mode, action, query pack, pack version, and suite; runtime
+comes from the hash-verified execution receipt. Rows are aggregated by query pack, by language, by
+query pack x language, and by source language, each with per-status counts and runtime
+total/min/max/p50/p95. Per-query rows come from the run-owned
+`appsec-review/codeql-query-metrics/1` document named by the event's `query_metrics` identity;
+an absent source is a named gap, never zero. See
+[CodeQL execution telemetry](../operations/codeql-analysis.md#execution-telemetry).
 
 The `review` section uses `appsec-review/review-metrics-semantics/1`. Source classification is
 `appsec-review/source-counting/1`: language is extension-based; SLOC is the number of non-empty
