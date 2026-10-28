@@ -284,7 +284,11 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
             }
             if outcome not in APPLICABILITY_OUTCOMES:
                 raise AssertionError("invalid applicability outcome")
-            row["applicability_fingerprint"] = _hash(row)
+            if assessment_mode == "assessment":
+                from .assessment import _semantic
+                row["applicability_fingerprint"] = _hash(_semantic(row))
+            else:
+                row["applicability_fingerprint"] = _hash(row)
             rows.append(row)
     return tuple(sorted(rows, key=lambda item: (item["component_id"], item["control_identity"])))
 
@@ -547,6 +551,8 @@ def deterministic_join(rows: Sequence[Mapping[str, Any]], verified_results: Sequ
             "standard": row["standard"], "version": row["version"], "profile": row["profile"],
             "assessment_mode": row.get("assessment_mode", "qualification"),
             "execution_completion": result.get("execution_completion", "completed") if result else "not_dispatched",
+            "worker_attempt_count": result.get("worker_attempt_count", 0) if result else 0,
+            "reviewer_attempt_count": result.get("reviewer_attempt_count", 0) if result else 0,
             "coverage_completeness": result.get("coverage_completeness", "unresolved") if result else
                                      "not_applicable" if row["outcome"] == "not_applicable" else "unresolved",
             "control_status": result["status"] if result else "not_assessed",
@@ -558,6 +564,7 @@ def deterministic_join(rows: Sequence[Mapping[str, Any]], verified_results: Sequ
                                   and row.get("assessment_mode") == "assessment"),
             "disagreements": result.get("disagreements", []) if result else [],
             "gaps": list(row.get("gaps", ())) + (list(result.get("gaps", ())) if result else []),
+            "limitations": list(result.get("limitations", ())) if result else [],
         })
     if by_row:
         raise ValueError(f"validator returned results outside selection: {sorted(by_row)}")

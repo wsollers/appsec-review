@@ -994,7 +994,8 @@ def _control_resolver(run_root: Path, snapshot: str, publication: Mapping[str, A
     if core.manifest["target_snapshot"] != snapshot:
         raise ValueError("OWASP publication concerns a different target snapshot")
     return EvidenceResolver(core, accept_manifest(run_root, manifest_path=path,
-                                                  manifest_sha256=upstream["sha256"]))
+                                                  manifest_sha256=upstream["sha256"]),
+                            max_source_lines=publication.get("assessment_bounds", {}).get("max_source_lines", 120))
 
 
 def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any],

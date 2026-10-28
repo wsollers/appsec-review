@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.jobs.job_owasp_control_assessment import job as assessment
+from appsec_review.config import load_config
 from appsec_review.owasp_workbench import indexes
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
@@ -167,8 +168,13 @@ def test_job_publishes_changed_packages_and_preserves_pointer_on_failure(tmp_pat
         "batching.build_packages": {"packages": {"batch:one": [package]}},
         "join.deterministic_join": {"joined": {"results": []}},
     }
+    settings = deepcopy(dict(load_config(Path(__file__).parents[1] / "appsec-review.toml").job(
+        "job_owasp_control_assessment").settings))
+    resolved = root / "data" / "configuration" / "resolved.json"
+    atomic_json(resolved, {"jobs": {"job_owasp_control_assessment": {"settings": settings}}})
+    atomic_json(resolved.with_name("manifest.json"), {"resolved_sha256": file_sha256(resolved)})
     unit = SimpleNamespace(job=SimpleNamespace(run_root=root, run_id="run",
-        source_fingerprint="source", config=SimpleNamespace(settings={"model": {}, "parser_versions": {}})),
+        source_fingerprint="source", config=SimpleNamespace(settings=settings)),
         output=outputs.__getitem__)
     publish = next(unit.handler for unit in assessment.build_job().units
                    if unit.unit_id == "publication.publish_indexes")

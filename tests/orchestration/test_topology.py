@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,25 @@ def test_disabled_jobs_are_transparent_and_closure_is_transitive() -> None:
     assert upstream_closure("job_target_analysis_plan", dependencies,
                             {"job_review_intake", "job_target_catalog"}) == (
         "job_review_intake", "job_target_catalog")
+
+
+def test_enabled_owasp_uses_tags_graph_and_classification_before_hunting() -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    jobs = dict(config.jobs)
+    owasp = jobs["job_owasp_control_assessment"]
+    jobs[owasp.job_id] = replace(owasp, settings={**owasp.settings, "enabled": True})
+    described = describe_wave1(replace(config, jobs=jobs), builtin_registry())
+    by_id = {item["job_id"]: item for item in described["jobs"]}
+    seen = set()
+    for item in described["jobs"]:
+        assert set(item["dependencies"]) <= seen
+        seen.add(item["job_id"])
+    upstream = by_id[owasp.job_id]["upstream_handoffs"]
+    assert {"job_security_tagging", "job_review_prioritization", "job_code_graph_index"} <= set(upstream)
+    assert owasp.job_id in by_id["job_review_data_indexing"]["upstream_handoffs"]
+    assert owasp.job_id in by_id["job_review_package_assembly"]["upstream_handoffs"]
+    assert owasp.job_id in by_id["job_inference_security_review"]["upstream_handoffs"]
+    assert owasp.job_id not in by_id["job_security_tagging"]["upstream_handoffs"]
 
 
 def _accepted(run_root: Path, job_id: str, status: str = "ACCEPTED") -> str:

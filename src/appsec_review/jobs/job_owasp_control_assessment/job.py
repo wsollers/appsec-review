@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from appsec_review.config.owasp import AssessmentMode, parse_settings
+from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.inference import Infer
 from appsec_review.observability import PipelineLog
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
@@ -107,7 +108,8 @@ def _core(unit: UnitContext) -> tuple[RetrievalCore, Path]:
 def _resolver(unit: UnitContext) -> EvidenceResolver:
     core, path = _core(unit)
     return EvidenceResolver(core, accept_manifest(unit.job.run_root, manifest_path=path,
-                                                  manifest_sha256=core.manifest_sha256))
+                                                  manifest_sha256=core.manifest_sha256),
+                            max_source_lines=parse_settings(unit.job.config.settings).max_source_lines)
 
 
 def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Job:
@@ -256,7 +258,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                 batch=original, packages=unit.output("batching.build_packages")["packages"][bid],
                 settings=typed, worker_profile=settings["model"],
                 reviewer_profile=settings["models"][typed.reviewer_profile], resolver=_resolver(unit),
-                infer=transport(), worker_result=batch["worker"])
+                infer=transport(), worker_result=batch["worker"],
+                validation_retrieval=batch["metrics"].get("retrieval"))
             reviewed_batches.append(value)
             return value
 
@@ -298,7 +301,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         fingerprints = fingerprint_inputs(standards=standards, selection=selection,
             classifications=classifications, rows=rows, batches=work["batches"],
             retrieval_manifest=unit.output("characterization.load_inputs")["retrieval_manifest"],
-            configuration_sha256=unit.job.config.settings.get("configuration_sha256", unit.job.source_fingerprint),
+            configuration_sha256=resolved_configuration_identity(unit.job.run_root),
             guidance_bundle_sha256=guidance_hash, model_identity=unit.job.config.settings["model"],
             parser_versions=unit.job.config.settings["parser_versions"])
         shards = [publish_shard(unit.job.run_root, family="standards", shard_id="selected",
@@ -325,8 +328,9 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                 "guidance": guidance_hash}))
         accepted = unit.output("characterization.load_inputs")["retrieval_manifest"]
         manifest = publish_manifest(unit.job.run_root, run_id=unit.job.run_id, shards=shards,
-            accepted_upstream_manifest=accepted, configuration_sha256=str(
-            unit.job.config.settings.get("configuration_sha256", unit.job.source_fingerprint)),
+            accepted_upstream_manifest=accepted,
+            configuration_sha256=resolved_configuration_identity(unit.job.run_root),
+            assessment_bounds={"max_source_lines": parse_settings(unit.job.config.settings).max_source_lines},
             assessment_mode=parse_settings(unit.job.config.settings).mode.value)
         return {"manifest": manifest, "fingerprints": fingerprints, "shard_count": len(shards)}
 
@@ -345,8 +349,11 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                                     if family in {"ASVS", "MASVS"}),
             "selected_controls": value["selection"]["control_count"], "selected_rows": len(results),
             "applicable_rows": sum(row["applicability"] in {"applicable", "conditional"} for row in results),
-            "dispatched_rows": sum(row["execution_completion"] not in {"not_dispatched", "failed"} for row in results),
-            "assessed_rows": sum(row["control_status"] in {"satisfied", "not_satisfied"} for row in results),
+            "dispatched_rows": sum(row["worker_attempt_count"] > 0 for row in results),
+            "reused_rows": sum(row["execution_completion"] == "reused" for row in results),
+            "assessed_rows": sum(row["assessment_mode"] == "assessment" and row["control_status"] in {
+                "satisfied", "not_satisfied"} for row in results),
+            "independent_review_attempted_rows": sum(row["reviewer_attempt_count"] > 0 for row in results),
             "independently_reviewed_rows": sum(row["verification_status"] in {
                 "independently_assessed", "dissent"} for row in results),
             "unresolved_rows": sum(row["coverage_completeness"] == "unresolved"

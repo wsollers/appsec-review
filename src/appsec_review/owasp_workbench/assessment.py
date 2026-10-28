@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import hashlib
 import json
 from pathlib import Path
 import time
@@ -12,7 +13,7 @@ from appsec_review.inference import Infer, ModelResult, ReviewModelRequest
 from appsec_review.inference.recording import recorded
 from appsec_review.observability import PipelineLog
 from appsec_review.storage import canonical_json
-from appsec_review.storage.shared import publish_named, safe_path
+from appsec_review.storage.shared import consume_named, publish_named, safe_path
 from .evidence import EvidenceResolver, redact
 from .guidance import compose, pin_bundle
 from .obligations import VERSION, procedure_for, subjects
@@ -144,8 +145,9 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
     key = digest({"mode": settings.mode.value, "packages": _semantic(packages),
                   "guidance": guidance["bundle_sha256"], "model_policy": dict(profile),
                   "rules": RESULT_RULE, "limits": asdict(settings)})
-    receipt = safe_path(run_root, f"data/owasp/receipts/{key}.json")
+    receipt = safe_path(run_root, f"data/indexes/owasp/receipts/{key}.json")
     if receipt.is_file():
+        consume_named(run_root, receipt, namespace="owasp-shard")
         cached = json.loads(receipt.read_text(encoding="utf-8"))
         if cached.get("key") != key or cached.get("mode") != "assessment":
             raise ValueError("OWASP reuse receipt has incompatible mode or identity")
@@ -199,19 +201,27 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                        "requested_provider": profile["provider"], "requested_model": profile["model"],
                        "served_provider": None, "served_model": None,
                        "input_tokens_reported": None, "output_tokens_reported": None,
+                       "cache_tokens_reported": None,
                        "input_tokens_estimated": estimate, "output_tokens_estimated": None,
                        "turn": turn, "retry": retry, "request_sha256": digest(asdict(request))}
             call_started = time.monotonic()
             try:
                 result: ModelResult = recorded(infer)(request, timeout_seconds=max(1, int(remaining)))
+                if any(value is not None and (type(value) is not int or value < 0)
+                       for value in (result.input_tokens, result.output_tokens, result.cache_tokens)):
+                    raise ValueError("OWASP provider returned invalid token usage")
                 attempt.update({
                     "served_provider": result.served_provider, "served_model": result.served_model,
                     "input_tokens_reported": result.input_tokens, "output_tokens_reported": result.output_tokens,
+                    "cache_tokens_reported": result.cache_tokens,
                     "output_tokens_estimated": (len(canonical_json(result.proposal)) + 3) // 4,
                     "response_sha256": digest(result.proposal),
+                    "raw_response_sha256": hashlib.sha256(result.raw_response.encode()).hexdigest()
+                    if result.raw_response is not None else None,
                 })
                 if ((result.input_tokens is not None and result.input_tokens > profile["max_input_tokens"])
                         or (result.output_tokens is not None and result.output_tokens > profile["max_output_tokens"])
+                        or attempt["output_tokens_estimated"] > profile["max_output_tokens"]
                         or time.monotonic() - started > profile["timeout_seconds"]):
                     raise ValueError("OWASP model exceeded token/time budget")
                 proposal = result.proposal
@@ -263,7 +273,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
             try:
                 responses.append(resolver.materialize(query["source_identity"],
                     component_id=allowed[query["source_identity"]], locator=query["locator"],
-                    max_lines=120))
+                    max_lines=settings.max_source_lines))
             except (ValueError, OSError, UnicodeError) as exc:
                 resolver.metrics["denials"] += 1
                 responses.append({"gap": f"{type(exc).__name__}: {exc}"})
@@ -284,7 +294,7 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
                  "contradictory": [], "citation_checks": [], "hypotheses": [], "assumptions": [],
                  "evidence_requests": [], "limitations": [], "gaps": []}
         if not obligation.get("supported") or item is None:
-            value["gaps"] = [obligation.get("reason", "worker did not return this obligation")]
+            value["gaps"] = [obligation.get("reason", "model did not return this obligation")]
             value["evidence_requests"] = list(value["gaps"])
             accepted.append(value)
             continue
@@ -310,8 +320,9 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
                     value["gaps"].append(check["reason"])
                 value["citation_checks"].append(check)
         outcome = item["outcome"]
-        if outcome == "satisfied" and (not value["supporting"] or value["contradictory"]
-                                      or item["assumptions"] or item["evidence_requests"]):
+        if outcome in {"satisfied", "not_satisfied"} and (item["assumptions"] or item["evidence_requests"]):
+            value["gaps"].append("material prerequisites remain assumed or requested, not established")
+        if outcome == "satisfied" and (not value["supporting"] or value["contradictory"]):
             value["gaps"].append("satisfied proposal has unresolved material proof requirements")
         if outcome == "not_satisfied" and not value["contradictory"]:
             value["gaps"].append("adverse proposal lacks resolving subject-bound contradiction evidence")
@@ -330,7 +341,9 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
               packages: Sequence[Mapping[str, Any]], settings: OwaspSettings,
               worker_profile: Mapping[str, Any], reviewer_profile: Mapping[str, Any],
               resolver: EvidenceResolver, infer: Infer, independent: bool = True,
-              worker_result: Mapping[str, Any] | None = None) -> dict[str, Any]:
+              worker_result: Mapping[str, Any] | None = None,
+              validation_retrieval: Mapping[str, int] | None = None) -> dict[str, Any]:
+    retrieval_before = dict(resolver.metrics)
     ready = [package for package in packages if any(item.get("supported") for item in package["proof_obligations"])]
     empty = {"status": "missing_evidence", "proposal": None, "attempts": []}
     worker = dict(worker_result) if worker_result is not None else investigate(repository_root=repository_root, run_root=run_root, batch=batch, packages=ready,
@@ -389,23 +402,33 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
             if any(state == "cannot_verify" for state in states) else "scoped",
             "assessment_mode": "assessment", "obligations": assessed,
             "observations": observations, "disagreements": disagreements,
+            "worker_attempt_count": len(worker["attempts"]),
+            "reviewer_attempt_count": len(reviewer["attempts"]),
             "evidence_used": list({digest(ref): ref for ref in refs}.values()),
             "gaps": sorted(set(gaps)),
+            "limitations": sorted(set([*package.get("limitations", ()),
+                *(text for item in assessed for text in item["limitations"]),
+                *(text for item in independent for text in item["limitations"])])),
             "lead_eligible": bool(observations),
             "interpretation": "analyst_assessed; underlying evidence required for every downstream security predicate",
         })
     attempts = [*worker["attempts"], *reviewer["attempts"]]
+    known_input = [item["input_tokens_reported"] for item in attempts if item["input_tokens_reported"] is not None]
+    known_output = [item["output_tokens_reported"] for item in attempts if item["output_tokens_reported"] is not None]
+    retrieval = {key: value - retrieval_before.get(key, 0) + (validation_retrieval or {}).get(key, 0)
+                 for key, value in resolver.metrics.items()}
     return {
         "schema": "appsec-review/validator-batch-result/1", "batch_id": batch["batch_id"],
         "fingerprint": batch["fingerprint"], "terminal_state": "succeeded"
         if worker["status"] in {"succeeded", "reused"} else "failed",
         "results": results, "worker": worker, "independent_review": reviewer,
         "metrics": {"model_calls": len(attempts), "attempts": attempts,
-                    "retrieval": dict(resolver.metrics), "cost_usd": None,
-                    "input_tokens_reported": sum(item["input_tokens_reported"] for item in attempts
-                                                if item["input_tokens_reported"] is not None),
-                    "output_tokens_reported": sum(item["output_tokens_reported"] for item in attempts
-                                                 if item["output_tokens_reported"] is not None),
+                    "retrieval": retrieval, "cost_usd": None,
+                    "reused_model_results": sum(item["status"] == "reused" for item in (worker, reviewer)),
+                    "input_tokens_reported": sum(known_input) if attempts and len(known_input) == len(attempts) else None,
+                    "output_tokens_reported": sum(known_output) if attempts and len(known_output) == len(attempts) else None,
+                    "known_input_tokens_subtotal": sum(known_input) if known_input else None,
+                    "known_output_tokens_subtotal": sum(known_output) if known_output else None,
                     "unknown_usage_attempts": sum(item["input_tokens_reported"] is None
                                                   or item["output_tokens_reported"] is None for item in attempts)},
     }
