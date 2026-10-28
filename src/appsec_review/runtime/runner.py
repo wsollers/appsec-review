@@ -527,6 +527,9 @@ class JobRunner:
                           outcomes: Mapping[str, Any], outcomes_ref: Mapping[str, Any], *,
                           accepted: bool, completed: str, artifacts: list[dict[str, Any]]) -> dict[str, Any]:
         identities = claim["component_identities"]
+        artifacts = collect_artifacts(context.run_root, artifacts, [
+            reference(context.run_root, context.run_root / "data/configuration" / name)
+            for name in ("manifest.json", "resolved.json", "appsec-review.toml")])
         input_manifest = (reference(context.run_root, safe_path(context.run_root, claim["input_manifest_path"]),
                                     expected_sha256=claim["input_manifest_sha256"])
                           if claim.get("input_manifest_path") else None)
@@ -678,6 +681,16 @@ class JobRunner:
         outcomes_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()
                                       + "/outcomes.json", canonical_json(outcomes))
         result_path = context.attempt_root / "result.json"
+        # Manifest verification records this attempt's consumption receipts. Finish
+        # that closure before freezing the artifact list, not during admission.
+        from appsec_review.runtime.handoff import verify_required_outputs
+        if context.input_manifest_path is not None:
+            from appsec_review.retrieval.index import load_verified_manifest
+            load_verified_manifest(root, context.input_manifest_path, context.input_manifest_sha256)
+        verify_required_outputs(root, {
+            "job_id": job.job_id, "target_snapshot": claim["evidence_target_snapshot"],
+            "resolving_paths": {"attempt": context.attempt_root.relative_to(root).as_posix()},
+        }, claim, result)
         from appsec_review.storage.shared import attempt_artifacts
         artifacts = collect_artifacts(
             root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
@@ -696,11 +709,13 @@ class JobRunner:
         handoff_ref = immutable_bytes(root, handoff_path.relative_to(root).as_posix(), canonical_json(handoff))
         duration_ms = max(0, int((time.monotonic() - started) * 1000))
         self._handoff_event(context, "HANDOFF_VALIDATED", handoff, handoff_ref, duration_ms, len(outcomes["units"]))
-        pointer_paths = [context.attempt_root.parent.parent / "latest.json"]
+        pointer_paths = [safe_path(root, context.attempt_root.parent.parent.relative_to(root).as_posix()
+                                   + "/latest.json")]
         if accepted_manifest is not None:
-            pointer_paths.append(root / "data" / "indices" / "accepted.json")
+            pointer_paths.append(safe_path(root, "data/indices/accepted.json"))
         previous = {path: path.read_bytes() if path.exists() else None for path in pointer_paths}
         try:
+            atomic_json(context.attempt_root / "status.json", status)
             if accepted_manifest is not None:
                 manifest, manifest_path = accepted_manifest
                 atomic_json(pointer_paths[1], {
@@ -711,20 +726,23 @@ class JobRunner:
             atomic_json(pointer_paths[0], {
                 "schema": "appsec-review/latest-handoff/1", "attempt_id": context.attempt_id,
                 "handoff_path": handoff_ref["path"], "handoff_sha256": handoff_ref["sha256"]})
-        except BaseException:
+            context.events.write(
+                "JOB_COMPLETED_WITH_GAPS" if completion_status == "COMPLETED_WITH_GAPS" else "JOB_SUCCEEDED",
+                completion_status=completion_status,
+                duration_ms=max(0, int((datetime.fromisoformat(completed) -
+                    datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000)))
+            write_run_metrics(root)
+            self._handoff_event(context, "HANDOFF_ACCEPTED", handoff, handoff_ref, duration_ms, len(outcomes["units"]))
+        except BaseException as original:
             for path, payload in previous.items():
-                if payload is None:
-                    path.unlink(missing_ok=True)
-                else:
-                    atomic_bytes(path, payload)
+                try:
+                    if payload is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        atomic_bytes(path, payload)
+                except OSError as rollback_error:
+                    original.add_note(f"accepted pointer rollback failed: {type(rollback_error).__name__}")
             raise
-        atomic_json(context.attempt_root / "status.json", status)
-        self._handoff_event(context, "HANDOFF_ACCEPTED", handoff, handoff_ref, duration_ms, len(outcomes["units"]))
-        context.events.write("JOB_COMPLETED_WITH_GAPS" if completion_status == "COMPLETED_WITH_GAPS" else "JOB_SUCCEEDED",
-                             completion_status=completion_status,
-                             duration_ms=max(0, int((datetime.fromisoformat(completed) -
-                                 datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000)))
-        write_run_metrics(root)
         return {"status": status, "result": result, "attempt_root": str(context.attempt_root),
                 "handoff": handoff, "handoff_sha256": handoff_ref["sha256"]}
 

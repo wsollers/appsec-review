@@ -13,7 +13,7 @@ from appsec_review.config import load_config
 from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff, handoff_input_projection, input_set_sha256
 from appsec_review.retrieval.index import INDEX_SCHEMA, IndexBuilder, IndexIdentity, write_manifest
 from appsec_review.runtime import Job, JobRunner, Unit
-from appsec_review.runtime.datasets import indexed
+from appsec_review.runtime.datasets import artifact_only, indexed
 from appsec_review.runtime.handoff import (
     build_outcomes, collect_artifacts, frozen_job_config_sha256, verify_handoff_integrity, verify_outcomes,
 )
@@ -23,10 +23,12 @@ from appsec_review.storage.shared import reference, verify_handoff
 from tests.test_job_runtime import write_config
 
 
-def setup(tmp_path, handler=lambda unit: {"value": 7}, *, units=None, datasets=()):
+def setup(tmp_path, handler=lambda unit: {"value": 7}, *, units=None, datasets=(), extra_jobs=()):
     path = write_config(tmp_path)
     with path.open("a", encoding="utf-8") as stream:
         stream.write('\n[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n')
+        for job_id in extra_jobs:
+            stream.write(f'\n[jobs.{job_id}]\nname = "{job_id}"\nworkers = 1\n')
     config = load_config(path)
     job = Job("job_fixture", "fixture", handler, units=units or (Unit("work.only", handler),),
               datasets=datasets)
@@ -96,6 +98,7 @@ def test_mixed_operational_failure_requires_retry_but_deterministic_gaps_do_not(
         ]}
     config, job, _, outcome, root = publish(tmp_path, produce)
     assert outcome["handoff"]["coverage"]["retry_required"]
+    assert outcome["handoff"]["coverage"]["disposition"] == "partial"
     assert "accepted job contains a retriable failed producer" in ResumePlanner(
         config, root, (job,), "snapshot").accepted(job, {})[0]
 
@@ -313,3 +316,134 @@ def test_handoff_events_are_hash_bound_closed_metadata_and_not_reemitted_on_reus
     runner.finalize_attempt(job, claim)
     after = [json.loads(line) for line in path.read_text().splitlines()]
     assert sum(event["event"] == "HANDOFF_VALIDATED" for event in after) == 1
+
+
+def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artifact_refs(tmp_path):
+    def produce(unit):
+        manifest = json.loads((unit.job.run_root / "data/configuration/manifest.json").read_bytes())
+        return {"source_inventory": [{"path": "source.py", "sha256": "a" * 64, "size_bytes": 4}],
+                "artifact_candidates": [{"path": "customer.bin", "sha256": "b" * 64, "size_bytes": 4}],
+                "layers": manifest["sources"]}
+    _, _, _, outcome, root = publish(tmp_path, produce)
+    assert outcome["handoff"]["coverage"]["disposition"] == "complete"
+    assert all(not ref["path"].startswith(("source.py", "customer.bin"))
+               for ref in outcome["handoff"]["artifacts"])
+    with pytest.raises(ValueError):
+        collect_artifacts(root, {"artifact": {"path": "source.py", "sha256": "a" * 64, "size_bytes": 4}})
+    with pytest.raises(ValueError):
+        collect_artifacts(root, {"artifact": {"path": str(tmp_path / "not-a-frozen-layer"), "sha256": "a" * 64}})
+
+
+def test_strict_target_independent_consumer_preserves_unique_upstream_evidence_without_source_access(tmp_path):
+    job_id = "job_final_report_publication"
+    config, producer, runner = setup(tmp_path, _index_output, extra_jobs=(job_id,))
+    first = runner.run(producer, source_fingerprint="snapshot")
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    consumer = Job(job_id, job_id, lambda unit: {}, units=(Unit("work.only", lambda unit: {}),))
+    result = runner.run(consumer, run_id=root.name, source_fingerprint="none",
+                        upstream_handoffs={"job_fixture": first["handoff_sha256"]})
+    handoff = result["handoff"]
+    assert handoff["source_fingerprint"] == "none"
+    assert handoff["target_snapshot"] == handoff["evidence_target_snapshot"] == "snapshot"
+    assert handoff["input_manifest"] is not None
+    verify_handoff_integrity(root, handoff)
+    tampered = deepcopy(handoff)
+    tampered["input_manifest"] = dict(handoff["artifacts"][0])
+    rehash(tampered)
+    with pytest.raises(ValueError, match="claimed input manifest"):
+        verify_handoff_integrity(root, tampered)
+    assert ResumePlanner(config, root, (consumer,), "none").accepted(
+        consumer, {"job_fixture": first["handoff_sha256"]})[0] == ()
+
+
+def test_strict_target_independent_missing_origin_is_named_rejection(tmp_path):
+    job_id = "job_final_report_publication"
+    config, _, runner = setup(tmp_path, extra_jobs=(job_id,))
+    consumer = Job(job_id, job_id, lambda unit: pytest.fail("no evidence"),
+                   units=(Unit("work.only", lambda unit: pytest.fail("no evidence")),))
+    with pytest.raises(ValueError, match="verified target origin"):
+        runner.run(consumer)
+    rejected_path, = config.runtime.runs_dir.glob(f"*/data/jobs/{job_id}/attempts/*/rejected-handoff.json")
+    handoff = json.loads(rejected_path.read_bytes())
+    assert handoff["execution_status"] == "SKIPPED"
+    assert handoff["coverage"]["disposition"] == "unavailable"
+    assert handoff["status"] == "REJECTED"
+    assert not list(config.runtime.runs_dir.glob(f"*/data/jobs/{job_id}/latest.json"))
+
+
+def test_strict_target_independent_rejects_disagreeing_verified_upstream_targets(tmp_path):
+    job_id = "job_final_report_publication"
+    config, producer, runner = setup(tmp_path, extra_jobs=(job_id, "job_other"))
+    first = runner.run(producer, source_fingerprint="snapshot-one")
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    second = runner.run(replace(producer, job_id="job_other", name="job_other"),
+                        run_id=root.name, source_fingerprint="snapshot-two")
+    consumer = Job(job_id, job_id, lambda unit: {}, units=(Unit("work.only", lambda unit: {}),))
+    with pytest.raises(ValueError, match="disagree"):
+        runner.run(consumer, run_id=root.name,
+                   upstream_handoffs={"job_fixture": first["handoff_sha256"],
+                                      "job_other": second["handoff_sha256"]})
+
+
+def test_verified_skipped_task_retains_skipped_execution_and_blocked_coverage(tmp_path):
+    config, job, runner = setup(tmp_path)
+    claim = runner.begin_attempt(job)
+    root = config.runtime.runs_dir / claim["run_id"]
+    path = root / claim["attempt_path"] / "steps/work/tasks/only/status.json"
+    atomic_json(path, {"unit_id": "work.only", "step_id": "work", "task_id": "only", "status": "SKIPPED"})
+    outcomes = build_outcomes(root, run_id=root.name, job_id=job.job_id, attempt_id=claim["attempt_id"],
+                              target_snapshot="none", unit_ids=claim["unit_ids"])
+    assert outcomes["units"][0]["execution_status"] == "SKIPPED"
+    assert outcomes["units"][0]["result_reference"] is None
+    assert outcomes["coverage"]["retry_required"]
+    assert outcomes["gaps"][0]["code"] == "producer_blocked"
+
+
+def test_previous_same_job_shard_in_manifest_is_not_current_required_output(tmp_path):
+    config, job, runner, first, root = publish(tmp_path, _index_output, datasets=(DECLARATION,))
+    original = first["result"]["outputs"]["work.only"]
+    def inherit(unit):
+        return {"index_manifest": original["index_manifest"]}
+    with pytest.raises(ValueError, match="required dataset output missing"):
+        runner.run(replace(job, units=(Unit("work.only", inherit),)),
+                   run_id=root.name, source_fingerprint="snapshot")
+
+
+def test_required_current_artifact_satisfies_contract_but_inherited_artifact_does_not(tmp_path):
+    declaration = replace(artifact_only(
+        "required_fixture", "work", "inventory", "fixture/1", "Required fixture.",
+        artifacts=("data/jobs/job_fixture/attempts/*/fixture.json",), reason="fixture"), required=True)
+    def produce(unit):
+        path = unit.job.attempt_root / "fixture.json"
+        atomic_json(path, {"value": 7})
+        return {"artifact": reference(unit.job.run_root, path)}
+    config, job, runner, first, root = publish(tmp_path, produce, datasets=(declaration,))
+    prior = first["result"]["outputs"]["work.only"]
+    with pytest.raises(ValueError, match="required dataset output missing"):
+        runner.run(replace(job, units=(Unit("work.only", lambda unit: prior),)),
+                   run_id=root.name, source_fingerprint="snapshot")
+
+
+def test_pointer_write_failure_restores_both_previous_publications(tmp_path, monkeypatch):
+    config, job, runner, first, root = publish(tmp_path, _index_output)
+    latest = root / "data/jobs/job_fixture/latest.json"
+    accepted = root / "data/indices/accepted.json"
+    previous = {path: path.read_bytes() for path in (latest, accepted)}
+    real_atomic = atomic_json
+    def fail_latest(path, value):
+        if path == latest:
+            raise OSError("pointer publication failed")
+        real_atomic(path, value)
+    monkeypatch.setattr("appsec_review.runtime.runner.atomic_json", fail_latest)
+    with pytest.raises(OSError, match="pointer publication failed"):
+        runner.run(job, run_id=root.name, source_fingerprint="snapshot")
+    assert all(path.read_bytes() == payload for path, payload in previous.items())
+    rejected = root / "data/jobs/job_fixture/attempts/attempt_0002/rejected-handoff.json"
+    assert json.loads(rejected.read_bytes())["status"] == "REJECTED"
+
+
+def test_attempt_id_and_reference_location_do_not_change_input_set_hash(tmp_path):
+    config, job, runner, first, root = publish(tmp_path)
+    second = runner.run(job, run_id=root.name, source_fingerprint="snapshot")
+    assert first["handoff"]["attempt_id"] != second["handoff"]["attempt_id"]
+    assert first["handoff"]["input_set_sha256"] == second["handoff"]["input_set_sha256"]

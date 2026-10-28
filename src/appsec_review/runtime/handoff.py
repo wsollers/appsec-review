@@ -10,6 +10,7 @@ from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from appsec_review.interchange import (
@@ -35,6 +36,11 @@ _KNOWN_STATUSES = {
     "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY", "CONFIGURED_DISABLED",
     "PARTIAL", "COMPLETED_WITH_GAPS", "DEGRADED",
 }
+_REFERENCE_FIELD = re.compile(r"(?:.*_)?(?:artifact|artifacts|reference|references|receipt|receipts)$")
+_REFERENCE_FIELDS = {
+    "index_manifest", "outcomes", "input_manifest", "object", "dependencies", "evidence_refs",
+    "native_output", "native_outputs",
+}
 
 
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
@@ -48,26 +54,39 @@ def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
 def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
     """Resolve every declared artifact reference, never silently drop a missing path."""
     artifacts: dict[str, dict[str, Any]] = {}
+    source_layers: list[Mapping[str, Any]] | None = None
 
-    def collect(value: Any) -> None:
+    def collect(value: Any, *, declared: bool = False) -> None:
+        nonlocal source_layers
         if isinstance(value, Mapping):
             if "path" in value and "sha256" in value:
-                path = safe_path(root, value["path"])
-                ref = reference(root, path, expected_sha256=value["sha256"])
-                if "size_bytes" in value and (
-                        type(value["size_bytes"]) is not int or value["size_bytes"] != ref["size_bytes"]):
-                    raise ValueError("result artifact size mismatch")
-                previous = artifacts.setdefault(ref["path"], ref)
-                if previous != ref:
-                    raise ValueError("result artifact has conflicting identities")
-            for child in value.values():
-                collect(child)
+                # Intake records external configuration identity, not permission to
+                # open that source. Only an exact frozen layer can use this shape.
+                if isinstance(value["path"], str) and Path(value["path"]).is_absolute():
+                    if source_layers is None:
+                        manifest = json.loads(safe_path(root, "data/configuration/manifest.json").read_bytes())
+                        source_layers = manifest["sources"]
+                    if value in source_layers:
+                        return
+                # Source inventories also have path/hash/size fields. Those are
+                # not run artifacts; artifact fields and the run's data namespace are.
+                if declared or (isinstance(value["path"], str) and value["path"].startswith("data/")):
+                    path = safe_path(root, value["path"])
+                    ref = reference(root, path, expected_sha256=value["sha256"])
+                    if "size_bytes" in value and (
+                            type(value["size_bytes"]) is not int or value["size_bytes"] != ref["size_bytes"]):
+                        raise ValueError("result artifact size mismatch")
+                    previous = artifacts.setdefault(ref["path"], ref)
+                    if previous != ref:
+                        raise ValueError("result artifact has conflicting identities")
+            for name, child in value.items():
+                collect(child, declared=name in _REFERENCE_FIELDS or _REFERENCE_FIELD.fullmatch(name) is not None)
         elif isinstance(value, (list, tuple)):
             for child in value:
-                collect(child)
+                collect(child, declared=declared)
 
     for value in values:
-        collect(value)
+        collect(value, declared=True)
     return list(artifacts.values())
 
 
@@ -229,8 +248,10 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
                        GapCode.PRODUCER_BLOCKED, f"task execution: {state}", retryable=True, refs=refs)
             declared[gap.gap_id] = gap
         coverage = {item.disposition for item in summaries}
-        if state is not ExecutionStatus.SUCCEEDED or CoverageDisposition.UNAVAILABLE in coverage:
+        if state is not ExecutionStatus.SUCCEEDED or summaries[0].disposition == CoverageDisposition.UNAVAILABLE:
             disposition = CoverageDisposition.UNAVAILABLE
+        elif CoverageDisposition.UNAVAILABLE in coverage:
+            disposition = CoverageDisposition.PARTIAL
         elif CoverageDisposition.PARTIAL in coverage or declared:
             disposition = CoverageDisposition.PARTIAL
         elif coverage <= {CoverageDisposition.NOT_APPLICABLE, CoverageDisposition.SKIPPED_POLICY}:
@@ -354,6 +375,8 @@ def verify_handoff_integrity(root: Path, handoff: Mapping[str, Any], *,
         verify_required_outputs(root, handoff, claim, result)
     if handoff["outcomes"] is not None:
         verify_outcomes(root, handoff)
+    from appsec_review.observability.spans import count_work
+    count_work("handoff_validations")
     return handoff
 
 
