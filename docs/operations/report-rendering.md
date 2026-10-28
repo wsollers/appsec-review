@@ -9,6 +9,18 @@ for it. The image stays an enabled catalog entry so it can be built and smoke-te
 `manual = true`: `job_image_pin_verification` does not require it, and a host that never renders a report
 need not build it (build it with the command below when you do).
 
+**Dossier boundary (proposed):** [dossier publication](dossier-publication.md) is a new semantic job
+commissioned by the [completion design](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
+not this standalone diagnostic renderer. It will retain protected per-confirmed-finding and
+per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate, reuse the hardened image/template,
+and report failed PDF rendering as a gap while keeping source artifacts. Its restricted loader
+must not copy this tool's arbitrary review interchange into developer dossiers or public output.
+Only sanitized summaries/statuses and artifact references belong in public projections.
+At contract commit `5f5548d`, that job, its exact settings/receipts and its real seeded PDF sample
+remain pending; the sample at the end of this page demonstrates the existing standalone renderer
+only. [Dossier data inventory](../architecture/dossier-data-inventory.md) records available inputs
+and their visibility.
+
 ## What it renders
 
 The loader (`src/appsec_review/reporting/loader.py`) reads a run directory read-only and builds one
