@@ -134,7 +134,7 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
 
             return ModelResult(proposal=proposal, input_tokens=tokens("input_tokens"),
                                output_tokens=tokens("output_tokens"), cache_tokens=tokens("cache_read_tokens"),
-                               raw_response=raw)
+                               raw_response=raw, served_model=request.model, served_provider="copilot-sdk")
 
 
 def _run(operation, timeout_seconds: int):

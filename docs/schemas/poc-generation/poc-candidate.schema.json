@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/poc-generation/poc-candidate.schema.json",
   "title": "One entry of poc_candidates in the accepted inference-review handoff",
-  "description": "Exact accepted-review candidate contract. poc_basis.sha256 hashes the canonical poc_basis.brief.",
+  "description": "Exact accepted-review candidate contract. poc_basis.sha256 hashes the canonical poc_basis.brief. Entry and path carry resolved entity identities, not worker-local labels.",
   "type": "object",
   "additionalProperties": false,
   "required": [

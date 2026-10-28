@@ -135,6 +135,25 @@ def test_the_summary_schema_agrees_with_jsonschema() -> None:
     agree("poc-generation", good, invalid)
 
 
+def test_review_producer_candidates_satisfy_the_consumer_schema_and_reader() -> None:
+    from appsec_review.config import PocCandidateSettings
+    from appsec_review.jobs.job_inference_security_review.stages import poc_candidates
+    from appsec_review.jobs.job_poc_generation.candidates import parse_candidates
+    from tests.test_poc_generation_units import basis_value
+
+    basis = basis_value()
+    finding = {"claim_id": CLAIM, "state": "confirmed", "judge_verdict": "red_correct",
+               "technical_severity": "high", "finding_package_id": FINDING, "sha256": "4" * 64,
+               "direct_evidence": ["evrel-" + "6" * 64]}
+    brief = {"claim_id": CLAIM, "cell_id": "cell-1", "package_id": "finding_lead-" + "2" * 64,
+             "poc_basis": basis}
+    (produced,) = poc_candidates([finding], [brief], PocCandidateSettings())
+    assert SCHEMAS.errors("poc-candidate", produced) == []
+    assert jsonschema_errors("poc-candidate", produced) == []
+    (parsed,) = parse_candidates([produced])
+    assert parsed.poc_basis.record() == basis
+
+
 def test_the_compile_record_and_provenance_written_by_the_job_satisfy_their_schemas(tmp_path) -> None:
     from appsec_review.jobs.job_poc_generation.candidates import parse_candidates
     from appsec_review.jobs.job_poc_generation.package import write_candidate

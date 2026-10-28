@@ -198,7 +198,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                                                   in_graph=bool(upstream_values))
                 if tagged is not None:
                     upstream_handoffs = tagged
-                inputs = launch_inputs(selected, target=configured_target(config.runtime.repository_root),
+                inputs = launch_inputs(selected, target=configured_target(config.runtime.repository_root, config.target_acquisition.targets_dir),
                                        upstream_handoffs=upstream_handoffs)
                 claim = launch_begin(
                     runner_factory(config), selected, inputs, run_id=run_id, trigger=_trigger_for_run(tags),
@@ -360,15 +360,8 @@ def build_definitions(
     source = config_path or os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")
     config = load_config(source)
     registry = registry or builtin_registry()
+    registry.require_matches(config.jobs, surface="Dagster")
     registered = set(registry.job_ids())
-    configured = set(config.jobs)
-    if registered != configured:
-        missing_config = sorted(registered - configured)
-        missing_registration = sorted(configured - registered)
-        raise ValueError(
-            "Dagster job/config mismatch: "
-            f"missing_config={missing_config}, missing_registration={missing_registration}"
-        )
 
     # A job-level enabled flag controls dispatch. Keep disabled jobs registered so configuration
     # validation and a future enablement still work, but make them transparent to every graph.
@@ -403,8 +396,9 @@ def build_definitions(
                     ),
                 )
             )
-    # Pre-intake gates run in this order in every composite review graph: the live model check, then
-    # the image-pin verification. A disabled gate is transparent, so intake follows the last enabled one.
+    # Pre-intake gates run in this order in every composite review graph: the live model check, the
+    # image-pin verification, then the target acquisition of the system named by APPSEC_REVIEW_SYSTEM.
+    # A disabled gate is transparent, so intake follows the last enabled one.
     gates = gate_ids(registered)
     gate_deps = gate_dependencies(registered)
 

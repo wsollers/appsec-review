@@ -231,7 +231,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         coverage_sha = coverage.build()
         indexes.append(IndexIdentity("analysis", "appsec-review/retrieval-index/2", coverage_sha,
             coverage_fingerprint, coverage_path.relative_to(unit.job.run_root).as_posix(),
-            {"job": "job_tree_sitter_ast", "unit": unit.unit_id}, tuple(parsed["gaps"]),
+            {"job": "job_tree_sitter_ast", "unit": unit.unit_id,
+             "scope_languages": {str(value["scope_id"]): str(value["language"])
+                                 for value in parsed["dispositions"]}}, tuple(parsed["gaps"]),
             f"tree-sitter-coverage-{unit.job.attempt_id}"))
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)

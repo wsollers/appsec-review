@@ -20,10 +20,11 @@ approved_first_party_projects = []
 # Deployment operators declare opaque release IDs here and bump them when supplied software
 # changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
 codeql = "codeql-2.27.0-cert-v2.62.0"
-codeql_runner = "appsec-codeql-runner-6aaa1cc6"
+codeql_runner = "appsec-codeql-runner-89568569"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.
+# A capacity overlay may raise these per host (test/acceptance/prod-capacity-overlay.toml sets io_slots = 4).
 cpu = 8
 memory_mb = 10240
 io_slots = 1
@@ -88,13 +89,80 @@ output_file_bytes = 2147483648      # RLIMIT_FSIZE for every file the container 
 # One table per binary. `sha256` is the expected hash of the file at `path`; a mismatch refuses
 # the run. `authorization` states why this binary may be reverse-engineered (license term,
 # contract, or ownership) and is recorded in the publication. Optional `processor`,
-# `compiler_spec`, and `loader` override Ghidra's detection.
+# `compiler_spec`, and `loader` override Ghidra's detection. Optional `debug_symbols` names a PDB
+# that Ghidra applies before analysis, pinned by `debug_symbols_sha256`. A review freezes the
+# current publication of every binary listed here; `required = true` makes a missing or stale
+# publication fail review intake instead of becoming a binary_decompilation_unavailable gap.
 #
 # [[binary_decompilation.binaries]]
 # id = "vendor-codec"
 # path = "inputs/vendor/libcodec.so"
 # sha256 = "<64 lowercase hex characters>"
 # authorization = "Vendor agreement 2026-014 section 7 permits security analysis"
+# required = false
+# debug_symbols = "inputs/vendor/libcodec.pdb"        # PE only; omit when there is none
+# debug_symbols_sha256 = "<64 lowercase hex characters>"
+
+[target_acquisition]
+# Pinned checkout of review systems into new directories under `targets_dir`. A system is composed of
+# one or more components, because one reviewed system may live in more than one source-control
+# system; each component's `kind` defaults to "git". `appsec-review start --system <id>` (or
+# APPSEC_REVIEW_SYSTEM for any driver) makes job_target_acquisition acquire every component in
+# parallel into `targets_dir/<system>/<component>/` before intake fingerprints the composed
+# `targets_dir/<system>` root and discovery runs once over it; `appsec-review acquire-target --system
+# <id>` does the same outside a run. A component whose checkout and record exist is only re-verified;
+# acquisition never pulls, edits, or replaces an existing checkout. Records go to
+# `records_dir/<system>/manifest.json` (the composed tree and every component identity) and
+# `records_dir/<system>/components/<component>/`. Credentials never appear here: Git uses the
+# operator's credential helper or ssh agent, and Perforce and review APIs read the environment
+# variables a component names. See docs/operations/target-acquisition.md.
+targets_dir = "targets"
+records_dir = "data/target-acquisitions"
+git_executable = "git"
+p4_executable = "p4"
+command_timeout_seconds = 3600
+http_timeout_seconds = 60
+max_http_response_bytes = 33554432
+max_review_commits = 10000
+max_files = 500000
+max_total_bytes = 8589934592
+max_file_bytes = 536870912
+max_path_bytes = 4096
+max_submodule_depth = 8              # deeper gitlinks are named gaps
+max_diff_bytes = 67108864            # larger review patches are named gaps
+max_parallel_components = 4          # components of one system acquired concurrently
+allow_local_sources = false          # file:// Git sources and loopback http review APIs; tests only
+#
+# [[target_acquisition.systems]]
+# id = "storefront"
+#
+# [[target_acquisition.systems.components]]
+# id = "service"                     # kind defaults to "git"
+# url = "https://git.example.com/team/service.git"
+# commit = "<40 or 64 lowercase hex characters>"
+# submodules = "recursive"           # or "none" (each gitlink is then a named gap)
+#
+# [[target_acquisition.systems.components]]
+# id = "engine"
+# kind = "perforce"
+# port = "ssl:perforce.example.com:1666"
+# trust_fingerprint = "<colon-separated SHA fingerprint; required for ssl ports>"
+# depot_path = "//depot/engine/main/..."
+# changelist = 123456
+# user_env = "P4USER"
+# ticket_env = "P4_TICKET"
+#
+# [[target_acquisition.systems.components]]
+# id = "web-mr-42"
+# kind = "review_export"
+# provider = "gitlab"                # gitlab, gerrit (needs patchset), azure_devops (needs repository, iteration)
+# source = "api"                     # or "bundle" with bundle_path and bundle_sha256
+# api_url = "https://gitlab.example.com"
+# project = "team/web"
+# change = 42
+# revision = "<reviewed head commit>"
+# clone_url = "https://gitlab.example.com/team/web.git"
+# token_env = "GITLAB_TOKEN"
 
 [orchestration.dagster]
 executor = "multiprocess"
@@ -333,6 +401,30 @@ workers = 1
 workers = 1
 [jobs.job_image_pin_verification.steps.publication.tasks.publish_handoff]
 
+[jobs.job_target_acquisition]
+name = "target_acquisition"
+workers = 1
+
+[jobs.job_target_acquisition.settings]
+# After the image-pin gate and before review intake, acquire (or read-only re-verify) every component
+# of the system named by `start --system` / APPSEC_REVIEW_SYSTEM, in parallel (bounded by
+# target_acquisition.max_parallel_components), into targets/<system>/. A failed component is a named
+# gap; a system with no available component fails the run. Without a requested system the gate
+# records NOT_REQUESTED and changes nothing. See docs/operations/target-acquisition.md.
+enabled = true
+
+[jobs.job_target_acquisition.steps.selection]
+workers = 1
+[jobs.job_target_acquisition.steps.selection.tasks.resolve_system]
+
+[jobs.job_target_acquisition.steps.acquisition]
+workers = 1
+[jobs.job_target_acquisition.steps.acquisition.tasks.acquire_components]
+
+[jobs.job_target_acquisition.steps.publication]
+workers = 1
+[jobs.job_target_acquisition.steps.publication.tasks.publish_handoff]
+
 [jobs.job_review_intake]
 name = "review_intake"
 workers = 1
@@ -357,6 +449,12 @@ workers = 1
 [jobs.job_review_intake.steps.prepare_target.tasks.resolve_target]
 [jobs.job_review_intake.steps.prepare_target.tasks.validate_target]
 [jobs.job_review_intake.steps.prepare_target.tasks.fingerprint_target]
+
+[jobs.job_review_intake.steps.binary_evidence]
+workers = 1
+# Freezes the verified current publication of each [[binary_decompilation.binaries]] entry (identity
+# and manifest hash). It reads the publication store only; Ghidra runs before submission.
+[jobs.job_review_intake.steps.binary_evidence.tasks.resolve_publications]
 
 [jobs.job_review_intake.steps.publish_intake]
 workers = 1
@@ -907,7 +1005,7 @@ image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:38cc04b72ca8b3fdc739dffc51a8f874ceb0f336abfd84b6830854bbd880a8fc"
+image_id = "sha256:ad6df7a22dac7cef91f7a44249c7cbacbe823aa8e7ef731822d763c375994b2e"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.go]
 tag = "audit-buildenv-go:local"
@@ -942,7 +1040,7 @@ image_id = "sha256:d5df139bd741352cf6dcddb154ce6607dbba4b0f5525c4de36b9953fa720a
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:38cc04b72ca8b3fdc739dffc51a8f874ceb0f336abfd84b6830854bbd880a8fc"
+image_id = "sha256:ad6df7a22dac7cef91f7a44249c7cbacbe823aa8e7ef731822d763c375994b2e"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
@@ -1463,7 +1561,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "d9da524a15017a00be52d4eb9ea02bd5b4c50ebab004667329d47d697e9f92d5"
+asset_lock_sha256 = "bba15ec8f3feff25771e73cab2679f1b76c2ae1371d446559c854b5785f2f52c"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1490,7 +1588,7 @@ build_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0
 runtime_image_id = "sha256:6d42fb11646bc42e1f15e72bc916da7516c64fb957fca8fdb70dbc329b7235d1"
 runtime_user = "1000:1000"
 codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
-runner_release_id = "appsec-codeql-runner-6aaa1cc6"
+runner_release_id = "appsec-codeql-runner-89568569"
 runner_source = "application"
 
 [[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
@@ -1499,8 +1597,12 @@ build_image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd
 runtime_image_id = "sha256:c1dd8158da4044b7a88cef57c2962faf68849298e7fda2e7f116aa5d24107632"
 runtime_user = "1000:1000"
 codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
-runner_release_id = "appsec-codeql-runner-6aaa1cc6"
+runner_release_id = "appsec-codeql-runner-89568569"
 runner_source = "application"
+
+# The Rust/wasm build environment (audit-buildenv-rust-wasm:local, pinned above) has no preinstalled
+# declaration: the resolver derives its CodeQL runtime from containers/tools/codeql/Dockerfile on
+# first use, on any host that built that environment from its Dockerfile.
 
 [jobs.job_codeql_analysis.settings.export_queries]
 enabled = true
@@ -1513,7 +1615,9 @@ mode = "seeded"
 seed_depth = 3
 max_seed_depth = 8
 seed_limit = 200
-# The precompile action fills the persistent query compile cache before evaluation. A cold compile
+# The precompile action fills the query compile cache before evaluation. The cache is shared across
+# runs and keyed by the declared CodeQL release, so a pack compiles cold only after a CodeQL
+# release or pack change (`containers/build.py query-packs --warm` pre-fills it). A cold compile
 # is minutes of CPU, so it has its own timeout and resources, separate from timeout_seconds.
 compile_timeout_seconds = 3600
 compile_threads = 8
@@ -1560,12 +1664,12 @@ query_pack_version = "1.0.0"
 query_suite = "graph-export.qls"
 query_suite_sha256 = "c0120cc191ba3f7378f8e759c08b21e85c7cf32cf40426b1e15256775f8040e6"
 query_pack_sha256 = "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e348bde"
-tree_sha256 = "730b59ec4ad5bf02315545ce61cd4156f9899aad9078241d25e92795b3c3403b"
+tree_sha256 = "93b9a8bf0e4b634035b49b4888344bd6abaf772615635b7452471e4ed8b77656"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "0d7508e2710c4abf4ac2e52f98a1d918d5c3f5d8190600b136c0af396078ab2b"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
@@ -1587,6 +1691,22 @@ query_id = "security-extended"
 query_suite = "codeql-suites/go-security-extended.qls"
 query_suite_sha256 = "8970c08e48221cc8cfd89b6ac9c8cd1e56f143a740b613da67d835f3cabf7c29"
 
+# Must equal export_query_packs.go in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.go.export_queries]]
+query_id = "graph-export-go"
+source_path = "rules/codeql-graph-export/go"
+query_pack = "appsec-review/graph-export-go"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "f0ee2d8dc86bb84ce6bf5f781edc7f150da89525825933cd9f6cb712144ddb47"
+query_pack_sha256 = "03a6e1968bea2877a7023f0dda3bf8fd126218c631035983f47f6716eaadb424"
+tree_sha256 = "86b9772637889717ee94bd3661c0e38dfb24d12dc5700f133827de76472628c7"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+
 [jobs.job_codeql_analysis.settings.languages.java]
 enabled = true
 mode = "build"
@@ -1601,6 +1721,22 @@ query_pack_sha256 = "993ad1ce6f5a2ae10fe10b80308d5647a7f5b1864bbbea7afdb12f882fc
 query_lock_sha256 = "13bcdf3fd8cba2737d918e86d3fd504112157a1a43275c7951683eb9ca184b86"
 source_languages = ["Java", "Kotlin"]
 prerequisites = []
+
+# Must equal export_query_packs.java in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.java.export_queries]]
+query_id = "graph-export-java"
+source_path = "rules/codeql-graph-export/java"
+query_pack = "appsec-review/graph-export-java"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "c1873118f784e768b52f54f524ebf7e3089a7462e408475c7307f3bf91e9e24c"
+query_pack_sha256 = "1852e1e967fba5fb1ee952d43b0a7f9b4f55f8cc34c6bc5d3b11f193f2dc490b"
+tree_sha256 = "8581c202d152a4068fc5bf3096530815f2fc671c05c522862f5b376a78e2a9ce"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.csharp]
 enabled = true
@@ -1622,6 +1758,22 @@ query_id = "security-extended"
 query_suite = "codeql-suites/csharp-security-extended.qls"
 query_suite_sha256 = "7abab2161fc1ffef4b8fa2462b02fb7789c70fb738dc1eee678ab09ea78f7220"
 
+# Must equal export_query_packs.csharp in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.csharp.export_queries]]
+query_id = "graph-export-csharp"
+source_path = "rules/codeql-graph-export/csharp"
+query_pack = "appsec-review/graph-export-csharp"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "39367bd368773b73bc2f08c8225ed22ad1ccfdbbec46f76404423275cc03e87a"
+query_pack_sha256 = "0a49ef58180d4e8030e5d056a10ebcbe7ff41542dc40842cbe26559db5d5edd4"
+tree_sha256 = "a538e9d576c14d6fd025c9347364cce941c01d7d48bfbaedfa289b47fc18206a"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+
 [jobs.job_codeql_analysis.settings.languages.javascript]
 enabled = true
 mode = "source"
@@ -1636,6 +1788,22 @@ query_pack_sha256 = "94bbb51ba66151f3612f35ad3d721c4c945afc07b074fc27865bef5c803
 query_lock_sha256 = "5bb3b0d5ca96c81913ea5558e9be745b802f6e1a7f7cb85c4630ee1ddbffd537"
 source_languages = ["JavaScript", "TypeScript"]
 prerequisites = ["bundled-typescript"]
+
+# Must equal export_query_packs.javascript in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.javascript.export_queries]]
+query_id = "graph-export-javascript"
+source_path = "rules/codeql-graph-export/javascript"
+query_pack = "appsec-review/graph-export-javascript"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "d20a8b4ff19d2dda1d500d954dd94ffacec37b8974b0b2511f4879acd3f55855"
+query_pack_sha256 = "9d6ee801b50e9229483ca651f59f9aa678596e599e330d0b1aa62a5aed1acc89"
+tree_sha256 = "7a4263da449294af74a9d7755636226b5d737ae90f02ba0c714be6cc9dd2fbb0"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.python]
 enabled = true
@@ -1652,6 +1820,22 @@ query_lock_sha256 = "0c6ce22fd453bb6214dd7badf393096b17af3aae76fa7bfd1a14b93effc
 source_languages = ["Python"]
 prerequisites = []
 
+# Must equal export_query_packs.python in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.python.export_queries]]
+query_id = "graph-export-python"
+source_path = "rules/codeql-graph-export/python"
+query_pack = "appsec-review/graph-export-python"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "2fd390012848e76aaa07c8e1baf152f5ef8353063b5f29843d71dcd7aab0080b"
+query_pack_sha256 = "7d0808d772fe1feeb5ed03f996d7793aa2884cdf2404a898fcac770ffce33fa7"
+tree_sha256 = "3fe7ba29be7ba96c9dcd8ca943b41508fafa2e0447763c179ee8aaa2742567a8"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+
 [jobs.job_codeql_analysis.settings.languages.ruby]
 enabled = true
 mode = "source"
@@ -1666,6 +1850,22 @@ query_pack_sha256 = "fc74f5fd9a81de48fe6ce9c4b446c9ead6f6a95cb033f7ff6c6bb116374
 query_lock_sha256 = "186b8e67a334bcf5e3ab09a250a8d895e179df6bc3f8f0f4badfbdabcfcf9baf"
 source_languages = ["Ruby"]
 prerequisites = []
+
+# Must equal export_query_packs.ruby in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.ruby.export_queries]]
+query_id = "graph-export-ruby"
+source_path = "rules/codeql-graph-export/ruby"
+query_pack = "appsec-review/graph-export-ruby"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "fb3c6b1ecbd56e03f1ddeac4d258ad4543f46fc3fa588c2e058b856e4098942b"
+query_pack_sha256 = "9a54ffd33511f1c6ffce058ed8f9d2970bb2ddbdcea11b39630b4d9ba69c49cb"
+tree_sha256 = "df8ed537dcb5e0347f33fd3116a305de1dfcbe315df5f15c607586dac813bb78"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.rust]
 enabled = true
@@ -1686,6 +1886,22 @@ prerequisites = ["Cargo.toml", "Cargo.lock", "bundled-rust-indexer"]
 query_id = "security-extended"
 query_suite = "codeql-suites/rust-security-extended.qls"
 query_suite_sha256 = "73f133b0f0028e7721488a4ea95784d2b78b3acfb8cbf1668d2900d3ac1030c0"
+
+# Must equal export_query_packs.rust in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.rust.export_queries]]
+query_id = "graph-export-rust"
+source_path = "rules/codeql-graph-export/rust"
+query_pack = "appsec-review/graph-export-rust"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "6ce90b13f0ee267d55e2e3f2289b4c021988343a0be486b94e3c0ba49cacbf88"
+query_pack_sha256 = "632020abd5dbe64a238b0ae4b6ab04064cc30f3a8a6f19928a501165f0b30bd1"
+tree_sha256 = "2104e6e3908ceeea10b416af79125420d7be2aeffde16e8f169827a1ce4c09ff"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true
@@ -1780,6 +1996,34 @@ workers = 1
 [jobs.job_cpp_symbol_index.steps.acceptance]
 workers = 1
 [jobs.job_cpp_symbol_index.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_binary_evidence_indexing]
+name = "binary_evidence_indexing"
+workers = 1
+
+[jobs.job_binary_evidence_indexing.settings]
+# Bounds per configured binary; each truncation is a named coverage gap. Provisional: tune them from
+# the large-binary measurement in docs/TODO.md.
+max_functions_per_binary = 200000
+max_call_sites_per_binary = 1000000
+max_imports_per_binary = 20000
+max_strings_per_binary = 200000
+max_string_xrefs = 64
+max_string_chars = 4096
+# Retrieval text per function entity (name plus pseudo-C); read_excerpt reads the full pseudo-C.
+max_entity_text_bytes = 65536
+
+[jobs.job_binary_evidence_indexing.steps.load]
+workers = 1
+[jobs.job_binary_evidence_indexing.steps.load.tasks.accepted_publications]
+
+[jobs.job_binary_evidence_indexing.steps.index]
+workers = 1
+[jobs.job_binary_evidence_indexing.steps.index.tasks.binaries]
+
+[jobs.job_binary_evidence_indexing.steps.acceptance]
+workers = 1
+[jobs.job_binary_evidence_indexing.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_cpg_analysis]
 name = "cpg_analysis"
@@ -2118,6 +2362,15 @@ name = "owasp_control_assessment"
 workers = 8
 
 [jobs.job_owasp_control_assessment.settings]
+enabled = true
+mode = "assessment"
+reviewer_profile = "reviewer"
+max_evidence_per_component = 60
+max_source_lines = 120
+max_subjects_per_control = 8
+max_batches = 200
+max_turns = 4
+max_queries = 12
 asvs_level = 2
 masvs_profile = "L2"
 max_batch_size = 12
@@ -2126,7 +2379,17 @@ max_components = 128
 dynamic_authorized = false
 
 [jobs.job_owasp_control_assessment.settings.model]
-enabled = false
+enabled = true
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "medium"
+max_input_tokens = 24000
+max_output_tokens = 6000
+timeout_seconds = 120
+retries = 1
+
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+enabled = true
 provider = "claude-cli"
 model = "claude-haiku-5-5"
 reasoning = "medium"
@@ -2142,8 +2405,8 @@ batching_rules = "1"
 result_validator = "1"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
-catalog_path = "data/reference/owasp/fixtures/asvs-5.0.0.json"
-catalog_sha256 = "841724424177d187f85a1128f30b432e2598316d215e99314cf8f87a5771b4e9"
+catalog_path = "data/reference/owasp/catalogs/asvs-5.0.0.json"
+catalog_sha256 = "f4d237a894ad86ac3849b5e9ae8faadb9d922e5b219d9822b065d13584c21742"
 version = "5.0.0"
 repository = "https://github.com/OWASP/ASVS"
 ref = "v5.0.0_release"
@@ -2151,8 +2414,8 @@ commit = "5cf9b032440be53ce345ab3c130fda46ba1ce7a2"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.MASVS]
-catalog_path = "data/reference/owasp/fixtures/masvs-2.1.0.json"
-catalog_sha256 = "845f6e57f5f61094d059cdcc8882c3fb9a1808c025bb5cf3b0b536969dd416d4"
+catalog_path = "data/reference/owasp/catalogs/masvs-2.1.0.json"
+catalog_sha256 = "45d3c4b53ea5178fcc7eda98edb0e2aa09ed299d718405b3ec1f280d03ed1adb"
 version = "2.1.0"
 repository = "https://github.com/OWASP/owasp-masvs"
 ref = "v2.1.0"
@@ -2160,8 +2423,8 @@ commit = "8e133d09f4140518ed04cc254b18be9ff4990ffc"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.MASTG]
-catalog_path = "data/reference/owasp/fixtures/mastg-2.0.0.json"
-catalog_sha256 = "664e962d762cbdaa34e486f6dfa48a94663d44c080db596d241325ec344a08f6"
+catalog_path = "data/reference/owasp/catalogs/mastg-2.0.0.json"
+catalog_sha256 = "7d7412a8cf74f703843af95257c3be8d56198aa4fafbe15b31db9ab3533888e1"
 version = "2.0.0"
 repository = "https://github.com/OWASP/owasp-mastg"
 ref = "v2.0.0"
@@ -2169,8 +2432,8 @@ commit = "990472dbcffe126f5556045d60270c4ffdfdde72"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.OWASP_API_TOP_10]
-catalog_path = "data/reference/owasp/fixtures/api-top10-2023.json"
-catalog_sha256 = "58291b235d5238272b406ed7779918cbeaf82333110d3d9bd8733585b814ef4c"
+catalog_path = "data/reference/owasp/catalogs/api-top10-2023.json"
+catalog_sha256 = "8962e8b85f82cf490f7c00492bfb242048b45afea07c968c0dbb207f52201ffd"
 version = "2023"
 repository = "https://github.com/OWASP/API-Security"
 ref = "2023"
@@ -2178,8 +2441,8 @@ commit = "e85ddfa5a936d4656840ac250c039c7057e66b0d"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.OWASP_TOP_10]
-catalog_path = "data/reference/owasp/fixtures/top10-2025.json"
-catalog_sha256 = "10760a8e21296f94b07a8b14a081b19574ad964b680b6429771ac7a34c7c735c"
+catalog_path = "data/reference/owasp/catalogs/top10-2025.json"
+catalog_sha256 = "3361038c50640e224bcc30ebb9ad8f41e3f701fa7b60511c4a1f14781862f5a9"
 version = "2025"
 repository = "https://github.com/OWASP/Top10"
 ref = "2025"
@@ -2284,7 +2547,7 @@ max_active_claims = 500
 max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
-review_teams = 5
+review_teams = 3
 red_per_team = 3
 blue_per_team = 2
 verifier_per_team = 1

@@ -31,7 +31,7 @@ class VerifiedInputs:
     review_status: str
     manifest_sha256: str
     manifest_path: str
-    candidates: tuple[PocCandidate, ...] | None
+    candidates: tuple[PocCandidate, ...]
     findings: Mapping[str, Mapping[str, Any]]            # finding_package_id -> projected finding package
     package_records: Mapping[str, Mapping[str, Any]]     # package_id -> {path, sha256, lane}
     language_build_handoff_sha256: str | None = None
@@ -65,9 +65,8 @@ def verify_inputs(run_root: Path, *, review_schemas: SchemaSet,
              "the accepted scope does not name the review's manifest")
     findings = {item["finding_package_id"]: item for item in document["packages"]}
     candidates = read_candidates(review)
-    if candidates is not None:
-        problems = check_against_review(candidates, findings)
-        _require(not problems, "poc_candidates disagree with the verified review: " + "; ".join(problems[:3]))
+    problems = check_against_review(candidates, findings)
+    _require(not problems, "poc_candidates disagree with the verified review: " + "; ".join(problems[:3]))
     records: dict[str, Mapping[str, Any]] = {}
     for lane in LANES:
         lane_document = read_bound_json(run_root, outputs[f"packages.assemble_{lane}_packages"]["artifact"])

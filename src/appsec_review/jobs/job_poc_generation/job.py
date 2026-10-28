@@ -40,7 +40,7 @@ from .policy import check_ast
 from .settings import PocGenerationSettings
 from .source import WriterAnswer, assemble, check_answer, decline_of, file_violations
 from .statuses import (
-    ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND, GAP_NO_CANDIDATES,
+    ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND,
     INSUFFICIENT_EVIDENCE, NOT_APPLICABLE, POLICY_DENIED, SOURCE_STATUSES, STATUSES,
 )
 from .writer import WorkspaceReader, load_guidance, run_writer
@@ -160,23 +160,19 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
         planned: list[dict[str, Any]] = []
         omitted: list[str] = []
         language_sha = None
-        if verified.candidates is None:
-            gaps.append(f"{GAP_NO_CANDIDATES}: the accepted review handoff has no poc_candidates field "
-                        "(an older run); nothing was generated")
-        else:
-            ordered = _order(verified.candidates)
-            for candidate in ordered[:settings.max_candidates]:
-                finding = verified.findings[candidate.finding_package_id]
-                planned.append({
-                    "candidate": _candidate_record(candidate),
-                    "finding": {key: finding.get(key) for key in (
-                        "finding_package_id", "sha256", "path", "title", "label", "lane", "state",
-                        "missing_predicates")},
-                    "package": dict(verified.package_records.get(candidate.package_id) or {}) or None})
-            omitted = [item.claim_id for item in ordered[settings.max_candidates:]]
-            if omitted:
-                gaps.append(f"{GAP_CANDIDATE_BOUND}: {len(omitted)} candidates were not attempted because "
-                            f"max_candidates is {settings.max_candidates}")
+        ordered = _order(verified.candidates)
+        for candidate in ordered[:settings.max_candidates]:
+            finding = verified.findings[candidate.finding_package_id]
+            planned.append({
+                "candidate": _candidate_record(candidate),
+                "finding": {key: finding.get(key) for key in (
+                    "finding_package_id", "sha256", "path", "title", "label", "lane", "state",
+                    "missing_predicates")},
+                "package": dict(verified.package_records.get(candidate.package_id) or {}) or None})
+        omitted = [item.claim_id for item in ordered[settings.max_candidates:]]
+        if omitted:
+            gaps.append(f"{GAP_CANDIDATE_BOUND}: {len(omitted)} candidates were not attempted because "
+                        f"max_candidates is {settings.max_candidates}")
         try:
             language_sha = services.builds_factory(run_root).handoff_sha256 if planned else None
         except MissingBuild as exc:
@@ -188,7 +184,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
                          "language_build_handoff_sha256": language_sha},
             "review_status": verified.review_status,
             "bindings": list(verified.bindings),
-            "candidates_field": "absent" if verified.candidates is None else "present",
+            "candidates_field": "present",
             "planned": planned, "omitted": omitted}
         unit.job.events.write("POC_GENERATION_INPUTS_VERIFIED", planned=len(planned), omitted=len(omitted),
                               candidate_count=len(planned), omitted_count=len(omitted),
@@ -449,9 +445,9 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     headers = Headers(located.unit)
     brief = build_brief(candidate, finding=item["finding"], package=package, view=view, sink=sink,
                         unit=located.unit, headers=headers, settings=settings)
-    unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis reference")]
+    unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis identity")]
     if unresolved and len(unresolved) >= len(candidate.poc_basis.entry) + len(candidate.poc_basis.path):
-        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis reference resolves in the package view")
+        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis identity resolves in the package view")
         return entry
     document_ref = _write_json(unit, f"briefs/{candidate.claim_id}.json", brief.document)
     entry["brief"] = document_ref

@@ -11,6 +11,7 @@ from appsec_review.retrieval.neighborhood import (
     DIRECTIONS, INCLUDES, LANGUAGE_PATTERN, LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, SEED_PATTERN)
 from appsec_review.retrieval.observations import OBSERVATION_CLASSES, REPORTED_SEVERITIES
 from appsec_review.retrieval.precomputed import QUERY_SETS
+from appsec_review.retrieval.syntax import QUERY_SYNTAX, MODES, MAX_NAME_BYTES
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
@@ -142,6 +143,14 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "query_set": {"type": "string", "enum": list(QUERY_SETS)},
          "subject": IDENTITY,
          "path": {"type": "string", "maxLength": 4096},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": QUERY_SYNTAX, "description": "Query precomputed syntax-only definitions, written calls, imports or identifier occurrences within one exact source-file or AST identity. Names and call targets are unresolved; results never establish semantic references or dataflow. No parsing or source-tree scanning runs during retrieval.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["mode", "subject"], "properties": {
+         "mode": {"type": "string", "enum": list(MODES)},
+         "subject": {"type": "string", "pattern": "^asr:(source_file|ast_node):[0-9a-f]{64}$"},
+         "name": {"type": "string", "minLength": 1, "maxLength": MAX_NAME_BYTES},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},

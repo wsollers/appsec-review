@@ -1,0 +1,8 @@
+name: appsec-review/graph-export-swift
+version: 1.0.0
+description: >-
+  appsec-review code-graph export queries for Swift (appsec-review/codeql-graph-export/1).
+  Table queries made of primitive-column query predicates only; this is not a SARIF suite.
+  CodeQL extracts Swift only on macOS executors.
+dependencies:
+  codeql/swift-all: 6.8.3

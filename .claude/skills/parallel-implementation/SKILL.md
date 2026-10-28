@@ -29,10 +29,11 @@ instead.
 - Each chunk owns an explicit list of files to create or modify, and nothing else. Shared hotspots
   each get exactly one owner. Examples are central config, registries, schemas and shared test
   `__init__` files.
-- Each chunk writes its own unit tests and runs the existing suites it could regress.
+- Each chunk writes its own unit tests and runs focused unit tests for the behavior it could
+  regress, following the verification scope in root `AGENTS.md`.
 - Content (prompts, personas) and the code that validates it may be separate chunks. State the
   exact format contract in both briefs.
-- Integration (job wiring, end-to-end and orchestration acceptance) is a final, separate chunk. It
+- Integration code (job wiring and orchestration) is a final, separate chunk. It
   starts only after the others merge.
 - Keep each wave within the session's agent-count guideline.
 
@@ -44,7 +45,7 @@ Each brief must include:
 - owned files;
 - requirements;
 - tests to write;
-- the exact test command, with a unique `--basetemp=test/tmp/<chunk>`;
+- the exact focused unit-test command, with a unique `--basetemp=test/tmp/<chunk>`;
 - known pre-existing environmental failures;
 - commit-but-do-not-push;
 - the report format: branch, commits, public API, tests, deviations and concerns.
@@ -57,16 +58,17 @@ For each finished chunk:
 1. Confirm its branch descends from the contract commit.
 2. Diff it against the working branch. Any file outside its ownership must be reviewed and
    justified, or rejected.
-3. Merge with `--no-ff`, run the combined test set across all merged chunks plus regression
-   suites, then push.
+3. Merge with `--no-ff`, run the combined focused unit-test set for the affected behavior across
+   the merged chunks, then push.
 4. Record the agent's decisions and concerns. Settle cross-chunk conflicts yourself, such as
    validator versus content or design text versus implemented semantics, and fix the design rather
    than letting code and docs diverge.
 
 ## 6. Finish
 
-- Run the full regression set and compare failures against the base commit. Only failures that
-  already existed may remain, and they are reported as such.
+- Run the focused unit-test set for the changed areas and compare failures against the base
+  commit. Only failures that already existed may remain, and they are reported as such. Record
+  outstanding manual validation as required by root `AGENTS.md`.
 - Remove disposable `test/tmp/` output.
 - Exclude agent worktrees through `.git/info/exclude`, never through repository ignore rules.
 - Write an implementation record under `docs/reviews/` covering decisions, the partition, merges,

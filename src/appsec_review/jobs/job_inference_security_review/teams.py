@@ -27,6 +27,7 @@ from collections import defaultdict
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 import json
+from itertools import zip_longest
 from pathlib import Path
 import threading
 import time
@@ -38,6 +39,11 @@ from appsec_review.guidance.routing import unit_sources
 from appsec_review.guidance.routing import rank_personas
 from appsec_review.inference import ModelResult, ReviewModelRequest
 from appsec_review.retrieval.index import INDEX_NAMES
+from appsec_review.retrieval.model import EntityKind
+
+BINARY_INDEX = "binary"
+BINARY_ENTITY_PREFIXES = tuple(f"asr:{kind.value}:" for kind in (
+    EntityKind.BINARY_FUNCTION, EntityKind.BINARY_CALL_SITE, EntityKind.BINARY_IMPORT, EntityKind.BINARY_STRING))
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.adjudication import adjudicate
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
@@ -53,6 +59,7 @@ from appsec_review.review.judge import (
     side_assignment,
 )
 from appsec_review.review.ledger import EvidenceRequestOutcome, LedgerWriter, gap_json
+from appsec_review.review.lead_triage import menu_effective_severity
 from appsec_review.review.models import (
     BlueTask, CellRecord, CellStatus, Claim, ClaimState, EvidenceRelation, Gap, GapClass, HuntStrategy, IntegrityError,
     JudgePredicateVerdict, JudgeVerdict, JudgeVerdictValue, Lane, Predicate, RelationKind, Role, make_gap,
@@ -144,6 +151,7 @@ class ReviewContext:
     available_sources: tuple[str, ...]
     max_page_size: int = 20
     max_depth: int = 4
+    attempt_id: str = "-"
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
     _views: dict[str, PackageView] = field(default_factory=dict)
@@ -162,14 +170,15 @@ class ReviewContext:
         receipt = {"granted_tools": [name for name in capability.tools if name != EXPAND_TOOL],
                    "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
+        binary = BINARY_INDEX in capability.indexes
         key = sha256_hex({"role": role.value, "persona": persona, "stack": stack, "task": task,
-                          "lane": lane.value, "receipt": receipt})
+                          "lane": lane.value, "receipt": receipt, "binary_evidence": binary})
         with self._lock:
             cached = self._bundles.get(key)
         if cached is None:
             cached = compose_bundle(self.repository_root, role=role.value, persona=persona, stack=stack, task=task,
                                     task_input={"lane": lane.value}, capability=receipt,
-                                    vocabulary=self.vocabulary, crosswalk=self.crosswalk)
+                                    vocabulary=self.vocabulary, crosswalk=self.crosswalk, binary_evidence=binary)
             cached = {"bundle": cached, "text": render_prompt(cached)}
             with self._lock:
                 self._bundles[key] = cached
@@ -390,11 +399,14 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
             compact, labels, claim_id=claim.claim_id, schema_errors=schema_errors)
     profile = ctx.profile(role)
     tools = tuple(sorted((set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS) | {EXPAND_TOOL}))
+    indexes = tuple(name for name in ctx.index_names if name in INDEX_NAMES)
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=work.round_index, tools=tools,
-        indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES),
+        indexes=indexes,
         entities=(*work.entities, *extra_entities),
+        # Configured binaries are review inputs as a whole, so their decompiled entities are granted by kind.
+        entity_prefixes=BINARY_ENTITY_PREFIXES if BINARY_INDEX in indexes else (),
         graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
         max_queries=max(1, profile.max_queries), max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)
@@ -447,6 +459,7 @@ class _Guard:
                  clock: Callable[[], float] = time.monotonic) -> None:
         self.ctx, self.cell, self.profile, self.capture, self.clock = ctx, cell, profile, capture, clock
         self.deadline: float | None = None
+        self.dispatches = 0
 
     def __call__(self, request: ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
         if not self.ctx.budget.cell_launch_allowed():
@@ -460,7 +473,15 @@ class _Guard:
         if self.capture:
             self.cell.requests.append(json.dumps(asdict(request), sort_keys=True, default=str).encode("utf-8"))
         try:
-            result = self.ctx.infer(request, timeout_seconds=max(1, min(int(timeout_seconds), int(remaining) or 1)))
+            from appsec_review.observability.model_calls import call_model
+            spec = self.cell.spec
+            self.dispatches += 1
+            result = call_model(self.ctx.infer, request,
+                timeout_seconds=max(1, min(int(timeout_seconds), int(remaining) or 1)),
+                run_root=self.ctx.run_root, run_id=self.ctx.run_id,
+                job_id="job_inference_security_review", attempt_id=self.ctx.attempt_id,
+                step_id=f"{spec.lane.value}_review", task_id="teams",
+                package_id=spec.package_id, lane=spec.lane.value)
         except BaseException:
             self.ctx.budget.charge(model_turns=1)
             raise
@@ -485,9 +506,26 @@ def _not_launched(cell: _Cell, reason: str, gap_class: GapClass = GapClass.BUDGE
 def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]], list[str]], *,
          capture: bool = False) -> None:
     """Run or reuse one cell; ordinary failures end in a terminal record, never an exception."""
+    from appsec_review.observability import PipelineLog
+    started = time.monotonic()
+
+    def completed(outcome: CellOutcome, dispatches: int) -> None:
+        spec = cell.spec
+        PipelineLog(ctx.run_root).write("INFERENCE_REVIEW_CELL_COMPLETED", run_id=ctx.run_id,
+            job_id="job_inference_security_review", attempt_id=ctx.attempt_id,
+            step_id=f"{spec.lane.value}_review", task_id="teams", details={
+                "cell_id": cell.cell_id, "package_id": spec.package_id, "lane": spec.lane.value,
+                "role": spec.role.value, "persona": spec.persona,
+                "terminal_status": outcome.record.status.value, "reused": outcome.reused,
+                "model_dispatches": dispatches, "counts": dict(outcome.counts),
+                "gap_count": len(outcome.gaps),
+                "duration_ms": max(0, int((time.monotonic() - started) * 1000))})
+
     if not ctx.budget.cell_launch_allowed():
         cell.record, gap = _not_launched(cell, f"job budget exhausted ({ctx.budget.usage_exhausted()})")
-        cell.outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+        outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+        cell.outcome = outcome
+        completed(outcome, 0)
         return
     retry = ctx.settings.retry
     guard = _Guard(ctx, cell, ctx.profile(cell.spec.role), capture=capture)
@@ -499,6 +537,7 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
     if not outcome.reused and outcome.counts.get("queries"):
         ctx.budget.charge(retrieval_queries=int(outcome.counts["queries"]))
     cell.outcome, cell.record = outcome, outcome.record
+    completed(outcome, guard.dispatches)
 
 
 def _seen(cell: _Cell) -> set[str]:
@@ -1383,11 +1422,14 @@ def _consume_check(path: Path) -> None:
 def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *, other_lane_count: int,
              ledger_path: Path, stream: str, signal_dir: Path) -> dict[str, Any]:
     """Run every package of ``lane`` and seal the lane's ledger shard; returns the lane document."""
-    ordered = sorted(packages, key=lambda item: (not _exploratory(item), item.rank, item.package_id))
+    ordered = _ordered_packages(packages)
     counts = {Lane.LEAD: len(ordered), Lane.HUNT: other_lane_count} if lane is Lane.LEAD else {
         Lane.LEAD: other_lane_count, Lane.HUNT: len(ordered)}
-    allocation = lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share,
-                                 ctx.settings.budgets.budget_team_packages)
+    package_allocation = lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share,
+                                         ctx.settings.budgets.budget_team_packages)
+    claim_cap = ctx.settings.rounds.max_active_claims
+    allocation = (lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share, claim_cap)
+                  if sum(package_allocation.values()) > claim_cap else package_allocation)
     _signal(signal_dir, lane, ordered, allocation, queue_empty=False)
     other = Lane.HUNT if lane is Lane.LEAD else Lane.LEAD
     declared = _read_signal(signal_dir, other)
@@ -1396,15 +1438,15 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
     launches = allocation[lane]
     total = sum(allocation.values())
     lane_offset = 0 if lane is Lane.LEAD else allocation[Lane.LEAD]
-    claim_cap = ctx.settings.rounds.max_active_claims
     ordered = [replace(work, active_claim_limit=(claim_cap // total +
                        (index + lane_offset < claim_cap % total)) if index < launches and total else 0)
                for index, work in enumerate(ordered)]
     with ThreadPoolExecutor(max_workers=max(1, ctx.settings.teams.review_teams), thread_name_prefix=lane.value) as pool:
-        futures = [pool.submit(run_team, ctx, work, launch=index < launches,
-                               not_launched_reason=(f"lane {lane.value} team-package allocation of {launches} "
-                                                    f"exhausted (budget_team_packages)"))
-                   for index, work in enumerate(ordered)]
+        futures = []
+        for index, work in enumerate(ordered):
+            limit = "max_active_claims" if index < package_allocation[lane] else "budget_team_packages"
+            futures.append(pool.submit(run_team, ctx, work, launch=index < launches,
+                                       not_launched_reason=f"lane {lane.value} allocation of {launches} exhausted ({limit})"))
         teams = [future.result() for future in futures]
     _signal(signal_dir, lane, ordered, allocation, queue_empty=True)
     return _seal(ctx, lane, teams, allocation, ledger_path, stream)
@@ -1413,6 +1455,22 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
 def _exploratory(work: PackageWork) -> bool:
     return work.lane is Lane.LEAD and any(lead.get("admission_reasons") == ["exploration_reserve"]
                                          for lead in work.document.get("lead_menu", ()))
+
+
+def _ordered_packages(packages: Sequence[PackageWork]) -> list[PackageWork]:
+    """Reserve discovery capacity for both severities before the ordinary ranked queue."""
+    populations: dict[str, list[PackageWork]] = {"medium": [], "low": []}
+    ordinary = []
+    for work in sorted(packages, key=lambda item: (item.rank, item.package_id)):
+        if not _exploratory(work):
+            ordinary.append(work)
+            continue
+        severity = menu_effective_severity(work.document["lead_menu"][0])
+        if severity not in populations:
+            raise IntegrityError(f"exploratory package has invalid severity: {work.package_id}")
+        populations[severity].append(work)
+    return [work for pair in zip_longest(populations["medium"], populations["low"])
+            for work in pair if work is not None] + ordinary
 
 
 def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledger_path: Path, stream: str) -> dict[str, Any]:

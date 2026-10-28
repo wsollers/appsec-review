@@ -374,7 +374,11 @@
         "codeql_database",
         "points_to_set",
         "indirect_call_targets",
-        "memory_object"
+        "memory_object",
+        "binary_function",
+        "binary_call_site",
+        "binary_import",
+        "binary_string"
       ]
     },
     "poc_status": {

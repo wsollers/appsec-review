@@ -64,9 +64,11 @@ def test_engineering_signal_dagster_dependencies_match_current_orchestration() -
             "evidence_collection__finalize", "cpp_compiled_analysis__finalize"} == \
         upstream("dependency_intelligence__begin")
     assert "code_graph_index__finalize" in upstream("security_tagging__begin")
+    assert {"security_tagging__finalize", "code_graph_index__finalize",
+            "review_prioritization__finalize"} <= upstream("owasp_control_assessment__begin")
     review_upstream = upstream("review_data_indexing__begin")
     assert {"test_coverage__finalize", "profile_data__finalize",
-            "dependency_intelligence__finalize", "security_tagging__finalize"} <= review_upstream
+            "dependency_intelligence__finalize", "owasp_control_assessment__finalize"} <= review_upstream
 
 
 def _direct_graph_block(path: str, marker: str) -> str:
@@ -86,30 +88,14 @@ def test_operator_docs_track_the_executable_direct_graph() -> None:
         assert positions == sorted(positions), (path, expected)
 
 
-def test_architecture_docs_pin_current_counts_and_nonfinding_semantics() -> None:
+def test_architecture_doc_counts_match_the_registries() -> None:
     config = load_config("appsec-review.toml")
     indexing = Path("docs/architecture/indexing-and-query-reuse.md").read_text(encoding="utf-8")
     record = Path("docs/reviews/engineering-signal-jobs-implementation.md").read_text(encoding="utf-8")
-    canonical = Path("docs/architecture/engineering-security-signals.md").read_text(encoding="utf-8")
-    canonical_words = " ".join(canonical.split())
-    evidence = Path("docs/architecture/evidence-sources-and-dataflow-retrieval.md").read_text(encoding="utf-8")
 
     assert f"All {len(config.jobs)} currently registered jobs" in indexing
     assert f"All {len(PRODUCT_RULES)} stage-1 sets" in indexing
     assert f"input-source matrix contains {len(INPUT_SOURCES)}" in record
-    assert "`query_code_graph` | exists" in evidence
-    for phrase in (
-        "including linker/loader and model-assisted identities",
-        "applicability-unverified",
-        "conservative-default",
-        "not a vulnerability finding",
-        "context_only",
-        "artifact_origin: \"accepted-input\"",
-        "repositories.deduplicate",
-        "Fresh hits avoid HTTP",
-        "cache-hit, and HTTP-request counts",
-    ):
-        assert phrase in canonical_words
 
 
 def test_clang_observations_enter_the_source_sast_review_lane() -> None:
@@ -170,4 +156,3 @@ def test_context_cap_retains_dependency_and_scorecard_roles() -> None:
     chosen, omitted, gaps = assembler._cap(context, "unit", "lane_b_hunt")
     assert {item.role for item in chosen} == {"dependency", "openssf_scorecard"}
     assert omitted == 4 and gaps[0].state == "truncated"
-

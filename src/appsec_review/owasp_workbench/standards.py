@@ -43,6 +43,8 @@ class StandardCatalog:
     source: Mapping[str, Any]
     catalog_sha256: str
     fixture: bool
+    coverage: Mapping[str, Any]
+    distribution: Mapping[str, Any]
 
     @property
     def snapshot_id(self) -> str:
@@ -68,6 +70,8 @@ def load_catalog(repository_root: Path, family: str, settings: Mapping[str, Any]
         raise ValueError(f"{family} catalog hash mismatch")
     if document.get("schema") != CATALOG_SCHEMA:
         raise ValueError(f"{family} catalog schema is unsupported")
+    if type(document.get("fixture")) is not bool:
+        raise ValueError(f"{family} fixture marker must be an explicit boolean")
     if document.get("family") != family or document.get("authority") != SUPPORTED_FAMILIES[family]:
         raise ValueError(f"{family} catalog authority mismatch")
     version = str(settings.get("version", ""))
@@ -95,6 +99,12 @@ def load_catalog(repository_root: Path, family: str, settings: Mapping[str, Any]
             raise ValueError(f"{family} record identity/text is invalid or duplicated")
         ids.add(native_id)
         normalized.append(dict(record))
+    acquisition = document.get("acquisition", {})
+    if not document["fixture"]:
+        from .acquisition import validate_complete_catalog
+        validate_complete_catalog(document)
+    elif acquisition:
+        raise ValueError(f"{family} qualification fixture cannot declare complete acquisition coverage")
     return StandardCatalog(
         family=family,
         version=version,
@@ -103,6 +113,16 @@ def load_catalog(repository_root: Path, family: str, settings: Mapping[str, Any]
         source={key: str(upstream[key]) for key in sorted(required)},
         catalog_sha256=actual,
         fixture=bool(document.get("fixture", False)),
+        coverage=(dict(acquisition) if acquisition else {
+            "completeness": "abridged_fixture", "declared_ids": sorted(ids),
+            "exclusions": ["all upstream records not explicitly included in this fixture"],
+        }),
+        distribution=({
+            **{key: document["distribution"][key] for key in
+               ("attribution", "changes", "license_url", "license_source")},
+            "license_text_sha256": hashlib.sha256(
+                document["distribution"]["license_text"].encode("utf-8")).hexdigest(),
+        } if not document["fixture"] else {}),
     )
 
 
@@ -119,6 +139,7 @@ def load_catalogs(repository_root: Path, sources: Mapping[str, Any]) -> dict[str
 
 
 def standards_manifest(catalogs: Mapping[str, StandardCatalog]) -> dict[str, Any]:
+    """Keep control authority, snapshot completeness and redistribution credits in publications."""
     sources = []
     gaps = []
     for family in sorted(catalogs):
@@ -131,8 +152,18 @@ def standards_manifest(catalogs: Mapping[str, StandardCatalog]) -> dict[str, Any
             "catalog_sha256": catalog.catalog_sha256,
             "record_count": len(catalog.records),
             "upstream": dict(catalog.source),
+            "distribution": dict(catalog.distribution),
+            "normalized_records_sha256": catalog.coverage.get("normalized_records_sha256"),
             "fixture": catalog.fixture,
+            "completeness": catalog.coverage["completeness"],
+            "declared_record_count": len(catalog.coverage["declared_ids"]),
+            "exclusions": catalog.coverage["exclusions"],
         })
+        if family == "MASVS":
+            sources[-1]["profile_basis"] = (
+                "Qualification fixture profile labels; MASVS 2 defines no upstream levels."
+                if catalog.fixture else
+                "Local L1/L2 all-control selection aliases; MASVS 2 defines no upstream levels.")
         if catalog.fixture:
             gaps.append(f"{family} uses a pinned abridged fixture; live upstream refresh is unverified")
     payload = {"schema": "appsec-review/owasp-standards-manifest/1", "sources": sources,
@@ -158,7 +189,7 @@ def control_records(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int,
             record = dict(raw)
             record.update({"family": family, "version": catalog.version,
                            "control_identity": catalog.identity(str(raw["id"])),
-                           "catalog_sha256": catalog.catalog_sha256})
+                           "catalog_sha256": catalog.catalog_sha256, "fixture": catalog.fixture})
             if family == "MASVS":
                 record["supporting_tests"] = sorted(
                     catalogs["MASTG"].identity(str(test["id"]))

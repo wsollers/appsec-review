@@ -146,7 +146,7 @@ class PocChain:
                  "poc_basis": {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "brief": value},
                  "finding_package": {"finding_package_id": finding["finding_package_id"],
                                      "sha256": finding["sha256"]},
-                 "evidence_refs": []}
+                 "evidence_refs": list(finding["direct_evidence"])}
         entry.update(changes)
         return entry
 
@@ -156,7 +156,7 @@ class PocChain:
         if candidates is not None:
             self.inject(candidates)
 
-    def inject(self, candidates: Sequence[Mapping[str, Any]]) -> None:
+    def inject(self, candidates: Sequence[Mapping[str, Any]] | None) -> None:
         pointer_path = self.run_root / "data" / "jobs" / JOB / "latest.json"
         pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
         handoff_path = self.run_root / pointer["handoff_path"]
@@ -164,7 +164,10 @@ class PocChain:
         artifact = handoff["outputs"]["publication.publish_handoff"]["artifact"]
         review_path = self.run_root / artifact["path"]
         review = json.loads(review_path.read_text(encoding="utf-8"))
-        review["poc_candidates"] = [dict(item) for item in candidates]
+        if candidates is None:
+            review.pop("poc_candidates")
+        else:
+            review["poc_candidates"] = [dict(item) for item in candidates]
         payload = canonical_json(review)
         review_path.write_bytes(payload)
         artifact["sha256"], artifact["size_bytes"] = hashlib.sha256(payload).hexdigest(), len(payload)
@@ -261,7 +264,8 @@ def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
             "findings" / f"{item['finding_package_id']}.json"
         document = json.loads(path.read_text(encoding="utf-8"))
         findings.append({"finding_package_id": item["finding_package_id"], "sha256": item["sha256"],
-                         "claim_id": document["claim_id"], "state": document["state"]})
+                         "claim_id": document["claim_id"], "state": document["state"],
+                         "direct_evidence": document["direct_evidence"]})
     chain.findings = sorted(findings, key=lambda item: (item["state"] != "confirmed", item["claim_id"]))
     packages = []
     for lane in ("lead", "hunt"):

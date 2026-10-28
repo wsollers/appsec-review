@@ -14,6 +14,10 @@
 #   image           catalog image id, or the operator-provided CodeQL source tag, used to verify
 #   library         the analysis library version the pack is written against; asserted present
 #   verify          check-only (type-check, no query plan) | validate (engine-native validation)
+#   warm            CodeQL only: true when `query-packs --warm` (scripts/compile-codeql-queries.sh)
+#                   fully compiles the pack into the shared compile cache; false for packs that ship
+#                   precompiled .qlx (warm_skip_reason says why). warm_threads, warm_ram_mb and
+#                   warm_timeout_seconds override the compile defaults for one pack.
 #   state           enabled | deferred
 #
 # `library` is pinned deliberately. A CodeQL pack that declares `codeql/cpp-all: "*"` binds to
@@ -33,10 +37,114 @@ suite = "graph-export.qls"
 image = "audit-codeql:custom-2.27.0"
 library = "codeql/cpp-all@12.1.0"
 verify = "check-only"
-# `query-packs --warm` really compiles this pack into the persistent CodeQL compile cache.
+# `query-packs --warm` fully compiles this pack into the shared compile cache review runs mount.
 warm = true
 state = "enabled"
 description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-java"
+path = "rules/codeql-graph-export/java"
+engine = "codeql"
+language = "java"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/java-all@9.3.0"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Java and Kotlin code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-javascript"
+path = "rules/codeql-graph-export/javascript"
+engine = "codeql"
+language = "javascript"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/javascript-all@2.10.1"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored JavaScript and TypeScript code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-python"
+path = "rules/codeql-graph-export/python"
+engine = "codeql"
+language = "python"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/python-all@7.2.5"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Python code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-ruby"
+path = "rules/codeql-graph-export/ruby"
+engine = "codeql"
+language = "ruby"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/ruby-all@7.0.0"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Ruby code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-go"
+path = "rules/codeql-graph-export/go"
+engine = "codeql"
+language = "go"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/go-all@7.3.1"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Go code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+[[packs]]
+id = "graph-export-csharp"
+path = "rules/codeql-graph-export/csharp"
+engine = "codeql"
+language = "csharp"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/csharp-all@7.3.0"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored C# code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-rust"
+path = "rules/codeql-graph-export/rust"
+engine = "codeql"
+language = "rust"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/rust-all@0.2.21"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Rust code-graph export tables (call sites, sources, sinks, guards, paths, flow summaries; ranges not_applicable)."
+
+[[packs]]
+id = "graph-export-swift"
+path = "rules/codeql-graph-export/swift"
+engine = "codeql"
+language = "swift"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/swift-all@6.8.3"
+verify = "check-only"
+# CodeQL extracts Swift only on macOS; the pinned image is Linux, so this pack waits for a macOS executor.
+warm = false
+state = "deferred"
+description = "Repository-authored Swift code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
 
 [[packs]]
 id = "cert-cpp-coding-standards"
@@ -55,6 +163,10 @@ suite = "codeql-suites/cert-cpp-default.qls"
 image = "audit-codeql:custom-2.27.0"
 library = "codeql/cpp-all@12.1.0"
 verify = "check-only"
+# All 117 queries ship a precompiled .qlx in the image and `database analyze` loads those, so a
+# warm compile would only spend hours re-deriving what is already compiled.
+warm = false
+warm_skip_reason = "ships precompiled .qlx for every query; analyze loads them"
 state = "enabled"
 description = "Licensed CERT C++ 2016 coding-standards pack, release-pinned at 2.62.0 and layered into the CodeQL source image."
 

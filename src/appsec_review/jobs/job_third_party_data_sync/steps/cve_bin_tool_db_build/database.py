@@ -10,7 +10,7 @@ import subprocess
 import uuid
 from typing import Any, Callable, Mapping
 
-from appsec_review.container_runtime.identity import application_runtime_user
+from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot, require_beneath, verify_current
 from appsec_review.storage import file_sha256
 
@@ -215,7 +215,7 @@ def build(settings: CveBinToolSettings, resolved: Mapping[str, Any], work: Path,
     output_dir = work / "output"
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.chmod(0o777)
+    grant_runtime_user(output_dir, application_runtime_user("65532:65532"))
     for index, layer in enumerate(resolved["layers"]):
         source = Path(layer["path"])
         target = input_dir / f"{index:06d}.json.gz"

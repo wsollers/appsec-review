@@ -540,7 +540,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
-  - OWASP control failures;
+  - provisional, evidence-bound OWASP adverse hypotheses (not compliance failures or confirmed
+    vulnerabilities);
   - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
   - Dockerfile and IaC misconfiguration (`config_scanner`).
 
@@ -610,7 +611,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 | `variant` | "Claim X was confirmed; where else in this unit does the same pattern occur?" | a round-0 confirmed claim (round 1 only) |
 | `sink_up` | "Which dangerous sinks here take caller-controlled data, and what guards them?" | an accepted `sink_site` family (any state but `unavailable`) for the unit's scope (`symbol_links` alone no longer unlocks it; [code graph](code-graph-precomputation.md) decision 3) |
 | `entry_down` | "Follow this entry point's inputs inward." | an accepted `entry_point` family for the unit's scope |
-| `control_gap` | "This control failed or is missing here; what can an attacker do?" | an accepted OWASP workbench result |
+| `control_gap` | "Does this scoped adverse control hypothesis establish a vulnerability?" | accepted `control_evidence` context with original evidence; unsupported/unresolved controls are not failures |
 | `persona_sweep` | "Review this unit as the assigned specialist." | none |
 
 A strategy whose required source is unavailable is skipped with a `coverage_gap`. The panel falls
@@ -660,15 +661,22 @@ The unit of review capacity is the **review team**: `red_per_team` (default 3) r
     effective guard or control (`blue_control`), the other seeks a reachability or configuration
     break (`blue_reachability`). The blues never see each other's output.
   - *The verifier* stays blind under [R6](#r6-independence).
-- **Concurrency.** `review_teams` (default 5) is the number of teams that may run at once on the
-  host. A local overlay commonly sets it to 1. Teams are slots in one application-owned
+- **Concurrency.** `review_teams` (3 dev / 7 prod, including Copilot equivalents) is the number of
+  teams that may run at once within one run. A local overlay may lower it. Teams are slots in one application-owned
   cross-process semaphore, built on the kernel file locks in `storage/lock.py` and held under the
   run's data directory. Both lane units acquire teams from it, so `review_teams = 1` means exactly
-  one team on the machine regardless of how many Dagster units are active.
+  one team in that run regardless of how many Dagster units are active. Concurrent runs have
+  separate semaphores; this is not a host-wide call limit. The Dagster `inference_teams` pool
+  remains two lane units. Model-call concurrency is phase-dependent (up to three calls per
+  team for discovery/review, four for judges); see the
+  [operational limits](../operations/inference-security-review.md#effective-production-assignments-and-bounds).
 - **Scheduling.** The scheduler is fair-share and work-conserving. The next free team goes to the
   lane that has consumed the smaller fraction of its budget share. A lane with no queued packages
   releases its unused share to the other lane. Packages within a lane are taken in canonical
-  order: by rank, then `package_id`.
+  order: a bounded exploratory prefix alternates medium/low in rank/ID order within severity,
+  then ordinary packages by rank and `package_id`. Admission uses the same medium/low
+  alternation with lead-identity ordering, reassigning unused severity slots. Production
+  enables 20 exploratory packages; development exploration stays off.
 - **Semantics.** `review_teams` and pool limits are capacity, not semantics: they are excluded
   from every cell fingerprint, so runs at different concurrency reuse each other's cells. Budgets,
   team composition, caps, and lane shares are semantic: they decide what gets reviewed, and they
@@ -680,9 +688,13 @@ Budgets are expressed per lane in team-packages, with cell-level caps beneath th
 
 - A positive integer `budget_team_packages` is the job total. `lead_budget_share` (default 0.5)
   splits it between the lanes, and unused share flows to the other lane as described above.
-  `budget_team_packages = "all"` instead admits both complete generated package queues without
-  package-count truncation or lane-share quotas. `prod` and `copilot-prod` select `"all"`; `dev`
-  and `copilot-dev` retain 200. The run-wide budget still counts every launched package.
+  `budget_team_packages = "all"` removes that package-count budget but not the finite active-claim
+  ceiling. If package allocations exceed `max_active_claims`, fair-share/work-conserving allocation
+  is applied under the claim cap before launching teams; every allocated package receives at
+  least one claim slot and omitted packages record explicit budget gaps instead of running with
+  zero slots. `prod` and `copilot-prod` select `"all"` and 1,000 active claims; `dev`
+  and `copilot-dev` retain 200 packages and 500 active claims. Unused claim allocations are not
+  recycled; per-package caps remain 3 lead / 5 hunt. The run-wide budget counts every launched package.
 - Each cell is bounded by its model profile's turn, token, query, and timeout caps from
   [R2](#r2-worker-transport-and-bounded-retrieval-loop).
 - `max_model_turns` and the token totals are hard job ceilings. Reaching any ceiling stops new team
@@ -1070,7 +1082,7 @@ max_active_claims = 500
 max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
-review_teams = 5                 # capacity only; local overlay commonly sets 1; not fingerprinted
+review_teams = 3                 # dev; prod profile sets 7; capacity only, not fingerprinted
 red_per_team = 3
 blue_per_team = 2
 verifier_per_team = 1
@@ -2305,8 +2317,14 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 
 ### Dependencies and current gaps
 
-- The active OWASP assessment must publish accepted applicability/result/coverage shards with exact
-  evidence identities; abridged catalog/live-model gaps remain visible.
+- The opt-in OWASP assessment publishes accepted applicability/result/coverage shards with typed
+  original evidence identities before indexing, package assembly and hunt/red-blue review. It uses
+  prior tagging/tag-cloud, graph and classification context only for bounded routing. Complete
+  pinned catalogs are present, but only four narrow Python static procedures are implemented;
+  unsupported controls/languages and missing runtime adapters remain unresolved coverage.
+  Configured worker and fresh blinded reviewer calls are implemented; live-model efficacy remains
+  unverified. Qualification is explicit, synthetic and never production-eligible. See
+  [`owasp-control-workbench.md`](owasp-control-workbench.md).
 - C++ compiled analysis must supply accepted build/AST/IR/binary shards. The separate pinned,
   licensed cross-language CodeQL job supplies database, SARIF, and observation shards when its
   operator-provided image is present. Joern/CPG is deprecated and disabled by default
@@ -2315,15 +2333,23 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 - Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
   `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (only
   `source_to_sink_reachability`, besides `affected_construct`, and only for a path result, per
-  `review/tool_rules.py`; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
+  `review/tool_rules.py`; OWASP PRECOMPUTED interpretations are indirect for **every** final
+  predicate, including `missing_or_ineffective_guard`, and
   `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/1`), and, for C/C++ scopes with an
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per
-  unit from its accepted graph families. Remaining gaps: export packs exist only for C/C++, so every
-  other language's units fall back to `persona_sweep` with `required_source_unavailable`; the
-  export queries have only run against hand-authored recordings, never the pinned CodeQL image;
+  unit from its accepted graph families. Remaining gaps: export packs are pinned for C/C++, C#,
+  Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and Rust; Swift and every other language's
+  units fall back to `persona_sweep` with `required_source_unavailable`; the end-to-end test still
+  plays back recordings rather than a live export;
   no graph family can satisfy `security_impact`, and static absence of a fact is never a relation.
+- OWASP `not_satisfied` is a scoped adverse assessment, not exploit confirmation; `satisfied` is
+  scoped counterevidence, not component safety. Eligible `owasp_control` leads remain provisional
+  through packages and actual red/blue/verifier requests. Authority links, original references,
+  proof scopes, counterevidence, dissent and limitations survive projection. Final claims must
+  retrieve underlying evidence and establish their own predicates; a naked source-file identity
+  alone is not a direct predicate fact. Repeated underlying sources do not multiply corroboration.
 - Post-build assessment must publish build-security shards with protected command references,
   binary identities, and gaps, without exposing exact sensitive arguments.
 - CI analysis must publish its accepted discovery, observation, correlation, and coverage shards.

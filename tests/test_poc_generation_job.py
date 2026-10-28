@@ -1,10 +1,8 @@
-"""job_poc_generation end to end over the offline review chain.
+"""PoC edge cases over an accepted offline review with scripted candidate permutations.
 
-The scripted inference review produces the accepted review; ``poc_candidates`` is written into its handoff
-where the judge work will write it; the gate and then the PoC job run through the application runner with
-a scripted writer, a recording fake build container and an accepted-build lookup over a copy of
-cpp-multivuln; the final report then reads the PoC handoff. Nothing is a model, a container or Dagster,
-and nothing produced is ever executed.
+The PoC job consumes the review directly, using a scripted writer and compiler boundary adapter.
+The final gate certifies its artifacts before the report reads only that gate snapshot. No model,
+container or Dagster is invoked, and generated code is never executed.
 """
 from __future__ import annotations
 
@@ -27,7 +25,7 @@ from appsec_review.storage import file_sha256
 from tests import poc_support
 from tests.final_report_support import GATE, REPORT
 from tests.fixtures.poc_generation import relay
-from tests.poc_chain import POC, Writer, build_chain, generated_text, ast_by_source
+from tests.poc_chain import BASIS, POC, Writer, build_chain, generated_text, ast_by_source
 
 ROOT = Path(__file__).parents[1]
 CLAIM_DIR = f"data/jobs/{POC}/attempts"
@@ -73,7 +71,7 @@ def rows_of(frozen):
 
 
 def scenario(chain, tmp_path_factory, candidates, scripts, executor=None, *, report=False, **kwargs):
-    """Restore the accepted review, add ``candidates``, run the gate, the PoC job and (optionally) the report."""
+    """Restore the accepted review, add candidates, run PoC and optionally certify and publish."""
     chain.prepare(candidates)
     writer = Writer(scripts)
     executor = executor or poc_support.FakeExecutor(ast_by_source)
@@ -89,10 +87,9 @@ def scenario(chain, tmp_path_factory, candidates, scripts, executor=None, *, rep
 
 @pytest.fixture(scope="module")
 def mixed(chain, tmp_path_factory):
-    """Candidate 1 is good, candidate 2 carries the judge verdict ``partly``, the third is beyond the bound."""
+    """Candidate 1 is good, candidate 2 lacks a trigger, and the third is beyond the bound."""
     a = chain.findings[0]["claim_id"]
-    candidates = [chain.candidate(0), chain.candidate(1, basis={**chain.candidate(1)["poc_basis"]["brief"], "trigger": []}),
-                  chain.candidate(2)]
+    candidates = [chain.candidate(0), chain.candidate(1, basis={**BASIS, "trigger": []}), chain.candidate(2)]
     return scenario(chain, tmp_path_factory, candidates, {a: [relay.answer()]}, report=True)
 
 
@@ -174,6 +171,7 @@ def test_the_brief_carries_the_finding_the_basis_the_declarations_and_the_build_
     brief = read(mixed, row["brief"]["path"])
     assert brief["schema"] == "appsec-review/poc-writer-brief/1" and brief["claim"]["state"] == "confirmed"
     assert brief["poc_basis"] == mixed.candidates[0]["poc_basis"]["brief"]
+    assert set(brief["poc_basis_labels"]) == set(BASIS["entry"] + BASIS["path"])
     assert sorted(row["label"] for row in brief["poc_basis_labels"].values()) == ["E1", "F1", "F2"]
     assert brief["sink"] == {"name": relay.SINK, "path": "src/packet.cpp", "line": 7, "symbol": "asr:symbol:" + "4" * 64}
     text = "\n".join(line for item in brief["declarations"] for line in item["text"])
@@ -339,9 +337,7 @@ def test_a_policy_denied_and_a_compile_failed_candidate_keep_their_source_as_dat
 def test_writer_declines_unusable_bases_and_missing_answers_are_named_statuses(chain, tmp_path_factory) -> None:
     a, b = chain.findings[0]["claim_id"], chain.findings[1]["claim_id"]
     decline = {"action": "final", "result": {"decline": {"status": "unsafe_to_attempt", "why": "needs a socket"}}}
-    no_trigger = {"entry": ["asr:entry_point:" + "1" * 64], "path": ["asr:call_site:" + "2" * 64],
-                  "trigger": [], "input_format": "x", "preconditions": [],
-                  "expected_observation": "x", "unknowns": []}
+    no_trigger = {**BASIS, "trigger": []}
     run = scenario(chain, tmp_path_factory, [chain.candidate(0), chain.candidate(1, basis=no_trigger)],
                    {a: [decline]})
     rows = rows_of(run)
@@ -411,6 +407,17 @@ def test_a_review_with_no_candidates_produces_an_empty_valid_handoff(chain) -> N
     assert outcomes["status"] == "none_available" and "empty eligible scope" in outcomes["reason"]
 
 
+def test_a_handoff_without_the_required_candidate_field_is_an_integrity_failure(chain) -> None:
+    from appsec_review.jobs.accepted_review import load_accepted_review
+
+    chain.restore()
+    chain.inject(None)
+    with pytest.raises(IntegrityError, match="poc_candidates"):
+        load_accepted_review(chain.run_root, SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"),
+                             max_packages=10000)
+    assert not (chain.run_root / CLAIM_DIR).exists()
+
+
 def test_an_empty_candidate_list_is_a_run_with_nothing_to_document_not_a_gap(chain) -> None:
     chain.prepare([])
     chain.run_poc(Writer({}))
@@ -423,12 +430,13 @@ def test_an_empty_candidate_list_is_a_run_with_nothing_to_document_not_a_gap(cha
                                               "sha256": "0" * 64}),
     lambda c: c.candidate(0, state="supported" if c.findings[0]["state"] == "confirmed" else "confirmed"),
     lambda c: c.candidate(0, claim_id=c.findings[1]["claim_id"]),
+    lambda c: c.candidate(0, judge_verdict="partly"),
     lambda c: {**c.candidate(0), "poc_basis": {"sha256": "1" * 64, "brief": c.candidate(0)["poc_basis"]["brief"]}},
     lambda c: {**c.candidate(0), "surprise": True},
 ])
 def test_candidates_that_disagree_with_the_verified_review_fail_the_job(chain, mutate) -> None:
-    chain.prepare([mutate(chain)])
     with pytest.raises(IntegrityError):
+        chain.prepare([mutate(chain)])
         chain.run_poc(Writer({}))
 
 
@@ -507,12 +515,14 @@ def test_the_final_report_schema_accepts_the_poc_block_and_agrees_with_jsonschem
     closed = SchemaSet(ROOT / "docs" / "schemas" / "final-report")
     report = unit_json(mixed, "report.assemble", "final-report.json", REPORT)
     assert list(validator.iter_errors(report)) == [] and closed.errors("final-report", report) == []
+    item_index = next(index for index, item in enumerate(report["poc_outcomes"]["items"])
+                      if item["status"] == "compile_verified")
     broken = []
-    for edit in (lambda r: r["poc_outcomes"]["items"][0].update(status="Done!"),
-                 lambda r: r["poc_outcomes"]["items"][0].update(claim_id="claim-short"),
-                 lambda r: r["poc_outcomes"]["items"][0]["files"].pop("source"),
-                 lambda r: r["poc_outcomes"]["items"][0].update(description=""),
-                 lambda r: r["poc_outcomes"]["items"][0].update(surprise=1),
+    for edit in (lambda r: r["poc_outcomes"]["items"][item_index].update(status="Done!"),
+                 lambda r: r["poc_outcomes"]["items"][item_index].update(claim_id="claim-short"),
+                 lambda r: r["poc_outcomes"]["items"][item_index]["files"].pop("source"),
+                 lambda r: r["poc_outcomes"]["items"][item_index].update(description=""),
+                 lambda r: r["poc_outcomes"]["items"][item_index].update(surprise=1),
                  lambda r: r["poc_outcomes"].update(poc_handoff={"path": "../x", "sha256": "0" * 64})):
         mutated = deepcopy(report)
         edit(mutated)
@@ -534,12 +544,12 @@ def test_a_report_in_the_previous_shape_is_explicitly_unsupported(mixed) -> None
     assert SchemaSet(ROOT / "docs" / "schemas" / "final-report").errors("final-report", report)
 
 
-def test_the_default_package_view_is_built_from_the_accepted_review_and_unresolved_labels_are_named(chain) -> None:
+def test_the_default_package_view_is_built_from_the_accepted_review_and_unresolved_identities_are_named(chain) -> None:
     """Without the stub view the job builds the real labelled view; the fixture package has no entry point or call
-    path, so none of the basis labels resolve and the candidate is insufficient_evidence, not a guess."""
+    path, so none of the basis identities resolve and the candidate is insufficient_evidence, not a guess."""
     a = chain.findings[0]["claim_id"]
     chain.prepare([chain.candidate(0)])
     chain.run_poc(Writer({}), view_factory=None)
     row = chain.rows()[a]
-    assert row["status"] == "insufficient_evidence" and "reference" in row["reason"] and row["files"] is None
+    assert row["status"] == "insufficient_evidence" and "identity" in row["reason"] and row["files"] is None
     assert chain.built["executor"].calls == []

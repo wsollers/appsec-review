@@ -19,6 +19,8 @@
 /data/feeds/embedding-models/
 # Pre-run Ghidra decompilation publications of third-party binaries (appsec-review binary-decompile).
 /data/binary-decompilation/
+# Target acquisition manifests, review exports, and change diffs (appsec-review acquire-target).
+/data/target-acquisitions/
 # Tool-output cache and per-item memo (brief N): pointers into run trees, never committed.
 /data/caches/
 *.jsonl

@@ -1,20 +1,25 @@
 # Wave 1 review operations
 
-The direct CLI and Dagster share the application-owned job lifecycle, receipts, validation, and
-accepted handoffs, but they do not currently expose the same review topology.
+The direct CLI and Dagster share the application-owned job lifecycle, enabled review topology,
+receipts, validation, and accepted handoffs. The CLI runs a topological order linearly; Dagster
+can run independent branches concurrently.
 
 The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> source_history_analysis
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
+  -> ci_configuration_analysis -> source_history_analysis
   -> target_analysis_plan
-  -> tree_sitter_ast -> project_build -> language_build
+  -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
-  -> cpp_compiled_analysis -> clang_static_analysis
-  -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
-  -> [cpg_analysis only when enabled] -> evidence_collection -> dependency_intelligence
-  -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> code_graph_index -> review_data_indexing -> review_package_assembly
+  -> evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
+  -> sanitizer_build -> cpp_symbol_index -> [cpg_analysis only when enabled]
+  -> svf_alias_analysis (opt-in; only when enabled) -> binary_evidence_indexing
+  -> post_build_security_assessment -> dependency_intelligence
+  -> codeql_analysis -> review_prioritization
+  -> code_graph_index -> security_tagging
+  -> owasp_control_assessment (enabled by default)
+  -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> poc_generation
   -> remediation_planning -> remediation_validation -> dossier_publication -> final_publication_gate
   -> final_report_publication
@@ -26,13 +31,18 @@ its pin; any missing image or moved tag fails the run (see
 [`image-pin-verification.md`](image-pin-verification.md)). The pipeline never builds images. Setting
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
 
-The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
-control assessment, or security tagging, and `third_party_data_sync` runs separately (`appsec-review
+Both surfaces then run `target_acquisition`. For `start --system <id>` (Dagster:
+`APPSEC_REVIEW_SYSTEM=<id>`) it acquires or re-verifies every component of the configured system in
+parallel into `targets/<system>/` and intake reviews that composed root; otherwise it records
+`NOT_REQUESTED` (see [`target-acquisition.md`](target-acquisition.md)).
+
+The direct graph is derived from the same topology as Dagster's `wave1_review`, so it includes CI
+configuration analysis, post-build security assessment, OWASP control assessment and security
+tagging; `third_party_data_sync` runs separately (`appsec-review
 run job_third_party_data_sync`). Both surfaces run change-context analysis after Tree-sitter AST
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
-document issue analysis after package assembly. Use Dagster's
-`wave1_review`, which includes every registered job whose job-level `settings.enabled` is not false,
-except the standalone `third_party_data_sync` job, when its additional branches are required.
+document issue analysis after package assembly. Dagster's
+`wave1_review` runs the independent branches concurrently; the CLI runs them in one topological order.
 `final_report_publication` is its single terminal job; the gate and the report are described in
 [`final-report.md`](final-report.md). At integration `b702eb7`, enabled completion producers all
 precede one final gate. New configurations enable compile-only PoC, confirmed-only planning,
@@ -49,6 +59,20 @@ full native all-lane semantic acceptance remains pending. Do not infer
 end-to-end readiness from graph construction, new defaults or isolated unit coverage.
 See [remediation](remediation.md), [dossier publication](dossier-publication.md) and the
 [implementation record](../reviews/evidence-completion-documentation-inventory.md).
+The shared enabled direct/Dagster OWASP chain is **prioritization → code graph → security tagging/tag cloud →
+OWASP → review data indexing → package assembly → hunt and red/blue/independent verification**,
+with accepted source/component/build/static evidence also feeding OWASP. Tagging and prioritization
+do not wait for OWASP; their accepted products are bounded routing/context, never control proof.
+OWASP is enabled by default with `mode = "assessment"` in all shipped profiles. Assessment uses configured worker
+inference plus a fresh blinded reviewer; qualification must be explicitly selected with both
+profiles disabled and is never production-eligible. See
+[`owasp-control-assessment.md`](owasp-control-assessment.md).
+
+Direct `start`, `resume` and `plan-resume` select this chain through the normal enabled-job filter.
+`resume`/`plan-resume --force-from` accept either tagging or OWASP when enabled and reject either
+when disabled. Set `jobs.job_owasp_control_assessment.settings.enabled = false` before freezing
+a run to opt out. Shared chain
+ordering does not add standalone third-party sync to the direct graph.
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
 linear for deterministic resume semantics: adjacency does not widen a job's declared inputs. In

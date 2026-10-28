@@ -89,14 +89,16 @@ def _unavailable(reason: str, catalog: Mapping[str, CweEntry] | None = None, **i
 
 def accepted_feed_pins(run_root: Path) -> tuple[Mapping[str, Any] | None, str | None]:
     """The run's feed pins from the accepted indexing handoff, or ``(None, reason)``."""
-    from appsec_review.retrieval.core import resolve_accepted_manifest
+    from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError, resolve_accepted_manifest
     run_root = Path(run_root).resolve()
     try:
         resolve_accepted_manifest(run_root)       # verifies the pointer and the handoff hash
         pointer = json.loads((run_root / "data" / "indices" / "accepted.json").read_text(encoding="utf-8"))
         handoff_path = (run_root / str(pointer["handoff_path"])).resolve()
         handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    except Exception as exc:  # an unreadable pointer is reported, never treated as clean
+    except RetrievalIntegrityError:
+        raise                                     # a corrupted accepted index stops the run
+    except (RetrievalGap, OSError, LookupError, ValueError) as exc:  # unavailable is reported, never clean
         return None, f"accepted index pointer is unavailable ({type(exc).__name__})"
     if handoff.get("job_id") != INDEXING_JOB:
         return None, f"the accepted index set was not published by {INDEXING_JOB}; no feed pins are bound"
@@ -104,8 +106,10 @@ def accepted_feed_pins(run_root: Path) -> tuple[Mapping[str, Any] | None, str | 
     if not isinstance(reference, Mapping) or not isinstance(reference.get("path"), str):
         return None, f"the accepted {INDEXING_JOB} handoff records no {INPUTS_UNIT} artifact with feed pins"
     path = (run_root / reference["path"]).resolve()
-    if run_root not in path.parents or not path.is_file() or file_sha256(path) != reference.get("sha256"):
+    if run_root not in path.parents or not path.is_file():
         return None, f"{INDEXING_JOB} {INPUTS_UNIT} artifact identity mismatch"
+    if file_sha256(path) != reference.get("sha256"):
+        raise RetrievalIntegrityError(f"{INDEXING_JOB} {INPUTS_UNIT} artifact hash does not match its handoff")
     document = json.loads(path.read_text(encoding="utf-8"))
     feeds = document.get("feeds")
     if not isinstance(feeds, Mapping):

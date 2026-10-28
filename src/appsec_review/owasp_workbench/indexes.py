@@ -62,14 +62,20 @@ def publish_shard(run_root: Path, *, family: str, shard_id: str,
 
 def publish_manifest(run_root: Path, *, run_id: str, shards: Sequence[Mapping[str, Any]],
                      accepted_upstream_manifest: Mapping[str, Any],
-                     configuration_sha256: str) -> dict[str, Any]:
+                     configuration_sha256: str, assessment_mode: str = "qualification",
+                     assessment_bounds: Mapping[str, int] | None = None) -> dict[str, Any]:
+    if assessment_mode not in {"qualification", "assessment"}:
+        raise ValueError("OWASP publication requires an explicit execution mode")
     identities = sorted((dict(value) for value in shards),
                         key=lambda value: (value["family"], value["shard_id"]))
     if len({(item["family"], item["shard_id"]) for item in identities}) != len(identities):
         raise ValueError("OWASP index manifest contains duplicate shard identities")
     manifest = {"schema": MANIFEST_SCHEMA, "run_id": run_id, "shards": identities,
+                "assessment_mode": assessment_mode,
                 "accepted_upstream_manifest": dict(accepted_upstream_manifest),
                 "configuration_sha256": configuration_sha256}
+    if assessment_bounds is not None:
+        manifest["assessment_bounds"] = dict(assessment_bounds)
     manifest["fingerprint"] = _fingerprint(manifest)
     relative = Path("data") / "indexes" / "owasp" / "manifests" / f"{manifest['fingerprint']}.json"
     path = Path(run_root) / relative
@@ -184,6 +190,7 @@ class WorkbenchIndex:
             next_cursor = base64.urlsafe_b64encode(canonical_json(
                 {"request_hash": request_hash, "offset": offset + limit})).decode().rstrip("=")
         return {"schema": "appsec-review/owasp-query-response/1", "run_id": self.run_id,
+                "assessment_mode": self.manifest.get("assessment_mode", "qualification"),
                 "manifest_identity": {"fingerprint": self.manifest["fingerprint"]},
                 "results": page, "pagination": {"limit": limit, "offset": offset,
                 "next_cursor": next_cursor, "truncated": next_cursor is not None},

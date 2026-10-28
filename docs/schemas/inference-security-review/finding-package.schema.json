@@ -64,7 +64,7 @@
     },
     "analyst_assessed_evidence": {
       "$ref": "common.schema.json#/$defs/relation_ids",
-      "description": "Complete supporting relations the claim cites that are authentic and relevant but analyst-assessed (predicate-admission/1). Shown for review; they never count toward an obligation."
+      "description": "Complete supporting relations the claim cites that are authentic and relevant but analyst-assessed (predicate-admission/2). Shown for review; they never count toward an obligation."
     },
     "missing_predicates": {
       "type": "array",

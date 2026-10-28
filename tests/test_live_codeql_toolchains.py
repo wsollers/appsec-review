@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -50,8 +51,7 @@ def live_codeql_runtime(tmp_path_factory: pytest.TempPathFactory):
     run_root = root / "run"
     metadata_root = root / "metadata"
     run_root.mkdir()
-    resolver = CodeQLImageResolver(repository_root=ROOT, metadata_root=metadata_root,
-                                   settings=settings, timeout_seconds=1800)
+    releases = config.review_policy.releases
     images: dict[str, CodeQLImage] = {}
 
     def image_for(profile_name: str) -> CodeQLImage:
@@ -60,6 +60,12 @@ def live_codeql_runtime(tmp_path_factory: pytest.TempPathFactory):
         else:
             profile = profiles[profile_name]
             tag, image_id = profile.tag, profile.image_id
+        # Environments without a preinstalled declaration take the derived-image path, as the job's
+        # resolver would on a host that declares none.
+        declared = any(item.build_image_id == image_id for item in settings.preinstalled_runtimes)
+        resolver = CodeQLImageResolver(
+            repository_root=ROOT, metadata_root=metadata_root, timeout_seconds=1800, releases=releases,
+            settings=settings if declared else replace(settings, preinstalled_runtimes=()))
         if profile_name not in images:
             images[profile_name] = resolver.resolve(
                 build_image_tag=tag, build_image_id=image_id,
@@ -117,7 +123,8 @@ LIVE_SCOPES = (
         (".", ("dotnet", "build", "appsec-fixture.csproj", "--no-restore"),
          {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/.nuget/packages"}),
     )),
-    ("javascript", "source", "none", "typescript", ()),
+    # TypeScript extraction needs Node.js on PATH, so like an accepted node build it runs in that environment.
+    ("javascript", "node", "none", "typescript", ()),
     ("python", "source", "none", "python", ()),
     ("ruby", "source", "none", "ruby", ()),
     ("rust", "rust", "none", "rust", ()),
@@ -137,9 +144,9 @@ def test_live_codeql_inventory_matches_the_pinned_extractors_and_query_packs(
     )
     assert not execution.timed_out and execution.exit_code == 0
     inventory = json.loads((scratch / "inventory.json").read_text(encoding="utf-8"))
-    assert set(settings.languages) <= set(inventory["extractors"])
-    assert set(inventory["query_packs"]) == set(settings.languages)
-    assert inventory["custom_query_packs"]["cpp"][0]["query_id"] == "cert-cpp"
+    assert inventory["schema"] == "appsec-review/codeql-extractor-inventory/1"
+    assert inventory["assurance"] == "capability_availability_only"
+    assert set(settings.languages) <= set(inventory["languages"])
 
 
 @pytest.mark.parametrize(("profile", "runtime_user"), [("source", "1000:1000"), ("native", "10001:10001")])
@@ -157,6 +164,7 @@ def test_live_precompiled_queries_are_readable_by_runtime_user(
         tag, image_id = selected.tag, selected.image_id
     image = CodeQLImageResolver(
         repository_root=ROOT, metadata_root=tmp_path / "metadata", settings=settings,
+        releases=config.review_policy.releases,
     ).resolve(build_image_tag=tag, build_image_id=image_id, runtime_user=runtime_user)[0]
     probe = """
 import os

@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 import re
+import shutil
 
 import pytest
 
+from appsec_review import cli
 from appsec_review.cli import GRAPH_JOB_IDS, main
 from appsec_review.config import load_config
+from appsec_review.config.owasp import AssessmentMode
 from appsec_review.jobs.job_review_data_indexing.job import _resolved_steps
+from appsec_review.orchestration.topology import describe_wave1
 from appsec_review.runtime import active_job_ids
+from appsec_review.runtime.registry import builtin_registry
 
 
 ROOT = Path(__file__).parents[1]
@@ -60,6 +66,108 @@ def test_job_level_enabled_flag_is_generic(tmp_path: Path) -> None:
 def test_direct_dispatch_rejects_disabled_cpg_job() -> None:
     with pytest.raises(ValueError, match="job is disabled by configuration: job_cpg_analysis"):
         main(["--config", str(ROOT / "appsec-review.toml"), "run", "job_cpg_analysis"])
+
+
+@pytest.mark.parametrize("profile", ["dev", "prod", "copilot-dev", "copilot-prod"])
+def test_owasp_assessment_is_enabled_by_default_in_every_profile(profile: str) -> None:
+    config = load_config(ROOT / "appsec-review.toml", profile=profile)
+    owasp = config.job("job_owasp_control_assessment")
+    assert owasp.typed_settings.enabled is True
+    assert owasp.typed_settings.mode is AssessmentMode.ASSESSMENT
+    assert owasp.settings["model"]["enabled"] is True
+    assert owasp.settings["models"][owasp.settings["reviewer_profile"]]["enabled"] is True
+    chain = (
+        "job_review_prioritization", "job_code_graph_index", "job_security_tagging",
+        "job_owasp_control_assessment", "job_review_data_indexing",
+        "job_review_package_assembly", "job_inference_security_review",
+    )
+    selected = active_job_ids(config, (*cli.GRAPH_JOB_IDS, *cli.POST_INDEX_JOB_IDS))
+    assert tuple(job_id for job_id in selected if job_id in chain) == chain
+    described = describe_wave1(config, builtin_registry())
+    assert tuple(item["job_id"] for item in described["jobs"] if item["job_id"] in chain) == chain
+
+
+@pytest.mark.parametrize("profile", ["dev", "prod", "copilot-dev", "copilot-prod"])
+def test_owasp_explicit_opt_out_is_preserved_in_every_profile(tmp_path: Path, profile: str) -> None:
+    path = tmp_path / "appsec-review.toml"
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    path.write_text(_set_enabled(source, "job_owasp_control_assessment", False), encoding="utf-8")
+    shutil.copytree(ROOT / "profiles", tmp_path / "profiles")
+    config = load_config(path, profile=profile)
+    assert config.job("job_owasp_control_assessment").typed_settings.enabled is False
+    assert "job_owasp_control_assessment" not in active_job_ids(config, GRAPH_JOB_IDS)
+    wave = describe_wave1(config, builtin_registry())
+    assert "job_owasp_control_assessment" not in {item["job_id"] for item in wave["jobs"]}
+    assert {"job_security_tagging", "job_review_data_indexing"} <= {
+        item["job_id"] for item in wave["jobs"]}
+
+
+@pytest.mark.parametrize("command", ["start", "resume", "plan-resume"])
+@pytest.mark.parametrize("tagging_enabled,owasp_enabled", [
+    (True, True), (True, False), (False, True), (False, False),
+])
+def test_direct_graph_routes_enabled_owasp_after_tags_and_before_hunting(
+    monkeypatch, tmp_path: Path, command: str, tagging_enabled: bool, owasp_enabled: bool,
+) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    jobs = dict(config.jobs)
+    for job_id, enabled in (
+        ("job_security_tagging", tagging_enabled), ("job_owasp_control_assessment", owasp_enabled),
+    ):
+        jobs[job_id] = replace(jobs[job_id], settings={**jobs[job_id].settings, "enabled": enabled})
+    config = replace(config, jobs=jobs)
+    captured_jobs: list[str] = []
+    captured_force: list[str | None] = []
+
+    class CapturingGraph:
+        def __init__(self, _config, selected_jobs):
+            captured_jobs.extend(job.job_id for job in selected_jobs)
+
+        def plan(self, *_args, force_from=None, **_kwargs):
+            captured_force.append(force_from)
+            return ()
+
+        def run(self, *, force_from=None, **_kwargs):
+            captured_force.append(force_from)
+            return {"run_id": "r", "status": "SUCCEEDED", "decisions": [], "jobs": {}}
+
+    monkeypatch.setattr(cli, "load_config", lambda *_args, **_kwargs: config)
+    monkeypatch.setattr(cli, "GraphRunner", CapturingGraph)
+    monkeypatch.setattr(cli, "source_fingerprint", lambda _target: "test-source-fingerprint")
+    argv = [command, "--target", str(tmp_path)]
+    force_from = None
+    if command != "start":
+        argv.extend(["--run-id", "r"])
+        force_from = ("job_owasp_control_assessment" if owasp_enabled else
+                      "job_security_tagging" if tagging_enabled else None)
+        if force_from:
+            argv.extend(["--force-from", force_from])
+    assert main(argv) == 0
+    assert captured_force == [force_from]
+    assert ("job_security_tagging" in captured_jobs) is tagging_enabled
+    assert ("job_owasp_control_assessment" in captured_jobs) is owasp_enabled
+    chain = (
+        "job_review_prioritization", "job_code_graph_index",
+        *(("job_security_tagging",) if tagging_enabled else ()),
+        *(("job_owasp_control_assessment",) if owasp_enabled else ()),
+        "job_review_data_indexing", "job_review_package_assembly", "job_inference_security_review",
+    )
+    assert tuple(job_id for job_id in captured_jobs if job_id in chain) == chain
+    wave = describe_wave1(config, builtin_registry())
+    assert tuple(item["job_id"] for item in wave["jobs"] if item["job_id"] in chain) == chain
+
+
+@pytest.mark.parametrize("command", ["resume", "plan-resume"])
+@pytest.mark.parametrize("job_id", ["job_security_tagging", "job_owasp_control_assessment"])
+def test_direct_graph_cannot_force_a_disabled_owasp_or_tagging_job(
+    monkeypatch, tmp_path: Path, command: str, job_id: str,
+) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    jobs = dict(config.jobs)
+    jobs[job_id] = replace(jobs[job_id], settings={**jobs[job_id].settings, "enabled": False})
+    monkeypatch.setattr(cli, "load_config", lambda *_args, **_kwargs: replace(config, jobs=jobs))
+    with pytest.raises(ValueError, match=f"cannot force from disabled job: {job_id}"):
+        main([command, "--run-id", "r", "--target", str(tmp_path), "--force-from", job_id])
 
 
 def test_disabled_cpg_job_is_absent_from_resolved_inventory(tmp_path: Path) -> None:

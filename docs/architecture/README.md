@@ -22,7 +22,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
   runtime skills: which consumer reaches the data how.
 - [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
-- [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
+- [`owasp-control-workbench.md`](owasp-control-workbench.md) — pre-hunt OWASP flow/diagram, full pinned
+  catalogs versus four Python procedures, evidence custody, blinded review and provisional downstream context.
 - [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — faceted, basis-qualified security
   tag vocabulary, crosswalk, and tag-cloud rollup produced by `job_security_tagging`.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
@@ -34,6 +35,10 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   scope-sprawl, repeated-repair, test-churn, and ownership signals with a review-priority index.
 - [`../operations/change-context-analysis.md`](../operations/change-context-analysis.md) —
   change-context sources, export pinning, configuration, and retrieval.
+- [`../operations/target-acquisition.md`](../operations/target-acquisition.md) — hash-pinned,
+  parallel acquisition of a review system's components (Git by default with recursive submodules,
+  Perforce, GitLab/Gerrit/Azure DevOps review exports) into `targets/<system>/` by the
+  `job_target_acquisition` gate before intake, and the manifests intake records.
 - [`review-prioritization.md`](review-prioritization.md) — function-level cyclomatic and cognitive
   complexity, import coupling, boundary/privilege/suppression heuristics, CodeQL source-to-sink
   paths, and the LLM Prioritization Score.
@@ -54,8 +59,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
   route and boundary analysis, inference access, and the finding handoff design.
 - [`binary-decompilation.md`](binary-decompilation.md) — pre-run Ghidra decompilation of third-party
-  binaries: inputs, the hash-addressed publication store, gaps, how a review references a
-  publication, and the known-binary efficacy comparison.
+  binaries: inputs, the hash-addressed publication store, gaps, review intake and the
+  `job_binary_evidence_indexing` shards a review cites, and the known-binary efficacy comparison.
 - [`../operations/binary-decompilation.md`](../operations/binary-decompilation.md) — registering a
   binary, starting and verifying a decompilation, failures, and the efficacy command.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
@@ -91,6 +96,11 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
   compile-only test/control functions, immutable protected attempt files, enabled new-run pre-gate
   ordering and explicit authenticated manual admission for frozen disabled runs.
+- [`openvex-export.md`](openvex-export.md) — planned affected-only deterministic OpenVEX export,
+  immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
+  optional-tail report fan-in and telemetry (design only, not implemented).
+- [`../operations/openvex-export.md`](../operations/openvex-export.md) — draft operator setup,
+  trust/dataflow and report-state diagrams, output/accounting semantics, privacy and recovery.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph

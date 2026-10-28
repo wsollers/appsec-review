@@ -50,7 +50,7 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     settings = _settings(config)
     assert (settings.teams.review_teams, settings.teams.red_per_team, settings.teams.blue_per_team,
-            settings.teams.verifier_per_team) == (5, 3, 2, 1)
+            settings.teams.verifier_per_team) == (3, 3, 2, 1)
     assert settings.lanes.lead_budget_share == 0.5 and settings.lanes.hunt_budget_share == 0.5
     assert settings.lanes.lead_admission == ("critical", "high", "unknown")
     assert (settings.lanes.lead_max_claims_per_package, settings.lanes.hunt_max_units,
@@ -88,7 +88,7 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
     assert set(config.jobs) == set(builtin_registry().job_ids())
     resolved = json.loads(config.resolved_json)
     assert "pending_jobs" not in resolved
-    assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 5
+    assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 3
     assert tuple(config.job(JOB).steps) == ("scope", "triage", "packages", "lead_review", "hunt_review", "merge",
                                             "adjudicate", "scoring", "attack_chains", "completeness", "publication")
     from appsec_review.review.packages import PackageSettings
@@ -130,7 +130,7 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
 @pytest.mark.parametrize("old, new, message", [
     ("lead_budget_share = 0.5", "lead_budget_share = 1.5", "lead_budget_share must be a number between 0 and 1"),
     ("incomplete_gap_ratio = 0.25", "incomplete_gap_ratio = -0.1", "incomplete_gap_ratio must be"),
-    ("review_teams = 5", "review_teams = 0", "review_teams must be an integer"),
+    ("review_teams = 3", "review_teams = 0", "review_teams must be an integer"),
     ("red_per_team = 3", "red_per_team = 0", "red_per_team must be an integer"),
     ("budget_team_packages = 200", "budget_team_packages = 0", "budget_team_packages must be an integer"),
     ("max_model_turns = 12000", "max_model_turns = true", "max_model_turns must be an integer"),
@@ -231,6 +231,9 @@ def test_capacity_overlay_can_be_named_by_environment(tmp_path: Path, monkeypatc
     (f"[jobs.{JOB}]\nworkers = 1\n", "rejected: jobs.job_inference_security_review.workers"),
     (f"[jobs.{JOB}.settings.teams]\nreview_teams = \"1\"\n", "review_teams must be an integer"),
     ("[orchestration.dagster.pools]\ninference_teams = 1.5\n", "pool limit is invalid"),
+    ("[review_policy]\nmode = \"strict\"\n", "rejected: review_policy.mode"),
+    ("[review_policy.resources]\ngpu = 1\n", "rejected: review_policy.resources.gpu"),
+    ("[review_policy.resources]\nio_slots = \"4\"\n", "review_policy.resources.io_slots must be an integer"),
     ("", "must be a non-empty table"),
 ])
 def test_capacity_overlay_rejects_every_other_key(tmp_path: Path, overlay: str, message: str) -> None:
@@ -243,10 +246,33 @@ def test_capacity_overlay_values_are_still_range_checked(tmp_path: Path) -> None
         _variant(tmp_path, overlay=f"[jobs.{JOB}.settings.teams]\nreview_teams = 0\n")
     with pytest.raises(ValueError, match="pool limits must be between 1 and 64"):
         _variant(tmp_path, overlay="[orchestration.dagster.pools]\ninference_teams = 0\n")
+    with pytest.raises(ValueError, match="review_policy.resources.io_slots must be a positive integer"):
+        _variant(tmp_path, overlay="[review_policy.resources]\nio_slots = 0\n")
+
+
+def test_capacity_overlay_sets_the_resource_budget(tmp_path: Path) -> None:
+    base = _variant(tmp_path / "base")
+    config = _variant(tmp_path / "overlaid", overlay="[review_policy.resources]\nio_slots = 4\n")
+    assert base.review_policy.resources.io_slots == 1
+    assert config.review_policy.resources.io_slots == 4
+    assert config.review_policy.resources.cpu == base.review_policy.resources.cpu
+    resolved = json.loads(config.resolved_json)
+    assert resolved["review_policy"]["resources"]["io_slots"] == 4
+    assert resolved["configuration_overlay"]["keys"] == ["review_policy.resources.io_slots"]
+
+
+def test_checked_in_prod_capacity_overlay_loads() -> None:
+    config = load_config(ROOT / "appsec-review.toml", overlay=ROOT / "test/acceptance/prod-capacity-overlay.toml",
+                         profile="prod")
+    assert config.review_policy.resources.io_slots == 4
+    assert config.dagster.pool_limits["scanner"] == 4
+    assert _settings(config).teams.review_teams == 3
+    assert config.profile == "prod"
 
 
 def test_capacity_key_allowlist_is_exposed() -> None:
-    assert CAPACITY_KEYS == (f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.*")
+    assert CAPACITY_KEYS == (f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.*",
+                             "review_policy.resources.*")
     assert overlay_capacity_keys({"orchestration": {"dagster": {"pools": {"index": 2}}}}) == (
         "orchestration.dagster.pools.index",)
 
@@ -294,7 +320,7 @@ def test_capacity_keys_are_excluded_from_the_semantic_view(tmp_path: Path) -> No
     assert semantic_settings_sha256(fewer_teams) == semantic_settings_sha256(base)
     assert semantic_settings_sha256(larger_budget) != semantic_settings_sha256(base)
     assert semantic_settings_sha256(other_share) != semantic_settings_sha256(base)
-    assert base.as_document()["teams"]["review_teams"] == 5   # the full view still carries capacity
+    assert base.as_document()["teams"]["review_teams"] == 3   # the full view still carries capacity
 
 
 # ---------------------------------------------------------------- Dagster pools

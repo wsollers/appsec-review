@@ -51,7 +51,8 @@ merge commit.
 
 - Merge `origin/main` into your branch before every push and whenever `main` moves under you.
   Never rebase or force-push a branch another session may have pulled.
-- After merging, run the suites for every area either side touched, not only your own.
+- After merging, run focused unit tests for the affected areas on both sides, following the
+  verification scope in root `AGENTS.md`.
 
 ## 5. Shared hosts
 

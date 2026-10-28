@@ -28,7 +28,7 @@ from appsec_review.config.attack_chains import AttackChainSettings
 JOB_ID = "job_inference_security_review"
 REVIEW_TEAMS_KEY = f"jobs.{JOB_ID}.settings.teams.review_teams"
 POOLS_KEY = "orchestration.dagster.pools.*"
-CAPACITY_KEYS: tuple[str, ...] = (REVIEW_TEAMS_KEY, POOLS_KEY)
+CAPACITY_KEYS: tuple[str, ...] = (REVIEW_TEAMS_KEY, POOLS_KEY, "review_policy.resources.*")
 SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 TeamPackageBudget = int | Literal["all"]
 

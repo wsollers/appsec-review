@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "csharp-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/Program.cs, written to the column contract of the appsec-review/graph-export-csharp pack. They are a deliberately chosen subset of what the pack would export (implicit base-constructor calls and compiler-generated members are omitted); they are not a CodeQL recording and must be confirmed by tests/live/test_codeql_graph_export_csharp_live.py on the pinned image. bqrs_sha256 values are SHA-256 of the text 'hand-authored csharp-synthetic bqrs <query_id>'.",
+  "cases": {
+    "virtual_dispatch": "call_sites: Read -> store.Load(name), two virtual_resolved candidates (FileStore.Load, MemoryStore.Load), line 90",
+    "delegate_dispatch": "call_sites: Helpers.Apply -> fn(value) resolves the delegate to Program.Normalize as function_pointer_resolved, line 42",
+    "unresolved_dynamic_call": "call_sites: Main -> sink.Flush() through `dynamic` has no static target and is unresolved_indirect, line 128",
+    "remote_to_sql": "path_flows: action parameter name (line 62) reaches the SqlCommand.CommandText assignment at line 65 through Helpers.Wrap",
+    "remote_to_command": "path_flows: action parameter tool (line 70) reaches Process.Start at lines 74 and 76",
+    "remote_to_ssrf": "path_flows: action parameter url (line 81) reaches HttpClient.GetStringAsync at line 83 (catalog API sink, server_side_request)",
+    "remote_to_deserialization": "path_flows: action parameter body (line 94) reaches XmlSerializer.Deserialize at line 98",
+    "unsafe_reflection_sink": "sink_sites: Activator.CreateInstance argument 0 at line 97 (catalog API sink, unsafe_reflection)",
+    "argv_env_to_path": "source_sites/path_flows: Main args (line 122, command line argument) and GetEnvironmentVariable (line 124, environment variable) both reach File.Delete at line 125",
+    "sanitized_path": "path_sanitizers: Path.GetFileName at line 89 sanitizes the flow from name (line 87) to File.Delete at line 89",
+    "cross_function_flow_summary": "flow_summaries: FileStore.Load passes parameter key to File.Delete (line 20); Read's name reaches that sink through the virtual call at line 90",
+    "dominating_guard": "guards: tool.Length < 16 (line 72) dominates Process.Start at line 74, true_branch",
+    "non_dominating_guard": "guards: tool.Length < 16 (line 72) does not control Process.Start at line 76, which also has a none row",
+    "allocation_range": "ranges: new byte[count] at line 107 is guarded by count > 0 && count <= 4096 (line 105); integral Int32, lower 1",
+    "narrowing_conversion": "range_conversions: (int)length at line 110 is an Int64 -> Int32 narrowing conversion; the range is unknown",
+    "non_integral_operand": "ranges: string operands of the path, command, SQL and SSRF sinks are not_applicable (no interval semantics)"
+  }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 import importlib.util
 import json
 from pathlib import Path, PurePosixPath
@@ -312,6 +313,64 @@ def test_project_failure_is_scoped_and_retry_reuses_other_checkpoints(tmp_path: 
     job = build_job(executor_factory=lambda unit: None)
     assert {unit.unit_id for unit in job.units}.isdisjoint({"configure.projects", "compile.projects"})
     assert config.job("job_cpp_compiled_analysis").steps.keys().isdisjoint({"configure", "compile"})
+
+
+@pytest.mark.parametrize("status,checkpointable,retry", [
+    ("SUCCEEDED", False, False),
+    ("COMPLETED_WITH_GAPS", False, True),
+    ("COMPLETED_WITH_GAPS", True, False),
+])
+def test_cpp_handoff_dispositions_control_accepted_attempt_reuse(
+        tmp_path, monkeypatch, status, checkpointable, retry):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job as cpp_job
+    from appsec_review.retrieval.index import write_manifest
+    from appsec_review.runtime import JobRunner
+    from appsec_review.runtime.resume import ResumePlanner
+    from appsec_review.storage import file_sha256
+    from tests.fixtures.graph.job.builder import configured
+
+    config = configured(tmp_path)
+    gaps = ["fixture branch incomplete"] if status != "SUCCEEDED" else []
+
+    def upstream(context):
+        path = context.run_root / "upstream.json"
+        return path, file_sha256(path)
+
+    def stage(unit):
+        if unit.unit_id == "plan.accepted_cpp_plan":
+            write_manifest(unit.job.run_root / "upstream.json", run_id=unit.job.run_id,
+                           target_snapshot="fixture", target_root=tmp_path, indexes=[])
+            return {"plan": {"project_count": 2}}
+        if unit.step_id not in cpp_job.BRANCHES:
+            return {}
+        branch_status = status if unit.step_id == "ir" else "SUCCEEDED"
+        return {"projects": {
+            "healthy": {"terminal_status": "SUCCEEDED", "gaps": []},
+            "incomplete": {"terminal_status": branch_status,
+                           "gaps": gaps if unit.step_id == "ir" else [],
+                           "checkpointable": checkpointable},
+        }}
+
+    monkeypatch.setattr(cpp_job, "resolve_context_manifest", upstream)
+    original = build_job()
+    units = tuple(unit if unit.unit_id == "acceptance.publish_handoff" else replace(unit, handler=stage)
+                  for unit in original.units)
+    job = replace(original, units=units, input_validators=())
+    outcome = JobRunner(config).run(job, source_fingerprint="fixture")
+    handoff = outcome["handoff"]
+    dispositions = handoff["outputs"]["acceptance.publish_handoff"]["dispositions"]
+    assert len(dispositions) == 2 * len(cpp_job.BRANCHES)
+    incomplete = next(item for item in dispositions
+                      if item["project_key"] == "incomplete" and item["branch"] == "ir")
+    assert incomplete["terminal_status"] == status
+    assert (incomplete.get("disposition") == "GAP") is retry
+    assert all(item.get("disposition") != "GAP" for item in dispositions if item != incomplete)
+    reference = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    run_root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    summary = json.loads((run_root / reference["path"]).read_bytes())
+    assert summary["dispositions"]["incomplete:ir"] == status
+    reasons, _ = ResumePlanner(config, run_root, (job,), "fixture").accepted(job, {})
+    assert reasons == (("accepted job contains a retriable failed producer",) if retry else ())
 
 
 @pytest.mark.parametrize("stage,tool", (("catalog", "tool-native-cpp"), ("branch-infer", "tool-infer")))

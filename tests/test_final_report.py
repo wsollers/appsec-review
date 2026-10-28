@@ -159,6 +159,7 @@ def test_gate_document_is_schema_valid_and_every_binding_is_hash_pinned(chain: C
     assert {item["path"] for item in gate["inputs"].values()} <= bound
     assert {item["path"] for item in gate["packages"]} <= bound
     review = review_handoff(chain)
+    assert gate["review"]["lead_package_manifest_sha256"] == review["lead_package_manifest_sha256"]
     assert {item["path"] for item in review["shards"]} <= bound
     for item in gate["bindings"]:
         assert file_sha256(chain.run_root / item["path"]) == item["sha256"]
@@ -307,6 +308,44 @@ def test_every_run_owned_file_the_jobs_write_is_claimed_by_a_dataset(chain: Chai
 
 
 # ---------------------------------------------------------------------------------------------- integrity
+
+
+@pytest.mark.parametrize("bad_lane", [None, "lead", "hunt", "missing_lead"])
+def test_shared_review_reader_checks_both_manifest_identities_and_keeps_source_bindings(
+    tmp_path: Path, monkeypatch, bad_lane: str | None,
+) -> None:
+    from appsec_review.jobs import accepted_review
+
+    def reference(name: str, digest: str) -> dict[str, str]:
+        return {"path": f"data/{name}.json", "sha256": digest * 64}
+
+    outputs, documents, manifests, expected = {}, {}, {}, []
+    review = {"package_manifest_sha256": "1" * 64, "lead_package_manifest_sha256": "2" * 64}
+    for lane, digest in (("hunt", "1"), ("lead", "2")):
+        package_set = reference(f"{lane}-set", "3")
+        manifest = reference(f"{lane}-manifest", "4")
+        package = reference(f"{lane}-package", "5")
+        outputs[f"packages.assemble_{lane}_packages"] = {"artifact": package_set}
+        documents[package_set["path"]] = {
+            "package_manifest": manifest, "package_manifest_content_sha256": digest * 64,
+            "packages": [package],
+        }
+        manifests[manifest["path"]] = {"content_sha256": digest * 64}
+        expected.extend((package_set, manifest, package))
+    monkeypatch.setattr(accepted_review, "read_bound_json", lambda _root, ref: documents[ref["path"]])
+    monkeypatch.setattr(accepted_review, "resolve_bound", lambda _root, ref: ref["path"])
+    monkeypatch.setattr(accepted_review, "verify_package_manifest", lambda path: manifests[path])
+    if bad_lane == "missing_lead":
+        review.pop("lead_package_manifest_sha256")
+    elif bad_lane is not None:
+        review["lead_package_manifest_sha256" if bad_lane == "lead" else "package_manifest_sha256"] = "0" * 64
+    if bad_lane is None:
+        bindings = accepted_review._verify_package_manifests(tmp_path, outputs, review)
+        assert sorted(bindings, key=lambda ref: ref["path"]) == sorted(expected, key=lambda ref: ref["path"])
+    else:
+        lane = "lead" if bad_lane == "missing_lead" else bad_lane
+        with pytest.raises(IntegrityError, match=f"{lane} package manifest does not match the handoff"):
+            accepted_review._verify_package_manifests(tmp_path, outputs, review)
 
 
 def _first(chain: Chain, key: str) -> dict[str, str]:
@@ -733,7 +772,7 @@ def test_registry_topology_and_terminal_job() -> None:
 
     config, registry = load(ROOT / "appsec-review.toml"), builtin_registry()
     optional = {"job_poc_generation", "job_remediation_planning", "job_remediation_validation", "job_dossier_publication"}
-    assert {GATE, REPORT} | optional <= set(registry.job_ids())
+    assert {GATE, REPORT, "job_binary_evidence_indexing"} | optional <= set(registry.job_ids())
     jobs = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
     assert set(jobs[GATE]["dependencies"]) == {JOB} | optional and jobs[REPORT]["dependencies"] == [GATE]
     assert {GATE, JOB} <= set(jobs[REPORT]["upstream_handoffs"]) and JOB in jobs[GATE]["upstream_handoffs"]

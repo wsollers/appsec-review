@@ -1,5 +1,33 @@
 # Architecture TODOs
 
+## Finish OWASP acceptance beyond bounded static assessment
+
+- Implemented: complete pinned ASVS/MASVS inventories and MASTG/Top 10 context catalogs,
+  independently reviewed inventory/content/license pins; explicit qualification versus assessment;
+  configured worker and fresh blinded reviewer calls; four site-bound Python static procedures;
+  accepted original-evidence custody and scoped outcomes with named unresolved coverage.
+- Implemented in direct and Dagster graphs: accepted classification/prioritization/code graph → security tagging/tag
+  cloud → default-enabled OWASP → review data indexing/`control_evidence` → lead/hunt packages →
+  red/blue/independent verifier requests. Tags route work; they do not prove controls.
+- Verified offline: full-catalog publications, adverse/benign/dissent outcomes, configured caps,
+  qualification isolation, projection/lead/package delivery, actual scripted review-role requests,
+  original-source retrieval and indirect-proof guards. This is not live-provider efficacy.
+- [x] Integrate the same enabled tagging/OWASP chain into direct CLI `start`/`resume`/`plan-resume`,
+  including `--force-from` routing and rejection of disabled jobs. OWASP is enabled by default
+  across all shipped profiles, with an explicit job-level opt-out.
+  This closes the missing chain, not CI/post-build or standalone metadata-sync topology differences.
+- [ ] Run authorized live-model efficacy/budget acceptance. Scripted `Infer` doubles establish
+  contract behavior, not real-provider analytical quality.
+- [ ] Review and implement additional language/control procedures with subject-bound acceptance.
+  Complete catalog inventory is not full assessment coverage or compliance certification.
+- [ ] Implement separately authorized environment-bound runtime/manual adapters;
+  `MASVS-NETWORK-1` stays unsupported even when `dynamic_authorized = true`.
+- [ ] Obtain independent exploit confirmation where warranted. Even elevated/ship-blocking OWASP
+  hypotheses are provisional; no customer safety certification follows from this stage.
+
+See [the current design](architecture/owasp-control-workbench.md) and
+[operating limits](operations/owasp-control-assessment.md).
+
 ## Hook up Lua game-security rule scanning
 
 - [ ] Integrate `rules/lua-game-security/game-security.yml` into
@@ -303,12 +331,13 @@ implementation:
 - measure seeded versus whole-program export time on a 20k-100k LOC project, and tune the default
   `seed_depth` and `seed_limit` from the numbers;
 - measure one batched `codeql database run-queries` over all queries against serial runs;
-- make `query-packs --warm` a routine step of the host image procedure after a CodeQL image
-  rebuild (the compile is now a separate cached action that `query-packs --warm` precompiles; the
-  pipeline no longer builds images, see `docs/operations/image-pin-verification.md`), and make the
-  live CodeQL tests opt-in;
-- add seeded packs for Java/Kotlin, JavaScript/TypeScript and Python using the same two external
-  predicates (`exportScope`, `exportSeed`);
+- make `scripts/compile-codeql-queries.sh` a routine step of the host image procedure after a
+  CodeQL image rebuild (it fills the shared compile cache review runs mount, keyed by the declared
+  CodeQL release, so no run compiles cold; see `docs/operations/codeql-analysis.md`; the analyze
+  query suites ship precompiled `.qlx` and must not be warmed), and make the live
+  CodeQL tests opt-in;
+- measure the seeded packs for Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C# and Rust
+  (they use the same two external predicates, `exportScope` and `exportSeed`);
 - profile the slow `job_evidence_collection` tests.
 
 ## Measure and extend seeded Clang neighborhoods
@@ -550,12 +579,48 @@ build. The wrapper also forces `python3` into every build image.
    captures invalidate build checkpoints.
 5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
    after.
-## Build the dataflow, contract, and deployment evidence lanes
+## Prove and extend the dataflow lane; build the contract and deployment lanes
 
-Implement the planned jobs and queries in
-[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
-starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
-calls, unmodeled externals, and path/depth limits must be published as gaps.
+The planned `query_dataflow` tool and `job_dataflow_summary`/`job_reachability_linking` jobs are
+superseded by `query_code_graph`, the `job_codeql_analysis` export step and `job_code_graph_index`
+([`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md)). For
+C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact`, `range_fact` and
+`flow_summary` facts reach packages, admissibility and scoring. Remaining:
+
+1. Run the operator live tier on the review host with the pinned CodeQL image:
+   `python -m pytest -q tests/live/test_codeql_graph_export_live.py tests/live/test_code_graph_live.py`.
+   The native exports under `tests/fixtures/graph/codeql_export/native/exports/` are a live
+   recording (real BQRS hashes, cpp pack tree `93b9a8bf`). `test_code_graph_live.py` has no
+   recorded run. The native fixture has no sources or sinks, so only the synthetic test proves the
+   dataflow families.
+2. Export packs, catalog sections and recorded fixtures exist for Java/Kotlin,
+   JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and deferred Swift, and every pack except
+   Swift is pinned and has compiled and run in the pinned image (per-language status in
+   [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md)
+   section 8). Multilingual normalization, native-only secondary scoping and worker neighborhood
+   retrieval are wired. Open named gaps:
+   - no live result is recorded in the repository for the C# (`dotnet`) and
+     JavaScript/TypeScript (`node`) graph-export tiers;
+   - Swift is disabled: CodeQL extracts Swift only on macOS, so it needs a macOS executor;
+   - PHP has no CodeQL extractor;
+   - Rust `known_gaps`: `rust_summarized_body_prunes_remote_flow` and
+     `rust_canonicalize_summary_does_not_propagate`; Rust closure calls are `unresolved_indirect`;
+   - sinks the packs export but the catalog leaves unclassified (never `direct_eligible`): C/C++
+     `RemoteFlowSinkFunction` (deliberate), Swift `PredicateInjectionSink`, Python
+     `NoSqlExecution`, Ruby `HttpResponse` and Go `UnmarshalingFunction`;
+   - `range_fact` is `not_applicable` for JavaScript/TypeScript, Python, Ruby and Rust, and
+     intraprocedural for Java and Go;
+   - no live acceptance record of a real target; keep recorded acceptance distinct from live
+     acceptance.
+3. Implement the contract and deployment lanes planned in
+   [`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md).
+4. CodeQL execution telemetry caveats: analyze runtimes (by query path) and result counts (by
+   rule id) are not joined; compile cache hits report no time; an exception escaping after an
+   action's `COMPLETED` event counts that action twice; and a runtime with a runner older than
+   `appsec-codeql-runner-89568569` reports no analyze query timings
+   ([`operations/codeql-analysis.md`](operations/codeql-analysis.md#execution-telemetry)).
+
+Unresolved indirect calls, unmodeled externals, and path/depth limits must be published as gaps.
 
 ## Acquire dynamic execution evidence
 
@@ -615,8 +680,10 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   changes to snapshot function spans instead of reporting the metric unavailable at function scope.
 - Function attribution only sees surviving lines in the top blamed files; consider bounded
   `log -L` per function for changes whose lines were later rewritten.
-- Native review-export adapters for GitLab, Gerrit, and Azure DevOps (today they must be converted
-  to `appsec-review/review-records/1`), and a deployment-event adapter for common CD systems.
+- A deployment-event adapter for common CD systems. GitLab, Gerrit, and Azure DevOps review
+  exports are produced by target acquisition (see
+  [`operations/target-acquisition.md`](operations/target-acquisition.md)); validate them against
+  live servers.
 - Component relatedness uses nesting and co-change only; add build-graph or ownership-file
   (`CODEOWNERS`) relatedness when the catalog exposes them.
 - Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on
@@ -640,22 +707,30 @@ See [`architecture/review-prioritization.md`](architecture/review-prioritization
 
 Done: the pinned `tool-ghidra` image, the `[binary_decompilation]` configuration, the pre-run
 `appsec-review binary-decompile` command, the verified publication store with its `current.json`
-pointer and `resolve_current` lookup, and the case-083 known-binary efficacy comparison. See
-[`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
+pointer and `resolve_current` lookup, and the case-083 known-binary efficacy comparison. Reviews now
+consume publications: the `binary_evidence.resolve_publications` intake task with per-binary
+`required`, `job_binary_evidence_indexing` (bounded `binary` shards served by the existing
+retrieval and MCP tools, in the CLI graph and Dagster wave-1 topology), the registered
+`binary-evidence` runtime skill with an enforced binary citation rule, PDB inputs with a
+`debug_symbols_not_applied` gap, managed-code routing to a named decompiler, and a designed
+binary-only target kind. See [`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
 
 Outstanding, in order:
 
-1. Add the `binary_evidence.resolve_publications` task to `job_review_intake`. It records each
-   configured binary's identity and manifest hash in `review-intake.json`, or a
-   `binary_decompilation_unavailable` gap, and honors a per-binary `required` key.
-2. Add `job_binary_evidence_indexing` with bounded function, import-caller, call-neighbourhood, and
-   string indices, plus retrieval tools over them.
-3. Register a runtime skill that tells review workers how binary-derived evidence differs from
-   source, and require findings to cite binary hash, function address, and pseudo-C line.
-4. Add a PE fixture (with and without a PDB), optional debug-symbol inputs, and managed-code
-   routing.
-5. Design a target kind for a review whose only input is a binary.
-6. Measure memory, time, and file counts on a large real binary and tune the defaults.
+1. Rebuild `tool-ghidra` (it now ships `AppsecLoadDebugSymbols.java` and the wrapper's
+   `--debug-symbols` option) and run a PE fixture live, with and without its PDB. Today the PE and
+   PDB path is tested only with a fake Ghidra export; confirm Ghidra's PE loader and PDB analyzer
+   accept the staged file and that `program.debug_symbols_loaded` is reported.
+2. Measure peak container memory, wall time, publication file count and size, normalizer memory,
+   and `job_binary_evidence_indexing` time and index size on a large real binary (tens of thousands
+   of functions). Then tune `[binary_decompilation]` (`memory`, `max_heap`, `cpus`,
+   `timeout_seconds`, `analysis_timeout_seconds`, `max_functions`, `max_strings`) and
+   `[jobs.job_binary_evidence_indexing.settings]`, whose current values are provisional. This needs
+   a Docker host and a licensed large binary, so it was not done.
+3. Implement the binary-only target kind designed in the architecture page, including the open
+   decision on the dangerous-import seed list.
+4. Add a managed-code decompiler lane (ILSpy for CIL, jadx or CFR for JVM and Dalvik); today
+   managed binaries are routed to a named gap only.
 
 ## Decide how to assert correctness for large query-set jobs
 

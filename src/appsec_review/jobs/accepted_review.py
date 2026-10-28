@@ -162,7 +162,9 @@ def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review
             resolve_bound(run_root, package_ref)
             bindings.append(package_ref)
     _require(contents["hunt"] == review["package_manifest_sha256"],
-             "package manifest does not match the handoff")
+             "hunt package manifest does not match the handoff")
+    _require(contents["lead"] == review.get("lead_package_manifest_sha256"),
+             "lead package manifest does not match the handoff")
     return bindings
 
 
@@ -299,7 +301,8 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
                    "ledger_head_sha256": review["ledger_head_sha256"],
                    "projection_sha256": review["projection_sha256"],
                    "ship_block_policy_sha256": review["ship_block"]["policy_sha256"],
-                   "package_manifest_sha256": review["package_manifest_sha256"]},
+                   "package_manifest_sha256": review["package_manifest_sha256"],
+                   "lead_package_manifest_sha256": review["lead_package_manifest_sha256"]},
         "inputs": {"job_handoff": job_handoff_ref, "review_handoff": review_ref, "claim_ledger": ledger_ref,
                    "projection": projection_ref, "coverage_matrix": coverage_ref},
         "accounting": {key: accounting[key] for key in (

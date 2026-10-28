@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import asdict, replace
+import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
+import stat
 import tomllib
 from types import MappingProxyType, SimpleNamespace
 from typing import Any
@@ -67,10 +70,10 @@ def _settings(mode: str = "whole_program"):
 
 
 def _scope(language: str, root: str, unit: str) -> CodeQLScope:
-    files = ({"path": f"{root}/main.{'cpp' if language == 'cpp' else 'go'}", "sha256": "a" * 64,
+    files = ({"path": f"{root}/main.{'cpp' if language == 'cpp' else language}", "sha256": "a" * 64,
               "size_bytes": 12},)
     return CodeQLScope(SCOPE_SCHEMA, f"codeql-unit-{unit * 24}", language, ("C++",) if language == "cpp"
-                       else ("Go",), "manual", root, files, f"build-unit-{unit * 20}", unit * 64, "e" * 64, True)
+                       else (language.capitalize(),), "manual", root, files, f"build-unit-{unit * 20}", unit * 64, "e" * 64, True)
 
 
 class Events:
@@ -112,8 +115,19 @@ def _database(tmp_path: Path, scope: CodeQLScope, *, identity: str = "d" * 64,
 
 
 @pytest.fixture(autouse=True)
-def _cold_compile_cache():
+def _cold_compile_cache(monkeypatch):
     from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+    if os.name == "nt":
+        stage_export = codeql_job._stage_export
+
+        def stage(*args, **kwargs):
+            stage_export(*args, **kwargs)
+            # Windows read-only attributes also prevent unlinking disposable POSIX staging files.
+            for path in args[2].rglob("*"):
+                if path.is_file():
+                    path.chmod(path.stat().st_mode | stat.S_IWRITE)
+
+        monkeypatch.setattr(codeql_job, "_stage_export", stage)
     codeql_job._PRECOMPILED.clear()
     yield
     codeql_job._PRECOMPILED.clear()
@@ -179,8 +193,8 @@ def _never(image, run_root, settings):
 
 
 def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path: Path) -> None:
-    cpp, go = _scope("cpp", "native", "a"), _scope("go", "svc", "b")
-    databases = [_database(tmp_path, cpp), _database(tmp_path, go)]
+    cpp, swift = _scope("cpp", "native", "a"), _scope("swift", "svc", "b")
+    databases = [_database(tmp_path, cpp), _database(tmp_path, swift)]
     unit = _unit(tmp_path, databases)
     executor = FakeExecutor()
     output = _export_scopes(unit, executor_factory=executor.factory)
@@ -188,9 +202,9 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
     assert len(executor.calls) == 1 and executor.calls[0][2].name == cpp.scope_id
     assert output["terminal_status"] == "SUCCEEDED" and output["gaps"] == []
     by_scope = {item["scope_id"]: item for item in output["exports"]}
-    exported, skipped = by_scope[cpp.scope_id], by_scope[go.scope_id]
+    exported, skipped = by_scope[cpp.scope_id], by_scope[swift.scope_id]
     assert skipped["export_status"] == "NOT_APPLICABLE" and skipped["gaps"] == []
-    assert "no hash-pinned CodeQL graph export pack for go" in skipped["reason"]
+    assert "no hash-pinned CodeQL graph export pack for swift" in skipped["reason"]
 
     run_root = unit.job.run_root
     exports_root = run_root / "data" / "codeql" / "scopes" / cpp.scope_id / "exports"
@@ -209,10 +223,10 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
     index = json.loads((run_root / output["artifact"]["path"]).read_text(encoding="utf-8"))
     assert output["artifact"]["path"].endswith("/artifacts/codeql/graph-exports.json")
     assert index["schema"] == output["schema"] == "appsec-review/codeql-graph-exports/1"
-    assert [item["scope_id"] for item in index["exports"]] == [cpp.scope_id, go.scope_id]
+    assert [item["scope_id"] for item in index["exports"]] == [cpp.scope_id, swift.scope_id]
     assert output["dispositions"] == [
         {"scope_id": cpp.scope_id, "language": "cpp", "action": "export", "terminal_status": "SUCCEEDED"},
-        {"scope_id": go.scope_id, "language": "go", "action": "export", "terminal_status": "NOT_APPLICABLE"}]
+        {"scope_id": swift.scope_id, "language": "swift", "action": "export", "terminal_status": "NOT_APPLICABLE"}]
     export_events = [(name, details) for name, details in unit.job.events.records
                      if details.get("tool_id") == "codeql-graph-export"]
     assert [name for name, _details in export_events] == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
@@ -301,6 +315,78 @@ def test_timeout_or_nonzero_exit_is_a_scope_gap_that_spares_siblings(tmp_path: P
     assert {item["scope_id"] for item in failed} == {slow.scope_id, broken.scope_id}
 
 
+@pytest.mark.parametrize("exit_code,timed_out", [(0, False), (None, True), (2, False)])
+def test_current_coordinator_preserves_export_status_and_retry_dispositions(
+        tmp_path, monkeypatch, exit_code, timed_out):
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+    from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
+    from appsec_review.runtime import UnitExecutor
+
+    selected, sibling = _scope("cpp", "selected", "a"), _scope("cpp", "sibling", "b")
+    databases = [_database(tmp_path, scope) for scope in (selected, sibling)]
+    unit = _unit(tmp_path, databases)
+    unit.job.metadata_root = tmp_path / "metadata"
+    unit.job.run_id = "fixture"
+    unit.job.attempt_id = "attempt_0001"
+    unit.job.target_root = tmp_path
+    plan = SimpleNamespace(scopes=(selected, sibling), gaps=(), decisions=(),
+                           extractor_inventory=("cpp",), non_applicable=())
+    upstream = unit.job.run_root / "upstream.json"
+    write_manifest(upstream, run_id="fixture", target_snapshot=unit.job.source_fingerprint,
+                   target_root=tmp_path, indexes=[])
+    outputs = {"plan.inventory": {"upstream_manifests": []}}
+    unit.output = outputs.__getitem__
+    unit.unit_id = "execution.scopes"
+    monkeypatch.setattr(codeql_job, "_plan_from", lambda _: plan)
+    monkeypatch.setattr(codeql_job, "_receipt_map", lambda _: {})
+    monkeypatch.setattr(codeql_job, "_database_isolated",
+                        lambda _, scope, receipts: next(value for value in databases
+                                                       if value["scope"]["scope_id"] == scope.scope_id))
+    monkeypatch.setattr(codeql_job, "_query_one",
+                        lambda _, value, profile: {**value, "query_profile": profile})
+    monkeypatch.setattr(codeql_job, "resolve_context_manifest", lambda _: (upstream, file_sha256(upstream)))
+
+    def normalize(unit, value):
+        shard_id = value["scope"]["scope_id"] + "-" + value["query_profile"]["query_id"]
+        fingerprint = hashlib.sha256(shard_id.encode()).hexdigest()
+        path = unit.job.run_root / "data" / "indices" / f"{shard_id}.sqlite"
+        builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
+        builder.add_coverage("codeql", "complete")
+        identity = IndexIdentity("observations", "appsec-review/retrieval-index/2",
+                                 builder.build(), fingerprint, path.relative_to(unit.job.run_root).as_posix(),
+                                 {"job": JOB}, (), shard_id)
+        return {**value, "index_identity": asdict(identity), "observation_count": 0}
+
+    monkeypatch.setattr(codeql_job, "_normalize_one", normalize)
+    executor = FakeExecutor(outcome={selected.scope_id: (exit_code, timed_out)})
+    export_isolated = codeql_job._export_isolated
+    monkeypatch.setattr(codeql_job, "_export_isolated",
+                        lambda unit, value, **kw: export_isolated(
+                            unit, value, executor_factory=executor.factory, **kw))
+    job = build_job()
+    handlers = {item.unit_id: item.handler for item in job.units}
+    executed = handlers["execution.scopes"](unit)
+    outputs["execution.scopes"] = executed
+    unit.unit_id = "acceptance.publish_handoff"
+    published = handlers["acceptance.publish_handoff"](unit)
+    outputs["acceptance.publish_handoff"] = published
+    failed = timed_out or exit_code != 0
+    expected = "COMPLETED_WITH_GAPS" if failed else "SUCCEEDED"
+    assert executed["terminal_status"] == published["terminal_status"] == expected
+    assert all(value["terminal_status"] == "SUCCEEDED" for value in executed["scopes"])
+    assert executed["dispositions"] == [
+        {"scope_id": selected.scope_id, "language": "cpp", "action": "export",
+         "terminal_status": "FAILED" if failed else "SUCCEEDED"},
+        {"scope_id": sibling.scope_id, "language": "cpp", "action": "export", "terminal_status": "SUCCEEDED"},
+    ]
+    assert bool(executed["gaps"]) is failed
+    assert published["gaps"] == executed["gaps"]
+    summary = UnitExecutor.summarize(
+        job.units, {item.unit_id: {"status": "SUCCEEDED"} for item in job.units}, outputs)
+    assert summary["status"] == expected
+
+
 def test_failed_database_skips_export_as_a_named_gap(tmp_path: Path) -> None:
     cpp = _scope("cpp", "native", "a")
     output = _export_scopes(_unit(tmp_path, [_database(tmp_path, cpp, status="FAILED")]),
@@ -366,11 +452,11 @@ def test_planning_compares_the_toml_export_block_with_the_lock_entry() -> None:
     assert export_lock_mismatches({**configured, "cpp": []}, lock) == ("cpp",)
     assert export_lock_mismatches({**configured, "go": configured["cpp"]}, lock) == ("go",)
 
-    cpp, go = _scope("cpp", "native", "a"), _scope("go", "svc", "b")
-    planned = plan_graph_exports((cpp, go), enabled=True, export_languages=("cpp",))
+    cpp, swift = _scope("cpp", "native", "a"), _scope("swift", "svc", "b")
+    planned = plan_graph_exports((cpp, swift), enabled=True, export_languages=("cpp",))
     assert [(item["scope_id"], item["disposition"]) for item in planned] == [
-        (cpp.scope_id, "PLANNED"), (go.scope_id, "NOT_APPLICABLE")]
-    assert planned[1]["reason"] == "no hash-pinned CodeQL graph export pack for go"
+        (cpp.scope_id, "PLANNED"), (swift.scope_id, "NOT_APPLICABLE")]
+    assert planned[1]["reason"] == "no hash-pinned CodeQL graph export pack for swift"
     assert {item["disposition"] for item in plan_graph_exports((cpp,), enabled=False,
                                                                export_languages=("cpp",))} == {"NOT_APPLICABLE"}
 
@@ -388,8 +474,10 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
         "compile_timeout_seconds": 3600, "compile_threads": 8, "compile_ram_mb": 8192}
     assert action_timeout(settings, "export") == settings.export_timeout_seconds == 1800
     assert action_timeout(settings, "compile") == settings.compile_timeout_seconds == 3600
-    assert [item.query_id for item in settings.languages["cpp"].export_queries] == ["graph-export-cpp"]
-    assert all(not settings.languages[name].export_queries for name in settings.languages if name != "cpp")
+    pinned = {name: [item.query_id for item in value.export_queries]
+              for name, value in settings.languages.items() if value.export_queries}
+    assert pinned == {name: [f"graph-export-{name}"] for name in
+                      ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")}
 
     absent = _raw_settings()
     del absent["export_queries"]
@@ -412,7 +500,9 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
             (lambda value: value["export_queries"].update(max_seed_depth=9), "must not exceed 8"),
             (lambda value: value["export_queries"].update(seed_limit=0), "seed_limit must be a positive"),
             (lambda value: value["languages"]["go"].update(
-                export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "only for: cpp"),
+                export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "must use its own pack"),
+            (lambda value: value["languages"]["actions"].update(
+                export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "exist only for"),
             (lambda value: value["languages"]["cpp"]["export_queries"].append(
                 copy.deepcopy(value["languages"]["cpp"]["export_queries"][0])), "at most one"),
             (lambda value: value["languages"]["cpp"]["export_queries"][0].pop("catalog_sha256"),

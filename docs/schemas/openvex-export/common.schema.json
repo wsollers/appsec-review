@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/openvex-export/common.schema.json",
+  "title": "Closed OpenVEX export companion definitions",
+  "$defs": {
+    "sha256": {"$ref": "../final-report/common.schema.json#/$defs/sha256"},
+    "artifact_ref": {"$ref": "../final-report/common.schema.json#/$defs/artifact_ref"},
+    "sized_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"$ref": "../final-report/common.schema.json#/$defs/run_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0, "maximum": 536870912}
+      }
+    },
+    "document_ref": {
+      "allOf": [
+        {"$ref": "#/$defs/sized_ref"},
+        {"properties": {"size_bytes": {"maximum": 33554432}}}
+      ]
+    },
+    "manifest_ref": {
+      "allOf": [
+        {"$ref": "#/$defs/sized_ref"},
+        {"properties": {"size_bytes": {"maximum": 134217728}}}
+      ]
+    },
+    "nullable_output": {"oneOf": [{"$ref": "#/$defs/document_ref"}, {"type": "null"}]},
+    "count": {"type": "integer", "minimum": 0, "maximum": 10000},
+    "outcome": {"enum": ["exported", "exported_with_gaps", "no_statements"]},
+    "identifier": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "timestamp": {
+      "type": "string", "minLength": 27, "maxLength": 27,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$"
+    },
+    "gaps": {
+      "type": "array", "uniqueItems": true, "maxItems": 65,
+      "items": {"$ref": "../final-report/common.schema.json#/$defs/token"}
+    },
+    "refs": {
+      "type": "array", "uniqueItems": true, "maxItems": 30000,
+      "items": {"$ref": "#/$defs/artifact_ref"}
+    },
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "gate_handoff", "gate", "review_handoff", "review", "accepted_scope", "accepted_manifest",
+        "configuration_manifest", "resolved_configuration", "review_settings_sha256", "resolved_config_sha256",
+        "lead_package_manifest_sha256", "hunt_package_manifest_sha256", "ledger_head_sha256",
+        "projection_sha256", "ship_block_policy_sha256", "settings_sha256", "gate_completed_at",
+        "timestamp_source", "exporter_component", "exporter_release", "schema_sha256",
+        "validation_profile", "validation_profile_sha256"
+      ],
+      "properties": {
+        "gate_handoff": {"$ref": "#/$defs/artifact_ref"},
+        "gate": {"$ref": "#/$defs/artifact_ref"},
+        "review_handoff": {"$ref": "#/$defs/artifact_ref"},
+        "review": {"$ref": "#/$defs/artifact_ref"},
+        "accepted_scope": {"$ref": "#/$defs/artifact_ref"},
+        "accepted_manifest": {"$ref": "#/$defs/artifact_ref"},
+        "configuration_manifest": {"$ref": "#/$defs/artifact_ref"},
+        "resolved_configuration": {"$ref": "#/$defs/artifact_ref"},
+        "review_settings_sha256": {"$ref": "#/$defs/sha256"},
+        "resolved_config_sha256": {"$ref": "#/$defs/sha256"},
+        "lead_package_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "hunt_package_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "ledger_head_sha256": {"$ref": "#/$defs/sha256"},
+        "projection_sha256": {"$ref": "#/$defs/sha256"},
+        "ship_block_policy_sha256": {"$ref": "#/$defs/sha256"},
+        "settings_sha256": {"$ref": "#/$defs/sha256"},
+        "gate_completed_at": {"$ref": "#/$defs/timestamp"},
+        "timestamp_source": {"const": "gate_handoff.completed_at"},
+        "exporter_component": {"const": "openvex_export"},
+        "exporter_release": {"type": "string", "minLength": 1, "maxLength": 200},
+        "schema_sha256": {"const": "9373597734ed1d3ea5161a8b46d3866c4a8cfe76fd632fdd16aef01fb34b3238"},
+        "validation_profile": {"const": "appsec-review/openvex-export-validation/1"},
+        "validation_profile_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "review_context": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "review", "accounting", "ship_block", "verification", "coverage", "limitations",
+        "gap_ids", "unavailable_inputs", "status"
+      ],
+      "properties": {
+        "review": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/review"},
+        "accounting": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/accounting"},
+        "ship_block": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/ship_block"},
+        "verification": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/verification"},
+        "coverage": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/coverage"},
+        "limitations": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/limitations"},
+        "gap_ids": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/gap_ids"},
+        "unavailable_inputs": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/unavailable_inputs"},
+        "status": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/status"}
+      }
+    },
+    "product": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "product_id", "repository_iri", "repository_identity_basis", "target_snapshot", "acquisition",
+        "qualifications", "accepted_manifest", "resolved_config_sha256", "scope_statement"
+      ],
+      "properties": {
+        "product_id": {"$ref": "#/$defs/identifier"},
+        "repository_iri": {"$ref": "#/$defs/identifier"},
+        "repository_identity_basis": {"enum": ["operator_declared", "accepted_acquisition"]},
+        "target_snapshot": {"$ref": "#/$defs/sha256"},
+        "acquisition": {"oneOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "null"}]},
+        "qualifications": {
+          "type": "array", "maxItems": 64,
+          "items": {"type": "string", "minLength": 1, "maxLength": 2000}
+        },
+        "accepted_manifest": {"$ref": "#/$defs/artifact_ref"},
+        "resolved_config_sha256": {"$ref": "#/$defs/sha256"},
+        "scope_statement": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "package": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding", "score_refs", "evidence_refs", "disposition", "reason", "statement_id"],
+      "properties": {
+        "finding": {"$ref": "../final-report/common.schema.json#/$defs/finding_projection"},
+        "score_refs": {
+          "type": "array", "uniqueItems": true, "maxItems": 16,
+          "items": {"$ref": "#/$defs/artifact_ref"}
+        },
+        "evidence_refs": {"$ref": "#/$defs/refs"},
+        "disposition": {"enum": ["included", "excluded"]},
+        "reason": {"enum": ["included", "gate_verification_backlog", "gate_withheld"]},
+        "statement_id": {"oneOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]}
+      }
+    },
+    "statement_mapping": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "statement_id", "statement_index", "vulnerability_id", "product_id", "finding_package_id",
+        "finding_package", "claim_id", "claim_ledger", "projection", "settings_sha256", "evidence_refs"
+      ],
+      "properties": {
+        "statement_id": {"$ref": "#/$defs/identifier"},
+        "statement_index": {"type": "integer", "minimum": 0, "maximum": 9999},
+        "vulnerability_id": {"$ref": "#/$defs/identifier"},
+        "product_id": {"$ref": "#/$defs/identifier"},
+        "finding_package_id": {"$ref": "../final-report/common.schema.json#/$defs/finding_package_id"},
+        "finding_package": {"$ref": "#/$defs/artifact_ref"},
+        "claim_id": {"$ref": "../final-report/common.schema.json#/$defs/claim_id"},
+        "claim_ledger": {"$ref": "#/$defs/artifact_ref"},
+        "projection": {"$ref": "#/$defs/artifact_ref"},
+        "settings_sha256": {"$ref": "#/$defs/sha256"},
+        "evidence_refs": {"$ref": "#/$defs/refs"}
+      }
+    },
+    "accounting": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "gate_total", "gate_publishable", "gate_verification_backlog", "gate_withheld",
+        "included_findings", "excluded_findings", "statement_count", "product_count", "exclusion_counts"
+      ],
+      "properties": {
+        "gate_total": {"$ref": "#/$defs/count"},
+        "gate_publishable": {"$ref": "#/$defs/count"},
+        "gate_verification_backlog": {"$ref": "#/$defs/count"},
+        "gate_withheld": {"$ref": "#/$defs/count"},
+        "included_findings": {"$ref": "#/$defs/count"},
+        "excluded_findings": {"$ref": "#/$defs/count"},
+        "statement_count": {"$ref": "#/$defs/count"},
+        "product_count": {"const": 1},
+        "exclusion_counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["gate_verification_backlog", "gate_withheld"],
+          "properties": {
+            "gate_verification_backlog": {"$ref": "#/$defs/count"},
+            "gate_withheld": {"$ref": "#/$defs/count"}
+          }
+        }
+      }
+    }
+  }
+}

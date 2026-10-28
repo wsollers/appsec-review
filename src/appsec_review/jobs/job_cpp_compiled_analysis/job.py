@@ -1243,13 +1243,19 @@ def build_job(*, executor_factory=None) -> Job:
                             if value.get("producer", {}).get("job") != "job_cpp_compiled_analysis"]
         current_identities: list[IndexIdentity] = []
         gaps, dispositions = [], {}
+        handoff_dispositions = []
         for name in BRANCHES:
             for case_id, output in unit.output(f"{name}.projects")["projects"].items():
                 identity = output.get("index_identity")
                 if isinstance(identity, Mapping):
                     current_identities.append(IndexIdentity(**{**identity, "gaps": tuple(identity.get("gaps", ())) }))
                 gaps.extend(str(item) for item in output.get("gaps", ()))
-                dispositions[f"{case_id}:{name}"] = output.get("terminal_status", "UNKNOWN")
+                status = output.get("terminal_status", "UNKNOWN")
+                dispositions[f"{case_id}:{name}"] = status
+                disposition = {"project_key": case_id, "branch": name, "terminal_status": status}
+                if status not in {"SUCCEEDED", "NOT_APPLICABLE"} and output.get("checkpointable") is not True:
+                    disposition["disposition"] = "GAP"
+                handoff_dispositions.append(disposition)
         current_keys = {(item.name, item.shard_id) for item in current_identities}
         identities = [item for item in prior_identities if (item.name, item.shard_id) not in current_keys]
         identities.extend(current_identities)
@@ -1269,7 +1275,7 @@ def build_job(*, executor_factory=None) -> Job:
                               shard_count=len(identities), gap_count=len(unique_gaps))
         return {"schema": SCHEMA, "artifact": summary_artifact,
                 "index_manifest": _artifact(unit.job.run_root, destination),
-                "item_count": len(identities), "gaps": unique_gaps, "dispositions": dispositions,
+                "item_count": len(identities), "gaps": unique_gaps, "dispositions": handoff_dispositions,
                 "terminal_status": "COMPLETED_WITH_GAPS" if unique_gaps else "SUCCEEDED"}
 
     units: list[Unit] = [Unit("plan.accepted_cpp_plan", plan)]

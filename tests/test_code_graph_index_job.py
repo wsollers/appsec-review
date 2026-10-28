@@ -27,6 +27,7 @@ from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
+from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.storage import file_sha256
 from tests.fixtures.graph.job.builder import (
     FAILED, GO, NATIVE, ROOT, SNAPSHOT, SYNTHETIC, Staged, stage_run,
@@ -90,6 +91,25 @@ def test_graph_reads_bound_export_index_from_current_and_legacy_topologies(tmp_p
     staged = stage_run(tmp_path, legacy_codeql=legacy)
     inputs = load_codeql_inputs(staged.run_root, SNAPSHOT)
     assert {scope["scope_id"] for scope in inputs["scopes"]} == {SYNTHETIC, NATIVE, FAILED, GO}
+
+
+def test_graph_reads_export_reference_published_by_real_job_runner(staged):
+    from appsec_review.jobs.job_code_graph_index.scopes import load_codeql_inputs
+
+    accepted = accepted_handoff(staged.run_root, "job_codeql_analysis")
+    result = json.loads((staged.run_root / accepted.handoff["resolving_paths"]["result"]).read_bytes())
+    units = tuple(Unit(unit_id, lambda unit, output=output: output)
+                  for unit_id, output in result["outputs"].items())
+    job = Job("job_codeql_analysis", "codeql_analysis", UnitExecutor(units).execute, units=units)
+    outcome = JobRunner(staged.config).run(
+        job, run_id=staged.run_id, target_root=staged.target, source_fingerprint=SNAPSHOT)
+
+    reference = outcome["handoff"]["outputs"]["execution.scopes"]["graph_export_artifact"]
+    assert any(item["path"] == reference["path"] and item["sha256"] == reference["sha256"]
+               for item in outcome["handoff"]["artifacts"])
+    inputs = load_codeql_inputs(staged.run_root, SNAPSHOT)
+    assert {scope["scope_id"] for scope in inputs["scopes"]} == {SYNTHETIC, NATIVE, FAILED, GO}
+    assert inputs["handoff"]["sha256"] == outcome["handoff_sha256"]
 
 
 def test_catalog_release_changes_graph_scope_identity_without_changing_database(published):

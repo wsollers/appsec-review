@@ -2,39 +2,39 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import time
 from typing import Sequence
 
 from appsec_review.config import load_config
+from appsec_review.orchestration.topology import wave1_dependencies
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import GraphRunner, active_job_ids, job_is_enabled
 from appsec_review.jobs.cataloging import source_fingerprint
 
+INDEX_TERMINAL_JOB_ID = "job_review_data_indexing"
+
+
+def _graph_order() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The resumable graph and its post-index consumers, in the order Dagster's ``wave1_review`` uses."""
+    order = tuple(wave1_dependencies(frozenset(builtin_registry().job_ids())) or ())
+    split = order.index(INDEX_TERMINAL_JOB_ID) + 1
+    return order[:split], order[split:]
+
 
 # The deterministic review graph in execution order; ``start``, ``resume`` and ``--force-from`` all
-# use it. ``job_image_pin_verification`` runs after the model gate and before intake and fails the run
+# use it. It is derived from ``orchestration.topology`` so the CLI and Dagster run the same jobs.
+# ``job_image_pin_verification`` runs after the model gate and before intake and fails the run
 # when any enabled catalog image or configured image-ID pin does not resolve on the local daemon to
-# exactly its pinned image; it never builds an image. ``job_code_graph_index``
+# exactly its pinned image; it never builds an image. ``job_target_acquisition`` then acquires (or
+# re-verifies) every component of the system named by ``--system`` into ``targets/<system>/`` before
+# intake fingerprints that composed root; without ``--system`` it is a recorded no-op. ``job_code_graph_index``
 # consumes CodeQL and prioritization output and must precede the indexing job that accounts for it.
-GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
-                 "job_source_history_analysis",
-                 "job_target_analysis_plan", "job_tree_sitter_ast",
-                 "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
-                 "job_profile_data",
-                 "job_artifact_security_analysis",
-                 "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_svf_alias_analysis",
-                 "job_sanitizer_build",
-                 "job_cpp_symbol_index", "job_cpg_analysis",
-                 "job_evidence_collection", "job_dependency_intelligence", "job_change_context_analysis",
-                 "job_codeql_analysis",
-                 "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")
-# Consumers of the accepted index that run after the resumable graph.
-POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis",
-                      "job_inference_security_review", "job_poc_generation",
-                      "job_remediation_planning", "job_remediation_validation", "job_dossier_publication",
-                      "job_final_publication_gate", "job_final_report_publication")
+# The code graph and security tags contextualize OWASP before data indexing, hunt assembly and
+# red/blue investigation. Consumers of the accepted index (``POST_INDEX_JOB_IDS``) run after the resumable graph.
+GRAPH_JOB_IDS, POST_INDEX_JOB_IDS = _graph_order()
 # Jobs that are outside the automatic graph while ``settings.enabled`` is false and that an operator may still
 # dispatch directly on a finished run (`run <job> --run-id <id> --upstream-from-run`). Every other disabled job
 # is refused: disabling it means "do not run it".
@@ -60,17 +60,25 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--admit-manual-poc", action="store_true",
                      help="explicitly bind a manually run, disabled PoC job when rerunning the final gate")
 
+    def target_choice(command: argparse.ArgumentParser) -> None:
+        choice = command.add_mutually_exclusive_group(required=True)
+        choice.add_argument("--target", type=Path, help="an existing target checkout to review")
+        choice.add_argument("--system", metavar="ID",
+                            help="a configured [[target_acquisition.systems]] id: job_target_acquisition "
+                                 "acquires (or re-verifies) its components into targets/<id>/ in parallel, "
+                                 "then the graph reviews that composed root")
+
     start = commands.add_parser("start", help="start the deterministic review graph")
-    start.add_argument("--target", type=Path, required=True)
+    target_choice(start)
 
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
-    plan.add_argument("--target", type=Path, required=True)
+    target_choice(plan)
     plan.add_argument("--force-from", choices=GRAPH_JOB_IDS)
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
     resume.add_argument("--run-id", required=True)
-    resume.add_argument("--target", type=Path, required=True)
+    target_choice(resume)
     resume.add_argument("--force-from", choices=GRAPH_JOB_IDS)
 
     tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
@@ -94,6 +102,17 @@ def parser() -> argparse.ArgumentParser:
                         help="decompile again even when a verified publication exists")
     binary.add_argument("--verify-only", action="store_true",
                         help="verify existing publications without running Ghidra")
+
+    acquire = commands.add_parser(
+        "acquire-target",
+        help="check out every pinned component of a configured review system (Git with submodules by "
+             "default, Perforce, or a code-review export) in parallel into targets/<system>/<component>/")
+    acquire.add_argument("--system", action="append", dest="systems", metavar="ID",
+                         help="configured system id; repeatable; default is every configured system")
+    acquire.add_argument("--component", action="append", dest="components", metavar="ID",
+                         help="acquire only this component of the single --system; repeatable")
+    acquire.add_argument("--verify-only", action="store_true",
+                         help="re-check existing acquisitions against their manifests without fetching")
 
     pins = commands.add_parser(
         "update-image-pins",
@@ -165,6 +184,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(results, sort_keys=True, indent=2))
         return 1 if failed else 0
 
+    if args.command == "acquire-target":
+        from appsec_review.target_acquisition.acquire import acquire_system, verify_system
+        settings = config.target_acquisition
+        if args.components and (not args.systems or len(args.systems) != 1):
+            parser().error("--component requires exactly one --system")
+        if args.components and args.verify_only:
+            parser().error("--verify-only checks every component of the system")
+        try:
+            systems = [settings.system(system_id) for system_id in args.systems] if args.systems \
+                else list(settings.systems)
+            for component_id in args.components or ():
+                systems[0].component(component_id)
+        except KeyError as exc:
+            parser().error(str(exc.args[0]))
+        if not systems:
+            parser().error("no systems are configured under [[target_acquisition.systems]]")
+        common = {"repository_root": config.runtime.repository_root, "settings": settings}
+        results = [verify_system(**common, system=system) if args.verify_only
+                   else acquire_system(**common, system=system, components=args.components)
+                   for system in systems]
+        print(json.dumps(results, sort_keys=True, indent=2))
+        statuses = {item["status"] for item in results}
+        if statuses <= {"COMPLETE", "VERIFIED"} and not any(item["gaps"] for item in results):
+            return 0
+        return 2 if statuses <= {"COMPLETE", "PARTIAL", "VERIFIED"} else 1
+
     if args.command == "logs":
         from appsec_review.observability import PipelineLog
         path = config.runtime.runs_dir / args.run_id
@@ -201,11 +246,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
+        registry.require_matches(config.jobs, surface="CLI")
         selected = active_job_ids(config, (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
         if getattr(args, "force_from", None) and args.force_from not in selected:
             raise ValueError(f"cannot force from disabled job: {args.force_from}")
         jobs = [registry.build(job_id) for job_id in selected]
-        fingerprint = source_fingerprint(args.target)
+        if args.system is not None:
+            from appsec_review.runtime.launch import SYSTEM_ENVIRONMENT
+            try:
+                config.target_acquisition.system(args.system)
+            except KeyError as exc:
+                parser().error(str(exc.args[0]))
+            if "job_target_acquisition" not in selected:
+                parser().error("--system requires job_target_acquisition to be enabled")
+            # The acquisition gate reads the requested system from the environment, as every driver does.
+            os.environ[SYSTEM_ENVIRONMENT] = args.system
+            args.target = (config.runtime.repository_root / config.target_acquisition.targets_dir /
+                           args.system).absolute()
+            fingerprint = None
+        else:
+            fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":
             decisions = graph.plan(args.run_id, fingerprint, force_from=args.force_from,
@@ -231,6 +291,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from appsec_review.storage import RunStore
 
     registry = builtin_registry()
+    registry.require_matches(config.jobs, surface="CLI")
     job = registry.build(args.job_id)
     upstream: dict[str, str] = {}
     if args.upstream_from_run:
@@ -245,7 +306,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError(f"job is not in wave1_review: {args.job_id}")
         upstream = accepted_upstream_handoffs(RunStore(config.runtime.runs_dir).resolve(args.run_id),
                                               entry["upstream_handoffs"])
-    inputs = launch_inputs(job, target=args.target or configured_target(config.runtime.repository_root),
+    inputs = launch_inputs(job, target=args.target or configured_target(
+                               config.runtime.repository_root, config.target_acquisition.targets_dir),
                            upstream_handoffs=upstream)
     outcome = launch(JobRunner(config), job, inputs, run_id=args.run_id, trigger=args.trigger)
     print(json.dumps(outcome, sort_keys=True))

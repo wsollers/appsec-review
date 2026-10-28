@@ -24,7 +24,9 @@
     "planned_consumers",
     "lead_severity_triage",
     "poc_candidates",
-    "attack_chain_manifest"
+    "attack_chain_manifest",
+    "package_manifest_sha256",
+    "lead_package_manifest_sha256"
   ],
   "properties": {
     "schema": {
@@ -545,6 +547,9 @@
       "uniqueItems": true
     },
     "package_manifest_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "lead_package_manifest_sha256": {
       "$ref": "common.schema.json#/$defs/sha256"
     },
     "coverage_matrix": {

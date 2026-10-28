@@ -152,15 +152,22 @@ def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str,
         raise ModelOutputError(str(exc), raw_response=raw,
                                rejected_output=rejected[:131072]) from exc
     usage = {}
+    served_model = None
     try:
         envelope = json.loads(completed.stdout)
         usage = envelope.get("usage", {}) if isinstance(envelope, Mapping) else {}
+        if isinstance(envelope, Mapping):
+            served_model = envelope.get("model")
+            model_usage = envelope.get("modelUsage")
+            if served_model is None and isinstance(model_usage, Mapping) and len(model_usage) == 1:
+                served_model = next(iter(model_usage))
     except json.JSONDecodeError:
         pass
     return ModelResult(
         proposal=proposal,
         input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
         cache_tokens=usage.get("cache_read_input_tokens"), raw_response=completed.stdout,
+        served_model=served_model, served_provider="claude-cli",
     )
 
 

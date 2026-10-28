@@ -83,13 +83,12 @@ that the policy asks to document. The reader (`jobs/job_poc_generation/candidate
 | --- | --- |
 | `claim_id`, `package_id` | the claim and the review package it was raised on |
 | `state`, `judge_verdict` | the ledger state and the de-shuffled judge verdict |
-| `poc_basis` | `{sha256, brief}`: the bounded brief of review-protocol-v2 section 6.6; `sha256` is the SHA-256 of canonical JSON of `brief` |
+| `poc_basis` | `{sha256, brief}`: the bounded brief of review-protocol-v2 section 6.6; `sha256` is the SHA-256 of the canonical JSON of `brief`; entry and path contain resolved entity identities, not worker-local labels |
 | `finding_package` | `{finding_package_id, sha256}`, which must match the review handoff's finding package of that claim |
 | `evidence_refs` | the evidence the claim rests on |
 
-A parser-level absent-field path names `no_poc_candidates`; it does not make an older review
-schema acceptable to the strict shared `/3` reader or upgrade an old frozen run. An empty accepted
-array is a run with nothing to document. A field
+A handoff without the required field is an integrity failure in the strict shared `/3` reader;
+older frozen runs are not upgraded implicitly. An empty accepted array means nothing to document. A field
 that does not match the documented shape, or a candidate that disagrees with the verified finding package, is an
 integrity failure.
 
@@ -105,11 +104,11 @@ load.verify_inputs -> plan.briefs -> write.poc_writer -> validate.policy -> comp
    `poc_candidates`. Confirmed claims are attempted first, in claim-id order, up to `max_candidates`; the rest are named
    in the gap `candidate_bound_reached`.
 2. **`plan.briefs`** decides what can be attempted and builds each brief from the finding package, the `poc_basis` with
-   its labels resolved in the labelled package view, the declarations at the sink, the safe build facts of the
+   its entity identities resolved in the labelled package view, the declarations at the sink, the safe build facts of the
    translation unit that contains the sink and the closed limits the validators enforce. A candidate that cannot be
    attempted gets its terminal status here: a judge verdict outside `accepted_judge_verdicts` or a sink in a file that no
    accepted native build compiled is `not_applicable`; a `poc_basis` without an entry, a path or a trigger, a package
-   that names no sink function, or labels that do not resolve is `insufficient_evidence`.
+   that names no sink function, or identities that do not resolve is `insufficient_evidence`.
 3. **`write.poc_writer`** runs the model (below).
 4. **`validate.policy`** assembles the file, runs the textual checks and then the AST validators in the build image.
 5. **`compile.build_check`** runs the compile check.

@@ -1,0 +1,2 @@
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 1

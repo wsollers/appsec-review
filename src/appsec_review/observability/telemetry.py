@@ -18,6 +18,16 @@ FINDING_STATES = {"CANDIDATE", "REFUTED", "CONFIRMED"}
 TERMINAL_EVENTS = {"SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED",
                    "BLOCKED", "PARTIAL", "NOT_APPLICABLE"}
 METRICS_SEMANTICS = "appsec-review/review-metrics-semantics/1"
+RUN_METRICS_SCHEMA = "appsec-review/run-metrics/4"
+CODEQL_METRICS_SEMANTICS = "appsec-review/codeql-execution-metrics/1"
+CODEQL_QUERY_METRICS_SCHEMA = "appsec-review/codeql-query-metrics/1"
+CODEQL_TOOLS = {"codeql", "codeql-graph-export", "codeql-graph-export-compile"}
+CODEQL_ACTIONS = {"database": "database", "query": "analyze", "analyze": "analyze",
+                  "compile": "compile", "export": "export"}
+CODEQL_STATUSES = ("SUCCEEDED", "FAILED", "TIMED_OUT", "SKIPPED", "REUSED")
+DATABASE_PACK = "(database creation)"
+_CODEQL_ROW_LIMIT = 2000
+_CODEQL_GAP_LIMIT = 200
 
 
 def validate_event(record: Mapping[str, Any]) -> None:
@@ -151,6 +161,136 @@ def _timing_summary(bucket: Mapping[str, Any]) -> dict[str, Any]:
             "wall_span_ms": wall, "gap_count": int(bucket["gaps"]),
             "receipt_count": len(bucket["receipts"]),
             "terminal_dispositions": dict(sorted(bucket["dispositions"].items()))}
+
+
+def _tree_sitter_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    from appsec_review.container_runtime.measurement import COUNTERS, INVOCATION_SCHEMA
+    sources: dict[str, dict[str, Any]] = {}
+    reused: dict[str, Mapping[str, Any]] = {}
+    reused_tasks: set[tuple[str, str, str, str]] = set()
+    gaps: list[str] = []
+    kinds = {"TOOL_INVOCATION_STARTED": "start", "TOOL_INVOCATION_COMPLETED": "execution",
+             "TREE_SITTER_OUTPUT_VALIDATED": "output"}
+    for event in records:
+        details = event.get("details", {})
+        if event.get("event_type") == "TASK_REUSED" and event.get("job_id") in {
+                "job_source_history_analysis", "job_tree_sitter_ast"}:
+            reused_tasks.add(tuple(str(event.get(key)) for key in ("job_id", "attempt_id", "step_id", "task_id")))
+        if details.get("tool_id") != "tool-tree-sitter":
+            continue
+        if event["event_type"] == "TREE_SITTER_REUSED":
+            identity = str(details.get("reuse_id"))
+            if identity in reused and reused[identity] != details:
+                gaps.append(f"conflicting Tree-sitter reuse identity: {identity}")
+            reused[identity] = details
+            continue
+        kind = kinds.get(event["event_type"])
+        if kind is None:
+            continue
+        identity = str(details.get("tool_invocation_id") or "")
+        row = sources.setdefault(identity, {"references": {}, "documents": {}, "invalid": False})
+        reference = details.get("metrics_receipt")
+        if kind in row["references"]:
+            if row["references"][kind] != reference:
+                row["invalid"] = True
+                gaps.append(f"conflicting Tree-sitter invocation receipt: {identity}/{kind}")
+            continue
+        row["references"][kind] = reference
+        try:
+            document = _receipt_json(run_root, reference)
+            if document.get("invocation_id") != identity:
+                raise ValueError("invocation identity mismatch")
+            if kind != "output":
+                if document.get("schema") != INVOCATION_SCHEMA or any(
+                        document.get(key) != event.get(key) for key in ("run_id", "job_id", "attempt_id")):
+                    raise ValueError("invocation provenance mismatch")
+            elif document.get("schema") != "appsec-review/tree-sitter-output-metrics/1":
+                raise ValueError("output metrics schema mismatch")
+            row["documents"][kind] = document
+        except (OSError, ValueError, UnicodeError) as exc:
+            row["invalid"] = True
+            gaps.append(f"Tree-sitter invocation {identity}/{kind}: {exc}")
+
+    invocations = []
+    for identity, source in sorted(sources.items()):
+        documents = source["documents"]
+        start, execution, output = (documents.get(key, {}) for key in ("start", "execution", "output"))
+        base = execution or start
+        if start and execution and any(start.get(key) != execution.get(key) for key in start):
+            source["invalid"] = True
+            gaps.append(f"Tree-sitter start/completion mismatch: {identity}")
+        resources = execution.get("resources", {}) if not source["invalid"] else {}
+        invocations.append({
+            "invocation_id": identity,
+            **{key: base.get(key) for key in ("run_id", "job_id", "attempt_id", "unit_id", "scope_id", "language",
+                                             "image_id", "started_at", "completed_at", "duration_ms")},
+            "status": "INTEGRITY_ERROR" if source["invalid"] else execution.get("status", "INCOMPLETE"),
+            "exit_code": execution.get("exit_code"), "timed_out": execution.get("timed_out"),
+            "oom_killed": execution.get("oom_killed"), "configured_limits": base.get("configured_limits"),
+            "resources": resources, "receipts": source["references"],
+            "files_requested": len(base["files"]) if "files" in base else None,
+            **{key: output.get(key) if not source["invalid"] else None
+               for key in ("files_accounted", "files_parsed", "nodes_emitted", "truncated_files")},
+            "resource_accounting_complete": not source["invalid"] and execution.get(
+                "resource_accounting_complete", False),
+            "accounting_complete": bool(start and execution and output and not source["invalid"] and
+                                        execution.get("resource_accounting_complete")),
+        })
+
+    def summarize(rows):
+        complete_intervals = []
+        for row in rows:
+            if row["started_at"] and row["completed_at"] and row["status"] != "INTEGRITY_ERROR":
+                start = datetime.fromisoformat(row["started_at"])
+                end = datetime.fromisoformat(row["completed_at"])
+                if end >= start:
+                    complete_intervals.append((start, end))
+        points = sorted((stamp, delta) for start, end in complete_intervals if end > start
+                        for stamp, delta in ((start, 1), (end, -1)))
+        active = peak = covered_ms = 0
+        previous = None
+        for stamp, delta in points:
+            if active and previous is not None:
+                covered_ms += (stamp - previous).total_seconds() * 1000
+            active += delta
+            peak = max(peak, active)
+            previous = stamp
+        values = {key: [row["resources"].get(key) for row in rows
+                        if row["resources"].get(key) is not None] for key in COUNTERS}
+        measurements = {
+            key: {"value": (max(items) if key == "memory_peak_bytes" else sum(items)) if items else None,
+                  "measured_invocations": len(items), "unavailable_invocations": len(rows) - len(items),
+                  "complete": len(items) == len(rows) and all(row["resource_accounting_complete"] for row in rows)}
+            for key, items in values.items()}
+        durations = [row["duration_ms"] for row in rows if row["duration_ms"] is not None
+                     and row["status"] != "INTEGRITY_ERROR"]
+        elapsed = (int((max(end for _, end in complete_intervals) -
+                        min(start for start, _ in complete_intervals)).total_seconds() * 1000)
+                   if complete_intervals else None)
+        return {
+            "invocation_count": len(rows), "outcomes": dict(sorted(Counter(row["status"] for row in rows).items())),
+            "summed_invocation_duration_ms": sum(durations) if durations else None,
+            "elapsed_window_ms": elapsed, "covered_wall_ms": int(covered_ms) if complete_intervals else None,
+            "max_concurrency": peak if complete_intervals else None,
+            "timing_complete": len(complete_intervals) == len(rows),
+            "measurements": measurements,
+            "memory_peak_semantics": "maximum_individual_container_peak; concurrent_aggregate_peak_not_measured",
+            "counts": {key: {
+                "value": sum(row[key] for row in rows if row[key] is not None)
+                         if any(row[key] is not None for row in rows) else None,
+                "complete": all(row[key] is not None for row in rows)}
+                for key in ("files_requested", "files_accounted", "files_parsed", "nodes_emitted", "truncated_files")},
+            "accounting_complete": all(row["accounting_complete"] for row in rows),
+        }
+
+    groups = sorted({(str(row["job_id"]), str(row["attempt_id"])) for row in invocations})
+    return {"schema": "appsec-review/tree-sitter-metrics/1", **summarize(invocations),
+            "by_job_attempt": [{"job_id": job, "attempt_id": attempt, **summarize([
+                row for row in invocations if str(row["job_id"]) == job and str(row["attempt_id"]) == attempt])}
+                for job, attempt in groups],
+            "invocations": invocations, "reused_scopes": [reused[key] for key in sorted(reused)],
+            "reused_scope_count": len(reused), "reused_task_count": len(reused_tasks), "gaps": gaps,
+            "incomplete_accounting": bool(gaps) or any(not row["accounting_complete"] for row in invocations)}
 
 
 def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
@@ -378,10 +518,320 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
                 "Raw observations are excluded; lifecycle counts are reported in finding_states."}}
 
 
+def _codeql_action(event: str, details: Mapping[str, Any]) -> str | None:
+    action = details.get("action")
+    if isinstance(action, str) and action in CODEQL_ACTIONS:
+        return CODEQL_ACTIONS[action]
+    if event == "CODEQL_ACTION_FAILED" or isinstance(action, str):
+        return None
+    tool = details.get("tool_id")
+    if tool == "codeql-graph-export-compile":
+        return "compile"
+    if tool == "codeql-graph-export":
+        return "export"
+    return "analyze" if details.get("query_identity") or details.get("query_pack") else "database"
+
+
+def _codeql_stats(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    statuses = Counter({status: 0 for status in CODEQL_STATUSES})
+    statuses.update(str(row["status"]) for row in rows)
+    measured = [int(row["duration_ms"]) for row in rows
+                if row.get("duration_ms") is not None and row["status"] not in {"REUSED", "SKIPPED"}]
+    results = [int(row["result_count"]) for row in rows if isinstance(row.get("result_count"), int)]
+    return {"count": len(rows), "statuses": dict(sorted(statuses.items())),
+            "runtime_ms": {"measured_count": len(measured), "unmeasured_count": sum(
+                               1 for row in rows if row.get("duration_ms") is None
+                               and row["status"] not in {"REUSED", "SKIPPED"}),
+                           "total": sum(measured), "min": min(measured) if measured else None,
+                           "max": max(measured) if measured else None,
+                           "p50": _percentile(measured, .50), "p95": _percentile(measured, .95)},
+            "result_count": sum(results) if results else None,
+            "gap_count": sum(int(row.get("gap_count") or 0) for row in rows),
+            "truncated_count": sum(1 for row in rows if row.get("truncated") is True)}
+
+
+def _codeql_view(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    by_action: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        by_action.setdefault(str(row["action"]), []).append(row)
+    return {**_codeql_stats(rows),
+            "by_action": {action: _codeql_stats(items) for action, items in sorted(by_action.items())}}
+
+
+def _codeql_query_rows(run_root: Path, row: Mapping[str, Any], details: Mapping[str, Any],
+                       gaps: list[str]) -> list[dict[str, Any]]:
+    """Per-query rows of one execution, or named gaps; an absent source never reads as zero."""
+    label = f"CodeQL {row['action']} {row['language']}/{row['query_pack']} {row['scope_id']}"
+    if row["status"] in {"REUSED", "SKIPPED"} or row["action"] == "database" or row["reason"] is not None:
+        row["per_query"] = {"status": "not_applicable", "reason":
+                            "no CodeQL query was evaluated in this run for this action"}
+        return []
+    identity = details.get("query_metrics")
+    if identity is None:
+        reason = str(details.get("query_metrics_gap") or "per-query metrics were not recorded")
+        row["per_query"] = {"status": "gap", "reason": reason}
+        gaps.append(f"{label}: {reason}")
+        return []
+    try:
+        document = _receipt_json(run_root, identity)
+        if document.get("schema") != CODEQL_QUERY_METRICS_SCHEMA:
+            raise ValueError("per-query metrics schema is unsupported")
+    except (KeyError, OSError, ValueError, UnicodeError) as exc:
+        row["per_query"] = {"status": "gap", "reason": str(exc)}
+        gaps.append(f"{label}: per-query metrics {exc}")
+        return []
+    named = [str(item) for item in document.get("gaps", ())]
+    gaps.extend(f"{label}: {item}" for item in named)
+    queries = [item for item in document.get("queries", ()) if isinstance(item, Mapping)]
+    rules = [item for item in document.get("rules", ()) or () if isinstance(item, Mapping)]
+    row["per_query"] = {"status": "gap" if named and not queries else "partial" if named else "complete",
+                        "source": document.get("source"), "path": identity.get("path"),
+                        "expected_query_count": document.get("expected_query_count"),
+                        "observed_query_count": len(queries), "rule_count": len(rules), "gaps": named}
+    common = {"action": row["action"], "language": row["language"], "query_pack": row["query_pack"]}
+    values = [{**common, "query": str(item.get("query")), "key_kind": str(item.get("key_kind") or "query"),
+               "status": str(item.get("status") or "SUCCEEDED"),
+               "duration_ms": item.get("duration_ms") if isinstance(item.get("duration_ms"), int) else None,
+               "result_count": item.get("result_count") if isinstance(item.get("result_count"), int) else None,
+               "truncated": item.get("truncated") is True, "gap_count": 0}
+              for item in queries]
+    values.extend({**common, "query": str(item.get("rule_id")), "key_kind": "rule_id",
+                   "status": row["status"], "duration_ms": None,
+                   "result_count": item.get("result_count") if isinstance(item.get("result_count"), int) else None,
+                   "truncated": False, "gap_count": 0} for item in rules)
+    return values
+
+
+def _codeql_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """Every CodeQL execution as one row, viewed by query pack, by language and by both."""
+    starts: dict[str, datetime] = {}
+    rows: list[dict[str, Any]] = []
+    query_rows: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    for record in records:
+        event, details = str(record.get("event_type")), record.get("details", {})
+        if details.get("tool_id") not in CODEQL_TOOLS and event != "CODEQL_ACTION_FAILED":
+            continue
+        if event not in {"TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED",
+                         "CODEQL_ACTION_SKIPPED", "CODEQL_ACTION_FAILED"}:
+            continue
+        action = _codeql_action(event, details)
+        if action is None:
+            continue
+        stamp = datetime.fromisoformat(str(record["timestamp"]))
+        invocation = str(details.get("tool_invocation_id") or "")
+        if event == "TOOL_INVOCATION_STARTED":
+            if invocation:
+                starts.setdefault(invocation, stamp)
+            continue
+        pack = details.get("query_pack") or details.get("export_pack")
+        row: dict[str, Any] = {
+            "action": action, "tool_id": details.get("tool_id"),
+            "scope_id": str(details.get("scope_id") or "-"),
+            "language": str(details.get("language") or "unknown"),
+            "source_languages": sorted(str(item) for item in details.get("source_languages") or ()),
+            "build_mode": details.get("build_mode"), "project_root": details.get("project_root"),
+            "build_unit_id": details.get("build_unit_id"),
+            "query_pack": str(pack or (DATABASE_PACK if action == "database" else "unknown")),
+            "query_pack_version": details.get("query_pack_version") or details.get("export_pack_version"),
+            "query_suite": details.get("query_suite"), "query_profile": details.get("query_profile"),
+            "status": "SKIPPED" if event == "CODEQL_ACTION_SKIPPED" else "FAILED",
+            "duration_ms": None, "started_at": None, "completed_at": stamp.isoformat(),
+            "result_count": None, "gap_count": 1, "truncated": False, "receipt": None,
+            "reason": details.get("reason")}
+        if event == "TOOL_INVOCATION_COMPLETED":
+            reused = details.get("checkpoint_reused") is True
+            row.update(result_count=details.get("result_count") if isinstance(details.get("result_count"), int) else None,
+                       gap_count=int(details.get("gap_count") or 0), truncated=details.get("truncated") is True,
+                       reason=None)
+            begun = starts.pop(invocation, None)
+            row["started_at"] = begun.isoformat() if begun else None
+            receipt: Mapping[str, Any] = {}
+            try:
+                receipt = _receipt_json(run_root, details.get("metrics_receipt"))
+                row["receipt"] = details["metrics_receipt"]["path"]
+            except (KeyError, OSError, ValueError, UnicodeError) as exc:
+                gaps.append(f"CodeQL {action} {row['language']}/{row['query_pack']} {row['scope_id']}: "
+                            f"runtime unverified ({exc})")
+            timed_out = details.get("timed_out") is True or receipt.get("timed_out") is True
+            row["status"] = ("REUSED" if reused else "TIMED_OUT" if timed_out
+                             else str(details.get("disposition") or "UNKNOWN"))
+            if not reused and receipt:
+                duration = receipt.get("duration_ms", details.get("duration_ms"))
+                row["duration_ms"] = max(0, int(duration)) if isinstance(duration, (int, float)) else None
+                row["started_at"] = receipt.get("started_at") or row["started_at"]
+                row["completed_at"] = receipt.get("completed_at") or row["completed_at"]
+        elif event == "CODEQL_ACTION_FAILED":
+            gaps.append(f"CodeQL {action} {row['language']}/{row['query_pack']} {row['scope_id']}: "
+                        f"runtime unmeasured, action failed without an execution receipt ({row['reason']})")
+        query_rows.extend(_codeql_query_rows(run_root, row, details, gaps))
+        rows.append(row)
+
+    def grouped(*fields: str) -> dict[tuple[str, ...], list[Mapping[str, Any]]]:
+        groups: dict[tuple[str, ...], list[Mapping[str, Any]]] = {}
+        for item in rows:
+            groups.setdefault(tuple(str(item[field]) for field in fields), []).append(item)
+        return groups
+
+    by_pack = {}
+    for (pack,), items in sorted(grouped("query_pack").items()):
+        by_pack[pack] = {**_codeql_view(items), "query_pack_versions": sorted(
+            {str(item["query_pack_version"]) for item in items if item["query_pack_version"]}),
+            "languages": sorted({item["language"] for item in items})}
+    by_language = {}
+    for (language,), items in sorted(grouped("language").items()):
+        by_language[language] = {**_codeql_view(items), "source_languages": sorted(
+            {value for item in items for value in item["source_languages"]}),
+            "query_packs": sorted({item["query_pack"] for item in items})}
+    by_pack_language: dict[str, dict[str, Any]] = {}
+    for (pack, language), items in sorted(grouped("query_pack", "language").items()):
+        by_pack_language.setdefault(pack, {})[language] = _codeql_view(items)
+    source_groups: dict[str, list[Mapping[str, Any]]] = {}
+    for item in rows:
+        for value in item["source_languages"] or ["unknown"]:
+            source_groups.setdefault(value, []).append(item)
+    query_groups: dict[tuple[str, ...], list[Mapping[str, Any]]] = {}
+    for item in query_rows:
+        key = (item["action"], item["language"], item["query_pack"], item["key_kind"], item["query"])
+        query_groups.setdefault(key, []).append(item)
+    by_query = [{"action": key[0], "language": key[1], "query_pack": key[2], "key_kind": key[3],
+                 "query": key[4], **_codeql_stats(items)} for key, items in sorted(query_groups.items())]
+    by_query.sort(key=lambda item: (-int(item["runtime_ms"]["total"]), item["action"], item["language"],
+                                    item["query_pack"], item["key_kind"], item["query"]))
+    executions = sorted(rows, key=lambda item: (item["action"], item["language"], item["query_pack"],
+                                                item["scope_id"], str(item["completed_at"])))
+    return {"semantics": CODEQL_METRICS_SEMANTICS,
+            "status_vocabulary": list(CODEQL_STATUSES),
+            "runtime_semantics": ("execution receipt duration of fresh executions; REUSED and SKIPPED "
+                                  "rows are counted but excluded from runtime statistics"),
+            "totals": _codeql_view(rows),
+            "by_query_pack": by_pack, "by_language": by_language,
+            "by_query_pack_language": by_pack_language,
+            "by_source_language": {key: _codeql_view(items) for key, items in sorted(source_groups.items())},
+            "by_query": by_query[:_CODEQL_ROW_LIMIT], "by_query_total": len(by_query),
+            "by_query_truncated": len(by_query) > _CODEQL_ROW_LIMIT,
+            "executions": executions[:_CODEQL_ROW_LIMIT], "execution_total": len(executions),
+            "executions_truncated": len(executions) > _CODEQL_ROW_LIMIT,
+            "gap_count": len(gaps), "gaps": gaps[:_CODEQL_GAP_LIMIT]}
+
+
+def _owasp_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    publications, gaps, seen = [], [], set()
+    latest = None
+    for record in records:
+        if record["event_type"] != "OWASP_ASSESSMENT_RECORDED":
+            continue
+        reference = record["details"].get("metrics_receipt")
+        key = (record["attempt_id"], identity_hash(reference) if isinstance(reference, Mapping) else "")
+        if key in seen:
+            continue
+        seen.add(key)
+        latest = None
+        try:
+            report = _receipt_json(run_root, reference)
+            if report.get("schema") != "appsec-review/owasp-workbench-result/1":
+                raise ValueError("unsupported OWASP metrics receipt")
+            coverage = report["coverage"]
+            if (not isinstance(coverage, Mapping) or type(coverage.get("selected_rows")) is not int
+                    or any(type(value) is not int or value < 0 for value in coverage.values())
+                    or any(value > coverage["selected_rows"] for name, value in coverage.items()
+                           if name.endswith("_rows"))):
+                raise ValueError("invalid OWASP coverage denominators")
+            batches = report["telemetry"]
+            source_resolution = Counter()
+            for batch in batches:
+                counters = batch.get("retrieval", {})
+                values = [*counters.values(), *(batch.get(name, 0) for name in (
+                    "model_calls", "model_requested_retrievals", "reused_model_results"))]
+                if any(type(value) is not int or value < 0 for value in values):
+                    raise ValueError("invalid OWASP source-resolution counters")
+                source_resolution.update(counters)
+            input_retrieval = report.get("input_retrieval", {})
+            if any(type(value) is not int or value < 0 for value in input_retrieval.values()):
+                raise ValueError("invalid OWASP input-retrieval counters")
+            latest = {
+                "attempt_id": record["attempt_id"], "receipt": reference,
+                "assessment_mode": report["assessment_mode"], "coverage": dict(coverage),
+                "manifest_sha256": report["index_manifest"]["sha256"],
+                "input_retrieval": input_retrieval,
+                "source_resolution": dict(source_resolution),
+                "model_requested_retrievals": sum(batch.get("model_requested_retrievals", 0) for batch in batches),
+                "reused_model_results": sum(batch.get("reused_model_results", 0) for batch in batches),
+                "declared_model_calls": sum(batch.get("model_calls", 0) for batch in batches),
+                "gap_count": len(report["gaps"]),
+            }
+            publications.append(latest)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+            gaps.append({"attempt_id": record["attempt_id"], "reason": "owasp_metrics_receipt_unavailable",
+                         "error_class": type(exc).__name__})
+    dispatches = [record["details"] for record in records if record["event_type"] == "MODEL_CALL_COMPLETED"
+                  and record["job_id"] == "job_owasp_control_assessment"]
+    calls = [call for call in dispatches if call.get("execution_mode") != "replay"]
+    return {
+        "latest_publication": latest, "publications": publications, "gaps": gaps,
+        "coverage_unavailable_reason": None if latest is not None else "no_valid_publication_receipt",
+        "new_model_calls": sum(record["event_type"] == "MODEL_CALL_STARTED"
+                               and record["job_id"] == "job_owasp_control_assessment"
+                               and record["details"].get("execution_mode") != "replay" for record in records),
+        "completed_model_calls": len(calls),
+        "replay_attempts": sum(call.get("execution_mode") == "replay" for call in dispatches),
+        "model_dispositions": dict(Counter(str(call.get("terminal_status")) for call in calls)),
+        "model_calls_by_role": dict(Counter(str(call.get("role")) for call in calls)),
+        "unknown_usage_calls": sum(any(call.get(name) is None for name in (
+            "input_tokens", "output_tokens")) for call in calls),
+        "verified_reuse_events": sum(record["event_type"] == "OWASP_MODEL_REUSED" for record in records),
+        "model_requested_retrieval_dispositions": dict(Counter(
+            str(record["details"].get("terminal_status")) for record in records
+            if record["event_type"] == "OWASP_RETRIEVAL_COMPLETED")),
+        "interpretation": "publication metrics are not evidence of target safety or accepted job completion",
+    }
+
+
+def _review_flow_metrics(records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    cells, milestones = {}, {}
+    for record in records:
+        event, details = record["event_type"], record["details"]
+        if event == "INFERENCE_REVIEW_CELL_COMPLETED":
+            key = (record["run_id"], record["attempt_id"], details["cell_id"])
+            cells[key] = details
+        milestone = (
+            "control_evidence" if event == "PRECOMPUTED_PRODUCT_PUBLISHED"
+            and details.get("query_set") == "control_evidence" else
+            "packages" if event == "REVIEW_PACKAGES_PUBLISHED" else
+            f"lane:{details.get('lane')}" if event == "INFERENCE_REVIEW_LANE_COMPLETED" else None)
+        if milestone:
+            milestones[(record["job_id"], record["attempt_id"], milestone)] = {
+                "stage": milestone, "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "counts": {name: value for name, value in details.items()
+                           if type(value) is int and name in {
+                               "fact_count", "package_count", "gap_count", "coverage_gap_count",
+                               "cells_run", "cells_reused", "cells_not_launched", "claims", "cells", "gaps"}},
+                "manifest_sha256": details.get("manifest_sha256"),
+                "owasp_manifest_sha256": details.get("owasp_manifest_sha256"),
+                "package_manifest_sha256": details.get("package_manifest_sha256"),
+                "reused": details.get("reused"),
+            }
+    return {
+        "cell_count": len(cells),
+        "cells_by_role": dict(Counter(str(cell["role"]) for cell in cells.values())),
+        "cell_dispositions": dict(Counter(str(cell["terminal_status"]) for cell in cells.values())),
+        "reused_cells": sum(bool(cell["reused"]) for cell in cells.values()),
+        "cell_model_dispatches": sum(cell["model_dispatches"] for cell in cells.values()),
+        "new_model_calls": sum(record["event_type"] == "MODEL_CALL_STARTED"
+                               and record["job_id"] == "job_inference_security_review"
+                               and record["details"].get("execution_mode") != "replay" for record in records),
+        "fresh_retrieval_queries": sum(cell["counts"].get("queries", 0) for cell in cells.values()
+                                       if not cell["reused"]),
+        "milestones": list(milestones.values()),
+        "interpretation": "absent milestones are unrecorded, not successful or zero-work stages",
+    }
+
+
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     records, torn = PipelineLog(run_root).read()
     for record in records:
         validate_event(record)
+    tree_sitter = _tree_sitter_metrics(Path(run_root), records)
     raw_event_count = len(records)
     raw_event_counts = Counter(str(record["event_type"]) for record in records)
     unique_records = []
@@ -463,13 +913,17 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         if record["event_type"] == "MODEL_CALL_COMPLETED":
             model_usage.append({
                 "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "step_id": record.get("step_id"), "task_id": record.get("task_id"),
                 "invocation_id": details.get("model_invocation_id"),
+                **{name: details.get(name) for name in (
+                    "role", "persona", "cell_id", "batch_id", "package_id", "lane",
+                    "terminal_status", "error_class", "served_provider", "served_model", "execution_mode")},
                 "provider": details.get("provider"), "model": details.get("model"),
                 "duration_ms": details.get("duration_ms"), "retry_count": details.get("retry_count"),
                 "input_tokens": details.get("input_tokens"), "output_tokens": details.get("output_tokens"),
                 "cache_tokens": details.get("cache_tokens"), "cost": details.get("cost"),
                 "cost_unavailable_reason": None if details.get("cost") is not None else "no_trusted_rate_source",
-                "usage_unavailable_reason": ("provider_usage_unavailable" if any(
+                "usage_unavailable_reason": details.get("usage_unavailable_reason") or ("provider_usage_unavailable" if any(
                     details.get(name) is None for name in ("input_tokens", "output_tokens", "cache_tokens"))
                     else None),
             })
@@ -555,7 +1009,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             else:
                 genuinely_running.append(state)
     critical = max(task_intervals, key=lambda item: item[3], default=None)
-    return {"schema": "appsec-review/run-metrics/3", "run_id": Path(run_root).name,
+    return {"schema": RUN_METRICS_SCHEMA, "run_id": Path(run_root).name,
             "event_count": len(records), "event_counts": dict(sorted(event_counts.items())),
             "raw_event_count": raw_event_count, "raw_event_counts": dict(sorted(raw_event_counts.items())),
             "duplicate_lifecycle_records": duplicate_lifecycle_records,
@@ -599,6 +1053,10 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
             "completion": completion_metrics(records),
+            "owasp": _owasp_metrics(Path(run_root), records),
+            "review_flow": _review_flow_metrics(records),
+            "tree_sitter": tree_sitter,
+            "codeql": _codeql_metrics(Path(run_root), records),
             "torn_tail_ignored": torn}
 
 
@@ -625,4 +1083,5 @@ def emit_model_event(log: PipelineLog, *, event_type: str, run_id: str, invocati
                "input_tokens": input_tokens, "output_tokens": output_tokens,
                "cache_tokens": cache_tokens, "error_class": error_class, **correlation}
     return log.write(event_type, run_id=run_id, job_id=str(correlation.get("job_id", "inference")),
-                     attempt_id=str(correlation.get("attempt_id", "-")), details=details)
+                     attempt_id=str(correlation.get("attempt_id", "-")),
+                     step_id=correlation.get("step_id"), task_id=correlation.get("task_id"), details=details)

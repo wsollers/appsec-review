@@ -137,8 +137,9 @@ up the decision 2 safeguard.
 
 ## Capacity and local runs
 
-`[...settings.teams].review_teams` (default 5) is the number of review teams, each 3 red, 2 blue
-and 1 blind verifier, that may run at once on the host. To run a single team locally without
+`[...settings.teams].review_teams` is **3 in dev/copilot-dev and 7 in prod/copilot-prod**.
+It limits concurrent package-review teams within one run, not individual model calls or all runs
+on a host. Each team has 3 red, 2 blue and 1 blind verifier tasks. To run a single team locally without
 editing the checked-in file, supply a capacity overlay:
 
 ```toml
@@ -149,10 +150,19 @@ review_teams = 1
 
 Set `APPSEC_REVIEW_CONFIG_OVERLAY=local-capacity.toml`, pass `overlay=` to `load_config`, or choose an
 overlay under `test/acceptance` for one Dagster run with `scripts/review-start --overlay`. The
-overlay may set only `review_teams` and `orchestration.dagster.pools.*`; any other key is rejected.
+overlay may set only `review_teams`, `orchestration.dagster.pools.*` and
+`review_policy.resources.*` (the host resource budget); any other key is rejected.
 It is recorded as its own hashed layer in the run's configuration manifest. Capacity is excluded
 from cell fingerprints, so runs with different team counts reuse each other's cells and produce
 identical canonical outputs.
+
+[`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
+raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts, and runs 3 review
+teams; the checked-in default stays at one slot. See [performance assurance](performance-assurance.md)
+for its limits. That explicit overlay overrides production's 7-team default with 3; omit its
+team setting or select a deliberate 7-team capacity overlay when using its scanner/IO settings.
+Profile defaults are applied before capacity overlays, and the final resolved settings are frozen
+per run. Existing overlays are not silently overwritten.
 
 ## Routing, follow-up rounds, and coverage
 
@@ -175,7 +185,7 @@ predicate outcomes, or semantic evidence; a new actor/receipt ID is not new evid
 lanes, so concurrent packages cannot each consume the run-wide cap. Unused claim allocations are
 not transferred between packages. Per-package review caps also span all rounds. A team-package
 reservation covers all its rounds, while every actual model turn/token/retrieval charge continues
-to consume the original shared job budget. No model or budget limits are increased.
+to consume the original shared job budget. Token, turn, query and time limits are not increased.
 
 The lane artifact records round summaries, stable-round counts, accepted seeds, and the stop reason.
 Round/usage cutoffs, missing seed sources, omitted strategies/specialists, and unresolved evidence
@@ -192,26 +202,173 @@ worker's exact mechanism or statement: statement, argument, trigger, and rationa
 
 ## Opt-in medium/low exploration
 
-Both `dev` and `prod` default to:
+Production profiles (`prod` and `copilot-prod`) enable bounded medium/low exploration:
 
 ```toml
 [jobs.job_inference_security_review.settings.lanes]
-exploration_enabled = false
-exploration_reserve = 1
+exploration_enabled = true
+exploration_reserve = 20
 ```
 
-Enable exploration explicitly in the selected profile/base configuration. `exploration_reserve`
-limits the number of otherwise unadmitted medium/low lead packages, ordered by effective severity
-then accepted lead identity. These packages use reserved slots **inside** the existing lead-lane
+Development exploration (`dev` and `copilot-dev`) remains unchanged: `exploration_enabled = false`,
+`exploration_reserve = 1`. Selecting production is still explicit; the default profile is `dev`.
+This supersedes the earlier decision to leave production exploration disabled.
+
+`exploration_reserve`
+limits the number of otherwise unadmitted medium/low lead packages. Admission alternates medium,
+low, medium, low, sorting by accepted lead identity within each severity. These packages use
+reserved slots **inside** the existing lead-lane
 allocation and total team-package budget, not additional capacity. Critical/high/unknown and KEV
 admission remain unchanged; unknown is uncertainty, not low urgency. Informational leads are not
 admitted by this option. A profile may change these two settings; a capacity overlay may not.
+The 20-slot reserve permits **10 medium and 10 low** when both are plentiful; if one population
+is scarce, the other uses the unused slots (for example, 2 medium plus 18 low). Within the
+lead-lane launch allocation, exploratory packages precede ordinary ranked packages and again
+alternate medium/low, preserving both opportunities even when later claim or package cutoffs
+leave fewer than 20 slots. With one slot only, medium wins the tie; with at least two slots and
+both populations, each gets an opportunity. No severity is guaranteed completion after usage
+exhaustion or worker failure. This does not enable exhaustive medium/low coverage.
+Production's `"all"` package budget does not remove the exploration or active-claim limits.
 
 Package manifests record every lead's admission, reasons, and residual coverage, including reserve
 cutoffs and disabled exploration. Lane artifacts record exploratory packages as explored or not
 launched. The deterministic completeness artifact includes this admission inventory, expected
 specialists, and exploration outcomes. A successful cell covers only its actual lens, not every
 expected specialist or strategy, and does not mean the package is defect-free.
+
+### Effective production assignments and bounds
+
+Exploration and follow-ups run inside `job_inference_security_review` (Dagster
+`inference_security_review`); there is no separate exploration job, pool, model, or persona.
+The resolved profiles retain `max_rounds = 3` (rounds 0-2), `stable_rounds_required = 1`,
+and `max_attack_chains = 50`; production raises `max_active_claims` to 1,000 while dev retains
+500. Lead/hunt per-package claim caps remain
+3/5 across all rounds; hunt assembly retains its 50-unit cutoff. Variant hunting has no additional
+enable flag: round 1+ selects it only after that same hunt package produces confirmed R5/R6 seeds.
+Lead follow-ups receive accepted known claims but do not become hunt-lane variant workers.
+
+The following assignments apply to the initial and subsequent rounds, including exploratory leads:
+
+| Work / role | Model profile and reasoning | Persona / stack | Runtime skills |
+| --- | --- | --- | --- |
+| Lead lenses `lead_red_stack`, `lead_red_preconditions`, `lead_red_failure_modes` / `red_team_analyst` | `default`, high | Lead-routed persona and accepted package stack | `generative-investigation` |
+| Hunt `variant`, `sink_up`, `entry_down`, `persona_sweep` / `hypothesis_hunter` | `default`, high | Ranked hunt-panel persona and accepted package stack | `generative-investigation` |
+| Hunt `control_gap` / `hypothesis_hunter` | `default`, high | Ranked hunt-panel persona and accepted package stack | `generative-investigation`, `effective-control-verification` |
+| `blue_control`, `blue_reachability` / `blue_team_refuter` | `default`, high | Proposing claim's persona and package stack | `effective-control-verification` |
+| `blind_verifier` / `independent_verifier` | `strong`, high | Proposing claim's persona and package stack | `predicate-verification` |
+| `adjudicate_claim` / `adjudication_judge` | `strong`, high | `generalist` and package stack, with blinded A/B sides | `conflict-resolution` |
+| Upstream `triage.lead_severity` / `lead_triager` | `triage`, medium | Lean governing-rule/role/task bundle; no routed persona or stack | None |
+
+For `prod`, the provider is `claude-cli`: `default` and `triage` use `claude-sonnet-5-5`;
+`strong` uses `claude-opus-5-5`. For `copilot-prod`, the provider is `copilot-sdk` with exact IDs
+`claude-sonnet-5.5` and `claude-opus-5.5`, respectively. No model substitutions are introduced.
+The verifier remains distinct from the red models; the judge does not replace independent
+verification or set claim state. It is enabled for every red-affirmed claim (`when = "all"`,
+one judge per claim).
+
+Lead routing uses the first sorted lead CWE, then accepted location tags; no match uses
+`generalist` with a routing gap. The registered specialist personas are `authentication_session`,
+`authorization_access_control`, `cryptography_data_protection`, `mobile_platform`,
+`build_supply_chain`, `memory_safety_native`, `injection_interpreters`, `parsing_deserialization`,
+`network_api_surface`, `filesystem_resources`, `business_logic_abuse`, `ci_cd_pipeline`, and
+`cloud_container_deployment`. Hunt routing ranks accepted tag coverage and falls back through
+`business_logic_abuse`, `generalist`, then remaining specialists. These are dynamic assignments,
+not a promise to schedule every specialist.
+
+Stack routing chooses mobile (`android`, `ios`), `wasm`, C/C++
+(`c_systems_embedded`, `cpp_rpc_service`, `cpp_native_service`), managed services
+(`jvm_service`, `dotnet_service`, `go_service`, `rust_service`, `python_service`, `node_web`,
+`php_web`), `ci_pipeline`, `iac_kubernetes`, or `generic`, in the accepted-fact order described
+above. Missing facts and omitted specialists remain gaps. A three-cell hunt panel prioritizes
+`sink_up`, `entry_down`, `control_gap` in round 0; round 1+ inserts `variant` first, leaving
+`control_gap` outside the three-slot panel. Missing required sources fall back to `persona_sweep`
+and record a gap. This change does not enable the OWASP job to supply control-gap evidence.
+
+All review cells additionally receive `binary-evidence` when the accepted retrieval manifest
+includes a configured binary shard, not merely a coverage-only shard. These skills are registered
+under `pipeline/guidance/registry.json`, loaded by `load_runtime_skill`, rendered into the
+role/task bundle and hash-pinned under the run's guidance directory. Skills are not assigned to
+concurrency pools or discovered from worker installations.
+
+| Job units | Dagster pool | Effective checked-in capacity |
+| --- | --- | --- |
+| `lead_review.teams`, `hunt_review.teams` | `inference_teams` | 2 lane units; shared run semaphore permits 7 prod / 3 dev teams |
+| `scope.*`, `triage.*`, `packages.*`, `merge.*`, `adjudicate.*`, `completeness.*` | `application` | No explicit pool limit in the checked-in base; job workers and Dagster `max_concurrent` are both 8 |
+| `scoring.score_claims` | `inference_score` | 4; deterministic scoring, not another model worker |
+| `publication.*` | `lifecycle` | 1 |
+
+Each team has three discovery workers, then a three-worker review executor serving two blue
+tasks plus one blind-verifier task per admitted claim. The judge phase permits up to four workers
+per team. `roles.independent_verifier.workers = 4` is not a separate four-slot runtime pool:
+team review concurrency is controlled by `blue_per_team + verifier_per_team`. Capacity overlays
+can change team/pool capacity but do not enable exploration.
+
+The two lane executors each have `review_teams` worker threads, but compete for the same
+run-owned kernel-lock semaphore: they cannot each launch seven teams independently. One
+lane can use all seven slots when the other has no work. The Dagster pool stays at two
+lane units, not seven; the existing eight-unit job/executor bounds do not cap their internal
+model calls. The transport adds no lower application-wide call semaphore.
+At full utilization, discovery or blue/verifier phases permit up to 21 production / 9 development
+concurrent model calls. Judge-heavy phases can reach 28 / 12 because each team can have four
+judges in flight. These are upper bounds, not always six simultaneous calls per team: phases
+run sequentially, and per-package claim caps or available work may reduce concurrency.
+Provider rate limits, CPU/memory, explicit capacity overlays, or the semaphore's one-hour wait
+bound can still reduce achieved throughput. Multiple simultaneous runs have separate team
+semaphores and therefore add to host/provider demand. More teams can consume the unchanged
+usage budget sooner; in-flight calls are still charged if they finish after a ceiling is reached.
+
+Production `default`/`strong` retain 200,000 input tokens, 64,000 output tokens, 60 retrieval
+queries and 16 turns per cell, with 1,800/2,400-second deadlines. `triage` remains tool-free:
+64,000 input, 16,000 output, one turn and 600 seconds. Shared review ceilings remain 60,000
+model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries and
+86,400 seconds. Follow-ups consume those existing ceilings, not a fresh budget each round.
+
+### Resolved coverage limits and cutoffs
+
+| Setting | dev / copilot-dev | prod / copilot-prod |
+| --- | --- | --- |
+| Concurrent teams per run | 3 | 7 |
+| Medium/low exploration | Off (reserve 1 inactive) | On, reserve 20, alternating medium/low |
+| Run-wide active-claim allocation | 500 | 1,000 |
+| Team-package budget | 200 | `"all"` (still claim/usage bounded) |
+| Maximum package launches before usage exhaustion | 200 | 1,000 |
+| Rounds / stable rounds required | 3 / 1 | 3 / 1 |
+| Lead / hunt claims per package across rounds | 3 / 5 | 3 / 5 |
+| Hunt units / attack-chain cap | 50 / 50 | 50 / 50 |
+| Model turns / retrieval queries | 12,000 / 40,000 | 60,000 / 200,000 |
+| Input / output tokens | 60,000,000 / 6,000,000 | 600,000,000 / 60,000,000 |
+| Job timeout | 28,800 seconds | 86,400 seconds |
+
+The approved 1,000-claim production cap doubles the old finite 500 ceiling: it admits the
+previously discussed 485-lead + 114-hunt workload with at least one slot for every package,
+plus 401 additional claim slots, without raising usage ceilings. The 20 exploratory slots
+provide meaningful bounded sampling of both severities rather than one severity monopolizing
+a single slot. These are coverage allowances, not promises of model completion or quality.
+
+First determine the package-budget allocation. If its total exceeds `max_active_claims`,
+reallocate **package launches** across both declared queues under that claim cap using the
+existing fair-share/work-conserving scheduler (`lead_budget_share = 0.5`). A scarce lane releases
+unused share. Ordinary queues retain rank/ID order; the exploratory prefix uses the alternating
+policy above. Cut-off packages remain in the lane artifact and ledger with an explicit
+`max_active_claims` or `budget_team_packages` budget gap, do not reserve a team-package, and
+do not run discovery with zero claim capacity.
+
+Divide the claim slots among the resulting launch allocations by quotient and remainder
+(lead lane first for remainder ties). Every allocated package gets at least one; per-package
+claim caps still apply and unused allocations are not recycled. For example, two queues of
+1,001 packages each permit 500 lead and 500 hunt launches, each with one slot; all remaining
+packages have named cutoffs. `"all"` does not mean unbounded claims or package launches.
+One slot permits a seed claim, not an additional distinct variant claim: later rounds can
+refine existing claims, but additional claims record `max_active_claims` gaps once that
+package's allowance is full. In the 485-lead + 114-hunt example, remainder ordering gives the
+extra 401 slots to lead packages, so hunt packages each retain one slot.
+Cross-package/cross-lane seed sharing and automatic specialist delegation remain unimplemented.
+
+These settings affect **future production runs** using the updated checkout/image. Frozen
+settings on existing runs do not change. Focused offline tests resolve both production profiles
+and exercise admission, scheduling, shared 3/7-team capacity, follow-up rounds, and confirmed-only local variants using
+scripted inference. No paid/live model run, deployment, integration or acceptance run is implied;
+provider availability and real-run behavior remain operator validation.
 
 ## Tuning scoring
 
@@ -416,7 +573,7 @@ When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ on
   cell receives and may cite graph rows of its package's `graph_scopes` and nothing from another
   scope. `depth` is capped by `[jobs.job_code_graph_index.settings.graph].max_call_depth` as frozen
   into the run.
-- **Evidence admission.** A citation counts toward an obligation only when `predicate-admission/1`
+- **Evidence admission.** A citation counts toward an obligation only when `predicate-admission/2`
   makes its `(entity kind, predicate)` cell `direct`. Source text cited for anything but the
   construct itself is `analyst_assessed`: recorded in the ledger, listed on the finding package as
   `analyst_assessed_evidence` and in the report, never counted. A tool observation counts only for

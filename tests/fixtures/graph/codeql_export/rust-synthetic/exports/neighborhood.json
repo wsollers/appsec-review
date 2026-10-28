@@ -1,0 +1,1 @@
+{"bqrs_sha256":"1b0165ac8c238c2cf9e02f513f24965d198fb9d23a3f2879f600af23cd443e44","columns":["function_name","function_path","function_start_line","function_start_column","depth"],"query_id":"neighborhood","row_count":0,"rows":[],"schema":"appsec-review/codeql-graph-export/1","truncated":false}

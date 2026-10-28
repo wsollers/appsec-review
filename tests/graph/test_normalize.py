@@ -563,7 +563,7 @@ def test_catalog_loads_validates_and_rejects_contract_drift() -> None:
     with pytest.raises(CatalogError, match="schema"):
         parse_catalog(json.dumps({**document, "extra": 1}).encode())
     with pytest.raises(CatalogError, match="language"):
-        CATALOG.language("python")
+        CATALOG.language("php")
 
 
 @pytest.mark.parametrize(("row", "expected"), [

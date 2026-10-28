@@ -5,6 +5,9 @@ x-dagster-environment: &dagster-environment
   DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
   APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
   APPSEC_REVIEW_TARGET: ${APPSEC_REVIEW_TARGET:-/opt/app/targets/appsec-multi-vuln}
+  # A configured [[target_acquisition.systems]] id that target_acquisition acquires into targets/<id>/
+  # before intake; APPSEC_REVIEW_TARGET must then be /opt/app/targets/<id>. Empty reviews the target as is.
+  APPSEC_REVIEW_SYSTEM: ${APPSEC_REVIEW_SYSTEM:-}
   # "record" during a stepwise parity walk (docs/processes/local-dagster-parity.md); empty otherwise.
   APPSEC_REVIEW_MODEL_RECORDING: ${APPSEC_REVIEW_MODEL_RECORDING:-}
   # A capacity overlay under /opt/app/test/acceptance (docs/operations/inference-security-review.md); empty otherwise.
@@ -15,12 +18,14 @@ x-dagster-environment: &dagster-environment
 x-dagster-service: &dagster-service
   image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM:?Run deploy/dagster/bin/bootstrap.py first}
   user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
+  cgroup_parent: appsecreview-services.slice
   environment: *dagster-environment
   volumes:
     - dagster-storage:/var/dagster
     - ../../runs:/opt/app/runs
     - ../../data:/opt/app/data
-    - ../../targets:/opt/app/targets:ro
+    # Writable: acquisition creates checkouts here and builds write their outputs into the checkout.
+    - ../../targets:/opt/app/targets
     - ../../rules:/opt/app/rules:ro
     - ../../test/acceptance:/opt/app/test/acceptance:ro
   init: true
@@ -34,6 +39,11 @@ x-dagster-service: &dagster-service
 services:
   postgres:
     image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+    cgroup_parent: appsecreview-services.slice
+    cpus: 1
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 1024
     environment:
       POSTGRES_USER: appsec
       POSTGRES_DB: appsec_dagster
@@ -49,6 +59,10 @@ services:
 
   code-location:
     <<: *dagster-service
+    cpus: 4
+    mem_limit: 5g
+    memswap_limit: 5g
+    pids_limit: 2048
     group_add:
       - "${APPSEC_DOCKER_GID:-0}"
     build:
@@ -78,7 +92,7 @@ services:
       - dagster-storage:/var/dagster
       - ../../runs:/opt/app/runs
       - ../../data:/opt/app/data
-      - ../../targets:/opt/app/targets:ro
+      - ../../targets:/opt/app/targets
       - ../../rules:/opt/app/rules:ro
       - ../../test/acceptance:/opt/app/test/acceptance:ro
       - ../../containers/tools/codeql/codeql_runner.py:/opt/app/containers/tools/codeql/codeql_runner.py:ro
@@ -95,6 +109,10 @@ services:
 
   webserver:
     <<: *dagster-service
+    cpus: 0.5
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 512
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
     ports:
       - "127.0.0.1:3000:3000"
@@ -112,6 +130,10 @@ services:
 
   daemon:
     <<: *dagster-service
+    cpus: 0.5
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 512
     command: ["dagster-daemon", "run", "-w", "/opt/dagster/home/workspace.yaml"]
     depends_on:
       postgres:

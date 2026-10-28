@@ -181,7 +181,7 @@ class Admissibility(StrEnum):
     DIRECT = "direct"
     DIRECT_FOR_MAPPED_PREDICATE = "direct_for_mapped_predicate"
     # Authentic and relevant, but supporting the proposition needs human-style judgment of the cited
-    # text (``predicate-admission/1``). Recorded and shown; never satisfies an obligation.
+    # text (``predicate-admission/2``). Recorded and shown; never satisfies an obligation.
     ANALYST_ASSESSED = "analyst_assessed"
     INDIRECT = "indirect"
 

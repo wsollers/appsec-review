@@ -8,8 +8,9 @@ finding, and missing coverage is a named gap. Design and metric definitions:
 
 ## Running
 
-The job runs inside Dagster's `wave1_review` after CodeQL and OWASP control assessment and before
-security tagging. It is also the standalone Dagster job `review_prioritization`; launch it with the
+The job runs inside Dagster's `wave1_review` after CodeQL and before code-graph indexing, security
+tagging and the opt-in OWASP control assessment. Its rankings route OWASP work but are not control
+proof. It is also the standalone Dagster job `review_prioritization`; launch it with the
 `appsec/application_run_id` tag of a run that already has accepted intake, catalog, and Tree-sitter
 handoffs. It needs no container image: it runs in the application process over accepted artifacts
 and hash-verified target bytes. The direct CLI `start`/`resume` graph runs Tree-sitter first and

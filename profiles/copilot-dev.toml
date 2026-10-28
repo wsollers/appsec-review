@@ -16,6 +16,10 @@ model = "claude-haiku-5.5"
 provider = "copilot-sdk"
 model = "claude-haiku-5.5"
 
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
 [jobs.job_project_build.settings.model]
 provider = "copilot-sdk"
 model = "claude-haiku-5.5"

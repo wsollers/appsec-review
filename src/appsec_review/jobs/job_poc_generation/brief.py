@@ -1,6 +1,6 @@
 """The brief the writer receives for one candidate (review-judge-and-poc.md, section 5.1, step "plan").
 
-The brief is data: the finding package fields, the ``poc_basis`` and its labels resolved against the
+The brief is data: the finding package fields, the ``poc_basis`` and its identities resolved against the
 labelled package view, the declarations at the sink and the safe build facts of the translation unit
 that contains it, plus the closed limits the validators enforce. It also fixes what the validators
 will expect (:class:`~.policy.Expectation`): the sink name, the functions on the brief's call path and
@@ -78,20 +78,19 @@ def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package:
     """Assemble the brief; ``gaps`` names everything the writer was not given."""
     gaps: list[str] = []
     labels = rows_by_label(view.document) if view is not None else {}
-    references = {row["ref"]: row for row in labels.values() if isinstance(row.get("ref"), str)}
+    identities = {row["ref"]: row for row in labels.values() if isinstance(row.get("ref"), str)}
     basis = candidate.poc_basis
     resolved: dict[str, Any] = {}
-    for label in (*basis.entry, *basis.path, *basis.unknowns):
-        row = references.get(label)
+    for identity in (*basis.entry, *basis.path):
+        row = identities.get(identity)
         if row is None:
-            if label in set(basis.entry) | set(basis.path):
-                gaps.append(f"poc_basis reference {label} does not resolve in the package view")
+            gaps.append(f"poc_basis identity {identity} does not resolve in the package view")
             continue
-        resolved[label] = {key: value for key, value in row.items()
+        resolved[identity] = {key: value for key, value in row.items()
                            if key in {"label", "ref", "summary", "text", "path", "lines", "role", "tag"}}
     path_calls: set[str] = set()
-    for label in basis.path:
-        row = resolved.get(label)
+    for identity in basis.path:
+        row = resolved.get(identity)
         if row is not None:
             path_calls.update(_function_names(str(row.get("summary", ""))))
     sink_names = (str(sink["name"]),) if sink else ()

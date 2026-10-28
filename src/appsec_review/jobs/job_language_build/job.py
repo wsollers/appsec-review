@@ -233,12 +233,6 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
         retained = workspace / Path(*logical.parts)
         retained.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(dependency, retained)
-    try:
-        workspace.chmod(0o777)
-        for path in workspace.rglob("*"):
-            path.chmod(0o777 if path.is_dir() else 0o666)
-    except OSError:
-        pass
 
 
 def _snapshot(root: Path, limit: int) -> dict[str, str]:

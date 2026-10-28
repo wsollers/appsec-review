@@ -176,7 +176,7 @@ def test_compile_cache_initialization_is_single_flight_and_recreated_volume_is_n
     assert len([call for call in calls if "chown" in call]) == 2
 
 
-def test_compile_cache_requires_declarations_and_is_run_private(tmp_path):
+def test_compile_cache_requires_declarations_and_is_shared_across_runs(tmp_path):
     from dataclasses import replace
     from appsec_review.codeql.runtime import compile_cache_volume
     def forbidden(argv, timeout):
@@ -184,8 +184,9 @@ def test_compile_cache_requires_declarations_and_is_run_private(tmp_path):
     executor = _executor(tmp_path, forbidden)
     image = executor.image
     first = compile_cache_volume(image, executor.run_root)
-    assert first != compile_cache_volume(image, tmp_path / "other-run")
+    assert first == compile_cache_volume(image, tmp_path / "other-run")
     assert first != compile_cache_volume(replace(image, component_release_id="codeql-2"), executor.run_root)
+    assert first == compile_cache_volume(replace(image, runner_release_id="runner-2"), executor.run_root)
     executor.image = replace(image, component_release_id=None)
     assert executor._compile_cache("10001:10001") is None
 

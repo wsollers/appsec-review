@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "rust-synthetic",
+  "recording": "live",
+  "live_refreshable": true,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "A live recording: the exports/ directory is the byte-exact output of the runner export action for the appsec-review/graph-export-rust pack (tree_sha256 2104e6e3908ceeea10b416af79125420d7be2aeffde16e8f169827a1ce4c09ff) over a source-mode (none) database built from source/, captured from tests/live/test_codeql_graph_export_rust_live.py with CodeQL 2.27.0 and codeql/rust-all 0.2.21 in WSL Docker, using audit-buildenv-rust-wasm with rust-src so std resolves. source/ is a zero-network Cargo workspace: src/main.rs plus offline stand-ins for reqwest, rusqlite and serde_json under vendor/, pinned by Cargo.lock. Refresh it by copying a passing live run's exports/ here and regenerating the golden output; any pack change changes the manifest tree_sha256.",
+  "cases": {
+    "remote_to_sql": "sink_sites: <rusqlite::Connection>::execute argument 0 at line 20 is a sql-injection sink; the remote path from reqwest::blocking::get (line 37) is the known gap rust_summarized_body_prunes_remote_flow",
+    "remote_to_command": "sink_sites: Command::new argument 0 at line 42 (run_tool) is a command-injection sink; the remote path is the same known gap",
+    "remote_to_ssrf": "sink_sites: <reqwest::blocking::client::Client>::request argument 1 at line 62 is a request-url sink; the remote path is the same known gap",
+    "remote_to_deserialization": "sink_sites: serde_json::from_str at line 66 is a catalog API sink (model api); the remote path is the same known gap",
+    "argv_and_env_sources": "source_sites: reqwest::blocking::get (line 37, remote), std::env::args (line 83, commandargs) and std::env::var (line 86, environment); path_flows: the env value reaches fs::read_to_string at line 52",
+    "sanitized_path": "sink_sites: fs::read_to_string at line 57 counts one dominating sanitizer, std::fs::canonicalize at line 56; the argv path through canonicalize is the known gap rust_canonicalize_summary_does_not_propagate",
+    "guarded_sink": "guards: tool.len() < 16 (line 46) dominates Command::new at line 47, true_branch; path_flows: argv (line 83) reaches it",
+    "unguarded_sink": "guards: Command::new at line 42 has only a none row",
+    "cross_function_flow_summary": "flow_summaries: as_owned parameter 0 reaches its return value (taint, through the to_string summary); fetch_url parameter 0 reaches the request-url sink argument 1",
+    "virtual_dispatch": "call_sites: store.save(body) at line 79 on Box<dyn Store>, two virtual_resolved candidates",
+    "unresolved_indirect_call": "call_sites: the closure call bump(...) at line 89 is unresolved_indirect",
+    "not_applicable_range": "ranges: every sink operand is not_applicable (codeql/rust-all 0.2.21 has no range analysis)"
+  },
+  "known_gaps": {
+    "rust_summarized_body_prunes_remote_flow": "CodeQL 2.27.0 drops taint from the remote source through <reqwest::blocking::response::Response>::text, a callable that has both a models-as-data summary and a body in the source root (the vendored stand-in). A configuration whose sinks include the stand-in's own nodes reaches every remote sink operand; restricted to sink operands, the flow is pruned. Raising fieldFlowBranchLimit does not change it.",
+    "rust_canonicalize_summary_does_not_propagate": "std::fs::canonicalize is a body-less summarized callable with OptionalStep and OptionalBarrier[normalize-path] rows and the call at line 56 resolves to it, but taint stops at its argument, also with optionalStep(normalize-path) added as an additional flow step. No path_sanitizers row is produced; the syntactic dominating_sanitizer_count on the sink is still 1."
+  }
+}
