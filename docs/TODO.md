@@ -565,9 +565,11 @@ C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact
    synthetic dataflow expectations (`tests/fixtures/graph/codeql_export/synthetic/expected-facts.json`).
    The native fixture has no sources or sinks, so only the synthetic test proves the dataflow
    families.
-2. Add export packs and catalog sections for Java/Kotlin, then JavaScript/TypeScript, then Python
-   (code-graph-precomputation.md section 8), each with its own recorded fixture and expectations.
-   Go, C# and Rust follow once their CodeQL databases succeed; PHP has no CodeQL extractor.
+2. Export packs/catalog sections and recorded fixtures now exist for Java/Kotlin,
+   JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and deferred Swift. Multilingual normalization,
+   native-only secondary scoping and worker neighborhood retrieval are wired. Finish per-language
+   live image/database/export acceptance with matching pins; Swift remains disabled and PHP has no
+   CodeQL extractor. Keep recorded acceptance distinct from live acceptance (section 8).
 3. Implement the contract and deployment lanes planned in
    [`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md).
 
