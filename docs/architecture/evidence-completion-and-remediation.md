@@ -428,3 +428,10 @@ These decisions bind the implementation partitions:
 10. The manager owns central TOML/config-loader wiring, registry, orchestration, input matrix and
     final end-to-end integration. Implementation agents own disjoint producers and focused tests.
     No agent pushes, opens a PR, merges main or edits user-owned targets.
+11. The user selected **Run both automatically for new reviews** for remediation planning and
+    bounded nonexecuting validation. After implementation acceptance, central defaults will enable
+    both for new configurations; automatic compile-only PoC and dossier publication are also
+    intended. This is a rollout decision, not a claim about the inspected baseline defaults.
+    Existing runs keep their immutable frozen configuration, including disabled capabilities:
+    changing checkout defaults must not silently activate them on resume or rewrite old runs.
+    Automatic processing grants no runtime execution, reproduction or `fixed` assurance.

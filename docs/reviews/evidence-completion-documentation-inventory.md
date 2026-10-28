@@ -42,6 +42,16 @@ No broad `docs-sync` reconciliation was performed and `docs/docs-sync.json` is u
 | [Architecture navigation](../architecture/README.md), [agent navigation](../agent-reader.md) | Link inventory, proposed dossier operations and this record without introducing authority. |
 | [Wave1 operations](../operations/wave1-review.md), [inference design](../architecture/inference-security-review.md), [review package contract](../architecture/review-package-contract.md), [red output](../architecture/red-discovery-output.md), [indexing design](../architecture/indexing-and-query-reuse.md) | Integration follow-up: reconcile precise producer placement, package/reference schemas, chain publication, input matrix and availability; do not rewrite unrelated historic design. |
 
+## Rollout decision awaiting implementation reconciliation
+
+After the initial inventory commit, the user explicitly selected **Run both automatically for new
+reviews** for remediation planning and bounded nonexecuting validation. The manager will enable
+both in central new-configuration defaults; automatic compile-only PoC and dossier publication
+are also intended after implementation acceptance. Existing runs must retain their immutable
+frozen configuration rather than inherit changed checkout defaults. This records the user-directed
+decision, not source verification that these defaults have shipped. Runtime reproduction,
+negative-control execution and `fixed` assurance remain unauthorized and unclaimed.
+
 ## Unresolved implementation details
 
 The baseline only declares completion schema constants, `FindingBinding` and nonexecution helpers

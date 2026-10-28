@@ -64,6 +64,14 @@ public. Every format must preserve:
 
 ## Recovery and acceptance boundaries
 
+The [rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
+selects automatic remediation planning and bounded nonexecuting validation for new reviews after
+implementation acceptance, with automatic compile-only PoC and dossiers also intended. These are
+planned central defaults, not the inspected baseline configuration. Existing runs retain their
+frozen settings: new checkout defaults must not silently enable a previously disabled producer
+when resuming or publishing an old run. Automatic processing does not authorize runtime execution
+or imply reproduction or a fixed finding.
+
 Ordinary per-item failures must be terminal accounted outcomes so a dossier can state what was
 not produced. A missing expected capability or incomplete/capped scope is a named gap.
 Disabled-by-policy, empty eligible scope and integrity failure are distinct.
