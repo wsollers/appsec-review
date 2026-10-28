@@ -6,11 +6,43 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.interchange import (
-    ArtifactReference, CoverageSummary, HANDOFF_SCHEMA, OUTCOMES_SCHEMA, UnitOutcome,
+    ArtifactReference, HANDOFF_SCHEMA,
     decode_handoff, handoff_input_projection, input_set_sha256,
 )
 from appsec_review.runtime.datasets import dataset_contract
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.runtime.handoff import (
+    build_outcomes, collect_artifacts, execution_status, frozen_job_config_sha256,
+)
+from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+
+
+def _freeze_configuration(run_root: Path, job_id: str) -> tuple[str, str]:
+    from appsec_review.config import load_config
+    from appsec_review.runtime.runner import JobRunner
+
+    directory = run_root / "data" / "configuration"
+    resolved_path = directory / "resolved.json"
+    if not resolved_path.is_file():
+        candidates = [parent / "appsec-review.toml" for parent in
+                      (run_root, run_root.parent, run_root.parent.parent)]
+        source = next((path for path in candidates if path.is_file()), None)
+        if source is not None:
+            JobRunner(load_config(source))._bind_configuration(run_root)
+        else:
+            config = load_config(Path(__file__).parents[1] / "appsec-review.toml")
+            document = json.loads(config.resolved_json)
+            for name in ("fixture", "post", "live", "job_fixture", job_id):
+                document["jobs"].setdefault(name, {"name": name, "workers": 1, "settings": {}, "steps": {}})
+            atomic_bytes(directory / "appsec-review.toml", config.source_path.read_bytes())
+            atomic_bytes(resolved_path, canonical_json(document))
+            atomic_json(directory / "manifest.json", {
+                "schema": "appsec-review/run-configuration/2",
+                "source_sha256": file_sha256(directory / "appsec-review.toml"),
+                "resolved_sha256": file_sha256(resolved_path),
+                "resolved": {"path": "resolved.json", "sha256": file_sha256(resolved_path)},
+            })
+    document = json.loads(resolved_path.read_text(encoding="utf-8"))
+    return file_sha256(resolved_path), frozen_job_config_sha256(document, job_id)
 
 
 def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], *,
@@ -56,9 +88,7 @@ def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], 
             raise ValueError("synthetic handoff target snapshots disagree")
         snapshot = next(iter(snapshots), "fixture-snapshot")
     completion = value.get("completion_status", "SUCCEEDED")
-    disposition = "partial" if completion == "COMPLETED_WITH_GAPS" else "complete"
-    coverage = CoverageSummary(disposition, 0, False).as_dict()
-    units = []
+    unit_ids = []
     for unit_id, output in outputs.items():
         step_id, task_id = unit_id.split(".", 1) if "." in unit_id else ("fixture", unit_id)
         outcome_unit_id = f"{step_id}.{task_id}"
@@ -70,22 +100,20 @@ def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], 
         atomic_json(status_path, {"unit_id": outcome_unit_id, "step_id": step_id, "task_id": task_id,
                                   "status": "SUCCEEDED",
                                   "result_sha256": result_reference.sha256})
-        status_reference = retain({"path": status_path.relative_to(run_root).as_posix(),
-                                   "sha256": file_sha256(status_path)})
-        units.append(UnitOutcome(outcome_unit_id, "SUCCEEDED", None, disposition,
-                                 result_reference, status_reference).as_dict())
+        retain({"path": status_path.relative_to(run_root).as_posix(), "sha256": file_sha256(status_path)})
+        unit_ids.append(outcome_unit_id)
+    document = build_outcomes(run_root, run_id=run_root.name, job_id=job_id, attempt_id=attempt_id,
+                              target_snapshot=snapshot, unit_ids=unit_ids)
+    coverage = document["coverage"]
     outcomes_path = attempt / "outcomes.json"
-    atomic_json(outcomes_path, {
-        "schema": OUTCOMES_SCHEMA, "run_id": run_root.name, "job_id": job_id,
-        "attempt_id": attempt_id, "target_snapshot": snapshot, "units": units, "gaps": [], "coverage": coverage,
-    })
+    atomic_json(outcomes_path, document)
     outcomes = retain({"path": outcomes_path.relative_to(run_root).as_posix(),
                        "sha256": file_sha256(outcomes_path)}).as_dict()
     claim_path = attempt / "claim.json"
     prior_claim = json.loads(claim_path.read_text(encoding="utf-8")) if claim_path.is_file() else {}
     contract = prior_claim.get("dataset_contract", dataset_contract(
-        job_id, sorted({unit["unit_id"].split(".")[0] for unit in units}), ()))
-    resolved_config_sha256 = value.get("resolved_config_sha256", "a" * 64)
+        job_id, sorted({unit_id.split(".")[0] for unit_id in unit_ids}), ()))
+    resolved_config_sha256, job_config_sha256 = _freeze_configuration(run_root, job_id)
     atomic_json(claim_path, {
         **prior_claim, "run_id": run_root.name, "job_id": job_id, "attempt_id": attempt_id,
         "attempt_path": attempt.relative_to(run_root).as_posix(),
@@ -94,13 +122,23 @@ def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], 
         "dataset_contract": contract, "upstream_handoffs": dict(value.get("upstream_handoff_sha256", {})),
     })
     retain({"path": claim_path.relative_to(run_root).as_posix(), "sha256": file_sha256(claim_path)})
+    result_path = attempt / "result.json"
+    if not result_path.is_file():
+        atomic_json(result_path, {"status": completion, "outputs": outputs})
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    for reference in collect_artifacts(run_root, result):
+        retain(reference)
+    retain({"path": result_path.relative_to(run_root).as_posix(), "sha256": file_sha256(result_path)})
+    resolving_paths = {**value.get("resolving_paths", {}),
+                       "attempt": attempt.relative_to(run_root).as_posix(),
+                       "result": result_path.relative_to(run_root).as_posix()}
     handoff = {
         **dict(value), "schema": HANDOFF_SCHEMA, "run_id": run_root.name, "job_id": job_id,
-        "attempt_id": attempt_id, "status": "ACCEPTED", "execution_status": "SUCCEEDED",
+        "attempt_id": attempt_id, "status": "ACCEPTED", "execution_status": execution_status(document),
         "completion_status": completion, "outputs": outputs, "artifacts": list(artifacts.values()),
         "upstream_handoff_sha256": dict(value.get("upstream_handoff_sha256", {})),
         "resolved_config_sha256": resolved_config_sha256,
-        "job_config_sha256": value.get("job_config_sha256", "b" * 64),
+        "job_config_sha256": job_config_sha256,
         "source_fingerprint": value.get("source_fingerprint", snapshot), "target_snapshot": snapshot,
         "implementation_identity": value.get("implementation_identity", "fixture-implementation/1"),
         "schema_identity": value.get("schema_identity", "fixture-schema/1"),
@@ -108,7 +146,7 @@ def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], 
         "tool_identity": value.get("tool_identity", {"fixture": "1"}), "input_identity": None,
         "input_manifest": None, "dataset_contract_sha256": contract["sha256"],
         "coverage": coverage, "outcomes": outcomes,
-        "resolving_paths": dict(value.get("resolving_paths", {"attempt": attempt.relative_to(run_root).as_posix()})),
+        "resolving_paths": resolving_paths,
         "started_at": "2026-10-28T00:00:00+00:00", "completed_at": "2026-10-28T00:00:01+00:00",
     }
     handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
