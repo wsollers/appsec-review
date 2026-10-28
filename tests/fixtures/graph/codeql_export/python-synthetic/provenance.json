@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "python-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/app.py. They are what the python pack is written to export for the cases below (module-level code such as the Flask route decorators is outside every function and omitted), not a CodeQL recording. bqrs_sha256 values are SHA-256 of the text 'hand-authored synthetic bqrs <query_id>'.",
+  "cases": {
+    "remote_to_sql": "path_flows: route parameter name (line 23) reaches cursor.execute(query) argument 0 at line 18 through run_query",
+    "remote_to_command": "path_flows: route parameter host (line 30) reaches os.system argument 0 at line 33",
+    "remote_to_path": "path_flows: route parameter filename (line 38) reaches open argument 0 at line 40",
+    "remote_to_ssrf": "path_flows: route parameter url (line 46) reaches requests.get argument 0 at line 47",
+    "remote_to_deserialization": "path_flows: route parameter blob (line 52) reaches pickle.loads argument 0 at line 53",
+    "argv_source": "source_sites: sys.argv at line 87 (ThreatModelSource commandargs) reaches cursor.execute at line 18",
+    "environment_source": "source_sites: os.environ at line 89 (ThreatModelSource environment) reaches os.system at line 89",
+    "api_source": "source_sites: getpass.getpass() at line 88, a catalog API source (model api)",
+    "sanitized_path": "path_sanitizers: os.path.realpath at line 39 lies on the flow to open at line 40, which it dominates",
+    "dominating_guard": "guards: host in ALLOWED (line 31) dominates os.system at line 32, true_branch",
+    "unguarded_sink": "guards: os.system at line 33 has a none row (and a non_dominating row for line 31)",
+    "cross_function_summary": "flow_summaries: run_query parameter 1 (query) reaches the SqlExecution sink; path_edges enter it with a call edge",
+    "virtual_dispatch": "call_sites: Handler.handle -> self.run(value), virtual_resolved to Upper.run and Lower.run, line 68",
+    "unresolved_reflective_call": "call_sites: dispatch -> getattr(handler, action)(value), unresolved_indirect, line 82",
+    "unclassified_sink": "sink_sites: pymongo find at line 59, model NoSqlExecution, which catalog.json does not classify",
+    "http_response_sink": "sink_sites: the returned \"ok\" at line 34 is a Flask HttpResponse body",
+    "range_not_applicable": "ranges: every Python sink operand is not_applicable (named gap), e.g. cursor.execute at line 18"
+  }
+}

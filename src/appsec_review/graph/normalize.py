@@ -348,7 +348,7 @@ class _Locator:
                 mapped = self._line_span(path, raw, line, line, column, column, "line_only_location")
             else:
                 tail = name.split("(", 1)[0].rsplit("::", 1)[-1].strip()
-                found = next((candidate for candidate in (tail, name) if candidate
+                found = next((candidate for candidate in (tail, name, tail.rsplit(".", 1)[-1]) if candidate
                               and source.data.startswith(candidate.encode("utf-8"), start)), None)
                 reason = None if found else "symbol_name_mismatch"
                 if found is None:
