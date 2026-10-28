@@ -2531,6 +2531,425 @@
           ]
         }
       ]
+    },
+    "csharp": {
+      "model_library": "codeql/csharp-all",
+      "export_pack": "appsec-review/graph-export-csharp",
+      "sinks": [
+        {
+          "rule_id": "csharp.sink.api.getstringasync",
+          "match": {
+            "api": "GetStringAsync",
+            "declared_in": [
+              "System.Net.Http.HttpClient"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "csharp.sink.api.getasync",
+          "match": {
+            "api": "GetAsync",
+            "declared_in": [
+              "System.Net.Http.HttpClient"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "csharp.sink.api.getbytearrayasync",
+          "match": {
+            "api": "GetByteArrayAsync",
+            "declared_in": [
+              "System.Net.Http.HttpClient"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "csharp.sink.api.getstreamasync",
+          "match": {
+            "api": "GetStreamAsync",
+            "declared_in": [
+              "System.Net.Http.HttpClient"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "csharp.sink.api.postasync",
+          "match": {
+            "api": "PostAsync",
+            "declared_in": [
+              "System.Net.Http.HttpClient"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "csharp.sink.api.webrequest_create",
+          "match": {
+            "api": "Create",
+            "declared_in": [
+              "System.Net.WebRequest"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "csharp.sink.api.createinstance",
+          "match": {
+            "api": "CreateInstance",
+            "declared_in": [
+              "System.Activator"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        },
+        {
+          "rule_id": "csharp.sink.api.loadfrom",
+          "match": {
+            "api": "LoadFrom",
+            "declared_in": [
+              "System.Reflection.Assembly"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        },
+        {
+          "rule_id": "csharp.sink.api.random_next",
+          "match": {
+            "api": "Next",
+            "declared_in": [
+              "System.Random"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "csharp.sink.model.sqlinjection",
+          "match": {
+            "model": "SqlInjection.Sink"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "csharp.sink.model.commandinjection",
+          "match": {
+            "model": "CommandInjection.Sink"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "csharp.sink.model.taintedpath",
+          "match": {
+            "model": "TaintedPath.Sink"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "csharp.sink.model.unsafedeserialization",
+          "match": {
+            "model": "UnsafeDeserialization.Sink"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "csharp.sink.model.codeinjection",
+          "match": {
+            "model": "CodeInjection.Sink"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "csharp.sink.model.ldapinjection",
+          "match": {
+            "model": "LdapInjection.Sink"
+          },
+          "sink_class": "ldap_query",
+          "cwe_family": "CWE-90"
+        },
+        {
+          "rule_id": "csharp.sink.model.xpathinjection",
+          "match": {
+            "model": "XPathInjection.Sink"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "csharp.sink.model.xss",
+          "match": {
+            "model": "Xss.Sink"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "csharp.sink.model.urlredirect",
+          "match": {
+            "model": "UrlRedirect.Sink"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "csharp.sink.model.regexinjection",
+          "match": {
+            "model": "RegexInjection.Sink"
+          },
+          "sink_class": "regex_injection",
+          "cwe_family": "CWE-730"
+        },
+        {
+          "rule_id": "csharp.sink.model.logforging",
+          "match": {
+            "model": "LogForging.Sink"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "csharp.sink.model.xmlentityinjection",
+          "match": {
+            "model": "XmlEntityInjection.Sink"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "csharp.sink.model.arraycreation_length",
+          "match": {
+            "model": "ArrayCreation.length"
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-789"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "csharp.source.api.getenvironmentvariable",
+          "match": {
+            "api": "GetEnvironmentVariable",
+            "declared_in": [
+              "System.Environment"
+            ],
+            "index": -1
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "csharp.source.api.getcommandlineargs",
+          "match": {
+            "api": "GetCommandLineArgs",
+            "declared_in": [
+              "System.Environment"
+            ],
+            "index": -1
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "csharp.source.api.readline",
+          "match": {
+            "api": "ReadLine",
+            "declared_in": [
+              "System.Console"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "csharp.source.api.readalltext",
+          "match": {
+            "api": "ReadAllText",
+            "declared_in": [
+              "System.IO.File"
+            ],
+            "index": -1
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "csharp.source.model.local_environment",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "environment variable"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "csharp.source.model.local_command_line",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "command line argument"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "csharp.source.model.local_stdin",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "read from stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "csharp.source.model.stored_file",
+          "match": {
+            "model": "StoredFlowSource",
+            "source_type": "file stream"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "csharp.source.model.stored_database",
+          "match": {
+            "model": "StoredFlowSource",
+            "source_type": "database input"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "csharp.source.model.external_remote",
+          "match": {
+            "model": "ExternalSource",
+            "source_type": "remote"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "csharp.source.model.external_environment",
+          "match": {
+            "model": "ExternalSource",
+            "source_type": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "csharp.source.model.external_commandargs",
+          "match": {
+            "model": "ExternalSource",
+            "source_type": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "csharp.source.model.external_stdin",
+          "match": {
+            "model": "ExternalSource",
+            "source_type": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "csharp.source.model.external_file",
+          "match": {
+            "model": "ExternalSource",
+            "source_type": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "csharp.source.model.external_database",
+          "match": {
+            "model": "ExternalSource",
+            "source_type": "database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "csharp.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "csharp.source.model.local",
+          "match": {
+            "model": "LocalFlowSource"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "csharp.source.model.stored",
+          "match": {
+            "model": "StoredFlowSource"
+          },
+          "source_class": "database"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "csharp.sanitizer.getfilename",
+          "api": "GetFileName",
+          "declared_in": [
+            "System.IO.Path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "csharp.sanitizer.htmlencode",
+          "api": "HtmlEncode",
+          "declared_in": [
+            "System.Net.WebUtility",
+            "System.Web.HttpUtility"
+          ],
+          "applies_to": [
+            "html_output"
+          ]
+        },
+        {
+          "rule_id": "csharp.sanitizer.urlencode",
+          "api": "UrlEncode",
+          "declared_in": [
+            "System.Net.WebUtility",
+            "System.Web.HttpUtility"
+          ],
+          "applies_to": [
+            "url_redirect",
+            "server_side_request"
+          ]
+        },
+        {
+          "rule_id": "csharp.sanitizer.escapedatastring",
+          "api": "EscapeDataString",
+          "declared_in": [
+            "System.Uri"
+          ],
+          "applies_to": [
+            "url_redirect",
+            "server_side_request"
+          ]
+        }
+      ]
     }
   }
 }

@@ -264,6 +264,11 @@ def _api_tail(name: str) -> str:
     return name.split("(", 1)[0].rsplit("::", 1)[-1].strip()
 
 
+def _simple_name(name: str) -> str:
+    """The unqualified tail of a callee name (``ns::f`` or ``Namespace.Type.F``), for catalog API matching."""
+    return name.split("(", 1)[0].rsplit("::", 1)[-1].rsplit(".", 1)[-1].strip()
+
+
 def _location_dict(mapped: _Mapped | None) -> dict[str, Any] | None:
     """An embedded ``SourceLocation`` (steps, conditions, operands); export coordinates stay on the fact."""
     if mapped is None or mapped.location is None:
@@ -353,7 +358,9 @@ class _Locator:
                 mapped = self._line_span(path, raw, line, line, column, column, "line_only_location")
             else:
                 tail = name.split("(", 1)[0].rsplit("::", 1)[-1].strip()
-                found = next((candidate for candidate in (tail, name, tail.rsplit(".", 1)[-1]) if candidate
+                # Managed languages qualify with "." (Namespace.Type.Member); try that tail last.
+                dotted = tail.rsplit(".", 1)[-1].strip()
+                found = next((candidate for candidate in (tail, name, dotted) if candidate
                               and source.data.startswith(candidate.encode("utf-8"), start)), None)
                 reason = None if found else "symbol_name_mismatch"
                 if found is None:
@@ -919,8 +926,10 @@ class _Normalizer:
                 gaps.append("k_limited: the flow_summaries export was truncated; pairs may be missing")
             result = {
                 "function": {"symbol": symbol, "display": key[0]}, "pairs": pairs,
-                "sanitizes": sorted({row["callee_name"] for row in called if row["callee_name"] in sanitizers
-                                     or _api_tail(row["callee_name"]) in sanitizers}),
+                "sanitizes": sorted({row["callee_name"] for row in called
+                                     if row["callee_name"] in sanitizers
+                                     or _api_tail(row["callee_name"]) in sanitizers
+                                     or _simple_name(row["callee_name"]) in sanitizers}),
                 "opaque_calls": sorted({row["callee_name"] for row in called
                                         if row["dispatch"] == Dispatch.EXTERNAL_UNDEFINED.value}),
                 "k_limited": k_limited, "recursion_collapsed": True, "field_depth": 1,

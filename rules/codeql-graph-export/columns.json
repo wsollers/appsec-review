@@ -8777,6 +8777,1103 @@
           ]
         }
       ]
+    },
+    "csharp": {
+      "pack_root": "csharp",
+      "query_pack": "appsec-review/graph-export-csharp",
+      "queries": [
+        {
+          "query_id": "call_sites",
+          "query_file": "CallSites.ql",
+          "result_set": "call_sites",
+          "family": "call_site",
+          "description": "one row per (call, candidate callee) in a function defined inside the source root",
+          "columns": [
+            {
+              "name": "caller_name",
+              "type": "string",
+              "meaning": "qualified name of the calling function"
+            },
+            {
+              "name": "caller_path",
+              "type": "string",
+              "meaning": "calling function location: path"
+            },
+            {
+              "name": "caller_start_line",
+              "type": "int",
+              "meaning": "calling function location: start line"
+            },
+            {
+              "name": "caller_start_column",
+              "type": "int",
+              "meaning": "calling function location: start column"
+            },
+            {
+              "name": "call_path",
+              "type": "string",
+              "meaning": "call expression: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "call_start_line",
+              "type": "int",
+              "meaning": "call expression: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "call_start_column",
+              "type": "int",
+              "meaning": "call expression: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "call_end_line",
+              "type": "int",
+              "meaning": "call expression: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "call_end_column",
+              "type": "int",
+              "meaning": "call expression: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "callee_name",
+              "type": "string",
+              "meaning": "fully qualified callee name (Namespace.Type.Member, nested types joined by \"+\"); \"<indirect:EXPR>\" for a dynamic or unresolved delegate call"
+            },
+            {
+              "name": "callee_declared_in",
+              "type": "string",
+              "meaning": "fully qualified name of the type declaring the callee; \"\" when unresolved"
+            },
+            {
+              "name": "callee_path",
+              "type": "string",
+              "meaning": "callee location: path; \"\" when outside the source root or unresolved"
+            },
+            {
+              "name": "callee_start_line",
+              "type": "int",
+              "meaning": "callee location: start line; 0 when outside the source root or unresolved"
+            },
+            {
+              "name": "callee_start_column",
+              "type": "int",
+              "meaning": "callee location: start column; 0 when outside the source root or unresolved"
+            },
+            {
+              "name": "dispatch",
+              "type": "string",
+              "meaning": "direct | virtual_resolved (virtual or interface call, one row per source candidate) | function_pointer_resolved (delegate or function-pointer call, one row per runtime target) | template_instantiation (call to a constructed generic) | unresolved_indirect (dynamic call, unresolved delegate) | external_undefined (referenced-assembly callee)"
+            },
+            {
+              "name": "candidate_count",
+              "type": "int",
+              "meaning": "number of candidate callees for this call (0 when unresolved, 1 when direct)"
+            },
+            {
+              "name": "argument_count",
+              "type": "int",
+              "meaning": "number of call arguments"
+            },
+            {
+              "name": "in_loop",
+              "type": "string",
+              "meaning": "\"true\" when the call's statement is inside a loop body, else \"false\""
+            }
+          ]
+        },
+        {
+          "query_id": "sink_sites",
+          "query_file": "SinkSites.ql",
+          "result_set": "sink_sites",
+          "family": "sink_site",
+          "description": "one row per (sink expression, argument_index, model)",
+          "columns": [
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            },
+            {
+              "name": "operand_path",
+              "type": "string",
+              "meaning": "sink operand expression: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "operand_start_line",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "operand_start_column",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "operand_end_line",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "operand_end_column",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "model",
+              "type": "string",
+              "meaning": "\"api\" for a catalog API match, else the cpp-all model: FormattingFunction | AllocationFunction | ArrayFunction.output | CommandExecutionFunction | RemoteFlowSinkFunction | ArrayExprWrite"
+            },
+            {
+              "name": "api",
+              "type": "string",
+              "meaning": "called function name; \"\" for an array write"
+            },
+            {
+              "name": "declared_in",
+              "type": "string",
+              "meaning": "fully qualified name of the type declaring the called member; \"\" for a non-call sink (assignment, array creation)"
+            },
+            {
+              "name": "sink_display",
+              "type": "string",
+              "meaning": "CodeQL toString() of the sink expression"
+            },
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the enclosing function"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "enclosing function location (Function.getLocation()): path"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "enclosing function location: start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "enclosing function location: start column"
+            },
+            {
+              "name": "dominating_sanitizer_count",
+              "type": "int",
+              "meaning": "catalog sanitizer calls in the same function that dominate the sink"
+            }
+          ]
+        },
+        {
+          "query_id": "source_sites",
+          "query_file": "SourceSites.ql",
+          "result_set": "source_sites",
+          "family": "entry_point",
+          "description": "one row per source dataflow node and model",
+          "columns": [
+            {
+              "name": "source_path",
+              "type": "string",
+              "meaning": "source dataflow node: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "source_start_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "source_start_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "model",
+              "type": "string",
+              "meaning": "RemoteFlowSource | LocalFlowSource | FlowSource (cpp-all model class), or \"api\" for a catalog API the model library does not cover"
+            },
+            {
+              "name": "source_type",
+              "type": "string",
+              "meaning": "cpp-all FlowSource.getSourceType(); \"\" for model \"api\""
+            },
+            {
+              "name": "node_kind",
+              "type": "string",
+              "meaning": "return_value | output_argument | parameter | expression"
+            },
+            {
+              "name": "api",
+              "type": "string",
+              "meaning": "called function name for return_value/output_argument; \"\" otherwise"
+            },
+            {
+              "name": "declared_in",
+              "type": "string",
+              "meaning": "fully qualified name of the type declaring api; \"\" when api is \"\""
+            },
+            {
+              "name": "index",
+              "type": "int",
+              "meaning": "argument index for output_argument, parameter index for parameter, -1 otherwise"
+            },
+            {
+              "name": "source_display",
+              "type": "string",
+              "meaning": "CodeQL toString() of the source node"
+            },
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the enclosing function"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "enclosing function location (Function.getLocation()): path"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "enclosing function location: start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "enclosing function location: start column"
+            }
+          ]
+        },
+        {
+          "query_id": "flow_summaries",
+          "query_file": "FlowSummaries.ql",
+          "result_set": "flow_summaries",
+          "family": "flow_summary",
+          "description": "one row per (function, input, output, flow kind) intraprocedural pair",
+          "columns": [
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the enclosing function"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "enclosing function location (Function.getLocation()): path"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "enclosing function location: start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "enclosing function location: start column"
+            },
+            {
+              "name": "from_kind",
+              "type": "string",
+              "meaning": "parameter | parameter_deref | global"
+            },
+            {
+              "name": "from_index",
+              "type": "int",
+              "meaning": "parameter index; -1 for a global"
+            },
+            {
+              "name": "from_name",
+              "type": "string",
+              "meaning": "parameter name or qualified global name"
+            },
+            {
+              "name": "to_kind",
+              "type": "string",
+              "meaning": "return | parameter_deref | global | sink"
+            },
+            {
+              "name": "to_index",
+              "type": "int",
+              "meaning": "parameter index for parameter_deref, sink argument_index for sink, -1 otherwise"
+            },
+            {
+              "name": "to_name",
+              "type": "string",
+              "meaning": "parameter name, qualified global name, or the sink api (model when api is \"\"); \"\" for return"
+            },
+            {
+              "name": "to_model",
+              "type": "string",
+              "meaning": "sink model for to_kind sink (as sink_sites.model); \"\" otherwise"
+            },
+            {
+              "name": "flow_kind",
+              "type": "string",
+              "meaning": "data when any witness is plain local dataflow, else taint"
+            }
+          ]
+        },
+        {
+          "query_id": "path_flows",
+          "query_file": "Paths.ql",
+          "result_set": "path_flows",
+          "family": "dataflow_path",
+          "description": "one row per (source node, sink expression, argument_index) with a global taint flow",
+          "columns": [
+            {
+              "name": "source_path",
+              "type": "string",
+              "meaning": "source dataflow node: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "source_start_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "source_start_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            }
+          ]
+        },
+        {
+          "query_id": "path_edges",
+          "query_file": "Paths.ql",
+          "result_set": "path_edges",
+          "family": "dataflow_path",
+          "description": "one row per path-graph edge lying on a flow, keyed by the flow",
+          "columns": [
+            {
+              "name": "source_path",
+              "type": "string",
+              "meaning": "source dataflow node: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "source_start_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "source_start_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            },
+            {
+              "name": "from_path",
+              "type": "string",
+              "meaning": "edge start node: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "from_start_line",
+              "type": "int",
+              "meaning": "edge start node: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "from_start_column",
+              "type": "int",
+              "meaning": "edge start node: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "from_end_line",
+              "type": "int",
+              "meaning": "edge start node: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "from_end_column",
+              "type": "int",
+              "meaning": "edge start node: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "from_display",
+              "type": "string",
+              "meaning": "CodeQL toString() of the edge start node"
+            },
+            {
+              "name": "from_function",
+              "type": "string",
+              "meaning": "qualified name of the edge start node's function; \"\" when none"
+            },
+            {
+              "name": "to_path",
+              "type": "string",
+              "meaning": "edge end node: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "to_start_line",
+              "type": "int",
+              "meaning": "edge end node: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "to_start_column",
+              "type": "int",
+              "meaning": "edge end node: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "to_end_line",
+              "type": "int",
+              "meaning": "edge end node: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "to_end_column",
+              "type": "int",
+              "meaning": "edge end node: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "to_display",
+              "type": "string",
+              "meaning": "CodeQL toString() of the edge end node"
+            },
+            {
+              "name": "to_function",
+              "type": "string",
+              "meaning": "qualified name of the edge end node's function; \"\" when none"
+            },
+            {
+              "name": "edge_kind",
+              "type": "string",
+              "meaning": "local (same function) | call (into a parameter) | return"
+            }
+          ]
+        },
+        {
+          "query_id": "path_sanitizers",
+          "query_file": "Paths.ql",
+          "result_set": "path_sanitizers",
+          "family": "dataflow_path",
+          "description": "one row per catalog sanitizer call with an argument on a flow",
+          "columns": [
+            {
+              "name": "source_path",
+              "type": "string",
+              "meaning": "source dataflow node: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "source_start_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "source_start_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_line",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "source_end_column",
+              "type": "int",
+              "meaning": "source dataflow node: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            },
+            {
+              "name": "sanitizer_path",
+              "type": "string",
+              "meaning": "sanitizer call: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sanitizer_start_line",
+              "type": "int",
+              "meaning": "sanitizer call: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sanitizer_start_column",
+              "type": "int",
+              "meaning": "sanitizer call: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sanitizer_end_line",
+              "type": "int",
+              "meaning": "sanitizer call: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sanitizer_end_column",
+              "type": "int",
+              "meaning": "sanitizer call: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "api",
+              "type": "string",
+              "meaning": "sanitizer function name"
+            }
+          ]
+        },
+        {
+          "query_id": "guards",
+          "query_file": "Guards.ql",
+          "result_set": "guards",
+          "family": "guard_fact",
+          "description": "one row per (sink, guard condition, state); one none row per sink without a controlling guard; each comparison row carries its two operands (location, kind, constant value) and the sink destination object size",
+          "columns": [
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            },
+            {
+              "name": "guard_state",
+              "type": "string",
+              "meaning": "dominating | non_dominating | post_dominating_only | none"
+            },
+            {
+              "name": "polarity",
+              "type": "string",
+              "meaning": "true_branch | false_branch for dominating guards; unknown otherwise"
+            },
+            {
+              "name": "condition_path",
+              "type": "string",
+              "meaning": "guard condition (macro expansion site when in a macro): path relative to the database source root; \"\" when outside it; \"\" or 0 for none"
+            },
+            {
+              "name": "condition_start_line",
+              "type": "int",
+              "meaning": "guard condition (macro expansion site when in a macro): 1-based start line; 0 when outside the source root; \"\" or 0 for none"
+            },
+            {
+              "name": "condition_start_column",
+              "type": "int",
+              "meaning": "guard condition (macro expansion site when in a macro): 1-based start column; 0 when outside the source root; \"\" or 0 for none"
+            },
+            {
+              "name": "condition_end_line",
+              "type": "int",
+              "meaning": "guard condition (macro expansion site when in a macro): 1-based end line; 0 when outside the source root; \"\" or 0 for none"
+            },
+            {
+              "name": "condition_end_column",
+              "type": "int",
+              "meaning": "guard condition (macro expansion site when in a macro): 1-based inclusive end column; 0 when outside the source root; \"\" or 0 for none"
+            },
+            {
+              "name": "condition_display",
+              "type": "string",
+              "meaning": "CodeQL toString() of the condition; \"\" for none"
+            },
+            {
+              "name": "in_macro",
+              "type": "string",
+              "meaning": "always \"false\": C# has no macro expansion"
+            },
+            {
+              "name": "constrains_sink_operand",
+              "type": "string",
+              "meaning": "true | false | unknown: true when the condition compares the operand variable or a local-flow source of the operand; unknown when it only shares a variable with the operand"
+            },
+            {
+              "name": "comparison_operator",
+              "type": "string",
+              "meaning": "comparison operator; \"\" when the condition is not a comparison"
+            },
+            {
+              "name": "bound_display",
+              "type": "string",
+              "meaning": "toString() of the compared bound; \"\" when not a comparison"
+            },
+            {
+              "name": "lhs_path",
+              "type": "string",
+              "meaning": "left operand of the comparison: path relative to the database source root; \"\" when outside it or when the condition is not a comparison"
+            },
+            {
+              "name": "lhs_start_line",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based start line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_start_column",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based start column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_end_line",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based end line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_end_column",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based inclusive end column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_kind",
+              "type": "string",
+              "meaning": "kind of the left operand of the comparison: variable | field | constant | sizeof | call | other (sizeof first, then compile-time constant, then field access, variable access, call); other when not a comparison. The operand text is not exported: the normalizer slices it from the accepted source bytes at the location"
+            },
+            {
+              "name": "lhs_value",
+              "type": "string",
+              "meaning": "decimal value of the left operand of the comparison when it is an integer compile-time constant, else \"\""
+            },
+            {
+              "name": "rhs_path",
+              "type": "string",
+              "meaning": "right operand of the comparison: path relative to the database source root; \"\" when outside it or when the condition is not a comparison"
+            },
+            {
+              "name": "rhs_start_line",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based start line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_start_column",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based start column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_end_line",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based end line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_end_column",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based inclusive end column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_kind",
+              "type": "string",
+              "meaning": "kind of the right operand of the comparison: variable | field | constant | sizeof | call | other (sizeof first, then compile-time constant, then field access, variable access, call); other when not a comparison. The operand text is not exported: the normalizer slices it from the accepted source bytes at the location"
+            },
+            {
+              "name": "rhs_value",
+              "type": "string",
+              "meaning": "decimal value of the right operand of the comparison when it is an integer compile-time constant, else \"\""
+            },
+            {
+              "name": "destination_object_bytes",
+              "type": "int",
+              "meaning": "always -1: C# sinks have no fixed-size destination object"
+            }
+          ]
+        },
+        {
+          "query_id": "ranges",
+          "query_file": "Ranges.ql",
+          "result_set": "ranges",
+          "family": "range_fact",
+          "description": "one row per sink operand",
+          "columns": [
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            },
+            {
+              "name": "operand_path",
+              "type": "string",
+              "meaning": "sink operand expression: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "operand_start_line",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "operand_start_column",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "operand_end_line",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "operand_end_column",
+              "type": "int",
+              "meaning": "sink operand expression: 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "applicability",
+              "type": "string",
+              "meaning": "integral | not_applicable (non-integral operands: floating-point, decimal, reference types)"
+            },
+            {
+              "name": "type_display",
+              "type": "string",
+              "meaning": "operand type as written"
+            },
+            {
+              "name": "signed",
+              "type": "string",
+              "meaning": "\"true\" | \"false\" for integral operands; \"\" otherwise"
+            },
+            {
+              "name": "bits",
+              "type": "int",
+              "meaning": "operand bit width; 0 when not_applicable"
+            },
+            {
+              "name": "lower",
+              "type": "string",
+              "meaning": "SimpleRangeAnalysis lower bound as CodeQL float text; \"unknown\" at the type minimum; \"\" when not_applicable"
+            },
+            {
+              "name": "upper",
+              "type": "string",
+              "meaning": "SimpleRangeAnalysis upper bound as CodeQL float text; \"unknown\" at the type maximum; \"\" when not_applicable"
+            }
+          ]
+        },
+        {
+          "query_id": "range_conversions",
+          "query_file": "Ranges.ql",
+          "result_set": "range_conversions",
+          "family": "range_fact",
+          "description": "one row per integral-to-integral conversion on a sink operand",
+          "columns": [
+            {
+              "name": "sink_path",
+              "type": "string",
+              "meaning": "sink expression (the call or array write): path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "sink_start_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_start_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_line",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "sink_end_column",
+              "type": "int",
+              "meaning": "sink expression (the call or array write): 1-based inclusive end column; 0 when outside the source root"
+            },
+            {
+              "name": "argument_index",
+              "type": "int",
+              "meaning": "sink operand argument index; -1 when the operand is not a call argument (array write index, or the call itself)"
+            },
+            {
+              "name": "step",
+              "type": "int",
+              "meaning": "1-based position in the cast chain on the operand (1 = the outermost explicit cast on the operand)"
+            },
+            {
+              "name": "kind",
+              "type": "string",
+              "meaning": "sign_change | narrowing | promotion (in that precedence)"
+            },
+            {
+              "name": "from_type",
+              "type": "string",
+              "meaning": "type before the conversion"
+            },
+            {
+              "name": "to_type",
+              "type": "string",
+              "meaning": "type after the conversion"
+            },
+            {
+              "name": "conversion_path",
+              "type": "string",
+              "meaning": "conversion expression: path relative to the database source root; \"\" when outside it"
+            },
+            {
+              "name": "conversion_start_line",
+              "type": "int",
+              "meaning": "conversion expression: 1-based start line; 0 when outside the source root"
+            },
+            {
+              "name": "conversion_start_column",
+              "type": "int",
+              "meaning": "conversion expression: 1-based start column; 0 when outside the source root"
+            },
+            {
+              "name": "conversion_end_line",
+              "type": "int",
+              "meaning": "conversion expression: 1-based end line; 0 when outside the source root"
+            },
+            {
+              "name": "conversion_end_column",
+              "type": "int",
+              "meaning": "conversion expression: 1-based inclusive end column; 0 when outside the source root"
+            }
+          ]
+        },
+        {
+          "query_id": "seed_functions",
+          "query_file": "Seeds.ql",
+          "result_set": "seed_functions",
+          "description": "seeded mode only (no rows in whole_program): one row per (seed location, source-root function whose definition overlaps the seed lines); not part of a graph family",
+          "columns": [
+            {
+              "name": "seed_path",
+              "type": "string",
+              "meaning": "seed location: path relative to the database source root, as given in seeds.csv"
+            },
+            {
+              "name": "seed_start_line",
+              "type": "int",
+              "meaning": "seed location: 1-based first line"
+            },
+            {
+              "name": "seed_end_line",
+              "type": "int",
+              "meaning": "seed location: 1-based last line (inclusive)"
+            },
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the function containing the seed lines"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "function location: path relative to the database source root"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "function location: 1-based start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "function location: 1-based start column"
+            }
+          ]
+        },
+        {
+          "query_id": "neighborhood",
+          "query_file": "Neighborhood.ql",
+          "result_set": "neighborhood",
+          "description": "seeded mode only (no rows in whole_program): one row per exported function with its minimum call-graph distance from a seed function; not part of a graph family",
+          "columns": [
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the function"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "function location: path relative to the database source root"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "function location: 1-based start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "function location: 1-based start column"
+            },
+            {
+              "name": "depth",
+              "type": "int",
+              "meaning": "minimum number of call-graph steps (callers, callees, virtual overrides) from a seed function; 0 for a seed function"
+            }
+          ]
+        }
+      ]
     }
   }
 }

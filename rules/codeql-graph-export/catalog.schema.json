@@ -425,8 +425,56 @@
       }
     },
     "models_csharp": {
-      "description": "Rejects a csharp section until its pack declares its closed model vocabulary.",
-      "not": {}
+      "description": "The closed model vocabulary the csharp pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlInjection.Sink",
+                      "CommandInjection.Sink",
+                      "TaintedPath.Sink",
+                      "UnsafeDeserialization.Sink",
+                      "CodeInjection.Sink",
+                      "LdapInjection.Sink",
+                      "XPathInjection.Sink",
+                      "Xss.Sink",
+                      "UrlRedirect.Sink",
+                      "RegexInjection.Sink",
+                      "LogForging.Sink",
+                      "XmlEntityInjection.Sink",
+                      "ResourceInjection.Sink",
+                      "ArrayCreation.length"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalFlowSource",
+                      "StoredFlowSource",
+                      "SourceNode",
+                      "ExternalSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "models_rust": {
       "description": "The closed model vocabulary the rust pack's SinkSites and SourceSites queries emit (rust-all models-as-data sink kinds and threat models).",
