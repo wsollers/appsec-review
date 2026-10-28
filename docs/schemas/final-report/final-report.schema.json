@@ -160,6 +160,39 @@
         }
       }
     },
+    "openvex_export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state", "reason", "handoff", "result", "manifest", "document",
+        "statement_count", "included_findings", "excluded_findings"
+      ],
+      "properties": {
+        "state": {"enum": ["disabled", "not_run", "available", "no_statements", "stale"]},
+        "reason": {"$ref": "common.schema.json#/$defs/text"},
+        "handoff": {
+          "oneOf": [{"$ref": "common.schema.json#/$defs/artifact_ref"}, {"type": "null"}]
+        },
+        "result": {
+          "oneOf": [{"$ref": "common.schema.json#/$defs/artifact_ref"}, {"type": "null"}]
+        },
+        "manifest": {
+          "oneOf": [{"$ref": "common.schema.json#/$defs/artifact_ref"}, {"type": "null"}]
+        },
+        "document": {
+          "oneOf": [{"$ref": "common.schema.json#/$defs/artifact_ref"}, {"type": "null"}]
+        },
+        "statement_count": {
+          "oneOf": [{"type": "integer", "minimum": 0, "maximum": 10000}, {"type": "null"}]
+        },
+        "included_findings": {
+          "oneOf": [{"type": "integer", "minimum": 0, "maximum": 10000}, {"type": "null"}]
+        },
+        "excluded_findings": {
+          "oneOf": [{"type": "integer", "minimum": 0, "maximum": 10000}, {"type": "null"}]
+        }
+      }
+    },
     "poc_outcomes": {
       "type": "object",
       "additionalProperties": false,

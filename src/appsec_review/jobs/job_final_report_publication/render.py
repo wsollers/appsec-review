@@ -168,6 +168,19 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
                 lines.append("  - files: " + ", ".join(code(item["files"][key]["path"]) for key in (
                     "source", "compile", "readme", "provenance")))
     lines += [""]
+    if "openvex_export" in report:
+        export = report["openvex_export"]
+        lines += ["## OpenVEX impact statements", "",
+                  f"Status {code(export['state'])}: {plain(export['reason'])}"]
+        if export["statement_count"] is not None:
+            lines.append(f"- affected statements: {export['statement_count']}; "
+                         f"included findings: {export['included_findings']}; "
+                         f"excluded findings: {export['excluded_findings']}")
+        for key in ("handoff", "result", "manifest", "document"):
+            reference = export[key]
+            if reference is not None:
+                lines.append(f"- {key}: {code(reference['path'])}, SHA-256 {code(reference['sha256'])}")
+        lines += [""]
     lines += _section("Verification backlog (unconfirmed)", report["verification_backlog"], settings,
                       "The verification backlog is empty.", unconfirmed=True)
     lines += ["## Withheld packages", ""]

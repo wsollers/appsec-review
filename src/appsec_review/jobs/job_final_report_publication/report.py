@@ -62,13 +62,20 @@ def poc_section(poc: Mapping[str, Any] | None) -> tuple[dict[str, Any], dict[str
 
 def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
                  gate_document: Mapping[str, str], configuration_profile: Mapping[str, Any] | None = None,
-                 poc: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                 poc: Mapping[str, Any] | None = None,
+                 openvex: Mapping[str, Any] | None = None) -> dict[str, Any]:
     packages = gate["packages"]
 
     def bucket(name: str) -> list[Any]:
         return [item for item in packages if item["bucket"] == name]
 
     limitations = list(gate["limitations"])
+    export_gap = openvex is not None and openvex["state"] in {"not_run", "stale", "no_statements"}
+    if openvex is not None and export_gap:
+        limitations.append({
+            "limitation_id": f"openvex_export_{openvex['state']}", "kind": "gap",
+            "statement": openvex["reason"], "count": 0,
+        })
     review = gate["review"]
     complete = (review["status"] == "COMPLETE" and not review["review_incomplete"]
                 and not any(item["kind"] == "gap" for item in limitations))
@@ -87,12 +94,14 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
         "schema": FINAL_REPORT_SCHEMA, "run_id": gate["run_id"],
         "provenance": provenance,
         "status": {"review": review["status"], "review_incomplete": review["review_incomplete"],
-                   "publication": gate["status"], "review_complete": complete},
+                   "publication": "PUBLISHABLE_WITH_LIMITATIONS" if export_gap else gate["status"],
+                   "review_complete": complete},
         "summary": {"accounting": gate["accounting"], "package_counts": gate["package_counts"],
                     "ship_block": gate["ship_block"], "coverage": gate["coverage"]},
         "findings": bucket("publishable"),
         "attack_chains": {"status": "none_available", "reason": ATTACK_CHAIN_UNAVAILABLE, "items": []},
         "poc_outcomes": outcomes,
+        **({"openvex_export": dict(openvex)} if openvex is not None else {}),
         "verification_backlog": bucket("verification_backlog"),
         "withheld": bucket("withheld"),
         "limitations": limitations,
