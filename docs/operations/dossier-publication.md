@@ -111,6 +111,36 @@ not regenerate or visually inspect these PDFs; these are attributed owner/parent
 The seeded presentation/nonexecution example establishes neither a real-target vulnerability,
 target PoC compilation nor full native cross-lane acceptance.
 
+### Sample page previews
+
+These committed images are documentation snapshots of the **synthetic seeded sample**, not real
+target review evidence. The original PDFs, LaTeX, JSON and rendering receipts remain run-owned
+artifacts under `runs/dossier-navigation-final`; the paths and hashes above identify their source.
+
+| Confirmed-finding dossier: cover and contents | PoC dossier: cover and contents |
+| --- | --- |
+| ![Synthetic confirmed-finding dossier cover with contents, status and nonexecution notice](../assets/dossier-samples/confirmed-finding-cover.png) | ![Synthetic proof-of-concept dossier cover with contents and explicit runtime-proof-not-run status](../assets/dossier-samples/poc-cover.png) |
+
+<details>
+<summary>Finding brief, separate risk dimensions and resolving evidence (page 2)</summary>
+
+![Synthetic finding brief, independent risk dimensions and source-evidence bindings](../assets/dossier-samples/confirmed-finding-evidence.png)
+
+</details>
+
+<details>
+<summary>Assurance limitations and artifact provenance (page 4)</summary>
+
+![Synthetic dossier showing unverified remediation, missing chain context, coverage gaps and hash-bound provenance](../assets/dossier-samples/confirmed-finding-provenance.png)
+
+</details>
+
+Refresh these snapshots from the corresponding `preview.png`, `evidence-preview.png` and
+`provenance-preview.png` after regenerating the PDFs with the
+[seed fixture](../../tests/dossier_fixture.py) and
+[live rendering tests](../../tests/test_dossier_live.py). Copy the generated images unchanged;
+do not hand-edit them or substitute protected real-review material.
+
 ## Process telemetry
 
 Use existing correlated `context.events` and
