@@ -707,7 +707,8 @@ The [serial smoke runner](deploy/dagster/README.md#serial-smoke-tests) verifies 
 printing its credentials.
 
 The console is at <http://localhost:3000> (bound to `127.0.0.1` only). `targets/` is mounted
-read-only, and the default review target is `/opt/app/targets/appsec-multi-vuln`. To review a
+writable (acquisition creates checkouts there and builds write their outputs into the checkout),
+and the default review target is `/opt/app/targets/appsec-multi-vuln`. To review a
 different checkout under `targets/`, set `APPSEC_REVIEW_TARGET` in `deploy/dagster/.env` to its
 container path, for example:
 
