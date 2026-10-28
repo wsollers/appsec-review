@@ -43,7 +43,18 @@
     },
     "models_java": {"description": "Rejects a java section until its pack declares its closed model vocabulary.", "not": {}},
     "models_javascript": {"description": "Rejects a javascript section until its pack declares its closed model vocabulary.", "not": {}},
-    "models_python": {"description": "Rejects a python section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_python": {
+      "description": "The closed model vocabulary the python pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["SqlExecution", "NoSqlExecution", "SystemCommandExecution", "FileSystemAccess",
+                   "HttpClientRequest", "Decoding.mayExecuteInput", "CodeExecution", "LdapExecution",
+                   "XPathExecution", "XmlParsing", "TemplateConstruction", "HttpRedirectResponse",
+                   "ResponseHeaderWrite", "RegexExecution", "Logging", "HttpResponse"]}}}}}},
+        "sources": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["RemoteFlowSource", "ThreatModelSource"]}}}}}}
+      }
+    },
     "models_ruby": {"description": "Rejects a ruby section until its pack declares its closed model vocabulary.", "not": {}},
     "models_go": {"description": "Rejects a go section until its pack declares its closed model vocabulary.", "not": {}},
     "models_csharp": {"description": "Rejects a csharp section until its pack declares its closed model vocabulary.", "not": {}},
