@@ -233,9 +233,11 @@ Configuration lives in `appsec-review.toml`:
 - `[jobs.job_codeql_analysis.settings.export_queries]` sets `enabled`, `row_limit` (rows decoded
   per export query), `max_bytes` (total export bytes per scope) and `timeout_seconds` (the runner
   `export` action). The defaults equal the `GraphSettings` contract: 200000, 268435456 and 1800.
-- `[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]` must equal
-  `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json` field for field. At most
-  one pack is allowed per language, and only `cpp` may declare one. Planning stops with a
+- `[[jobs.job_codeql_analysis.settings.languages.<language>.export_queries]]` must equal
+  `export_query_packs.<language>` in `containers/tools/codeql/assets.lock.json` field for field.
+  At most one pack is allowed per language. `cpp`, `csharp`, `go`, `java`, `javascript`, `python`,
+  `ruby` and `rust` declare one; `swift` has a pack but no pin, because CodeQL extracts Swift only
+  on macOS, so its scopes take the "no hash-pinned pack" disposition. Planning stops with a
   framework-integrity failure when any language's block differs from its lock entry. Runtime
   reads the declared pack, column and catalog contracts for execution; it does not fingerprint
   the supplied lock, pack tree, suite or runner. Relevant operator release declarations determine
@@ -279,10 +281,15 @@ configured `catalog_sha256` pin.
 
 Verification status: the export step runs offline in `tests/test_codeql_export_step.py` and, inside
 the real job with an injected executor, in `tests/integration/test_code_graph_end_to_end.py`. Both
-play back hand-authored recordings. The pack has compiled and run in the pinned image against the
-calibration database (`tests/live/test_codeql_pack_shapes.py`);
-`tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` remain the
-operator tiers that refresh and verify the recordings. The native fixture has no sources or sinks,
+play back recordings: the C/C++ native recording is copied from a live export, and the per-language
+synthetic recordings are hand-authored. Every pack except Swift has compiled and run in
+`audit-codeql:custom-2.27.0` built from this repository on a Linux (WSL 2) Docker host; the
+per-language live results are in
+[`rules/codeql-graph-export/README.md`](../../rules/codeql-graph-export/README.md#live-verification).
+`tests/live/test_codeql_graph_export_live.py`, `tests/live/test_codeql_graph_export_<language>_live.py`
+and `tests/live/test_code_graph_live.py` are the operator tiers that refresh and verify the
+recordings; the JavaScript/TypeScript tier runs in the `node` build profile because the TypeScript
+extractor needs Node.js. The native fixture has no sources or sinks,
 so `test_codeql_graph_export_live.py` also compiles the synthetic fixture
 (`tests/fixtures/graph/codeql_export/synthetic/source/synthetic.cpp`) and requires the live export to
 meet every row in its `expected-facts.json` (two paths to one sink, dominating, non-dominating and
@@ -307,9 +314,11 @@ project, the database and the scope.
 
 - **Cache.** `$HOME/.codeql/compile-cache` is persisted in the docker volume
   `appsec-codeql-compile-<sha256(declarations)[:24]>`, mounted at `/codeql-cache` and linked by
-  the runner. Its namespace includes the run root, declared CodeQL/runner releases and runtime
-  user. Customer runs never share writable compilation caches with other runs or platform
-  release tooling. Missing component declarations disable cache use explicitly.
+  the runner. Its namespace is the declared CodeQL/runner releases and runtime user, so it is
+  shared across runs and packs recompile only when the CodeQL distribution, the runner release
+  or the pack bytes change (CodeQL's cache is content addressed by query and library bytes).
+  Native mode keeps its cache directory under the run. Missing component declarations disable
+  cache use explicitly.
   Initialization is single-flight under a process-safe per-volume lock. Only the volume root
   is chowned; existing cache contents are not recursively traversed. A Docker volume creation
   timestamp binds the initialization record so a recreated volume is initialized again.
@@ -327,9 +336,15 @@ project, the database and the scope.
   times out makes that export `FAILED` with a named gap; it is never read as "no flows".
   Events use tool id `codeql-graph-export-compile`.
 - **Platform release checks.** `python containers/build.py query-packs` and its `--warm` option
-  are separate platform-maintenance operations. Their cache is not the customer run's writable
-  cache, and their checks never run as customer-review assurance. A new customer run starts
-  with its own cold compilation cache.
+  are separate platform-maintenance operations. `--warm` fills its own volume, keyed by the
+  image id (`appsec-codeql-compile-<image-id[:16]>`), not the customer job's release-keyed cache,
+  so it does not warm a review run, and its checks never run as customer-review assurance. The
+  first review run after a CodeQL or runner release change compiles cold; later runs reuse that
+  release's shared cache.
+- **Cache sharing trade-off.** The job's compilation cache is shared by every run of the same
+  user and declared releases. It holds only compiled QL derived from repository-owned packs and
+  the image's libraries (evaluation binds the scope and seeds with `--external`, so no project
+  data enters it), but it is writable state that outlives a run.
 - **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed (its 117 queries
   took 48 min 36 s with `--check-only` on the rebuilt payload, so the registry gives it a 7200 s
   timeout); registering it with `warm = true` would add that cost to every payload rebuild; it was

@@ -64,9 +64,16 @@ def action_timeout(settings: RuntimeSettings, action: str) -> int:
 
 
 def compile_cache_volume(image: "CodeQLImage", run_root: Path) -> str:
-    """Run-private compilation cache, keyed by declarations rather than supplied payloads."""
-    identity = {"run_root": str(run_root.resolve()), "codeql": image.component_release_id,
-                "runner": image.runner_release_id, "user": application_runtime_user(image.runtime_user)}
+    """Compilation cache shared across runs, keyed by declarations rather than supplied payloads.
+
+    CodeQL's compile cache is content addressed by query and library bytes, so packs recompile
+    only when the declared CodeQL distribution, runner release or runtime user changes (a new
+    volume) or the pack bytes change (a new cache entry). ``run_root`` only scopes native mode,
+    whose cache directory lives under the run.
+    """
+    del run_root
+    identity = {"codeql": image.component_release_id, "runner": image.runner_release_id,
+                "user": application_runtime_user(image.runtime_user)}
     return "appsec-codeql-compile-" + hashlib.sha256(canonical_json(identity)).hexdigest()[:24]
 
 
@@ -549,7 +556,7 @@ class CodeQLExecutor:
                                   "disposable-docker-volume" if volume_name else "run-bind"),
              "compile_cache": ("run-private-native-bind" if native and cache_volume else
                                "persistent-docker-volume" if cache_volume else "none"),
-             "compile_cache_reason": ("run_private_declared_release" if cache_volume else
+             "compile_cache_reason": ("declared_release" if cache_volume else
                                       "missing_release" if action in {"query", "export", "compile"}
                                       else "not_applicable")},
         )

@@ -513,16 +513,21 @@ def cache_owner() -> str:
 
 
 def compile_cache_volume(image_id: str) -> str:
-    """Name of the volume job_codeql_analysis mounts (appsec_review.codeql.runtime.compile_cache_volume)."""
+    """Name of the platform warm-compile volume, keyed by the CodeQL image id.
+
+    Deliberately separate from the review job's release-keyed cache
+    (appsec_review.codeql.runtime.compile_cache_volume): warming it proves the packs compile in the
+    image and measures the cold cost, but does not warm a review run.
+    """
     return "appsec-codeql-compile-" + hashlib.sha256(image_id.encode()).hexdigest()[:16]
 
 
 def _codeql_warm(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
-    """Really compile every query of a CodeQL pack into the persistent compile-cache volume.
+    """Really compile every query of a CodeQL pack into the platform warm-compile volume.
 
-    ``--check-only`` stops before query planning, so it leaves the multi-minute work to the first
-    analysis run. This does that work once, offline, into the exact volume (named from the pinned
-    CodeQL image id) and at the exact pack path the job uses, so the first analysis starts warm.
+    ``--check-only`` stops before query planning, so it misses errors that only appear when a query
+    is planned. This does the full compile once, offline, into the volume named from the pinned
+    CodeQL image id, at the pack path the job uses.
     """
     inspected = subprocess.run([docker_binary(), "image", "inspect", pack["image"], "--format", "{{.Id}}"],
                                capture_output=True, text=True, check=False)

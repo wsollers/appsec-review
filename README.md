@@ -100,9 +100,10 @@ Clang 18 comes from those images, not from the host; the host needs `clang++-18`
 opt-in live test above.
 
 **CodeQL** is not in the catalog. Its licensed payload (CLI, extractors, query packs) is not in this
-repository: you supply a licensed base image tagged `audit-codeql:local`, download
-`coding-standards-codeql-packs.zip` (`github/codeql-coding-standards@v2.62.0`) into
-`containers/tools/codeql/`, and layer `audit-codeql:custom-2.27.0` with `Dockerfile.custom-source`.
+repository: on any Linux Docker host (native Linux or WSL 2, not Windows PowerShell)
+`containers/tools/codeql/build-source-image.sh` downloads the pinned CodeQL bundle and
+`github/codeql-coding-standards@v2.62.0` packs, verifies their SHA-256, and builds
+`audit-codeql:local` and `audit-codeql:custom-2.27.0` from this repository's Dockerfiles.
 Its execution image ID and declared component releases are configured in `appsec-review.toml`;
 customer review execution does not hash supplied assets or their lock file. See
 [`containers/tools/codeql/README.md`](containers/tools/codeql/README.md),
@@ -377,8 +378,8 @@ To build only a few images:
 containers/build-all.sh build tool-gitleaks tool-semgrep tool-infer
 ```
 
-The CodeQL image needs a licensed base image that you supply (`audit-codeql:local`), and the pinned
-`audit-codeql:custom-2.27.0` is layered on it with `containers/tools/codeql/Dockerfile.custom-source`.
+The CodeQL images build on any Linux Docker host (native Linux or WSL 2) with one command,
+`containers/tools/codeql/build-source-image.sh`, which fetches the pinned, hash-verified CodeQL and builds `audit-codeql:local` and the pinned `audit-codeql:custom-2.27.0`.
 No proprietary CodeQL payload is committed; see
 [`containers/tools/codeql/LICENSE.md`](containers/tools/codeql/LICENSE.md) and
 [`docs/operations/codeql-analysis.md`](docs/operations/codeql-analysis.md). Without it, CodeQL scopes
@@ -720,7 +721,7 @@ handoff artifact verify, and that the dataset publication audit has no violation
     -k without_container_images --basetemp=test/tmp/nothing-review
   ```
 
-- **Full tier** (a review host with the pinned images, such as Zarathustra). It uses the real Docker
+- **Full tier** (any Linux or WSL 2 Docker host with the pinned images built from this repository). It uses the real Docker
   daemon, runs the whole graph in one pass, requires every job to finish, and asserts that every
   scanner that ran observed nothing. It skips, naming what is missing, when the daemon, an enabled
   catalog tool image or a build-profile image is unavailable.

@@ -168,7 +168,9 @@ missing declarations skip lookup and report `missing_release_identity`. New comp
 publishes an attributed receipt, and eligible reuse still verifies target-source resolution.
 Release selectivity at the identity level does not establish cross-run reuse. A run's configuration
 and releases remain immutable; a query-release change requires a new run, whose run-private
-database cache is distinct. The opt-in predecessor path below supports query-release-only changes
+database cache is distinct. The CodeQL query compile cache is the one cross-run exception: it is
+shared by runs with the same user and declared CodeQL/runner releases, and holds only compiled
+repository-owned QL ([cache](codeql-analysis.md#query-precompilation)). The opt-in predecessor path below supports query-release-only changes
 through a new frozen run. Fake-tool acceptance covers destination `JobRunner` execution and
 finalization, accepted import provenance, zero new DB launches, fresh queries under the new
 declaration and subsequent query reuse in both modes. Real retained-data import and production
