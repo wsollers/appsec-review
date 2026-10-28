@@ -149,6 +149,7 @@ class ReviewContext:
     available_sources: tuple[str, ...]
     max_page_size: int = 20
     max_depth: int = 4
+    attempt_id: str = "-"
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
     _views: dict[str, PackageView] = field(default_factory=dict)
@@ -456,6 +457,7 @@ class _Guard:
                  clock: Callable[[], float] = time.monotonic) -> None:
         self.ctx, self.cell, self.profile, self.capture, self.clock = ctx, cell, profile, capture, clock
         self.deadline: float | None = None
+        self.dispatches = 0
 
     def __call__(self, request: ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
         if not self.ctx.budget.cell_launch_allowed():
@@ -469,7 +471,15 @@ class _Guard:
         if self.capture:
             self.cell.requests.append(json.dumps(asdict(request), sort_keys=True, default=str).encode("utf-8"))
         try:
-            result = self.ctx.infer(request, timeout_seconds=max(1, min(int(timeout_seconds), int(remaining) or 1)))
+            from appsec_review.observability.model_calls import call_model
+            spec = self.cell.spec
+            self.dispatches += 1
+            result = call_model(self.ctx.infer, request,
+                timeout_seconds=max(1, min(int(timeout_seconds), int(remaining) or 1)),
+                run_root=self.ctx.run_root, run_id=self.ctx.run_id,
+                job_id="job_inference_security_review", attempt_id=self.ctx.attempt_id,
+                step_id=f"{spec.lane.value}_review", task_id="teams",
+                package_id=spec.package_id, lane=spec.lane.value)
         except BaseException:
             self.ctx.budget.charge(model_turns=1)
             raise
@@ -494,9 +504,26 @@ def _not_launched(cell: _Cell, reason: str, gap_class: GapClass = GapClass.BUDGE
 def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]], list[str]], *,
          capture: bool = False) -> None:
     """Run or reuse one cell; ordinary failures end in a terminal record, never an exception."""
+    from appsec_review.observability import PipelineLog
+    started = time.monotonic()
+
+    def completed(outcome: CellOutcome, dispatches: int) -> None:
+        spec = cell.spec
+        PipelineLog(ctx.run_root).write("INFERENCE_REVIEW_CELL_COMPLETED", run_id=ctx.run_id,
+            job_id="job_inference_security_review", attempt_id=ctx.attempt_id,
+            step_id=f"{spec.lane.value}_review", task_id="teams", details={
+                "cell_id": cell.cell_id, "package_id": spec.package_id, "lane": spec.lane.value,
+                "role": spec.role.value, "persona": spec.persona,
+                "terminal_status": outcome.record.status.value, "reused": outcome.reused,
+                "model_dispatches": dispatches, "counts": dict(outcome.counts),
+                "gap_count": len(outcome.gaps),
+                "duration_ms": max(0, int((time.monotonic() - started) * 1000))})
+
     if not ctx.budget.cell_launch_allowed():
         cell.record, gap = _not_launched(cell, f"job budget exhausted ({ctx.budget.usage_exhausted()})")
-        cell.outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+        outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+        cell.outcome = outcome
+        completed(outcome, 0)
         return
     retry = ctx.settings.retry
     guard = _Guard(ctx, cell, ctx.profile(cell.spec.role), capture=capture)
@@ -508,6 +535,7 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
     if not outcome.reused and outcome.counts.get("queries"):
         ctx.budget.charge(retrieval_queries=int(outcome.counts["queries"]))
     cell.outcome, cell.record = outcome, outcome.record
+    completed(outcome, guard.dispatches)
 
 
 def _seen(cell: _Cell) -> set[str]:

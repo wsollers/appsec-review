@@ -12,7 +12,8 @@ from appsec_review.config.owasp import OwaspSettings
 from appsec_review.inference import Infer, ModelResult, ReviewModelRequest
 from appsec_review.inference.recording import recorded
 from appsec_review.observability import PipelineLog
-from appsec_review.storage import canonical_json
+from appsec_review.observability.model_calls import call_model
+from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import consume_named, publish_named, safe_path
 from .evidence import EvidenceResolver, redact
 from .guidance import compose, pin_bundle
@@ -140,7 +141,12 @@ def _rebind(proposal: Mapping[str, Any], resolver: EvidenceResolver,
 
 def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any],
                 packages: Sequence[Mapping[str, Any]], role: str, profile: Mapping[str, Any],
-                settings: OwaspSettings, resolver: EvidenceResolver, infer: Infer) -> dict[str, Any]:
+                settings: OwaspSettings, resolver: EvidenceResolver, infer: Infer,
+                attempt_id: str = "-", unit_id: str = "validation.assessment") -> dict[str, Any]:
+    step_id, task_id = unit_id.split(".")
+    log = PipelineLog(run_root)
+    correlation = {"run_id": resolver.scope.run_id, "job_id": "job_owasp_control_assessment",
+                   "attempt_id": attempt_id, "step_id": step_id, "task_id": task_id}
     guidance, text = _guidance(repository_root, run_root, batch, role)
     key = digest({"mode": settings.mode.value, "packages": _semantic(packages),
                   "guidance": guidance["bundle_sha256"], "model_policy": dict(profile),
@@ -154,10 +160,16 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         try:
             proposal = _rebind(cached["proposal"], resolver, packages)
             validate_final(proposal, packages)
-        except (ValueError, KeyError, OSError):
+        except (ValueError, KeyError, OSError) as exc:
             # A changed reference is a reuse denial, never permission to copy prior conclusions.
             resolver.metrics["denials"] += 1
+            log.write("OWASP_REUSE_DENIED", **correlation, details={
+                "batch_id": batch["batch_id"], "role": role, "error_class": type(exc).__name__})
         else:
+            log.write("OWASP_MODEL_REUSED", **correlation, details={
+                "batch_id": batch["batch_id"], "role": role, "receipt_sha256": file_sha256(receipt),
+                "receipt_path": receipt.relative_to(run_root).as_posix(),
+                "guidance_bundle_sha256": guidance["bundle_sha256"], "new_model_calls": 0})
             return {"status": "reused", "proposal": proposal, "attempts": [],
                     "guidance": guidance, "receipt": receipt.relative_to(run_root).as_posix(),
                     "retrieval_requests": 0,
@@ -207,7 +219,9 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                        "turn": turn, "retry": retry, "request_sha256": digest(asdict(request))}
             call_started = time.monotonic()
             try:
-                result: ModelResult = recorded(infer)(request, timeout_seconds=max(1, int(remaining)))
+                result: ModelResult = call_model(recorded(infer), request,
+                    timeout_seconds=max(1, int(remaining)), run_root=run_root, **correlation,
+                    batch_id=batch["batch_id"], turn=turn, retry_count=retry)
                 if any(value is not None and (type(value) is not int or value < 0)
                        for value in (result.input_tokens, result.output_tokens, result.cache_tokens)):
                     raise ValueError("OWASP provider returned invalid token usage")
@@ -242,8 +256,9 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                 proposal = None
             attempt["duration_ms"] = max(0, int((time.monotonic() - call_started) * 1000))
             attempts.append(attempt)
-            PipelineLog(run_root).write("OWASP_MODEL_ATTEMPT", run_id=resolver.scope.run_id,
-                job_id="job_owasp_control_assessment", details=attempt)
+            log.write("OWASP_MODEL_ATTEMPT", **correlation, details={
+                **{key: value for key, value in attempt.items() if key != "error"},
+                "batch_id": batch["batch_id"], "cell_id": request.cell_id})
             if proposal is not None:
                 break
         if terminal != "succeeded":
@@ -265,13 +280,20 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         responses = []
         for query in requests:
             queries += 1
+            query_started = time.monotonic()
+            retrieval = {"batch_id": batch["batch_id"], "role": role, "cell_id": request.cell_id,
+                         "query_number": queries, "terminal_status": "SUCCEEDED"}
             if queries > settings.max_queries:
                 terminal = "retrieval_budget"
+                log.write("OWASP_RETRIEVAL_COMPLETED", **correlation, details={
+                    **retrieval, "terminal_status": "SKIPPED", "reason": "retrieval_budget"})
                 break
             if (not isinstance(query, Mapping) or set(query) != {"source_identity", "locator"}
                     or query["source_identity"] not in allowed):
                 resolver.metrics["denials"] += 1
                 responses.append({"denied": "identity is outside this batch's accepted component evidence"})
+                log.write("OWASP_RETRIEVAL_COMPLETED", **correlation, details={
+                    **retrieval, "terminal_status": "DENIED", "reason": "outside_batch_scope"})
                 continue
             try:
                 responses.append(resolver.materialize(query["source_identity"],
@@ -280,6 +302,10 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
             except (ValueError, OSError, UnicodeError) as exc:
                 resolver.metrics["denials"] += 1
                 responses.append({"gap": f"{type(exc).__name__}: {exc}"})
+                retrieval.update(terminal_status="FAILED", error_class=type(exc).__name__)
+            log.write("OWASP_RETRIEVAL_COMPLETED", **correlation, details={
+                **retrieval, "duration_ms": max(0, int((time.monotonic() - query_started) * 1000)),
+                "truncated": bool(responses[-1].get("truncated"))})
         transcript.extend(({"request": _clean(proposal)}, {"evidence": _clean(responses)}))
         if terminal == "retrieval_budget":
             break
@@ -346,16 +372,19 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
               worker_profile: Mapping[str, Any], reviewer_profile: Mapping[str, Any],
               resolver: EvidenceResolver, infer: Infer, independent: bool = True,
               worker_result: Mapping[str, Any] | None = None,
-              validation_retrieval: Mapping[str, int] | None = None) -> dict[str, Any]:
+              validation_retrieval: Mapping[str, int] | None = None,
+              attempt_id: str = "-", unit_id: str = "validation.assessment") -> dict[str, Any]:
     retrieval_before = dict(resolver.metrics)
     ready = [package for package in packages if any(item.get("supported") for item in package["proof_obligations"])]
     ready_ids = {package["row_id"] for package in ready}
     empty = {"status": "missing_evidence", "proposal": None, "attempts": []}
     worker = dict(worker_result) if worker_result is not None else investigate(repository_root=repository_root, run_root=run_root, batch=batch, packages=ready,
-        role="control_assessor", profile=worker_profile, settings=settings, resolver=resolver, infer=infer) if ready else empty
+        role="control_assessor", profile=worker_profile, settings=settings, resolver=resolver, infer=infer,
+        attempt_id=attempt_id, unit_id=unit_id) if ready else empty
     # A new request context with the original evidence, no worker answer or transcript.
     reviewer = investigate(repository_root=repository_root, run_root=run_root, batch=batch, packages=ready,
-        role="independent_reviewer", profile=reviewer_profile, settings=settings, resolver=resolver, infer=infer) if ready and independent else empty
+        role="independent_reviewer", profile=reviewer_profile, settings=settings, resolver=resolver, infer=infer,
+        attempt_id=attempt_id, unit_id=unit_id) if ready and independent else empty
     worker_rows = {row["row_id"]: row for row in worker["proposal"]["results"]} if worker["proposal"] else {}
     review_rows = {row["row_id"]: row for row in reviewer["proposal"]["results"]} if reviewer["proposal"] else {}
     results = []
