@@ -261,13 +261,15 @@ def test_capacity_overlay_sets_the_resource_budget(tmp_path: Path) -> None:
     assert resolved["configuration_overlay"]["keys"] == ["review_policy.resources.io_slots"]
 
 
-def test_checked_in_prod_capacity_overlay_loads() -> None:
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+def test_checked_in_prod_capacity_overlay_loads(profile: str) -> None:
+    base = load_config(ROOT / "appsec-review.toml", profile=profile)
     config = load_config(ROOT / "appsec-review.toml", overlay=ROOT / "test/acceptance/prod-capacity-overlay.toml",
-                         profile="prod")
+                         profile=profile)
     assert config.review_policy.resources.io_slots == 4
     assert config.dagster.pool_limits["scanner"] == 4
-    assert _settings(config).teams.review_teams == 3
-    assert config.profile == "prod"
+    assert _settings(config).teams.review_teams == _settings(base).teams.review_teams == 7
+    assert config.profile == profile
 
 
 def test_capacity_key_allowlist_is_exposed() -> None:

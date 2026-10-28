@@ -110,8 +110,9 @@ does **not** enable medium/low lead exploration. See [model profiles](model-prof
 limits and distinct-model verification behavior.
 
 For an approved host capacity increase, select the checked-in
-`prod-capacity-overlay.toml` instead of `none`. It sets three review teams, four I/O slots and
-a scanner pool of four; it does not raise CPU or RAM. It is not implied by `--profile prod`.
+`prod-capacity-overlay.toml` instead of `none`. It sets four I/O slots and a scanner pool of
+four and keeps the selected profile's review-team count; it does not raise CPU or RAM. It is not
+implied by `--profile prod`.
 Confirm the host and builder topology can support it first. A resource-budget mismatch with
 an active run or recorded lease is refused even with `--force`.
 
