@@ -520,6 +520,1197 @@
           ]
         }
       ]
+    },
+    "ruby": {
+      "model_library": "codeql/ruby-all",
+      "export_pack": "appsec-review/graph-export-ruby",
+      "sinks": [
+        {
+          "rule_id": "ruby.sink.model.sqlexecution",
+          "match": {
+            "model": "SqlExecution"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "ruby.sink.model.sqlconstruction",
+          "match": {
+            "model": "SqlConstruction"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "ruby.sink.model.systemcommandexecution",
+          "match": {
+            "model": "SystemCommandExecution"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "ruby.sink.model.codeexecution",
+          "match": {
+            "model": "CodeExecution"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "ruby.sink.model.codeexecution.reflective",
+          "match": {
+            "model": "CodeExecution.reflective"
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        },
+        {
+          "rule_id": "ruby.sink.model.filesystemaccess",
+          "match": {
+            "model": "FileSystemAccess"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "ruby.sink.model.httpclientrequest",
+          "match": {
+            "model": "HttpClientRequest"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "ruby.sink.model.unsafedeserialization",
+          "match": {
+            "model": "UnsafeDeserialization"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "ruby.sink.model.xmlparsercall",
+          "match": {
+            "model": "XmlParserCall"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "ruby.sink.model.xpathexecution",
+          "match": {
+            "model": "XPathExecution"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "ruby.sink.model.ldapexecution",
+          "match": {
+            "model": "LdapExecution"
+          },
+          "sink_class": "ldap_query",
+          "cwe_family": "CWE-90"
+        },
+        {
+          "rule_id": "ruby.sink.model.templaterendering",
+          "match": {
+            "model": "TemplateRendering"
+          },
+          "sink_class": "template_injection",
+          "cwe_family": "CWE-1336"
+        },
+        {
+          "rule_id": "ruby.sink.model.httpredirectresponse",
+          "match": {
+            "model": "HttpRedirectResponse"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "ruby.sink.model.headerwriteaccess",
+          "match": {
+            "model": "HeaderWriteAccess"
+          },
+          "sink_class": "header_injection",
+          "cwe_family": "CWE-113"
+        },
+        {
+          "rule_id": "ruby.sink.model.regexexecution",
+          "match": {
+            "model": "RegexExecution"
+          },
+          "sink_class": "regex_injection",
+          "cwe_family": "CWE-730"
+        },
+        {
+          "rule_id": "ruby.sink.model.logging",
+          "match": {
+            "model": "Logging"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "ruby.source.model.argv",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "a command-line argument"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "ruby.source.model.environment",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "an environment variable"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "ruby.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "ruby.source.model.local",
+          "match": {
+            "model": "LocalFlowSource"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "ruby.sanitizer.basename",
+          "api": "basename",
+          "declared_in": [
+            "File"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "ruby.sanitizer.shellescape",
+          "api": "shellescape",
+          "declared_in": [
+            "Shellwords"
+          ],
+          "applies_to": [
+            "command_execution"
+          ]
+        }
+      ]
+    },
+    "go": {
+      "model_library": "codeql/go-all",
+      "export_pack": "appsec-review/graph-export-go",
+      "sinks": [
+        {
+          "rule_id": "go.sink.api.gob.newdecoder",
+          "match": {
+            "api": "NewDecoder",
+            "declared_in": [
+              "encoding/gob"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "go.sink.api.net.dial",
+          "match": {
+            "api": "Dial",
+            "declared_in": [
+              "net"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "go.sink.api.syscall.exec",
+          "match": {
+            "api": "Exec",
+            "declared_in": [
+              "syscall"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "go.sink.api.rand.intn",
+          "match": {
+            "api": "Intn",
+            "declared_in": [
+              "math/rand"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "go.sink.api.strings.repeat",
+          "match": {
+            "api": "Repeat",
+            "declared_in": [
+              "strings"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-789"
+        },
+        {
+          "rule_id": "go.sink.model.sql.querystring",
+          "match": {
+            "model": "SQL::QueryString"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "go.sink.model.systemcommandexecution",
+          "match": {
+            "model": "SystemCommandExecution"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "go.sink.model.filesystemaccess",
+          "match": {
+            "model": "FileSystemAccess"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "go.sink.model.http.clientrequest",
+          "match": {
+            "model": "Http::ClientRequest"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "go.sink.model.http.redirect",
+          "match": {
+            "model": "Http::Redirect"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "go.sink.model.http.headerwrite",
+          "match": {
+            "model": "Http::HeaderWrite"
+          },
+          "sink_class": "header_injection",
+          "cwe_family": "CWE-113"
+        },
+        {
+          "rule_id": "go.sink.model.http.responsebody",
+          "match": {
+            "model": "Http::ResponseBody"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "go.sink.model.loggercall",
+          "match": {
+            "model": "LoggerCall"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "go.source.api.syscall.getenv",
+          "match": {
+            "api": "Getenv",
+            "declared_in": [
+              "syscall"
+            ],
+            "index": -1
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "go.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "go.source.model.commandargs",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "go.source.model.environment",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "go.source.model.file",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "go.source.model.stdin",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "go.source.model.database",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "go.source.model.sourcemodel",
+          "match": {
+            "model": "sourceModel"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "go.source.model.sourcenode",
+          "match": {
+            "model": "SourceNode"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "go.sanitizer.filepath.clean",
+          "api": "Clean",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.filepath.rel",
+          "api": "Rel",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.filepath.evalsymlinks",
+          "api": "EvalSymlinks",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.filepath.base",
+          "api": "Base",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.regexp.quotemeta",
+          "api": "QuoteMeta",
+          "declared_in": [
+            "regexp"
+          ],
+          "applies_to": [
+            "regex_injection"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.html.escapestring",
+          "api": "EscapeString",
+          "declared_in": [
+            "html"
+          ],
+          "applies_to": [
+            "html_output"
+          ]
+        }
+      ]
+    },
+    "javascript": {
+      "model_library": "codeql/javascript-all",
+      "export_pack": "appsec-review/graph-export-javascript",
+      "sinks": [
+        {
+          "rule_id": "javascript.sink.api.unserialize",
+          "match": {
+            "api": "unserialize",
+            "declared_in": [
+              "node-serialize"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "javascript.sink.api.log",
+          "match": {
+            "api": "log",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.info",
+          "match": {
+            "api": "info",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.warn",
+          "match": {
+            "api": "warn",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.error",
+          "match": {
+            "api": "error",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.random",
+          "match": {
+            "api": "random",
+            "declared_in": [
+              "Math"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "javascript.sink.model.sqlinjection",
+          "match": {
+            "model": "SqlInjection::Sink"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "javascript.sink.model.commandinjection",
+          "match": {
+            "model": "CommandInjection::Sink"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "javascript.sink.model.taintedpath",
+          "match": {
+            "model": "TaintedPath::Sink"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "javascript.sink.model.requestforgery",
+          "match": {
+            "model": "RequestForgery::Sink"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "javascript.sink.model.codeinjection",
+          "match": {
+            "model": "CodeInjection::Sink"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "javascript.sink.model.unsafedeserialization",
+          "match": {
+            "model": "UnsafeDeserialization::Sink"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "javascript.sink.model.reflectedxss",
+          "match": {
+            "model": "ReflectedXss::Sink"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "javascript.sink.model.serversideurlredirect",
+          "match": {
+            "model": "ServerSideUrlRedirect::Sink"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "javascript.sink.model.xxe",
+          "match": {
+            "model": "Xxe::Sink"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "javascript.sink.model.xpathinjection",
+          "match": {
+            "model": "XpathInjection::Sink"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "javascript.sink.model.regexpinjection",
+          "match": {
+            "model": "RegExpInjection::Sink"
+          },
+          "sink_class": "regex_injection",
+          "cwe_family": "CWE-730"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "javascript.source.api.question",
+          "match": {
+            "api": "question",
+            "declared_in": [
+              "readline-sync"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "javascript.source.api.prompt",
+          "match": {
+            "api": "prompt",
+            "declared_in": [
+              "readline-sync"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "javascript.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "javascript.source.model.commandargs",
+          "match": {
+            "model": "ThreatModelSource.commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "javascript.source.model.environment",
+          "match": {
+            "model": "ThreatModelSource.environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "javascript.source.model.response",
+          "match": {
+            "model": "ThreatModelSource.response"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "javascript.source.model.file",
+          "match": {
+            "model": "ThreatModelSource.file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "javascript.source.model.database",
+          "match": {
+            "model": "ThreatModelSource.database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "javascript.source.model.stdin",
+          "match": {
+            "model": "ThreatModelSource.stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "javascript.source.model.threatmodel",
+          "match": {
+            "model": "ThreatModelSource"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "javascript.sanitizer.basename",
+          "api": "basename",
+          "declared_in": [
+            "path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "javascript.sanitizer.escape",
+          "api": "escape",
+          "declared_in": [
+            "mysql",
+            "mysql2"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        },
+        {
+          "rule_id": "javascript.sanitizer.escapeid",
+          "api": "escapeId",
+          "declared_in": [
+            "mysql",
+            "mysql2"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        },
+        {
+          "rule_id": "javascript.sanitizer.encodeuricomponent",
+          "api": "encodeURIComponent",
+          "declared_in": [
+            "global"
+          ],
+          "applies_to": [
+            "server_side_request",
+            "url_redirect"
+          ]
+        }
+      ]
+    },
+    "java": {
+      "model_library": "codeql/java-all",
+      "export_pack": "appsec-review/graph-export-java",
+      "sinks": [
+        {
+          "rule_id": "java.sink.api.exec",
+          "match": {
+            "api": "exec",
+            "declared_in": [
+              "java.lang.Runtime"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "java.sink.api.executequery",
+          "match": {
+            "api": "executeQuery",
+            "declared_in": [
+              "java.sql.Statement"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "java.sink.api.executeupdate",
+          "match": {
+            "api": "executeUpdate",
+            "declared_in": [
+              "java.sql.Statement"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "java.sink.api.execute",
+          "match": {
+            "api": "execute",
+            "declared_in": [
+              "java.sql.Statement"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "java.sink.api.addbatch",
+          "match": {
+            "api": "addBatch",
+            "declared_in": [
+              "java.sql.Statement"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "java.sink.api.readobject",
+          "match": {
+            "api": "readObject",
+            "declared_in": [
+              "java.io.ObjectInputStream"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "java.sink.api.readunshared",
+          "match": {
+            "api": "readUnshared",
+            "declared_in": [
+              "java.io.ObjectInputStream"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "java.sink.api.forname",
+          "match": {
+            "api": "forName",
+            "declared_in": [
+              "java.lang.Class"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        },
+        {
+          "rule_id": "java.sink.api.loadclass",
+          "match": {
+            "api": "loadClass",
+            "declared_in": [
+              "java.lang.ClassLoader"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        },
+        {
+          "rule_id": "java.sink.api.eval",
+          "match": {
+            "api": "eval",
+            "declared_in": [
+              "javax.script.ScriptEngine"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "java.sink.model.sql-injection",
+          "match": {
+            "model": "sql-injection"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "java.sink.model.command-injection",
+          "match": {
+            "model": "command-injection"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "java.sink.model.path-injection",
+          "match": {
+            "model": "path-injection"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "java.sink.model.request-forgery",
+          "match": {
+            "model": "request-forgery"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "java.sink.model.url-redirection",
+          "match": {
+            "model": "url-redirection"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "java.sink.model.ldap-injection",
+          "match": {
+            "model": "ldap-injection"
+          },
+          "sink_class": "ldap_query",
+          "cwe_family": "CWE-90"
+        },
+        {
+          "rule_id": "java.sink.model.xpath-injection",
+          "match": {
+            "model": "xpath-injection"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "java.sink.model.template-injection",
+          "match": {
+            "model": "template-injection"
+          },
+          "sink_class": "template_injection",
+          "cwe_family": "CWE-1336"
+        },
+        {
+          "rule_id": "java.sink.model.html-injection",
+          "match": {
+            "model": "html-injection"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "java.sink.model.js-injection",
+          "match": {
+            "model": "js-injection"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "java.sink.model.log-injection",
+          "match": {
+            "model": "log-injection"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "java.sink.model.response-splitting",
+          "match": {
+            "model": "response-splitting"
+          },
+          "sink_class": "header_injection",
+          "cwe_family": "CWE-113"
+        },
+        {
+          "rule_id": "java.sink.model.unsafe-deserialization",
+          "match": {
+            "model": "unsafe-deserialization"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "java.sink.model.jndi-injection",
+          "match": {
+            "model": "jndi-injection"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-74"
+        },
+        {
+          "rule_id": "java.sink.model.mvel-injection",
+          "match": {
+            "model": "mvel-injection"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-917"
+        },
+        {
+          "rule_id": "java.sink.model.ognl-injection",
+          "match": {
+            "model": "ognl-injection"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-917"
+        },
+        {
+          "rule_id": "java.sink.model.groovy-injection",
+          "match": {
+            "model": "groovy-injection"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "java.sink.model.jexl-injection",
+          "match": {
+            "model": "jexl-injection"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-917"
+        },
+        {
+          "rule_id": "java.sink.model.xslt-injection",
+          "match": {
+            "model": "xslt-injection"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-74"
+        },
+        {
+          "rule_id": "java.sink.model.fragment-injection",
+          "match": {
+            "model": "fragment-injection"
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "java.source.api.getrequesturi",
+          "match": {
+            "api": "getRequestURI",
+            "declared_in": [
+              "com.sun.net.httpserver.HttpExchange"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "java.source.api.getrequestbody",
+          "match": {
+            "api": "getRequestBody",
+            "declared_in": [
+              "com.sun.net.httpserver.HttpExchange"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "java.source.api.getrequestheaders",
+          "match": {
+            "api": "getRequestHeaders",
+            "declared_in": [
+              "com.sun.net.httpserver.HttpExchange"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "java.source.api.readline",
+          "match": {
+            "api": "readLine",
+            "declared_in": [
+              "java.io.Console"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "java.source.model.argv",
+          "match": {
+            "model": "LocalUserInput",
+            "source_type": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "java.source.model.environment",
+          "match": {
+            "model": "LocalUserInput",
+            "source_type": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "java.source.model.stdin",
+          "match": {
+            "model": "LocalUserInput",
+            "source_type": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "java.source.model.file",
+          "match": {
+            "model": "LocalUserInput",
+            "source_type": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "java.source.model.database",
+          "match": {
+            "model": "LocalUserInput",
+            "source_type": "database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "java.source.model.reverse-dns",
+          "match": {
+            "model": "SourceNode",
+            "source_type": "reverse-dns"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "java.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "java.source.model.local",
+          "match": {
+            "model": "LocalUserInput"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "java.sanitizer.getcanonicalpath",
+          "api": "getCanonicalPath",
+          "declared_in": [
+            "java.io.File"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "java.sanitizer.getcanonicalfile",
+          "api": "getCanonicalFile",
+          "declared_in": [
+            "java.io.File"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "java.sanitizer.normalize",
+          "api": "normalize",
+          "declared_in": [
+            "java.nio.file.Path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "java.sanitizer.setstring",
+          "api": "setString",
+          "declared_in": [
+            "java.sql.PreparedStatement"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        },
+        {
+          "rule_id": "java.sanitizer.encodeforhtml",
+          "api": "encodeForHTML",
+          "declared_in": [
+            "org.owasp.esapi.Encoder"
+          ],
+          "applies_to": [
+            "html_output"
+          ]
+        }
+      ]
     }
   }
 }

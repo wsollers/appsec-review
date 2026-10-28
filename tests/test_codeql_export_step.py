@@ -412,7 +412,9 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
             (lambda value: value["export_queries"].update(max_seed_depth=9), "must not exceed 8"),
             (lambda value: value["export_queries"].update(seed_limit=0), "seed_limit must be a positive"),
             (lambda value: value["languages"]["go"].update(
-                export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "only for: cpp"),
+                export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "must use its own pack"),
+            (lambda value: value["languages"]["actions"].update(
+                export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "exist only for"),
             (lambda value: value["languages"]["cpp"]["export_queries"].append(
                 copy.deepcopy(value["languages"]["cpp"]["export_queries"][0])), "at most one"),
             (lambda value: value["languages"]["cpp"]["export_queries"][0].pop("catalog_sha256"),

@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "go-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/main.go for the Go pack. They are a deliberately chosen subset of what the pack would export (for example the file source of os.Open and several taint pairs of serve are omitted), written to exercise the Go cases; they are not a CodeQL recording. bqrs_sha256 values are SHA-256 of the text 'hand-authored synthetic bqrs <query_id>'; the manifest pack hashes are SHA-256 placeholders, not the compiled pack.",
+  "cases": {
+    "sql_cross_function_flow": "path_flows: r.FormValue (line 47) reaches db.Exec argument 0 at line 42 through lookup and the quote helper",
+    "two_sources_one_command": "path_flows: os.Args and os.Getenv (line 69) both reach exec.Command argument 0 at line 69",
+    "argv_and_environment_sources": "source_sites: os.Args (sourceModel commandargs) and os.Getenv (sourceModel environment) at line 69",
+    "sanitized_path": "path_sanitizers: filepath.Clean lies on the flow to os.Open at line 50, which has dominating_sanitizer_count 1",
+    "ssrf_sink": "sink_sites: http.Get argument 0 at line 52, model Http::ClientRequest",
+    "deserialization_sink": "sink_sites: gob.NewDecoder argument 0 at line 53, catalog API match",
+    "dominating_guard": "guards: count < 100 (line 55) dominates strings.Repeat at line 56, true_branch",
+    "non_dominating_guard": "guards: count < 100 (line 55) does not control strings.Repeat at line 58, which also has a none row",
+    "guard_bounded_range": "ranges: strings.Repeat count at line 56 is integral with upper bound 99 from the dominating guard",
+    "narrowing_conversion": "range_conversions: int -> int32 narrowing (step 1) then int32 -> int promotion (step 2) at line 58",
+    "flow_summary_helper": "flow_summaries: quote passes parameter 0 to its return value",
+    "interface_dispatch": "call_sites: dispatch -> h.Handle(input), two virtual_resolved candidates, line 29",
+    "unresolved_function_value": "call_sites: Apply -> fn(s), unresolved_indirect, line 34",
+    "function_value_resolved": "call_sites: serve -> pick(name) resolved to quote by local flow, line 64",
+    "reflective_call": "call_sites: serve -> reflect.Value.Call, external_undefined in package reflect, line 65",
+    "unclassified_sink": "sink_sites: json.Unmarshal argument 0 at line 60, model UnmarshalingFunction, which catalog.json does not classify"
+  }
+}
