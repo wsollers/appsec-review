@@ -159,6 +159,29 @@ cases and other environment gaps remain explicit: Windows permissions/read-only 
 actual-symlink privileges, POSIX executable/symlink/custody assumptions, CRLF-sensitive locked
 taxonomy/AST fixtures, and optional dependencies are not resolved by this slice.
 
+### Concurrent integration reconciliation
+
+Merge `05379db1` combines interchange tip `c7a6fdbc` with local integration base `c47e3fea`
+without rebasing or changing the main checkout. Metrics retain the additive `interchange`,
+`native_sbom`, `debug_symbols`, `owasp`, `review_flow`, and `completion` sections. Syft retains
+both its structured package identity fields and exact native selectors. New native-SBOM,
+debug-symbol, and binary-evidence accepted readers require `/2` envelopes; their synthetic
+handoffs use canonical accounting. Graph-export artifact projections remain available, and
+native target-file inventories remain source metadata even when target paths start with `data/`.
+
+The final metrics/adapter gate and isolated strict target-independent runtime recheck passed
+184 tests with 3 skips in 48.04 s. The native-SBOM/runtime/interchange-E2E gate passed 95 tests
+with 1 skip and one Windows `status.json` replacement permission failure; that exact runtime
+case passed in the isolated recheck without a source change. The static whole-Graph reuse,
+structured Syft, and completion wiring/contract gate passed 53 tests in 252.06 s.
+
+Debug-symbol indexing/execution, binary-evidence, and adapter checks passed 88 tests with 1 skip.
+Six unchanged debug-symbol E2E fixtures remain blocked by `unknown debug-symbol reader settings`;
+their test, reader-settings helper, and configuration parser match `c47e3fea`. Three package
+publication cases still require POSIX `os.O_DIRECTORY` on this Windows host. These gates are
+not additive totals or a full-suite claim. No custody, retry, or integrity checks were weakened
+to accommodate those environment and upstream-fixture gaps.
+
 Local focused verification at source checkpoint `0369ac27` (parent `4798b33a`, the exact
 `7820273f` metrics patch, and final runtime/consumer/native patches listed above):
 **237 passed, 2 skipped** across `test_interchange_contract`,
