@@ -47,7 +47,17 @@
     "models_ruby": {"description": "Rejects a ruby section until its pack declares its closed model vocabulary.", "not": {}},
     "models_go": {"description": "Rejects a go section until its pack declares its closed model vocabulary.", "not": {}},
     "models_csharp": {"description": "Rejects a csharp section until its pack declares its closed model vocabulary.", "not": {}},
-    "models_rust": {"description": "Rejects a rust section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_rust": {
+      "description": "The closed model vocabulary the rust pack's SinkSites and SourceSites queries emit (rust-all models-as-data sink kinds and threat models).",
+      "properties": {
+        "sinks": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["sql-injection", "command-injection", "path-injection", "request-url", "log-injection",
+                   "html-injection", "alloc-size", "alloc-layout", "pointer-access", "disable-certificate",
+                   "hasher-input", "credentials-key", "credentials-iv", "credentials-nonce"]}}}}}},
+        "sources": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["remote", "commandargs", "environment", "file", "stdin", "database"]}}}}}}
+      }
+    },
     "models_swift": {"description": "Rejects a swift section until its pack declares its closed model vocabulary.", "not": {}},
     "sink_class": {
       "enum": ["memory_write", "memory_read", "allocation_size", "format_string", "command_execution",
