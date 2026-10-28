@@ -13,22 +13,42 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI runs the same jobs as Dagster's `wave1_review`, in a topological order derived from
-`orchestration.topology.wave1_dependencies`; Dagster builds the branched topology from every
-registered, configured, enabled job except `job_third_party_data_sync`, and the CLI executes it
-linearly. Both refuse to start when the registered and configured jobs differ. Both surfaces end with `job_inference_security_review`,
-`job_final_publication_gate` and `job_final_report_publication`, in that order; the report is the
-single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
+The direct CLI runs the same enabled jobs as Dagster's `wave1_review`, in a topological order derived
+from `orchestration.topology.wave1_dependencies`; Dagster executes independent branches concurrently
+and the CLI executes them linearly. Standalone `job_third_party_data_sync` remains outside reviews.
+Both refuse to start when the registered and configured jobs differ. Both place enabled PoC,
+remediation and dossier jobs between inference review and the single final gate, followed by
+report publication; the report is the single terminal job. Both surfaces use the same semantic
+registry and accepted-handoff format. The operator-visible execution distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
+**Delivered completion source:** `b702eb7` registers the pre-gate graph, three new jobs, typed
+settings/profiles and dataset/input-matrix wiring. PoC/planning/validation/dossiers default enabled
+for new configurations; old frozen runs are unchanged. Validation without planning is rejected.
+The [completion design](evidence-completion-and-remediation.md) preserves compile-only policy.
+Checkpoint `18eae9f` aligns the shared review reader with writer `/3` and verifies nested chain
+and package bindings. Integration `dd9c9ad` supplies immutable protected PoC `/2`,
+gate/report `/2`, authenticated disabled-manual-PoC admission and chain/base completeness isolation.
+Gate certification rehashes nested optional artifacts and freezes capability/attachment accounting;
+the report never discovers later producers. The
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is owner-verified;
+full native all-lane acceptance remains pending. Registration and unit coverage do not establish it. The
+[dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
+lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and
+dataset/input-matrix surfaces that must change together.
+Combined source `6975aef2` retains main's topology-derived CLI `_graph_order` rather than restoring
+a separate hardcoded job list. Both required hunt/lead package-manifest hashes are checked by the
+shared `/3` reader, and PoC briefs resolve entry/path entity identities rather than display labels.
+OpenVEX shared contracts/settings and design documents are present, but no exporter is registered
+or configured; it is not part of the 42-job count or current terminal-report dependencies.
 In both graphs, enabled prioritization and code-graph indexing feed security tagging,
 then OWASP consumes accepted tag-cloud/classification context before review data indexing and
 package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is enabled by
 default in assessment mode across shipped profiles; it selects the same chain in direct
 `start`/`resume`/`plan-resume` and Dagster. Direct `--force-from` accepts tagging/OWASP only when
 enabled, and `jobs.job_owasp_control_assessment.settings.enabled = false` explicitly opts out.
-CI/post-build and standalone metadata-sync differences remain; this is not full graph
-parity. The [workbench design](owasp-control-workbench.md) describes the four supported
+Standalone metadata sync remains outside the review graph. The
+[workbench design](owasp-control-workbench.md) describes the four supported
 Python static procedures, separate blinded reviewer, provisional result boundary and named
 unresolved coverage.
 
@@ -41,7 +61,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 38 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 42 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -83,7 +103,10 @@ input, output, tool, and acceptance contracts.
 | `job_document_issue_analysis` | Private document candidate ledger with verified source mappings | [document-issue-analysis](../operations/document-issue-analysis.md) |
 | `job_inference_security_review` | Two-lane evidence-bound inference review (slice 1: claim ledger, adjudication, one scorer, accepted handoff) | [inference-security-review](inference-security-review.md) |
 | `job_final_publication_gate` | Deterministic, model-free gate: re-verifies the accepted review handoff from bytes and classifies every finding package as publishable, verification backlog or withheld, with named limitations | [final-report](../operations/final-report.md) |
-| `job_poc_generation` | Optional (shipped `settings.enabled = false`, run by hand): a model writes a unit-test function with no `main` and a negative control for each finding the judge agreed with; AST validators and a compile check in the build image verify it; nothing is linked or run | [poc-generation](../operations/poc-generation.md) |
+| `job_poc_generation` | Default enabled for new configurations; reads accepted review directly, writes immutable protected compile-only test/control functions and `/2` outcome/provenance before the gate | [poc-generation](../operations/poc-generation.md) |
+| `job_remediation_planning` | Confirmed-only inert exact patches, separate regression specifications and accounted manual/insufficient/capped outcomes | [remediation](../operations/remediation.md) |
+| `job_remediation_validation` | Exact scratch applicability, independent semantic assessment, selected static/native syntax checks and cleanup; never runtime verification | [remediation](../operations/remediation.md) |
+| `job_dossier_publication` | Protected per-confirmed-finding and per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate; real PDF only when rendered | [dossier-publication](../operations/dossier-publication.md) |
 | `job_final_report_publication` | Deterministic, model-free terminal job: `final-report.json` and a byte-reproducible `final-report.md` from the accepted gate (PDF is a later step) | [final-report](../operations/final-report.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
@@ -503,17 +526,19 @@ The generic native build container executes untrusted build logic but never targ
 workspace under the same rule and publishes an instrumented-output catalog that no existing job
 consumes ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)).
 
-`job_poc_generation` sits between them when enabled and is transparent when disabled (the shipped default): the report
-then follows the gate exactly as before. It reads no target tree (the source copy is the run's accepted native build
+`job_poc_generation` is now ordered before the single gate alongside the remediation/dossier
+producers, and remains transparent when disabled. It reads no target tree (the source copy is the run's accepted native build
 workspace, so it is not in `launch.TARGET_JOBS`), calls one model under the no-tools in-process loop, and compiles
 but never links or runs what the model wrote. A direct dispatch of this one job is allowed while it is disabled
 (`cli.MANUAL_JOB_IDS`) ([`../operations/poc-generation.md`](../operations/poc-generation.md)).
 
 `job_final_publication_gate` and `job_final_report_publication` call no model. The gate reads the
 accepted inference review handoff and re-hashes every artifact it binds; the report reads the
-accepted gate handoff and, when the PoC job ran on that gate, its accepted handoff. Neither reinterprets a claim state or a ship-block status, and an integrity
-failure fails the job. The two remediation jobs reserved by decision 8 are not built, and the gate
-records that as a named limitation ([`../operations/final-report.md`](../operations/final-report.md)).
+accepted gate handoff. Their remaining old post-gate PoC discovery/hardcoded capability behavior
+is a pending contract replacement, not the new snapshot contract. Neither may reinterpret a
+claim state or ship-block status, and integrity failure fails the job. Real remediation producers
+now exist; [final-report operations](../operations/final-report.md) marks the unfinished
+gate certification boundary rather than treating those producers as absent.
 The C++ analysis container only replays bounded compile units for analysis. Application code validates
 workspace manifests, compile commands, and artifacts; converts tool failures to explicit gaps; and
 retains framework integrity failures as hard failures. See

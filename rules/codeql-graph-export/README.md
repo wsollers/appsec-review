@@ -33,7 +33,7 @@ refreshed, never hand-edited.
 
 | Language | Live result | Notes |
 |---|---|---|
-| C/C++ | passes | Native recording refreshed from the live export (it includes the CMake compiler-id sources the build traces under `codeql-build/`). |
+| C/C++ | passes | Native recording refreshed from the live export. `GraphExport.qll` `sourcePath()` excludes the CMake compiler-id sources the build traces under `codeql-build/CMakeFiles/`, which do not resolve against target sources. |
 | Java/Kotlin | passes | |
 | Python | QL fixed | `path_sanitizers` also matches a sanitizer call that the path graph steps over (`safe = realpath(filename)`). |
 | Ruby | QL fixed | A concept anchored at its own operand (ActiveRecord `find_by_sql`) is reported at the receiving call, and catalog sanitizer calls get an argument-to-result taint step so flows through `File.basename` stay visible. |

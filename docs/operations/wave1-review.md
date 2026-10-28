@@ -1,7 +1,8 @@
 # Wave 1 review operations
 
-The direct CLI and Dagster share the application-owned job lifecycle, receipts, validation, and
-accepted handoffs, but they do not currently expose the same review topology.
+The direct CLI and Dagster share the application-owned job lifecycle, enabled review topology,
+receipts, validation, and accepted handoffs. The CLI runs a topological order linearly; Dagster
+can run independent branches concurrently.
 
 The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
@@ -19,8 +20,9 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> code_graph_index -> security_tagging
   -> owasp_control_assessment (enabled by default)
   -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> poc_generation (opt-in; only when enabled) -> final_report_publication
+  -> document_issue_analysis -> inference_security_review -> poc_generation
+  -> remediation_planning -> remediation_validation -> dossier_publication -> final_publication_gate
+  -> final_report_publication
 ```
 
 Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every
@@ -42,12 +44,21 @@ production, review prioritization after CodeQL, review-package assembly after da
 document issue analysis after package assembly. Dagster's
 `wave1_review` runs the independent branches concurrently; the CLI runs them in one topological order.
 `final_report_publication` is its single terminal job; the gate and the report are described in
-[`final-report.md`](final-report.md). `poc_generation` is an optional job between the gate and the report; it is
-shipped disabled, so it is absent from both graphs unless `jobs.job_poc_generation.settings.enabled = true`, and it is
-normally run by hand on a finished run ([`poc-generation.md`](poc-generation.md)). Enabled, it adds the dependency
-`gate -> poc_generation -> report` to `wave1_review` and to the direct graph. Dagster's current dependency graph is assembled from the registered,
+[`final-report.md`](final-report.md). At integration `b702eb7`, enabled completion producers all
+precede one final gate. New configurations enable compile-only PoC, confirmed-only planning,
+bounded nonexecuting validation and protected dossiers; disabled optional jobs are omitted and
+old frozen configurations are not rewritten. Validation requires enabled planning. Dagster lets
+PoC/planning/validation/dossiers depend on their enabled producers before the gate, rather than
+running a second gate or creating a gate-to-PoC cycle. Its dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
+**Acceptance boundary:** final `dd9c9ad` aligns review `/3`, pre-gate PoC/gate/report `/2`,
+immutable protected outputs, exact capability/snapshot binding and chain/base completeness isolation.
+The owner-verified [seeded PDF sample](dossier-publication.md#verified-seeded-sample) is retained;
+full native all-lane semantic acceptance remains pending. Do not infer
+end-to-end readiness from graph construction, new defaults or isolated unit coverage.
+See [remediation](remediation.md), [dossier publication](dossier-publication.md) and the
+[implementation record](../reviews/evidence-completion-documentation-inventory.md).
 The shared enabled direct/Dagster OWASP chain is **prioritization → code graph → security tagging/tag cloud →
 OWASP → review data indexing → package assembly → hunt and red/blue/independent verification**,
 with accepted source/component/build/static evidence also feeding OWASP. Tagging and prioritization
@@ -61,7 +72,7 @@ Direct `start`, `resume` and `plan-resume` select this chain through the normal 
 `resume`/`plan-resume --force-from` accept either tagging or OWASP when enabled and reject either
 when disabled. Set `jobs.job_owasp_control_assessment.settings.enabled = false` before freezing
 a run to opt out. Shared chain
-ordering does not add CI/post-build jobs or standalone third-party sync to the direct graph.
+ordering does not add standalone third-party sync to the direct graph.
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
 linear for deterministic resume semantics: adjacency does not widen a job's declared inputs. In

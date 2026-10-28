@@ -85,7 +85,7 @@ def test_enabled_export_refuses_an_unavailable_prerequisite(tmp_path, prerequisi
 
 
 @pytest.mark.parametrize("poc_enabled", [False, True])
-def test_enabled_export_is_in_both_driver_orders_and_report_waits_for_every_tail(tmp_path, poc_enabled):
+def test_enabled_export_is_post_gate_in_both_drivers_without_changing_gate_only_report(tmp_path, poc_enabled):
     from appsec_review import cli
 
     config = export_config(tmp_path)
@@ -98,13 +98,13 @@ def test_enabled_export_is_in_both_driver_orders_and_report_waits_for_every_tail
     described = describe_wave1(config, registry)
     entries = {item["job_id"]: item for item in described["jobs"]}
     assert entries[EXPORT]["dependencies"] == [GATE]
-    assert POC not in entries[EXPORT]["upstream_handoffs"]
     assert {GATE, REVIEW} <= set(entries[EXPORT]["upstream_handoffs"])
-    assert entries[REPORT]["dependencies"] == ([EXPORT, POC] if poc_enabled else [EXPORT])
+    assert entries[REPORT]["dependencies"] == [GATE]
+    assert registry.build(REPORT).consumes == (GATE,)
     direct = active_job_ids(config, (*cli.GRAPH_JOB_IDS, *cli.POST_INDEX_JOB_IDS))
     assert direct.index(GATE) < direct.index(EXPORT) < direct.index(REPORT)
     if poc_enabled:
-        assert direct.index(POC) < direct.index(REPORT)
+        assert direct.index(POC) < direct.index(GATE)
     assert set(direct) == set(entries)
 
 
@@ -114,7 +114,7 @@ def test_export_is_a_declared_protected_downstream_dataset_not_an_index_input():
 
     registry = builtin_registry()
     assert registry.build(EXPORT).consumes == (GATE, REVIEW)
-    assert EXPORT in registry.build(REPORT).consumes
+    assert registry.build(REPORT).consumes == (GATE,)
     assert EXPORT in DOWNSTREAM_JOBS
     assert {item.output_kind for item in DATASETS} == {
         "openvex_verified_inputs", "openvex_documents", "openvex_export_accounting",

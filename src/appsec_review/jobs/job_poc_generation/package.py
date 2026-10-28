@@ -1,4 +1,4 @@
-"""The developer-facing files of one candidate under ``data/poc/<claim-id>/`` (spec section 5.5).
+"""Immutable attempt-owned developer files of one compile-only candidate.
 
 ``poc_<name>.cpp`` (both functions and the generated includes), ``compile.json`` (policy verdict,
 commands, exit codes, diagnostics and the symbol check), ``README.md`` (what it shows, where to add
@@ -13,10 +13,11 @@ from collections.abc import Mapping, Sequence
 import hashlib
 from pathlib import Path
 import re
-import shutil
 from typing import Any
 
 from appsec_review.jobs.bound_artifacts import artifact_ref
+from appsec_review.jobs.completion_contracts import nonexecution_assurance
+from appsec_review.review.models import IntegrityError
 from appsec_review.jobs.job_final_report_publication.render import code, plain
 from appsec_review.storage import atomic_bytes, atomic_json
 
@@ -24,8 +25,7 @@ from .candidates import PocCandidate
 from .source import WriterAnswer
 from .statuses import COMPILE_VERIFIED
 
-OUTPUT_ROOT = ("data", "poc")
-PROVENANCE_SCHEMA = "appsec-review/poc-provenance/1"
+PROVENANCE_SCHEMA = "appsec-review/poc-provenance/2"
 POLICY_SCHEMA = "appsec-review/poc-policy/1"
 DESCRIPTION_LIMIT = 300
 STATUS_TEXT = {
@@ -101,14 +101,16 @@ def render_readme(*, candidate: PocCandidate, finding: Mapping[str, Any], answer
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def write_candidate(run_root: Path, *, candidate: PocCandidate, finding: Mapping[str, Any], answer: WriterAnswer,
+def write_candidate(run_root: Path, *, output_root: Path, candidate: PocCandidate, finding: Mapping[str, Any], answer: WriterAnswer,
                     status: str, reason: str, source_text: str, language: str, compile_record: Mapping[str, Any],
                     violations: Sequence[Mapping[str, Any]], policy_verdict: str, provenance: Mapping[str, Any],
                     facts: Mapping[str, Any] | None) -> dict[str, Any]:
     """Write the four files; the returned references are run-relative, hashed and ready for the handoff."""
-    root = Path(run_root).joinpath(*OUTPUT_ROOT, candidate.claim_id)
+    root = Path(output_root).resolve() / candidate.claim_id
+    if not root.is_relative_to(Path(run_root).resolve() / "data" / "jobs" / "job_poc_generation" / "attempts"):
+        raise IntegrityError("PoC files must be owned by a producer attempt")
     if root.exists():
-        shutil.rmtree(root)
+        raise IntegrityError("PoC candidate artifacts are immutable; use a new attempt")
     source_name = source_file_name(answer, language)
     atomic_bytes(root / source_name, source_text.encode("utf-8"))
     atomic_json(root / "compile.json", {
@@ -118,7 +120,7 @@ def write_candidate(run_root: Path, *, candidate: PocCandidate, finding: Mapping
         candidate=candidate, finding=finding, answer=answer, status=status, reason=reason, source_name=source_name,
         source_text=source_text, facts=facts, violations=violations).encode("utf-8"))
     atomic_json(root / "provenance.json", {
-        "schema": PROVENANCE_SCHEMA, **provenance,
+        "schema": PROVENANCE_SCHEMA, **provenance, **nonexecution_assurance(),
         "files": {"source": {"name": source_name, "sha256": hashlib.sha256(source_text.encode()).hexdigest()},
                   "compile": {"name": "compile.json"}, "readme": {"name": "README.md"}}})
     return {"source": artifact_ref(run_root, root / source_name), "compile": artifact_ref(run_root, root / "compile.json"),
@@ -126,5 +128,5 @@ def write_candidate(run_root: Path, *, candidate: PocCandidate, finding: Mapping
             "provenance": artifact_ref(run_root, root / "provenance.json")}
 
 
-__all__ = ["COMPILE_VERIFIED", "DESCRIPTION_LIMIT", "OUTPUT_ROOT", "describe", "render_readme", "source_file_name",
+__all__ = ["COMPILE_VERIFIED", "DESCRIPTION_LIMIT", "describe", "render_readme", "source_file_name",
            "write_candidate"]

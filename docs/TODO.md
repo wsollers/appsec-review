@@ -589,9 +589,8 @@ C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact
 
 1. Run the operator live tier on the review host with the pinned CodeQL image:
    `python -m pytest -q tests/live/test_codeql_graph_export_live.py tests/live/test_code_graph_live.py`.
-   The native exports under `tests/fixtures/graph/codeql_export/native/exports/` were refreshed
-   from a live run (they carry real BQRS hashes), but its `provenance.json` still says
-   `recording: hand-authored`; correct it with the next refresh. `test_code_graph_live.py` has no
+   The native exports under `tests/fixtures/graph/codeql_export/native/exports/` are a live
+   recording (real BQRS hashes, cpp pack tree `93b9a8bf`). `test_code_graph_live.py` has no
    recorded run. The native fixture has no sources or sinks, so only the synthetic test proves the
    dataflow families.
 2. Export packs, catalog sections and recorded fixtures exist for Java/Kotlin,

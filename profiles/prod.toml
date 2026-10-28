@@ -4,7 +4,7 @@
 # --profile prod); the default profile "dev" is appsec-review.toml exactly as it is. This file is a
 # closed-allowlist layer deep-merged over appsec-review.toml before validation (see
 # docs/operations/model-profiles.md): it may set only the model tables of the model-calling jobs, the
-# inference review's model profiles, role model_profile bindings, budgets and opt-in exploration. Edit the model names
+# inference review's model profiles, role bindings, budgets, exploration, team count and active-claim cap. Edit model names
 # here when an account's model list differs, then rerun; the file hash is part of the run.
 
 [jobs.job_target_analysis_plan.settings.model]
@@ -91,7 +91,13 @@ model_profile = "strong"
 [jobs.job_inference_security_review.settings.lanes]
 # Reserve stays inside the existing package/claim/usage limits; dev remains opt-in.
 exploration_enabled = true
-exploration_reserve = 1
+exploration_reserve = 20
+
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 7
+
+[jobs.job_inference_security_review.settings.rounds]
+max_active_claims = 1000
 
 [jobs.job_poc_generation.settings.models.default]
 model = "claude-sonnet-5-5"
@@ -101,6 +107,24 @@ max_output_tokens = 32000
 max_queries = 8
 max_turns = 6
 timeout_seconds = 600
+
+[jobs.job_remediation_planning.settings.writer]
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+max_turns = 6
+max_queries = 4
+timeout_seconds = 900
+
+[jobs.job_remediation_validation.settings.reviewer]
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 16000
+max_turns = 2
+max_queries = 0
+timeout_seconds = 900
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = "all"

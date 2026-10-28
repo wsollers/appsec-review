@@ -219,23 +219,3 @@ def load_export(run_root: Path, settings: OpenVexExportSettings, repository_root
         bundle.result["statement_count"], bundle.result["included_findings"], bundle.result["excluded_findings"],
         tuple(bundle.result["gaps"]),
     )
-
-
-def report_section(view: ExportReportView) -> dict[str, Any]:
-    reasons = {
-        State.DISABLED: "OpenVEX export is disabled in this run's frozen configuration.",
-        State.NOT_RUN: "OpenVEX export is enabled but has no accepted result; no safety verdict is implied.",
-        State.STALE: "The accepted OpenVEX export is stale; rerun export before linking its outputs.",
-        State.NO_STATEMENTS: "No gate-publishable confirmed finding was eligible; this is not a clean verdict.",
-        State.AVAILABLE: "Affected-only statements for the exact reviewed source snapshot and configuration.",
-    }
-    def reference(value: ArtifactRef | None) -> dict[str, str] | None:
-        return None if value is None else {"path": value.path, "sha256": value.sha256}
-
-    return {
-        "state": view.state.value, "reason": reasons[view.state],
-        "handoff": reference(view.handoff), "result": reference(view.result),
-        "manifest": reference(view.manifest), "document": reference(view.document),
-        "statement_count": view.statement_count, "included_findings": view.included_findings,
-        "excluded_findings": view.excluded_findings,
-    }

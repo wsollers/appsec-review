@@ -91,6 +91,13 @@ vendored paths have a `vendor`, `vendors`, or `third_party` segment; and tests h
 Generated, vendored, and test files remain in language totals and are also reported as explicit
 subtotals. Bounded, excluded, undecodable, or missing catalog input is a source coverage gap.
 
+The additive `tree_sitter` view (`appsec-review/tree-sitter-metrics/1`) re-verifies correlated
+start, execution and validated-output receipts, including invocation/run/job/attempt identity.
+It reports per-invocation outcomes/resources/files/nodes/truncation, job-attempt groups and reuse;
+timing separates summed invocation work, elapsed window, covered wall time and maximum concurrency.
+Missing or conflicting receipts/resources keep explicit gaps, nulls and completeness flags.
+`memory_peak_bytes` is the maximum individual container peak, not concurrent aggregate memory.
+
 Build outcomes come from accepted language-build receipts. A reused successful receipt counts as
 reuse rather than fresh success; any receipt with producer gaps also increments the gap count.
 Artifact reference totals count each build-unit-to-artifact edge. Content-deduplicated totals count
@@ -116,3 +123,80 @@ For fleet/control-plane state, `python deploy/dagster/bin/run_report.py` reports
 run list alongside bounded slow-operation rankings collected from available summaries. It separates
 completed, queued, genuinely running, stale, and orphaned Dagster records. `--stale-seconds`
 controls classification; the command is read-only.
+
+## Evidence-completion tracking (commissioned)
+
+The user requires telemetry and metrics from the first implementation of the
+[completion lanes](evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
+not instrumentation added after rollout. Integration `b702eb7` adds completion aggregates and
+remediation/dossier events to the existing system. Checkpoint `18eae9f` adds aggregate parity for
+real PoC/native statuses, capability maps, flags and nonadditive limits. Remediation follow-up
+`e769645f` preserves unknown token dimensions/null versus genuine measured zero and emits unavailable
+metadata. Final `dd9c9ad` adds actual chain composition/challenge/publication, PoC outcome,
+gate capability/admission and report assembly events. The table below records the complete tracking
+requirement, not a claim that every producer emits every dimension or provider usage measurement.
+
+Reuse [`EventLog.write`](../../src/appsec_review/observability/events.py) through `context.events`
+and [`aggregate_run_metrics`](../../src/appsec_review/observability/telemetry.py), retaining the
+canonical pipeline stream and regenerable `data/telemetry/summary.json`. No separate telemetry
+backend or Azure service is requested.
+
+[`observability/completion.py::completion_metrics`](../../src/appsec_review/observability/completion.py)
+first added `completion` to `appsec-review/run-metrics/3`; combined source `6975aef2` retains
+the same `completion-process-metrics/1` semantics in `run-metrics/4`, alongside the existing
+review and new CodeQL/OWASP/review-flow/Tree-sitter views.
+Its `semantics` is `appsec-review/completion-process-metrics/1`, with
+`authority: observational_process_metrics_not_security_evidence`. Fixed lanes are
+`attack_chains`, `poc_generation`, `remediation_planning`, `remediation_validation`, `dossiers`,
+`publication_gate`, `report_publication`. Chains are selected by inference `step_id=attack_chains`
+or the `INFERENCE_REVIEW_ATTACK_CHAIN` event prefix; other lanes map fixed job ids.
+
+Each lane contains `observed` and `events`. Each event has the following closed aggregate shape:
+
+| Field | Meaning and bounded dimensions |
+| --- | --- |
+| `count`, `counters`, `outcomes` | Event count, allowlisted attempted-work sums and closed statuses; outcome maps retain their `outcomes`, `outcome_counts`, `by_kind` or `by_status` prefix. All seven actual PoC statuses are accepted: `compile_verified`, `compile_failed`, `artifact_generated`, `policy_denied`, `insufficient_evidence`, `not_applicable`, `unsafe_to_attempt`. Native adapter outcomes include `passed`, `baseline_failed`, `patched_failed`, `unsafe`. |
+| Capability maps | `attachment_counts`, `gap_counts`, `omitted_counts`, `certified_outcome_counts` become prefixed counters; `dispositions` become prefixed outcomes and Boolean `enabled` values become flags. Only `poc_generation`, `attack_chains`, `remediation_planning`, `remediation_validation`, `dossiers` are valid capabilities. These are event observations, not a replacement for frozen configuration or accepted manifests. |
+| `flags` | Counts by Boolean value for `explicit_poc_admission`, `frontier_truncated`, `pdf_requested`, `render_failed`, `baseline_attempted`, `patched_attempted`, `usage_unavailable`, and the fixed capability `enabled` map. |
+| `dimensions` | `kind`: `confirmed_finding`, `poc`, `refuter`, `weakest_link_verifier`; `adapter`: `native_syntax`; `role`: `remediation_writer`, `remediation_reviewer`. No arbitrary identity becomes a label. |
+| `limits` | Per-event observed `{min,max}` ranges for `max_dossiers`, `max_source_excerpts`, `max_evidence_rows`. Configured limits are **never summed** across retries or counted as work. |
+| `unavailable_token_measurements` | Number of explicit-null `input_tokens`, `output_tokens`, `cache_tokens` measurements, not missing turns. Separately, `counters.usage_unavailable_count`, when emitted by a producer, counts turns with unavailable usage. Omitted fields are not invented as zero or counted as explicit nulls. |
+| `duration_ms` | `count`, `p50`, `p95`, `max`, `summed_work`; summaries are null when no duration was emitted. |
+
+Invalid/nonfinite/negative/oversized measurements and invalid capability/outcome mappings increment
+`measurement_gap_count`; at most 200 named `measurement_gaps` are retained.
+`COUNTERS`, `OUTCOMES`, `OUTCOME_FIELDS`, `LIMITS`, `CAPABILITIES`, `CAPABILITY_COUNTERS`, `FLAGS`
+and `DIMENSIONS` are closed in the source module. Aggregator support for a field does not prove a
+producer emitted it; synthetic metrics fixtures do not substitute for actual process observations.
+Checkpoint `0ece65d3` adds the real chain challenge map's `not_launched` status to the aggregate
+allowlist, with a full `CellStatus`-shaped regression. Its presence still does not establish
+accepted challenge coverage. Aggregate counters
+exclude arbitrary text, candidate ids, paths, provider prose and raw payloads.
+
+These are event-scoped **attempted work**: retries count; neither stage totals nor overlapping
+durations may be summed as unique candidates or end-to-end wall time. `observed=false` is not a
+measured zero or a complete missing-producer audit. Producer manifests, frozen config and
+integrity/coverage accounting remain necessary.
+
+| Surface | Required process observations |
+| --- | --- |
+| Stages and attempts | Start/terminal correlation, duration, attempt/reuse and stage progress, enabled/disabled or empty-scope disposition, caps, gaps and failures; unmatched/conflicting lifecycle records remain explicit. |
+| PoC candidates | Eligible and terminal candidate counts; policy refusal, unsupported/unavailable, compile outcome, cap/timeout and producer failure. Compilation remains distinct from runtime execution. |
+| Chains | Seed/composition/challenge counts, terminal continuity decisions, bounds and missing-edge/verification gaps before ledger sealing. Metrics cannot replace the accepted chain manifest. |
+| Remediation | Confirmed-only intake, proposal outcomes and byte-edit applicability; adapter selections, static/build/manual outcomes, rejections and adapter failures. No `fixed` or runtime-success counter follows from a static/build check. |
+| Dossiers | Eligible confirmed-finding/PoC counts, source retention, per-item render status, PDF success/failure/timeout, output counts, duration, caps and cleanup gaps. A retained LaTeX source is not a successful PDF. |
+| Gate and report | Accepted input/capability accounting, certified attachment counts, integrity failures and missing-producer/coverage gaps, without inventing target evidence from throughput. |
+| Model work | Correlated model/retry/duration and provider usage where emitted. Unknown token/cache/cost data remains unknown, not an instrumented zero or an inferred bill. |
+
+Use low-cardinality stage/lane/status/adapter/error-class aggregates. Exact run/attempt/candidate
+and artifact hashes are diagnostic correlation fields, not unbounded metric-label dimensions.
+Do not double-count per-item outcomes again as stage summaries or add overlapping inclusive
+durations as wall time. Failed, skipped, capped and disabled work must remain distinguishable.
+
+Producer fields must be allowlisted before `context.events.write`: its attempt log receives fields
+before the central writer bounds/redacts them. Never emit source, patch or PoC payloads, raw prompts,
+credentials or arbitrary model/compiler diagnostics into either stream. Use counts, closed statuses,
+bounded error classes and resolving hashes instead; existing key-based redaction is not permission
+to log arbitrary content under a different key. Metrics are operational accounting, not admissible
+security evidence or a public dossier payload. See [metrics operations](../operations/metrics.md)
+and the [dossier input inventory](dossier-data-inventory.md).

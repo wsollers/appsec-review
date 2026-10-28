@@ -18,7 +18,7 @@ from appsec_review.jobs.job_openvex_export.contracts import (
 )
 from appsec_review.jobs.job_openvex_export.job import build_job
 from appsec_review.jobs.job_openvex_export.reporting import (
-    load_export, read_accepted_export, report_section,
+    load_export, read_accepted_export,
 )
 from appsec_review.observability import EventLog, PipelineLog
 from appsec_review.runtime import JobContext, UnitContext
@@ -149,7 +149,7 @@ def test_output_reader_rejects_a_hardlink_created_during_read(tmp_path, monkeypa
 
 @pytest.mark.parametrize("buckets", [(), ("publishable",), ("verification_backlog",), ("withheld",),
                                     ("publishable", "verification_backlog", "withheld")])
-def test_units_prove_outputs_and_report_only_exact_accepted_state(tmp_path, monkeypatch, buckets):
+def test_units_prove_outputs_and_expose_only_exact_accepted_export_state(tmp_path, monkeypatch, buckets):
     disk = AcceptedInputDisk(tmp_path, monkeypatch, buckets=buckets)
     units = ExportUnits(disk)
     assert units.view().state == ExportReportState.NOT_RUN
@@ -165,8 +165,6 @@ def test_units_prove_outputs_and_report_only_exact_accepted_state(tmp_path, monk
     assert view.included_findings == count
     assert view.excluded_findings == len(buckets) - count
     assert (view.document is not None) == bool(count)
-    assert report_section(view)["document"] == (None if view.document is None
-                                                else view.document.reference.to_json())
     assert read_accepted_export(disk.root, units.reference, disk.settings, ROOT).result_bytes == bundle.result_bytes
     if not count:
         assert not list((units.context.attempt_root / "steps" / "export").rglob("openvex.json"))

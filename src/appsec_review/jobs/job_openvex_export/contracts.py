@@ -20,6 +20,7 @@ import unicodedata
 from urllib.parse import unquote, urlsplit
 
 from appsec_review.jobs.engineering_contracts import (
+    FINAL_PUBLICATION_GATE_SCHEMA,
     OPENVEX_EXPORT_HANDOFF_SCHEMA,
     OPENVEX_EXPORT_MANIFEST_SCHEMA,
     OPENVEX_EXPORT_RESULT_SCHEMA,
@@ -259,6 +260,20 @@ def json_body(value: Any) -> Any:
     if isinstance(value, (tuple, list)):
         return [json_body(item) for item in value]
     return value
+
+
+def _gate_references(value: Any) -> set[ArtifactRef]:
+    """Resolve reference shapes only inside the frozen, depth-bounded gate snapshot."""
+    references: set[ArtifactRef] = set()
+    if isinstance(value, Mapping):
+        if {"path", "sha256"} <= set(value):
+            references.add(ArtifactRef(value["path"], value["sha256"]))
+        for item in value.values():
+            references.update(_gate_references(item))
+    elif isinstance(value, tuple):
+        for item in value:
+            references.update(_gate_references(item))
+    return references
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -561,10 +576,13 @@ class VerifiedInputs:
         validate_text(self.run_id, max_bytes=200, field="run_id")
         require_sha256(self.settings_sha256)
         object.__setattr__(self, "gate_completed_at", normalize_timestamp(self.gate_completed_at))
-        if (self.gate.get("schema") != "appsec-review/final-publication-gate/1"
+        if (self.gate.get("schema") != FINAL_PUBLICATION_GATE_SCHEMA
                 or self.gate.get("run_id") != self.run_id):
             raise ValueError("verified gate must have the expected schema and run")
-        if json_sha256(self.gate) != self.provenance.gate.sha256:
+        if not {"capabilities", "attachments"} <= set(self.gate) or "unavailable_inputs" in self.gate:
+            raise ValueError("verified gate requires strict capability and attachment context")
+        gate = freeze_json(self.gate)
+        if json_sha256(gate) != self.provenance.gate.sha256:
             raise ValueError("verified gate projection does not match its canonical artifact hash")
         if any(type(finding) is not VerifiedFinding for finding in self.findings):
             raise ValueError("verified findings must be frozen finding records")
@@ -586,14 +604,18 @@ class VerifiedInputs:
             raise ValueError("verified input inventory exceeds bounds or repeats paths")
         bound = {item.reference for item in inventory}
         required = set(self.provenance.references)
-        required.update(ArtifactRef.from_mapping(item) for item in self.gate["bindings"])
+        gate_bindings = {ArtifactRef.from_mapping(item) for item in gate["bindings"]}
+        for name in ("inputs", "capabilities", "attachments"):
+            if not _gate_references(gate[name]) <= gate_bindings:
+                raise ValueError("gate context reference is absent from its certified bindings")
+        required.update(gate_bindings)
         if self.source.acquisition is not None:
             required.add(self.source.acquisition)
         for finding in findings:
             required.update((finding.reference, *finding.score_refs, *finding.evidence_refs))
         if not required <= bound:
             raise ValueError("verified inventory omits a required input reference")
-        object.__setattr__(self, "gate", freeze_json(self.gate))
+        object.__setattr__(self, "gate", gate)
         object.__setattr__(self, "findings", findings)
         object.__setattr__(self, "input_inventory", inventory)
 
@@ -726,12 +748,14 @@ def output_reference(output_prefix: str, filename: str, payload: bytes) -> Sized
 
 # Exact resources consumed by the offline validator, including transitive accepted-gate definitions.
 SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
-    "common.schema.json": "3f0c492583a0180f569b56246437315bbe1653e3b8654ee6afb42ae226ce7891",
+    "common.schema.json": "f49fdd4cf6da94fb8484784d54b8f863200ee5d0a65b9ca82da3d1620bb1afec",
     "manifest.schema.json": "64aed63dd5cc0df74d8d0b332c8a9a532d3764fcb7f100594174fa3f0f7dbfd9",
     "result.schema.json": "b5321b7f4e736e55149ca3fce67b073c460e1f3473fc9b45eb40c0db0ace018a",
-    "../final-report/common.schema.json": "4e6d69c2da3ab6aaa508a8bd50389a8fd8ad1321f6b1cf075d87f0c13e1c5dad",
+    "../final-report/common.schema.json": "97cd0bd8b73d5c72da0280233d57add71bef1f9ded8b6be64dcced968bd7e7d9",
     "../final-report/final-publication-gate.schema.json":
-        "607a270c370bb497849f3ecd68a3d5072dfdfad2f25cace802a9bef715dd292e",
+        "14b45f53dbde7265573137bbe1b458e167f9e298953c67a4510475e9241af252",
+    "../final-report/final-report.schema.json":
+        "291d5eeedfd05063a9e1e89660b6f80be3a6744e8bc0eef8a0724a1dcd78908a",
     "upstream/openvex-v0.2.0.schema.json": UPSTREAM_SCHEMA_SHA256,
 })
 VALIDATION_PROFILE_SHA256 = domain_sha256("openvex-validation-profile/1", {

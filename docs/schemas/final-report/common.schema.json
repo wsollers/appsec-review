@@ -3,6 +3,146 @@
   "$id": "https://appsec-review.local/schemas/final-report/common.schema.json",
   "title": "Shared definitions for the final publication gate and final report",
   "$defs": {
+    "ref_or_null": {
+      "oneOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "null"}]
+    },
+    "capability": {
+      "type": "object", "additionalProperties": false,
+      "required": ["enabled", "disposition", "reason", "handoff", "summary", "item_count", "omitted_count",
+                   "gap_count", "execution", "runtime_verified", "result_id"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "disposition": {"enum": ["SUCCEEDED", "SKIPPED_NA", "SKIPPED_POLICY", "GAP"]},
+        "reason": {"$ref": "#/$defs/text"},
+        "handoff": {"$ref": "#/$defs/ref_or_null"},
+        "summary": {"$ref": "#/$defs/ref_or_null"},
+        "item_count": {"type": "integer", "minimum": 0},
+        "omitted_count": {"type": "integer", "minimum": 0},
+        "gap_count": {"type": "integer", "minimum": 0},
+        "execution": {"const": "not_performed_by_policy"},
+        "runtime_verified": {"const": false},
+        "result_id": {"type": "null"}
+      }
+    },
+    "capabilities": {
+      "type": "object", "additionalProperties": false,
+      "required": ["poc_generation", "attack_chains", "remediation_planning", "remediation_validation", "dossiers"],
+      "properties": {
+        "poc_generation": {"$ref": "#/$defs/capability"},
+        "attack_chains": {"$ref": "#/$defs/capability"},
+        "remediation_planning": {"$ref": "#/$defs/capability"},
+        "remediation_validation": {"$ref": "#/$defs/capability"},
+        "dossiers": {"$ref": "#/$defs/capability"}
+      }
+    },
+    "finding_binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["claim_id", "finding_package_id", "sha256"],
+      "properties": {
+        "claim_id": {"$ref": "#/$defs/claim_id"},
+        "finding_package_id": {"$ref": "#/$defs/finding_package_id"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "attachment_gaps": {
+      "type": "array", "maxItems": 2000, "items": {"$ref": "#/$defs/text"}
+    },
+    "chain_attachment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["chain_id", "status", "component_claim_ids", "artifact", "gap_count", "disposition"],
+      "properties": {
+        "chain_id": {"$ref": "#/$defs/record_id"},
+        "status": {"enum": ["confirmed", "qualified_supported", "refuted", "insufficient_evidence"]},
+        "component_claim_ids": {"type": "array", "minItems": 2, "maxItems": 32, "uniqueItems": true,
+                                "items": {"$ref": "#/$defs/claim_id"}},
+        "artifact": {"$ref": "#/$defs/artifact_ref"},
+        "gap_count": {"type": "integer", "minimum": 0},
+        "disposition": {"enum": ["assessed", "capped"]}
+      }
+    },
+    "planning_attachment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding", "status", "plan", "gap_ids", "execution", "runtime_verified", "result_id"],
+      "properties": {
+        "finding": {"$ref": "#/$defs/finding_binding"},
+        "status": {"enum": ["proposal_generated", "manual_design_required", "insufficient_evidence", "capped", "not_launched"]},
+        "plan": {"$ref": "#/$defs/ref_or_null"},
+        "gap_ids": {"$ref": "#/$defs/attachment_gaps"},
+        "execution": {"const": "not_performed_by_policy"},
+        "runtime_verified": {"const": false},
+        "result_id": {"type": "null"}
+      }
+    },
+    "validation_attachment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding", "status", "validation", "gap_ids", "execution", "runtime_verified", "result_id"],
+      "properties": {
+        "finding": {"$ref": "#/$defs/finding_binding"},
+        "status": {"enum": ["build_checked", "static_checked", "rejected", "inconclusive",
+                            "manual_validation_required", "capped", "not_launched"]},
+        "validation": {"$ref": "#/$defs/ref_or_null"},
+        "gap_ids": {"$ref": "#/$defs/attachment_gaps"},
+        "execution": {"const": "not_performed_by_policy"},
+        "runtime_verified": {"const": false},
+        "result_id": {"type": "null"}
+      }
+    },
+    "dossier_attachment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dossier_id", "kind", "finding", "status", "files", "gap_ids"],
+      "properties": {
+        "dossier_id": {"$ref": "#/$defs/record_id"},
+        "kind": {"enum": ["confirmed_finding", "poc"]},
+        "finding": {"$ref": "#/$defs/finding_binding"},
+        "status": {"$ref": "#/$defs/token"},
+        "gap_ids": {"$ref": "#/$defs/attachment_gaps"},
+        "files": {
+          "type": "object", "additionalProperties": false, "required": ["json", "latex", "pdf", "receipt"],
+          "properties": {
+            "json": {"$ref": "#/$defs/artifact_ref"},
+            "latex": {"$ref": "#/$defs/artifact_ref"},
+            "pdf": {"$ref": "#/$defs/ref_or_null"},
+            "receipt": {"$ref": "#/$defs/artifact_ref"}
+          }
+        }
+      }
+    },
+    "attachments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["poc_generation", "attack_chains", "remediation_planning", "remediation_validation", "dossiers"],
+      "properties": {
+        "poc_generation": {"type": "array", "maxItems": 10000, "items": {
+          "$ref": "final-report.schema.json#/properties/poc_outcomes/properties/items/items"}},
+        "attack_chains": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/chain_attachment"}},
+        "remediation_planning": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/planning_attachment"}},
+        "remediation_validation": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/validation_attachment"}},
+        "dossiers": {"type": "array", "maxItems": 20000, "items": {"$ref": "#/$defs/dossier_attachment"}}
+      }
+    },
+    "planning_section": {
+      "type": "object", "additionalProperties": false, "required": ["status", "reason", "items"],
+      "properties": {
+        "status": {"enum": ["available", "none_available"]},
+        "reason": {"$ref": "#/$defs/text"},
+        "items": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/planning_attachment"}}
+      }
+    },
+    "validation_section": {
+      "type": "object", "additionalProperties": false, "required": ["status", "reason", "items"],
+      "properties": {
+        "status": {"enum": ["available", "none_available"]},
+        "reason": {"$ref": "#/$defs/text"},
+        "items": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/validation_attachment"}}
+      }
+    },
+    "dossier_section": {
+      "type": "object", "additionalProperties": false, "required": ["status", "reason", "items"],
+      "properties": {
+        "status": {"enum": ["available", "none_available"]},
+        "reason": {"$ref": "#/$defs/text"},
+        "items": {"type": "array", "maxItems": 20000, "items": {"$ref": "#/$defs/dossier_attachment"}}
+      }
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
@@ -694,7 +834,7 @@
         "kind": {
           "enum": [
             "gap",
-            "not_run"
+            "not_run", "notice"
           ]
         },
         "statement": {

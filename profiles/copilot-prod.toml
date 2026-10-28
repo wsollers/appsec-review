@@ -86,7 +86,13 @@ model_profile = "strong"
 
 [jobs.job_inference_security_review.settings.lanes]
 exploration_enabled = true
-exploration_reserve = 1
+exploration_reserve = 20
+
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 7
+
+[jobs.job_inference_security_review.settings.rounds]
+max_active_claims = 1000
 
 [jobs.job_poc_generation.settings.models.default]
 provider = "copilot-sdk"
@@ -97,6 +103,26 @@ max_output_tokens = 32000
 max_queries = 8
 max_turns = 6
 timeout_seconds = 600
+
+[jobs.job_remediation_planning.settings.writer]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+max_turns = 6
+max_queries = 4
+timeout_seconds = 900
+
+[jobs.job_remediation_validation.settings.reviewer]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 16000
+max_turns = 2
+max_queries = 0
+timeout_seconds = 900
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = "all"

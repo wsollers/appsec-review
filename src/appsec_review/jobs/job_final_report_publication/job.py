@@ -4,13 +4,13 @@ Units: ``load.accepted_gate`` re-verifies the accepted ``job_final_publication_g
 gate document and every artifact the gate binds, ``report.assemble`` writes the schema-validated
 ``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON, and
 ``acceptance.publish_handoff`` re-proves both files and publishes the hash-pinned handoff. The job
-calls no model and reads accepted gate state plus separately verified optional PoC/OpenVEX
-publications. PDF rendering is a later step.
+calls no model and reads nothing the gate does not bind. PDF rendering is a later step.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -19,9 +19,8 @@ from appsec_review.indexing.store import accepted_handoff
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json, resolve_bound
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA, FINAL_REPORT_HANDOFF_SCHEMA,
-    FINAL_REPORT_SCHEMA, POC_GENERATION_HANDOFF_SCHEMA, POC_GENERATION_SCHEMA,
+    FINAL_REPORT_SCHEMA,
 )
-from appsec_review.jobs.job_final_publication_gate import JOB_ID as GATE_JOB
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -33,9 +32,8 @@ from .report import build_report
 from .settings import FinalReportSettings
 
 JOB_ID = "job_final_report_publication"
-POC_JOB = "job_poc_generation"
+GATE_JOB = "job_final_publication_gate"
 SCHEMA_ROOT = Path("docs") / "schemas" / "final-report"
-POC_SCHEMA_ROOT = Path("docs") / "schemas" / "poc-generation"
 TOPOLOGY = {"load": ("accepted_gate",), "report": ("assemble", "render"), "acceptance": ("publish_handoff",)}
 IMPLEMENTATION = "appsec-review/final-report-publication/1"
 REPORT_JSON = "final-report.json"
@@ -69,32 +67,26 @@ def _check(schemas: SchemaSet, name: str, document: Any) -> None:
         raise IntegrityError(f"{name} does not satisfy its schema: {'; '.join(errors[:3])}")
 
 
-def load_poc(run_root: Path, schemas: SchemaSet, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
-    """The run's accepted PoC summary, re-proved from bytes, or ``None`` when the PoC job has not run.
+def _verify_bindings(run_root: Path, gate: Mapping[str, Any]) -> None:
+    if gate["run_id"] != run_root.name:
+        raise IntegrityError("gate snapshot belongs to another run")
+    bindings = {(row["path"], row["sha256"]) for row in gate["bindings"]}
+    for row in gate["bindings"]:
+        resolve_bound(run_root, row)
 
-    A PoC handoff built from a different gate handoff is *stale*: it is reported as such and its outcomes are
-    not shown. Every file the summary names is re-hashed, so a changed reproducer is an integrity failure.
-    """
-    try:
-        accepted = accepted_handoff(run_root, POC_JOB)
-    except ValueError as exc:
-        raise IntegrityError(f"accepted {POC_JOB} handoff cannot be verified: {exc}") from exc
-    if accepted is None:
-        return None
-    published = (accepted.handoff.get("outputs") or {}).get("publish.publish_handoff")
-    if (accepted.handoff.get("job_id") != POC_JOB or not isinstance(published, Mapping)
-            or published.get("schema") != POC_GENERATION_HANDOFF_SCHEMA):
-        raise IntegrityError("accepted PoC handoff does not publish a supported summary")
-    document = read_bound_json(run_root, published["artifact"])
-    _check(schemas, "poc-generation", document)
-    if document["schema"] != POC_GENERATION_SCHEMA or published.get("item_count") != len(document["candidates"]):
-        raise IntegrityError("PoC summary disagrees with its accepted handoff")
-    stale = document["upstream"]["gate_handoff"] != dict(gate_handoff)
-    if not stale:
-        for row in document["candidates"]:
-            for reference in (row["files"] or {}).values():
-                resolve_bound(run_root, reference)
-    return {"handoff": {"path": accepted.path, "sha256": accepted.sha256}, "document": document, "stale": stale}
+    def included(value: Any) -> None:
+        if isinstance(value, Mapping):
+            if {"path", "sha256"} <= set(value) and (value["path"], value["sha256"]) not in bindings:
+                raise IntegrityError("gate attachment is not among its certified bindings")
+            for item in value.values():
+                included(item)
+        elif isinstance(value, list):
+            for item in value:
+                included(item)
+
+    included(gate["inputs"])
+    included(gate["capabilities"])
+    included(gate["attachments"])
 
 
 def build_job(*, repository_root: Path | None = None) -> Job:
@@ -106,19 +98,6 @@ def build_job(*, repository_root: Path | None = None) -> Job:
     def _schemas(unit: UnitContext) -> SchemaSet:
         return SchemaSet(_root(unit) / SCHEMA_ROOT)
 
-    def _poc(unit: UnitContext, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
-        return load_poc(unit.job.run_root, SchemaSet(_root(unit) / POC_SCHEMA_ROOT), gate_handoff)
-
-    def _openvex(unit: UnitContext, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
-        from appsec_review.jobs.job_openvex_export.reporting import (
-            frozen_export_settings, load_export, report_section,
-        )
-        settings, release = frozen_export_settings(unit.job.run_root)
-        if settings is None:
-            return None
-        return report_section(load_export(unit.job.run_root, settings, _root(unit),
-                                          exporter_release=release, gate_handoff=gate_handoff))
-
     def load(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
         try:
@@ -127,6 +106,9 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             raise IntegrityError(f"accepted {GATE_JOB} handoff cannot be verified: {exc}") from exc
         if accepted is None or accepted.handoff.get("job_id") != GATE_JOB:
             raise IntegrityError(f"an accepted {GATE_JOB} handoff is required")
+        claimed_gate = unit.job.upstream_handoffs.get(GATE_JOB)
+        if claimed_gate is not None and claimed_gate != accepted.sha256:
+            raise IntegrityError("accepted gate differs from the report attempt's upstream identity")
         published = (accepted.handoff.get("outputs") or {}).get("acceptance.publish_handoff")
         if not isinstance(published, Mapping) or published.get("schema") != FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA:
             raise IntegrityError("accepted gate handoff does not publish a supported gate document")
@@ -140,38 +122,35 @@ def build_job(*, repository_root: Path | None = None) -> Job:
                 item["finding_package_id"] for item in gate["packages"]) != sorted(
                 identity for ids in gate["buckets"].values() for identity in ids):
             raise IntegrityError("gate package accounting is not exact")
-        for binding in gate["bindings"]:                       # every artifact the gate bound, from bytes
-            resolve_bound(run_root, binding)
-        for key in ("job_handoff", "review_handoff", "claim_ledger", "projection", "coverage_matrix"):
-            if gate["inputs"][key] not in gate["bindings"]:
-                raise IntegrityError(f"gate input is not among its bindings: {key}")
+        _verify_bindings(run_root, gate)
         gate_handoff = {"path": accepted.path, "sha256": accepted.sha256}
-        poc = _poc(unit, gate_handoff)
         return {"gate_handoff": gate_handoff,
                 "gate_document": {"path": reference["path"], "sha256": reference["sha256"]},
                 "gate_status": gate["status"], "review_status": gate["review"]["status"],
                 "package_counts": counts, "binding_count": len(gate["bindings"]),
-                "poc": None if poc is None else {"handoff": poc["handoff"], "stale": poc["stale"]},
-                "openvex": _openvex(unit, gate_handoff),
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def assemble(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
         loaded = unit.output("load.accepted_gate")
         gate = read_bound_json(unit.job.run_root, loaded["gate_document"])
-        poc = _poc(unit, loaded["gate_handoff"])
-        if (None if poc is None else {"handoff": poc["handoff"], "stale": poc["stale"]}) != loaded["poc"]:
-            raise IntegrityError("the PoC handoff changed between load and assemble")
-        openvex = _openvex(unit, loaded["gate_handoff"])
-        if openvex != loaded["openvex"]:
-            raise IntegrityError("the OpenVEX acceptance changed between load and assemble")
         report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
-                              configuration_profile=_configuration_profile(unit.job.run_root), poc=poc, openvex=openvex)
+                              configuration_profile=_configuration_profile(unit.job.run_root))
         _check(_schemas(unit), "final-report", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
         unit.job.events.write("FINAL_REPORT_ASSEMBLED", findings=len(report["findings"]),
+                              publishable_count=len(report["findings"]),
+                              backlog_count=len(report["verification_backlog"]),
+                              withheld_count=len(report["withheld"]),
+                              attachment_count=sum(len(rows) for rows in gate["attachments"].values()),
+                              gap_count=sum(item["kind"] == "gap" for item in report["limitations"]),
+                              duration_ms=max(0, round((time.monotonic() - started) * 1000)),
                               verification_backlog=len(report["verification_backlog"]),
-                              limitation_count=len(report["limitations"]))
+                              limitation_count=len(report["limitations"]),
+                              certified_outcome_counts={name: len(gate["attachments"][name])
+                                                         for name in sorted(gate["attachments"])},
+                              runtime_verified=False)
         return {"artifact": artifact_ref(unit.job.run_root, path), "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def render(unit: UnitContext) -> Mapping[str, Any]:
@@ -190,6 +169,7 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         settings = _settings(unit)
         loaded, assembled, rendered = (unit.output(name) for name in (
             "load.accepted_gate", "report.assemble", "report.render"))
+        _verify_bindings(run_root, read_bound_json(run_root, loaded["gate_document"]))
         report = read_bound_json(run_root, assembled["artifact"])
         _check(_schemas(unit), "final-report", report)
         expected = render_markdown(report, evidence_ids=settings.markdown_evidence_ids,
@@ -198,8 +178,6 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
-        if _openvex(unit, loaded["gate_handoff"]) != report.get("openvex_export"):
-            raise IntegrityError("the OpenVEX acceptance changed before report publication")
         gaps = [f"{item['limitation_id']}: {item['statement']}"[:300] for item in report["limitations"]
                 if item["kind"] == "gap"]
         counts = report["summary"]["package_counts"]

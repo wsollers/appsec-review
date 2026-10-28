@@ -514,6 +514,10 @@ PROFILE_MODEL_JOBS: tuple[str, ...] = (
     "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
     "job_dependency_intelligence", "job_owasp_control_assessment")
 PROFILE_NAMED_MODEL_JOBS: tuple[str, ...] = ("job_poc_generation",)
+PROFILE_COMPLETION_MODEL_JOBS: Mapping[str, str] = MappingProxyType({
+    "job_remediation_planning": "writer",
+    "job_remediation_validation": "reviewer",
+})
 PROFILE_JOB_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
     "timeout_seconds": int, "retries": int})
@@ -581,7 +585,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
     A profile may set only: the ``model`` table of the five model-calling jobs
     (``PROFILE_JOB_MODEL_KEYS``), model profiles of the inference review
     (``PROFILE_REVIEW_MODEL_KEYS``), ``model_profile`` of its roles, and its ``budgets``
-    (``PROFILE_BUDGET_KEYS``), plus the two explicit lane exploration settings. Every other key,
+    (``PROFILE_BUDGET_KEYS``), the two lane exploration settings, team capacity and active-claim cap. Every other key,
     wrong type and empty table is rejected by name.
     """
     from .inference_review import JOB_ID, parse_team_package_budget
@@ -605,7 +609,8 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
         return [f"{field}.{key}" for key in values]
 
     root = table(document, "", {"jobs"})
-    jobs = table(root["jobs"], "jobs", {*PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, JOB_ID})
+    jobs = table(root["jobs"], "jobs", {
+        *PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, *PROFILE_COMPLETION_MODEL_JOBS, JOB_ID})
     keys: list[str] = []
     for job_id in sorted(jobs):
         field = f"jobs.{job_id}"
@@ -629,7 +634,15 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                     raise ValueError(f"configuration profile model profile name is invalid: {name}")
                 keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
             continue
-        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes"})
+        if job_id in PROFILE_COMPLETION_MODEL_JOBS:
+            model_field = PROFILE_COMPLETION_MODEL_JOBS[job_id]
+            settings = table(job["settings"], f"{field}.settings", {model_field})
+            keys += typed(settings[model_field], f"{field}.settings.{model_field}", PROFILE_REVIEW_MODEL_KEYS)
+            continue
+        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes", "teams", "rounds"})
+        for section, key in (("teams", "review_teams"), ("rounds", "max_active_claims")):
+            if section in settings:
+                keys += typed(settings[section], f"{field}.settings.{section}", {key: int})
         if "lanes" in settings:
             keys += typed(settings["lanes"], f"{field}.settings.lanes",
                           {"exploration_enabled": bool, "exploration_reserve": int})
@@ -682,9 +695,14 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
             for name, values in settings["models"].items():
                 base_table((*named, name)).update(values)
             continue
+        if job_id in PROFILE_COMPLETION_MODEL_JOBS:
+            model_field = PROFILE_COMPLETION_MODEL_JOBS[job_id]
+            base_table(("jobs", job_id, "settings", model_field)).update(settings[model_field])
+            continue
         review = ("jobs", job_id, "settings")
-        if "lanes" in settings:
-            base_table((*review, "lanes")).update(settings["lanes"])
+        for section in ("lanes", "teams", "rounds"):
+            if section in settings:
+                base_table((*review, section)).update(settings[section])
         for name, values in settings.get("models", {}).items():
             models = base_table((*review, "models"))
             models.setdefault(name, {}).update(values)
@@ -1113,6 +1131,18 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_inference_security_review":
             from .inference_review import parse_inference_review_settings
             typed_settings = parse_inference_review_settings(settings)
+        elif job_id == "job_dossier_publication":
+            from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
+            typed_settings = DossierPublicationSettings.from_mapping(settings)
+        elif job_id == "job_openvex_export":
+            from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+            typed_settings = OpenVexExportSettings.from_mapping(settings)
+        elif job_id == "job_remediation_planning":
+            from .remediation import RemediationPlanningSettings
+            typed_settings = RemediationPlanningSettings.from_mapping(settings)
+        elif job_id == "job_remediation_validation":
+            from .remediation import RemediationValidationSettings
+            typed_settings = RemediationValidationSettings.from_mapping(settings)
         elif job_id == "job_owasp_control_assessment":
             from .owasp import parse_settings as parse_owasp_settings
             typed_settings = parse_owasp_settings(settings)
@@ -1122,9 +1152,6 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_evidence_collection":
             from .evidence_collection import parse_evidence_collection_settings
             typed_settings = parse_evidence_collection_settings(settings)
-        elif job_id == "job_openvex_export":
-            from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
-            typed_settings = OpenVexExportSettings.from_mapping(settings)
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -1141,6 +1168,11 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         for prerequisite in ("job_final_publication_gate", "job_inference_security_review"):
             if prerequisite not in jobs or jobs[prerequisite].settings.get("enabled", True) is not True:
                 raise ValueError(f"enabled job_openvex_export requires enabled {prerequisite}")
+    validation = jobs.get("job_remediation_validation")
+    planning = jobs.get("job_remediation_planning")
+    if (validation is not None and validation.settings["enabled"]
+            and (planning is None or not planning.settings["enabled"])):
+        raise ValueError("job_remediation_validation requires enabled job_remediation_planning")
     codeql_job = jobs.get("job_codeql_analysis")
     if codeql_job is not None:
         # One run-bound seeding definition: CodeQL's export_queries is the source, every other seeded

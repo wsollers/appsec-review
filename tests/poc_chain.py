@@ -1,15 +1,15 @@
-"""An offline review -> gate -> PoC job -> report chain for the job_poc_generation tests.
+"""An offline review -> PoC -> gate -> report chain for the job_poc_generation tests.
 
 The scripted inference review runs over the fixture accepted index set (no model, container or network);
-``poc_candidates`` is then written into the accepted review handoff exactly where the judge work will
-produce it, the gate is run over that handoff, and ``job_poc_generation`` runs with injected edges: a
+``poc_candidates`` can be replaced to exercise candidate contracts, and ``job_poc_generation`` runs with injected edges: a
 scripted writer, a recording fake build executor, an accepted-build lookup over a copy of cpp-multivuln
-and a stub package view. The report then reads the PoC handoff when it exists.
+and a stub package view. The report reads only the gate's certified snapshot.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 import dataclasses
+import gc
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -45,6 +45,7 @@ def poc_tables(**overrides: int) -> str:
     start = text.index("[jobs.job_poc_generation]\n")
     end = text.index("# Final report publication (docs/operations/final-report.md)")
     block = text[start:end]
+    block = block.replace("enabled = false", "enabled = true", 1)
     for key, value in overrides.items():
         assert f"\n{key} = " in block, key
         block = re.sub(rf"(?m)^{key} = .*$", f"{key} = {value}", block, count=1)
@@ -102,7 +103,6 @@ class PocChain:
     snapshot: Path
     findings: list[dict[str, Any]]
     packages: list[str]
-    schema_root: Path | None = None
     built: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -114,6 +114,7 @@ class PocChain:
         return self.base.parent / f"{self.base.name}-accepted-workspace"
 
     def restore(self) -> None:
+        gc.collect()
         shutil.rmtree(self.base)
         shutil.copytree(self.snapshot, self.base)
 
@@ -150,14 +151,10 @@ class PocChain:
         return entry
 
     def prepare(self, candidates: Sequence[Mapping[str, Any]] | None) -> None:
-        """Restore the accepted review, write ``poc_candidates`` into its handoff and run the gate over it."""
+        """Restore the review; optional candidate mutations exercise strict consumer integrity checks."""
         self.restore()
         if candidates is not None:
             self.inject(candidates)
-        from appsec_review.jobs.job_final_publication_gate import build_job as build_gate
-
-        run_job(self.config, build_gate(repository_root=self.schema_root), self.fixture.run_id,
-                self.upstream(JOB), self.env)
 
     def inject(self, candidates: Sequence[Mapping[str, Any]] | None) -> None:
         pointer_path = self.run_root / "data" / "jobs" / JOB / "latest.json"
@@ -193,11 +190,17 @@ class PocChain:
 
     def run_poc(self, writer, executor=None, *, env: Mapping[str, str] | None = None, **kwargs):
         job = self.job(writer, executor, **kwargs)
-        return run_job(self.config, job, self.fixture.run_id, self.upstream(GATE), {**self.env, **dict(env or {})})
+        return run_job(self.config, job, self.fixture.run_id, self.upstream(JOB), {**self.env, **dict(env or {})})
 
-    def run_report(self):
-        upstream = self.upstream(POC) or self.upstream(GATE)
-        return run_job(self.config, report_job(), self.fixture.run_id, upstream, self.env)
+    def run_gate(self):
+        from appsec_review.jobs.job_final_publication_gate import build_job as build_gate
+        return run_job(self.config, build_gate(repository_root=ROOT), self.fixture.run_id,
+                       {**self.upstream(JOB), **self.upstream(POC)}, self.env)
+
+    def run_report(self, *, refresh_gate=True):
+        if refresh_gate:
+            self.run_gate()
+        return run_job(self.config, report_job(), self.fixture.run_id, self.upstream(GATE), self.env)
 
     def summary(self) -> dict[str, Any]:
         return self.read(POC, "publish.publish_handoff", "poc-generation.json")
@@ -236,8 +239,7 @@ def load_chain(base: Path, meta: Path) -> PocChain:
     fixture = FixtureRun(**{name: (Path(value) if "Path" in str(types[name]) else value)
                             for name, value in record["fixture"].items()})
     chain = PocChain(base, fixture, Path(record["config"]), record["env"], base.parent / f"{base.name}-snapshot",
-                     record["findings"], record["packages"],
-                     ROOT)
+                     record["findings"], record["packages"])
     chain.restore()
     return chain
 
@@ -252,8 +254,7 @@ def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
            "APPSEC_C7_SCENARIO": str(write_scenario(logs, fixture.ids, calls=str(logs / "calls.jsonl"),
                                                     captures=str(logs / "captures")))}
     run_job(config, review_job(), fixture.run_id, env=env)
-    chain = PocChain(base, fixture, config, env, base.parent / f"{base.name}-snapshot", [], [],
-                     ROOT)
+    chain = PocChain(base, fixture, config, env, base.parent / f"{base.name}-snapshot", [], [])
     handoff = chain.handoff(JOB)
     review = json.loads((fixture.run_root / handoff["outputs"]["publication.publish_handoff"]["artifact"]["path"]
                          ).read_text(encoding="utf-8"))

@@ -57,6 +57,8 @@ def parser() -> argparse.ArgumentParser:
                      help="target checkout for target-reading jobs (default: APPSEC_REVIEW_TARGET)")
     run.add_argument("--upstream-from-run", action="store_true",
                      help="bind the run's accepted handoffs of the upstream jobs wave1_review would pass")
+    run.add_argument("--admit-manual-poc", action="store_true",
+                     help="explicitly bind a manually run, disabled PoC job when rerunning the final gate")
 
     def target_choice(command: argparse.ArgumentParser) -> None:
         choice = command.add_mutually_exclusive_group(required=True)
@@ -124,6 +126,9 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if getattr(args, "admit_manual_poc", False) and (
+            args.job_id != "job_final_publication_gate" or not args.upstream_from_run or not args.run_id):
+        parser().error("--admit-manual-poc requires run job_final_publication_gate --run-id --upstream-from-run")
     config = load_config(args.config, profile=args.profile)
     if args.command == "schedules":
         schedules = {
@@ -292,7 +297,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.upstream_from_run:
         if not args.run_id:
             parser().error("--upstream-from-run requires --run-id")
-        entry = next((item for item in describe_wave1(config, registry, include=MANUAL_JOB_IDS & {args.job_id})["jobs"]
+        included = MANUAL_JOB_IDS & {args.job_id}
+        if args.admit_manual_poc:
+            included = included | {"job_poc_generation"}
+        entry = next((item for item in describe_wave1(config, registry, include=included)["jobs"]
                       if item["job_id"] == args.job_id), None)
         if entry is None:
             raise ValueError(f"job is not in wave1_review: {args.job_id}")

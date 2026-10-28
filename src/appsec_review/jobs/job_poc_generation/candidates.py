@@ -1,8 +1,7 @@
 """``poc_candidates`` of the accepted inference-review handoff (review-judge-and-poc.md, section 4).
 
 The producer is the judge work of ``job_inference_security_review``; this module only reads what that
-section documents, strictly. A handoff without the field is an older run: the job completes with the
-named gap ``no_poc_candidates``. A present but malformed field is an integrity failure, because the
+section documents, strictly. A missing or malformed field is an integrity failure, because the
 handoff is hash-bound and an entry that does not match the documented shape cannot be repaired here.
 
 Each entry carries ``claim_id``, ``package_id``, ``state``, ``judge_verdict``, the ``poc_basis``
@@ -87,9 +86,8 @@ def _text(value: Any, index: int, name: str, *, empty: bool = True) -> str:
 
 def _identities(value: Any, index: int, name: str, limit: int) -> tuple[str, ...]:
     if (not isinstance(value, list) or len(value) > limit
-            or any(not isinstance(item, str) or not ENTITY_ID.fullmatch(item) for item in value)
-            or len(set(value)) != len(value)):
-        raise _fail(index, f"{name} must be at most {limit} unique entity identities")
+            or any(not isinstance(item, str) or not ENTITY_ID.fullmatch(item) for item in value)):
+        raise _fail(index, f"{name} must be at most {limit} resolved entity identities")
     return tuple(value)
 
 

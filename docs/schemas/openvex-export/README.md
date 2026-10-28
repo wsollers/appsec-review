@@ -1,9 +1,13 @@
 # OpenVEX shared contracts
 
-These shared contracts are used by the implemented, disabled-by-default exporter, its
-accepted-output reader, final-report integration and metrics. The authoritative design is
-[OpenVEX findings export](../../architecture/openvex-export.md); verification scope and
-remaining manual checks are in the [implementation record](../../reviews/openvex-export-implementation.md).
+These are **Wave 0 contracts, not an installed exporter**. No registry, dispatch, TOML,
+runtime, report, telemetry aggregation or installed-resource wiring is introduced here.
+The export design is [OpenVEX findings export](../../architecture/openvex-export.md).
+For upstream publication contracts, the later
+[evidence-completion architecture](../../architecture/evidence-completion-and-remediation.md)
+is authoritative: accepted review `/3`, one gate `/2` after completion producers, and a
+gate-only report `/2`. These shared contracts are reconciled against exact candidate
+`7f4c9b0a1e099fd507c33611f78c2cc890f05a5f`; they do not implement or alter that graph.
 
 The official OpenVEX v0.2.0 schema is retained byte-for-byte under `upstream/`, at commit
 `61b5f885d0f481f48683c93345e49ef1a6e9fdff`. Its SHA-256 is
@@ -39,20 +43,18 @@ inference settings hash) and `references`. Its JSON includes that explicit deriv
 Verified inputs expose `total_input_bytes` and serialize with
 `appsec-review/openvex-verified-inputs/1`. Inventory paths are unique and sorted, cover
 every provenance/gate/finding/score/evidence reference and are bounded individually and
-in aggregate. The input verifier additionally enforces **lower configured**
+in aggregate. Gate inputs and every nested capability/attachment reference must also
+belong to the gate's certified bindings; merely adding them to the input inventory does
+not confer gate authority. The gate schema must be the current central `/2` identity;
+legacy `/1` and its `unavailable_inputs` projection are not accepted.
+The input implementation must additionally enforce **lower configured**
 bounds, all accepted hashes/schemas/cross-identities and current pointer custody.
-Durable inventory excludes exact job `latest.json` admission pointers and
-`data/indices/accepted.json`: they remain measured, bounded and reproved internally,
-but legitimate pointer replacement must not corrupt historical exported evidence.
-The job adds eight immutable run-owned schema/license/lock snapshots. Accordingly,
-`total_input_bytes` describes durable bindings, not all operational metadata read.
 Synthetic record construction is not an acceptance API.
 
-The implemented boundary signatures are:
+The Wave 1 implementation signatures are:
 
 ```python
 verify_inputs(run_root, settings, repository_root) -> VerifiedInputs
-reprove_inputs(run_root, verified_inputs, settings, repository_root) -> None
 assemble_export(verified_inputs, settings, exporter_release, *, output_prefix: str) -> ExportBundle
 validate_export(bundle, verified_inputs, settings) -> None
 ```
@@ -115,7 +117,14 @@ repository inference, target guidance, external publication or post-run approval
 `common.schema.json`, `manifest.schema.json` and `result.schema.json` define closed,
 bounded local objects. Manifest contains provenance, exact accepted review context,
 one source-snapshot product, every gate finding once, statement mappings, document/null,
-exact accounting and sorted path/hash bindings. Package rows nest the **unchanged**
+exact accounting and sorted path/hash bindings. The closed `review_context` now requires
+the exact gate `/2` `capabilities` and `attachments` in place of the removed `/1`
+`unavailable_inputs`, including compile-only nonexecution assurances and limitations of
+kind `notice`. Notices are preserved but do not become review gaps. Local OpenVEX
+manifest/result identities remain `/1` in this contracts-only pre-integration base; the
+validation-profile digest changes to bind the corrected context and upstream schema pins.
+No previously issued runtime export is being migrated.
+Package rows nest the **unchanged**
 accepted `finding_projection` with explicit `score_refs`, `evidence_refs`, disposition,
 reason and statement ID/null. Statement mappings bind package/claim, claim ledger,
 projection, settings, product/vulnerability IDs and resolving evidence references.
@@ -137,24 +146,27 @@ retained, **and** these transitive unchanged resources at sibling `final-report/
 ```text
 final-report/common.schema.json
 final-report/final-publication-gate.schema.json
+final-report/final-report.schema.json
 ```
 
-`SCHEMA_SHA256` pins all six schema files; `VALIDATION_PROFILE_SHA256` incorporates
-those pins and the versioned profile. Load them into an explicit offline
+The third resource is necessary because gate `/2` common definitions reference the
+report `/2` PoC attachment item schema. It does not introduce a report data dependency.
+`SCHEMA_SHA256` pins all seven schema files; `VALIDATION_PROFILE_SHA256` incorporates
+those pins and the versioned profile. The final-report resources are the original,
+deliberately changed source bytes, not normalized copies; the OpenVEX upstream schema,
+license and lock are unchanged. Load schemas into an explicit offline
 `referencing.Registry` and reject unknown resources; never use the review `SchemaSet`
-for upstream OpenVEX or retrieve the JSON-LD context. Source resources are authoritative
-when present, otherwise validation uses `sys.prefix/share/appsec-review/schemas/`.
-No newline normalization is applied to pins. A rebuilt wheel's installed-only schema
-fallback and pure canonical assembly/validation were checked, in addition to the synthetic
-offline-layout units. This does not establish full installed job execution: upstream
-review verification still requires the application's existing guidance/schema resources.
+for upstream OpenVEX or retrieve the JSON-LD context. Packaging and the actual installed
+wheel-resource test belong to integration; Wave 0 tests exercise the offline registry
+against the same synthetic installed directory layout.
 
 ## Test fixtures and verification
 
 `tests/openvex_support.py` exports `settings_mapping(*, enabled=False, **overrides)`,
 `enabled_settings(**overrides)`, `fixture_id(prefix, seed)`, `fixture_ref(name)`,
 `make_verified_inputs(buckets=("publishable",), *, settings=None, review_gap=False,
-run_id="run-openvex-fixture", gate_completed_at="2026-10-28T10:00:00-04:00")`,
+run_id="run-openvex-fixture", gate_completed_at="2026-10-28T10:00:00-04:00",
+completion_attachments=False)`,
 `example_bundle(inputs=None, settings=None, *, output_prefix=OUTPUT_PREFIX,
 exporter_release=RELEASE)`, `schema_registry(schema_root=SCHEMAS)` and
 `schema_validator(name, schema_root=SCHEMAS)`.
@@ -162,17 +174,20 @@ Fixtures are small, deterministic, schema-valid **synthetic in-memory verified-b
 examples**, not disk fixtures that claim to pass real acceptance/custody verification.
 `buckets` supports empty, all backlog/withheld, mixed and repeated bucket cases;
 `review_gap=True` retains an explicit review limitation. Example identities/advice exist
-only in test support, never as production defaults.
+only in test support, never as production defaults. The default fixture binds both
+lead/hunt package-set and manifest references plus the review-owned chain manifest even
+when chain scope is empty. `completion_attachments=True` requires at least two
+publishable findings and adds a qualified chain, compile-failed PoC, manual remediation
+planning/validation and dossier projections with exact per-capability counts and nested
+artifact references. These attachments never change accepted finding state or OpenVEX
+eligibility. All original public record fields and function signatures remain unchanged;
+only the synthetic fixture has the additional optional keyword.
 
 Focused Windows unit command (explicitly authorized for this isolated worktree):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q tests\test_openvex_contracts.py tests\test_openvex_settings.py --basetemp=test/tmp/openvex-contracts
+.\.venv\Scripts\python.exe -m pytest -q tests\test_openvex_contracts.py tests\test_openvex_settings.py --basetemp=test/tmp/openvex-contracts-gate2
 ```
 
-`tests/openvex_input_support.py` additionally provides `AcceptedInputDisk`, a small
-hash-bound filesystem fixture with an explicit `load_accepted_review` authority double.
-Focused job/report handler units and the actual accepted-output-reader/metrics boundary
-use it without claiming a complete real review chain. The implementation record lists
-the delivered selectors and results. Integration, acceptance and live Dagster runs remain
-manual; passing these units does not establish those checks.
+Integration, acceptance and live Dagster runs remain manual. Unit boundary examples
+establish neither real-run acceptance nor runtime/report/metrics integration.

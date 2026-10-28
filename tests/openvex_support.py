@@ -6,6 +6,7 @@ separately establish acceptance/custody; these fixtures start at its verified-st
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -16,6 +17,9 @@ from referencing import Registry, Resource
 from referencing.exceptions import NoSuchResource
 
 from appsec_review.jobs.job_final_publication_gate import classify as classifier
+from appsec_review.jobs.job_final_publication_gate.attachments import capability
+from appsec_review.jobs.completion_contracts import CompletionCapability, nonexecution_assurance
+from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA
 from appsec_review.jobs.job_openvex_export import contracts as c
 from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
 from appsec_review.review import ship_block
@@ -107,13 +111,73 @@ def make_verified_inputs(
     buckets: Sequence[c.GateBucket | str] = (c.GateBucket.PUBLISHABLE,), *,
     settings: OpenVexExportSettings | None = None, review_gap: bool = False,
     run_id: str = "run-openvex-fixture", gate_completed_at: str = "2026-10-28T10:00:00-04:00",
+    completion_attachments: bool = False,
 ) -> c.VerifiedInputs:
     settings = settings or enabled_settings()
     findings = tuple(_finding(index, c.GateBucket(bucket)) for index, bucket in enumerate(buckets))
     refs = {name: fixture_ref(name) for name in (
         "gate-handoff", "review-handoff", "review", "scope", "manifest", "configuration-manifest",
         "configuration", "claim-ledger", "projection", "coverage", "lead-manifest", "hunt-manifest", "policy",
+        "lead-package-set", "hunt-package-set", "lead-package", "hunt-package", "chain-manifest",
     )}
+    capabilities = {name.value: capability(False) for name in CompletionCapability}
+    capabilities["attack_chains"] = capability(True, summary=refs["chain-manifest"].to_json())
+    attachments: dict[str, list[dict[str, Any]]] = {name.value: [] for name in CompletionCapability}
+    if completion_attachments:
+        eligible = [finding for finding in findings if finding.bucket == c.GateBucket.PUBLISHABLE]
+        if len(eligible) < 2:
+            raise ValueError("the synthetic completion snapshot requires two publishable findings")
+        chain_id = fixture_id("chain", "completion")
+        refs["chain"] = fixture_ref("chain")
+        for finding in eligible[:2]:
+            findings = tuple(replace(item, projection={**c.json_body(item.projection), "attack_chains": [chain_id]})
+                             if item.finding_package_id == finding.finding_package_id else item for item in findings)
+        attachments["attack_chains"] = [{
+            "chain_id": chain_id, "status": "qualified_supported",
+            "component_claim_ids": [finding.claim_id for finding in eligible[:2]],
+            "artifact": refs["chain"].to_json(), "gap_count": 1, "disposition": "assessed",
+        }]
+        capabilities["attack_chains"] = capability(True, summary=refs["chain-manifest"].to_json(), count=1, gaps=1)
+        finding = eligible[0]
+        for name in ("poc_generation", "remediation_planning", "remediation_validation", "dossiers"):
+            refs[f"{name}-handoff"] = fixture_ref(f"{name}-handoff")
+            refs[f"{name}-summary"] = fixture_ref(f"{name}-summary")
+            capabilities[name] = capability(True, handoff=refs[f"{name}-handoff"].to_json(),
+                                            summary=refs[f"{name}-summary"].to_json(),
+                                            count=1 if name == "poc_generation" else
+                                            len(eligible) + int(name == "dossiers"),
+                                            gaps=0 if name == "dossiers" else
+                                            1 if name == "poc_generation" else len(eligible))
+        poc_files = {name: fixture_ref(f"poc-{name}") for name in ("source", "compile", "readme", "provenance")}
+        refs.update({f"poc-{name}": reference for name, reference in poc_files.items()})
+        attachments["poc_generation"] = [{
+            "claim_id": finding.claim_id, "finding_package_id": finding.finding_package_id,
+            "status": "compile_failed", "description": "Compile-only fixture outcome. Nothing was executed.",
+            "functions": {"test_function": "test_fixture", "negative_control": "control_fixture"},
+            "files": {name: reference.to_json() for name, reference in poc_files.items()},
+            **nonexecution_assurance(),
+        }]
+        for name, key, status in (("remediation_planning", "plan", "manual_design_required"),
+                                   ("remediation_validation", "validation", "manual_validation_required")):
+            for index, item in enumerate(eligible):
+                refs[f"{key}-{index}"] = fixture_ref(f"{key}-{index}")
+                binding = {"claim_id": item.claim_id, "finding_package_id": item.finding_package_id,
+                           "sha256": item.reference.sha256}
+                attachments[name].append({
+                    "finding": binding, "status": status, key: refs[f"{key}-{index}"].to_json(),
+                    "gap_ids": ["synthetic_manual_review"], **nonexecution_assurance(),
+                })
+        for index, (kind, item) in enumerate(
+                [("confirmed_finding", item) for item in eligible] + [("poc", eligible[0])]):
+            dossier_files = {name: fixture_ref(f"dossier-{index}-{name}") for name in ("json", "latex", "pdf", "receipt")}
+            refs.update({f"dossier-{index}-{name}": reference for name, reference in dossier_files.items()})
+            attachments["dossiers"].append({
+                "dossier_id": fixture_id("dossier", str(index)), "kind": kind,
+                "finding": {"claim_id": item.claim_id, "finding_package_id": item.finding_package_id,
+                            "sha256": item.reference.sha256},
+                "status": "rendered", "gap_ids": [],
+                "files": {name: reference.to_json() for name, reference in dossier_files.items()},
+            })
     gaps = [fixture_id("gap", "coverage")] if review_gap else []
     counts = {"confirmed": sum(f.projection["state"] == "confirmed" for f in findings),
               "supported": sum(f.projection["state"] == "supported" for f in findings)}
@@ -147,10 +211,13 @@ def make_verified_inputs(
             "supported": [f.finding_package_id for f in findings if f.projection["state"] == "supported"],
         },
         "possible_duplicate_pairs": 0, "packages": [c.json_body(f.projection) for f in findings],
+        "capabilities": capabilities, "attachments": attachments,
         "gap_ids": gaps,
-        "bindings": sorted([ref.to_json() for ref in refs.values()], key=lambda ref: ref["path"]),
+        "bindings": sorted([ref.to_json() for name, ref in refs.items() if name != "gate-handoff"] + [
+            ref.to_json() for finding in findings
+            for ref in (finding.reference, *finding.score_refs, *finding.evidence_refs)], key=lambda ref: ref["path"]),
     }
-    gate = classifier.gate_document("appsec-review/final-publication-gate/1", inputs, classifier.classify(inputs))
+    gate = classifier.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, inputs, classifier.classify(inputs))
     gate_ref = c.ArtifactRef("data/fixtures/gate.json", c.json_sha256(gate))
     provenance = c.ExportProvenance(
         refs["gate-handoff"], gate_ref, refs["review-handoff"], refs["review"], refs["scope"], refs["manifest"],
@@ -235,7 +302,7 @@ def example_bundle(inputs: c.VerifiedInputs | None = None, settings: OpenVexExpo
         },
         "review_context": {key: c.json_body(gate[key]) for key in (
             "review", "accounting", "ship_block", "verification", "coverage", "limitations",
-            "gap_ids", "unavailable_inputs", "status")},
+            "gap_ids", "capabilities", "attachments", "status")},
         "products": [{
             **inputs.source.to_json(), "product_id": product,
             "accepted_manifest": provenance.accepted_manifest.to_json(),

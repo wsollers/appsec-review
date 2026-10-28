@@ -58,10 +58,11 @@ def _repository_document() -> dict:
 
 
 def _repository_model_jobs() -> set[str]:
-    """Jobs whose central settings declare a ``model`` table or ``models`` tables."""
+    """Jobs whose central settings declare inference, writer or reviewer model tables."""
     jobs = _repository_document()["jobs"]
     return {job_id for job_id, job in jobs.items() if job_id not in PENDING_JOBS and (
         isinstance(job.get("settings", {}).get("model"), dict)
+        or any(isinstance(job.get("settings", {}).get(name), dict) for name in ("writer", "reviewer"))
         or any(isinstance(item, dict) for item in job.get("settings", {}).get("models", {}).values()))}
 
 

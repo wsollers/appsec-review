@@ -30,7 +30,9 @@
     "completeness_reviewer": {"responsibility": "Identify review-coverage gaps across units, strategies, and personas.", "path": "pipeline/prompt-fragments/roles/completeness_reviewer.md", "lens": "generative", "output_schema": "completeness-result", "outputs": ["coverage_gap", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["coverage", "find", "query_dataset_inventory"]},
     "lead_triager": {"responsibility": "Assign one priority severity to each scanner lead whose scanner reported none, from the rule and a bounded excerpt.", "path": "pipeline/prompt-fragments/roles/lead_triager.md", "lens": "skeptical", "output_schema": "lead-triage-result", "outputs": [], "prohibited": ["accept_claim", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": []},
     "native_dependency_resolver": {"responsibility": "Resolve one bounded native dependency candidate to plausible public repository context."},
-    "poc_writer": {"responsibility": "Write one benign, bounded unit-test function with a negative control that demonstrates an agreed finding; never run by the pipeline."}
+    "poc_writer": {"responsibility": "Write one benign, bounded unit-test function with a negative control that demonstrates an agreed finding; never run by the pipeline."},
+    "remediation_writer": {"responsibility": "Propose inert exact-byte corrections and safe regression specifications for accepted confirmed findings only."},
+    "remediation_reviewer": {"responsibility": "Independently assess one inert correction and bounded static or compile-check evidence without declaring a runtime fix."}
   },
   "personas": {
     "devops_engineer": {"viewpoint": "Reproducible automation, immutable containers, dependencies, CI behavior, and diagnosable operational failures."},
@@ -71,7 +73,24 @@
     "generic": {"path": "pipeline/prompt-fragments/stacks/generic.md"}
   },
   "tasks": {
-    "inference-security-review": {"lead_red_stack": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_stack.md"}, "lead_red_preconditions": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_preconditions.md"}, "lead_red_failure_modes": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_failure_modes.md"}, "variant": {"path": "pipeline/guidance/tasks/inference-security-review/variant.md"}, "sink_up": {"path": "pipeline/guidance/tasks/inference-security-review/sink_up.md"}, "entry_down": {"path": "pipeline/guidance/tasks/inference-security-review/entry_down.md"}, "control_gap": {"path": "pipeline/guidance/tasks/inference-security-review/control_gap.md"}, "persona_sweep": {"path": "pipeline/guidance/tasks/inference-security-review/persona_sweep.md"}, "blue_control": {"path": "pipeline/guidance/tasks/inference-security-review/blue_control.md"}, "blue_reachability": {"path": "pipeline/guidance/tasks/inference-security-review/blue_reachability.md"}, "blind_verifier": {"path": "pipeline/guidance/tasks/inference-security-review/blind_verifier.md"}, "lead_severity": {"path": "pipeline/guidance/tasks/inference-security-review/lead_severity.md"}, "adjudicate_claim": {"path": "pipeline/guidance/tasks/inference-security-review/adjudicate_claim.md"}},
+    "inference-security-review": {
+      "lead_red_stack": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_stack.md"},
+      "lead_red_preconditions": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_preconditions.md"},
+      "lead_red_failure_modes": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_failure_modes.md"},
+      "variant": {"path": "pipeline/guidance/tasks/inference-security-review/variant.md"},
+      "sink_up": {"path": "pipeline/guidance/tasks/inference-security-review/sink_up.md"},
+      "entry_down": {"path": "pipeline/guidance/tasks/inference-security-review/entry_down.md"},
+      "control_gap": {"path": "pipeline/guidance/tasks/inference-security-review/control_gap.md"},
+      "persona_sweep": {"path": "pipeline/guidance/tasks/inference-security-review/persona_sweep.md"},
+      "blue_control": {"path": "pipeline/guidance/tasks/inference-security-review/blue_control.md"},
+      "blue_reachability": {"path": "pipeline/guidance/tasks/inference-security-review/blue_reachability.md"},
+      "blind_verifier": {"path": "pipeline/guidance/tasks/inference-security-review/blind_verifier.md"},
+      "lead_severity": {"path": "pipeline/guidance/tasks/inference-security-review/lead_severity.md"},
+      "adjudicate_claim": {"path": "pipeline/guidance/tasks/inference-security-review/adjudicate_claim.md"},
+      "chain_composer": {"path": "pipeline/guidance/tasks/inference-security-review/chain_composer.md"},
+      "chain_refuter": {"path": "pipeline/guidance/tasks/inference-security-review/chain_refuter.md"},
+      "chain_weakest_link_verifier": {"path": "pipeline/guidance/tasks/inference-security-review/chain_weakest_link_verifier.md"}
+    },
     "dependency-intelligence": {"native_repository_resolution": {"path": "pipeline/guidance/tasks/dependency-intelligence/native_repository_resolution.md"}}
   },
   "persona_migrations": {

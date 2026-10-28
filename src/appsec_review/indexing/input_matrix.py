@@ -118,12 +118,10 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("review_package",), ()),
     ("protected_runtime_material", ("runtime",), "protected", (), ("query_datasets", "coverage")),
     ("review_decisions", ("job_inference_security_review",), "extend", ("review_package",), ("coverage",)),
-    # Decision 8: the review handoff's downstream consumers, fixed by name. Each reads the inference
-    # review handoff (``PLANNED_CONSUMERS`` in its datasets module) and produces the named source. The
-    # remediation jobs are not built; the publication gate and the final report are, and no review
-    # reads either as an input.
-    ("remediation_plans", ("planned:job_remediation_planning",), "planned", (), ()),
-    ("remediation_validations", ("planned:job_remediation_validation",), "planned", (), ()),
+    ("attack_chains", ("job_inference_security_review",), "artifact_only", (), ("coverage",)),
+    ("remediation_plans", ("job_remediation_planning",), "artifact_only", (), ("coverage",)),
+    ("remediation_validations", ("job_remediation_validation",), "artifact_only", (), ("coverage",)),
+    ("dossiers", ("job_dossier_publication",), "protected", (), ("coverage",)),
     ("publication_gate_decisions", ("job_final_publication_gate",), "artifact_only", (), ("coverage",)),
     ("openvex_exports", ("job_openvex_export",), "protected", (), ("coverage",)),
     ("final_report_publications", ("job_final_report_publication",), "artifact_only", (), ("coverage",)),
@@ -132,16 +130,18 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("poc_generation", ("job_poc_generation",), "artifact_only", (), ("coverage",)),
 )
 
-# Decision 8: the downstream jobs and the producers whose handoffs each consumes, in graph order.
-# ``planned:`` names resolve through :func:`resolve_producer` once the job is registered. The gate
-# currently consumes only the review handoff; it will also consume the remediation validation handoff
-# once that job exists, and the remediation jobs are the only ones still planned.
+# Downstream accepted-handoff consumers, in publication order.
 PLANNED_CONSUMERS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("planned:job_remediation_planning", ("job_inference_security_review",)),
-    ("planned:job_remediation_validation", ("job_inference_security_review", "planned:job_remediation_planning")),
-    ("job_final_publication_gate", ("job_inference_security_review",)),
+    ("job_poc_generation", ("job_inference_security_review", "job_language_build")),
+    ("job_remediation_planning", ("job_inference_security_review", "job_poc_generation")),
+    ("job_remediation_validation", ("job_inference_security_review", "job_remediation_planning")),
+    ("job_dossier_publication", ("job_inference_security_review", "job_poc_generation",
+                                "job_remediation_planning", "job_remediation_validation")),
+    ("job_final_publication_gate", ("job_inference_security_review", "job_poc_generation",
+                                  "job_remediation_planning", "job_remediation_validation",
+                                  "job_dossier_publication")),
     ("job_openvex_export", ("job_final_publication_gate", "job_inference_security_review")),
-    ("job_final_report_publication", ("job_final_publication_gate", "job_openvex_export")),
+    ("job_final_report_publication", ("job_final_publication_gate",)),
 )
 
 
