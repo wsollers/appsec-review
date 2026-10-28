@@ -552,7 +552,8 @@ See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
 scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` is an opt-in
 Haiku development profile using a separate Copilot subscription login. Other values are errors. The
-stack's profile is fixed when its containers are created, so switching needs a stack restart.
+stack's profile is the container default; `review-start --profile` picks another profile of the same
+provider family (Claude or Copilot) for one run, and a family switch needs a stack restart.
 
 | Profile | Models | Limits |
 | --- | --- | --- |

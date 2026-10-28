@@ -21,6 +21,7 @@ from dagster import (
 
 from appsec_review.config import AppConfig, load_config
 from appsec_review.config.native_dagster import reject_uncommissioned_native_execution
+from appsec_review.config.run_selection import RunConfigurations, configurations
 from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import Job, job_is_enabled, plan_jobs
@@ -139,10 +140,11 @@ def _pool_for(unit_id: str, job_id: str | None = None) -> str:
     return "lifecycle" if unit_id.startswith("__") else "application"
 
 
-def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
+def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | RunConfigurations,
                          runner_factory: RunnerFactory, *, node_namespace: str = "",
                          job_dependencies: Mapping[str, tuple[str, ...]] | None = None):
-    plan_jobs(jobs, config)
+    configs = configurations(config)
+    plan_jobs(jobs, configs.base)
     dependencies_by_job = dict(job_dependencies or {})
     if not dependencies_by_job:
         dependencies_by_job = {job.job_id: (() if position == 0 else (jobs[position - 1].job_id,))
@@ -160,8 +162,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
             @op(name=_node_name(selected, "begin", node_namespace), ins=dict(ins), out=Out(dict),
                 tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
                 description=f"Claim and validate an application attempt for {selected.job_id}.")
-            @guarded_op(config)
+            @guarded_op(configs)
             def begin(context, **inputs):
+                config = configs.for_run(context.dagster_run)
                 upstream_values = [dict(value) for value in inputs.values()]
                 run_ids = {str(value.get("run_id")) for value in upstream_values if value.get("run_id")}
                 if len(run_ids) > 1:
@@ -231,8 +234,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     out=Out(Nothing), tags={"appsec/pool": _pool_for(selected_unit.unit_id, selected_job.job_id)},
                     pool=_pool_for(selected_unit.unit_id, selected_job.job_id),
                     description=f"Execute or reuse {selected_job.job_id}.{selected_unit.unit_id}.")
-                @guarded_op(config)
+                @guarded_op(configs)
                 def execute(context, claim, **_dependencies):
+                    config = configs.for_run(context.dagster_run)
                     correlated = {**dict(claim), "orchestration": {
                         **dict(claim.get("orchestration", {})), "node": context.op.name}}
                     output = runner_factory(config).execute_or_reuse_unit(
@@ -257,8 +261,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
             @op(name=_node_name(selected, "finalize", node_namespace), ins=dict(selected_ins), out=Out(dict),
                 tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
                 description=f"Validate and publish the accepted handoff for {selected.job_id}.")
-            @guarded_op(config)
+            @guarded_op(configs)
             def finalize(context, claim, **_units):
+                config = configs.for_run(context.dagster_run)
                 outcome = runner_factory(config).finalize_attempt(selected, claim)
                 context.instance.add_run_tags(context.run_id, {
                     f"appsec/{selected.job_id}/attempt": outcome["status"]["attempt_id"],
@@ -332,7 +337,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
 
     return generated_graph.to_job(
         description=f"Application-owned integrity lifecycle exposed as the real {name} Dagster DAG.",
-        executor_def=execution_definition(config),
+        executor_def=execution_definition(configs),
     )
 
 

@@ -552,6 +552,9 @@ class AppConfig:
     profile_path: Path | None = None
     profile_sha256: str | None = None
     review_policy: ReviewPolicy = ReviewPolicy()
+    # How the profile and overlay were chosen: the process environment, or a run's launch tags
+    # (``appsec_review.config.run_selection``). Recorded in a run's configuration manifest; not hashed.
+    selection_source: str = "environment"
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -769,9 +772,10 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     ``configuration_profile``. Layer order: base, profile, capacity overlay.
 
     The overlay is ``overlay`` when given, otherwise the local path or file URI named by
-    ``APPSEC_REVIEW_CONFIG_OVERLAY`` when that variable is set and non-empty. It may set only
-    capacity keys (see ``overlay_capacity_keys``); it is merged before validation and frozen,
-    with its own hash, into the resolved configuration.
+    ``APPSEC_REVIEW_CONFIG_OVERLAY`` when that variable is set and non-empty; ``overlay=""``
+    explicitly selects no overlay, whatever the variable says. It may set only capacity keys (see
+    ``overlay_capacity_keys``); it is merged before validation and frozen, with its own hash, into
+    the resolved configuration.
     """
     source = _config_source(path)
     repository_root = source.parent
@@ -790,7 +794,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         profile_sha256 = hashlib.sha256(profile_bytes).hexdigest()
         profile_record = {"layer": PROFILE_LAYER, "name": profile_name, "path": str(profile_source),
                           "sha256": profile_sha256, "keys": list(profile_keys), "document": profile_document}
-    overlay_value = overlay if overlay is not None else (os.environ.get(OVERLAY_ENVIRONMENT) or None)
+    overlay_value = (overlay or None) if overlay is not None else (os.environ.get(OVERLAY_ENVIRONMENT) or None)
     overlay_source: Path | None = None
     overlay_sha256: str | None = None
     overlay_record: dict[str, Any] | None = None

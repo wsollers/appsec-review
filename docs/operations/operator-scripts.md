@@ -122,12 +122,51 @@ locally instead.
 The profile selects the models and limits (`dev`: Haiku and today's limits; `prod`: Sonnet 5.5, an Opus 5.5
 verifier and larger limits; `copilot-dev`: Haiku through Copilot with unchanged dev limits;
 `copilot-prod`: Sonnet 5.5 with an Opus 5.5 verifier and judge through Copilot, retaining all prod limits;
-see [`model-profiles.md`](model-profiles.md)). Like the target it is container
-environment fixed at creation: the stack scripts print `profile: dev|prod|copilot-dev|copilot-prod` (and, for either production profile, a notice
+see [`model-profiles.md`](model-profiles.md)). The stack scripts set the container's default profile:
+they print `profile: dev|prod|copilot-dev|copilot-prod` (and, for either production profile, a notice
 that it uses the more capable models and larger token limits), carry the running value over on a plain
-restart, and `stack-status` shows it. `review-start --profile X` means "I expect X" and refuses (exit 3)
-with the `scripts/stack-restart --profile X` command when the running stack has another profile.
+restart, and `stack-status` shows it. `review-start --profile X` and `--overlay F` choose the profile
+and capacity overlay for that one run (see below).
 PowerShell: `-Profile dev|prod|copilot-dev|copilot-prod` on the same four scripts.
+
+### Per-run profile and overlay
+
+`review-start --profile X --overlay F` (`-Profile X -Overlay F`) applies to that run only; the stack
+is not restarted. Each value defaults first to what a resumed run (`--run-id`) recorded, then to the
+container's `APPSEC_REVIEW_PROFILE` / `APPSEC_REVIEW_CONFIG_OVERLAY`. `review-start` prints each choice with
+its source (`requested`, `recorded by run …` or `container default`) and launches with the Dagster tags
+`appsec/profile=<name>` and `appsec/overlay=<container path>|none`. The code location resolves the run's
+configuration from those tags with the same validation as the environment: a known profile, an overlay
+under `test/acceptance`, and the same profile and overlay allowlists. The resolved choice is recorded
+under `selection` (`profile`, `overlay`, `source`) in `runs/<run-id>/data/configuration/manifest.json`,
+and a resumed run refuses a different selection from the one it was bound to. Runs launched without
+the tags use the container environment, as before.
+
+Some values stay fixed per container and are refused instead of silently ignored:
+
+- The provider family. Copilot profiles need the `-copilot` image and compose overlay, so switching between
+  `dev`/`prod` and `copilot-dev`/`copilot-prod` is refused (exit 3) with the `scripts/stack-restart --profile X`
+  command. Within a family the switch is per run.
+- `--target` and `--recording`. They must match the container, as before.
+- Native execution. Its operator contract pins one configuration and resource budget, so any
+  differing selection is refused.
+- The `tree_sitter_ast` job. It builds its executor from the container configuration and refuses
+  tags that select another.
+
+`orchestration.dagster.pools.*` from an overlay applies to the selected run. The pools are tag
+concurrency limits of the run's own multiprocess executor (the instance has no pool configuration),
+so the run's executor is rebuilt with its values. Each run enforces its own limits; they are not
+shared across concurrent runs.
+
+**Resource budget guard.** Every run on the host shares `runs/metadata/resource-admission/leases.json`,
+which admits against the smallest limits recorded by any lease. A run whose `review_policy.resources`
+differ would silently clamp every concurrent run. When a run is active or the ledger holds leases,
+`review-start` resolves the new run's budget and compares it with each active run's budget (from that
+run's tags, defaulting to the container's selection) and with every recorded lease. It refuses
+(exit 3) on any difference and names the conflicts. `--force` does not override this: wait for the
+other runs or choose a matching selection. Overlays on `main` cannot yet set `review_policy.resources`,
+so today every selection shares one budget; the guard covers future overlays and leases from other
+launchers.
 
 `--purge-volumes` is separate and explicit. It prints the project's containers and volumes (the
 PostgreSQL database and the Dagster storage, with every run's history), refuses without `--yes`, and
@@ -244,7 +283,7 @@ containers, fixed when they were created. `review-start` therefore checks the re
 
 | Script | Purpose |
 | --- | --- |
-| `review-start [--target T] [--overlay F] [--recording M] [--run-id ID] [--stop-on-first-error] [--id-wait S] [--dry-run] [--force]` | Launch `wave1_review` and return at once. Prints the Dagster run id, the application run id (read back for up to `--id-wait` seconds, default 60, else "pending") and the URL. `--run-id` resumes an existing application run (it must exist under `runs/`) and cannot be combined with first-error mode. Refuses when the stack is down, an image pin has moved, or a run is active (unless `--force`). |
+| `review-start [--target T] [--profile P] [--overlay F] [--recording M] [--run-id ID] [--stop-on-first-error] [--id-wait S] [--dry-run] [--force]` | Launch `wave1_review` and return at once. Prints the Dagster run id, the application run id (read back for up to `--id-wait` seconds, default 60, else "pending") and the URL. `--profile`/`--overlay` select this run's profile and capacity overlay ([per run](#per-run-profile-and-overlay)); `--target`/`--recording` must match the container. `--run-id` resumes an existing application run (it must exist under `runs/`) and cannot be combined with first-error mode. Refuses when the stack is down, an image pin has moved, a run is active (unless `--force`), or the selected resource budget differs from an active run's or lease's (even with `--force`). |
 | `review-watch [--run ID] [--once] [--interval S]` | Poll the GraphQL API. Prints one line when each job starts (`[ 12.3 min] started codeql_analysis (14/33 jobs)`), one line per failed step, and a final line. Works for any run, whoever started it; `--run` takes a Dagster uuid or an application run id; without it the active run (else the latest). Exit 0 for `SUCCESS`, 1 for `FAILURE`/`CANCELED`. `--once` prints a snapshot and exits. |
 | `review-status [--limit N]` | Recent runs with status, application run id, start and duration, and for each active run its started and finished jobs and current steps. |
 | `review-stop [--now] [--yes] [--reason TEXT] [--dry-run]` | End the current review: lists every non-terminal run, then terminates them through `recover_runs.py`. Default policy `SAFE_TERMINATE`; `--now` uses `MARK_AS_CANCELED_IMMEDIATELY`, which marks runs canceled without waiting (their tool containers may keep running). Needs `--yes` when more than one run is affected. Nothing active is a no-op, exit 0. |

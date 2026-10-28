@@ -45,6 +45,10 @@ OVERLAY_VARIABLE = "APPSEC_REVIEW_CONFIG_OVERLAY"
 RECORDING_VARIABLE = "APPSEC_REVIEW_MODEL_RECORDING"
 PROFILE_VARIABLE = "APPSEC_REVIEW_PROFILE"
 DEFAULT_PROFILE = "dev"
+PROFILES = ("dev", "prod", "copilot-dev", "copilot-prod")
+PROFILE_TAG = "appsec/profile"
+OVERLAY_TAG = "appsec/overlay"
+NO_OVERLAY = "none"
 DEPLOY_VARIABLES = (TARGET_VARIABLE, OVERLAY_VARIABLE, RECORDING_VARIABLE, PROFILE_VARIABLE)
 PROFILE_NOTICE = ("profile {profile} uses the more capable models (Sonnet 5.5, Opus 5.5 verifier) and larger token limits; "
                   "see docs/operations/model-profiles.md")
@@ -217,26 +221,30 @@ def require_own_stack(containers: list[Container]) -> None:
                        "with this checkout's mounts)", REFUSED)
 
 
-def guard_active_runs(url: str, containers: list[Container], force: bool, action: str) -> None:
-    """Refuse to disturb a non-terminal run (multi-session-coordination: do not move what others use)."""
+def guard_active_runs(url: str, containers: list[Container], force: bool, action: str) -> list[dict]:
+    """Refuse to disturb a non-terminal run (multi-session-coordination: do not move what others use).
+
+    Returns the non-terminal runs that ``--force`` let through (empty when none or unverifiable).
+    """
     if not stack_running(containers):
-        return
+        return []
     try:
         active = active_only(list_runs(url))
     except OpsError as error:
         if force:
             say(f"warning: cannot verify active runs ({error}); continuing because of --force")
-            return
+            return []
         raise OpsError(f"refusing to {action}: cannot verify that no run is active ({error}). "
                        "Use --force only if you know nothing is running.", REFUSED) from error
     if not active:
-        return
+        return []
     listing = "; ".join(f"{run['runId']} {run['status']} {run['pipelineName']} "
                         f"app={tag_map(run).get('appsec/application_run_id', 'unallocated')}" for run in active)
     if not force:
         raise OpsError(f"refusing to {action}: {len(active)} non-terminal Dagster run(s): {listing}. "
                        "Wait for them (review-watch), end them (review-stop), or use --force.", REFUSED)
     say(f"warning: {action} with --force while {len(active)} run(s) are active: {listing}")
+    return active
 
 
 # -- lifecycle ------------------------------------------------------------------------------------
@@ -313,6 +321,17 @@ def add_deploy_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--recording", choices=("record", "replay", "off"), help="model recording mode")
     parser.add_argument("--profile", choices=("dev", "prod", "copilot-dev", "copilot-prod"),
                         help="runtime profile (Copilot profiles use a separate login; prod profiles use production limits)")
+
+
+def add_review_options(parser: argparse.ArgumentParser) -> None:
+    fixed = "must equal the running code-location's value (fixed at creation; change it with stack-restart)"
+    parser.add_argument("--target", help=f"review target: a name under targets/ or a container path; {fixed}")
+    parser.add_argument("--recording", choices=("record", "replay", "off"), help=f"model recording mode; {fixed}")
+    parser.add_argument("--profile", choices=PROFILES,
+                        help="runtime profile for this run only (default: a resumed run's recorded profile, else the "
+                             "container's); must keep the container's provider: dev/prod or copilot-dev/copilot-prod")
+    parser.add_argument("--overlay", help="capacity overlay under test/acceptance for this run only, or 'none' "
+                                          "(default: a resumed run's recorded overlay, else the container's)")
 
 
 # -- stack checks ---------------------------------------------------------------------------------
@@ -582,6 +601,105 @@ def webserver_and_code(containers: list[Container]) -> tuple[Container, Containe
     return services["webserver"], services["code-location"]
 
 
+def provider_family(profile: str) -> str:
+    return "copilot" if profile.startswith("copilot-") else "claude"
+
+
+def recorded_selection(run_id: str) -> tuple[str | None, str | None]:
+    """The profile and overlay a resumed application run was bound to (its configuration manifest)."""
+    manifest = ROOT / "runs" / run_id / "data" / "configuration" / "manifest.json"
+    try:
+        selection = json.loads(manifest.read_text(encoding="utf-8")).get("selection") or {}
+    except (OSError, ValueError):
+        return None, None
+    profile = selection.get("profile") if selection.get("profile") in PROFILES else None
+    overlay = selection.get("overlay")
+    if overlay is None:
+        return profile, ""
+    return profile, overlay if isinstance(overlay, str) and overlay.startswith(CONTAINER_ACCEPTANCE + "/") else None
+
+
+def run_selection(args: argparse.Namespace, code: Container) -> tuple[tuple[str, str], tuple[str, str]]:
+    """((profile, source), (container overlay path or '', source)) for this run.
+
+    An explicit option wins, then a resumed run's recorded choice, then the container's setting.
+    """
+    recorded = recorded_selection(args.run_id) if args.run_id else (None, None)
+    if args.profile is not None:
+        profile = (args.profile, "requested")
+    elif recorded[0]:
+        profile = (recorded[0], f"recorded by run {args.run_id}")
+    else:
+        profile = (running_value(code, PROFILE_VARIABLE), "container default")
+    if args.overlay is not None:
+        overlay = (resolve_overlay(args.overlay), "requested")
+    elif recorded[1] is not None:
+        overlay = (recorded[1], f"recorded by run {args.run_id}")
+    else:
+        overlay = (code.settings.get(OVERLAY_VARIABLE, ""), "container default")
+    container_profile = running_value(code, PROFILE_VARIABLE)
+    if provider_family(profile[0]) != provider_family(container_profile):
+        raise OpsError(f"profile {profile[0]} needs the {provider_family(profile[0])} provider, but the running "
+                       f"code-location uses {container_profile} ({provider_family(container_profile)}); the provider "
+                       f"image and login are fixed at creation: run scripts/stack-restart --profile {profile[0]} first.",
+                       REFUSED)
+    return profile, overlay
+
+
+def host_budget(profile: str, overlay: str):
+    """Resolve the run's configuration on the host (container overlay path mapped to test/acceptance)."""
+    from appsec_review.config import load_config
+
+    host_overlay = (str(ROOT / "test" / "acceptance" / overlay.removeprefix(CONTAINER_ACCEPTANCE + "/"))
+                    if overlay else "")
+    try:
+        return load_config(ROOT / "appsec-review.toml", profile=profile, overlay=host_overlay)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise OpsError(f"cannot resolve the resource budget of profile {profile}, overlay {overlay or 'none'} "
+                       f"to check it against active work: {error}", REFUSED) from error
+
+
+def guard_resource_budget(active: list[dict], code: Container, profile: str, overlay: str) -> None:
+    """Refuse (even with --force) a run whose resource budget differs from active runs or recorded leases.
+
+    The host lease ledger admits every action against the smallest budget any recorded lease carries, so
+    two budgets cannot coexist without one silently clamping the other.
+    """
+    ledger = ROOT / "runs" / "metadata" / "resource-admission" / "leases.json"
+    leases: dict = {}
+    if ledger.is_file():
+        try:
+            leases = json.loads(ledger.read_text(encoding="utf-8")).get("leases") or {}
+        except (OSError, ValueError, AttributeError) as error:
+            raise OpsError(f"cannot read the resource lease ledger {ledger}: {error}", REFUSED) from error
+    default = (running_value(code, PROFILE_VARIABLE), code.settings.get(OVERLAY_VARIABLE, ""))
+    others = []
+    for run in active:
+        tags = tag_map(run)
+        theirs = (tags.get(PROFILE_TAG, default[0]),
+                  "" if tags.get(OVERLAY_TAG) == NO_OVERLAY else tags.get(OVERLAY_TAG, default[1]))
+        if theirs != (profile, overlay):  # the same selection resolves to the same budget
+            others.append((run, theirs))
+    if not others and not leases:
+        return
+    from appsec_review.runtime.resources import budget_conflicts
+
+    mine = host_budget(profile, overlay)
+    budget = mine.review_policy.resources
+    conflicts = budget_conflicts(mine.runtime.metadata_dir, budget)
+    for run, theirs in others:
+        other = host_budget(*theirs).review_policy.resources
+        if other != budget:
+            conflicts.append(f"run {run['runId']} (profile {theirs[0]}, overlay {theirs[1] or 'none'}) "
+                             f"budget {other.view()} != requested {budget.view()}")
+    if conflicts:
+        raise OpsError("refusing to start a review whose review_policy.resources budget differs from active work; "
+                       "the shared lease ledger (runs/metadata/resource-admission/leases.json) admits against the "
+                       "smallest recorded budget, so one review would be silently clamped. --force does not override "
+                       "this: wait for that work to finish, or launch with a profile/overlay that has the same "
+                       "budget. Conflicts: " + "; ".join(conflicts), REFUSED)
+
+
 def cmd_review_start(args: argparse.Namespace) -> int:
     import review_run
 
@@ -602,10 +720,11 @@ def _review_start(args: argparse.Namespace) -> int:
     require_own_stack(containers)
     requested = requested_settings(args)
     for key, wanted in requested.items():
+        if key in (PROFILE_VARIABLE, OVERLAY_VARIABLE):
+            continue  # chosen per run below
         actual = running_value(code, key)
         if actual != wanted:
-            flag = {TARGET_VARIABLE: "--target", OVERLAY_VARIABLE: "--overlay", RECORDING_VARIABLE: "--recording",
-                    PROFILE_VARIABLE: "--profile"}[key]
+            flag = {TARGET_VARIABLE: "--target", RECORDING_VARIABLE: "--recording"}[key]
             raise OpsError(f"the running code-location has {key}={actual or '(unset)'}, not {wanted or '(unset)'}. "
                            f"The container fixes it at creation: run scripts/stack-restart {flag} <value> first.", REFUSED)
     if args.run_id:
@@ -613,7 +732,9 @@ def _review_start(args: argparse.Namespace) -> int:
             raise OpsError(f"--run-id {args.run_id!r} is not an application run id like 2026-10-21-0007", USAGE)
         if not (ROOT / "runs" / args.run_id).is_dir():
             raise OpsError(f"no application run runs/{args.run_id} to resume", NOT_FOUND)
-    guard_active_runs(args.url, containers, args.force, "start another review")
+    (profile, profile_source), (overlay, overlay_source) = run_selection(args, code)
+    active = guard_active_runs(args.url, containers, args.force, "start another review")
+    guard_resource_budget(active, code, profile, overlay)
     configuration = ROOT / "appsec-review.toml"
     if configuration.is_file():
         import review_run  # the documented helper: the image pin preflight stepwise.py also runs
@@ -629,7 +750,7 @@ def _review_start(args: argparse.Namespace) -> int:
     dagster_run_id = getattr(args, "dagster_run_id", None) or str(uuid4())
     identity = review_run.submission_identity(
         ROOT, target=code.settings.get(TARGET_VARIABLE) or f"{CONTAINER_TARGETS}/appsec-multi-vuln",
-        profile=running_value(code, PROFILE_VARIABLE), overlay=code.settings.get(OVERLAY_VARIABLE, ""),
+        profile=profile, overlay=overlay,
         recording=code.settings.get(RECORDING_VARIABLE, ""), image_id=code.image_id,
         project=project, url=args.url, application_run_id=args.run_id)
     safety_policy = None
@@ -642,6 +763,8 @@ def _review_start(args: argparse.Namespace) -> int:
     review_run.check_submission(ROOT, identity, dagster_run_id)
     tags = {"appsec/application_run_id": args.run_id} if args.run_id else {}
     tags["appsec/submission_identity"] = review_run.submission_identity_sha256(identity)
+    tags[PROFILE_TAG] = profile
+    tags[OVERLAY_TAG] = overlay or NO_OVERLAY
     if safety_policy is not None:
         tags["appsec/safety_identity"] = execution_safety.identity(safety_policy)
         tags["dagster/max_retries"] = "0"
@@ -651,12 +774,11 @@ def _review_start(args: argparse.Namespace) -> int:
     if safety_policy is not None:
         command += ["--config-json", json.dumps(
             {"execution": {"config": {"safety": safety_policy}}}, sort_keys=True)]
-    profile = running_value(code, PROFILE_VARIABLE)
-    say(f"profile:   {profile}")
+    say(f"profile:   {profile} ({profile_source})")
     if profile in {"prod", "copilot-prod"}:
         say(PROFILE_NOTICE.format(profile=profile))
     say(f"target:    {code.settings.get(TARGET_VARIABLE) or '(default)'}")
-    say(f"overlay:   {code.settings.get(OVERLAY_VARIABLE) or '(none)'}")
+    say(f"overlay:   {overlay or '(none)'} ({overlay_source})")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")
     say("+ docker " + shlex.join(command))
     if args.dry_run:
@@ -892,7 +1014,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     review = add("review-start", cmd_review_start, f"Launch {JOB_NAME} on the target the stack is built for.",
                  dry_run=True, force=True)
-    add_deploy_options(review)
+    review.description = (
+        f"Launch {JOB_NAME} on the target the stack is built for. --profile and --overlay choose this run's "
+        "configuration (Dagster tags appsec/profile and appsec/overlay); the container's settings are the default. "
+        "A run whose review_policy.resources budget differs from an active run or a recorded resource lease is "
+        "refused, even with --force, because the shared lease ledger would clamp both to the smaller budget.")
+    add_review_options(review)
     review.add_argument("--run-id", help="resume this existing application run (adds the appsec/application_run_id tag)")
     review.add_argument("--stop-on-first-error", action="store_true",
                         help="freeze the run-scoped no-retry safety policy; requires the matching deployed code")
