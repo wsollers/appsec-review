@@ -847,17 +847,17 @@ class _Assembler:
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
         self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
         self.control_context: dict[str, list[ContextEntry]] = defaultdict(list)
+        from appsec_review.indexing.products import load_control_assessment
+        control_cache: dict[str, Any] = {}
         for shard in scope.producer("control_evidence").shards:
             for row in scope.store.entities((shard,), kinds=("precomputed_fact",)):
                 result = row["payload"].get("result", {})
                 if result.get("assessment_mode") != "assessment":
                     continue
+                result = load_control_assessment(scope.run_root, scope.target_snapshot, result, cache=control_cache)
                 cid = str(result.get("component_id"))
                 self.control_context[cid].append(context_entry(row["identity"], "control_context",
-                                                                scope.shard_sha256(shard)))
-                for evidence in result.get("evidence", ()):
-                    if evidence.get("resolved") and evidence.get("source_identity"):
-                        self.control_context[cid].append(context_entry(evidence["source_identity"], "source"))
+                    scope.shard_sha256(shard), control_assessment=result))
         for shard in scope.producer("security_tagging").shards:
             for row in scope.store.entities((shard,), kinds=("tag_assignment",)):
                 subject = row["payload"].get("subject") or {}
@@ -941,6 +941,12 @@ class _Assembler:
         path = lead.path or next((item["workspace_path"] for item in artifacts if item["workspace_path"]), None)
         component = self.scope.component_for(path)
         unit = self.scope.build_unit_for(path)
+        if component is None and lead.component_hint:
+            component = next((item for item in self.scope.components
+                              if item.component_id == lead.component_hint), None)
+        if unit is None and lead.build_unit_hint:
+            unit = next((item for item in self.scope.build_units
+                         if item.build_unit_id == lead.build_unit_hint), None)
         return (component.component_id if component else lead.component_hint or "unassigned",
                 unit.build_unit_id if unit else None, component, unit)
 
@@ -990,10 +996,16 @@ class _Assembler:
                 for relation in artifact["provenance"]:
                     artifact_refs.update((relation["source_id"], relation["target_id"]))
                     artifact_refs.update(command["ref"] for command in relation["commands"])
+        assessments = [lead.control_assessment for lead, *_ in leads if lead.control_assessment is not None]
+        assessments.extend(item.control_assessment for item in context if item.control_assessment is not None)
+        underlying = [item for assessment in assessments for item in assessment["evidence"] if item["resolved"]]
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
-                           *(item.id for item in context), *artifact_refs})
+                           *(item.id for item in context), *artifact_refs,
+                           *(item["source_identity"] for item in underlying)})
         shard_hashes = sorted({*(item[0].shard_sha256 for item in leads),
                                *(item.shard_sha256 for item in context if item.shard_sha256), *graph_shards,
+                               *(item["publication"]["sha256"] for item in underlying),
+                               *(assessment["workbench_reference"]["manifest_sha256"] for assessment in assessments),
                                *(self.correlation_hashes if any(item[0].family in {"source_sast", "codeql"}
                                                                 for item in leads) else ())})
         retrieval = {"indexes": list(self.scope.index_names), "query_sets": list(self.scope.query_sets),
@@ -1152,7 +1164,8 @@ class _Assembler:
         budget = bound - len({(item.role, item.id) for item in unit.context})
         graph_context, graph_omitted = self.graph.unit_context(unit.paths, budget)
         context, omitted, gaps = self._cap(
-            (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths)),
+            (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
+             *self.control_context.get(unit.component_id, ())),
             unit.key, "lane_b_hunt")
         if graph_omitted:
             omitted += graph_omitted
