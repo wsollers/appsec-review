@@ -73,6 +73,17 @@ class SinkClass(StrEnum):
     INTEGER_CONVERSION = "integer_conversion"
     CRYPTO_MISUSE = "crypto_misuse"
     LOG_OUTPUT = "log_output"
+    # Managed-language sink classes (additive; no existing value changes meaning).
+    SERVER_SIDE_REQUEST = "server_side_request"
+    XML_EXTERNAL_ENTITY = "xml_external_entity"
+    LDAP_QUERY = "ldap_query"
+    XPATH_QUERY = "xpath_query"
+    HTML_OUTPUT = "html_output"
+    TEMPLATE_INJECTION = "template_injection"
+    URL_REDIRECT = "url_redirect"
+    HEADER_INJECTION = "header_injection"
+    REGEX_INJECTION = "regex_injection"
+    UNSAFE_REFLECTION = "unsafe_reflection"
     UNCLASSIFIED = "unclassified"
 
 
