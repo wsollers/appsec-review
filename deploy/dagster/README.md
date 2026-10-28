@@ -184,6 +184,30 @@ Use `python3 deploy/dagster/bin/review_run.py status --run-id DAGSTER_UUID` to q
 Dagster status and show the last lines of that file. The file can appear shortly after Dagster
 marks the source run terminal because the daemon launches the error-state job asynchronously.
 
+The running `wave1_step_failure_state` sensor reports each failed step while the `wave1_review` run
+continues, so a watcher can start an investigation without waiting for the run to end. Every 15
+seconds it reads `STEP_FAILURE` events of `STARTING`, `STARTED` and `CANCELING` `wave1_review` runs
+from the Dagster event log, and drains a tracked run once more after it leaves those statuses. The
+sensor evaluates in the code location, which mounts `runs/`, and writes directly without launching
+a Dagster run. Its contract for watchers:
+
+- **Path:** `runs/metadata/dagster-error-state/<dagster-uuid>/steps/<step-key>.attempt-<n>.log`.
+  `<step-key>` is the Dagster step key with every character outside `[A-Za-z0-9_.-]` replaced by
+  `_` and truncated to 150 characters. `<n>` is the failed attempt, one more than the step's earlier
+  `STEP_UP_FOR_RETRY` events. A re-execution has a new Dagster UUID and so a new directory.
+- **Content:** seven `key=value` lines, in this order: `dagster_run_id`, `application_run_id`
+  (the `appsec/application_run_id` tag, or `unallocated`), `step_key` (unsanitized), `attempt`,
+  `event_storage_id`, `timestamp` (UTC ISO 8601 of the Dagster event), and `message` (the root-cause
+  error collapsed to one line of at most 700 characters).
+- **Idempotency:** each file is written once, atomically, and never rewritten. The sensor cursor
+  maps tracked Dagster run ids to event-log cursors and advances only after the files are written,
+  so a daemon restart or lost cursor rewrites nothing and misses nothing for a tracked run. A
+  watcher may treat each new file as one new failure. Steps skipped because of an upstream failure
+  have no file. A run that starts and ends between two sensor ticks is reported only by the
+  run-level file below.
+
+The run-level `<dagster-uuid>.log` file is unchanged and still appears when the run ends.
+
 For a `wave1_review` run, repeat `--required-family <family>` (for example `native` or `dotnet`)
 to require zero-gap `SUCCEEDED` language-build receipts for that family and resolve their
 retained capture artifacts; the verifier fails if any such receipt is missing, failed, or gapped.
