@@ -382,11 +382,20 @@ def test_jvm_failure_isolated_and_success_checkpoint_detects_tampering(tmp_path:
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "maven": "SUCCEEDED", "sibling": "FAILED"}
+    from appsec_review.runtime.handoff import verify_handoff_integrity
+    run_root = config.runtime.runs_dir / run_id
+    latest = json.loads((run_root / "data" / "jobs" / "job_language_build" / "latest.json").read_text())
+    first_handoff = json.loads((run_root / latest["handoff_path"]).read_text())
     GraphRunner(config, [build_language(executor_factory=lambda unit, profile: JvmExecutor([]))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id,
         force_from="job_language_build")
     resumed = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
+    verify_handoff_integrity(run_root, first_handoff)
     assert next(item for item in resumed if item["root"] == "maven")["checkpoint_reused"] is True
+    first_by_root = {item["root"]: item for item in receipts}
+    second_by_root = {item["root"]: item for item in resumed}
+    assert second_by_root["maven"]["workspace"] == first_by_root["maven"]["workspace"]
+    assert second_by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]
     successful = next(item for item in resumed if item["root"] == "maven")
     artifact = config.runtime.runs_dir / run_id / successful["artifacts"][0]["path"]
     artifact.write_bytes(b"tampered")

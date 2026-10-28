@@ -589,6 +589,11 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "native": "SUCCEEDED", "sibling": "FAILED"}
+    from appsec_review.runtime.handoff import verify_handoff_integrity
+    run_root = config.runtime.runs_dir / run_id
+    latest = json.loads((run_root / "data" / "jobs" / "job_language_build" / "latest.json").read_text())
+    first_handoff = json.loads((run_root / latest["handoff_path"]).read_text())
+    first_by_root = {item["root"]: item for item in receipts}
 
     calls: list[tuple[str, ...]] = []
     resumed = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
@@ -596,9 +601,12 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
                                      run_id=run_id, force_from="job_language_build")
     second = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     by_root = {item["root"]: item for item in second}
+    verify_handoff_integrity(run_root, first_handoff)
     assert resumed["status"] == "COMPLETED_WITH_GAPS"
     assert by_root["native"]["checkpoint_reused"] is declared_releases
     assert by_root["sibling"]["checkpoint_reused"] is False
+    assert (by_root["native"]["workspace"] == first_by_root["native"]["workspace"]) is declared_releases
+    assert by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]
     expected = [("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                       "-DCMAKE_BUILD_TYPE=RelWithDebInfo"),
                 ("cmake", "--build", "build", "--parallel", "2")]
