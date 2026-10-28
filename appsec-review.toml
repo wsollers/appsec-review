@@ -1678,6 +1678,22 @@ query_id = "security-extended"
 query_suite = "codeql-suites/rust-security-extended.qls"
 query_suite_sha256 = "73f133b0f0028e7721488a4ea95784d2b78b3acfb8cbf1668d2900d3ac1030c0"
 
+# Must equal export_query_packs.rust in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.rust.export_queries]]
+query_id = "graph-export-rust"
+source_path = "rules/codeql-graph-export/rust"
+query_pack = "appsec-review/graph-export-rust"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "6ce90b13f0ee267d55e2e3f2289b4c021988343a0be486b94e3c0ba49cacbf88"
+query_pack_sha256 = "632020abd5dbe64a238b0ae4b6ab04064cc30f3a8a6f19928a501165f0b30bd1"
+tree_sha256 = "8eb625cdca32a02d4a222605459d64de6cdf2b37cddaada1685f22fbda565712"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "bc92e242feebad0fbf30036705b227a82d957cdd892f89be76741473ffb4ddeb"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "008fb3e7ad997add410f06e0b3a9e58b86c5a0ede57cf203f0619e768aa1a853"
+
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true
 mode = "source"

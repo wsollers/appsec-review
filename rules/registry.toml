@@ -39,6 +39,19 @@ state = "enabled"
 description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
 
 [[packs]]
+id = "graph-export-rust"
+path = "rules/codeql-graph-export/rust"
+engine = "codeql"
+language = "rust"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/rust-all@0.2.21"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Rust code-graph export tables (call sites, sources, sinks, guards, paths, flow summaries; ranges not_applicable)."
+
+[[packs]]
 id = "cert-cpp-coding-standards"
 # Verified in the in-image pack (the one the review loads): all 117 queries type-check against
 # codeql/cpp-all@12.1.0 in audit-codeql:custom-2.27.0 with networking disabled. The pack's own
