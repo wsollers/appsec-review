@@ -14,7 +14,7 @@ from appsec_review.runtime.resources import ResourceAdmission
 from appsec_review.storage import atomic_json
 
 from . import jobs
-from .support import CHECKOUT, MODULE, read, wait_for
+from .support import CHECKOUT, MODULE, read, wait_for, working_directory
 
 
 def dagster_run(kind):
@@ -229,18 +229,26 @@ def main():
         atomic_json(jobs.root() / f"{action}.json", guardian.state)
     elif action == "powershell-dispatch":
         import shutil
+        import tempfile
+        from pathlib import Path
+
         executable = shutil.which("powershell.exe")
         if not executable:
             raise RuntimeError("required Windows PowerShell executable is unavailable")
-        output = jobs.root() / "wsl-arguments.txt"
+        native_root = Path(tempfile.mkdtemp(prefix="ps-", dir=working_directory(jobs.root())))
+        output = native_root / "wsl-arguments.txt"
         result = subprocess.run([
             executable, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", str(CHECKOUT / "tests/fixtures/process_lifecycle/powershell_dispatch.ps1"),
             "-Common", str(CHECKOUT / "scripts/lib/common.ps1"), "-Output", str(output)],
-            cwd=CHECKOUT, capture_output=True, text=True, timeout=15,
-            env={**os.environ, "APPSEC_REPO_ROOT": str(CHECKOUT)})
+            cwd=working_directory(jobs.root()), capture_output=True, text=True, timeout=15,
+            env={**os.environ, "APPSEC_REPO_ROOT": str(CHECKOUT),
+                 "TEMP": str(native_root), "TMP": str(native_root)})
+        if output.exists():
+            shutil.copyfile(output, jobs.root() / output.name)
         atomic_json(jobs.root() / f"{action}.json", {
-            "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
+            "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr,
+            "native_root": str(native_root)})
     else:
         raise ValueError(f"unknown fixture action: {action}")
 

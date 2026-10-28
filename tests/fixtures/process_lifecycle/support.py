@@ -48,6 +48,11 @@ def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def working_directory(root):
+    # CreateProcess rejects cwd over MAX_PATH even when Python can access the directory.
+    return Path(os.environ.get("APPSEC_ACCEPTANCE_ROOT", root))
+
+
 @contextmanager
 def case(name):
     outer = os.environ.get("APPSEC_ACCEPTANCE_ROOT")
@@ -296,7 +301,8 @@ def process(root, action, *arguments, environment=None):
     stderr = stdout.name.replace(".stdout", ".stderr")
     with stdout, open(stderr, "w", encoding="utf-8") as errors:
         child = _BoundedProcess(
-            [sys.executable, "-m", MODULE, action, *map(str, arguments)], cwd=root,
+            [sys.executable, "-m", MODULE, action, *map(str, arguments)],
+            cwd=working_directory(root),
             stdin=subprocess.PIPE, stdout=stdout, stderr=errors, text=True,
             env=env, start_new_session=True)
         job = None
