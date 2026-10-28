@@ -81,8 +81,8 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     fixture = build_accepted_index_set(base / "data")
     native_ids = support.add_native_graph_facts(fixture)
     jobs = (POC, PLAN, VALIDATE, DOSSIERS, GATE, REPORT)
-    config = write_config(base, fixture.runs_dir, extra="".join(
-        job_tables(job) for job in ("job_third_party_data_sync", *jobs)))
+    config = write_config(base, fixture.runs_dir, extra=support.reference_sync_tables() + "".join(
+        job_tables(job) for job in jobs))
     env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1))}
     root = fixture.run_root
     accepted = {}
