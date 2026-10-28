@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import hashlib
+import json
 from pathlib import Path
 import tomllib
 from typing import Any
@@ -15,6 +16,7 @@ from typing import Any
 import pytest
 
 from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
+from appsec_review.interchange import HANDOFF_SCHEMA
 from appsec_review.jobs.accepted_review import VerifiedReview
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA
 from appsec_review.jobs.job_final_publication_gate import classify as classifier
@@ -25,6 +27,7 @@ from appsec_review.retrieval.model import canonical_json as index_canonical_json
 from appsec_review.review.ship_block import policy_sha256
 
 from tests.openvex_support import ROOT, enabled_settings, make_verified_inputs
+from tests.handoff_fixture import write_fixture_handoff
 
 
 class AcceptedInputDisk:
@@ -41,7 +44,9 @@ class AcceptedInputDisk:
         self.resolved = {
             "jobs": {inputs.REVIEW_JOB: {"settings": review_settings},
                      inputs.GATE_JOB: {"settings": {"enabled": True, "max_packages": 10000}},
+                     inputs.INTAKE_JOB: {"settings": {}},
                      c.JOB_ID: {"settings": self.settings.to_mapping()}},
+            "build_capture": config["build_capture"],
             "configuration_profile": {"name": "dev", "path": None},
         }
         self.config_ref = self.put("data/configuration/resolved.json", self.resolved)
@@ -208,12 +213,33 @@ class AcceptedInputDisk:
         return {"path": name, "sha256": hashlib.sha256(payload).hexdigest()}
 
     def handoff(self, job: str, outputs: dict[str, Any]) -> dict[str, Any]:
-        return {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": job,
+        return {"schema": HANDOFF_SCHEMA, "status": "ACCEPTED", "job_id": job,
                 "outputs": outputs, "resolved_config_sha256": self.config_ref["sha256"],
                 "completed_at": "2026-10-28T10:00:00-04:00"}
 
     def publish(self, job: str, handoff: dict[str, Any]) -> dict[str, str]:
-        reference = self.put(f"data/jobs/{job}/attempts/one/handoff.json", handoff)
+        name = f"data/jobs/{job}/attempts/{handoff.get('attempt_id', 'one')}/handoff.json"
+        attempt = self.root / name
+        self.put((attempt.parent / "result.json").relative_to(self.root).as_posix(), {
+            "status": handoff.get("completion_status", "SUCCEEDED"), "outputs": handoff["outputs"],
+        })
+        # Refresh only accounting owned by this publisher; retain explicit runtime artifacts.
+        outputs = {ref.path: ref for ref in inputs._references(handoff["outputs"], accounting=True)}
+        artifacts = []
+        for raw in handoff.get("artifacts", ()):
+            relative = raw["path"].removeprefix(attempt.parent.relative_to(self.root).as_posix() + "/")
+            if relative in {"claim.json", "result.json", "outcomes.json"} or (
+                    relative.startswith("steps/") and relative.endswith(("/result.json", "/status.json"))):
+                continue
+            artifacts.append(outputs[raw["path"]].to_json() if raw["path"] in outputs else raw)
+        value = {**handoff, "artifacts": artifacts}
+        completed_at = value["completed_at"]
+        write_fixture_handoff(self.root, attempt, value, target_snapshot=self.snapshot)
+        document = json.loads(attempt.read_bytes())
+        document["completed_at"] = completed_at
+        reference = self.put(name, document)
+        handoff.clear()
+        handoff.update(document)
         self.put(f"data/jobs/{job}/latest.json",
                  {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
         return reference
