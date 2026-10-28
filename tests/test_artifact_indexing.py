@@ -187,7 +187,8 @@ workers = 1
         "job_id": "job_language_build", "attempt_id": "attempt_0001",
         "outputs": {"acceptance.publish_handoff": {"artifact": accepted_identity,
                                                      "index_manifest": manifest_identity}},
-        "artifacts": [accepted_identity, manifest_identity]})
+        "artifacts": [accepted_identity, manifest_identity,
+                      *(receipt["workspace_manifest"] for receipt in receipts)]})
     latest = run_root / "data" / "jobs" / "job_language_build" / "latest.json"
     atomic_json(latest, {"handoff_path": handoff_path.relative_to(run_root).as_posix(),
                          "handoff_sha256": file_sha256(handoff_path)})
@@ -212,6 +213,19 @@ def test_recorded_build_fixture_can_bound_families_without_changing_receipt_cont
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     reference = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
     assert file_sha256(root / reference["path"]) == reference["sha256"]
+    assert all(receipt["workspace_manifest"] in handoff["artifacts"] for receipt in receipts)
+
+
+def test_changed_recorded_receipts_bind_protected_native_inputs_to_framework(tmp_path: Path) -> None:
+    _, _, _, root, receipts, accepted, handoff_path, latest = _seed(
+        tmp_path, build_families=("native",))
+    path = root / "data" / "build" / "protected-commands.json"
+    atomic_json(path, {"schema": "appsec-review/protected-compile-commands/1", "rows": []})
+    receipts[0]["protected_compile_commands"] = _identity(root, path)
+    _publish_changed_language_receipts(root, receipts, accepted, handoff_path, latest)
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    assert receipts[0]["workspace_manifest"] in handoff["artifacts"]
+    assert receipts[0]["protected_compile_commands"] in handoff["artifacts"]
 
 
 def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], accepted_path: Path,
@@ -222,7 +236,12 @@ def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], acc
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     identity = _identity(run_root, accepted_path)
     handoff["outputs"]["acceptance.publish_handoff"]["artifact"] = identity
-    handoff["artifacts"] = [identity, handoff["outputs"]["acceptance.publish_handoff"]["index_manifest"]]
+    handoff["artifacts"] = [
+        identity, handoff["outputs"]["acceptance.publish_handoff"]["index_manifest"],
+        *(receipt["workspace_manifest"] for receipt in receipts),
+        *(receipt["protected_compile_commands"] for receipt in receipts
+          if isinstance(receipt.get("protected_compile_commands"), dict)),
+    ]
     atomic_json(handoff_path.parent / "result.json", {
         "status": handoff["completion_status"], "outputs": handoff["outputs"],
     })
