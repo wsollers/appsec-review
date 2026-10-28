@@ -88,3 +88,36 @@ docker buildx build --load --pull=false --network none \
   --build-arg RUNTIME_USER=<uid>:<gid> \
   --tag appsec-review-codeql:manual containers/tools/codeql
 ```
+
+## Rebuild, re-pin and live verification
+
+Every step runs on any Linux Docker host where Dagster and appsec-review run (native Linux or
+WSL 2). Each one uses only the repository's Dockerfiles and pinned upstream downloads, never an
+image copied from another host.
+
+1. Build the source image with `containers/tools/codeql/build-source-image.sh`. Run the runner's
+   `inventory` action against `assets.lock.json`. Then set the printed image id as
+   `source_image.image_id` in `assets.lock.json` and as
+   `jobs.job_codeql_analysis.settings.source_image_id` in `appsec-review.toml`.
+2. Rebuild any build-environment image a CodeQL build profile uses, for example
+   `python3 containers/build.py build audit-buildenv-rust-wasm`, which ships `rust-src` for the
+   Rust extractor (see [`../../buildenv/rust-wasm/README.md`](../../buildenv/rust-wasm/README.md)).
+   Update every `image_id` pin of that image in `appsec-review.toml`. A `preinstalled_runtimes`
+   entry bound to the old `build_image_id` no longer matches. Remove it or re-declare it.
+3. When a graph-export pack, `columns.json` or `catalog.json` changes, recompute the pack tree
+   hashes in `assets.lock.json` `export_query_packs` and in the matching `appsec-review.toml`
+   `export_queries` blocks, following
+   [`rules/codeql-graph-export/README.md`](../../../rules/codeql-graph-export/README.md#changing-the-pack-or-catalog).
+   Then update `jobs.job_codeql_analysis.settings.asset_lock_sha256`. When `codeql_runner.py`
+   changes, bump `review_policy.releases.codeql_runner`. A new runner release also starts a new
+   shared compile-cache volume, so the first run after it compiles cold.
+4. Run the offline contract tests (`tests/test_codeql_export_runner.py`). Then run the live tiers:
+
+   ```text
+   .venv/bin/python -m pytest -q tests/live/test_codeql_graph_export_live.py \
+     tests/live/test_codeql_graph_export_<language>_live.py
+   ```
+
+   They skip when the pinned source image is not available locally. They take 13-35 minutes each
+   on a cold compile cache. The Swift tier always skips on Linux. Refresh live recordings and
+   expectations as described in the pack README; never hand-edit a live recording.

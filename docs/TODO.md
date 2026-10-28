@@ -588,18 +588,37 @@ C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact
 
 1. Run the operator live tier on the review host with the pinned CodeQL image:
    `python -m pytest -q tests/live/test_codeql_graph_export_live.py tests/live/test_code_graph_live.py`.
-   Refresh `tests/fixtures/graph/codeql_export/native` from the diff (set its provenance `recording`
-   to `live`), and fix the pack, or the expectation if the pack is right, for any failure of the
-   synthetic dataflow expectations (`tests/fixtures/graph/codeql_export/synthetic/expected-facts.json`).
-   The native fixture has no sources or sinks, so only the synthetic test proves the dataflow
-   families.
-2. Export packs/catalog sections and recorded fixtures now exist for Java/Kotlin,
-   JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and deferred Swift. Multilingual normalization,
-   native-only secondary scoping and worker neighborhood retrieval are wired. Finish per-language
-   live image/database/export acceptance with matching pins; Swift remains disabled and PHP has no
-   CodeQL extractor. Keep recorded acceptance distinct from live acceptance (section 8).
+   The native exports under `tests/fixtures/graph/codeql_export/native/exports/` were refreshed
+   from a live run (they carry real BQRS hashes), but its `provenance.json` still says
+   `recording: hand-authored`; correct it with the next refresh. `test_code_graph_live.py` has no
+   recorded run. The native fixture has no sources or sinks, so only the synthetic test proves the
+   dataflow families.
+2. Export packs, catalog sections and recorded fixtures exist for Java/Kotlin,
+   JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and deferred Swift, and every pack except
+   Swift is pinned and has compiled and run in the pinned image (per-language status in
+   [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md)
+   section 8). Multilingual normalization, native-only secondary scoping and worker neighborhood
+   retrieval are wired. Open named gaps:
+   - no live result is recorded in the repository for the C# (`dotnet`) and
+     JavaScript/TypeScript (`node`) graph-export tiers;
+   - Swift is disabled: CodeQL extracts Swift only on macOS, so it needs a macOS executor;
+   - PHP has no CodeQL extractor;
+   - Rust `known_gaps`: `rust_summarized_body_prunes_remote_flow` and
+     `rust_canonicalize_summary_does_not_propagate`; Rust closure calls are `unresolved_indirect`;
+   - sinks the packs export but the catalog leaves unclassified (never `direct_eligible`): C/C++
+     `RemoteFlowSinkFunction` (deliberate), Swift `PredicateInjectionSink`, Python
+     `NoSqlExecution`, Ruby `HttpResponse` and Go `UnmarshalingFunction`;
+   - `range_fact` is `not_applicable` for JavaScript/TypeScript, Python, Ruby and Rust, and
+     intraprocedural for Java and Go;
+   - no live acceptance record of a real target; keep recorded acceptance distinct from live
+     acceptance.
 3. Implement the contract and deployment lanes planned in
    [`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md).
+4. CodeQL execution telemetry caveats: analyze runtimes (by query path) and result counts (by
+   rule id) are not joined; compile cache hits report no time; an exception escaping after an
+   action's `COMPLETED` event counts that action twice; and a runtime with a runner older than
+   `appsec-codeql-runner-89568569` reports no analyze query timings
+   ([`operations/codeql-analysis.md`](operations/codeql-analysis.md#execution-telemetry)).
 
 Unresolved indirect calls, unmodeled externals, and path/depth limits must be published as gaps.
 
