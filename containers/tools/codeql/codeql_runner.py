@@ -19,6 +19,7 @@ import time
 CODEQL = "/opt/codeql/codeql"
 MANUAL_LANGUAGES = {"cpp", "go", "java", "csharp"}
 NONE_LANGUAGES = {"javascript", "python", "ruby", "rust", "actions"}
+EXPORT_LANGUAGES = ("cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "swift")
 
 
 def _canonical(value: object) -> bytes:
@@ -518,7 +519,7 @@ def parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--pack", required=True)
     compile_parser.add_argument("--columns", required=True)
     compile_parser.add_argument("--asset-lock", required=True)
-    compile_parser.add_argument("--language", choices=("cpp",), required=True)
+    compile_parser.add_argument("--language", choices=EXPORT_LANGUAGES, required=True)
     compile_parser.add_argument("--threads", type=int, required=True)
     compile_parser.add_argument("--ram", type=int, required=True)
     export_parser = sub.add_parser("export")
@@ -526,7 +527,7 @@ def parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--pack", required=True)
     export_parser.add_argument("--columns", required=True)
     export_parser.add_argument("--asset-lock", required=True)
-    export_parser.add_argument("--language", choices=("cpp",), required=True)
+    export_parser.add_argument("--language", choices=EXPORT_LANGUAGES, required=True)
     export_parser.add_argument("--output-dir", required=True)
     export_parser.add_argument("--scope-file", required=True)
     export_parser.add_argument("--seeds-file", required=True)

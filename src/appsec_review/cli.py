@@ -92,6 +92,15 @@ def parser() -> argparse.ArgumentParser:
     binary.add_argument("--verify-only", action="store_true",
                         help="verify existing publications without running Ghidra")
 
+    acquire = commands.add_parser(
+        "acquire-target",
+        help="check out a configured, pinned review target (Git with submodules, Perforce, or a code-review "
+             "export) into a new directory under targets/")
+    acquire.add_argument("--target", action="append", dest="targets", metavar="ID",
+                         help="configured target id; repeatable; default is every configured target")
+    acquire.add_argument("--verify-only", action="store_true",
+                         help="re-check existing acquisitions against their manifests without fetching")
+
     pins = commands.add_parser(
         "update-image-pins",
         help="re-pin every configured image-ID pin to the image its tag resolves to on the local daemon")
@@ -158,6 +167,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 "evidence": str(getattr(exc, "evidence", None) or "") or None})
         print(json.dumps(results, sort_keys=True, indent=2))
         return 1 if failed else 0
+
+    if args.command == "acquire-target":
+        from appsec_review.target_acquisition.acquire import acquire_target, verify_target
+        settings = config.target_acquisition
+        try:
+            requests = [settings.target(target_id) for target_id in args.targets] if args.targets \
+                else list(settings.targets)
+        except KeyError as exc:
+            parser().error(str(exc.args[0]))
+        if not requests:
+            parser().error("no targets are configured under [[target_acquisition.targets]]")
+        results = [(verify_target if args.verify_only else acquire_target)(
+            repository_root=config.runtime.repository_root, settings=settings, request=request)
+            for request in requests]
+        print(json.dumps(results, sort_keys=True, indent=2))
+        statuses = {item.get("acquisition_status") or item["status"] if item["status"] == "VERIFIED"
+                    else item["status"] for item in results}
+        if statuses <= {"COMPLETE"}:
+            return 0
+        return 2 if statuses <= {"COMPLETE", "PARTIAL"} else 1
 
     if args.command == "logs":
         from appsec_review.observability import PipelineLog

@@ -1,0 +1,7 @@
+# Hash-pinned hand-authored recordings: byte-exact, never end-of-line converted.
+tests/fixtures/graph/codeql_export/ruby-synthetic/** -text
+tests/fixtures/graph/expected/ruby-synthetic/** -text
+tests/fixtures/graph/codeql_export/go-synthetic/** -text
+tests/fixtures/graph/expected/go-synthetic/** -text
+tests/fixtures/graph/codeql_export/java-synthetic/** -text
+tests/fixtures/graph/expected/java-synthetic/** -text

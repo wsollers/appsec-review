@@ -282,7 +282,13 @@ the real job with an injected executor, in `tests/integration/test_code_graph_en
 play back hand-authored recordings. The pack has compiled and run in the pinned image against the
 calibration database (`tests/live/test_codeql_pack_shapes.py`);
 `tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` remain the
-operator tiers that refresh and verify the recordings.
+operator tiers that refresh and verify the recordings. The native fixture has no sources or sinks,
+so `test_codeql_graph_export_live.py` also compiles the synthetic fixture
+(`tests/fixtures/graph/codeql_export/synthetic/source/synthetic.cpp`) and requires the live export to
+meet every row in its `expected-facts.json` (two paths to one sink, dominating, non-dominating and
+macro guards, unknown ranges, sign-changing conversions, virtual and unresolved dispatch). The
+offline `tests/graph/test_synthetic_export_expectations.py` holds the hand-authored recording to the
+same file.
 
 ### Query precompilation
 

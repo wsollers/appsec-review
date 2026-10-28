@@ -550,12 +550,28 @@ build. The wrapper also forces `python3` into every build image.
    captures invalidate build checkpoints.
 5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
    after.
-## Build the dataflow, contract, and deployment evidence lanes
+## Prove and extend the dataflow lane; build the contract and deployment lanes
 
-Implement the planned jobs and queries in
-[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
-starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
-calls, unmodeled externals, and path/depth limits must be published as gaps.
+The planned `query_dataflow` tool and `job_dataflow_summary`/`job_reachability_linking` jobs are
+superseded by `query_code_graph`, the `job_codeql_analysis` export step and `job_code_graph_index`
+([`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md)). For
+C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact`, `range_fact` and
+`flow_summary` facts reach packages, admissibility and scoring. Remaining:
+
+1. Run the operator live tier on the review host with the pinned CodeQL image:
+   `python -m pytest -q tests/live/test_codeql_graph_export_live.py tests/live/test_code_graph_live.py`.
+   Refresh `tests/fixtures/graph/codeql_export/native` from the diff (set its provenance `recording`
+   to `live`), and fix the pack, or the expectation if the pack is right, for any failure of the
+   synthetic dataflow expectations (`tests/fixtures/graph/codeql_export/synthetic/expected-facts.json`).
+   The native fixture has no sources or sinks, so only the synthetic test proves the dataflow
+   families.
+2. Add export packs and catalog sections for Java/Kotlin, then JavaScript/TypeScript, then Python
+   (code-graph-precomputation.md section 8), each with its own recorded fixture and expectations.
+   Go, C# and Rust follow once their CodeQL databases succeed; PHP has no CodeQL extractor.
+3. Implement the contract and deployment lanes planned in
+   [`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md).
+
+Unresolved indirect calls, unmodeled externals, and path/depth limits must be published as gaps.
 
 ## Acquire dynamic execution evidence
 
@@ -615,8 +631,10 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   changes to snapshot function spans instead of reporting the metric unavailable at function scope.
 - Function attribution only sees surviving lines in the top blamed files; consider bounded
   `log -L` per function for changes whose lines were later rewritten.
-- Native review-export adapters for GitLab, Gerrit, and Azure DevOps (today they must be converted
-  to `appsec-review/review-records/1`), and a deployment-event adapter for common CD systems.
+- A deployment-event adapter for common CD systems. GitLab, Gerrit, and Azure DevOps review
+  exports are produced by `acquire-target` (see
+  [`operations/target-acquisition.md`](operations/target-acquisition.md)); validate them against
+  live servers.
 - Component relatedness uses nesting and co-change only; add build-graph or ownership-file
   (`CODEOWNERS`) relatedness when the catalog exposes them.
 - Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on

@@ -110,6 +110,11 @@ Export schemas:
 `{"pull_request": null, "direct_push": true}`. Timestamps must be RFC 3339 with an explicit offset.
 Organization identities are pseudonymous hashes, so the export never needs plaintext emails.
 
+`appsec-review acquire-target` writes a review-records export for a GitLab merge request, Gerrit
+change, or Azure DevOps pull request. It also writes the hash to pin. See
+[`../operations/target-acquisition.md`](../operations/target-acquisition.md). Approval times that a
+provider does not report stay `null` and become a named acquisition gap.
+
 ## Signals
 
 All windows reuse history's anchor (the snapshot commit time) and in-window changes; nothing reads

@@ -334,6 +334,12 @@ evaluation, keep it outside this repository and point `APPSEC_EVALUATOR_GUIDE` a
 Any other target works the same way: clone it beneath `targets/` and pass its path with `--target`
 (direct CLI) or `APPSEC_REVIEW_TARGET` (Dagster).
 
+To acquire a pinned target instead, use `appsec-review acquire-target`. It handles three sources:
+a Git commit with its submodules checked out recursively, a submitted Perforce changelist, or a
+GitLab, Gerrit, or Azure DevOps review revision. It writes a hash-pinned manifest and records gaps.
+It never touches an existing checkout. See
+[`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md).
+
 ## Build the tool container images
 
 [`containers/catalog.toml`](containers/catalog.toml) is the inventory of every image: tool images,

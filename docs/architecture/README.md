@@ -34,6 +34,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   scope-sprawl, repeated-repair, test-churn, and ownership signals with a review-priority index.
 - [`../operations/change-context-analysis.md`](../operations/change-context-analysis.md) —
   change-context sources, export pinning, configuration, and retrieval.
+- [`../operations/target-acquisition.md`](../operations/target-acquisition.md) — user-invoked,
+  hash-pinned acquisition of Git (recursive submodules), Perforce, and GitLab/Gerrit/Azure DevOps
+  review-export targets into `targets/`, and the manifest intake records.
 - [`review-prioritization.md`](review-prioritization.md) — function-level cyclomatic and cognitive
   complexity, import coupling, boundary/privilege/suppression heuristics, CodeQL source-to-sink
   paths, and the LLM Prioritization Score.

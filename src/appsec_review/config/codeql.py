@@ -93,8 +93,9 @@ class CodeQLCustomQuerySettings:
 
 
 _EXPORT_RULES_ROOT = ("rules", "codeql-graph-export")
-# C/C++ is the only language with a graph export pack in this change (code-graph plan D5).
-_EXPORT_LANGUAGES = frozenset({"cpp"})
+# Languages that may carry a graph export pack (rules/codeql-graph-export/<language>/). A language is
+# enabled only by its export_queries entry, whose hash pins require the pack to exist.
+_EXPORT_LANGUAGES = frozenset({"cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "swift"})
 EXPORT_MODES = ("seeded", "whole_program")
 # Hard ceiling of ``max_seed_depth``: deeper neighborhoods approach the whole program.
 SEED_DEPTH_CEILING = 8
@@ -352,6 +353,12 @@ class CodeQLAnalysisSettings:
         exporting = {name for name, language in self.languages.items() if language.export_queries}
         if not exporting <= _EXPORT_LANGUAGES:
             raise ValueError("CodeQL graph export packs exist only for: " + ", ".join(sorted(_EXPORT_LANGUAGES)))
+        for name in exporting:
+            entry = self.languages[name].export_queries[0]
+            if (entry.query_id != f"graph-export-{name}" or entry.query_pack != f"appsec-review/graph-export-{name}"
+                    or PurePosixPath(entry.source_path).parts[:3] != (*_EXPORT_RULES_ROOT, name)):
+                raise ValueError(f"CodeQL {name} graph export must use its own pack "
+                                 f"rules/codeql-graph-export/{name} (graph-export-{name})")
         if (not isinstance(self.preinstalled_runtimes, tuple) or len(self.preinstalled_runtimes) > 128
                 or any(not isinstance(item, CodeQLPreinstalledRuntime) for item in self.preinstalled_runtimes)):
             raise ValueError("CodeQL preinstalled_runtimes requires at most 128 typed declarations")
