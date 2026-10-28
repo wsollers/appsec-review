@@ -236,6 +236,34 @@ def test_remediation_is_confirmed_only_and_stays_assurance_labelled(seeded):
         inputs.load_inputs(seeded.root, seeded.verified, settings())
 
 
+@pytest.mark.parametrize("disposition", ["assessed", "capped"])
+def test_chain_projection_retains_actual_artifact_qualifications_and_identity(seeded, disposition):
+    from appsec_review.jobs.job_dossier_publication.job import _chains
+    from appsec_review.reporting.dossiers import build_dossier
+
+    chain_id = "chain-" + "c" * 64
+    limitations = ["Deployment continuity is unavailable.", "Privilege and temporal continuity are unresolved."]
+    objective = "Synthetic document continuity assessment"
+    artifact = write(seeded.root, "chain.json", {
+        "schema": "appsec-review/attack-chain/1", "run_id": seeded.root.name,
+        "proposal": {"chain_id": chain_id, "objective": objective}, "challenges": [],
+        "status": "qualified_supported", "limitations": limitations,
+        "assessment": {"objective": objective, "path_confidence": "qualified",
+                       "prerequisites": [], "boundary_exposure": "unresolved",
+                       "remediation_choke_points": [], "shipment_decision": "not_assessed_by_chain_policy"}})
+    document = {"chains": {"items": [{
+        "chain_id": chain_id, "status": "qualified_supported", "limitations": limitations,
+        "component_claim_ids": [seeded.source["finding"]["claim_id"]],
+        "disposition": disposition, "artifact": artifact}]}}
+    projected = _chains(seeded.root, document, seeded.source["finding"], settings())
+    assert projected == [{"chain_id": chain_id, "status": "qualified_supported",
+                          "objective": objective, "qualifications": limitations}]
+    model = build_dossier(kind="confirmed_finding", chains=projected, **seeded.source)
+    assert model["chains"][0]["chain_id"] == chain_id
+    assert model["chains"][0]["qualifications"] == sorted(limitations)
+    assert model["chains"][0]["status"] == "qualified_supported"
+
+
 def test_publication_verifier_detects_tamper_bad_counts_and_pdf_claims(seeded):
     _publication, summary = output_summary(seeded, job(seeded).execute(context(seeded)))
     for key in ("admitted", "items", "omitted"):

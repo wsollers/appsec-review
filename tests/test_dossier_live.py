@@ -54,6 +54,14 @@ def test_real_dossier_pdf_is_readable_complete_and_byte_reproducible(tmp_path, k
                          "Not fixed, resolved, or regression verified", "Resolving provenance", "Seeded",
                          "safe_negative_control", "Enforcement linkage"):
             assert expected in flattened, (expected, flattened)
+        pages = text.split("\f")
+        for heading in ("Finding brief", "Risk dimensions", "Evidence and resolving source", "Proof of concept",
+                        "Remediation assurance", "Chain context and limitations", "Resolving provenance"):
+            toc = re.search(rf"^\s*{re.escape(heading)}\s+(\d+)\s*$", pages[0], re.MULTILINE)
+            actual = [number for number, page in enumerate(pages, 1)
+                      if re.search(rf"^\s*{re.escape(heading)}\s*$", page, re.MULTILINE)]
+            assert toc is not None, (heading, pages[0])
+            assert actual == [int(toc.group(1))], (heading, toc.group(1), actual)
         assert "PRIVATE_PROMPT" not in text
         receipt = json.loads((directory.parent / "receipt.json").read_text())
         assert receipt["tool"]["image_id"] == identity

@@ -59,7 +59,14 @@ The parsers are `config.remediation.RemediationPlanningSettings.from_mapping` an
 `RemediationValidationSettings.from_mapping`. The central config loader, registry, launch graph,
 profile/model checks, guidance registry and input matrix must register these jobs together.
 The new role fragments are `remediation_writer` and `remediation_reviewer`; no runtime skill is
-loaded. The user selected automatic planning and bounded nonexecuting validation for **new
+loaded. The local assembler calls shared `governing_rules`, `load_registry`, and fragment
+validation, requires the registered bounded responsibility, and checks its closed role-to-job
+allowlist against the actual job context. `remediation_writer` belongs only to planning;
+`remediation_reviewer` belongs only to validation. Tool mentions and conflicting policy are
+rejected before dispatch. The pinned bundle identifies the job, role, registry version,
+responsibility, and exact governing/role file hashes.
+
+The user selected automatic planning and bounded nonexecuting validation for **new
 reviews**; existing runs retain their frozen configuration. The corresponding central tables are:
 
 ```toml
@@ -139,3 +146,18 @@ Step-level `workers` may be explicitly set to one by the central integrator; mod
 patch checks are deliberately serial and bounded in this slice. Enable validation only with
 planning enabled. Consumers must read the accepted summaries and referenced bytes, never
 reconstruct mutable file paths or treat `build_checked` as `fixed` or `resolved`.
+
+## Metadata-only telemetry
+
+The jobs emit `REMEDIATION_PLANNING_INPUTS_VERIFIED`,
+`REMEDIATION_VALIDATION_INPUTS_VERIFIED`, `REMEDIATION_MODEL_COMPLETED`,
+`REMEDIATION_PLANNING_CANDIDATE_COMPLETED`, `REMEDIATION_VALIDATION_CANDIDATE_COMPLETED`,
+`REMEDIATION_VALIDATION_ADAPTER_COMPLETED`, and the two corresponding `*_PUBLISHED` events.
+Admission, omitted/confirmed candidates, finite outcomes, gaps, durations, adapter failures and
+timeouts, and output byte counts are bounded metadata. Claim/cell IDs are correlation fields,
+not metric labels; source, prompts, patches, model answers and reason prose are not emitted.
+Model token aggregates preserve `null` whenever that dimension is missing from any completed
+turn, and for attempts without a completed turn. Genuine reported zero usage remains zero.
+`usage_unavailable`, `usage_unavailable_count` (completed turns missing either dimension),
+and `usage_unavailable_reason` (`provider_usage_missing`, `no_completed_turns`, or null)
+distinguish unavailable usage from measured usage.
