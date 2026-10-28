@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,7 +14,7 @@ from appsec_review.config import load_config
 from appsec_review.config.assurance import parse_review_policy
 from appsec_review.jobs.job_openvex_export.contracts import (
     ArtifactRef, ExportError, ExportReportState, JOB_ID, OPENVEX_EXPORT_HANDOFF_SCHEMA,
-    VerifiedInputs, canonical_bytes,
+    SizedArtifactRef, VerifiedInputs, canonical_bytes,
 )
 from appsec_review.jobs.job_openvex_export.job import build_job
 from appsec_review.jobs.job_openvex_export.reporting import (
@@ -23,6 +24,7 @@ from appsec_review.observability import EventLog, PipelineLog
 from appsec_review.runtime import JobContext, UnitContext
 from tests.openvex_input_support import AcceptedInputDisk
 from tests.openvex_support import ROOT
+from tests.openvex_support import enabled_settings
 
 
 class ExportUnits:
@@ -105,6 +107,43 @@ class ExportUnits:
     def result(self):
         reference = self.outputs["export.assemble"]["artifact"]
         return json.loads((self.disk.root / reference["path"]).read_bytes())
+
+
+def test_output_reader_uses_its_explicit_byte_bound_and_rejects_wrong_measured_size(tmp_path):
+    from appsec_review.jobs.job_openvex_export.reporting import read_output
+
+    payload = b'{"status":"bound"}\n'
+    (tmp_path / "artifact.json").write_bytes(payload)
+    reference = ArtifactRef("artifact.json", hashlib.sha256(payload).hexdigest())
+    settings = enabled_settings(max_artifact_bytes=1)
+    assert read_output(tmp_path, reference, settings, max_bytes=len(payload)) == payload
+    with pytest.raises(ExportError):
+        read_output(tmp_path, reference, settings, max_bytes=len(payload) - 1)
+    with pytest.raises(ExportError):
+        read_output(tmp_path, SizedArtifactRef(reference.path, reference.sha256, len(payload) + 1),
+                    settings, max_bytes=len(payload))
+
+
+def test_output_reader_rejects_a_hardlink_created_during_read(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_openvex_export import reporting
+
+    payload = b"{}\n"
+    (tmp_path / "artifact.json").write_bytes(payload)
+    reference = ArtifactRef("artifact.json", hashlib.sha256(payload).hexdigest())
+    original, calls = reporting.os.fstat, [0]
+
+    def fstat(descriptor):
+        result = original(descriptor)
+        calls[0] += 1
+        if calls[0] == 2:
+            return SimpleNamespace(st_nlink=2, **{key: getattr(result, key) for key in (
+                "st_size", "st_mtime_ns", "st_dev", "st_ino", "st_mode")})
+        return result
+
+    monkeypatch.setattr(reporting.os, "fstat", fstat)
+    with pytest.raises(ExportError):
+        reporting.read_output(tmp_path, reference, enabled_settings(), max_bytes=len(payload))
+    assert calls[0] == 2
 
 
 @pytest.mark.parametrize("buckets", [(), ("publishable",), ("verification_backlog",), ("withheld",),

@@ -35,7 +35,8 @@ def read_output(run_root: Path, reference: ArtifactRef, settings: OpenVexExportS
         payload = stream.read(max_bytes + 1)
         after = os.fstat(stream.fileno())
     current = reader.path(reference.path).stat()
-    if (len(payload) > max_bytes or len(payload) != before.st_size
+    if (after.st_nlink != 1 or current.st_nlink != 1
+            or len(payload) > max_bytes or len(payload) != before.st_size
             or before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns
             or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
             != (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
