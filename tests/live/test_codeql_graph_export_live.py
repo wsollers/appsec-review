@@ -30,15 +30,15 @@ COMPARED = ("columns", "rows", "row_count", "truncated")
 
 
 def _export(settings, run_root: Path, image_for, name: str, workspace: Path, profile: str, mode: str,
-            source_subroot: str, commands) -> Path:
-    """Build a C/C++ database for ``workspace`` and run the hash-pinned export pack over it."""
+            source_subroot: str, commands, *, language: str = "cpp") -> Path:
+    """Build a ``language`` database for ``workspace`` and run that language's hash-pinned export pack."""
     scratch = run_root / f"graph-export-{name}"
     shutil.copytree(workspace, scratch / "workspace")
     codeql_image = image_for(profile)
     _write_replay(scratch / "replay.json", run_root, codeql_image.build_image_id, commands)
     executor = CodeQLExecutor(image=codeql_image, run_root=run_root, settings=settings)
     database = executor.execute("database", (
-        "--mode", mode, "--language", "cpp", "--replay", "replay.json", "--workspace", "workspace",
+        "--mode", mode, "--language", language, "--replay", "replay.json", "--workspace", "workspace",
         "--source-subroot", source_subroot, "--database", "database",
         "--threads", str(settings.threads), "--ram", str(settings.ram_mb),
     ), scratch_root=scratch)
@@ -48,7 +48,7 @@ def _export(settings, run_root: Path, image_for, name: str, workspace: Path, pro
     # The executor's export action reads only the staged ``export`` tree, exactly as the job stages it.
     staged = scratch / "export"
     shutil.copytree(scratch / "database", staged / "database")
-    shutil.copytree(ROOT / "rules" / "codeql-graph-export" / "cpp", staged / "pack")
+    shutil.copytree(ROOT / "rules" / "codeql-graph-export" / language, staged / "pack")
     shutil.copyfile(ROOT / "rules" / "codeql-graph-export" / "columns.json", staged / "columns.json")
     shutil.copyfile(ROOT / "containers" / "tools" / "codeql" / "assets.lock.json", staged / "assets.lock.json")
     (staged / "scope.csv").write_text("whole_program,0\n", encoding="utf-8")
@@ -56,7 +56,7 @@ def _export(settings, run_root: Path, image_for, name: str, workspace: Path, pro
     bounds = contract.GraphSettings()
     export = executor.execute("export", graph_export_arguments(
         database="export/database", pack="export/pack", columns="export/columns.json",
-        asset_lock="export/assets.lock.json", language="cpp", output_dir="exports",
+        asset_lock="export/assets.lock.json", language=language, output_dir="exports",
         scope_file="export/scope.csv", seeds_file="export/seeds.csv",
         row_limit=bounds.max_facts_per_family_per_scope, max_bytes=bounds.max_export_bytes,
         threads=settings.threads, ram_mb=settings.ram_mb), scratch_root=scratch)

@@ -17,29 +17,62 @@
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
-      "properties": {"cpp": {"$ref": "#/$defs/language"}}
+      "properties": {
+        "cpp": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_cpp"}]},
+        "java": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_java"}]},
+        "javascript": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_javascript"}]},
+        "python": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_python"}]},
+        "ruby": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_ruby"}]},
+        "go": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_go"}]},
+        "csharp": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_csharp"}]},
+        "rust": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_rust"}]},
+        "swift": {"allOf": [{"$ref": "#/$defs/language"}, {"$ref": "#/$defs/models_swift"}]}
+      }
     }
   },
   "$defs": {
+    "models_cpp": {
+      "description": "The closed model vocabulary the cpp pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["FormattingFunction", "AllocationFunction", "ArrayFunction.output", "CommandExecutionFunction",
+                   "RemoteFlowSinkFunction", "ArrayExprWrite"]}}}}}},
+        "sources": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["RemoteFlowSource", "LocalFlowSource", "FlowSource"]}}}}}}
+      }
+    },
+    "models_java": {"description": "Rejects a java section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_javascript": {"description": "Rejects a javascript section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_python": {"description": "Rejects a python section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_ruby": {"description": "Rejects a ruby section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_go": {"description": "Rejects a go section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_csharp": {"description": "Rejects a csharp section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_rust": {"description": "Rejects a rust section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_swift": {"description": "Rejects a swift section until its pack declares its closed model vocabulary.", "not": {}},
     "sink_class": {
       "enum": ["memory_write", "memory_read", "allocation_size", "format_string", "command_execution",
                "path_access", "sql_query", "code_injection", "deserialization", "integer_conversion",
-               "crypto_misuse", "log_output"]
+               "crypto_misuse", "log_output", "server_side_request", "xml_external_entity", "ldap_query",
+               "xpath_query", "html_output", "template_injection", "url_redirect", "header_injection",
+               "regex_injection", "unsafe_reflection"]
     },
     "source_class": {
       "enum": ["remote", "local_user", "argv", "environment", "file", "ipc", "database", "internal"]
     },
-    "api": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+    "api": {"type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"},
     "declared_in": {
-      "description": "Basenames of declaring headers; a row matches when any of its declared_in basenames is listed.",
+      "description": "Basenames of declaring headers (C/C++) or the declaring module, package, namespace or type (managed languages); a row matches when any of its declared_in values is listed.",
       "type": "array", "minItems": 1, "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^[A-Za-z0-9_+.-]+$"}
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9_+.:/@$-]+$"}
     },
     "sink_model": {
-      "enum": ["FormattingFunction", "AllocationFunction", "ArrayFunction.output", "CommandExecutionFunction",
-               "RemoteFlowSinkFunction", "ArrayExprWrite"]
+      "description": "A CodeQL model class name; each language's models_<language> definition closes the vocabulary.",
+      "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
     },
-    "source_model": {"enum": ["RemoteFlowSource", "LocalFlowSource", "FlowSource"]},
+    "source_model": {
+      "description": "A CodeQL model class name; each language's models_<language> definition closes the vocabulary.",
+      "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
+    },
     "language": {
       "type": "object",
       "additionalProperties": false,
