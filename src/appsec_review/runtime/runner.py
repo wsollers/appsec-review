@@ -63,7 +63,12 @@ class JobRunner:
         if manifest_path.exists():
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if manifest.get("resolved_sha256") != self.config.resolved_sha256:
-                raise ValueError("run is already bound to a different configuration")
+                bound = manifest.get("selection") or {}
+                raise ValueError(
+                    "run is already bound to a different configuration"
+                    + (f" (profile {bound.get('profile')}, overlay {bound.get('overlay') or 'none'}; "
+                       f"this attempt resolved profile {self.config.profile}, overlay "
+                       f"{self.config.overlay_path or 'none'})" if bound else ""))
             if file_sha256(destination / "appsec-review.toml") != manifest.get("source_sha256"):
                 raise ValueError("run-owned configuration hash mismatch")
             if file_sha256(destination / "resolved.json") != self.config.resolved_sha256:
@@ -77,6 +82,9 @@ class JobRunner:
             "source_sha256": self.config.source_sha256,
             "resolved_sha256": self.config.resolved_sha256,
             "sources": [dict(layer) for layer in self.config.layers],
+            "selection": {"profile": self.config.profile,
+                          "overlay": str(self.config.overlay_path) if self.config.overlay_path else None,
+                          "source": self.config.selection_source},
             "resolved": {"path": "resolved.json", "sha256": self.config.resolved_sha256},
         })
 

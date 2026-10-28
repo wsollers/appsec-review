@@ -99,8 +99,9 @@ deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
 
 The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
 models and larger token limits from `profiles/prod.toml`, which the image copies next to
-`appsec-review.toml`). It is fixed when the containers are created, so switch with
-`scripts/stack-restart --profile prod`. See [model profiles](../../docs/operations/model-profiles.md).
+`appsec-review.toml`). It is the containers' default, set when they are created
+(`scripts/stack-restart --profile prod`); `scripts/review-start --profile` selects another profile of
+the same provider family for one run. See [model profiles](../../docs/operations/model-profiles.md).
 
 ```bash
 python deploy/dagster/bin/bootstrap.py

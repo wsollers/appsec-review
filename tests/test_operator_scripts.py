@@ -377,7 +377,8 @@ def test_review_start_launches_wave1_review_through_the_webserver(box: Sandbox, 
     assert argv[argv.index("-w") + 1] == "/opt/dagster/home/workspace.yaml" and argv[argv.index("-l") + 1] == "appsec_review"
     tags = json.loads(argv[argv.index("--tags") + 1])
     assert set(tags) == ({"appsec/submission_identity", "appsec/safety_identity", "dagster/max_retries"}
-                         if stop_policy else {"appsec/submission_identity"})
+                         if stop_policy else {"appsec/submission_identity"}) | {"appsec/profile", "appsec/overlay"}
+    assert tags["appsec/profile"] == "dev" and tags["appsec/overlay"] == "none"
     intent = review_run.read_submission(box.repo)
     assert intent["state"] == "SUBMITTED"
     assert tags["appsec/submission_identity"] == intent["identity_sha256"]
@@ -441,14 +442,18 @@ def test_review_start_refuses_a_target_the_container_was_not_created_with(box: S
     assert container_path.returncode == 3 and "remains SUBMITTED" in container_path.stderr
 
 
-def test_review_start_checks_overlay_and_recording_against_the_container(box: Sandbox) -> None:
+def test_review_start_checks_recording_and_selects_the_overlay_per_run(box: Sandbox) -> None:
     (box.repo / "test" / "acceptance" / "cap.toml").write_text("x = 1\n", encoding="utf-8")
     box.stack(settings={ops.OVERLAY_VARIABLE: "/opt/app/test/acceptance/cap.toml", ops.RECORDING_VARIABLE: "record"})
     box.dagster.runs()
-    assert box.run("review-start", "--overlay", "cap.toml", "--recording", "record", "--dry-run").returncode == 0
+    default = box.run("review-start", "--recording", "record", "--dry-run")
+    assert default.returncode == 0 and "overlay:   /opt/app/test/acceptance/cap.toml (container default)" in default.stdout
     mismatch = box.run("review-start", "--recording", "off", "--dry-run")
     assert mismatch.returncode == 3 and "APPSEC_REVIEW_MODEL_RECORDING=record" in mismatch.stderr
-    assert box.run("review-start", "--overlay", "none", "--dry-run").returncode == 3
+    dropped = box.run("review-start", "--overlay", "none", "--id-wait", "1")
+    assert dropped.returncode == 0 and "overlay:   (none) (requested)" in dropped.stdout
+    argv = next(call for call in box.docker_calls() if "launch" in call)
+    assert json.loads(argv[argv.index("--tags") + 1])["appsec/overlay"] == "none"
     outside = box.base / "outside.toml"
     outside.write_text("x = 1\n", encoding="utf-8")
     assert box.run("review-start", "--overlay", str(outside), "--dry-run").returncode == 2
@@ -1095,18 +1100,29 @@ def test_stack_rebuild_takes_the_profile(box: Sandbox, profile: str) -> None:
     assert [call["env"][ops.PROFILE_VARIABLE] for call in box.lifecycle_calls()] == [profile, profile]
 
 
-@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
-def test_review_start_refuses_when_the_running_profile_differs(box: Sandbox, profile: str) -> None:
+def test_review_start_selects_the_profile_per_run_within_the_provider_family(box: Sandbox) -> None:
     box.dagster.runs()
-    refused = box.run("review-start", "--profile", profile, "--dry-run")
-    assert refused.returncode == 3 and "APPSEC_REVIEW_PROFILE=dev" in refused.stderr
-    assert "stack-restart --profile" in refused.stderr
-    assert box.run("review-start", "--profile", "dev", "--dry-run").returncode == 0
-    box.stack(settings={ops.PROFILE_VARIABLE: profile})
-    assert box.run("review-start", "--profile", "dev", "--dry-run").returncode == 3
-    accepted = box.run("review-start", "--profile", profile, "--dry-run")
-    assert accepted.returncode == 0 and f"profile:   {profile}" in accepted.stdout and "more capable models" in accepted.stdout
-    assert f"profile:   {profile}" in box.run("review-start", "--dry-run").stdout
+    refused = box.run("review-start", "--profile", "copilot-prod", "--dry-run")
+    assert refused.returncode == 3 and "stack-restart --profile copilot-prod" in refused.stderr
+    assert "profile:   dev (container default)" in box.run("review-start", "--dry-run").stdout
+    accepted = box.run("review-start", "--profile", "prod", "--id-wait", "1")
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert "profile:   prod (requested)" in accepted.stdout and "more capable models" in accepted.stdout
+    argv = next(call for call in box.docker_calls() if "launch" in call)
+    tags = json.loads(argv[argv.index("--tags") + 1])
+    assert tags["appsec/profile"] == "prod" and tags["appsec/overlay"] == "none"
+    assert review_run.read_submission(box.repo)["identity"]["configuration"]["profile"] == "prod"
+
+
+def test_review_start_keeps_a_copilot_stack_on_copilot_profiles(box: Sandbox) -> None:
+    box.stack(settings={ops.PROFILE_VARIABLE: "copilot-dev"})
+    box.dagster.runs()
+    refused = box.run("review-start", "--profile", "dev", "--dry-run")
+    assert refused.returncode == 3 and "stack-restart --profile dev" in refused.stderr
+    copilot = box.run("review-start", "--profile", "copilot-prod", "--dry-run")
+    assert copilot.returncode == 0, copilot.stdout + copilot.stderr
+    assert "profile:   copilot-prod (requested)" in copilot.stdout
+    assert "profile:   copilot-dev (container default)" in box.run("review-start", "--dry-run").stdout
 
 
 def test_stack_status_shows_the_profile(box: Sandbox) -> None:
