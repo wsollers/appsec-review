@@ -6,3 +6,5 @@ tests/fixtures/graph/codeql_export/go-synthetic/** -text
 tests/fixtures/graph/expected/go-synthetic/** -text
 tests/fixtures/graph/codeql_export/java-synthetic/** -text
 tests/fixtures/graph/expected/java-synthetic/** -text
+tests/fixtures/graph/codeql_export/swift-synthetic/** -text
+tests/fixtures/graph/expected/swift-synthetic/** -text

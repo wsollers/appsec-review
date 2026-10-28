@@ -482,8 +482,50 @@
       }
     },
     "models_swift": {
-      "description": "Rejects a swift section until its pack declares its closed model vocabulary.",
-      "not": {}
+      "description": "The closed model vocabulary the swift pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlInjectionSink",
+                      "CommandInjectionSink",
+                      "PathInjectionSink",
+                      "UnsafeUnpackSink",
+                      "XxeSink",
+                      "UnsafeJsEvalSink",
+                      "UncontrolledFormatStringSink",
+                      "UnsafeWebViewFetchSink",
+                      "CleartextLoggingSink",
+                      "PredicateInjectionSink"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalFlowSource",
+                      "FlowSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "sink_class": {
       "enum": [
