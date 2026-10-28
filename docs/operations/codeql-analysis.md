@@ -314,9 +314,10 @@ project, the database and the scope.
 
 - **Cache.** `$HOME/.codeql/compile-cache` is persisted in the docker volume
   `appsec-codeql-compile-<sha256(declarations)[:24]>`, mounted at `/codeql-cache` and linked by
-  the runner. Its namespace is the declared CodeQL/runner releases and runtime user, so it is
-  shared across runs and packs recompile only when the CodeQL distribution, the runner release
-  or the pack bytes change (CodeQL's cache is content addressed by query and library bytes).
+  the runner. Its namespace is the declared CodeQL release and the runtime user (the runner
+  release is not part of it: the runner contributes nothing to compiled QL), so it is shared
+  across runs and queries recompile only when the CodeQL distribution or the query bytes change
+  (CodeQL's cache is content addressed by query and library bytes).
   Native mode keeps its cache directory under the run. Missing component declarations disable
   cache use explicitly.
   Initialization is single-flight under a process-safe per-volume lock. Only the volume root
@@ -335,12 +336,11 @@ project, the database and the scope.
   process (per-key lock, in-memory memo) before the first export action. A compile that fails or
   times out makes that export `FAILED` with a named gap; it is never read as "no flows".
   Events use tool id `codeql-graph-export-compile`.
-- **Platform release checks.** `python containers/build.py query-packs` and its `--warm` option
-  are separate platform-maintenance operations. `--warm` fills its own volume, keyed by the
-  image id (`appsec-codeql-compile-<image-id[:16]>`), not the customer job's release-keyed cache,
-  so it does not warm a review run, and its checks never run as customer-review assurance. The
-  first review run after a CodeQL or runner release change compiles cold; later runs reuse that
-  release's shared cache.
+- **Platform warm compile.** `python containers/build.py query-packs --warm` compiles every
+  warm-registered pack into the same volume review runs mount (the name is derived from the
+  declared CodeQL release in `appsec-review.toml` and the uid that reads it), so after a CodeQL
+  release change one warm step, not the first review run, pays the cold compile. Its checks are
+  platform maintenance and never count as customer-review assurance.
 - **Cache sharing trade-off.** The job's compilation cache is shared by every run of the same
   user and declared releases. It holds only compiled QL derived from repository-owned packs and
   the image's libraries (evaluation binds the scope and seeds with `--external`, so no project

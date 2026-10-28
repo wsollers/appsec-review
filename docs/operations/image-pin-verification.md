@@ -84,8 +84,8 @@ rebuild moves tags on the shared daemon that a live run may be using.
    Smoke the rebuilt images (`python3 containers/build.py smoke <image-id>`) before pinning them.
 
    After rebuilding a CodeQL image, fully compile its query packs to prove they plan in the new
-   image (this fills a platform volume keyed by the image id; it does not warm review runs, whose
-   shared cache is keyed by the declared CodeQL and runner releases):
+   image. This fills the shared compile cache review runs mount (keyed by the declared CodeQL
+   release and runtime user), so no review run compiles cold afterwards:
 
    ```bash
    python3 containers/build.py query-packs --warm
