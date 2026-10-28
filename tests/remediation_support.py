@@ -147,19 +147,6 @@ def toml_tables() -> str:
         VALIDATE, "remediation_validation", "validate", validation_settings()) + "\n"
 
 
-def reference_sync_tables() -> str:
-    """Keep every configured feed, including tables separated by internal comments."""
-    job = "job_third_party_data_sync"
-    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    start = text.index(f"[jobs.{job}]\n")
-    lines = []
-    for line in text[start:].splitlines():
-        if line.startswith("[") and f"jobs.{job}" not in line:
-            break
-        lines.append(line)
-    return "\n".join(lines) + "\n"
-
-
 def add_native_graph_facts(fixture) -> dict[str, str]:
     """Commission actual mapped graph facts before review, rather than relabelling a supported claim."""
     from appsec_review.graph.contract import Family
