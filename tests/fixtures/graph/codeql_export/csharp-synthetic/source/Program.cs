@@ -86,7 +86,7 @@ namespace Synthetic
         [HttpGet("read")]
         public IActionResult Read(string name)
         {
-            File.Delete(Path.GetFileName(name));
+            System.IO.File.Delete(Path.GetFileName(name));
             return Ok(store.Load(name));
         }
 
