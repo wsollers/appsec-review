@@ -34,7 +34,7 @@ def summary(root, job):
 @pytest.fixture(scope="module")
 def chain(tmp_path_factory):
     base = tmp_path_factory.mktemp("rm")
-    fixture = build_accepted_index_set(base)
+    fixture = build_accepted_index_set(base / "data")
     native_ids = support.add_native_graph_facts(fixture)
     config = write_config(base, fixture.runs_dir,
                           extra=support.toml_tables() + job_tables("job_third_party_data_sync"))
@@ -130,7 +130,9 @@ def test_native_review_really_emits_confirmed_poc_candidacy_without_injected_can
     review = load_review(chain.root, support.ROOT, support.bounds())
     handoff = read_bound_json(chain.root, review["inputs"]["review_handoff"])
     candidates = handoff["poc_candidates"]
-    assert candidates
+    assert candidates, [(package["title"], package["state"], package["judge_verdict"],
+                         [(score["native"], score["missing_factors"]) for score in package["scores"]])
+                        for package in review["packages"]]
     assert len({candidate["claim_id"] for candidate in candidates}) == len(candidates)
     for candidate in candidates:
         assert candidate["state"] == "confirmed"
