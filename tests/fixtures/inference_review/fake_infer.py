@@ -127,6 +127,14 @@ class ScriptedInfer:
         self._log(request, "call")
         if request.role in self.scenario.get("fail_roles", ()):
             raise RuntimeError("scripted provider outage")
+        if task == "chain_composer":
+            return self._final({"candidates": [], "gaps": ["fixture_has_no_native_chain_continuity_evidence"]})
+        if task in ("chain_refuter", "chain_weakest_link_verifier"):
+            return self._final({
+                "chain_id": payload["chain"]["chain_id"],
+                "checks": [{"edge_index": index, "dimension": item["dimension"], "stance": "unresolved", "cites": []}
+                           for index, edge in enumerate(payload["chain"]["edges"]) for item in edge["obligations"]],
+                "gaps": ["fixture_has_no_native_chain_continuity_evidence"]})
         if request.role == "red_team_analyst":
             self._gate()
             return self._lead_red(request, task, payload)
