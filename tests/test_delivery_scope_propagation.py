@@ -77,7 +77,7 @@ def test_fresh_catalog_scope_gates_fake_scanner_before_payload_access(tmp_path, 
         return {"artifact": artifact, "gaps": [], "terminal_status": "SUCCEEDED"}
 
     monkeypatch.setattr(security, "_safe_file", safe_file)
-    monkeypatch.setattr(security, "classify", lambda *args: {"family": "native", "format": "pe"})
+    monkeypatch.setattr(security, "classify", lambda *args, **kwargs: {"family": "native", "format": "pe"})
     monkeypatch.setattr(security, "_scan_one", fake_scan)
     loaded = {"artifacts": artifacts}
     unit = SimpleNamespace(
