@@ -9,6 +9,7 @@ import yaml
 from yaml.events import AliasEvent, MappingStartEvent, SequenceStartEvent, MappingEndEvent, SequenceEndEvent
 
 from appsec_review.debug_symbols._reader_binary import Pe, ReaderFailure
+from appsec_review.debug_symbols._reader_codeview import decode_inline_ranges, native_inline_sites
 from appsec_review.debug_symbols.contract import AddressRange, RecordKind, SourceSpan, SymbolRecord
 
 
@@ -72,7 +73,7 @@ _PRIMITIVES = {
 }
 
 
-def parse_pdb(text: str, image: Pe, limits):
+def parse_pdb(text: str, image: Pe, limits, *, native_pdb: bytes | None = None):
     document = _document(text, limits)
     gaps = {"source_paths_unverified", "variable_locations_not_indexed", "signature_parameter_names_unavailable"}
     records = []
@@ -93,6 +94,17 @@ def parse_pdb(text: str, image: Pe, limits):
         raise ReaderFailure("record_limit")
     types = {0x1000 + index: item for index, item in enumerate(tpi)}
     ids = {0x1000 + index: item for index, item in enumerate(ipi)}
+    native_sites = {}
+    if native_pdb is not None and any(
+        item.get("Kind") in ("S_INLINESITE", "S_INLINESITE2")
+        for module in modules for item in module.get("Modi", {}).get("Records", [])
+    ):
+        try:
+            native_sites = native_inline_sites(native_pdb, limits)
+        except ReaderFailure as error:
+            if error.gap in ("record_limit", "input_limit", "depth_limit"):
+                raise
+            gaps.add(error.gap)
 
     def typename(index, seen=()):
         if type(index) is not int or index < 0:
@@ -240,6 +252,8 @@ def parse_pdb(text: str, image: Pe, limits):
                       "producer": compile_metadata.get("Version", ""), "source_binding": "path_only"},
             ))
         stack = []
+        procedures = {}
+        inline_ranges = {}
         for symbol_index, item in enumerate(module_symbols):
             kind = item.get("Kind", "")
             key = module_key + f":symbol:{symbol_index:08x}"
@@ -258,6 +272,7 @@ def parse_pdb(text: str, image: Pe, limits):
                           "native_record_index": symbol_index},
                 ))
                 stack.append((key, "function"))
+                procedures[key] = procedure
                 if "HasOptimizedDebugInfo" in procedure.get("Flags", []):
                     gaps.add("optimized_debug_information")
             elif kind in ("S_INLINESITE", "S_INLINESITE2"):
@@ -265,16 +280,50 @@ def parse_pdb(text: str, image: Pe, limits):
                 value = ids.get(inline["Inlinee"], {})
                 identity = value.get("FuncId", value.get("MemberFuncId", {}))
                 site = inlinees.get(inline["Inlinee"], {})
-                # LLVM 18 pdb2yaml omits binary annotations. Never substitute the
-                # enclosing function's range for an unknown inline address range.
-                gaps.add("inline_ranges_unavailable")
+                ranges = ()
+                native = native_sites.get((module_index, symbol_index))
+                try:
+                    if native is None:
+                        raise ReaderFailure("inline_native_data_unavailable")
+                    procedure_key = module_key + f":symbol:{native.procedure_index:08x}"
+                    parent_key = module_key + f":symbol:{native.parent_index:08x}"
+                    active_procedure = next((entry[0] for entry in reversed(stack) if entry[1] == "function"), None)
+                    if (native.parent != inline["PtrParent"] or native.end != inline["PtrEnd"]
+                            or native.inlinee != inline["Inlinee"]
+                            or not stack or parent_key != stack[-1][0]
+                            or procedure_key != active_procedure
+                            or any(procedures.get(procedure_key, {}).get(field) != value
+                                   for field, value in native.procedure.items())):
+                        raise ReaderFailure("inline_native_export_mismatch")
+                    relative = decode_inline_ranges(
+                        native.annotations, procedure_size=native.procedure["CodeSize"],
+                        max_records=limits["max_records"],
+                    )
+                    start = image.rva(native.procedure["Segment"], native.procedure["Offset"],
+                                      native.procedure["CodeSize"])
+                    ranges = tuple(AddressRange(start + interval.start, start + interval.end)
+                                   for interval in relative)
+                    if parent_key in inline_ranges and any(
+                        not any(parent.start <= interval.start and interval.end <= parent.end
+                                for parent in inline_ranges[parent_key])
+                        for interval in ranges
+                    ):
+                        ranges = ()
+                        raise ReaderFailure("inline_annotation_parent_range_mismatch")
+                except ReaderFailure as error:
+                    if error.gap in ("record_limit", "input_limit", "depth_limit"):
+                        raise
+                    gaps.update(("inline_ranges_unavailable", error.gap))
                 records.append(SymbolRecord(
                     key, RecordKind.INLINE_FRAME, identity.get("Name", ""),
+                    ranges=ranges,
                     source=source(site["FileName"], site["LineNum"]) if site else None,
                     parent_key=stack[-1][0] if stack else module_key,
                     data={"inlinee_index": inline["Inlinee"], "address_kind": "rva",
-                          "source_role": "inlinee_definition", "source_binding": "path_only"},
+                          "source_role": "inlinee_definition", "source_binding": "path_only",
+                          "native_record_offset": native.record_offset if native else None},
                 ))
+                inline_ranges[key] = ranges
                 stack.append((key, "inline"))
             elif kind in ("S_BLOCK32", "S_SEPCODE"):
                 stack.append((stack[-1][0] if stack else module_key, "block"))

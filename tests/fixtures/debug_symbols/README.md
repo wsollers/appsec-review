@@ -97,10 +97,34 @@ Compilation-unit display names are basenames, not absolute paths.
   callsite ancestry/ranges.
 - Genuine native PDB functions/signatures, TPI layouts/member offsets, section
   offset-to-RVA conversion, MD5 line tables, compilation units, optimized-out
-  variables, and inline ancestry/definition sources.
+  variables, and inline ancestry/definition sources/address ranges.
 - LLVM 18 `pdb2yaml` **omits inline binary annotations**. Native PDB inline
-  frames therefore have no guessed ranges and explicitly report
-  `inline_ranges_unavailable`; the definition source is not a callsite claim.
+  ranges are read from the paired PDB's MSF/DBI module symbol streams, then
+  matched to the YAML by native module/record ordinal, inlinee identity,
+  scope parent/end and enclosing procedure fields. The genuine `inline.pdb`
+  contains `0B00 040F` at native record offset 192: an inline interval at
+  `[0x1000, 0x100f)` within `entry`, whose procedure interval is
+  `[0x1000, 0x1010)`. This is not a fabricated copy of the procedure's range.
+  Definition sources remain explicitly distinct from callsite source claims.
+- The bounded decoder supports documented 1/2/4-byte compressed operands,
+  explicit and implicit-next-start lengths, code-offset/line-offset and
+  code-length/code-offset combination opcodes, and trailing zero alignment
+  padding. Line/file/column operands do not alter address membership and are
+  not used to invent callsite source bindings. Intervals must be nonempty,
+  nonoverlapping and contained in the validated PE section/procedure; nested
+  inline intervals must also fit their known parent inline intervals.
+  Unknown opcodes, malformed operands, missing terminal lengths, inconsistent
+  native/YAML scopes, and unsupported separated-code chunks produce explicit
+  gaps and no ranges for the affected frame. No procedure-end fallback is used.
+  Native stream rows, scopes, opcodes and ranges share the existing bounds.
+- Format references:
+  [Microsoft cvinfo.h](https://github.com/microsoft/microsoft-pdb/blob/master/include/cvinfo.h)
+  documents `INLINESITESYM` and `BinaryAnnotationOpcode`;
+  LLVM 18 [RawTypes.h](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.3/llvm/include/llvm/DebugInfo/PDB/Native/RawTypes.h),
+  [SymbolRecord.h](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.3/llvm/include/llvm/DebugInfo/CodeView/SymbolRecord.h)
+  and [NativeFunctionSymbol.cpp](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.3/llvm/lib/DebugInfo/PDB/Native/NativeFunctionSymbol.cpp)
+  describe the native stream layout, compressed encoding and address-state
+  semantics, including the differing cursor effects of the two length opcodes.
 - Public-only PDB names/RVAs do not invent function lengths/signatures.
   Split/supplementary DWARF, unsupported type/member forms, location
   expressions, unavailable checksums and optimized-away data remain named
