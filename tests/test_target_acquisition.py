@@ -925,3 +925,29 @@ def test_acquisition_gate_follows_image_pin_in_the_topology() -> None:
     assert dependencies is not None
     assert dependencies["job_target_acquisition"] == ("job_image_pin_verification",)
     assert dependencies["job_review_intake"] == ("job_target_acquisition",)
+
+
+def test_configured_target_follows_the_requested_system_and_refuses_disagreement(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from appsec_review.runtime.launch import SYSTEM_ENVIRONMENT, TARGET_ENVIRONMENT, configured_target
+
+    monkeypatch.delenv(TARGET_ENVIRONMENT, raising=False)
+    monkeypatch.delenv(SYSTEM_ENVIRONMENT, raising=False)
+    assert configured_target(tmp_path) == (tmp_path / "targets" / "appsec-multi-vuln").absolute()
+    monkeypatch.setenv(SYSTEM_ENVIRONMENT, SYSTEM)
+    assert configured_target(tmp_path) == (tmp_path / "targets" / SYSTEM).absolute()
+    monkeypatch.setenv(TARGET_ENVIRONMENT, str(tmp_path / "targets" / SYSTEM))
+    assert configured_target(tmp_path) == (tmp_path / "targets" / SYSTEM).absolute()
+    monkeypatch.setenv(TARGET_ENVIRONMENT, str(tmp_path / "targets" / "appsec-multi-vuln"))
+    with pytest.raises(ValueError, match="disagrees"):
+        configured_target(tmp_path)
+
+
+def test_dagster_deployment_mounts_targets_writable_and_passes_the_system() -> None:
+    yaml = pytest.importorskip("yaml")
+    compose = yaml.safe_load((ROOT / "deploy" / "dagster" / "compose.yaml").read_text(encoding="utf-8"))
+    for name, service in compose["services"].items():
+        mounts = [mount for mount in service.get("volumes", []) if ":/opt/app/targets" in str(mount)]
+        assert all(mount == "../../targets:/opt/app/targets" for mount in mounts), (name, mounts)
+    assert "APPSEC_REVIEW_SYSTEM" in compose["x-dagster-environment"]
+

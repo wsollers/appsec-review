@@ -58,17 +58,24 @@ class LaunchInputs:
 
 
 def configured_target(repository_root: Path, targets_dir: str = "targets") -> Path:
-    """The target a launch reviews: ``APPSEC_REVIEW_TARGET``, else the composed root of the system named
-    by ``APPSEC_REVIEW_SYSTEM``, else the repository's default corpus."""
+    """The target a launch reviews: the composed root of the system named by ``APPSEC_REVIEW_SYSTEM``, else
+    ``APPSEC_REVIEW_TARGET``, else the repository's default corpus.
+
+    When both are set they must agree, so a deployment never acquires one tree and reviews another."""
 
     from appsec_review.config.native_dagster import native_execution_requested
     if native_execution_requested():
         from appsec_review.orchestration.dagster.native import validate_native_launch
         return Path(validate_native_launch().target_root)
     # Do not resolve symlinks/stat the checkout before we know the job reads it.
-    if not os.environ.get(TARGET_ENVIRONMENT) and os.environ.get(SYSTEM_ENVIRONMENT):
-        return (Path(repository_root) / targets_dir / os.environ[SYSTEM_ENVIRONMENT]).absolute()
-    return Path(os.environ.get(TARGET_ENVIRONMENT, Path(repository_root) / "targets" / "appsec-multi-vuln")).absolute()
+    system, target = os.environ.get(SYSTEM_ENVIRONMENT, ""), os.environ.get(TARGET_ENVIRONMENT, "")
+    if system:
+        root = (Path(repository_root) / targets_dir / system).absolute()
+        if target and os.path.normpath(Path(target).absolute()) != os.path.normpath(root):
+            raise ValueError(f"{TARGET_ENVIRONMENT}={target} disagrees with {SYSTEM_ENVIRONMENT}={system}; "
+                             f"set {TARGET_ENVIRONMENT}={root} or unset it")
+        return root
+    return Path(target or Path(repository_root) / "targets" / "appsec-multi-vuln").absolute()
 
 
 def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str]) -> LaunchInputs:

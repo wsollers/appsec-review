@@ -93,14 +93,13 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f 
 
 Choose the Claude subscription login. The Windows host's Claude login is separate from this
 container login; neither is copied into the image or repository.
-For a bounded acceptance target already beneath the read-only `targets/` mount, set
-`APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
-deployment defaults to `/opt/app/targets/appsec-multi-vuln`. The code location also honours
-`APPSEC_REVIEW_SYSTEM=<id>`, which makes `target_acquisition` acquire a configured multi-component
-system into `targets/<id>/` before intake, but this compose deployment neither passes that variable
-nor mounts `targets/` writable, so here the gate records `NOT_REQUESTED`. Acquire a system on the
-host with `appsec-review acquire-target --system <id>` and point `APPSEC_REVIEW_TARGET` at
-`/opt/app/targets/<id>`; see
+`targets/` is mounted writable at `/opt/app/targets`: acquisition creates checkouts there and
+builds write their outputs (binaries, libraries, generated assets) into the checkout. For a target
+already beneath it, set `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch
+commands; otherwise the deployment defaults to `/opt/app/targets/appsec-multi-vuln`. To have
+`target_acquisition` acquire a configured multi-component system into `targets/<id>/` before intake,
+set both `APPSEC_REVIEW_SYSTEM=<id>` and `APPSEC_REVIEW_TARGET=/opt/app/targets/<id>` in
+`deploy/dagster/.env`; the code location refuses to start a review when the two disagree. See
 [`../../docs/operations/target-acquisition.md`](../../docs/operations/target-acquisition.md).
 
 The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
