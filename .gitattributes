@@ -1,0 +1,13 @@
+# Keep portable source and shell scripts LF, regardless of core.autocrlf.
+* text=auto eol=lf
+
+# Only Windows command-processor scripts need CRLF in the working tree.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# These are byte-pinned inputs, not text to normalize. Preserve the committed
+# bytes (including upstream CRLF and mixed endings) on every platform.
+rules/** -text
+data/** -text
+tests/fixtures/** -text
+test/acceptance/** -text
