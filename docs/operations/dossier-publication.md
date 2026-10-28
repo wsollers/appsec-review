@@ -2,8 +2,8 @@
 
 Status: producer delivered in `065f736c`, centrally wired in `b702eb7`, assurance compatibility
 fixed in `7641fa5` (2026-10-28). The semantic job, protected loader, renderer, typed settings and
-receipts are implemented. **End-to-end acceptance remains pending**: chain publication now emits
-review handoff `/3`, but the delivered shared reader still expects `/2`; final PoC/gate/report
+receipts are implemented. Checkpoint `18eae9f` aligns shared review `/3` acceptance and nested
+bindings. **End-to-end acceptance remains pending**: final PoC/gate/report
 attachment contracts and a real seeded PDF sample are not yet reconciled here.
 The [source-verified data inventory](../architecture/dossier-data-inventory.md) lists actual
 producer/index/query/provenance surfaces and unavailable capabilities.
@@ -144,7 +144,7 @@ Resume must invalidate consumers when any consumed review, PoC, plan, validation
 schema, tool or rendering identity changes. The final gate must verify all referenced bytes and
 certify one snapshot before reporting.
 
-Before calling the new end-to-end graph operational, reconcile final review/PoC/gate/report
+Before calling the new end-to-end graph operational, reconcile final PoC/gate/report
 contracts, explicit manual admission, enabled/disabled combinations, tamper rejection, deterministic
 and public-data leakage checks and the live PDF sample. Producer factories and declarations alone
 are not that acceptance result. Track checks and remaining gaps in the

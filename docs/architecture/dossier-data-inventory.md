@@ -2,7 +2,8 @@
 
 Status: source-verified inventory, initially at contract commit
 `5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
-and assurance fix `7641fa5`, 2026-10-28. This is a catalog of implemented input surfaces,
+and assurance fix `7641fa5`, then reader/metric checkpoint `18eae9f`, remediation `e769645f` and
+index-admission `3f28d871`, 2026-10-28. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,
 central wiring and process metrics now exist; final gate/PoC contracts and chain isolation still
 await integration. Shared schema identities and assurance remain in
@@ -75,7 +76,11 @@ against a target for this document. Target-owned guidance is not dossier authori
 | Remediation | Confirmed-only outcomes, inert exact byte-edit patches, separate regression specifications, independent semantic assessments, bounded static/native syntax comparisons and cleanup receipts. | [`job_remediation_planning/job.py`](../../src/appsec_review/jobs/job_remediation_planning/job.py), [`job_remediation_validation/job.py`](../../src/appsec_review/jobs/job_remediation_validation/job.py); [operations](../operations/remediation.md). PoC context is not consumed in this slice (`poc_handoff: null`), despite ordering after PoC. No runtime regression or target mutation. |
 | Dossiers | Closed protected model, bounded redacted excerpts/inert PoC source, per-finding/PoC-outcome membership, immutable JSON/LaTeX/PDF/receipt references and omitted/render-gap accounting. | [`job_dossier_publication/job.py`](../../src/appsec_review/jobs/job_dossier_publication/job.py), [`reporting/dossiers.py`](../../src/appsec_review/reporting/dossiers.py), [`dossier_render.py`](../../src/appsec_review/reporting/dossier_render.py); [operations](../operations/dossier-publication.md). Registered producer availability is not completed gate certification or real-run PDF evidence. |
 
-The shared accepted-review verifier re-hashes the ledger, package manifests, findings, scores and coverage,
+The shared accepted-review verifier now accepts handoff `/3` and re-hashes the ledger, individual
+lead/hunt review packages and their manifests, findings, scores, coverage, scope and chain artifacts.
+It checks run identity, duplicate finding/claim/score identities, canonical PoC-basis digest and
+finding chain membership against the ledger, retaining these nested refs in its bindings.
+It also verifies the chain manifest through `chains.verify_publication`
 and proves that `remediation_intake` (confirmed) and `verification_backlog` (supported) exactly
 partition accepted finding packages. Its current projection is intentionally narrower than a
 developer dossier. A dossier needing the claim, adjudication or evidence content must resolve the
@@ -371,12 +376,13 @@ measurements retain null/unavailable reasons where producers preserve them.
 
 The summary now also contains `completion`, with
 `appsec-review/completion-process-metrics/1` semantics. Seven fixed lanes report `observed` and
-per-event counts, allowlisted counters/outcomes, explicit-null usage counts and duration
+per-event counts, allowlisted counters/outcomes/capability maps/flags/dimensions, separate null-token
+measurements and missing-turn counters, nonadditive configured-limit ranges and duration
 count/p50/p95/max/summed-work. Invalid measurements retain a total and at most 200 named gaps.
 This is attempted event-scoped work, including retries, not unique accepted findings; overlapping
 stage summaries must not be added. An unobserved lane is not an observed zero or a complete
-missing-producer audit. The remediation model emitter's unknown-to-zero conversion is a pending
-producer correction at this source boundary.
+missing-producer audit. Remediation `e769645f` now preserves unknown token dimensions as null and
+genuine measured zeros, with explicit missing-turn/no-completed-turn metadata.
 
 These are regenerable operational views, not another retrieval index or an evidence-admission
 route. Hash-bound metric receipts resolve run-owned artifacts; malformed/changed/escaping receipts
@@ -445,18 +451,20 @@ remains in the [completion design](evidence-completion-and-remediation.md).
 
 Integration `b702eb7` contains chain `ec9257bf`, dossier `065f736c`, remediation `6278e580`,
 typed defaults/profiles, registration, input matrix, CLI/Dagster ordering and completion metrics;
-`7641fa5` restores assurance validation within full schema-validated producer rows.
+`7641fa5` restores assurance validation within full schema-validated producer rows. Checkpoint
+`18eae9f` includes shared reader `/3` alignment (`6f168400`) and metric parity.
 
 | Delivered surface | Source-verified state / remaining boundary |
 | --- | --- |
-| Shared review reader | `jobs/accepted_review.py` is extracted and reused. It still expects review handoff `/2` while chain publication emits `/3`; the final version-aligned reader is pending. |
+| Shared review reader | `jobs/accepted_review.py` now verifies handoff `/3`, ledger-bound chain publication/memberships, nested review-package refs, run identity, duplicate identities and the PoC-basis digest. Shared-reader version mismatch is resolved; final producer/gate/report contracts are still pending. |
 | Pre-gate topology | Direct and Dagster graphs register PoC, planning, validation and dossiers before one gate, then the report. New configurations enable all four; frozen old configurations remain immutable. Validation without planning is rejected. PoC/gate/report producer contracts must still catch up to that graph. |
 | Chains | Three pre-seal units, native continuity policy, protected dataset and manifest exist. Chain/base-finding coverage isolation remains a known follow-up; do not claim independent base findings are unaffected until that fix is verified. |
-| Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Non-native/architectural work retains manual outcomes; neither PoC context nor regression-function compilation is commissioned. |
+| Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Job-scoped validated role bundles are hash-pinned; uncommissioned native profiles retain manual outcomes. Neither PoC context nor regression-function compilation is commissioned. |
 | Dossiers | Real semantic job, strict typed bounds, closed projection, hardened renderer and `dossier-rendering-receipt/1` exist. Final gate certification and actual seeded PDF evidence remain pending. |
-| Metrics | `run-metrics/3.completion` exists with fixed lanes and observational semantics. Producer events are partial; final PoC/gate/report/chain instrumentation and unknown remediation usage still need reconciliation. |
+| Metrics | `run-metrics/3.completion` exists with fixed lanes, actual statuses, fixed capability/flag/dimension maps, nonadditive limit ranges, separate null-token measurements/missing-turn counters and observational semantics. Remediation preserves unknown usage; final PoC/gate/report/chain instrumentation remains partial. |
+| Index admission / resume inventory | `3f28d871` excludes the three new completion consumers from active pre-review acceptance. `registry_providers` still returns **all registered file owners and dataset declarations** for resume auditing; do not remove downstream ownership just because its output is not yet a pre-review input. |
 
-Final gate/PoC `/2` publication contracts, shared `/3` review acceptance, final report attachment
+Final gate/PoC `/2` publication contracts, final report attachment
 projection, explicit-manual-PoC authentication end to end, chain/base isolation, residual dataset
 consumer metadata, complete producer telemetry and the real seeded PDF/sample remain unresolved
 here. No target scan, assumed deployment, compilation or generic metrics pass substitutes for

@@ -85,8 +85,10 @@ controls classification; the command is read-only.
 The user requires telemetry and metrics from the first implementation of the
 [completion lanes](evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
 not instrumentation added after rollout. Integration `b702eb7` adds completion aggregates and
-remediation/dossier events to the existing system. Final PoC/gate/report/chain instrumentation
-and producer-level unknown-usage preservation are still being reconciled. The table below records
+remediation/dossier events to the existing system. Checkpoint `18eae9f` adds aggregate parity for
+real PoC/native statuses, capability maps, flags and nonadditive limits. Remediation follow-up
+`e769645f` preserves unknown token dimensions/null versus genuine measured zero and emits unavailable
+metadata. Final PoC/gate/report/chain instrumentation is still being reconciled. The table below records
 the complete tracking requirement, not a claim that every producer already emits every dimension.
 
 Reuse [`EventLog.write`](../../src/appsec_review/observability/events.py) through `context.events`
@@ -102,12 +104,24 @@ Its `semantics` is `appsec-review/completion-process-metrics/1`, with
 `publication_gate`, `report_publication`. Chains are selected by inference `step_id=attack_chains`
 or the `INFERENCE_REVIEW_ATTACK_CHAIN` event prefix; other lanes map fixed job ids.
 
-Each lane contains `observed` and `events`. Each event has `count`, allowlisted `counters` and
-`outcomes`, `usage_unavailable_count` for explicit-null token fields, and duration
-`count`, `p50`, `p95`, `max`, `summed_work` (null when no duration was emitted).
-Invalid/nonfinite/negative/oversized counters or durations and invalid outcome mappings increment
+Each lane contains `observed` and `events`. Each event has the following closed aggregate shape:
+
+| Field | Meaning and bounded dimensions |
+| --- | --- |
+| `count`, `counters`, `outcomes` | Event count, allowlisted attempted-work sums and closed statuses; outcome maps retain their `outcomes`, `outcome_counts`, `by_kind` or `by_status` prefix. All seven actual PoC statuses are accepted: `compile_verified`, `compile_failed`, `artifact_generated`, `policy_denied`, `insufficient_evidence`, `not_applicable`, `unsafe_to_attempt`. Native adapter outcomes include `passed`, `baseline_failed`, `patched_failed`, `unsafe`. |
+| Capability maps | `attachment_counts`, `gap_counts`, `omitted_counts` become prefixed counters; `dispositions` become prefixed outcomes and Boolean `enabled` values become flags. Only `poc_generation`, `attack_chains`, `remediation_planning`, `remediation_validation`, `dossiers` are valid capabilities. These are event observations, not a replacement for frozen configuration or accepted manifests. |
+| `flags` | Counts by Boolean value for `explicit_poc_admission`, `frontier_truncated`, `pdf_requested`, `render_failed`, `baseline_attempted`, `patched_attempted`, `usage_unavailable`, and the fixed capability `enabled` map. |
+| `dimensions` | `kind`: `confirmed_finding`, `poc`, `refuter`, `weakest_link_verifier`; `adapter`: `native_syntax`; `role`: `remediation_writer`, `remediation_reviewer`. No arbitrary identity becomes a label. |
+| `limits` | Per-event observed `{min,max}` ranges for `max_dossiers`, `max_source_excerpts`, `max_evidence_rows`. Configured limits are **never summed** across retries or counted as work. |
+| `unavailable_token_measurements` | Number of explicit-null `input_tokens`, `output_tokens`, `cache_tokens` measurements, not missing turns. Separately, `counters.usage_unavailable_count`, when emitted by a producer, counts turns with unavailable usage. Omitted fields are not invented as zero or counted as explicit nulls. |
+| `duration_ms` | `count`, `p50`, `p95`, `max`, `summed_work`; summaries are null when no duration was emitted. |
+
+Invalid/nonfinite/negative/oversized measurements and invalid capability/outcome mappings increment
 `measurement_gap_count`; at most 200 named `measurement_gaps` are retained.
-`COUNTERS`, `OUTCOMES`, `OUTCOME_FIELDS` are closed in the source module. Aggregate counters
+`COUNTERS`, `OUTCOMES`, `OUTCOME_FIELDS`, `LIMITS`, `CAPABILITIES`, `CAPABILITY_COUNTERS`, `FLAGS`
+and `DIMENSIONS` are closed in the source module. Aggregator support for a field does not prove a
+producer emitted it; in particular pending final producer instrumentation is not supplied by
+synthetic metrics fixtures. Aggregate counters
 exclude arbitrary text, candidate ids, paths, provider prose and raw payloads.
 
 These are event-scoped **attempted work**: retries count; neither stage totals nor overlapping

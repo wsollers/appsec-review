@@ -11,7 +11,8 @@ This page covers operator settings for `job_inference_security_review` (Dagster 
 completeness/ledger/publication sealing. Typed `chain_proposed`, `chain_challenged`, `chain_decided`
 events remain in the single `ledger-event/1` stream; a protected `attack-chain-manifest/1` binds
 proposals, challenges and terminal artifacts. Publication now emits `inference-review-handoff/3`.
-The shared reader's `/3` alignment and chain/base-coverage isolation remain integration follow-ups.
+Checkpoint `18eae9f` aligns the shared `/3` reader and ledger-bound chain membership/publication
+verification. Chain/base-coverage isolation remains an integration follow-up.
 Downstream confirmed-finding dossiers and remediation must reference the exact
 accepted findings, adjudications, evidence and scores without changing their state or shipment
 decision. The [dossier data inventory](../architecture/dossier-data-inventory.md) distinguishes

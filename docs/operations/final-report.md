@@ -2,8 +2,8 @@
 
 **Partial completion integration (`b702eb7`):** the registered graph now places PoC, remediation
 and dossiers before one final gate. The gate/report contracts below remain the old implementation:
-they have not yet been replaced by final `/2` snapshot contracts, and the shared reader still
-expects review `/2` while the chain writer emits `/3`. Hardcoded absence limitations and
+they have not yet been replaced by final `/2` snapshot contracts. Checkpoint `18eae9f` aligns the
+shared review reader with writer `/3`, including nested chain/package bindings. Hardcoded absence limitations and
 post-gate PoC discovery are pending replacement, not evidence that the new producers are absent.
 The [completion design](../architecture/evidence-completion-and-remediation.md) requires
 one gate-certified snapshot after every enabled producer, including protected

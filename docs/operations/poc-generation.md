@@ -5,8 +5,9 @@ single final gate and enables it for new configurations. The handler/publication
 is still the old gate-coupled implementation from `5f5548d`, not an operational recipe for that new
 graph. Its replacement will use
 immutable attempt-owned artifacts and add explicit nonexecution assurance and protected
-[per-outcome dossiers](dossier-publication.md). Final PoC/gate `/2` contracts and the shared `/3`
-review reader are pending; old frozen runs are not silently enabled or upgraded.
+[per-outcome dossiers](dossier-publication.md). Final PoC/gate `/2` contracts are pending;
+checkpoint `18eae9f` aligns the shared `/3` review reader and verifies PoC-basis digests.
+Old frozen runs are not silently enabled or upgraded.
 [Dossier data inventory](../architecture/dossier-data-inventory.md)
 enumerates the actual accepted inputs and bounded retrieval; compiling either function still
 does not observe its behavior.

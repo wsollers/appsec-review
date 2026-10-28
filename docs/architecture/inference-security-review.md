@@ -14,7 +14,8 @@ code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package gra
 CVSS v4/SSVC providers, global round barriers and cross-package variant hunts remain design only.
 Compile-only PoC generation exists; `ec9257bf` adds real pre-seal chain composition/challenges,
 and integration `b702eb7` adds remediation/dossier producers, automatic new-configuration defaults,
-pre-gate ordering and completion metrics. Final `/3` review acceptance, PoC/gate/report contracts,
+pre-gate ordering and completion metrics. Checkpoint `18eae9f` aligns shared `/3` review acceptance
+and extends metric parity. Final PoC/gate/report contracts,
 chain/base isolation and end-to-end/live-PDF acceptance remain pending at this source boundary.
 The [completion contract](evidence-completion-and-remediation.md) preserves the user's compile-only,
 never-executed policy; any executor diagrams/sketches below are historical unimplemented design,
@@ -1444,8 +1445,8 @@ Closed versioned schemas exist for the red discovery result, blue and verifier r
 turns, cell records, claims, evidence relations, adjudication, gaps, ledger events, score packages
 (`score-package/3`), finding packages (`finding-package/2`) and the handoff
 (`inference-review-handoff/3` from the chain writer). Chain proposal/challenge/terminal/manifest
-schemas now exist, with typed chain events in `ledger-event/1`. The shared reader still expects
-handoff `/2` pending version-aligned integration; final PoC/publication contract changes are not
+schemas now exist, with typed chain events in `ledger-event/1`. The shared reader now accepts
+handoff `/3` and verifies chain/package bindings; final PoC/publication contract changes are not
 silently treated as backwards-compatible.
 They use closed objects, bounded strings/arrays, enums for state, and reusable definitions for
 artifact/evidence references.
