@@ -32,7 +32,8 @@ def _graph_order() -> tuple[tuple[str, ...], tuple[str, ...]]:
 # re-verifies) every component of the system named by ``--system`` into ``targets/<system>/`` before
 # intake fingerprints that composed root; without ``--system`` it is a recorded no-op. ``job_code_graph_index``
 # consumes CodeQL and prioritization output and must precede the indexing job that accounts for it.
-# Consumers of the accepted index (``POST_INDEX_JOB_IDS``) run after the resumable graph.
+# The code graph and security tags contextualize OWASP before data indexing, hunt assembly and
+# red/blue investigation. Consumers of the accepted index (``POST_INDEX_JOB_IDS``) run after the resumable graph.
 GRAPH_JOB_IDS, POST_INDEX_JOB_IDS = _graph_order()
 # Jobs that are outside the automatic graph while ``settings.enabled`` is false and that an operator may still
 # dispatch directly on a finished run (`run <job> --run-id <id> --upstream-from-run`). Every other disabled job

@@ -8,16 +8,61 @@
     {"$ref": "#/$defs/resultSet"}
   ],
   "$defs": {
-    "citation": {
+    "qualificationCitation": {
       "type": "object",
       "additionalProperties": true,
       "required": ["source_identity", "artifact_sha256", "lines"],
       "properties": {
         "source_identity": {"type": "string", "minLength": 1},
         "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "lines": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 1}], "items": false}
+        "lines": {"$ref": "#/$defs/lines"}
       }
     },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "lines": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 1}],
+      "items": false
+    },
+    "mode": {"enum": ["qualification", "assessment"]},
+    "typedEvidence": {
+      "type": "object",
+      "description": "Resolution and subject relevance are application checks; schema validity alone is never evidence acceptance.",
+      "required": ["schema", "run_id", "target_snapshot", "component_id", "build_unit_id", "environment",
+                   "source_identity", "entity_kind", "publication", "locator", "content_sha256"],
+      "properties": {
+        "schema": {"const": "appsec-review/owasp-evidence-reference/1"},
+        "run_id": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}$"},
+        "target_snapshot": {"type": "string", "minLength": 1},
+        "component_id": {"type": "string", "minLength": 1},
+        "build_unit_id": {"type": ["string", "null"]},
+        "environment": {"type": "string", "minLength": 1},
+        "source_identity": {"type": "string", "pattern": "^asr:[a-z_]+:[0-9a-f]{64}$"},
+        "entity_kind": {"type": "string", "minLength": 1},
+        "content_sha256": {"$ref": "#/$defs/sha256"},
+        "publication": {
+          "type": "object", "required": ["manifest_sha256", "index", "shard_id", "sha256"],
+          "properties": {
+            "manifest_sha256": {"$ref": "#/$defs/sha256"}, "sha256": {"$ref": "#/$defs/sha256"},
+            "index": {"type": "string", "minLength": 1}, "shard_id": {"type": "string", "minLength": 1}
+          }
+        },
+        "locator": {
+          "type": "object", "required": ["kind"],
+          "properties": {"kind": {"type": "string"}},
+          "if": {"properties": {"kind": {"const": "source"}}},
+          "then": {
+            "required": ["path", "file_sha256", "lines", "source_custody"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "file_sha256": {"$ref": "#/$defs/sha256"}, "lines": {"$ref": "#/$defs/lines"},
+              "source_custody": {"type": ["object", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "citation": {"oneOf": [{"$ref": "#/$defs/qualificationCitation"}, {"$ref": "#/$defs/typedEvidence"}]},
     "input": {
       "type": "object",
       "additionalProperties": false,
@@ -40,8 +85,34 @@
         "component_id": {"type": "string"},
         "outcome": {"enum": ["applicable", "not_applicable", "conditional", "cannot_determine", "unsupported_missing_evidence"]},
         "reason": {"type": "string", "minLength": 1},
-        "evidence": {"type": "array", "items": {"$ref": "#/$defs/citation"}}
-      }
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
+        "assessment_mode": {"$ref": "#/$defs/mode"}
+      },
+      "if": {"required": ["assessment_mode"], "properties": {"assessment_mode": {"const": "assessment"}}},
+      "then": {"properties": {"evidence": {"items": {"$ref": "#/$defs/typedEvidence"}}}}
+    },
+    "result": {
+      "type": "object",
+      "required": ["row_id", "control_identity", "component_id", "assessment_mode", "control_status",
+                   "verification_status", "execution_completion", "coverage_completeness", "lead_eligible",
+                   "evidence_used", "obligations", "observations", "disagreements", "gaps", "limitations"],
+      "properties": {
+        "assessment_mode": {"$ref": "#/$defs/mode"},
+        "control_status": {"enum": ["satisfied", "not_satisfied", "cannot_verify", "not_assessed"]},
+        "verification_status": {"enum": ["independently_assessed", "dissent", "pending", "unresolved", "qualification_only", "not_required"]},
+        "coverage_completeness": {"enum": ["scoped", "partial", "unresolved", "not_applicable", "fixture_only"]},
+        "execution_completion": {"type": "string", "minLength": 1},
+        "lead_eligible": {"type": "boolean"},
+        "evidence_used": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
+        "obligations": {"type": "array", "items": {"type": "object"}},
+        "observations": {"type": "array", "items": {"type": "object"}},
+        "disagreements": {"type": "array", "items": {"type": "object"}},
+        "gaps": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      },
+      "if": {"properties": {"assessment_mode": {"const": "qualification"}}},
+      "then": {"properties": {"lead_eligible": {"const": false}}},
+      "else": {"properties": {"evidence_used": {"items": {"$ref": "#/$defs/typedEvidence"}}}}
     },
     "resultSet": {
       "type": "object",
@@ -50,7 +121,7 @@
       "properties": {
         "schema": {"const": "appsec-review/control-result-set/1"},
         "result_set_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "results": {"type": "array", "items": {"type": "object"}},
+        "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
         "accounting": {
           "type": "object",
           "required": ["selected", "joined", "exactly_once"],

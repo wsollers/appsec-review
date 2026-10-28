@@ -69,7 +69,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/8"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/9"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -248,7 +248,9 @@ def lead_record(lead: Lead, component_id: str, build_unit_id: str | None, *,
         LogicalIdentity.parse(duplicate)
     lane_a: dict[str, Any] = {} if admission is None else {"admission_reasons": list(admission),
                                                             "advisory_context": lead.advisory}
-    return {**lane_a, "weaknesses": list(weaknesses or ()),
+    return {**lane_a, **({"control_assessment": dict(lead.control_assessment)}
+                        if lead.control_assessment is not None else {}),
+        "weaknesses": list(weaknesses or ()),
             "advisory_summary": advisory_reference.summary_of(lead.advisory),
         "observation_id": lead.observation_id, "lead_family": lead.family, "scanner": lead.scanner,
         "rule_id": lead.rule_id, "message": lead.message, "rule_cwe": list(lead.rule_cwe),
@@ -844,6 +846,18 @@ class _Assembler:
         self.graph = GraphContext(scope)
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
         self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
+        self.control_context: dict[str, list[ContextEntry]] = defaultdict(list)
+        from appsec_review.indexing.products import load_control_assessment
+        control_cache: dict[str, Any] = {}
+        for shard in scope.producer("control_evidence").shards:
+            for row in scope.store.entities((shard,), kinds=("precomputed_fact",)):
+                result = row["payload"].get("result", {})
+                if result.get("assessment_mode") != "assessment":
+                    continue
+                result = load_control_assessment(scope.run_root, scope.target_snapshot, result, cache=control_cache)
+                cid = str(result.get("component_id"))
+                self.control_context[cid].append(context_entry(row["identity"], "control_context",
+                    scope.shard_sha256(shard), control_assessment=result))
         for shard in scope.producer("security_tagging").shards:
             for row in scope.store.entities((shard,), kinds=("tag_assignment",)):
                 subject = row["payload"].get("subject") or {}
@@ -927,20 +941,35 @@ class _Assembler:
         path = lead.path or next((item["workspace_path"] for item in artifacts if item["workspace_path"]), None)
         component = self.scope.component_for(path)
         unit = self.scope.build_unit_for(path)
+        if component is None and lead.component_hint:
+            component = next((item for item in self.scope.components
+                              if item.component_id == lead.component_hint), None)
+        if unit is None and lead.build_unit_hint:
+            unit = next((item for item in self.scope.build_units
+                         if item.build_unit_id == lead.build_unit_hint), None)
         return (component.component_id if component else lead.component_hint or "unassigned",
                 unit.build_unit_id if unit else None, component, unit)
+
+    @staticmethod
+    def _context_order(entry: ContextEntry) -> tuple[str, int, str, str]:
+        assessment = entry.control_assessment or {}
+        assessed = assessment.get("control_status") in {"satisfied", "not_satisfied"} or any(
+            item.get("resolved") is True and item.get("locator", {}).get("kind") == "source"
+            for item in assessment.get("evidence", ()))
+        return (entry.role, int(bool(assessment) and not assessed),
+                str(assessment.get("control_identity", "")), entry.id)
 
     def _cap(self, context: Iterable[ContextEntry], subject: str, producer: str
              ) -> tuple[list[ContextEntry], int, list[ScopeGap]]:
         unique = {(item.role, item.id): item for item in context}
-        ordered = [unique[key] for key in sorted(unique)]
+        ordered = sorted(unique.values(), key=self._context_order)
         bound = self.settings.max_context_entries
         if len(ordered) <= bound:
             return ordered, 0, []
         # Preserve representation from every context role under pressure. In particular, a large
         # dependency inventory must not consume the whole budget before its Scorecard seeds are
-        # admitted. This remains deterministic because both roles and identities are sorted.
-        buckets = {role: [unique[key] for key in sorted(unique) if key[0] == role]
+        # admitted. Within the control role, assessed/source-backed evidence precedes declarations.
+        buckets = {role: [entry for entry in ordered if entry.role == role]
                    for role in sorted({key[0] for key in unique})}
         balanced: list[ContextEntry] = []
         depth = 0
@@ -976,10 +1005,16 @@ class _Assembler:
                 for relation in artifact["provenance"]:
                     artifact_refs.update((relation["source_id"], relation["target_id"]))
                     artifact_refs.update(command["ref"] for command in relation["commands"])
+        assessments = [lead.control_assessment for lead, *_ in leads if lead.control_assessment is not None]
+        assessments.extend(item.control_assessment for item in context if item.control_assessment is not None)
+        underlying = [item for assessment in assessments for item in assessment["evidence"] if item["resolved"]]
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
-                           *(item.id for item in context), *artifact_refs})
+                           *(item.id for item in context), *artifact_refs,
+                           *(item["source_identity"] for item in underlying)})
         shard_hashes = sorted({*(item[0].shard_sha256 for item in leads),
                                *(item.shard_sha256 for item in context if item.shard_sha256), *graph_shards,
+                               *(item["publication"]["sha256"] for item in underlying),
+                               *(assessment["workbench_reference"]["manifest_sha256"] for assessment in assessments),
                                *(self.correlation_hashes if any(item[0].family in {"source_sast", "codeql"}
                                                                 for item in leads) else ())})
         retrieval = {"indexes": list(self.scope.index_names), "query_sets": list(self.scope.query_sets),
@@ -1040,6 +1075,7 @@ class _Assembler:
         if unit is not None:
             context.append(context_entry(unit.identity, "build_unit"))
         context.extend(self.scoped_tags(component_id, sources, (lead.path,) if lead.path else ()))
+        context.extend(self.control_context.get(component_id, ()))
         if lead.duplicate_of:
             context.append(context_entry(lead.duplicate_of, "duplicate_of"))
         context.extend(context_entry(identity, "flow") for identity in lead.flow_ids)
@@ -1137,7 +1173,8 @@ class _Assembler:
         budget = bound - len({(item.role, item.id) for item in unit.context})
         graph_context, graph_omitted = self.graph.unit_context(unit.paths, budget)
         context, omitted, gaps = self._cap(
-            (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths)),
+            (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
+             *self.control_context.get(unit.component_id, ())),
             unit.key, "lane_b_hunt")
         if graph_omitted:
             omitted += graph_omitted
@@ -1153,6 +1190,13 @@ class _Assembler:
                         "artifact_ids": sorted({identity for lead in unit.leads for identity, role in lead.related
                                                 if role == "artifact"})}
         rank = ranked.rank_record()
+        byte_omitted_controls = 0
+
+        def control_gaps() -> list[ScopeGap]:
+            return ([ScopeGap("owasp_control", unit.key, "truncated",
+                f"{byte_omitted_controls} control context entries exceeded max_package_bytes="
+                f"{self.settings.max_package_bytes}; all control rows remain in the pinned OWASP workbench")]
+                if byte_omitted_controls else [])
 
         def render(chunk: list, number: int, count: int) -> tuple[str, bytes]:
             key = f"{unit.key}#{number:05d}"
@@ -1163,16 +1207,29 @@ class _Assembler:
                     "artifact_ids": sorted({identity for lead, *_ in chunk for identity, role in lead.related
                                             if role == "artifact"})},
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
-                gaps=[*gaps, *graph_gaps, *missing], truncation={"omitted_leads": 0, "omitted_context": omitted,
-                                                                 "next_partition": following},
+                gaps=[*gaps, *graph_gaps, *missing, *control_gaps()],
+                truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": following},
                 graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
                 neighborhood=neighborhood)
 
         def split(chunk: list) -> list[list]:
+            nonlocal omitted, byte_omitted_controls
             _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
             if len(body) <= self.settings.max_package_bytes:
                 return [chunk]
             if len(chunk) <= 1:
+                # Splitting leads cannot reduce component-wide control context. Apply the same
+                # explicit byte-bound qualification as lane A, without removing authoritative rows.
+                while len(body) > self.settings.max_package_bytes:
+                    candidates = [i for i, entry in enumerate(context) if entry.control_assessment is not None]
+                    if not candidates:
+                        break
+                    context.pop(max(candidates, key=lambda i: self._context_order(context[i])))
+                    omitted += 1
+                    byte_omitted_controls += 1
+                    _identity, body = render(chunk, 99_997, 99_999)
+                if len(body) <= self.settings.max_package_bytes:
+                    return [chunk]
                 raise IntegrityError(f"hunt partition of {unit.key} exceeds max_package_bytes with a single lead; "
                                      "the membership gate is blocked")
             middle = len(chunk) // 2
@@ -1181,7 +1238,7 @@ class _Assembler:
         size = self.settings.hunt_menu_partition_size
         chunks = [chunk for offset in range(0, max(1, len(menu)), size)
                   for chunk in split(menu[offset:offset + size])]
-        self.extra_gaps.extend(gaps)
+        self.extra_gaps.extend((*gaps, *control_gaps()))
         packages = []
         for number, chunk in enumerate(chunks):
             package_id, body = render(chunk, number, len(chunks))

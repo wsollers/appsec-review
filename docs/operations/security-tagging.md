@@ -3,11 +3,15 @@
 `security_tagging` assigns basis-qualified tags from the
 [security tag taxonomy](../architecture/security-tag-taxonomy.md) to code subjects. It reads only
 the accepted retrieval manifest (`data/indices/accepted.json`), never the target tree. In the
-`wave1_review` Dagster graph it runs after `codeql_analysis` and after `owasp_control_assessment`,
-`job_review_prioritization` and `job_code_graph_index` (the last retrieval-manifest publisher)
-when those are registered (`orchestration/dagster/adapter.py`). `job_review_data_indexing`
-follows it, then `job_review_package_assembly`, and `job_document_issue_analysis` is the terminal
-job.
+`wave1_review` Dagster graph it runs after CodeQL, review prioritization and code-graph indexing
+when registered (`orchestration/topology.py`). The opt-in `job_owasp_control_assessment` then
+consumes accepted tag assignments and a bounded component tag cloud as routing context, never
+control proof. Tagging does not depend on OWASP. Review data indexing follows all enabled
+producers, then package assembly, document issue analysis and inference review; final report
+publication is terminal. Direct `start`/`resume`/`plan-resume` select the same enabled
+prioritization → code graph → tagging → OWASP → indexing chain; `--force-from` cannot bypass a
+disabled-job gate. OWASP is still shipped disabled. CI/post-build branches remain Dagster additions,
+and third-party metadata sync remains standalone.
 Run it standalone only after an accepted manifest exists; without one the input validator fails the
 job.
 

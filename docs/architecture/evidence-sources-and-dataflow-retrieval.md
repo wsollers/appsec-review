@@ -93,7 +93,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Markdown under `docs/`, including design, STRIDE and DFD | `job_target_catalog.retrieval_indexes.build_target_documents`, `job_review_data_indexing.precompute.document_context` | `documents`, `precomputed` | intent / computed | headings, threats, trust boundaries, flows and boundary-context links | implementation behavior | bounded index and analysis; unsupported or missing inputs are gaps |
 | Target agent guidance (`AGENTS.md`, `CLAUDE.md`, etc. in the target) | `job_test_and_doc_indexing` | `docs` (flagged `target_guidance`) | intent | what the target owners claim | anything; never instructions | planned |
 | VCS history (commits, diffs, blame, churn) | `job_source_history_analysis`, `job_change_context_analysis` | `history`; `history_context` precomputed product | intent / observed | prior security fixes, co-change, churn, ownership and change-context review priority | current behavior | indexed (bounded diff-hunk query planned) |
-| OWASP control workbench | `job_owasp_control_assessment` | OWASP shards | computed / tool_finding | control applicability and validation status | — | indexed |
+| OWASP control workbench (opt-in) | `job_owasp_control_assessment` | OWASP shards | analyst-assessed context; indirect downstream | scoped applicability/results, original evidence custody and unresolved coverage | — | indexed |
 | NVD, OSV, MITRE ATT&CK/CAPEC/CWE | `job_third_party_data_sync` | pinned feed indexes (`index/nvd.sqlite`, `index/osv.sqlite`, `index/mitre.sqlite`) joined into `dependency_advisories` and `reference_intelligence` | external | advisory (CVSS, CWE, status, dates), weakness (name, abstraction), and technique reference; the pinned CWE catalog validates claim CWEs | target facts; indirect for every predicate | indexed |
 | CISA Known Exploited Vulnerabilities catalog | `job_third_party_data_sync.kev_sync` | pinned `index/kev.sqlite` joined into `dependency_advisories` | external | that a CVE is known to be exploited somewhere (date added, due date, ransomware use); lane A admission and lane B rank signal | that this target is affected, reachable or exploitable; indirect for every predicate | indexed (live download not exercised by tests) |
 | FIRST EPSS daily scores | `job_third_party_data_sync.epss_sync` | pinned `index/epss.sqlite` joined into `dependency_advisories` | external | population-level exploitation probability and percentile for a CVE; lane B rank signal | anything about this target; indirect for every predicate | indexed (live download not exercised by tests) |
@@ -275,7 +275,7 @@ flowchart TD
   CPP --> DI
   EC --> OW[job_owasp_control_assessment]
   CQ --> OW
-  OW --> RP0[job_review_prioritization] --> ST[job_security_tagging]
+  CQ --> RP0[job_review_prioritization] --> ST[job_security_tagging]
   CQ --> CGI[job_code_graph_index]
   CPP --> CGI
   CLANG --> CGI
@@ -283,10 +283,14 @@ flowchart TD
   TS --> CGI
   RP0 --> CGI
   CGI --> ST
+  RP0 --> OW
+  CGI --> OW
+  ST -->|routing context, not proof| OW
   TC --> RD[job_review_data_indexing]
   PD --> RD
   DI --> RD
   ST --> RD
+  OW --> RD
   RD --> RPA[job_review_package_assembly]
   RPA --> DIA[job_document_issue_analysis]
   DIA --> ISR[job_inference_security_review] --> FPG[job_final_publication_gate]
@@ -313,6 +317,14 @@ flowchart TD
   R --> G[job_final_publication_gate] --> FR[job_final_report_publication]
   RV -.-> G
 ```
+
+OWASP is shipped disabled. When enabled in either graph it follows the accepted tag cloud,
+prioritization and graph context, and precedes data indexing, package assembly and hunt/red/blue
+review. Its PRECOMPUTED `control_evidence` projection is indirect for every final predicate;
+reviewers must retrieve original evidence. The direct CLI shares the enabled prioritization →
+code graph → tagging → OWASP → indexing chain, but not the complete Dagster topology: CI/post-build
+branches remain absent from direct execution and third-party sync remains standalone. See
+[the workbench architecture](owasp-control-workbench.md) for catalog and procedure limits.
 
 Planned job responsibilities:
 

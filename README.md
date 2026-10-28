@@ -498,9 +498,11 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> cpg_analysis (deprecated; only when enabled) -> binary_evidence_indexing -> evidence_collection
   -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> code_graph_index -> review_data_indexing -> review_package_assembly
+  -> code_graph_index -> security_tagging
+  -> owasp_control_assessment (opt-in; only when enabled)
+  -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> poc_generation (optional; only when enabled) -> final_report_publication
+  -> poc_generation (opt-in; only when enabled) -> final_report_publication
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -561,12 +563,29 @@ $env:PYTHONPATH = "src"
 python -m appsec_review start --target targets/appsec-multi-vuln
 ```
 
-The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
-control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
-enabled registered review job except the standalone `third_party_data_sync` job, when you need
-those branches. The direct graph is linear, so its
+The direct graph leaves out CI configuration analysis and post-build security assessment,
+including when those jobs are enabled. Use Dagster's `wave1_review` job, which runs every
+enabled registered review job except the standalone
+`third_party_data_sync` job, when you need those branches. The direct graph is linear, so its
 order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
+
+The opt-in [OWASP assessment](docs/architecture/owasp-control-workbench.md) is shipped disabled
+with `mode = "assessment"`. In both direct and Dagster graphs the enabled chain is accepted source/component/
+build/static information → prioritization/code graph → security tagging/tag cloud → OWASP →
+review data indexing (`control_evidence`) → package assembly → hunt and red/blue/independent
+verification. Tags and classifications route work, never prove controls. Full pinned catalogs
+contain 345 ASVS controls, 24 MASVS controls, 292 MASTG supporting tests and two 10-record risk
+catalogs; **only four narrow Python static procedures are implemented**, not full compliance
+coverage. Configured assessment calls a worker and a fresh blinded reviewer. Qualification is an
+explicit synthetic mode, not selected by input-file presence and never production-eligible.
+Downstream OWASP interpretations remain provisional and indirect for every final predicate:
+review roles must retrieve original evidence. See [settings, outputs and limits](docs/operations/owasp-control-assessment.md).
+Direct `start`, `resume` and `plan-resume` select tagging and OWASP in this order when enabled.
+`--force-from` can name either job in `resume`/`plan-resume`, but cannot bypass a disabled-job gate.
+This shared ordering is not full graph parity: CI/post-build remain Dagster additions and
+third-party metadata sync remains standalone.
+
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
 [`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).

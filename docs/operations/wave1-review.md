@@ -16,9 +16,11 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> [cpg_analysis only when enabled] -> binary_evidence_indexing -> evidence_collection
   -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> code_graph_index -> review_data_indexing -> review_package_assembly
+  -> code_graph_index -> security_tagging
+  -> owasp_control_assessment (opt-in; only when enabled)
+  -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> [poc_generation only when enabled] -> final_report_publication
+  -> poc_generation (opt-in; only when enabled) -> final_report_publication
 ```
 
 Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every
@@ -45,6 +47,20 @@ shipped disabled, so it is absent from both graphs unless `jobs.job_poc_generati
 normally run by hand on a finished run ([`poc-generation.md`](poc-generation.md)). Enabled, it adds the dependency
 `gate -> poc_generation -> report` to `wave1_review` and to the direct graph. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
+
+The shared enabled direct/Dagster OWASP chain is **prioritization → code graph → security tagging/tag cloud →
+OWASP → review data indexing → package assembly → hunt and red/blue/independent verification**,
+with accepted source/component/build/static evidence also feeding OWASP. Tagging and prioritization
+do not wait for OWASP; their accepted products are bounded routing/context, never control proof.
+OWASP is shipped disabled with `mode = "assessment"`. Enabling assessment uses configured worker
+inference plus a fresh blinded reviewer; qualification must be explicitly selected with both
+profiles disabled and is never production-eligible. See
+[`owasp-control-assessment.md`](owasp-control-assessment.md).
+
+Direct `start`, `resume` and `plan-resume` select this chain through the normal enabled-job filter.
+`resume`/`plan-resume --force-from` accept either tagging or OWASP when enabled and reject either
+when disabled. OWASP therefore remains absent under the shipped disabled default. Shared chain
+ordering does not add CI/post-build jobs or standalone third-party sync to the direct graph.
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
 linear for deterministic resume semantics: adjacency does not widen a job's declared inputs. In
