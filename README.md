@@ -831,6 +831,43 @@ Use a named base directory beneath `test/tmp/` for focused or concurrent session
 python -m pytest -q tests/test_static_adapters.py --basetemp=test/tmp/static-adapters
 ```
 
+### Bounded integration acceptance
+
+The public acceptance driver selects exact producer/consumer obligations from
+[`tests/acceptance_inventory.json`](tests/acceptance_inventory.json), runs real application
+jobs with declared scripted external boundaries, and requires complete collection, passing
+cases and confirmed owned-process cleanup. It is always strict: skips and known failures do
+not establish acceptance.
+
+```powershell
+.\scripts\run-tests.ps1 -Acceptance quick -Workers 1 -DryRun
+.\scripts\run-tests.ps1 -Acceptance signals -Workers 1
+```
+
+```bash
+scripts/run-tests.sh --acceptance quick --workers 1 --dry-run
+scripts/run-tests.sh --acceptance signals --workers 1
+```
+
+Use the checkout's own virtual environment; process selections also need the Dagster host
+dependencies. Serial is the default, with at most two workers. All state, fixture runs and
+production-format telemetry stay beneath a unique `test/tmp/acceptance/` root, never production
+`runs/`, `data/` or `targets/`. This supports process/storage isolation beside a review, not
+zero shared CPU/I/O contention. `quick` targets under ten minutes with a twelve-minute hard cap;
+current quick acceptance remains red despite revision-bound named `process` and `consumers`
+profile passes.
+The authentic oracle and serial signals budget remain unresolved; final integrated public-driver
+calibration is not complete. Optional real-tool, deployed,
+provider, guidance, warm-CodeQL and native profiles currently fail as unimplemented rather
+than silently passing.
+
+See the [acceptance operator guide](docs/operations/bounded-acceptance.md) for exact profiles,
+deadlines, prerequisites, result artifacts and limitations; the
+[architecture](docs/architecture/bounded-acceptance.md) for authentic joins and final-report
+authority; and the [implementation record](docs/reviews/integration-live-test-implementation.md)
+for revision-specific results. These commands do not run the broader live/deployed acceptance
+tools described below or authorize external services.
+
 ### End-to-end review of a target with nothing to find
 
 `tests/integration/test_nothing_review.py` runs the review graph that `appsec-review start` runs
