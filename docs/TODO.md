@@ -304,11 +304,12 @@ implementation:
   `seed_depth` and `seed_limit` from the numbers;
 - measure one batched `codeql database run-queries` over all queries against serial runs;
 - make `query-packs --warm` a routine step of the host image procedure after a CodeQL image
-  rebuild (the compile is now a separate cached action that `query-packs --warm` precompiles; the
-  pipeline no longer builds images, see `docs/operations/image-pin-verification.md`), and make the
-  live CodeQL tests opt-in;
-- add seeded packs for Java/Kotlin, JavaScript/TypeScript and Python using the same two external
-  predicates (`exportScope`, `exportSeed`);
+  rebuild, as a compile check (it fills a platform volume keyed by the image id; review runs share
+  a separate cache keyed by the declared CodeQL and runner releases, so only the first run after a
+  release change compiles cold; see `docs/operations/codeql-analysis.md`), and make the live
+  CodeQL tests opt-in;
+- measure the seeded packs for Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C# and Rust
+  (they use the same two external predicates, `exportScope` and `exportSeed`);
 - profile the slow `job_evidence_collection` tests.
 
 ## Measure and extend seeded Clang neighborhoods

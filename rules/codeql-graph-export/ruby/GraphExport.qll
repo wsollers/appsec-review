@@ -267,23 +267,51 @@ module GraphExport {
    * name; `api` the called method name ("" when the sink is not a method call).
    */
   predicate sink(Expr sinkExpr, Expr operand, int arg, string model, string api) {
-    exists(DataFlow::Node anchor, DataFlow::Node operandNode |
+    exists(DataFlow::Node anchor, DataFlow::Node operandNode, DataFlow::Node site |
       conceptSink(anchor, operandNode, model) and
-      sinkExpr = anchor.asExpr().getExpr() and
+      site = sinkSite(anchor, operandNode) and
+      sinkExpr = site.asExpr().getExpr() and
       operand = operandNode.asExpr().getExpr() and
       inSource(sinkExpr.getLocation()) and
       exportedExpr(sinkExpr)
     |
       (
-        anchor.(DataFlow::CallNode).getArgument(arg) = operandNode
+        site.(DataFlow::CallNode).getArgument(arg) = operandNode
         or
-        not anchor.(DataFlow::CallNode).getArgument(_) = operandNode and arg = -1
+        not site.(DataFlow::CallNode).getArgument(_) = operandNode and arg = -1
       ) and
       (
         api = sinkExpr.(MethodCall).getMethodName()
         or
         not sinkExpr instanceof MethodCall and api = ""
       )
+    )
+  }
+
+  /**
+   * The sink expression for a concept anchored at `anchor`. Some models anchor the concept at
+   * its own operand (ActiveRecord's `SqlExecution` is the SQL argument of `find_by_sql`); the
+   * call receiving that argument is then the sink, so `api` names the called method.
+   */
+  private DataFlow::Node sinkSite(DataFlow::Node anchor, DataFlow::Node operand) {
+    conceptSink(anchor, operand, _) and
+    (
+      anchor = operand and result.(DataFlow::CallNode).getArgument(_) = anchor
+      or
+      not (anchor = operand and exists(DataFlow::CallNode c | c.getArgument(_) = anchor)) and
+      result = anchor
+    )
+  }
+
+  /**
+   * A catalog sanitizer call propagates taint from its arguments to its result, so a flow through
+   * it is exported (and the sanitizer listed) rather than lost where no library summary exists.
+   */
+  predicate sanitizerStep(DataFlow::Node pred, DataFlow::Node succ) {
+    exists(DataFlow::CallNode call |
+      sanitizerApi(call.getMethodName()) and
+      pred = call.getArgument(_) and
+      succ = call
     )
   }
 

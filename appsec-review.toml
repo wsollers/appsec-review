@@ -20,7 +20,7 @@ approved_first_party_projects = []
 # Deployment operators declare opaque release IDs here and bump them when supplied software
 # changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
 codeql = "codeql-2.27.0-cert-v2.62.0"
-codeql_runner = "appsec-codeql-runner-6aaa1cc6"
+codeql_runner = "appsec-codeql-runner-89568569"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.
@@ -972,7 +972,7 @@ image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:38cc04b72ca8b3fdc739dffc51a8f874ceb0f336abfd84b6830854bbd880a8fc"
+image_id = "sha256:9b358785819745f557cb08dcbd4691f7aba00c0fe6aa7ed38653dfc8812fece1"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.go]
 tag = "audit-buildenv-go:local"
@@ -1007,7 +1007,7 @@ image_id = "sha256:d5df139bd741352cf6dcddb154ce6607dbba4b0f5525c4de36b9953fa720a
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:38cc04b72ca8b3fdc739dffc51a8f874ceb0f336abfd84b6830854bbd880a8fc"
+image_id = "sha256:9b358785819745f557cb08dcbd4691f7aba00c0fe6aa7ed38653dfc8812fece1"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
@@ -1528,7 +1528,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "d9da524a15017a00be52d4eb9ea02bd5b4c50ebab004667329d47d697e9f92d5"
+asset_lock_sha256 = "edb0781de3f823aec3603ab402f96a86ceb9bad0506c53d94e7f87803632995d"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1555,7 +1555,7 @@ build_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0
 runtime_image_id = "sha256:6d42fb11646bc42e1f15e72bc916da7516c64fb957fca8fdb70dbc329b7235d1"
 runtime_user = "1000:1000"
 codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
-runner_release_id = "appsec-codeql-runner-6aaa1cc6"
+runner_release_id = "appsec-codeql-runner-89568569"
 runner_source = "application"
 
 [[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
@@ -1564,7 +1564,19 @@ build_image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd
 runtime_image_id = "sha256:c1dd8158da4044b7a88cef57c2962faf68849298e7fda2e7f116aa5d24107632"
 runtime_user = "1000:1000"
 codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
-runner_release_id = "appsec-codeql-runner-6aaa1cc6"
+runner_release_id = "appsec-codeql-runner-89568569"
+runner_source = "application"
+
+# Rust/wasm build environment (audit-buildenv-rust-wasm:local) with the pinned CodeQL bundle layered
+# by containers/tools/codeql/Dockerfile (BUILD_IMAGE = that environment, RUNTIME_USER = 1000:1000).
+# Host-specific: rebuild with that Dockerfile and replace runtime_image_id on another host.
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
+build_image_id = "sha256:084e077dd3a8ee1c343982b10c31a97a133d4d2bd307b8051440013149fccd92"
+runtime_image_id = "sha256:339cdb172f4f57c8247c972485984a0db7057617730a0ab4ac2efe0c152be35e"
+runtime_user = "1000:1000"
+codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
+runner_release_id = "appsec-codeql-runner-89568569"
 runner_source = "application"
 
 [jobs.job_codeql_analysis.settings.export_queries]
@@ -1578,7 +1590,9 @@ mode = "seeded"
 seed_depth = 3
 max_seed_depth = 8
 seed_limit = 200
-# The precompile action fills the persistent query compile cache before evaluation. A cold compile
+# The precompile action fills the query compile cache before evaluation. The cache is shared across
+# runs and keyed by the declared CodeQL and runner releases, so a pack compiles cold only after a
+# release or pack change. A cold compile
 # is minutes of CPU, so it has its own timeout and resources, separate from timeout_seconds.
 compile_timeout_seconds = 3600
 compile_threads = 8
@@ -1628,9 +1642,9 @@ query_pack_sha256 = "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e3
 tree_sha256 = "730b59ec4ad5bf02315545ce61cd4156f9899aad9078241d25e92795b3c3403b"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "0d7508e2710c4abf4ac2e52f98a1d918d5c3f5d8190600b136c0af396078ab2b"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
@@ -1652,6 +1666,22 @@ query_id = "security-extended"
 query_suite = "codeql-suites/go-security-extended.qls"
 query_suite_sha256 = "8970c08e48221cc8cfd89b6ac9c8cd1e56f143a740b613da67d835f3cabf7c29"
 
+# Must equal export_query_packs.go in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.go.export_queries]]
+query_id = "graph-export-go"
+source_path = "rules/codeql-graph-export/go"
+query_pack = "appsec-review/graph-export-go"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "f0ee2d8dc86bb84ce6bf5f781edc7f150da89525825933cd9f6cb712144ddb47"
+query_pack_sha256 = "03a6e1968bea2877a7023f0dda3bf8fd126218c631035983f47f6716eaadb424"
+tree_sha256 = "86b9772637889717ee94bd3661c0e38dfb24d12dc5700f133827de76472628c7"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+
 [jobs.job_codeql_analysis.settings.languages.java]
 enabled = true
 mode = "build"
@@ -1666,6 +1696,22 @@ query_pack_sha256 = "993ad1ce6f5a2ae10fe10b80308d5647a7f5b1864bbbea7afdb12f882fc
 query_lock_sha256 = "13bcdf3fd8cba2737d918e86d3fd504112157a1a43275c7951683eb9ca184b86"
 source_languages = ["Java", "Kotlin"]
 prerequisites = []
+
+# Must equal export_query_packs.java in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.java.export_queries]]
+query_id = "graph-export-java"
+source_path = "rules/codeql-graph-export/java"
+query_pack = "appsec-review/graph-export-java"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "c1873118f784e768b52f54f524ebf7e3089a7462e408475c7307f3bf91e9e24c"
+query_pack_sha256 = "1852e1e967fba5fb1ee952d43b0a7f9b4f55f8cc34c6bc5d3b11f193f2dc490b"
+tree_sha256 = "8581c202d152a4068fc5bf3096530815f2fc671c05c522862f5b376a78e2a9ce"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.csharp]
 enabled = true
@@ -1687,6 +1733,22 @@ query_id = "security-extended"
 query_suite = "codeql-suites/csharp-security-extended.qls"
 query_suite_sha256 = "7abab2161fc1ffef4b8fa2462b02fb7789c70fb738dc1eee678ab09ea78f7220"
 
+# Must equal export_query_packs.csharp in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.csharp.export_queries]]
+query_id = "graph-export-csharp"
+source_path = "rules/codeql-graph-export/csharp"
+query_pack = "appsec-review/graph-export-csharp"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "39367bd368773b73bc2f08c8225ed22ad1ccfdbbec46f76404423275cc03e87a"
+query_pack_sha256 = "0a49ef58180d4e8030e5d056a10ebcbe7ff41542dc40842cbe26559db5d5edd4"
+tree_sha256 = "a538e9d576c14d6fd025c9347364cce941c01d7d48bfbaedfa289b47fc18206a"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+
 [jobs.job_codeql_analysis.settings.languages.javascript]
 enabled = true
 mode = "source"
@@ -1701,6 +1763,22 @@ query_pack_sha256 = "94bbb51ba66151f3612f35ad3d721c4c945afc07b074fc27865bef5c803
 query_lock_sha256 = "5bb3b0d5ca96c81913ea5558e9be745b802f6e1a7f7cb85c4630ee1ddbffd537"
 source_languages = ["JavaScript", "TypeScript"]
 prerequisites = ["bundled-typescript"]
+
+# Must equal export_query_packs.javascript in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.javascript.export_queries]]
+query_id = "graph-export-javascript"
+source_path = "rules/codeql-graph-export/javascript"
+query_pack = "appsec-review/graph-export-javascript"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "d20a8b4ff19d2dda1d500d954dd94ffacec37b8974b0b2511f4879acd3f55855"
+query_pack_sha256 = "9d6ee801b50e9229483ca651f59f9aa678596e599e330d0b1aa62a5aed1acc89"
+tree_sha256 = "7a4263da449294af74a9d7755636226b5d737ae90f02ba0c714be6cc9dd2fbb0"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.python]
 enabled = true
@@ -1717,6 +1795,22 @@ query_lock_sha256 = "0c6ce22fd453bb6214dd7badf393096b17af3aae76fa7bfd1a14b93effc
 source_languages = ["Python"]
 prerequisites = []
 
+# Must equal export_query_packs.python in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.python.export_queries]]
+query_id = "graph-export-python"
+source_path = "rules/codeql-graph-export/python"
+query_pack = "appsec-review/graph-export-python"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "2fd390012848e76aaa07c8e1baf152f5ef8353063b5f29843d71dcd7aab0080b"
+query_pack_sha256 = "7d0808d772fe1feeb5ed03f996d7793aa2884cdf2404a898fcac770ffce33fa7"
+tree_sha256 = "3fe7ba29be7ba96c9dcd8ca943b41508fafa2e0447763c179ee8aaa2742567a8"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+
 [jobs.job_codeql_analysis.settings.languages.ruby]
 enabled = true
 mode = "source"
@@ -1731,6 +1825,22 @@ query_pack_sha256 = "fc74f5fd9a81de48fe6ce9c4b446c9ead6f6a95cb033f7ff6c6bb116374
 query_lock_sha256 = "186b8e67a334bcf5e3ab09a250a8d895e179df6bc3f8f0f4badfbdabcfcf9baf"
 source_languages = ["Ruby"]
 prerequisites = []
+
+# Must equal export_query_packs.ruby in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.ruby.export_queries]]
+query_id = "graph-export-ruby"
+source_path = "rules/codeql-graph-export/ruby"
+query_pack = "appsec-review/graph-export-ruby"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "fb3c6b1ecbd56e03f1ddeac4d258ad4543f46fc3fa588c2e058b856e4098942b"
+query_pack_sha256 = "9a54ffd33511f1c6ffce058ed8f9d2970bb2ddbdcea11b39630b4d9ba69c49cb"
+tree_sha256 = "df8ed537dcb5e0347f33fd3116a305de1dfcbe315df5f15c607586dac813bb78"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.rust]
 enabled = true
@@ -1751,6 +1861,22 @@ prerequisites = ["Cargo.toml", "Cargo.lock", "bundled-rust-indexer"]
 query_id = "security-extended"
 query_suite = "codeql-suites/rust-security-extended.qls"
 query_suite_sha256 = "73f133b0f0028e7721488a4ea95784d2b78b3acfb8cbf1668d2900d3ac1030c0"
+
+# Must equal export_query_packs.rust in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.rust.export_queries]]
+query_id = "graph-export-rust"
+source_path = "rules/codeql-graph-export/rust"
+query_pack = "appsec-review/graph-export-rust"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "6ce90b13f0ee267d55e2e3f2289b4c021988343a0be486b94e3c0ba49cacbf88"
+query_pack_sha256 = "632020abd5dbe64a238b0ae4b6ab04064cc30f3a8a6f19928a501165f0b30bd1"
+tree_sha256 = "2104e6e3908ceeea10b416af79125420d7be2aeffde16e8f169827a1ce4c09ff"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true

@@ -768,8 +768,8 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                                result_limit=settings.result_limit)
             result_count = sum(len(run.get("results", ())) for run in sarif["runs"])
         except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
-            safety.fail(f"CodeQL returned invalid SARIF: {type(exc).__name__}", action="codeql.query")
             sarif = None
+            safety.fail(f"CodeQL returned invalid SARIF: {type(exc).__name__}", action="codeql.query")
             status, gaps = "FAILED", [f"CodeQL query produced invalid bounded SARIF ({type(exc).__name__})"]
     execution = _execution_artifact(unit, root, "query")
     per_query = _query_metrics(unit.job.run_root, root / "executions" / "query",

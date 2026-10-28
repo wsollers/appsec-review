@@ -6,13 +6,12 @@ export pack since compiled and run live on the pinned image against a calibratio
 the export is scoped: from findings outward to a configured depth instead of whole program. The
 CodeQL export pack, the export step, `job_code_graph_index`, `query_code_graph`, graph
 admissibility, package v4 graph context, the `code_graph` lane and the scoring factors run end to
-end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. The end-to-end
-recordings are still hand-authored (section 10, "C9 Integration and acceptance") and the Live
-acceptance record is not written. Export packs and recorded normalization fixtures now exist for
-C/C++, Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and deferred Swift.
-The graph index and retrieval are language-neutral; actual live availability still requires an
-accepted database, matching configured pack/image pins and usable exports. Swift remains disabled.
-Section 12 is partially implemented: K4 now runs as the independent
+end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. The C/C++ native
+recording is copied from a live export; the per-language synthetic recordings are hand-authored and
+checked by per-language live tests. Export packs exist for C/C++, C#, Go, Java/Kotlin,
+JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this
+repository; Swift's pack is deferred until a macOS executor exists. The graph index and retrieval
+are language-neutral. The Live acceptance record is not written. Section 12 is partially implemented: K4 now runs as the independent
 `job_clang_static_analysis` producer, while K1, K2, K3, and optional K5 remain planned. The
 implementation record is
 [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
@@ -39,7 +38,7 @@ in the last column establishes each fact.
 
 | Producer | What it publishes | What it cannot give the review | Established by |
 |---|---|---|---|
-| `job_codeql_analysis` | One immutable database per accepted scope and language, profile-specific SARIF/observation shards, and a bounded graph export for each successful database with a configured, pinned language pack under `rules/codeql-graph-export/<language>`. Export manifests bind source hashes, language, scope and build unit. Unconfigured export languages record `NOT_APPLICABLE`; failed queries and exports have separate dispositions. Its publication references verified sibling manifests rather than composing their shards. | A registered pack is not proof of a working database or live export. Recorded fixtures and live image acceptance are separate gates; Swift is disabled and PHP has no extractor. | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
+| `job_codeql_analysis` | One immutable database per accepted scope and language, one SARIF per query profile, normalized `observations` shards with ordered `code_flow`/`thread_flow` steps. Executor actions are `inventory`, `database`, `query` and, since C1/C2, `export`: the ready coordinator `execution.scopes` runs the declared `rules/codeql-graph-export/<language>` pack as each successful database of a pinned export language becomes eligible, under shared resource admission. Supplied pack/runner payloads are not fingerprinted. Bounded JSON exports plus `export-manifest.json` remain under `data/codeql/scopes/<scope-id>/exports` (dataset `codeql_graph_export`, `artifact_only`). Languages without a configured export pack record `NOT_APPLICABLE`. Its publication writes a manifest of its own shards only and references sibling manifests as verified upstream manifests (it does not compose their shards). Live acceptance before this plan: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1; Go 0/7; C# and Rust planning gaps; PHP `NOT_APPLICABLE`. | Export packs are pinned for C/C++, C#, Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this repository; Swift is deferred (Linux cannot extract it). Synthetic recordings are hand-authored and checked by per-language live tests. | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
 | `job_code_graph_index` (new, C5) | One `graph` shard per `(CodeQL scope, family)` with a coverage row each; normalized (C3), cross-checked against clangd/IR/AST (C4) and SARIF-correlated (C4) facts; `unavailable` coverage-only shards for scopes without a usable export. Restores clangd/IR/AST shards the CodeQL manifest rewrite dropped from their producers' accepted handoffs (C9). | Facts for languages without an export pack; anything CodeQL's models do not cover. | `jobs/job_code_graph_index/`, `docs/operations/code-graph-index.md` |
 | `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): it is omitted from execution plans and produces no run artifacts. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_GAP`), `runtime/selection.py`, `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
 | `job_cpp_compiled_analysis` LLVM IR branch | Unchanged: `define` lines as `ir_entity`, uniquely resolvable direct `call @name` as exact `CALLS`; TU-level ambiguous locations. Used as a C4 cross-check input (`ir-name-same-tu`). | CFG, def-use, dominators, guards, ranges, source-exact locations (section 12, K1/K3). | `jobs/job_cpp_compiled_analysis/job.py::_ir_index` |
@@ -774,25 +773,23 @@ code-graph-precomputation.md".
 
 ## 8. Language rollout, scope, fallbacks
 
-The implemented rollout is:
+Order and the evidence for it:
 
-| Languages | Primary export/index/retrieval | Range provenance and limitations |
-|---|---|---|
-| C/C++ | Pack and recorded integration; only language with native clangd/LLVM/Clang AST/SVF cross-checks | `codeql-simple-range-analysis` |
-| Java/Kotlin | JVM pack/catalog and recorded fixture; no native cross-check prerequisite | `codeql-range-analysis`, intraprocedural |
-| JavaScript/TypeScript, Python, Ruby, Rust | Language packs/catalogs and recorded fixtures; no native cross-check prerequisite | `not-performed`; range family is partial with a named gap, even for empty exports |
-| Go | Pack/catalog and recorded fixture; successful database/build remains a run-specific requirement | `codeql-constant-and-dominating-guards`; no general arithmetic/loop/call propagation |
-| C# | Pack/catalog and recorded fixture; successful database/environment remains a run-specific requirement | `codeql-constant-and-sign-analysis` |
-| Swift | Pack/catalog and recorded fixture only; policy-disabled, macOS extraction deferred | `codeql-literal-only`, not a live lane |
-| Actions / PHP | Actions is not a code graph target; PHP has no CodeQL extractor | Source/syntax/SAST where available, no semantic graph substitute |
-
-Registered packs, configured hashes, recorded tests, live pack compilation and a live end-to-end
-run are separate acceptance levels. No per-language MCP tool is required. Native secondary shards
-are assigned only to canonical C/C++ scopes, never a JVM/Python/Go scope sharing the same root.
-The fixed seven-family graph coverage determines `complete`, `partial` or `unavailable`;
-non-native `not_covered` cross-check state alone does not make the primary export unavailable.
-All-placeholder ranges are partial; null intervals stay ineligible and never bound destinations.
-Existing qualified spellings (`::` and `.`) are matched as written, not rewritten.
+1. **C/C++** — the only language with cross-check producers, a hash-pinned custom pack path
+   (`cert-cpp`), a native build-capture fixture (`tests/fixtures/build_toolchains/native`), two
+   successful live scopes, and the `cpp-all` libraries for guards and ranges. Memory-safety sink
+   classes are where guard and range facts matter most.
+2. **Java/Kotlin, JavaScript/TypeScript, Python** — successful live scopes (7/7, 12/12, 8/8),
+   mature `RemoteFlowSource` models; no cross-check producer (facts are `not_covered`); range
+   facts are `not_applicable` for JS/Python and intraprocedural `RangeAnalysis` only for Java.
+   Each is its own export pack and catalog section; a language ships only when its recorded
+   fixture passes the acceptance suite.
+3. **Go, C#, Rust** — blocked by producer reality: Go databases fail because accepted recipes only
+   download modules (and the configured Go `security-extended` profile is not in the lock); C#
+   lacks an accepted .NET environment; Rust lacks Cargo locks in the fixture. They inherit the
+   generic export mechanism once a database succeeds; nothing in this plan is language-specific
+   beyond the pack and catalog.
+4. **Actions** — not a code graph target; excluded.
 
 Explicitly out of scope: Joern export, LLVM CFG/def-use/dominator extraction, points-to/alias
 facts (`aliases` mode of plan B), `contract_enforcement` (`job_interface_contracts`),
@@ -808,7 +805,7 @@ Fallbacks when a producer is unavailable, each a named gap and never a clean res
 | Export query timed out or exceeded `max_export_bytes` | design: families from that query `unavailable`, other families from the same database stay usable. As implemented, the CodeQL `export` action runs every query of a scope as one unit bounded by `jobs.job_codeql_analysis.settings.export_queries.{row_limit,max_bytes,timeout_seconds}`; a timeout, non-zero exit or over-size export marks the whole scope's export `FAILED` and the graph job publishes all of that scope's families `unavailable` (see [`../operations/code-graph-index.md`](../operations/code-graph-index.md)). `settings.graph.max_export_bytes` is re-checked when the graph job loads the export and exceeding it is an integrity error; `max_paths_per_sink` and `max_path_steps` bound normalization (`graph/normalize.py`), not export cost; `graph.export_timeout_seconds` is a fallback default only |
 | clangd/IR/AST shard absent for a C/C++ scope | `cross_check.state = not_covered`; facts stay `direct_eligible` (cross-check is a second opinion, not a prerequisite) |
 | Export pack or catalog hash differs from the lock | framework-integrity failure in `plan.inventory` (same rule as the SARIF suites) |
-| Tree-sitter-only language or missing CodeQL database | `query_syntax` can return bounded, source-resolved definitions, written calls, imports and identifier occurrences under exact source-file grants; names and targets remain unresolved. The separate graph lane stays unavailable; syntax never substitutes for dataflow evidence |
+| Tree-sitter-only language | no graph facts; the language matrix row says so; no syntactic call-site substitute is published in this batch |
 
 ## 9. Risks of the chosen design
 

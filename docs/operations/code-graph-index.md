@@ -110,6 +110,7 @@ chain. Its units run in the `index` pool. The CLI graph (`appsec-review start`, 
 
 Offline: `tests/test_code_graph_index_job.py` (staged accepted run) and
 `tests/integration/test_code_graph_end_to_end.py` (the real CodeQL job with an injected executor,
-this job, indexing and the inference review). Both use hand-authored recordings
-(`tests/fixtures/graph/codeql_export/`). The live tier `tests/live/test_code_graph_live.py` needs
-the pinned CodeQL image and has not been run.
+this job, indexing and the inference review). Both use recordings
+(`tests/fixtures/graph/codeql_export/`); the C/C++ native recording is copied from a live export.
+The live tier `tests/live/test_code_graph_live.py` needs the pinned CodeQL image, which builds from
+this repository on any Linux Docker host (`containers/tools/codeql/README.md`).

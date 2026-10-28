@@ -135,7 +135,18 @@ query predicate path_sanitizers(
       sink_end_column, argument_index) and
     onFlow(source, sink, n) and
     GraphExport::sanitizerCall(sanitizer, api) and
-    n.getNode() = sanitizer.getArg(_)
+    (
+      n.getNode() = sanitizer.getArg(_)
+      or
+      // The path graph hides summarized calls: an edge can step straight over the sanitizer
+      // (`filename` -> `safe` across `safe = realpath(filename)`).
+      exists(GraphTaint::PathNode m |
+        onFlow(source, sink, m) and
+        n.getASuccessor() = m and
+        TaintTracking::localTaint(n.getNode(), sanitizer.getArg(_)) and
+        TaintTracking::localTaint(sanitizer, m.getNode())
+      )
+    )
   |
     GraphExport::locationColumns(sanitizer.getLocation(), sanitizer_path, sanitizer_start_line,
       sanitizer_start_column, sanitizer_end_line, sanitizer_end_column)

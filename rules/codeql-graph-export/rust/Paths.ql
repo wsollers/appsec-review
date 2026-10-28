@@ -54,7 +54,7 @@ predicate onFlow(GraphTaint::PathNode source, GraphTaint::PathNode sink, GraphTa
 }
 
 string edgeKind(GraphTaint::PathNode a, GraphTaint::PathNode b) {
-  if a.getNode().getEnclosingCallable() = b.getNode().getEnclosingCallable()
+  if GraphExport::sameCallable(a.getNode(), b.getNode())
   then result = "local"
   else
     if b.getNode() instanceof DataFlow::ParameterNode

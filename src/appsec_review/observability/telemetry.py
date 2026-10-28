@@ -935,8 +935,8 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
-            "codeql": _codeql_metrics(Path(run_root), records),
             "tree_sitter": tree_sitter,
+            "codeql": _codeql_metrics(Path(run_root), records),
             "torn_tail_ignored": torn}
 
 

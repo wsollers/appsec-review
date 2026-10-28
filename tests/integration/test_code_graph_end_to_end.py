@@ -61,6 +61,7 @@ NATIVE_SOURCES = ROOT / "tests" / "fixtures" / "build_toolchains" / "native"
 IMAGE_ID = "sha256:" + "1" * 64
 SYNTHETIC_PATH = "src/synthetic.cpp"
 PYTHON_PATH = "svc/app.py"
+WORKFLOW_PATH = ".github/workflows/ci.yml"
 SRC_UNIT = "build-unit-" + hashlib.sha256(b"src").hexdigest()[:20]
 NATIVE_UNIT = "build-unit-" + hashlib.sha256(b"native").hexdigest()[:20]
 # SARIF regions (end column exclusive) of CodeQL's getenv -> atoi -> m -> len -> memcpy path-problem flow.
@@ -254,7 +255,7 @@ class FakeExecutor:
         FakeExecutor.calls.append((action, scratch_root.name))
         if action == "inventory":
             atomic_json(scratch_root / values["--output"], {
-                "schema": "appsec-review/codeql-extractor-inventory/1", "languages": ["cpp", "python"],
+                "schema": "appsec-review/codeql-extractor-inventory/1", "languages": ["actions", "cpp", "python"],
                 "roots": {}, "extractors": {}, "query_packs": {}, "prerequisites": {}})
         elif action == "database":
             database = scratch_root / values["--database"]
@@ -272,7 +273,7 @@ class FakeExecutor:
             pass  # the export pack precompile warms a cache; the fake has nothing to compile
         elif action == "export":
             subroot = (scratch_root / values["--database"] / "source-subroot.txt").read_text(encoding="utf-8")
-            recording = {"src": "synthetic", "native": "native"}[subroot]
+            recording = {"src": "synthetic", "native": "native", "svc": "python-synthetic"}[subroot]
             shutil.copytree(EXPORTS / recording / "exports", scratch_root / values["--output-dir"])
         else:
             raise AssertionError(f"unexpected CodeQL action {action}")
@@ -432,8 +433,11 @@ def pipeline(tmp_path_factory) -> SimpleNamespace:
     for name in ("main.cpp", "helper.c"):
         shutil.copyfile(NATIVE_SOURCES / name, target / "native" / name)
     (target / "svc").mkdir()
-    (target / PYTHON_PATH).write_text("import os\n\ndef handler(request):\n    return os.system(request)\n",
-                                      encoding="utf-8")
+    shutil.copyfile(EXPORTS / "python-synthetic" / "source" / "app.py", target / PYTHON_PATH)
+    # A GitHub Actions workflow: a CodeQL language with no graph export pack.
+    (target / ".github" / "workflows").mkdir(parents=True)
+    (target / WORKFLOW_PATH).write_text("on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+                                        "    steps:\n      - run: echo ok\n", encoding="utf-8")
     snapshot = source_fingerprint(target)
     loaded = load_config(ROOT / "appsec-review.toml")
     # The recordings are whole-program exports; a seeded scope would need seeds from evidence.
@@ -493,7 +497,8 @@ def test_codeql_publishes_what_the_graph_job_reads_and_build_units_match(pipelin
     exports = {item["scope_id"]: item for item in codeql["export.scopes"]["exports"]}
     by_root = {item["root"]: item for item in exports.values()}
     assert by_root["src"]["export_status"] == by_root["native"]["export_status"] == "SUCCEEDED"
-    assert by_root["svc"]["export_status"] == "NOT_APPLICABLE"
+    assert by_root["svc"]["export_status"] == "SUCCEEDED"
+    assert {item["language"]: item["export_status"] for item in exports.values()}["actions"] == "NOT_APPLICABLE"
     assert {action for action, _scope in FakeExecutor.calls} == {"inventory", "database", "query", "export", "compile"}
     graph = _outputs(pipeline.graph)
     loaded = graph["load.accepted_inputs"]
@@ -611,16 +616,16 @@ def test_the_completeness_ledger_names_the_code_graph_lane_for_an_uncovered_lang
     matrices = _json(Path(pipeline.indexing["attempt_root"]) / "steps" / "matrix" / "tasks" / "coverage"
                      / "coverage-matrices.json")
     lanes = {row["language"]: row for row in matrices["languages"]}
-    python = lanes["python"]
-    assert python["lanes"]["code_graph"]["state"] == "unavailable"
+    assert lanes["python"]["lanes"]["code_graph"]["state"] in {"complete", "partial"}
     assert lanes["c/c++"]["lanes"]["code_graph"]["state"] in {"complete", "partial"}
+    assert lanes["actions"]["lanes"]["code_graph"]["state"] == "unavailable"
     ledger = (_review_unit(pipeline, "completeness.audit") / "ledger.jsonl").read_text(encoding="utf-8")
     gaps = [json.loads(line)["body"]["gap"] for line in ledger.splitlines()
             if json.loads(line)["kind"] == "gap_recorded"]
     graph = [gap for gap in gaps if gap["subject_id"].startswith("producer:code_graph:")]
-    python_scope = next(item["scope_id"] for item in _outputs(pipeline.codeql)["export.scopes"]["exports"]
-                        if item["language"] == "python")
-    assert any(python_scope in gap["subject_id"] and "no hash-pinned CodeQL graph export pack for python"
+    actions_scope = next(item["scope_id"] for item in _outputs(pipeline.codeql)["export.scopes"]["exports"]
+                         if item["language"] == "actions")
+    assert any(actions_scope in gap["subject_id"] and "no hash-pinned CodeQL graph export pack for actions"
                in gap["reason"] for gap in graph)
 
 
