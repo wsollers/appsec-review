@@ -1,15 +1,26 @@
-"""Record terminal Dagster review failures in a short, tail-friendly file."""
+"""Record Dagster review failures in short, tail-friendly files."""
 
 from __future__ import annotations
 
+import json
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dagster import (
-    DagsterEventType, DagsterRunStatus, DefaultSensorStatus,
-    RunRequest, job, op, run_status_sensor,
+    DagsterEventType, DagsterRunStatus, DefaultSensorStatus, RunRequest,
+    RunsFilter, SkipReason, job, op, run_status_sensor, sensor,
 )
 
 from appsec_review.storage import atomic_bytes
+
+WAVE_JOB = "wave1_review"
+STEP_FAILURE_SENSOR = "wave1_step_failure_state"
+_ACTIVE_STATUSES = [DagsterRunStatus.STARTING, DagsterRunStatus.STARTED, DagsterRunStatus.CANCELING]
+_MAX_ACTIVE_RUNS = 20
+_MAX_FAILURES_PER_RUN = 50
+_MAX_RETRY_RECORDS = 1000
+_UNSAFE = re.compile(r"[^A-Za-z0-9_.-]")
 
 
 def _one_line(value: object, limit: int = 700) -> str:
@@ -51,6 +62,73 @@ def record_error_state(instance, source_run_id: str, runs_dir: Path) -> Path:
     return path
 
 
+def step_failure_path(runs_dir: Path, dagster_run_id: str, step_key: str, attempt: int) -> Path:
+    """Return the stable per-failure file for one step attempt of one Dagster run."""
+    safe_step = _UNSAFE.sub("_", step_key)[:150] or "_"
+    return (runs_dir / "metadata" / "dagster-error-state" / dagster_run_id / "steps"
+            / f"{safe_step}.attempt-{attempt}.log")
+
+
+def _step_attempt(instance, dagster_run_id: str, step_key: str) -> int:
+    # STEP_FAILURE is terminal for a step, so its attempt follows every earlier retry of that step.
+    retries = instance.get_records_for_run(
+        dagster_run_id, of_type=DagsterEventType.STEP_UP_FOR_RETRY, limit=_MAX_RETRY_RECORDS).records
+    return 1 + sum(1 for record in retries
+                   if record.event_log_entry.dagster_event.step_key == step_key)
+
+
+def record_step_failure(instance, run, record, runs_dir: Path) -> Path:
+    """Write one STEP_FAILURE record once; an existing file is never rewritten."""
+    entry = record.event_log_entry
+    step_key = entry.dagster_event.step_key or "-"
+    attempt = _step_attempt(instance, run.run_id, step_key)
+    path = step_failure_path(runs_dir, run.run_id, step_key, attempt)
+    if path.exists():
+        return path
+    timestamp = datetime.fromtimestamp(entry.timestamp, timezone.utc).isoformat()
+    lines = [
+        f"dagster_run_id={run.run_id}",
+        f"application_run_id={run.tags.get('appsec/application_run_id', 'unallocated')}",
+        f"step_key={_one_line(step_key, 300)}",
+        f"attempt={attempt}",
+        f"event_storage_id={record.storage_id}",
+        f"timestamp={timestamp}",
+        f"message={_event_message(entry)}",
+    ]
+    atomic_bytes(path, ("\n".join(lines) + "\n").encode("utf-8"))
+    return path
+
+
+def record_step_failures(instance, runs_dir: Path, cursor: str | None) -> tuple[list[Path], str]:
+    """Record new step failures of active review runs and return the advanced sensor cursor.
+
+    The cursor maps each tracked Dagster run id to its event-log cursor. A run stays tracked while
+    it is active and is drained once more after it leaves the active statuses.
+    """
+    try:
+        state = json.loads(cursor) if cursor else {}
+    except ValueError:
+        state = {}
+    if not isinstance(state, dict):
+        state = {}
+    runs = {run.run_id: run for run in instance.get_runs(
+        RunsFilter(job_name=WAVE_JOB, statuses=_ACTIVE_STATUSES), limit=_MAX_ACTIVE_RUNS)}
+    for run_id in state:
+        if run_id not in runs and (run := instance.get_run_by_id(run_id)) is not None:
+            runs[run_id] = run
+    written: list[Path] = []
+    next_state: dict[str, str] = {}
+    for run_id, run in runs.items():
+        connection = instance.get_records_for_run(
+            run_id, cursor=state.get(run_id), of_type=DagsterEventType.STEP_FAILURE,
+            limit=_MAX_FAILURES_PER_RUN)
+        for record in connection.records:
+            written.append(record_step_failure(instance, run, record, runs_dir))
+        if run.status in _ACTIVE_STATUSES or connection.has_more:
+            next_state[run_id] = connection.cursor
+    return written, json.dumps(next_state, sort_keys=True, separators=(",", ":"))
+
+
 def build_error_state_definitions(wave_job, runs_dir: Path) -> tuple[object, list[object]]:
     @op(name="record_wave1_error_state")
     def record(context) -> str:
@@ -80,4 +158,18 @@ def build_error_state_definitions(wave_job, runs_dir: Path) -> tuple[object, lis
             )
 
         sensors.append(on_error)
+
+    # Sensor evaluation runs in the code location, which mounts runs/, so it writes directly
+    # instead of launching a Dagster run per failed step.
+    @sensor(name=STEP_FAILURE_SENSOR, minimum_interval_seconds=15,
+            default_status=DefaultSensorStatus.RUNNING)
+    def on_step_failure(context):
+        written, cursor = record_step_failures(context.instance, runs_dir, context.cursor)
+        if cursor != context.cursor:
+            context.update_cursor(cursor)
+        if not written:
+            return SkipReason("no new wave1_review step failures")
+        return SkipReason(f"recorded {len(written)} wave1_review step failure file(s)")
+
+    sensors.append(on_step_failure)
     return error_job, sensors

@@ -380,7 +380,7 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("ci_configuration_review").name == "ci_configuration_review"
     assert definitions.get_job_def("wave1_review").name == "wave1_review"
     assert definitions.get_job_def("wave1_error_state").name == "wave1_error_state"
-    for name in ("wave1_failure_state", "wave1_canceled_state"):
+    for name in ("wave1_failure_state", "wave1_canceled_state", "wave1_step_failure_state"):
         assert definitions.get_sensor_def(name).default_status is dagster.DefaultSensorStatus.RUNNING
 
 
