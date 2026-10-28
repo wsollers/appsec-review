@@ -180,78 +180,78 @@ module GraphExport {
   string flag(boolean b) { b = true and result = "true" or b = false and result = "false" }
 
   /**
-   * Catalog API sinks: function `name` of module `module` ("builtins" for a builtin) and the
+   * Catalog API sinks: function `name` of module `mod` ("builtins" for a builtin) and the
    * dangerous positional argument `arg` (-1: the call itself). Kept equal to the `api` sink rules
    * of ../catalog.json by tests/graph/test_python_export.py.
    */
-  predicate apiSinkArgument(string module, string name, int arg) {
-    module = "os" and name = "system" and arg = 0
+  predicate apiSinkArgument(string mod, string name, int arg) {
+    mod = "os" and name = "system" and arg = 0
     or
-    module = "os" and name = "popen" and arg = 0
+    mod = "os" and name = "popen" and arg = 0
     or
-    module = "os" and name = "remove" and arg = 0
+    mod = "os" and name = "remove" and arg = 0
     or
-    module = "pickle" and name = "loads" and arg = 0
+    mod = "pickle" and name = "loads" and arg = 0
     or
-    module = "requests" and name = "get" and arg = 0
+    mod = "requests" and name = "get" and arg = 0
     or
-    module = "urllib.request" and name = "urlopen" and arg = 0
+    mod = "urllib.request" and name = "urlopen" and arg = 0
     or
-    module = "builtins" and name = "open" and arg = 0
+    mod = "builtins" and name = "open" and arg = 0
     or
-    module = "builtins" and name = "eval" and arg = 0
+    mod = "builtins" and name = "eval" and arg = 0
     or
-    module = "builtins" and name = "exec" and arg = 0
+    mod = "builtins" and name = "exec" and arg = 0
   }
 
   /**
    * Catalog API sources the threat-model sources do not cover: `arg` -1 is the return value.
    * Kept equal to the `api` source rules of ../catalog.json.
    */
-  predicate apiSourceArgument(string module, string name, int arg) {
-    module = "getpass" and name = "getpass" and arg = -1
+  predicate apiSourceArgument(string mod, string name, int arg) {
+    mod = "getpass" and name = "getpass" and arg = -1
     or
-    module = "builtins" and name = "input" and arg = -1
+    mod = "builtins" and name = "input" and arg = -1
   }
 
   /** Catalog sanitizer APIs. Kept equal to the `sanitizers` of ../catalog.json. */
-  predicate sanitizerApi(string module, string name) {
-    module = "os.path" and name = "realpath"
+  predicate sanitizerApi(string mod, string name) {
+    mod = "os.path" and name = "realpath"
     or
-    module = "shlex" and name = "quote"
+    mod = "shlex" and name = "quote"
     or
-    module = "werkzeug.utils" and name = "secure_filename"
+    mod = "werkzeug.utils" and name = "secure_filename"
     or
-    module = "html" and name = "escape"
+    mod = "html" and name = "escape"
   }
 
-  private predicate catalogApi(string module, string name) {
-    apiSinkArgument(module, name, _) or apiSourceArgument(module, name, _) or sanitizerApi(module, name)
+  private predicate catalogApi(string mod, string name) {
+    apiSinkArgument(mod, name, _) or apiSourceArgument(mod, name, _) or sanitizerApi(mod, name)
   }
 
   /** The API graph node of a dotted module path of one or two components. */
-  bindingset[module]
-  private API::Node moduleNode(string module) {
-    result = API::moduleImport(module)
+  bindingset[mod]
+  private API::Node moduleNode(string mod) {
+    result = API::moduleImport(mod)
     or
     result =
-      API::moduleImport(module.regexpCapture("([^.]+)\\.([^.]+)", 1))
-          .getMember(module.regexpCapture("([^.]+)\\.([^.]+)", 2))
+      API::moduleImport(mod.regexpCapture("([^.]+)\\.([^.]+)", 1))
+          .getMember(mod.regexpCapture("([^.]+)\\.([^.]+)", 2))
   }
 
-  /** `call` calls the catalog API `module`.`name` (through any import form API graphs follow). */
-  predicate apiCallName(DataFlow::CallCfgNode call, string module, string name) {
-    catalogApi(module, name) and
+  /** `call` calls the catalog API `mod`.`name` (through any import form API graphs follow). */
+  predicate apiCallName(DataFlow::CallCfgNode call, string mod, string name) {
+    catalogApi(mod, name) and
     (
-      module = "builtins" and call = API::builtin(name).getACall()
+      mod = "builtins" and call = API::builtin(name).getACall()
       or
-      module != "builtins" and call = moduleNode(module).getMember(name).getACall()
+      mod != "builtins" and call = moduleNode(mod).getMember(name).getACall()
     )
   }
 
   /** Comma-joined sorted catalog modules `n` is a call into ("" when none). */
   string declaredIn(DataFlow::Node n) {
-    result = concat(string module | apiCallName(n, module, _) | module, "," order by module)
+    result = concat(string mod | apiCallName(n, mod, _) | mod, "," order by mod)
   }
 
   /** The syntactic callee name of `call`: a `Name` id or an `Attribute` name, else "". */
@@ -273,9 +273,9 @@ module GraphExport {
   }
 
   private predicate apiCallSink(DataFlow::CallCfgNode call, DataFlow::Node operand, int arg, string api) {
-    exists(string module |
-      apiCallName(call, module, api) and
-      apiSinkArgument(module, api, arg)
+    exists(string mod |
+      apiCallName(call, mod, api) and
+      apiSinkArgument(mod, api, arg)
     |
       arg >= 0 and operand = call.getArg(arg)
       or
@@ -284,7 +284,7 @@ module GraphExport {
   }
 
   private predicate apiSinkCall(DataFlow::Node n) {
-    exists(string module, string api | apiCallName(n, module, api) and apiSinkArgument(module, api, _))
+    exists(string mod, string api | apiCallName(n, mod, api) and apiSinkArgument(mod, api, _))
   }
 
   /**
@@ -370,7 +370,7 @@ module GraphExport {
 
   /** A call of a catalog sanitizer API. */
   predicate sanitizerCall(DataFlow::CallCfgNode call, string api) {
-    exists(string module | apiCallName(call, module, api) and sanitizerApi(module, api))
+    exists(string mod | apiCallName(call, mod, api) and sanitizerApi(mod, api))
   }
 
   /** Number of catalog sanitizer calls that strictly dominate `sinkNode` in its scope. */
@@ -425,8 +425,8 @@ module GraphExport {
       nodeShape(n, nodeKind, api, index)
       or
       not n instanceof ThreatModelSource::Range and
-      exists(string module |
-        apiCallName(n, module, api) and apiSourceArgument(module, api, index) and index = -1
+      exists(string mod |
+        apiCallName(n, mod, api) and apiSourceArgument(mod, api, index) and index = -1
       ) and
       model = "api" and
       sourceType = "" and

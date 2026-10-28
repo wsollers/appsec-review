@@ -65,7 +65,7 @@ query predicate flow_summaries(
     exists(DataFlow::Node input, DataFlow::Node output |
       inputNode(f, input, from_kind, from_index, from_name) and
       outputNode(f, output, to_kind, to_index, to_name, to_model) and
-      TaintTracking::localTaint(input, output)
+      GraphExport::localTaint(input, output)
     ) and
     // A pair is "data" when any witness is plain dataflow, otherwise "taint".
     (

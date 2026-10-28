@@ -154,6 +154,52 @@ Each entry carries:
 
 The job's terminal status is `PARTIAL` whenever any named gap exists.
 
+### Bounded symbol parsing
+
+Source-history symbol extraction invokes the pinned Tree-sitter image sequentially, once per
+selected file. Each request retains the configured per-file byte and node bounds; its scope node
+bound equals `symbols.max_nodes_per_file`, rather than multiplying that bound by the number of
+files in a language. All selected files are still processed, grouped by language in deterministic
+order. The job validates and extracts each output before starting the next invocation, retaining
+only the extracted symbols and statuses instead of accumulating raw syntax trees.
+
+Requests, parser outputs, and execution receipts are retained separately under the symbol task's
+`scratch/tree-sitter/<language>/<sha256-of-target-relative-path>/` directory. Identical basenames
+in different directories have distinct scratch identities. Truncation, syntax errors, and missing
+coverage retain their named gaps; per-file batching does not increase resource limits or silently
+drop files. When stop-on-first-error is active, an unexpected parser failure stops admission before
+any subsequent file is launched.
+
+### Tree-sitter invocation metrics
+
+Both source-history parsing and ordinary AST parsing publish invocation-linked telemetry.
+Each actual execution has a distinct invocation ID, job/unit/attempt and scope identities,
+requested paths/hashes, configured limits, timestamps, duration, and execution receipt link.
+Retained receipts live under `data/telemetry/tree-sitter/<invocation-id>/`.
+
+A hash-pinned, read-only-mounted stdlib supervisor runs in the existing pinned parser image,
+under the same resource limits. It forwards termination to the parser and retains cgroup-v2
+CPU time, memory peak, I/O, OOM events, and local cgroup limits before the container exits.
+Measurements include supervisor/container overhead, not just parser computation. A missing
+counter or a whole-container kill can prevent final capture; those values are explicitly
+unavailable, never measured zeros. Configured limits are not measurements. The container's
+private cgroup namespace does not expose ancestor limits: `local_limits` must not be interpreted
+as the effective hierarchical budget. For example, an ancestor's zero swap limit still forbids
+swap when the child-local limit is nonzero. Host-side enforcement verification must retain
+ancestor evidence separately. Failed and canceled
+invocations retain their available evidence before cleanup; no historical receipt is rewritten.
+
+The existing run-metrics projection exposes one `tree_sitter` section in
+`data/telemetry/summary.json`, including both callers and job/attempt breakdowns. It deduplicates
+invocation identities, keeps retries as distinct executions, and reports shard/task reuse
+separately. Summed invocation duration is distinct from the elapsed window, covered wall time,
+and maximum observed concurrency. CPU and I/O totals carry measured/unavailable counts and
+completeness. The memory statistic is the **maximum individual container peak**, not a sum of
+peaks or a measurement of concurrent aggregate memory. Validated output receipts count files
+accounted for, files parsed, emitted nodes, and truncations; absent output accounting remains
+unknown. Missing completion, conflicting receipts, unavailable counters, and cancellation are
+visible through incomplete-accounting fields.
+
 ## Outputs and recovery
 
 - The accepted `source-history.json` holds:

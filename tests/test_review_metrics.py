@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from appsec_review.container_runtime.measurement import COUNTERS, INVOCATION_SCHEMA, RESOURCE_SCHEMA
 from appsec_review.observability import PipelineLog, aggregate_run_metrics
 from appsec_review.storage import atomic_json, file_sha256
 
@@ -132,3 +135,97 @@ def test_review_metrics_name_absent_producers_as_coverage_gaps(tmp_path: Path) -
         "language-build metrics producer receipt is unavailable",
         "CodeQL scope metrics producer receipt is unavailable",
     ]
+
+
+def tree_invocation(root: Path, identity: str, *, start: int, end: int | None,
+                    job: str = "job_source_history_analysis", status: str = "SUCCEEDED",
+                    measured: bool = True, peak: int = 1024, attempt: str = "attempt_0001"):
+    log = PipelineLog(root)
+    common = {"tool_id": "tool-tree-sitter", "tool_invocation_id": identity}
+    invocation = {
+        "schema": INVOCATION_SCHEMA, "invocation_id": identity, "run_id": "run",
+        "job_id": job, "attempt_id": attempt, "unit_id": "parse.scope", "scope_id": identity,
+        "language": "C", "image_id": "sha256:" + "a" * 64, "configured_limits": {"memory": "1g"},
+        "files": [{"path": "a.c", "sha256": "b" * 64}],
+        "started_at": f"2026-10-27T00:00:{start:02}+00:00",
+    }
+
+    def event(kind, name, value):
+        reference = _receipt(root, f"{identity}-{name}.json", value)
+        details = {**common, "metrics_receipt": reference}
+        log.write(kind, run_id="run", job_id=job, attempt_id=attempt, details=details)
+        return details
+
+    event("TOOL_INVOCATION_STARTED", "start", invocation)
+    if end is None:
+        return None
+    resources = {"schema": RESOURCE_SCHEMA, **{key: 10 if measured else None for key in COUNTERS},
+                 "memory_peak_bytes": peak if measured else None, "final_snapshot": measured,
+                 "local_limits": {"memory.max": "1073741824"},
+                 "limit_scope": "container_cgroup", "ancestor_limits_visible": False,
+                 "unavailable": {} if measured else {"snapshot": "container_killed"}}
+    completed = {**invocation, "completed_at": f"2026-10-27T00:00:{end:02}+00:00",
+                 "duration_ms": (end - start) * 1000, "status": status, "resources": resources,
+                 "resource_accounting_complete": measured, "exit_code": 0 if status == "SUCCEEDED" else 137,
+                 "timed_out": False, "oom_killed": status == "OOM"}
+    details = event("TOOL_INVOCATION_COMPLETED", "execution", completed)
+    if status == "SUCCEEDED":
+        event("TREE_SITTER_OUTPUT_VALIDATED", "output", {
+            "schema": "appsec-review/tree-sitter-output-metrics/1", "invocation_id": identity,
+            "files_requested": 1, "files_accounted": 1, "files_parsed": 1,
+            "nodes_emitted": 20, "truncated_files": 0})
+    return details
+
+
+@pytest.mark.parametrize(("second_start", "elapsed", "concurrency"), ((5, 8000, 1), (2, 5000, 2)))
+def test_tree_sitter_rollup_deduplicates_both_jobs_and_distinguishes_time_and_peak(
+        tmp_path: Path, second_start: int, elapsed: int, concurrency: int) -> None:
+    first = tree_invocation(tmp_path, "one", start=1, end=5, peak=1024)
+    tree_invocation(tmp_path, "two", start=second_start, end=second_start + 4,
+                    job="job_tree_sitter_ast", peak=4096, attempt="attempt_0002")
+    PipelineLog(tmp_path).write("TOOL_INVOCATION_COMPLETED", run_id="run",
+        job_id="job_source_history_analysis", attempt_id="attempt_0001", details=first)
+    for _ in range(2):
+        PipelineLog(tmp_path).write("TREE_SITTER_REUSED", run_id="run", details={
+            "tool_id": "tool-tree-sitter", "reuse_id": "reuse-one", "source_invocation_id": "one"})
+    summary = aggregate_run_metrics(tmp_path)["tree_sitter"]
+    assert summary["invocation_count"] == 2 and summary["reused_scope_count"] == 1
+    assert len(summary["by_job_attempt"]) == 2
+    assert summary["summed_invocation_duration_ms"] == 8000
+    assert summary["elapsed_window_ms"] == elapsed and summary["covered_wall_ms"] == elapsed
+    assert summary["max_concurrency"] == concurrency and summary["timing_complete"]
+    assert summary["measurements"]["memory_peak_bytes"]["value"] == 4096
+    assert summary["measurements"]["cpu_usage_usec"]["value"] == 20
+    assert summary["measurements"]["io_read_bytes"]["value"] == 20
+    assert summary["counts"]["nodes_emitted"] == {"value": 40, "complete": True}
+    assert not summary["incomplete_accounting"]
+
+
+def test_tree_sitter_failures_cancellation_and_missing_completion_remain_incomplete(tmp_path: Path) -> None:
+    tree_invocation(tmp_path, "oom", start=1, end=3, status="OOM", peak=1_073_741_824)
+    tree_invocation(tmp_path, "canceled", start=3, end=4, status="CANCELED", measured=False)
+    tree_invocation(tmp_path, "lost", start=4, end=None)
+    summary = aggregate_run_metrics(tmp_path)["tree_sitter"]
+    assert summary["outcomes"] == {"CANCELED": 1, "INCOMPLETE": 1, "OOM": 1}
+    assert summary["incomplete_accounting"] and not summary["timing_complete"]
+    assert summary["counts"]["nodes_emitted"] == {"value": None, "complete": False}
+    assert summary["measurements"]["cpu_usage_usec"] == {
+        "value": 10, "measured_invocations": 1, "unavailable_invocations": 2, "complete": False}
+    assert summary["measurements"]["memory_peak_bytes"]["value"] == 1_073_741_824
+    canceled = next(row for row in summary["invocations"] if row["invocation_id"] == "canceled")
+    assert canceled["resources"]["memory_peak_bytes"] is None
+
+
+def test_tree_sitter_conflicting_identity_is_not_summed_as_another_execution(tmp_path: Path) -> None:
+    first = tree_invocation(tmp_path, "one", start=1, end=2)
+    changed = json.loads((tmp_path / first["metrics_receipt"]["path"]).read_text())
+    changed["duration_ms"] = 9000
+    reference = _receipt(tmp_path, "conflict.json", changed)
+    PipelineLog(tmp_path).write("TOOL_INVOCATION_COMPLETED", run_id="run",
+        job_id="job_source_history_analysis", attempt_id="attempt_0001",
+        details={**first, "metrics_receipt": reference})
+    summary = aggregate_run_metrics(tmp_path)["tree_sitter"]
+    assert summary["invocation_count"] == 1 and summary["outcomes"] == {"INTEGRITY_ERROR": 1}
+    assert summary["summed_invocation_duration_ms"] is None
+    assert summary["measurements"]["memory_peak_bytes"]["value"] is None
+    assert summary["gaps"] and summary["incomplete_accounting"]

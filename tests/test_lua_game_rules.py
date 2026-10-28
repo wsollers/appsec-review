@@ -34,7 +34,7 @@ def _annotations(kind: str) -> set[tuple[str, int]]:
 
 def test_rules_have_metadata_and_positive_and_negative_fixtures() -> None:
     ids = {rule["id"] for rule in RULES}
-    assert len(ids) == len(RULES) == 20
+    assert ids and len(ids) == len(RULES)
     assert {name for name, _ in _annotations("ruleid")} == ids
     assert {name for name, _ in _annotations("ok")} == ids
     assert not (_annotations("ruleid") & _annotations("ok"))

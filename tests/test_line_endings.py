@@ -26,6 +26,8 @@ def test_checkout_preserves_pinned_bytes_and_canonical_git_blobs(tmp_path, autoc
         "scripts/check.sh": portable,
         "scripts/check.ps1": portable,
         "src/example.py": portable,
+        "rules/codeql-graph-export/example.ql": portable,
+        "containers/tools/codeql/assets.lock.json": portable,
         "tools/check.bat": windows,
         "tools/check.cmd": windows,
         "image.bin": b"\x00binary\r\npayload\n",

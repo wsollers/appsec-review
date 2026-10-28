@@ -28,25 +28,56 @@ worktree's configuration or virtual environment. Rebuild the application image a
 code, then verify the loaded code location before launching; the fixed wrapper mount alone does
 not update the application package.
 
-## Windows host WSL memory limit
+## Native WSL review-host limits
 
-On the current Windows Docker Desktop host, the global WSL 2 configuration is stored at
-`C:\Users\wsoll\.wslconfig` (`%UserProfile%\.wslconfig`). It limits the shared WSL 2 virtual
-machine to 16 GB of memory, provides 8 GB of swap, and enables immediate cache reclamation:
+The instrumented Freeciv deployment uses Docker Engine inside Ubuntu-22.04, not the Docker
+Desktop daemon. Its checkout, Docker image store and restored PostgreSQL/Dagster volumes remain
+on the Linux filesystem. Keep Docker Desktop stopped; its original data is retained for recovery,
+not a second authoritative scheduler. WSL currently reports approximately 32 GiB of RAM.
+This is observed host capacity, not permission to change the global WSL configuration.
 
-```ini
-[wsl2]
-memory=16GB
-swap=8GB
+The Compose services require the operator-provisioned systemd cgroup-v2 hierarchy below.
+Do not use these deployment settings with an unconfigured daemon or a cgroupfs-based Desktop
+daemon. The repository does not provision the host units automatically.
 
-[experimental]
-autoMemoryReclaim=dropCache
+| Slice | CPU ceiling | RAM ceiling | PID ceiling |
+| --- | --- | --- | --- |
+| `appsecreview.slice` | 16 | 20 GiB | 8192 |
+| `appsecreview-actions.slice` | 8 | 10 GiB | 2048 |
+| `appsecreview-services.slice` | 6 | 8 GiB | 4096 |
+| `appsecreview-engine.slice` | 2 | 2 GiB | 2048 |
+
+Every slice has `MemorySwapMax=0`. The native daemon's `cgroup-parent` defaults to the actions
+slice; Docker and containerd service drop-ins place their processes in the engine slice.
+Compose places all four services in the services slice. Their individual CPU/RAM/PID limits
+are code location 4/5 GiB/2048, PostgreSQL 1/1 GiB/1024, webserver 0.5/1 GiB/512 and daemon
+0.5/1 GiB/512. Each container's memory-plus-swap limit equals its memory limit.
+Verify kernel limits and actual process membership, not merely the configuration files.
+
+The unchanged review-action ledger allows 8 CPUs, 10240 MiB, one I/O slot and 512 MiB staging
+per reservation. The largest configured CodeQL compile reserves 8 CPUs and 9728 MiB
+(8192 MiB tool RAM, 1024 MiB container overhead and 512 MiB staging), within that budget.
+Application/model workers are charged to the separate services slice. SDK peak memory is
+unmeasured; these ceilings enforce a stop on exhaustion, not a performance guarantee.
+The capacity-only Freeciv overlay reduces concurrent review teams to one while retaining all
+packages, viewpoints, languages, models, assurance and token/tool budgets.
+
+After preservation, resource, authentication and runtime-integrity approval:
+
+```bash
+scripts/stack-start.sh --profile copilot-prod --target freeciv \
+  --overlay freeciv-instrumented/capacity-overlay.toml --no-probe
+scripts/review-start.sh --profile copilot-prod --target freeciv \
+  --overlay freeciv-instrumented/capacity-overlay.toml --stop-on-first-error
 ```
 
-The 16 GB limit is shared by Docker Desktop and every running WSL 2 distribution; it is not a
-per-container or per-distribution allowance. After changing the file, save active WSL work, run
-`wsl --shutdown`, and restart Docker Desktop. The shutdown stops all WSL distributions and running
-containers.
+The start command alone does not establish authentication or launch safety. Complete the separate
+non-inference authentication checks before submission. The overlay is mounted read-only under
+`/opt/app/test/acceptance` and inherited by the application workers. It needs no image rebuild.
+A deployment-only commit must record its own source SHA separately from the retained image's
+implementation SHA and immutable image ID, with byte-equivalence evidence for installed
+application/configuration/guidance assets. Changes to packaged implementation still require a
+rebuild. No resource configuration commissions a derived-image builder or authorizes a retry.
 
 ## Build, start, verify, and stop
 
@@ -72,8 +103,9 @@ status and logs; review start, watch, status and stop) with an active-run guard;
 Run these commands from a native checkout on each host: `~/projects/appsec-review` in WSL or a
 Windows drive checkout in PowerShell. Do not run the WSL deployment from `/mnt/c` or `/mnt/f`.
 Each checkout has its own ignored `.env`, `runs/`, `data/`, target files, Claude login, Compose
-project, image, PostgreSQL volume, and Dagster storage volume. The stacks share Docker Desktop's
-engine, so stop one before starting the other. The lifecycle and live smoke commands enforce this.
+project, image, PostgreSQL volume, and Dagster storage volume. Stacks using one daemon share that
+engine, so stop one before starting the other. The lifecycle and live smoke commands enforce this
+within that daemon; they cannot discover a second scheduler on a different daemon.
 Bootstrap preserves the existing database secret while refreshing host-specific paths and removing
 Linux-only settings from the Windows environment. On Linux and WSL it records the operator uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees. It
@@ -93,14 +125,13 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f 
 
 Choose the Claude subscription login. The Windows host's Claude login is separate from this
 container login; neither is copied into the image or repository.
-For a bounded acceptance target already beneath the read-only `targets/` mount, set
-`APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
-deployment defaults to `/opt/app/targets/appsec-multi-vuln`. The code location also honours
-`APPSEC_REVIEW_SYSTEM=<id>`, which makes `target_acquisition` acquire a configured multi-component
-system into `targets/<id>/` before intake, but this compose deployment neither passes that variable
-nor mounts `targets/` writable, so here the gate records `NOT_REQUESTED`. Acquire a system on the
-host with `appsec-review acquire-target --system <id>` and point `APPSEC_REVIEW_TARGET` at
-`/opt/app/targets/<id>`; see
+`targets/` is mounted writable at `/opt/app/targets`: acquisition creates checkouts there and
+builds write their outputs (binaries, libraries, generated assets) into the checkout. For a target
+already beneath it, set `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch
+commands; otherwise the deployment defaults to `/opt/app/targets/appsec-multi-vuln`. To have
+`target_acquisition` acquire a configured multi-component system into `targets/<id>/` before intake,
+set both `APPSEC_REVIEW_SYSTEM=<id>` and `APPSEC_REVIEW_TARGET=/opt/app/targets/<id>` in
+`deploy/dagster/.env`; the code location refuses to start a review when the two disagree. See
 [`../../docs/operations/target-acquisition.md`](../../docs/operations/target-acquisition.md).
 
 The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable

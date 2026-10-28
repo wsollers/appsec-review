@@ -594,6 +594,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         if verification["warning"]:
             unit.job.events.write("INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT", warning=verification["warning"])
         hunt_packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
+        lead_packages = _read(unit.job.run_root, unit.output("packages.assemble_lead_packages")["artifact"])
         matrix_ref = completeness_doc["coverage_matrix"]
         matrix = _read(unit.job.run_root, matrix_ref)
         triage_out = unit.output("triage.lead_severity")
@@ -607,6 +608,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             configuration_sha256=semantic_settings_sha256(settings), projection=projection, accounting=accounting,
             shards=stages.shard_records(unit.job.run_root, paths), findings=findings, scores=scores,
             package_manifest_sha256=hunt_packages["package_manifest_content_sha256"],
+            lead_package_manifest_sha256=lead_packages["package_manifest_content_sha256"],
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
             possible=merged_doc["possible_duplicates"], schemas=schemas,
             ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),

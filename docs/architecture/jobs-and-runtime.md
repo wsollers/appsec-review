@@ -13,12 +13,10 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a linear review graph of 33 jobs from
-`job_model_connectivity` through `job_final_report_publication` (`GRAPH_JOB_IDS` plus
-`POST_INDEX_JOB_IDS` in `cli.py`). Dagster builds the broader, branched
-`wave1_review` topology from every registered, configured, enabled job except
-`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
-jobs that are not in the direct graph. Both surfaces end with `job_inference_security_review`,
+The direct CLI runs the same jobs as Dagster's `wave1_review`, in a topological order derived from
+`orchestration.topology.wave1_dependencies`; Dagster builds the branched topology from every
+registered, configured, enabled job except `job_third_party_data_sync`, and the CLI executes it
+linearly. Both refuse to start when the registered and configured jobs differ. Both surfaces end with `job_inference_security_review`,
 `job_final_publication_gate` and `job_final_report_publication`, in that order; the report is the
 single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).

@@ -168,7 +168,9 @@ missing declarations skip lookup and report `missing_release_identity`. New comp
 publishes an attributed receipt, and eligible reuse still verifies target-source resolution.
 Release selectivity at the identity level does not establish cross-run reuse. A run's configuration
 and releases remain immutable; a query-release change requires a new run, whose run-private
-database cache is distinct. The opt-in predecessor path below supports query-release-only changes
+database cache is distinct. The CodeQL query compile cache is the one cross-run exception: it is
+shared by runs with the same user and declared CodeQL/runner releases, and holds only compiled
+repository-owned QL ([cache](codeql-analysis.md#query-precompilation)). The opt-in predecessor path below supports query-release-only changes
 through a new frozen run. Fake-tool acceptance covers destination `JobRunner` execution and
 finalization, accepted import provenance, zero new DB launches, fresh queries under the new
 declaration and subsequent query reuse in both modes. Real retained-data import and production
@@ -313,6 +315,15 @@ implied by a fixture-validation allowance or by the unlimited package-count sett
 backend/cleanup/reconciliation commissioning remains a rollout gate; fixture admission does not
 establish available production capacity.
 
+A capacity overlay may set `review_policy.resources.*` for one host. The checked-in
+[`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
+raises `io_slots` to 4, so four 2-CPU/1,536 MiB scanners fit the CPU and memory budget, and lowers
+the Dagster `scanner` pool to match. The admission ledger is shared across runs on the host and
+admits against the lowest limit among active leases, so a concurrent run without the overlay
+restores one-slot admission. A scanner's admission wait counts against its tool `timeout_seconds`;
+an admission timeout is a named gap. With the image builder service enabled, overlap with a build on
+the same engine is still rejected regardless of `io_slots`, and a native operator contract must
+declare the same budget.
 Persistent service/daemon overhead also consumes the aggregate budget while the service is idle.
 With even one CPU held for that lifetime inside the eight-CPU budget, an eight-CPU compiled
 database or export-compilation action cannot be admitted while the service remains alive.

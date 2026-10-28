@@ -468,6 +468,14 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
         return {output.node_name for outputs in mapping.values() for output in outputs}
 
+    def assert_barrier_waits_for_every_branch(job: str) -> None:
+        # The publish barrier waits for the job's claim plus every terminal branch of that job.
+        barrier = f"{job}__acceptance__publish_handoff"
+        members = {name for name in names if name.startswith(f"{job}__")} - {barrier, f"{job}__finalize"}
+        feeding = set().union(*(upstream(name) for name in members))
+        terminal = {f"{job}__begin"} | {name for name in members if name not in feeding}
+        assert terminal <= upstream(barrier) <= members
+
     assert upstream("image_pin_verification__begin") == {"model_connectivity__finalize"}
     assert upstream("review_intake__begin") == {"image_pin_verification__finalize"}
 
@@ -492,7 +500,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "artifact_indexing__begin", "artifact_indexing__index__catalogs",
         "artifact_indexing__index__members", "artifact_indexing__index__relationships"}
     assert "artifact_indexing__finalize" in upstream("artifact_security_analysis__begin")
-    assert len(upstream("project_build__acceptance__publish_handoff")) == 20
+    assert_barrier_waits_for_every_branch("project_build")
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")
     assert "post_build_security_assessment__finalize" in upstream("owasp_control_assessment__begin")
@@ -503,8 +511,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     assert upstream("cpp_compiled_analysis__infer__projects") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
-    cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
-    assert len(cpp_barrier) == 6  # claim plus five project-batched terminal branches
+    assert_barrier_waits_for_every_branch("cpp_compiled_analysis")
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
     assert len(post_build_barrier) == 2  # claim plus the generic accepted-unit index barrier
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")

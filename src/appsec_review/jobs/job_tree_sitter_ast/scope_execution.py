@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
+from appsec_review.container_runtime.measurement import TreeSitterInvocation, record_reuse
 from appsec_review.runtime import UnitContext
 from appsec_review.storage import atomic_json
 from appsec_review.storage.shared import immutable_bytes, safe_path
@@ -87,6 +88,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     metadata_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.json"
     metadata = reusable_shard(metadata_path, artifact_path, index_path, fingerprint)
     if metadata is not None:
+        record_reuse(unit, scope.scope_id, fingerprint, metadata.get("tree_sitter_invocation_id"))
         return {**metadata, "index_reused": True}
     scratch = (unit.job.run_root / "data" / "treesitter" / "work" / unit.job.attempt_id /
                hashlib.sha256(scope.scope_id.encode()).hexdigest()[:20])
@@ -108,10 +110,11 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     # target mount remains read-only.
     executor = executor_factory(unit) if executor_factory else ContainerExecutor(
         load_catalog(unit.job.repository_root), unit.job.run_root)
+    measurement = TreeSitterInvocation.for_unit(unit, request)
     execution = executor.execute(ExecutionRequest("tool-tree-sitter",
         ("/opt/appsec/parser.py", "parse", "--request", "/scratch/request.json",
          "--output", "/scratch/output.json"), target_root, scratch,
-        working_directory="/scratch"))
+        working_directory="/scratch", measurement=measurement))
     if execution.exit_code != 0 or execution.timed_out or execution.oom_killed:
         return {"scope_id": scope.scope_id, "language": scope.language, "fingerprint": fingerprint,
                 "terminal_status": "FAILED", "gaps": [f"container parser failed with exit {execution.exit_code}"],
@@ -134,11 +137,13 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
             path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
             for item in scope.files if any(record.get("path") == item["path"]
                 and record.get("status") != "TRUNCATED" for record in container_output.get("records", ()))})
+    measurement.record_output(unit.job.run_root, container_output)
     result = {"schema": SCHEMA, "scope_id": scope.scope_id, "project_id": scope.project_id,
               "translation_scope_id": scope.translation_scope_id, "language": scope.language,
               "fingerprint": fingerprint, "grammar": asdict(grammar), "artifact": artifact,
               "index_identity": asdict(identity), "counts": counts, "execution": asdict(execution),
               "gaps": list(identity.gaps), "truncated": any("limit" in gap for gap in identity.gaps),
-              "terminal_status": "PARTIAL" if identity.gaps else "SUCCEEDED", "index_reused": False}
+              "terminal_status": "PARTIAL" if identity.gaps else "SUCCEEDED", "index_reused": False,
+              "tree_sitter_invocation_id": measurement.invocation_id}
     atomic_json(metadata_path, result)
     return result

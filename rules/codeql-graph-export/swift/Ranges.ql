@@ -22,6 +22,7 @@ import GraphExport
 /** The standard integral type name of `t` (sugar and aliases removed). */
 string integralName(Type t) { result = t.getUnderlyingType().(IntegralType).getName() }
 
+bindingset[name]
 int bitsOf(string name) {
   name = ["Int", "UInt"] and result = 64
   or
@@ -29,7 +30,7 @@ int bitsOf(string name) {
 }
 
 string literalBound(Expr operand) {
-  result = operand.resolve().(IntegerLiteralExpr).getStringValue().toInt().toFloat().toString()
+  result = (operand.resolve().(IntegerLiteralExpr).getStringValue().toInt() * 1.0).toString()
   or
   not exists(operand.resolve().(IntegerLiteralExpr).getStringValue().toInt()) and
   result = "unknown"

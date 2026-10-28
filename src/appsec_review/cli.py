@@ -8,36 +8,32 @@ import time
 from typing import Sequence
 
 from appsec_review.config import load_config
+from appsec_review.orchestration.topology import wave1_dependencies
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import GraphRunner, active_job_ids, job_is_enabled
 from appsec_review.jobs.cataloging import source_fingerprint
 
+INDEX_TERMINAL_JOB_ID = "job_review_data_indexing"
+
+
+def _graph_order() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The resumable graph and its post-index consumers, in the order Dagster's ``wave1_review`` uses."""
+    order = tuple(wave1_dependencies(frozenset(builtin_registry().job_ids())) or ())
+    split = order.index(INDEX_TERMINAL_JOB_ID) + 1
+    return order[:split], order[split:]
+
 
 # The deterministic review graph in execution order; ``start``, ``resume`` and ``--force-from`` all
-# use it. ``job_image_pin_verification`` runs after the model gate and before intake and fails the run
+# use it. It is derived from ``orchestration.topology`` so the CLI and Dagster run the same jobs.
+# ``job_image_pin_verification`` runs after the model gate and before intake and fails the run
 # when any enabled catalog image or configured image-ID pin does not resolve on the local daemon to
 # exactly its pinned image; it never builds an image. ``job_target_acquisition`` then acquires (or
 # re-verifies) every component of the system named by ``--system`` into ``targets/<system>/`` before
 # intake fingerprints that composed root; without ``--system`` it is a recorded no-op. ``job_code_graph_index``
 # consumes CodeQL and prioritization output and must precede the indexing job that accounts for it.
-GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_target_acquisition",
-                 "job_review_intake", "job_target_catalog",
-                 "job_source_history_analysis",
-                 "job_target_analysis_plan", "job_tree_sitter_ast",
-                 "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
-                 "job_profile_data",
-                 "job_artifact_security_analysis",
-                 "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_svf_alias_analysis",
-                 "job_sanitizer_build",
-                 "job_cpp_symbol_index", "job_cpg_analysis", "job_binary_evidence_indexing",
-                 "job_evidence_collection", "job_dependency_intelligence", "job_change_context_analysis",
-                 "job_codeql_analysis",
-                 "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")
-# Consumers of the accepted index that run after the resumable graph.
-POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis",
-                      "job_inference_security_review", "job_final_publication_gate",
-                      "job_poc_generation", "job_final_report_publication")
+# Consumers of the accepted index (``POST_INDEX_JOB_IDS``) run after the resumable graph.
+GRAPH_JOB_IDS, POST_INDEX_JOB_IDS = _graph_order()
 # Jobs that are outside the automatic graph while ``settings.enabled`` is false and that an operator may still
 # dispatch directly on a finished run (`run <job> --run-id <id> --upstream-from-run`). Every other disabled job
 # is refused: disabling it means "do not run it".
@@ -244,6 +240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
+        registry.require_matches(config.jobs, surface="CLI")
         selected = active_job_ids(config, (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
         if getattr(args, "force_from", None) and args.force_from not in selected:
             raise ValueError(f"cannot force from disabled job: {args.force_from}")
@@ -288,6 +285,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from appsec_review.storage import RunStore
 
     registry = builtin_registry()
+    registry.require_matches(config.jobs, surface="CLI")
     job = registry.build(args.job_id)
     upstream: dict[str, str] = {}
     if args.upstream_from_run:
