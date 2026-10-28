@@ -1894,19 +1894,21 @@ Relevance and support are the closed, versioned `predicate-admission/2` table
 | `package`, `archive_member` | D | I | I | I | I | I | component presence at a version (SBOM, lockfile, inventory) |
 | `bytecode_module`, `managed_assembly`, `wasm_module` | D | I | I | I | I | I | no readable source in the entity; prefer indirect |
 | `evidence_artifact` | D | A | A | A | A | A | a run-owned tool artifact: its content is read, not computed |
+| `binary_function`, `binary_call_site` | D | A | A | A | I | I | Ghidra pseudo-C bound to a binary hash, function address and lines: the function or call exists there; flow, input control and guards read from decompiled text are a reconstruction ([`binary-decompilation.md`](binary-decompilation.md)) |
 
 Principles: source content is direct only for the construct it is; component content is direct only
 for presence; configuration is direct only for build facts; and **no kind is direct for
 `security_impact`** (impact follows from the adjudicated facts of the claim, not from one cited
-entity; `obligation-rules/2` therefore does not require it, see R4). Where unsure a cell is the
-weaker one.
+entity; `obligation-rules/2` therefore does not require it, see R4). Binary-derived pseudo-C is
+direct only for the construct at its address. Where unsure a cell is the weaker one.
+`predicate-admission/2` added the two binary rows; every `/1` cell is unchanged.
 
 | Admissibility | Cited entity kinds (`retrieval/model.py::EntityKind`) |
 |---|---|
-| per cell of the table above | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
+| per cell of the table above | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact`; `binary_function`, `binary_call_site` |
 | direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI), mapped by producer, native rule identity and result kind (`tool-rule-predicates/2`, see below) |
 | direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`: support, qualify, or contradict only when the facts show the destination is bounded, see below) |
-| indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
+| indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, `binary_import`, `binary_string`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
 | indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
 
 Only complete `direct` and `direct_for_mapped_predicate` relations satisfy an obligation

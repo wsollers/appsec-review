@@ -351,6 +351,9 @@ authenticity is not relevance and relevance is not support. The application clas
   control, reachability, guard and impact it is `indirect`.
 - A build action or compile unit is `direct` for `configuration_enables`; built binaries are
   `analyst_assessed` at best.
+- Decompiled binary content (`binary_function`, `binary_call_site`) is `direct` only for
+  `affected_construct` and must cite binary hash, function address and pseudo-C line; flow, input
+  control and guards read from it are `analyst_assessed`. Binary imports and strings are `indirect`.
 - No kind is `direct` for `security_impact`; impact is derived from the adjudicated claim, so it is
   not a required predicate (R4).
 - A tool observation counts only for the predicates its producer and rule name, and a CodeQL result
