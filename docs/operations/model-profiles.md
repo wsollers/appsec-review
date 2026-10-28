@@ -150,6 +150,7 @@ rejected with a message that names the key.
 | Table | Allowed keys |
 | --- | --- |
 | `jobs.<job>.settings.model` for `job_target_analysis_plan`, `job_project_build`, `job_post_build_security_assessment`, `job_dependency_intelligence`, `job_owasp_control_assessment` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
+| `jobs.job_owasp_control_assessment.settings.models.reviewer` (only this named profile) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
 | `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
@@ -169,11 +170,20 @@ See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-
 | `job_target_analysis_plan` | `claude-sonnet-5-5` | high | 200000 | 64000 | 900 |
 | `job_post_build_security_assessment` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
 | `job_dependency_intelligence` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
-| `job_owasp_control_assessment` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+| OWASP worker `model` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+| OWASP blinded `models.reviewer` | `claude-opus-5-5` | high | 200000 | 32000 | 600 |
 | `job_project_build` | `claude-sonnet-5-5` | medium | 128000 | 16000 | 600 |
 | inference review `models.default` | `claude-sonnet-5-5` | high | 200000 | 64000 | 1800 |
 | inference review `models.strong` (new) | `claude-opus-5-5` | high | 200000 | 64000 | 2400 |
 | PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+
+OWASP remains disabled by its separate job-level `settings.enabled = false`; selecting a model
+profile does not enable it. Base/dev worker and reviewer use `claude-haiku-5-5`; `copilot-dev`
+selects `copilot-sdk`/`claude-haiku-5.5` for both. `copilot-prod` selects
+`claude-sonnet-5.5` for the worker and `claude-opus-5.5` for the reviewer. Independent review means
+a fresh blinded request over original evidence without the worker answer/transcript; model
+distinctness alone is not proof. Qualification requires both selected profiles disabled explicitly,
+not a provider overlay. See [OWASP operations](owasp-control-assessment.md).
 
 `default` and `strong` also set `max_queries = 60` and `max_turns = 16`. The inference review budgets
 become `budget_team_packages = "all"`, `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_tokens = 60000000`,

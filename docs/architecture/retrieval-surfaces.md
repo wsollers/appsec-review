@@ -36,7 +36,11 @@ accepted index shards (read-only, hash-verified)
   bound by hash to the run, manifest, package, role and round. The scoped MCP session uses the role
   tool lists in `mcp/capability.py::_ROLE_TOOLS`.
 - **`query_owasp_workbench` is MCP-only.** It reads a separate store, so it is not grantable to a
-  review cell.
+  review cell. This does not exclude OWASP context from review: accepted publications project to
+  PRECOMPUTED `control_evidence`, then provisional lead/hunt packages and labelled red/blue/verifier
+  requests with authority links and original evidence refs. Those interpretations are indirect for
+  every final predicate. Review cells retrieve underlying evidence through their granted in-process
+  tools, not by opening the workbench through MCP.
 - **Runtime skills carry no target facts and no retrieval instructions for review.** The role,
   persona and governing-rules guidance a review cell receives is assembled from `pipeline/guidance`
   and `pipeline/prompt-fragments`, and is hash-pinned in the run. See

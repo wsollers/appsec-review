@@ -108,8 +108,8 @@ crosswalk are pinned by path and SHA-256 under `jobs.job_security_tagging.settin
 | Family | Namespace | Catalog / authority | Pinned today |
 | --- | --- | --- | --- |
 | Code facts | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang`, `gap` | Local vocabulary file. `component` reuses the workbench `COMPONENT_ROLES`. | Yes (local file, SHA-256 pinned) |
-| Controls | `asvs5` | OWASP ASVS 5.0.0 | Yes (fixture only) |
-| Controls | `masvs2` | OWASP MASVS 2.1.0 | Yes (fixture only) |
+| Controls | `asvs5` | OWASP ASVS 5.0.0 | Yes (complete pinned catalog; tags are not assessment proof) |
+| Controls | `masvs2` | OWASP MASVS 2.1.0 | Yes (complete pinned catalog; tags are not assessment proof) |
 | Controls | `nist53r5` | NIST SP 800-53 Rev. 5 (OSCAL catalog) | Proposed |
 | Controls | `ssdf` | NIST SP 800-218 SSDF 1.1 | Proposed |
 | Controls | `k8s-pss` | Kubernetes Pod Security Standards (baseline, restricted) | Proposed |
@@ -662,9 +662,13 @@ Rendering rules:
 
 ## Placement in the pipeline
 
-`job_security_tagging` runs after the last retrieval-manifest publisher in `wave1_review` (CodeQL
-analysis when it is registered) and closes the wave after the OWASP control assessment. It reads only the accepted, hash-verified retrieval manifest and
-publishes immutable `tags` retrieval shards, one per display family. A shard's fingerprint covers:
+`job_security_tagging` runs after CodeQL, review prioritization and code-graph indexing in
+`wave1_review`. The opt-in OWASP assessment follows tagging, using accepted assignments and
+distinct-subject tag-cloud counts as bounded routing context, not proof; absent tags are unknown.
+There is no OWASP-to-tagging dependency. Review data indexing closes the producer wave before
+package assembly and inference review. Tagging reads only the accepted, hash-verified retrieval
+manifest and publishes immutable `tags` retrieval shards, one per display family.
+A shard's fingerprint covers:
 
 - its upstream manifest;
 - the vocabulary hash;

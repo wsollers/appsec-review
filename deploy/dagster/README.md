@@ -234,19 +234,20 @@ language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_a
   + clang_static_analysis + cpp_symbol_index + cpg_analysis
   + post_build_security_assessment + evidence_collection
   + tree_sitter_ast + change_context_analysis -> codeql_analysis
-post_build_security_assessment + evidence_collection + artifact_security_analysis
-  + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
-codeql_analysis + owasp_control_assessment -> review_prioritization
+codeql_analysis -> review_prioritization
 codeql_analysis + cpp_compiled_analysis + clang_static_analysis + cpp_symbol_index
   + tree_sitter_ast + review_prioritization -> code_graph_index
-codeql_analysis + owasp_control_assessment + review_prioritization + code_graph_index
+codeql_analysis + review_prioritization + code_graph_index
   -> security_tagging
-test_coverage + profile_data + dependency_intelligence + security_tagging
+post_build_security_assessment + evidence_collection + artifact_security_analysis
+  + tree_sitter_ast + codeql_analysis + review_prioritization + code_graph_index
+  + security_tagging -> owasp_control_assessment (opt-in)
+test_coverage + profile_data + dependency_intelligence + security_tagging + owasp_control_assessment
   -> review_data_indexing -> review_package_assembly -> document_issue_analysis
   -> inference_security_review -> final_publication_gate -> final_report_publication
 ```
 
-`wave1_review` contains every registered job except the standalone
+`wave1_review` contains every enabled registered job except the standalone
 `third_party_data_sync` job, and `final_report_publication` is its single terminal job.
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in
@@ -288,13 +289,20 @@ and dependency intelligence joins accepted catalog, build, artifact, and evidenc
 also waiting for the compiled C/C++ branch when present. Cross-language CodeQL consumes its
 declared catalog, language-build, artifact, C++,
 post-build, static-evidence, tree-sitter, and change-context publications. The code-graph job then
-normalizes accepted CodeQL exports and cross-check inputs. OWASP, review prioritization, and
-security tagging publish their own branches; `review_data_indexing` waits for every enabled leaf
+normalizes accepted CodeQL exports and cross-check inputs. Review prioritization and code-graph
+indexing precede security tagging; the opt-in OWASP assessment consumes their bounded accepted
+classification/tag-cloud context, never treating it as control proof. `review_data_indexing` waits for every enabled leaf
 and audits the composed accepted view. Each evidence
 branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
 truthful terminal disposition from every static branch, verifies every immutable shard, and then
-publication moves the accepted pointer. OWASP assessment waits for both the static-evidence and
-post-build branches. The configured multiprocess executor allows unrelated branches to overlap;
+publication moves the accepted pointer. OWASP assessment waits for the static-evidence,
+post-build, prioritization, graph and tagging branches, then precedes package assembly, hunting and
+red/blue/independent verification. It is shipped disabled with assessment mode configured; worker
+and fresh blinded reviewer inference are implemented, but live-model efficacy is not established.
+Only four narrow Python static procedures are supported despite complete pinned catalogs.
+See [OWASP operations](../../docs/operations/owasp-control-assessment.md). The direct CLI still
+omits tagging/OWASP even when enabled; this ordering describes Dagster.
+The configured multiprocess executor allows unrelated branches to overlap;
 Grype alone waits for Syft.
 
 A producer failure is not a clean scan and not a framework failure. It becomes a durable `FAILED`,

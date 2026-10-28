@@ -68,7 +68,9 @@ Operations, one page per job or service:
 - [`operations/post-build-security-assessment.md`](operations/post-build-security-assessment.md) — build-hardening assessment.
 - [`operations/static-analysis.md`](operations/static-analysis.md) — deterministic static evidence collection.
 - [`operations/codeql-analysis.md`](operations/codeql-analysis.md) — cross-language CodeQL.
-- [`operations/owasp-control-assessment.md`](operations/owasp-control-assessment.md) — OWASP control assessment.
+- [`operations/owasp-control-assessment.md`](operations/owasp-control-assessment.md) — opt-in assessment
+  versus synthetic qualification, pre-hunt ordering, typed bounds, receipts and unresolved coverage;
+  [architecture and flow diagram](architecture/owasp-control-workbench.md).
 - [`operations/review-prioritization.md`](operations/review-prioritization.md) — review prioritization.
 - [`operations/security-tagging.md`](operations/security-tagging.md) — security tagging.
 - [`operations/document-issue-analysis.md`](operations/document-issue-analysis.md) — source-mapped document candidate ledger.

@@ -530,11 +530,25 @@ python -m appsec_review start --target targets/appsec-multi-vuln
 ```
 
 The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
-control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
-enabled registered review job except the standalone `third_party_data_sync` job, when you need
-those branches. The direct graph is linear, so its
+control assessment, and security tagging, including when those jobs are enabled. Use Dagster's
+`wave1_review` job, which runs every enabled registered review job except the standalone
+`third_party_data_sync` job, when you need those branches. The direct graph is linear, so its
 order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
+
+The opt-in [OWASP assessment](docs/architecture/owasp-control-workbench.md) is shipped disabled
+with `mode = "assessment"`. In the enabled Dagster path the order is accepted source/component/
+build/static information → prioritization/code graph → security tagging/tag cloud → OWASP →
+review data indexing (`control_evidence`) → package assembly → hunt and red/blue/independent
+verification. Tags and classifications route work, never prove controls. Full pinned catalogs
+contain 345 ASVS controls, 24 MASVS controls, 292 MASTG supporting tests and two 10-record risk
+catalogs; **only four narrow Python static procedures are implemented**, not full compliance
+coverage. Configured assessment calls a worker and a fresh blinded reviewer. Qualification is an
+explicit synthetic mode, not selected by input-file presence and never production-eligible.
+Downstream OWASP interpretations remain provisional and indirect for every final predicate:
+review roles must retrieve original evidence. See [settings, outputs and limits](docs/operations/owasp-control-assessment.md).
+The direct CLI's missing OWASP/tagging chain remains an integration gap, not an accepted path.
+
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
 [`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).

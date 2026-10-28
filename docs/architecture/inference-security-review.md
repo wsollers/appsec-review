@@ -528,7 +528,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
-  - OWASP control failures;
+  - provisional, evidence-bound OWASP adverse hypotheses (not compliance failures or confirmed
+    vulnerabilities);
   - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
   - Dockerfile and IaC misconfiguration (`config_scanner`).
 
@@ -598,7 +599,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 | `variant` | "Claim X was confirmed; where else in this unit does the same pattern occur?" | a round-0 confirmed claim (round 1 only) |
 | `sink_up` | "Which dangerous sinks here take caller-controlled data, and what guards them?" | an accepted `sink_site` family (any state but `unavailable`) for the unit's scope (`symbol_links` alone no longer unlocks it; [code graph](code-graph-precomputation.md) decision 3) |
 | `entry_down` | "Follow this entry point's inputs inward." | an accepted `entry_point` family for the unit's scope |
-| `control_gap` | "This control failed or is missing here; what can an attacker do?" | an accepted OWASP workbench result |
+| `control_gap` | "Does this scoped adverse control hypothesis establish a vulnerability?" | accepted `control_evidence` context with original evidence; unsupported/unresolved controls are not failures |
 | `persona_sweep` | "Review this unit as the assigned specialist." | none |
 
 A strategy whose required source is unavailable is skipped with a `coverage_gap`. The panel falls
@@ -2287,8 +2288,14 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 
 ### Dependencies and current gaps
 
-- The active OWASP assessment must publish accepted applicability/result/coverage shards with exact
-  evidence identities; abridged catalog/live-model gaps remain visible.
+- The opt-in OWASP assessment publishes accepted applicability/result/coverage shards with typed
+  original evidence identities before indexing, package assembly and hunt/red-blue review. It uses
+  prior tagging/tag-cloud, graph and classification context only for bounded routing. Complete
+  pinned catalogs are present, but only four narrow Python static procedures are implemented;
+  unsupported controls/languages and missing runtime adapters remain unresolved coverage.
+  Configured worker and fresh blinded reviewer calls are implemented; live-model efficacy remains
+  unverified. Qualification is explicit, synthetic and never production-eligible. See
+  [`owasp-control-workbench.md`](owasp-control-workbench.md).
 - C++ compiled analysis must supply accepted build/AST/IR/binary shards. The separate pinned,
   licensed cross-language CodeQL job supplies database, SARIF, and observation shards when its
   operator-provided image is present. Joern/CPG is deprecated and disabled by default
@@ -2297,7 +2304,8 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 - Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
   `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (only
   `source_to_sink_reachability`, besides `affected_construct`, and only for a path result, per
-  `review/tool_rules.py`; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
+  `review/tool_rules.py`; OWASP PRECOMPUTED interpretations are indirect for **every** final
+  predicate, including `missing_or_ineffective_guard`, and
   `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/1`), and, for C/C++ scopes with an
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
@@ -2306,6 +2314,12 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   other language's units fall back to `persona_sweep` with `required_source_unavailable`; the
   export queries have only run against hand-authored recordings, never the pinned CodeQL image;
   no graph family can satisfy `security_impact`, and static absence of a fact is never a relation.
+- OWASP `not_satisfied` is a scoped adverse assessment, not exploit confirmation; `satisfied` is
+  scoped counterevidence, not component safety. Eligible `owasp_control` leads remain provisional
+  through packages and actual red/blue/verifier requests. Authority links, original references,
+  proof scopes, counterevidence, dissent and limitations survive projection. Final claims must
+  retrieve underlying evidence and establish their own predicates; a naked source-file identity
+  alone is not a direct predicate fact. Repeated underlying sources do not multiply corroboration.
 - Post-build assessment must publish build-security shards with protected command references,
   binary identities, and gaps, without exposing exact sensitive arguments.
 - CI analysis must publish its accepted discovery, observation, correlation, and coverage shards.

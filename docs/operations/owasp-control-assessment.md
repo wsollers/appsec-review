@@ -1,46 +1,127 @@
 # Operating the OWASP control-assessment stage
 
-Run the `owasp_control_assessment` Dagster job only after the accepted component, evidence, build,
-compiled, and retrieval manifests exist. In the full `wave1_review` graph it is placed after
-evidence publication and also waits for CodeQL, artifact-security analysis, Tree-sitter and
-post-build assessment (`orchestration/dagster/adapter.py`). The standalone job also accepts a hash-owned qualification input at
-`runs/<run-id>/data/inputs/owasp-workbench.json`; that path is for deterministic integration tests,
-not a way to bypass accepted production indexes.
+`job_owasp_control_assessment` is shipped **disabled**; `mode = "assessment"` is the configured
+default. Its worker and reviewer profiles are enabled for use when the job is explicitly enabled.
+It performs bounded accepted-index/source assessment, never target execution or a compliance audit.
+See the [workbench architecture](../architecture/owasp-control-workbench.md) for proof boundaries.
 
-Check these outputs after a run:
+## Prerequisites and placement
 
-- `data/configuration/` for the immutable central TOML;
-- `data/guidance/<sha256>/` for exact worker guidance bundles;
-- `data/indexes/owasp/accepted.json` for the accepted shard manifest;
-- the job attempt's `artifacts/owasp-workbench/` directory for selection, classification,
-  applicability, validation work, verified results, join, and publication records; and
-- `data/logs/pipeline.jsonl` for worker start/stop, model identity, token/duration/retry counts,
-  retrieval use, gaps, and lifecycle events.
+In Dagster's `wave1_review`, the enabled job waits for accepted component/source/evidence/build
+information, CodeQL, artifact-security analysis, Tree-sitter and post-build assessment, plus
+review prioritization, code-graph indexing and security tagging when registered. The tag cloud,
+classification and graph context route work; they do not prove control outcomes. OWASP then
+precedes review data indexing, package assembly, hunting, red/blue review and independent
+verification. Prioritization and tagging do not depend on OWASP.
 
-The abridged checked catalogs make offline tests deterministic. They do not represent full OWASP
-coverage. Until a network-authorized refresh publishes and verifies complete catalogs, operators
-must retain the standards-refresh gap. Live model inference is disabled by default; fixture runs
-exercise deterministic workers. Enabling a model changes the immutable run configuration and must
-use the configured provider/model/reasoning/budget/timeout/retry boundary.
+At feature base `6ff64d81` the direct CLI `start`/`resume` job list still omits OWASP and security
+tagging. Use the enabled Dagster path for the integrated chain; do not assume setting `enabled`
+adds these jobs to the direct graph. A standalone dispatch must use the run's accepted upstream
+handoffs and snapshot, not an arbitrary source tree.
+
+For assessment, enable the job in central configuration before freezing a new run, retain
+`mode = "assessment"` and enabled worker/reviewer profiles, and configure the intended provider,
+models and budgets. Assessment rejects qualification catalogs and a run-owned qualification input.
+An unsupported provider or invalid bounds fail configuration validation.
+
+Qualification requires explicit `mode = "qualification"`, both selected model profiles disabled,
+and `runs/<run-id>/data/inputs/owasp-workbench.json`. File presence never changes modes. It is a
+synthetic integration exercise, visibly qualification-only, with no production-eligible leads.
 
 ## Settings
 
-Everything lives under `[jobs.job_owasp_control_assessment.settings]` in `appsec-review.toml`. The
-job's configuration validator rejects missing keys and out-of-range values before any unit runs.
+All keys live under `[jobs.job_owasp_control_assessment.settings]` in `appsec-review.toml`.
+The closed typed settings parser rejects missing/unknown keys and out-of-range values.
 
 | Key | Default | Allowed | Meaning |
 |---|---|---|---|
-| `asvs_level` | 2 | 1, 2, 3 | ASVS level selected for applicability |
-| `masvs_profile` | `L2` | `L1`, `L2` | MASVS profile selected for applicability |
-| `max_batch_size` | 12 | 1–64 | control-component rows per validation batch |
-| `max_components_per_batch` | 5 | 1–16 | distinct components per validation batch |
-| `max_components` | 128 | 1–128 | components accepted for classification |
-| `dynamic_authorized` | false | boolean | when false, dynamic-runtime and manual-observation controls become `unsupported_missing_evidence` with a named gap |
-| `model.*` | `enabled = false`, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` are required | worker model identity, logged with each worker and folded into the global fingerprint; the current validator cells run deterministic workers |
-| `parser_versions.*` | `component_rules`, `applicability_rules`, `batching_rules`, `result_validator` = `"1"` | strings | rule and validator versions folded into the global fingerprint |
-| `standards.<family>` | see TOML | pinned path and SHA-256 | catalog sources (see the architecture document) |
+| `enabled` | false | boolean | Generic job dispatch gate |
+| `mode` | `assessment` | `assessment`, `qualification` | Accepted target assessment or explicit synthetic exercise |
+| `reviewer_profile` | `reviewer` | configured `models` key | Fresh blinded reviewer model profile |
+| `asvs_level` | 2 | 1, 2, 3 | Upstream ASVS level selection |
+| `masvs_profile` | `L2` | `L1`, `L2` | Local aliases, both selecting all 24 MASVS 2 controls; not upstream levels |
+| `max_batch_size` | 12 | 1–64 | Control-component rows per batch |
+| `max_components_per_batch` | 5 | 1–16 | Distinct components per batch |
+| `max_components` | 128 | 1–128 | Components accepted for classification |
+| `max_evidence_per_component` | 60 | 1–200 | Accepted evidence/routing bounds; omissions remain named |
+| `max_source_lines` | 120 | 1–500 | Source materialization cap, recorded in publication `assessment_bounds` |
+| `max_subjects_per_control` | 8 | 1–32 | Named proof subjects per control |
+| `max_batches` | 200 | 1–10000 | Admitted validation batches; excluded work remains gaps |
+| `max_turns` | 4 | 1–16 | Turns per bounded investigation |
+| `max_queries` | 12 | 1–100 | Model-requested retrieval budget per investigation |
+| `dynamic_authorized` | false | boolean | Authorization policy, not adapter availability; no runtime/manual evidence adapter is implemented |
+| `model.*` | enabled, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | complete selected model profile | Worker policy; job remains disabled independently |
+| `models.reviewer.*` | same as worker | complete selected model profile | Separate fresh request context using original evidence, no prior worker answer/transcript |
+| `parser_versions.*` | `component_rules`, `applicability_rules`, `batching_rules`, `result_validator` = `"1"` | strings | Versioned parser/validator fingerprint inputs |
+| `standards.<family>` | complete catalog pins in TOML | pinned catalog path/hash and upstream identity | Reviewed ASVS, MASVS, MASTG and risk-context catalogs |
 
-If one validator cell fails, do not discard successful siblings. Re-run the same application run;
-the runtime reuses unchanged unit receipts and executes only the failed/dependent work. A completed
-join must account for every selected control-component row exactly once. Any duplicate, missing, or
-unexpected row blocks publication.
+Selected model profiles require `enabled`, `provider`, `model`, `reasoning`, `max_input_tokens`,
+`max_output_tokens`, `timeout_seconds` and `retries`. Enabling assessment requires both selected
+profiles enabled; enabling qualification requires both disabled. Token estimates bound requests;
+provider output, time, turn and retrieval limits are enforced. No prompt may widen these bounds.
+
+## Catalog checks and supported assessment
+
+The complete pinned catalogs contain 345 ASVS controls, 24 MASVS controls, 292 MASTG supporting
+test documents (including `tests-beta`), and 10 records in each Top 10 risk catalog. Independent
+Git tree/blob/ID inventories and reviewed normalized-content/license pins validate completeness.
+Retain attribution, license text and change notices on redistribution. Replacing a catalog hash
+alone cannot authorize changed source text, metadata or an incomplete inventory. Acquisition is an
+explicit separate operation in `owasp_workbench.acquisition`; ordinary jobs/tests do not refresh
+upstream data. No new live upstream revalidation is claimed by offline acceptance.
+
+Inventory completeness is not procedure coverage. Exactly four reviewed **Python static**
+procedures exist: ASVS `V1.2.4`, `V6.2.1`, `V8.2.1`, `V8.3.1`, with narrow subject recognition and
+materially complete, parseable, unredacted source requirements. Unsupported controls/languages
+remain unassessed/unresolved. `MASVS-NETWORK-1` has no runtime adapter even if authorization is
+enabled. Inspect the architecture's procedure table before interpreting results.
+
+## Outputs and interpretation
+
+Inspect these run-owned paths after a run:
+
+- `data/configuration/resolved.json` and configuration manifest: frozen global settings identity;
+- `data/guidance/<sha256>/`: exact hash-pinned worker/reviewer bundles;
+- `data/indexes/owasp/accepted.json`: accepted immutable shard manifest, mode, upstream identity
+  and resolved `assessment_bounds`;
+- `data/indexes/owasp/receipts/<semantic-key>.json`: shared-namespace model receipts;
+- the attempt's `artifacts/owasp-workbench/`: selection, classification, applicability, batches,
+  model results, independent review, join, publication and metrics; and
+- `data/logs/pipeline.jsonl`: worker lifecycle and actual model attempts.
+
+Reconcile catalog inventory, profile selection, applicability, dispatched rows, independently
+reviewed rows, unresolved rows and eligible leads as **different denominators**. Per-row dispatch
+and review-attempt counts include only rows actually sent, not unready neighbors in the same
+batch. Check `model_calls`/attempts, requested provider/model and available served identities,
+reported versus estimated tokens, unknown-usage attempts, retries, source-resolution work and
+`model_requested_retrievals` separately. Unknown usage/cost is `None`, not measured zero; verified
+reuse records zero **new calls**, not zero historical cost.
+
+`not_satisfied` is not exploit confirmation. `satisfied` is scoped counterevidence, not a safety
+claim. Failed/unsupported/`not_assessed`/`cannot_verify` work is unresolved coverage, not evidence
+of a missing control. Dissent, assumptions, evidence requests and limitations must remain visible.
+High/Critical or ship-blocking hypotheses are still provisional.
+
+Review data indexing projects results into PRECOMPUTED `control_evidence`; eligible adverse
+hypotheses become provisional `owasp_control` leads and enter lead/hunt packages. Original refs,
+scope, independent counterevidence and authority links remain intact. Every PRECOMPUTED
+interpretation is indirect for every final predicate; red/blue/verifier roles must retrieve original
+evidence and establish their own predicates. They do not inherit an OWASP verdict as direct proof.
+
+## Failure, reuse and acceptance limits
+
+A completed join must contain every selected control-component row exactly once. Missing,
+duplicate or unexpected rows block publication. Cell failure is a scoped gap, not permission to
+discard successful siblings. Resume the same application run through its normal accepted-handoff
+lifecycle; do not edit immutable publications or fabricate a successful reviewer record.
+
+Semantic receipts bind mode, local evidence/routing, catalog/proof/rules, guidance, model policy,
+bounds and scope. Reuse verifies provenance and rebinds current accepted references. Unrelated
+manifest re-pins can reuse unchanged work with no new model calls; relevant source/context,
+guidance or model changes invalidate it. Downstream verified expansion is operation-local only
+and retains run/snapshot/pin, citation and duplicate-ambiguity checks.
+
+Scripted offline acceptance covers actual full-catalog publications through projection, packages
+and red/blue/verifier request bodies with source retrieval and indirect-proof guards. It is not
+live-provider efficacy validation, real-host target execution, runtime-adapter acceptance, exploit
+confirmation or customer safety certification.

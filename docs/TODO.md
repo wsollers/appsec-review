@@ -1,5 +1,31 @@
 # Architecture TODOs
 
+## Finish OWASP acceptance beyond bounded static assessment
+
+- Implemented: complete pinned ASVS/MASVS inventories and MASTG/Top 10 context catalogs,
+  independently reviewed inventory/content/license pins; explicit qualification versus assessment;
+  configured worker and fresh blinded reviewer calls; four site-bound Python static procedures;
+  accepted original-evidence custody and scoped outcomes with named unresolved coverage.
+- Implemented in Dagster: accepted classification/prioritization/code graph → security tagging/tag
+  cloud → opt-in OWASP → review data indexing/`control_evidence` → lead/hunt packages →
+  red/blue/independent verifier requests. Tags route work; they do not prove controls.
+- Verified offline: full-catalog publications, adverse/benign/dissent outcomes, configured caps,
+  qualification isolation, projection/lead/package delivery, actual scripted review-role requests,
+  original-source retrieval and indirect-proof guards. This is not live-provider efficacy.
+- [ ] Integrate the same tagging/OWASP chain into direct CLI `start`/`resume`; at `6ff64d81`
+  `cli.GRAPH_JOB_IDS` still omits both jobs. Do not claim direct/Dagster parity.
+- [ ] Run authorized live-model efficacy/budget acceptance. Scripted `Infer` doubles establish
+  contract behavior, not real-provider analytical quality.
+- [ ] Review and implement additional language/control procedures with subject-bound acceptance.
+  Complete catalog inventory is not full assessment coverage or compliance certification.
+- [ ] Implement separately authorized environment-bound runtime/manual adapters;
+  `MASVS-NETWORK-1` stays unsupported even when `dynamic_authorized = true`.
+- [ ] Obtain independent exploit confirmation where warranted. Even elevated/ship-blocking OWASP
+  hypotheses are provisional; no customer safety certification follows from this stage.
+
+See [the current design](architecture/owasp-control-workbench.md) and
+[operating limits](operations/owasp-control-assessment.md).
+
 ## Hook up Lua game-security rule scanning
 
 - [ ] Integrate `rules/lua-game-security/game-security.yml` into

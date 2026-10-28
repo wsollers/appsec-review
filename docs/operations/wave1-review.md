@@ -26,7 +26,8 @@ its pin; any missing image or moved tag fails the run (see
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
 
 The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
-control assessment, or security tagging, and `third_party_data_sync` runs separately (`appsec-review
+control assessment, or security tagging, even when enabled; the OWASP/tagging direct-chain
+integration remains a gap. `third_party_data_sync` runs separately (`appsec-review
 run job_third_party_data_sync`). Both surfaces run change-context analysis after Tree-sitter AST
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
 document issue analysis after package assembly. Use Dagster's
@@ -38,6 +39,15 @@ shipped disabled, so it is absent from both graphs unless `jobs.job_poc_generati
 normally run by hand on a finished run ([`poc-generation.md`](poc-generation.md)). Enabled, it adds the dependency
 `gate -> poc_generation -> report` to `wave1_review` and to the direct graph. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
+
+The enabled Dagster OWASP path is **prioritization → code graph → security tagging/tag cloud →
+OWASP → review data indexing → package assembly → hunt and red/blue/independent verification**,
+with accepted source/component/build/static evidence also feeding OWASP. Tagging and prioritization
+do not wait for OWASP; their accepted products are bounded routing/context, never control proof.
+OWASP is shipped disabled with `mode = "assessment"`. Enabling assessment uses configured worker
+inference plus a fresh blinded reviewer; qualification must be explicitly selected with both
+profiles disabled and is never production-eligible. See
+[`owasp-control-assessment.md`](owasp-control-assessment.md).
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
 linear for deterministic resume semantics: adjacency does not widen a job's declared inputs. In

@@ -22,6 +22,14 @@ jobs that are not in the direct graph. Both surfaces end with `job_inference_sec
 single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
+In the enabled Dagster branch, prioritization and code-graph indexing feed security tagging,
+then OWASP consumes accepted tag-cloud/classification context before review data indexing and
+package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is shipped
+disabled with assessment mode configured; it does not automatically appear in the direct CLI
+when enabled. The [workbench design](owasp-control-workbench.md) describes the four supported
+Python static procedures, separate blinded reviewer, provisional result boundary and named
+unresolved coverage.
+
 A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
 enabled. `false` makes the job transparent: it is absent from direct and Dagster graphs, takes no
 inputs, publishes no handoff or artifacts, and is excluded from the run inventory. Nested feature

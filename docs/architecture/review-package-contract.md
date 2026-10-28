@@ -1,7 +1,7 @@
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/8`); the catalog-derived
+(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/9`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -256,8 +256,8 @@ The three view bounds live next to the package bounds:
    units, languages and reference-intelligence freshness. An absent producer shard is a
    `missing` gap and a stale feed a `stale` gap, with ids from `make_id("gap", 1, ...)`. Then
    normalize every accepted lead of every family with its versioned rule
-   `appsec-review/lead-family/<family>/<n>` (`/2` for `artifact_scanner`, `dependency_advisory`
-   and `source_sast`, `/1` otherwise):
+   `appsec-review/lead-family/<family>/<n>` from `review/lead_families.py::FAMILY_RULES`.
+   OWASP uses `owasp_control/2` for provisional evidence-bound hypotheses:
 
    | Family | Accepted records | Reported severity |
    |---|---|---|
@@ -267,9 +267,22 @@ The three view bounds live next to the package bounds:
    | `dependency_advisory` | dependency-class observations (OSV, Grype) | the advisory's own CVSS band, else the pinned NVD CVSS band (v4.0, v3.1, v3.0, then v2; basis `nvd-cvss-band`), else its severity label |
    | `ci_rule` | `job_ci_configuration_analysis` observations | native label |
    | `post_build_hardening` | deterministic `build_security` checks with status `FAIL` | native label if published, else `unknown` |
-   | `owasp_control` | `control_evidence` facts with status `not_satisfied` | native label if published, else `unknown` |
+   | `owasp_control` | assessment-mode `control_evidence` with `not_satisfied`, an eligible anchored hypothesis and re-resolving original evidence | provisional hypothesis label if published, else `unknown`; not final severity |
    | `secret` | secret-scanner observations (`tool-gitleaks`; any observation of class `secret`) | `unknown` (basis `no-native-severity`): the scanner reports none, and an unmapped label stays `unknown`, never low. Rule CWE `CWE-798`. |
    | `config_scanner` | Dockerfile and IaC misconfiguration observations (hadolint, checkov, trivy) | `normalize_reported_severity` (checkov reports none: `unknown`) |
+
+   OWASP assembly re-opens the hash-pinned workbench authority and re-resolves typed original
+   citations under the publication's `assessment_bounds`. It preserves control/procedure scope,
+   independent counterevidence, dissent, assumptions, evidence requests, hypotheses and limitations
+   in lead and hunt packages and labelled red/blue/verifier requests. Qualification, unsupported,
+   unresolved and benign rows are not adverse leads. A component-level lead has no invented exact
+   line. Its PRECOMPUTED interpretation is indirect for **every** final predicate; downstream
+   reviewers must retrieve original evidence and establish their own predicates. Source identity
+   alone is not a direct predicate fact. Repeated original sources do not multiply rank or
+   corroboration. Operation-local verified expansion retains all run/snapshot/pin, citation,
+   membership and duplicate-row ambiguity checks; it is not a persistent trust cache.
+   Evidence-first hunt context ordering retains useful refs under the byte cap; clipped context
+   remains a named truncation gap.
 
    A family whose accepted producer shard is absent is a `missing` gap, never an empty list.
    `secret` needs the `secret_scanner` producer (the `tool-gitleaks` observation shard) and `config_scanner` the

@@ -51,7 +51,13 @@ job and is exercised by `tests/review/` and the Dagster acceptance in
   repair against a real provider, and a live Dagster/container deployment remain open.
 - Downstream remediation and final-publication consumers do not exist; the job publishes its own
   accepted handoff only.
-- Live full-catalog OWASP/model validation and a pinned Joern/CPG closure remain upstream gaps.
+- OWASP now has complete pinned catalogs and offline full-catalog publications delivered through
+  real projection, lead/hunt packages and scripted red/blue/verifier requests. This supersedes the
+  abridged-catalog gap, not the live-model efficacy gate. Only four narrow Python static procedures
+  are implemented; unsupported controls/languages and runtime adapters remain unresolved. Results
+  are provisional context, indirect for every final predicate. See
+  [the current workbench design](../architecture/owasp-control-workbench.md). Joern/CPG remains a
+  separate upstream gap, not OWASP acceptance.
 - Organization ship-blocking policy, PoC authorization workflow, evidence freshness windows, and
   final downstream job names require owner decisions.
 
