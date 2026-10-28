@@ -9,6 +9,8 @@ import stat
 from typing import Any, Mapping
 
 from appsec_review.indexing.store import accepted_handoff
+from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
+from appsec_review.runtime.handoff import verify_handoff_integrity
 
 from .contracts import (
     ArtifactRef, ExportBundle, ExportError, ExportFailureReason as Reason, ExportOutcome,
@@ -89,10 +91,19 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
     schema_registry(repository_root=repository_root)
     reader = BoundedInputReader(run_root, settings, phase=ExportPhase.ACCEPT)
     accepted = reader.json(handoff)
-    if (accepted.get("schema") != "appsec-review/job-handoff/1"
+    if (accepted.get("schema") != HANDOFF_SCHEMA
             or accepted.get("job_id") != JOB_ID or accepted.get("status") != "ACCEPTED"
             or accepted.get("schema_identity") != OPENVEX_EXPORT_HANDOFF_SCHEMA):
         raise ExportError("unsupported accepted OpenVEX handoff", reason=Reason.SCHEMA_INVALID,
+                          phase=ExportPhase.ACCEPT)
+    try:
+        accepted = decode_handoff(accepted, run_id=run_root.name, job_id=JOB_ID)
+    except ValueError as exc:
+        raise ExportError("accepted OpenVEX common envelope is invalid", reason=Reason.SCHEMA_INVALID,
+                          phase=ExportPhase.ACCEPT) from exc
+    if (len(accepted["artifacts"]) > settings.max_bindings
+            or sum(item["size_bytes"] for item in accepted["artifacts"]) > settings.max_total_input_bytes):
+        raise ExportError("accepted runtime artifact inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
                           phase=ExportPhase.ACCEPT)
     outputs = accepted.get("outputs", {})
     published = outputs.get("acceptance.publish_handoff", {})
@@ -120,9 +131,7 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         manifest_ref, SizedArtifactRef(result_reference.path, result_reference.sha256, len(result_bytes)),
     )
     validate_export(bundle, verified, settings)
-    implementation_identity = accepted.get("implementation_identity")
-    if implementation_identity is None:
-        implementation_identity = "undeclared"
+    implementation_identity = accepted["implementation_identity"]
     if (published.get("item_count") != result["statement_count"]
             or accepted.get("resolved_config_sha256") != verified.provenance.resolved_config_sha256
             or accepted.get("upstream_handoff_sha256", {}).get("job_final_publication_gate")
@@ -138,12 +147,28 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         bundle.result_ref.path: MAX_RESULT_BYTES, bundle.manifest_ref.path: settings.max_manifest_bytes,
         **({bundle.document_ref.path: settings.max_document_bytes} if bundle.document_ref else {}),
     }
-    for item in accepted.get("artifacts", []):
-        reference = ArtifactRef(item["path"], item["sha256"])
+    admitted = {reference.path: reference for reference in verified.input_inventory}
+    for item in accepted["artifacts"]:
+        reference = SizedArtifactRef.from_mapping(item)
         if reference.path in artifacts:
             raise ExportError("accepted handoff repeats an artifact path", reason=Reason.IDENTITY_CONFLICT,
                               phase=ExportPhase.ACCEPT)
         artifacts[reference.path] = reference.sha256
+        if reference.path in admitted and admitted[reference.path] != reference:
+            raise ExportError("runtime and export inventories disagree", reason=Reason.IDENTITY_CONFLICT,
+                              phase=ExportPhase.ACCEPT)
+        admitted[reference.path] = reference
+    if (len(admitted) > settings.max_bindings
+            or sum(reference.size_bytes for reference in admitted.values()) > settings.max_total_input_bytes):
+        raise ExportError("accepted export inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
+                          phase=ExportPhase.ACCEPT)
+    for item in accepted["artifacts"]:
+        reference = SizedArtifactRef.from_mapping(item)
+        read_output(run_root, reference, settings, max_bytes=bounds.get(reference.path, settings.max_artifact_bytes))
+    verify_handoff_integrity(run_root, accepted)
+    reader.reprove()
+    for item in accepted["artifacts"]:
+        reference = SizedArtifactRef.from_mapping(item)
         read_output(run_root, reference, settings, max_bytes=bounds.get(reference.path, settings.max_artifact_bytes))
     for reference in (verified_ref, bundle.result_ref, bundle.manifest_ref, bundle.document_ref):
         if reference is not None and artifacts.get(reference.path) != reference.sha256:

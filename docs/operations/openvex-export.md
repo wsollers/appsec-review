@@ -292,7 +292,12 @@ Corruption is an export-reader integrity failure, not a missing/stale success. E
 accepted output is current only if all present authority pins and bytes still match, never as
 the claimed output of a failed attempt. Historical verification rehashes
 immutable inputs and every runtime-declared output artifact, checks release/identities and
-validates exact canonical reassembly. Before exposing current output, the operator reader re-proves
+validates exact canonical reassembly. The common runtime envelope is `job-handoff/2`, separate
+from the certified gate `/2` and review `/3` payloads. Its sized artifacts, attempt claim/result,
+task receipts and outcome accounting are verified through the shared runtime authority;
+legacy `/1` or incomplete envelopes are rejected rather than adapted. Historical export
+verification uses immutable accounting, not an optional producer's latest pointer. Before
+exposing current output, the operator reader re-proves
 current upstream authority and checks that acceptance did not change.
 
 The operator view's `handoff`, `result`, `manifest` and `document` references are nullable
