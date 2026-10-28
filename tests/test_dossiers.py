@@ -26,6 +26,7 @@ def test_origin_independent_model_is_bounded_and_deterministic(tmp_path):
     assert first["sources"][0]["path"] == "design/access-policy.md"
     assert first["visibility"] == "protected_developer"
     assert first["scores"][0]["remediation_priority"] is None
+    assert first["scores"][0]["provider"] == "application_risk_matrix/3"
     assert first["poc"]["runtime_verified"] is False
     assert first["poc"]["result_id"] is None
     assert first["evidence"][0]["strength"] == "counted_direct"

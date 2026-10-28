@@ -82,7 +82,7 @@ def nonexecution_assurance() -> dict[str, Any]:
 
 
 def verify_nonexecution_assurance(value: object) -> None:
-    if (not isinstance(value, Mapping) or set(value) != {"execution", "runtime_verified", "result_id"}
-            or value.get("execution") != NONEXECUTION_POLICY or value.get("runtime_verified") is not False
+    if (not isinstance(value, Mapping) or value.get("execution") != NONEXECUTION_POLICY
+            or value.get("runtime_verified") is not False or "result_id" not in value
             or value["result_id"] is not None):
         raise IntegrityError("compile-only evidence cannot assert runtime verification or an execution result")

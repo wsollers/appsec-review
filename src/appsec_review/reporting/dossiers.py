@@ -135,7 +135,7 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
                 name: project.text(dimension.get(name), "risk." + key + "." + name)
                 for name in ("scale", "rating", "value")}
         scores.append({"score_id": score["score_id"], "sha256": score["sha256"],
-                       "provider": project.text((score.get("provider") or {}).get("id"), "score.provider"),
+                       "provider": project.text((score.get("provider") or {}).get("id"), "score.provider", identity=True),
                        **dimensions, "missing_factors": sorted(score.get("missing_factors", ()))})
     poc_view = None
     if poc is not None:
