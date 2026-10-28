@@ -1,11 +1,11 @@
 """``job_poc_generation``: proof-of-concept unit-test functions for findings the judge agreed are correct.
 
-Units, in order: ``load.verify_inputs`` re-verifies the accepted gate and review handoffs from bytes and
+Units, in order: ``load.verify_inputs`` re-verifies the accepted review handoff directly from bytes and
 reads ``poc_candidates``; ``plan.briefs`` builds the writer's brief per candidate; ``write.poc_writer``
 asks the ``poc_writer`` model (no tools, in-process retrieval) for two functions; ``validate.policy``
 runs the deterministic validators on the clang AST in the build image; ``compile.build_check`` compiles
 the functions with the project's own flags (syntax, plain object, sanitizer object) and checks the
-undefined symbols; ``package.files`` writes ``data/poc/<claim-id>/``; ``publish.publish_handoff``
+undefined symbols; ``package.files`` writes immutable attempt-owned files; ``publish.publish_handoff``
 publishes one hash-bound handoff listing every candidate with its status.
 
 Nothing is linked into an executable and nothing is run. The job reads no target tree: the accepted
@@ -15,12 +15,15 @@ from __future__ import annotations
 
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 import hashlib
+import time
 from pathlib import Path
 import shutil
 from typing import Any, Callable, Mapping, Sequence
 
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
-from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
+from appsec_review.indexing.store import accepted_handoff
+from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json, resolve_bound
+from appsec_review.jobs.completion_contracts import nonexecution_assurance
 from appsec_review.jobs.engineering_contracts import POC_GENERATION_HANDOFF_SCHEMA, POC_GENERATION_SCHEMA
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.review.models import IntegrityError
@@ -29,7 +32,7 @@ from appsec_review.storage import atomic_json, canonical_json
 
 from . import buildcheck, inputs as review_inputs
 from .brief import Brief, build_brief
-from .buildctx import AcceptedBuilds, BuildUnit, Headers, declarations
+from .buildctx import AcceptedBuilds, BuildUnit, Headers, MissingBuild, declarations
 from .candidates import PocCandidate, parse_candidates
 from .datasets import CONSUMES, DATASETS
 from .package import describe, source_file_name, write_candidate
@@ -37,14 +40,13 @@ from .policy import check_ast
 from .settings import PocGenerationSettings
 from .source import WriterAnswer, assemble, check_answer, decline_of, file_violations
 from .statuses import (
-    ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND, GAP_NO_CANDIDATES,
+    ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND,
     INSUFFICIENT_EVIDENCE, NOT_APPLICABLE, POLICY_DENIED, SOURCE_STATUSES, STATUSES,
 )
 from .writer import WorkspaceReader, load_guidance, run_writer
 
 JOB_ID = "job_poc_generation"
 SCHEMA_ROOT = Path("docs") / "schemas" / "poc-generation"
-GATE_SCHEMA_ROOT = Path("docs") / "schemas" / "final-report"
 TOPOLOGY = {"load": ("verify_inputs",), "plan": ("briefs",), "write": ("poc_writer",), "validate": ("policy",),
             "compile": ("build_check",), "package": ("files",), "publish": ("publish_handoff",)}
 IMPLEMENTATION = "appsec-review/poc-generation/1"
@@ -145,47 +147,49 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
 
     # -- load -------------------------------------------------------------------------------------
     def load(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
         settings = _settings(unit)
         root = services.repo(unit)
         run_root = unit.job.run_root
         verified = review_inputs.verify_inputs(
-            run_root, review_schemas=SchemaSet(root / SCHEMA_DIRECTORY), gate_schemas=SchemaSet(root / GATE_SCHEMA_ROOT))
+            run_root, review_schemas=SchemaSet(root / SCHEMA_DIRECTORY))
+        claimed_review = unit.job.upstream_handoffs.get(review_inputs.REVIEW_JOB)
+        if claimed_review is not None and claimed_review != verified.review_job_handoff["sha256"]:
+            raise IntegrityError("accepted review differs from the PoC attempt's upstream identity")
         gaps: list[str] = []
         planned: list[dict[str, Any]] = []
         omitted: list[str] = []
         language_sha = None
-        if verified.candidates is None:
-            gaps.append(f"{GAP_NO_CANDIDATES}: the accepted review handoff has no poc_candidates field "
-                        "(an older run); nothing was generated")
-        else:
-            ordered = _order(verified.candidates)
-            for candidate in ordered[:settings.max_candidates]:
-                finding = verified.findings[candidate.finding_package_id]
-                planned.append({
-                    "candidate": _candidate_record(candidate),
-                    "finding": {key: finding.get(key) for key in (
-                        "finding_package_id", "sha256", "path", "title", "label", "lane", "state",
-                        "missing_predicates")},
-                    "package": dict(verified.package_records.get(candidate.package_id) or {}) or None})
-            omitted = [item.claim_id for item in ordered[settings.max_candidates:]]
-            if omitted:
-                gaps.append(f"{GAP_CANDIDATE_BOUND}: {len(omitted)} candidates were not attempted because "
-                            f"max_candidates is {settings.max_candidates}")
+        ordered = _order(verified.candidates)
+        for candidate in ordered[:settings.max_candidates]:
+            finding = verified.findings[candidate.finding_package_id]
+            planned.append({
+                "candidate": _candidate_record(candidate),
+                "finding": {key: finding.get(key) for key in (
+                    "finding_package_id", "sha256", "path", "title", "label", "lane", "state",
+                    "missing_predicates")},
+                "package": dict(verified.package_records.get(candidate.package_id) or {}) or None})
+        omitted = [item.claim_id for item in ordered[settings.max_candidates:]]
+        if omitted:
+            gaps.append(f"{GAP_CANDIDATE_BOUND}: {len(omitted)} candidates were not attempted because "
+                        f"max_candidates is {settings.max_candidates}")
         try:
             language_sha = services.builds_factory(run_root).handoff_sha256 if planned else None
-        except (ValueError, OSError, IntegrityError) as exc:
+        except MissingBuild as exc:
             gaps.append(f"accepted_build_unavailable: {str(exc)[:160]}")
         document = {
             "schema": "appsec-review/poc-generation-inputs/1", "run_id": verified.run_id,
-            "upstream": {"gate_handoff": verified.gate_handoff, "gate_document": verified.gate_document,
-                         "review_job_handoff": verified.review_job_handoff, "review_handoff": verified.review_handoff,
+            "upstream": {"review_job_handoff": verified.review_job_handoff, "review_handoff": verified.review_handoff,
                          "manifest": {"path": verified.manifest_path, "sha256": verified.manifest_sha256},
                          "language_build_handoff_sha256": language_sha},
             "review_status": verified.review_status,
-            "candidates_field": "absent" if verified.candidates is None else "present",
+            "bindings": list(verified.bindings),
+            "candidates_field": "present",
             "planned": planned, "omitted": omitted}
         unit.job.events.write("POC_GENERATION_INPUTS_VERIFIED", planned=len(planned), omitted=len(omitted),
-                              candidates_field=document["candidates_field"])
+                              candidate_count=len(planned), omitted_count=len(omitted),
+                              candidates_field=document["candidates_field"],
+                              duration_ms=max(0, round((time.monotonic() - started) * 1000)))
         return {"artifact": _write_json(unit, "inputs.json", document), "planned": len(planned),
                 "omitted": len(omitted), "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
@@ -326,7 +330,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
         rows: dict[str, Any] = {}
         for item in document["planned"]:
             claim = item["candidate"]["claim_id"]
-            rows[claim] = _package_candidate(run_root, settings, document, item, planned[claim], written.get(claim),
+            rows[claim] = _package_candidate(run_root, unit.unit_root / "candidates", settings, document, item, planned[claim], written.get(claim),
                                              validated[claim], compiled[claim])
         return {"artifact": _write_json(unit, "package.json", {"schema": "appsec-review/poc-generation-package/1",
                                                                "entries": rows}),
@@ -334,10 +338,16 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
 
     # -- publish ----------------------------------------------------------------------------------
     def publish(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
         settings = _settings(unit)
         run_root = unit.job.run_root
         loaded = unit.output("load.verify_inputs")
         document = inputs_document(unit)
+        for binding in document["bindings"]:
+            resolve_bound(run_root, binding)
+        accepted = accepted_handoff(run_root, review_inputs.REVIEW_JOB)
+        if accepted is None or {"path": accepted.path, "sha256": accepted.sha256} != document["upstream"]["review_job_handoff"]:
+            raise IntegrityError("accepted review changed during PoC production")
         rows = read_bound_json(run_root, unit.output("package.files")["artifact"])["entries"]
         candidates = [rows[item["candidate"]["claim_id"]] for item in document["planned"]]
         counts: dict[str, int] = {status: 0 for status in STATUSES}
@@ -348,6 +358,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
                     if row["status"] in GAP_STATUSES)
         summary = {
             "schema": POC_GENERATION_SCHEMA, "run_id": document["run_id"], "upstream": document["upstream"],
+            **nonexecution_assurance(),
             "execution_policy": "nothing is linked into an executable and nothing is run",
             "settings_sha256": settings.settings_sha256(),
             "counts": {"candidates": len(candidates), "omitted": len(document["omitted"]), "by_status": counts},
@@ -357,9 +368,16 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
             raise IntegrityError(f"PoC summary does not satisfy its schema: {'; '.join(errors[:3])}")
         reference = _write_json(unit, "poc-generation.json", summary)
         unit.job.events.write("POC_GENERATION_PUBLISHED", candidates=len(candidates),
-                              verified=counts[COMPILE_VERIFIED], gap_count=len(gaps))
+                              verified=counts[COMPILE_VERIFIED], gap_count=len(gaps), status_counts=counts,
+                              by_status=counts, candidate_count=len(candidates),
+                              compile_verified_count=counts[COMPILE_VERIFIED],
+                              policy_failure_count=counts[POLICY_DENIED], build_failure_count=counts[COMPILE_FAILED],
+                              omitted_count=len(document["omitted"]), policy_denied_count=counts[POLICY_DENIED],
+                              compile_failed_count=counts[COMPILE_FAILED], runtime_verified=False,
+                              duration_ms=max(0, round((time.monotonic() - started) * 1000)),
+                              execution="not_performed_by_policy")
         return {"schema": POC_GENERATION_HANDOFF_SCHEMA, "artifact": reference, "counts": summary["counts"],
-                "gate_handoff": document["upstream"]["gate_handoff"], "item_count": len(candidates),
+                "item_count": len(candidates),
                 "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     units = (
@@ -427,9 +445,9 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     headers = Headers(located.unit)
     brief = build_brief(candidate, finding=item["finding"], package=package, view=view, sink=sink,
                         unit=located.unit, headers=headers, settings=settings)
-    unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis label")]
+    unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis identity")]
     if unresolved and len(unresolved) >= len(candidate.poc_basis.entry) + len(candidate.poc_basis.path):
-        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis label resolves in the package view")
+        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis identity resolves in the package view")
         return entry
     document_ref = _write_json(unit, f"briefs/{candidate.claim_id}.json", brief.document)
     entry["brief"] = document_ref
@@ -539,7 +557,7 @@ def _compile_candidate(unit: UnitContext, settings: PocGenerationSettings, servi
             "record": _write_json(unit, f"compile/{claim}.json", outcome.record)}
 
 
-def _package_candidate(run_root: Path, settings: PocGenerationSettings, document: Mapping[str, Any],
+def _package_candidate(run_root: Path, output_root: Path, settings: PocGenerationSettings, document: Mapping[str, Any],
                        item: Mapping[str, Any], plan_entry: Mapping[str, Any], written: Mapping[str, Any] | None,
                        validated: Mapping[str, Any], compiled: Mapping[str, Any]) -> dict[str, Any]:
     candidate = parse_candidates([item["candidate"]])[0]
@@ -547,6 +565,7 @@ def _package_candidate(run_root: Path, settings: PocGenerationSettings, document
     status, reason = terminal["status"], terminal["reason"]
     row: dict[str, Any] = {
         "claim_id": candidate.claim_id, "package_id": candidate.package_id, "state": candidate.state,
+        **nonexecution_assurance(),
         "judge_verdict": candidate.judge_verdict,
         "finding_package": {"finding_package_id": candidate.finding_package_id,
                             "sha256": candidate.finding_package_sha256},
@@ -567,7 +586,7 @@ def _package_candidate(run_root: Path, settings: PocGenerationSettings, document
     compile_record = {**compile_record, "status": status, "reason": reason}
     facts = _facts(plan_entry)
     provenance = {
-        "claim_id": candidate.claim_id, "package_id": candidate.package_id,
+        "claim_id": candidate.claim_id, "package_id": candidate.package_id, "run_id": document["run_id"],
         "finding_package": row["finding_package"], "state": candidate.state, "judge_verdict": candidate.judge_verdict,
         "poc_basis_sha256": candidate.poc_basis.sha256, "brief_sha256": plan_entry["brief"]["sha256"],
         "package_sha256": plan_entry.get("package_sha256"), "source_sha256": validated["source_sha256"],
@@ -579,7 +598,7 @@ def _package_candidate(run_root: Path, settings: PocGenerationSettings, document
         "upstream": document["upstream"], "source_tree": plan_entry.get("build"),
         "image": {"image_id": (plan_entry.get("build") or {}).get("image_id")}}
     files = write_candidate(
-        run_root, candidate=candidate, finding=item["finding"], answer=answer, status=status, reason=reason,
+        run_root, output_root=output_root, candidate=candidate, finding=item["finding"], answer=answer, status=status, reason=reason,
         source_text=source["text"], language=source["language"], compile_record=compile_record,
         violations=validated.get("violations", []), policy_verdict=validated.get("policy_verdict", "not_evaluated"),
         provenance=provenance, facts=facts)

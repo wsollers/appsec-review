@@ -58,9 +58,12 @@ use `claude-sonnet-5.5`, preserving distinct-model verification. Inference-revie
 60,000 model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries
 and 86,400 seconds. These are limits, not consumption targets.
 
-Both production profiles set `budgets.budget_team_packages = "all"`. Every generated lead and hunt
-package is eligible for a team launch: there is no package-count cutoff or fixed lane-share quota.
-For example, queues of 485 lead and 114 hunt packages admit all 599, not 100 per lane. This does not
+Both production profiles set `budgets.budget_team_packages = "all"` and
+`rounds.max_active_claims = 1000`. There is no separate package-count budget, but package launches
+are bounded by claim capacity: every launched package receives at least one claim slot.
+When packages exceed 1,000, fair-share allocation across both lanes selects launches and records
+explicit cutoffs for the rest. For example, queues of 485 lead and 114 hunt packages admit all
+599 with nonzero allocations, not 100 per lane. This does not
 guarantee completion: token, turn, query, time, per-cell and concurrency safeguards remain in force,
 and exhaustion still records explicit gaps. `dev` and `copilot-dev` keep the 200-package ceiling and
 fair-share allocation. Existing runs retain their frozen settings; changing these profiles does not
@@ -150,17 +153,31 @@ rejected with a message that names the key.
 | Table | Allowed keys |
 | --- | --- |
 | `jobs.<job>.settings.model` for `job_target_analysis_plan`, `job_project_build`, `job_post_build_security_assessment`, `job_dependency_intelligence`, `job_owasp_control_assessment` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
+| `jobs.job_owasp_control_assessment.settings.models.reviewer` (only this named profile) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
 | `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
 | `jobs.job_inference_security_review.settings.budgets` | `budget_team_packages` (positive integer or `"all"`), `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.lanes` | `exploration_enabled` (Boolean), `exploration_reserve` (positive integer) |
+| `jobs.job_inference_security_review.settings.teams` | `review_teams` (integer 1-64, capacity only) |
+| `jobs.job_inference_security_review.settings.rounds` | `max_active_claims` (integer 1-100,000) |
 
-Medium/low exploration is **off in both profiles**. Production's larger budget does not opt in.
-Set `exploration_enabled = true` explicitly for the selected profile to admit up to
-`exploration_reserve` otherwise-unadmitted medium/low packages within the existing lead allocation
-and total budget. It does not admit informational leads or change unknown-severity handling.
-See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-exploration).
+Medium/low exploration is **on in `prod` and `copilot-prod`**, and remains **off in `dev` and
+`copilot-dev`**. Both production files explicitly set `exploration_enabled = true` and
+`exploration_reserve = 20`: bounded otherwise-unadmitted medium/low packages alternate between
+severities, in identity order within each severity, with unused slots going to the other population.
+When both are plentiful this selects 10 medium and 10 low; launch-time cutoffs preserve the same
+alternation (medium first for a single-slot tie). This is not exhaustive coverage of both severities.
+Informational leads and unknown-severity handling do not change. Package-local follow-ups retain
+three rounds and stop after one stable round; only confirmed, in-scope seeds unlock local
+round-1+ variants. No model, usage-budget, OWASP, or PoC enablement changes accompany this
+coverage policy. The approved coverage follow-up sets 7 production / 3 development concurrent
+teams and raises production active-claim capacity to 1,000 (dev stays 500), with fair launch
+cutoffs instead of zero-claim reviews. All other model, usage, and round limits are retained.
+See the [resolved comparison and cutoff policy](inference-security-review.md#resolved-coverage-limits-and-cutoffs)
+and [effective assignments](inference-security-review.md#effective-production-assignments-and-bounds)
+for providers, models, personas, skills, pools, and residual gaps. Existing runs retain frozen
+settings; offline verification does not imply a live production run.
 
 ## The prod values
 
@@ -169,11 +186,22 @@ See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-
 | `job_target_analysis_plan` | `claude-sonnet-5-5` | high | 200000 | 64000 | 900 |
 | `job_post_build_security_assessment` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
 | `job_dependency_intelligence` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
-| `job_owasp_control_assessment` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+| OWASP worker `model` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+| OWASP blinded `models.reviewer` | `claude-opus-5-5` | high | 200000 | 32000 | 600 |
 | `job_project_build` | `claude-sonnet-5-5` | medium | 128000 | 16000 | 600 |
 | inference review `models.default` | `claude-sonnet-5-5` | high | 200000 | 64000 | 1800 |
+| inference review `models.triage` | `claude-sonnet-5-5` | medium | 64000 | 16000 | 600 |
 | inference review `models.strong` (new) | `claude-opus-5-5` | high | 200000 | 64000 | 2400 |
 | PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+
+OWASP is enabled by default in all shipped profiles. Its separate job-level `settings.enabled = false`
+opts out before a run is frozen; selecting a model profile does not override that gate.
+Base/dev worker and reviewer use `claude-haiku-5-5`; `copilot-dev`
+selects `copilot-sdk`/`claude-haiku-5.5` for both. `copilot-prod` selects
+`claude-sonnet-5.5` for the worker and `claude-opus-5.5` for the reviewer. Independent review means
+a fresh blinded request over original evidence without the worker answer/transcript; model
+distinctness alone is not proof. Qualification requires both selected profiles disabled explicitly,
+not a provider overlay. See [OWASP operations](owasp-control-assessment.md).
 
 `default` and `strong` also set `max_queries = 60` and `max_turns = 16`. The inference review budgets
 become `budget_team_packages = "all"`, `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_tokens = 60000000`,

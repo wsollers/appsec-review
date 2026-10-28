@@ -4,6 +4,7 @@ Units, in dependency order: ``scope.accept_manifest``, ``scope.assemble_scope``,
 ``triage.lead_severity`` (audited severity for leads the scanner left unknown; see
 ``review/lead_triage.py``), ``packages.assemble_lead_packages``, ``packages.assemble_hunt_packages``, ``lead_review.teams``,
 ``hunt_review.teams``, ``merge.claims``, ``adjudicate.apply_policy``, ``scoring.score_claims``,
+``attack_chains.compose_candidates``, ``attack_chains.refute_edges``, ``attack_chains.verify_weakest_links``,
 ``completeness.audit``, ``publication.publish_claim_ledger``, ``publication.publish_handoff``.
 The two lane units depend only on their own package unit, so Dagster runs them in parallel; actual
 model concurrency is the run-wide review-team semaphore. Ordinary failures become typed gaps and a
@@ -16,6 +17,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.config.inference_review import (
@@ -41,7 +43,7 @@ from appsec_review.review.lead_triage import (
     run_triage,
 )
 from appsec_review.review.ledger import LedgerWriter, project
-from appsec_review.review.models import IntegrityError, Lane, Predicate
+from appsec_review.review.models import CellStatus, ChainStatus, ClaimState, IntegrityError, Lane, Predicate
 from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
 )
@@ -54,7 +56,7 @@ from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
-from . import stages
+from . import chains, stages
 from .datasets import CONSUMES, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
 from .teams import PackageWork, ReviewContext, lane_failure, run_lane
@@ -63,10 +65,13 @@ SCHEMA = "appsec-review/inference-security-review/1"
 TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"), "triage": ("lead_severity",),
             "packages": ("assemble_lead_packages", "assemble_hunt_packages"),
             "lead_review": ("teams",), "hunt_review": ("teams",), "merge": ("claims",),
-            "adjudicate": ("apply_policy",), "scoring": ("score_claims",), "completeness": ("audit",),
+            "adjudicate": ("apply_policy",), "scoring": ("score_claims",),
+            "attack_chains": ("compose_candidates", "refute_edges", "verify_weakest_links"),
+            "completeness": ("audit",),
             "publication": ("publish_claim_ledger", "publish_handoff")}
 LEDGER_UNITS = ("lead_review.teams", "hunt_review.teams", "adjudicate.apply_policy", "scoring.score_claims",
-                "completeness.audit")
+                "attack_chains.compose_candidates", "attack_chains.refute_edges",
+                "attack_chains.verify_weakest_links", "completeness.audit")
 TAXONOMY = Path("data") / "reference" / "taxonomy"
 # A tool observation is direct evidence only for the predicates its producing rule names (design R3):
 # the lookup is keyed by lead family, producer, native rule identity and result kind, with the
@@ -209,6 +214,19 @@ def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[Packa
     return works
 
 
+def review_index_names(indexes: Iterable[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Accepted index names a cell may query; ``binary`` only when a shard holds a configured binary.
+
+    A coverage-only ``binary`` shard (no binary configured) grants nothing and attaches no procedure.
+    """
+    names = set()
+    for shard in indexes:
+        name = str(shard["name"])
+        if name != "binary" or (shard.get("producer") or {}).get("binary_id"):
+            names.add(name)
+    return tuple(sorted(names))
+
+
 def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repository_root: Path,
                    settings: InferenceSecurityReviewSettings, infer: Callable[..., Any], manifest_sha256: str,
                    packages_doc: Mapping[str, Any], scope_out: Mapping[str, Any],
@@ -222,6 +240,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
     query_sets = set(_read(Path(run_root), scope_out["artifact"])["query_sets"])
     return ReviewContext(
         run_root=Path(run_root), run_id=run_id, repository_root=root, settings=settings, core=core, infer=infer,
+        attempt_id=Path(attempt_root).name,
         receipts_root=Path(run_root) / "data" / "jobs" / JOB_ID / "cells",
         budget=JobBudget(Path(attempt_root) / "budget", settings.budgets),
         semaphore=ReviewTeamSemaphore.for_run(Path(run_root), settings.teams.review_teams),
@@ -233,7 +252,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
                          for key, values in packages_doc["rule_predicates"].items()},
         source_languages=dict(scope_out["source_languages"]),
         build_unit_languages={key: tuple(value) for key, value in scope_out["build_unit_languages"].items()},
-        index_names=tuple(sorted({str(shard["name"]) for shard in core.manifest["indexes"]})),
+        index_names=review_index_names(core.manifest["indexes"]),
         available_sources=run_sources(query_sets),
         max_page_size=settings.packages.max_page_size, max_depth=settings.packages.max_depth)
 
@@ -498,6 +517,90 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),
                 "gaps": gaps, "terminal_status": "SUCCEEDED"}
 
+    def chain_context(unit: UnitContext) -> ReviewContext:
+        scope = _scope(unit)
+        packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
+        return review_context(
+            run_root=unit.job.run_root, run_id=unit.job.run_id, attempt_root=unit.job.attempt_root,
+            repository_root=repo(unit), settings=_settings(unit), infer=infer or _default_infer(),
+            manifest_sha256=scope.manifest_sha256, packages_doc=packages,
+            scope_out=unit.output("scope.assemble_scope"), manifest_path=scope.manifest_path)
+
+    def chain_compose(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
+        ctx = chain_context(unit)
+        projection = project(stages.merge_verified(shard_paths(unit, LEDGER_UNITS[:4])).events)
+        adjudications = _read(unit.job.run_root, unit.output("adjudicate.apply_policy")["artifact"])["adjudications"]
+        scores = _read(unit.job.run_root, unit.output("scoring.score_claims")["artifact"])["scores"]
+        merged = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
+        documents = package_documents(unit)
+        references = stages.claim_references(merged, documents)
+        families = stages.claim_lead_families(merged, documents)
+        extra: set[str] = set()
+        for record in adjudications:
+            claim_id = record["claim_id"]
+            inputs, _display = stages._ship_block_inputs(
+                ClaimState(record["state"]), [item for item in scores if item["claim_id"] == claim_id],
+                references.get(claim_id, {}), families.get(claim_id, ()), False)
+            decision = ship_block.decide(inputs, ctx.settings.ship_block,
+                                          require_distinct_model=ctx.settings.verification.require_distinct_model_for_ship_blocking)
+            if (decision.conditions["technical_severity_qualifies"]
+                    or decision.conditions["kev_dependency_qualifies"]):
+                extra.add(claim_id)
+        seeds = [seed for lane in lane_documents(unit) if lane.get("chain_seeds")
+                 for seed in _read(unit.job.run_root, lane["chain_seeds"])["seeds"]]
+        ledger_path = unit.unit_root / "ledger.jsonl"
+        document = chains.compose(ctx, projection, adjudications, extra_verifier_claims=extra, seeds=seeds,
+                                  out_dir=unit.unit_root / "proposals", ledger_path=ledger_path, stream=unit.unit_id)
+        unit.job.events.write("INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED",
+                              **document["accounting"], expanded=document["exploration"]["expanded"],
+                              frontier_truncated=document["exploration"]["frontier_truncated"],
+                              gaps=len(document["gaps"]), duration_ms=max(0, int((time.monotonic() - started) * 1000)))
+        return {"artifact": _write(unit, "composition.json", document),
+                "ledger_shard": _artifact(unit.job.run_root, ledger_path), "gaps": document["gaps"],
+                "terminal_status": _status(document["gaps"])}
+
+    def chain_challenge(kind: str) -> Callable[[UnitContext], Mapping[str, Any]]:
+        def handler(unit: UnitContext) -> Mapping[str, Any]:
+            started = time.monotonic()
+            composition = _read(unit.job.run_root, unit.output("attack_chains.compose_candidates")["artifact"])
+            previous = (_read(unit.job.run_root, unit.output("attack_chains.refute_edges")["artifact"])
+                        if kind == "weakest_link_verifier" else None)
+            ledger_path = unit.unit_root / "ledger.jsonl"
+            document = chains.challenge(chain_context(unit), composition, previous, kind=kind,
+                                        out_dir=unit.unit_root / "chains", ledger_path=ledger_path, stream=unit.unit_id)
+            result = {"artifact": _write(unit, "challenges.json", document),
+                      "ledger_shard": _artifact(unit.job.run_root, ledger_path), "gaps": document.get("gaps", []),
+                      "terminal_status": _status(document.get("gaps", []))}
+            status_counts = {status.value: sum(item["status"] == status.value for item in document["challenges"])
+                             for status in CellStatus}
+            unit.job.events.write(
+                "INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED", kind=kind,
+                challenges=len(document["challenges"]), outcomes=status_counts,
+                independent=sum(item["independent"] for item in document["challenges"]),
+                gaps=sum(len(item["gaps"]) for item in document["challenges"]),
+                duration_ms=max(0, int((time.monotonic() - started) * 1000)))
+            if "attack_chain_manifest" in document:
+                result["attack_chain_manifest"] = document["attack_chain_manifest"]
+                manifest = chains.read_artifact(unit.job.run_root, document["attack_chain_manifest"])
+                unit.job.events.write(
+                    "INFERENCE_REVIEW_ATTACK_CHAINS_PUBLISHED", **manifest["accounting"],
+                    outcomes={status.value: sum(item["status"] == status.value for item in manifest["items"])
+                              for status in ChainStatus},
+                    gaps=len(manifest["gaps"]), duration_ms=max(0, int((time.monotonic() - started) * 1000)))
+            return result
+        return handler
+
+    def chain_cells(unit: UnitContext) -> dict[str, str]:
+        cells: dict[str, str] = {}
+        for unit_id in LEDGER_UNITS[4:7]:
+            document = _read(unit.job.run_root, unit.output(unit_id)["artifact"])
+            for identity, lane in document["expected_cells"].items():
+                if identity in cells:
+                    raise IntegrityError("chain work produced duplicate cell identities")
+                cells[identity] = lane
+        return cells
+
     def completeness(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
         lanes = lane_documents(unit)
@@ -508,8 +611,12 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                             packages.get("cwe_reference"), packages.get("admission", ())):
             writer.record_gap(gap)
         writer.seal()
-        paths = shard_paths(unit, LEDGER_UNITS[:4]) + [ledger_path]
-        accounting, projection, merged = stages.audit(lanes, paths, settings.lanes.incomplete_gap_ratio)
+        paths = shard_paths(unit, LEDGER_UNITS[:-1]) + [ledger_path]
+        accounting, projection, merged = stages.audit(lanes, paths, settings.lanes.incomplete_gap_ratio,
+                                                     additional_cells=chain_cells(unit))
+        chains.verify_publication(
+            unit.job.run_root, projection, unit.output("attack_chains.verify_weakest_links")["attack_chain_manifest"],
+            SchemaSet(repo(unit) / SCHEMA_DIRECTORY), unit.job.run_id)
         matrix = stages.coverage_matrix(lanes[1], packages["units"])
         matrix_ref = _write(unit, "coverage-matrix.json", matrix)
         document = {"schema": "appsec-review/inference-review-completeness/1", "ledger_head_sha256": merged.head,
@@ -543,6 +650,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "projection_sha256"]:
             raise IntegrityError("claim ledger changed between completeness audit and publication")
         checked = stages.verify_receipts(projection, job_data(unit) / "cells")
+        chains.verify_publication(
+            unit.job.run_root, projection, unit.output("attack_chains.verify_weakest_links")["attack_chain_manifest"],
+            SchemaSet(repo(unit) / SCHEMA_DIRECTORY), unit.job.run_id)
         head = stages.write_ledger(merged, projection, unit.unit_root)
         return {"artifact": _write(unit, "ledger-head-receipt.json", {**head, "receipts_verified": checked}),
                 "ledger": _artifact(unit.job.run_root, unit.unit_root / "claim-ledger.jsonl"),
@@ -557,7 +667,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         if file_sha256(ledger_file) != ledger_out["ledger"]["sha256"]:
             raise IntegrityError("published claim ledger changed before the handoff")
         paths = shard_paths(unit, LEDGER_UNITS)
-        accounting, projection, merged = stages.audit(lane_documents(unit), paths, settings.lanes.incomplete_gap_ratio)
+        accounting, projection, merged = stages.audit(lane_documents(unit), paths, settings.lanes.incomplete_gap_ratio,
+                                                     additional_cells=chain_cells(unit))
         if ledger_file.read_bytes() != b"".join(canonical_json(event) for event in merged.events):
             raise IntegrityError("published claim ledger does not revalidate from its shards")
         completeness_doc = _read(unit.job.run_root, unit.output("completeness.audit")["artifact"])
@@ -581,6 +692,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         if verification["warning"]:
             unit.job.events.write("INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT", warning=verification["warning"])
         hunt_packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
+        lead_packages = _read(unit.job.run_root, unit.output("packages.assemble_lead_packages")["artifact"])
         matrix_ref = completeness_doc["coverage_matrix"]
         matrix = _read(unit.job.run_root, matrix_ref)
         triage_out = unit.output("triage.lead_severity")
@@ -589,15 +701,19 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         briefs = [entry for document in lane_documents(unit) if document.get("poc_basis")
                   for entry in _read(unit.job.run_root, document["poc_basis"])["briefs"]]
         candidates = stages.poc_candidates(findings, briefs, settings.poc_candidates)
+        chain_manifest = unit.output("attack_chains.verify_weakest_links")["attack_chain_manifest"]
+        chains.verify_publication(unit.job.run_root, projection, chain_manifest, schemas, unit.job.run_id)
         handoff = stages.build_handoff(
             run_id=unit.job.run_id, manifest_sha256=accepted["manifest_sha256"],
             configuration_sha256=semantic_settings_sha256(settings), projection=projection, accounting=accounting,
             shards=stages.shard_records(unit.job.run_root, paths), findings=findings, scores=scores,
             package_manifest_sha256=hunt_packages["package_manifest_content_sha256"],
+            lead_package_manifest_sha256=lead_packages["package_manifest_content_sha256"],
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
             possible=merged_doc["possible_duplicates"], schemas=schemas,
             ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),
-            verification=verification, lead_severity_triage=triage_summary, poc_candidate_list=candidates)
+            verification=verification, lead_severity_triage=triage_summary, poc_candidate_list=candidates,
+            attack_chain_manifest=chain_manifest)
         artifact = _write(unit, "inference-review-handoff.json", handoff)
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:
@@ -621,7 +737,10 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         Unit("merge.claims", merge, ("lead_review.teams", "hunt_review.teams")),
         Unit("adjudicate.apply_policy", adjudicate_unit, ("merge.claims",)),
         Unit("scoring.score_claims", score, ("adjudicate.apply_policy",)),
-        Unit("completeness.audit", completeness, ("scoring.score_claims",)),
+        Unit("attack_chains.compose_candidates", chain_compose, ("scoring.score_claims",)),
+        Unit("attack_chains.refute_edges", chain_challenge("refuter"), ("attack_chains.compose_candidates",)),
+        Unit("attack_chains.verify_weakest_links", chain_challenge("weakest_link_verifier"), ("attack_chains.refute_edges",)),
+        Unit("completeness.audit", completeness, ("attack_chains.verify_weakest_links",)),
         Unit("publication.publish_claim_ledger", publish_ledger, ("completeness.audit",)),
         Unit("publication.publish_handoff", publish_handoff, ("publication.publish_claim_ledger",)),
     )

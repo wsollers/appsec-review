@@ -1,8 +1,9 @@
 # Operating review-data indexing
 
 `job_review_data_indexing` precedes `job_review_package_assembly` in both the direct review graph
-(`appsec-review start`) and the Dagster `wave1_review` graph. It follows `job_code_graph_index` in
-both, and `job_security_tagging` in Dagster. It accounts for every
+(`appsec-review start`) and the Dagster `wave1_review` graph. It follows `job_code_graph_index`,
+`job_security_tagging` and the default-enabled OWASP assessment when those jobs are enabled on either
+surface. It accounts for every
 dataset the run produced, restores shards a manifest rewrite dropped, publishes cross-domain links
 and the stage-1 precomputed query sets, and publishes the dataset inventory as an indexed dataset.
 The design is in [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
@@ -39,6 +40,29 @@ are review context, and unmatched declarations or requests are named gaps, not f
 | `publish.inventory_index` | `inventory/dataset-inventory` shard and manifest | Accepted manifest = upstream shards + restored shards + link, product and inventory shards. |
 
 All bounds are in `[jobs.job_review_data_indexing.settings]` in `appsec-review.toml`.
+
+### OWASP projection and custody
+
+The shared enabled direct/Dagster order is tagging/tag cloud → OWASP → this job → package assembly →
+hunt/red-blue/independent verification. The OWASP job is enabled by default; if explicitly
+disabled, its absence produces
+an unavailable `control_evidence` gap, not full coverage. Qualification-only publications remain
+explicitly non-production-eligible.
+
+`precompute.control_evidence` authenticates the accepted OWASP manifest/shards, re-resolves original
+typed citations against its pinned accepted upstream snapshot, and uses the publication's
+`assessment_bounds.max_source_lines` rather than silently reverting to a default cap. Deep
+obligations, independent counterevidence, dissent and custody remain lossless in the immutable
+workbench authority; index summaries carry hash-pinned authority links instead of depth-truncated
+copies. Later lead/hunt assembly expands and verifies that authority with operation-local reuse,
+not a persistent verification bypass. Duplicate-row ambiguity still fails expansion.
+
+Only eligible, source-anchored adverse assessment hypotheses become provisional `owasp_control`
+leads. `not_satisfied` does not mean exploitable; `satisfied` does not mean component safety.
+Unsupported/`not_assessed`/failed/`cannot_verify` outcomes remain unresolved coverage, not failures.
+Every PRECOMPUTED interpretation is indirect for **every** final predicate. Downstream
+red/blue/verifier roles retrieve underlying evidence and establish their own predicates.
+See [OWASP operations](owasp-control-assessment.md) for mode, receipts and denominator accounting.
 
 ## Publication audit
 

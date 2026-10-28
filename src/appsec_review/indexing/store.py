@@ -14,12 +14,11 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
+from appsec_review.observability.spans import count_work
 from appsec_review.retrieval.index import MANIFEST_SCHEMA, IndexIdentity, load_verified_manifest
 from appsec_review.retrieval.model import canonical_json
 from appsec_review.storage import file_sha256
-
-
-HANDOFF_SCHEMA = "appsec-review/job-handoff/1"
 
 
 def digest(value: Any) -> str:
@@ -46,14 +45,12 @@ def accepted_handoff(run_root: Path, job_id: str) -> AcceptedHandoff | None:
     sha = file_sha256(path)
     if sha != pointer.get("handoff_sha256"):
         raise ValueError(f"accepted handoff identity changed: {job_id}")
-    handoff = json.loads(path.read_text(encoding="utf-8"))
-    if handoff.get("schema") != HANDOFF_SCHEMA or handoff.get("status") != "ACCEPTED":
-        raise ValueError(f"handoff is not accepted: {job_id}")
+    count_work("handoff_validations")
+    handoff = decode_handoff(json.loads(path.read_text(encoding="utf-8")),
+                             run_id=run_root.name, job_id=job_id)
     from appsec_review.storage.shared import verify_handoff, consume_handoff
-    # Legacy handoffs may predate resolving_paths; their original contract is unchanged.
-    if "resolving_paths" in handoff:
-        verify_handoff(run_root, handoff)
-        consume_handoff(run_root, handoff)
+    verify_handoff(run_root, handoff)
+    consume_handoff(run_root, handoff)
     return AcceptedHandoff(job_id, handoff, sha, path.relative_to(run_root.resolve()).as_posix())
 
 

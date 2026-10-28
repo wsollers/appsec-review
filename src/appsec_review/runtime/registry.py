@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from appsec_review.runtime.job import Job
 
@@ -30,6 +30,17 @@ class JobRegistry:
 
         return tuple(sorted(self._factories))
 
+    def require_matches(self, configured: Iterable[str], *, surface: str) -> None:
+        """Refuse to run when the configured jobs and the registered jobs differ."""
+
+        registered, configured = set(self._factories), set(configured)
+        if registered != configured:
+            raise ValueError(
+                f"{surface} job/config mismatch: "
+                f"missing_config={sorted(registered - configured)}, "
+                f"missing_registration={sorted(configured - registered)}"
+            )
+
 
 def builtin_registry() -> JobRegistry:
     from appsec_review.inference import check_models, infer as live_infer
@@ -37,6 +48,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_model_connectivity import build_job as build_model_connectivity
     from appsec_review.container_runtime.build_executor import _run as run_command
     from appsec_review.jobs.job_image_pin_verification import build_job as build_image_pin_verification
+    from appsec_review.jobs.job_target_acquisition import build_job as build_target_acquisition
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
@@ -46,6 +58,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_project_build import build_job as build_project_build
     from appsec_review.jobs.job_language_build import build_job as build_language_build
     from appsec_review.jobs.job_artifact_indexing import build_job as build_artifact_indexing
+    from appsec_review.jobs.job_debug_symbol_indexing import build_job as build_debug_symbol_indexing
     from appsec_review.jobs.job_test_coverage import build_job as build_test_coverage
     from appsec_review.jobs.job_profile_data import build_job as build_profile_data
     from appsec_review.jobs.job_artifact_security_analysis import build_job as build_artifact_security_analysis
@@ -58,6 +71,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_svf_alias_analysis import build_job as build_svf_alias_analysis
     from appsec_review.jobs.job_sanitizer_build import build_job as build_sanitizer_build
     from appsec_review.jobs.job_cpp_symbol_index import build_job as build_cpp_symbol_index
+    from appsec_review.jobs.job_binary_evidence_indexing import build_job as build_binary_evidence_indexing
     from appsec_review.jobs.job_cpg_analysis import build_job as build_cpg_analysis
     from appsec_review.jobs.job_codeql_analysis.job import build_job as build_codeql_analysis
     from appsec_review.jobs.job_code_graph_index import build_job as build_code_graph_index
@@ -70,7 +84,11 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issue_analysis
     from appsec_review.jobs.job_inference_security_review import build_job as build_inference_review
     from appsec_review.jobs.job_final_publication_gate import build_job as build_final_publication_gate
+    from appsec_review.jobs.job_openvex_export.job import build_job as build_openvex_export
     from appsec_review.jobs.job_poc_generation import build_job as build_poc_generation
+    from appsec_review.jobs.job_dossier_publication import build_job as build_dossier_publication
+    from appsec_review.jobs.job_remediation_planning import build_job as build_remediation_planning
+    from appsec_review.jobs.job_remediation_validation import build_job as build_remediation_validation
     from appsec_review.jobs.job_final_report_publication import build_job as build_final_report_publication
 
     # Parity walks record and replay model responses here (docs/processes/local-dagster-parity.md).
@@ -78,6 +96,7 @@ def builtin_registry() -> JobRegistry:
     registry = JobRegistry()
     registry.register("job_model_connectivity", lambda: build_model_connectivity(check_models=check_models))
     registry.register("job_image_pin_verification", lambda: build_image_pin_verification(runner=run_command))
+    registry.register("job_target_acquisition", build_target_acquisition)
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_source_history_analysis", build_source_history)
@@ -89,6 +108,7 @@ def builtin_registry() -> JobRegistry:
                       lambda: build_project_build(infer=infer))
     registry.register("job_language_build", build_language_build)
     registry.register("job_artifact_indexing", build_artifact_indexing)
+    registry.register("job_debug_symbol_indexing", build_debug_symbol_indexing)
     registry.register("job_test_coverage", build_test_coverage)
     registry.register("job_profile_data", build_profile_data)
     registry.register("job_artifact_security_analysis", build_artifact_security_analysis)
@@ -101,6 +121,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_svf_alias_analysis", build_svf_alias_analysis)
     registry.register("job_sanitizer_build", build_sanitizer_build)
     registry.register("job_cpp_symbol_index", build_cpp_symbol_index)
+    registry.register("job_binary_evidence_indexing", build_binary_evidence_indexing)
     registry.register("job_cpg_analysis", build_cpg_analysis)
     registry.register("job_codeql_analysis", build_codeql_analysis)
     registry.register("job_code_graph_index", build_code_graph_index)
@@ -114,6 +135,10 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_document_issue_analysis", build_document_issue_analysis)
     registry.register("job_inference_security_review", lambda: build_inference_review(infer=infer))
     registry.register("job_final_publication_gate", build_final_publication_gate)
+    registry.register("job_openvex_export", build_openvex_export)
     registry.register("job_poc_generation", lambda: build_poc_generation(infer=infer))
+    registry.register("job_dossier_publication", build_dossier_publication)
+    registry.register("job_remediation_planning", lambda: build_remediation_planning(infer=infer))
+    registry.register("job_remediation_validation", lambda: build_remediation_validation(infer=infer))
     registry.register("job_final_report_publication", build_final_report_publication)
     return registry

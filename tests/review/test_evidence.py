@@ -91,7 +91,8 @@ def _accepted_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
     artifact = {"path": manifest.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest),
                 "size_bytes": manifest.stat().st_size}
     handoff = attempt / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": "fixture",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff, {"source_fingerprint": SNAPSHOT, "status": "ACCEPTED", "job_id": "fixture",
                           "attempt_id": "attempt_0001", "artifacts": [artifact], "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
@@ -117,7 +118,7 @@ def _resolve(core: RetrievalCore, entity_id: str, predicate: Predicate = Predica
 @pytest.mark.parametrize("kind", sorted(DIRECT_KINDS))
 def test_every_structured_content_kind_is_direct_for_the_construct_and_never_for_impact(kind: EntityKind) -> None:
     """Deliberately changed from "every DIRECT kind is direct for every predicate": relevance is per
-    (kind, predicate) under ``predicate-admission/1`` (the full table is in test_predicate_admission.py)."""
+    (kind, predicate) under ``predicate-admission/2`` (the full table is in test_predicate_admission.py)."""
     assert classify(kind, Predicate.AFFECTED_CONSTRUCT) is Admissibility.DIRECT
     assert classify(kind, Predicate.SECURITY_IMPACT) is not Admissibility.DIRECT
     assert {classify(kind, predicate) for predicate in Predicate} <= {

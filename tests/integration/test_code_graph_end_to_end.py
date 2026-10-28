@@ -82,9 +82,10 @@ def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
 
 def _handoff(run_root: Path, snapshot: str, job_id: str, outputs: Mapping[str, Any],
              artifacts: list[dict[str, Any]]) -> dict[str, Any]:
+    from tests.handoff_fixture import write_fixture_handoff
     attempt = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
     path = attempt / "handoff.json"
-    atomic_json(path, {"schema": "appsec-review/job-handoff/1", "job_id": job_id, "attempt_id": "attempt_0001",
+    write_fixture_handoff(run_root, path, {"job_id": job_id, "attempt_id": "attempt_0001",
                        "status": "ACCEPTED", "completion_status": "SUCCEEDED", "outputs": dict(outputs),
                        "artifacts": artifacts, "source_fingerprint": snapshot,
                        "resolving_paths": {"attempt": attempt.relative_to(run_root).as_posix()}})
@@ -264,7 +265,8 @@ class FakeExecutor:
             (database / "source-subroot.txt").write_text(values["--source-subroot"], encoding="utf-8")
         elif action == "query":
             subroot = (scratch_root / values["--database"] / "source-subroot.txt").read_text(encoding="utf-8")
-            default = "--pack" in values and values["--pack"] == "codeql/cpp-queries"
+            default = (values.get("--pack") == "codeql/cpp-queries"
+                       and values.get("--suite") == "codeql-suites/cpp-code-scanning.qls")
             results = [BRIDGED_RESULT] if subroot == "src" and default else []
             output = scratch_root / values["--output"]
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -488,13 +490,13 @@ def test_codeql_publishes_what_the_graph_job_reads_and_build_units_match(pipelin
     for outcome in (pipeline.codeql, pipeline.graph, pipeline.indexing, pipeline.review):
         assert outcome["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome["status"]
     codeql = _outputs(pipeline.codeql)
-    # The graph job reads plan.inventory.plan from the result and export.scopes from the handoff, both
-    # bound to the accepted handoff's artifact list.
+    # Full unit outputs live in the hash-bound result, not the handoff's compact output projection.
     handoff = _json(Path(pipeline.codeql["attempt_root"]) / "handoff.json")
     bound = {item["path"] for item in handoff["artifacts"]}
     assert codeql["plan.inventory"]["plan"]["path"] in bound
-    assert handoff["outputs"]["export.scopes"]["artifact"]["path"] in bound
-    exports = {item["scope_id"]: item for item in codeql["export.scopes"]["exports"]}
+    assert codeql["execution.scopes"]["graph_export_artifact"]["path"] in bound
+    assert "graph_export_artifact" not in handoff["outputs"]["execution.scopes"]
+    exports = {item["scope_id"]: item for item in codeql["execution.scopes"]["exports"]}
     by_root = {item["root"]: item for item in exports.values()}
     assert by_root["src"]["export_status"] == by_root["native"]["export_status"] == "SUCCEEDED"
     assert by_root["svc"]["export_status"] == "SUCCEEDED"
@@ -525,13 +527,13 @@ def test_codeql_publishes_what_the_graph_job_reads_and_build_units_match(pipelin
                    if export["export_status"] == "SUCCEEDED")
 
 
-def test_a_bridged_codeql_lead_is_supported_by_direct_graph_relations(pipeline) -> None:
+def test_a_bridged_codeql_lead_is_confirmed_by_direct_graph_relations(pipeline) -> None:
     facts = _graph_facts(pipeline)
     adjudications = _json(_review_unit(pipeline, "adjudicate.apply_policy") / "adjudications.json")["adjudications"]
     (decided,) = [item for item in adjudications if item["state"] in {"supported", "confirmed"}]
-    # Every review role runs on one model profile here, so the verifier is not provider-independent and
-    # security_impact has no graph family: R5 row 6 (supported), not row 5 (confirmed).
-    assert decided["state"] == "supported" and decided["deciding_row"] == "r6_supported"
+    # Blindness and re-derived evidence establish independence; model distinctness gates ship-blocking only.
+    assert decided["verifier_independent"] is True
+    assert decided["state"] == "confirmed" and decided["deciding_row"] == "r5_confirmed"
     ledger = [json.loads(line) for line in (_review_unit(pipeline, "publication.publish_claim_ledger")
                                             / "claim-ledger.jsonl").read_text(encoding="utf-8").splitlines()]
     relations = {event["body"]["relation"]["relation_id"]: event["body"]["relation"] for event in ledger
@@ -623,7 +625,7 @@ def test_the_completeness_ledger_names_the_code_graph_lane_for_an_uncovered_lang
     gaps = [json.loads(line)["body"]["gap"] for line in ledger.splitlines()
             if json.loads(line)["kind"] == "gap_recorded"]
     graph = [gap for gap in gaps if gap["subject_id"].startswith("producer:code_graph:")]
-    actions_scope = next(item["scope_id"] for item in _outputs(pipeline.codeql)["export.scopes"]["exports"]
+    actions_scope = next(item["scope_id"] for item in _outputs(pipeline.codeql)["execution.scopes"]["exports"]
                          if item["language"] == "actions")
     assert any(actions_scope in gap["subject_id"] and "no hash-pinned CodeQL graph export pack for actions"
                in gap["reason"] for gap in graph)

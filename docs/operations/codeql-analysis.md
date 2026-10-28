@@ -223,10 +223,13 @@ makes its queries and export eligible, and query/export failures do not invalida
 The job-level topology is planning, ready-scope execution, then acceptance. Resource admission
 still applies; [current conservative limits](performance-assurance.md#scheduling-and-limits)
 do not permit two ordinary actions to overlap. Its design is
-[code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. Only C/C++
-has a pack in this change. Every other language records the export disposition `NOT_APPLICABLE`
-with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This is a named
-disposition, not a failure and not a clean result.
+[code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. C/C++, C#,
+Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and Rust have pinned packs. Every other
+language (Swift, Actions, and any language without a pin) records the export disposition
+`NOT_APPLICABLE` with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This
+is a named disposition, not a failure and not a clean result. An export that did not finish
+`SUCCEEDED` or `NOT_APPLICABLE`, or that carries a gap, keeps the job's terminal status at
+`COMPLETED_WITH_GAPS` (`publication_status`).
 
 Configuration lives in `appsec-review.toml`:
 
@@ -258,15 +261,20 @@ A database, declared pack release, bound or declared runner release change rerun
 does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a
 framework-integrity failure. A timeout, a non-zero exit or an invalid fresh export is a scope gap.
 A failed database is the gap "export skipped because database creation failed". A truncated query
-is a named gap. Any of these gaps makes the step's `terminal_status` `COMPLETED_WITH_GAPS`, while
-sibling scopes keep their exports.
+is a named gap. Any of these gaps makes the execution step, acceptance publication and job
+`COMPLETED_WITH_GAPS`, while sibling scopes keep their exports. The execution output publishes
+per-scope export dispositions; a failed export prevents accepted-attempt reuse on resume. Successful
+bounded exports with named limitations, and policy skips such as a scope with no seeds, do not
+become retriable failures solely because they carry a gap.
 
 Raw exports are the `codeql_graph_export` dataset (`artifact_only`). Their rows hold CodeQL
 internal ids and are never served; `job_code_graph_index` normalizes them. Consumers find them in
 the accepted handoff in three places:
 
-- `outputs["export.scopes"].artifact` points to `artifacts/codeql/graph-exports.json`
-  (`appsec-review/codeql-graph-exports/1`), with one record per scope.
+- `outputs["execution.scopes"].graph_export_artifact` points to `artifacts/codeql/graph-exports.json`
+  (`appsec-review/codeql-graph-exports/1`), with one record per scope. The handoff preserves this
+  reference and binds its path and SHA-256 in `artifacts`. Readers also accept the legacy
+  `outputs["export.scopes"].artifact` reference.
 - The `graph_exports` list in the acceptance summary (`outputs["acceptance.publish_handoff"].artifact`)
   holds the same records.
 - Every export manifest and file appears with its SHA-256 in the handoff `artifacts`.
@@ -336,23 +344,79 @@ project, the database and the scope.
   process (per-key lock, in-memory memo) before the first export action. A compile that fails or
   times out makes that export `FAILED` with a named gap; it is never read as "no flows".
   Events use tool id `codeql-graph-export-compile`.
-- **Platform warm compile.** `python containers/build.py query-packs --warm` compiles every
+- **Platform warm compile.** `scripts/compile-codeql-queries.sh` (a wrapper over
+  `python containers/build.py query-packs --warm`) compiles every
   warm-registered pack into the same volume review runs mount (the name is derived from the
   declared CodeQL release in `appsec-review.toml` and the uid that reads it), so after a CodeQL
   release change one warm step, not the first review run, pays the cold compile. Its checks are
-  platform maintenance and never count as customer-review assurance.
+  platform maintenance and never count as customer-review assurance. See
+  [Compiling CodeQL queries](#compiling-codeql-queries).
 - **Cache sharing trade-off.** The job's compilation cache is shared by every run of the same
   user and declared releases. It holds only compiled QL derived from repository-owned packs and
   the image's libraries (evaluation binds the scope and seeds with `--external`, so no project
   data enters it), but it is writable state that outlives a run.
-- **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed (its 117 queries
-  took 48 min 36 s with `--check-only` on the rebuilt payload, so the registry gives it a 7200 s
-  timeout); registering it with `warm = true` would add that cost to every payload rebuild; it was
-  left off. Its dependencies ship inside the
+- **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed: every one of its
+  117 queries ships a precompiled `.qlx` in the image (checked in `audit-codeql:custom-2.27.0`),
+  which `database analyze` loads, so the registry sets `warm = false` with a `warm_skip_reason`.
+  Its `--check-only` verification took 48 min 36 s on the rebuilt payload, so the registry gives it
+  a 7200 s timeout. Its dependencies ship inside the
   `cert-cpp-coding-standards.tgz` member of the licensed zip, so the image needs no other member
   packs.
 - **Detecting a cold cache.** A compile event longer than a couple of minutes, or an export that
   fails with a compile timeout, means the volume was empty or the payload changed.
+
+### Compiling CodeQL queries
+
+Run `scripts/compile-codeql-queries.sh` (Windows: `scripts\compile-codeql-queries.ps1`) on the
+review host before starting review runs whenever:
+
+- the CodeQL image or `review_policy.releases.codeql` changes: the compile-cache volume name is
+  derived from the release and the runtime uid, so a new release starts with an empty volume;
+- any QL, `qlpack.yml` or suite under `rules/codeql-graph-export/<language>/` changes (also re-pin
+  the pack as described in
+  [Changing the pack or catalog](../../rules/codeql-graph-export/README.md#changing-the-pack-or-catalog));
+- the cache volume was removed or recreated.
+
+What it compiles, and what it skips on purpose:
+
+- **Compiled:** every CodeQL pack registered with `warm = true` in `rules/registry.toml`, which is
+  the repository-authored graph-export packs (`cpp`, `java`, `csharp`, `javascript`, `python`,
+  `ruby`, `go`, `rust`). Each takes about 2-4 minutes cold at a 7 GB budget. `swift` is deferred
+  because CodeQL cannot extract Swift on Linux.
+- **Skipped:** the standard query packs in the image (`/opt/codeql/qlpacks/codeql/*-queries`) and
+  the licensed CERT pack (`/opt/codeql/custom-queries/cert-cpp`) ship precompiled `.qlx` files, and
+  `codeql database analyze` loads those (`Loaded .../Xxe.qlx`, zero compiles). Never warm them:
+  compiling the C/C++ analyze suites took 2.8 hours and produced nothing analyze uses.
+- Non-CodeQL packs are skipped; they have nothing to compile.
+
+The compile is idempotent: CodeQL's cache is content addressed, so a pack already in the volume is
+a cache hit and takes seconds.
+
+Memory: the review host runs these containers in one cgroup
+(`appsecreview.slice/appsecreview-actions.slice`, `memory.max` 10 GB) shared with other sessions.
+Two compiles at 6-7 GB each are OOM-killed, and a 3 GB budget thrashes the garbage collector. The
+script therefore compiles one pack at a time with `--ram 7000 --threads 8` by default, and refuses
+(exit 3) while another compile container (`appsec-review-warm-*` or `warm-*`) is running unless
+`--allow-concurrent` is given.
+
+```bash
+scripts/compile-codeql-queries.sh --dry-run              # list the packs and docker commands
+scripts/compile-codeql-queries.sh                        # compile everything that needs it
+scripts/compile-codeql-queries.sh --language go,java     # only some languages
+scripts/compile-codeql-queries.sh --ram 6000 --threads 4 graph-export-cpp
+```
+
+```powershell
+.\scripts\compile-codeql-queries.ps1 -DryRun
+.\scripts\compile-codeql-queries.ps1 -Language go,java -Ram 7000 -Threads 8
+```
+
+Everything runs on Linux Docker. On Windows the PowerShell twin always runs the bash script inside
+WSL (`-Distro`, else the distribution of a `\\wsl.localhost\<distro>\` checkout, else the WSL
+default); Windows-native Docker is not supported. Under `pwsh` on Linux it runs the bash script
+directly. Per-pack logs go to `runs/container-builds/<timestamp>-packs-<pid>/logs/<pack>.warm.log`.
+Exit codes: `0` compiled or cached, `1` a pack failed, `2` usage error, `3` refused because another
+compile is running.
 
 ### Seeded export
 
@@ -399,9 +463,11 @@ hash from the event's `query_metrics` field, or a `query_metrics_gap` reason:
 | compile | Runner compile summary on stdout (`appsec-review/codeql-compile/1`) | compile ms per query file | cache hits report no time and are named as a gap |
 | database | — | not applicable | — |
 
-The analyze timing source needs the runner release that writes `query-timings.json`. Until the
-CodeQL image is rebuilt with it and `codeql_runner` is bumped in `appsec-review.toml`, analyze
-rows carry the gap "runner wrote no query-timings.json". If an exception escapes after an action's
+The analyze timing source needs a runner that writes `query-timings.json`. The declared runner
+release `review_policy.releases.codeql_runner = "appsec-codeql-runner-89568569"` does: derived
+images copy the repository's `codeql_runner.py`, and the shipped `preinstalled_runtimes` declare
+`runner_source = "application"` with that release. A runtime that still carries an older runner yields
+analyze rows with the gap "runner wrote no query-timings.json". If an exception escapes after an action's
 `COMPLETED` event, the isolated wrapper also emits `CODEQL_ACTION_FAILED`, so that action is counted
 twice.
 
@@ -409,7 +475,7 @@ twice.
 
 SARIF 2.1 results, rule metadata, severities, fingerprints, suppressions, baseline state, locations,
 and code-flow steps are normalized into immutable `observations` shards. Each step records its
-SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/2`), so alternative paths
+SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/3`), so alternative paths
 for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
 sink as a verified semantic path. Exact path matches are
 distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher's
@@ -421,6 +487,21 @@ shards) and `job_review_data_indexing` (every producer).
 
 Use the `query_codeql` MCP tool to filter accepted observations by language, original source
 language, scope, build unit, rule, severity, path, or CodeQL shard.
+
+The [interchange provenance upgrade](../architecture/job-interchange.md) retains the original SARIF
+file and resolves each normalized observation to its original RFC 6901 result pointer, parser,
+execution receipt, and retained byte identity. Common metadata supplements SARIF rules, flows,
+suppressions, fingerprints, and source locations rather than replacing them. The normalizer upgrade
+uses `appsec-review/codeql-sarif-normalizer/3`; historical results retain their recorded version.
+Database and query checkpoint schema/identity are unchanged. A normalizer/provenance-only
+change invalidates derived observations, not an otherwise valid CodeQL database checkpoint.
+SARIF ingestion is not a new external exporter, and raw SARIF bodies are not added to inference.
+
+When a failed action left bounded SARIF, it is retained as incomplete diagnostic evidence with no
+normalized finding observations; an oversized failed report is an explicit native-output gap.
+Missing query execution receipts and unresolved source locations produce provenance gaps.
+Source locations are safely resolved and checked against accepted hashes, not trusted from a
+scanner-supplied path.
 
 ## Acceptance checklist
 
@@ -435,9 +516,9 @@ For a fresh `appsec-multi-vuln` run, verify:
 7. `query_codeql` returns the same accepted observations; and
 8. deployment verification reports per-language and per-profile execution, SARIF, observation,
    and gap counts; and
-9. every successful C/C++ database has a `SUCCEEDED` graph export whose manifest is bound to the
-   handoff, every other language reports `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py`
-   passes (not yet run).
+9. every successful database of a language with a pinned graph-export pack has a `SUCCEEDED`
+   graph export whose manifest is bound to the handoff, every other language reports
+   `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py` passes (not yet run).
 
 ## Live acceptance
 

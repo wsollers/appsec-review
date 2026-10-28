@@ -111,11 +111,13 @@ def test_ranges_are_a_named_not_applicable_gap_never_clean(normalized) -> None:
     assert ranges and all(any(gap.startswith("not_applicable:") for gap in fact.payload["gaps"]) for fact in ranges)
 
 
-def test_coverage_names_the_unresolved_calls_and_nothing_else_is_partial(normalized) -> None:
+def test_coverage_names_unresolved_calls_and_unavailable_range_analysis(normalized) -> None:
     coverage = {row.family.value: row for row in normalized.coverage}
     assert coverage["call_site"].status is c.Coverage.PARTIAL
     assert coverage["call_site"].counts == {"unresolved_indirect": 10}
-    assert all(row.status is c.Coverage.COMPLETE for name, row in coverage.items() if name != "call_site")
+    assert coverage["range_fact"].status is c.Coverage.PARTIAL
+    assert all(row.status is c.Coverage.COMPLETE for name, row in coverage.items()
+               if name not in {"call_site", "range_fact"})
 
 
 def test_paths_carry_sources_sanitizers_and_cross_function_steps(normalized) -> None:

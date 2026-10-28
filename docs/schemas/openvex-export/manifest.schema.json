@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/openvex-export/manifest.schema.json",
+  "title": "Protected OpenVEX export companion",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "outcome", "disclosure", "provenance", "review_context", "products",
+    "packages", "statement_mappings", "document", "accounting", "bindings"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/openvex-export-manifest/1"},
+    "run_id": {"$ref": "../final-report/common.schema.json#/$defs/short_text"},
+    "outcome": {"$ref": "common.schema.json#/$defs/outcome"},
+    "disclosure": {"const": "internal"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "review_context": {"$ref": "common.schema.json#/$defs/review_context"},
+    "products": {
+      "type": "array", "minItems": 1, "maxItems": 1,
+      "items": {"$ref": "common.schema.json#/$defs/product"}
+    },
+    "packages": {
+      "type": "array", "maxItems": 10000, "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/package"}
+    },
+    "statement_mappings": {
+      "type": "array", "maxItems": 10000, "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/statement_mapping"}
+    },
+    "document": {"$ref": "common.schema.json#/$defs/nullable_output"},
+    "accounting": {"$ref": "common.schema.json#/$defs/accounting"},
+    "bindings": {
+      "type": "array", "minItems": 1, "maxItems": 30000, "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/artifact_ref"}
+    }
+  }
+}

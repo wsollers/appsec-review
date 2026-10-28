@@ -99,7 +99,8 @@ def _publish(run_root: Path, target: Path, scopes: list[dict[str, Any]]) -> Retr
     write_manifest(manifest, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target, indexes=indexes)
     artifact = {"path": manifest.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest)}
     handoff = run_root / "data" / "jobs" / "live" / "attempts" / "attempt_0001" / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "job_id": "live", "status": "ACCEPTED",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff, {"job_id": "live", "status": "ACCEPTED",
                           "artifacts": [artifact], "outputs": {"publish": {"index_manifest": artifact}},
                           "source_fingerprint": SNAPSHOT})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {

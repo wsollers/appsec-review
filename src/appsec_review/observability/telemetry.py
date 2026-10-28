@@ -7,9 +7,15 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review.interchange import (
+    CoverageDisposition, ExecutionStatus, GapCode, INTERCHANGE_METRICS_SCHEMA,
+    artifact_reference_from_mapping, decode_handoff,
+)
 from appsec_review.observability.events import PipelineLog
+from appsec_review.observability.completion import completion_metrics
 from appsec_review.storage import atomic_json, canonical_json
 from appsec_review.storage import file_sha256
+from appsec_review.observability.debug_symbols import debug_symbol_metrics
 
 
 SCHEMA = "appsec-review/telemetry-event/1"
@@ -17,7 +23,7 @@ FINDING_STATES = {"CANDIDATE", "REFUTED", "CONFIRMED"}
 TERMINAL_EVENTS = {"SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED",
                    "BLOCKED", "PARTIAL", "NOT_APPLICABLE"}
 METRICS_SEMANTICS = "appsec-review/review-metrics-semantics/1"
-RUN_METRICS_SCHEMA = "appsec-review/run-metrics/4"
+RUN_METRICS_SCHEMA = "appsec-review/run-metrics/5"
 CODEQL_METRICS_SEMANTICS = "appsec-review/codeql-execution-metrics/1"
 CODEQL_QUERY_METRICS_SCHEMA = "appsec-review/codeql-query-metrics/1"
 CODEQL_TOOLS = {"codeql", "codeql-graph-export", "codeql-graph-export-compile"}
@@ -714,11 +720,701 @@ def _codeql_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
             "gap_count": len(gaps), "gaps": gaps[:_CODEQL_GAP_LIMIT]}
 
 
+class _InterchangeIntegrityError(ValueError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def _interchange_artifact(run_root: Path, raw: Any) -> Path:
+    """Resolve exact bytes without exposing paths or error messages as metric dimensions."""
+    from appsec_review.storage.shared import safe_path
+    try:
+        ref = artifact_reference_from_mapping(raw)
+    except (ValueError, TypeError) as exc:
+        raise _InterchangeIntegrityError("malformed_reference") from exc
+    try:
+        path = safe_path(run_root, ref.path)
+    except ValueError as exc:
+        raise _InterchangeIntegrityError("escaped_reference") from exc
+    if not path.is_file():
+        raise _InterchangeIntegrityError("missing_reference")
+    if path.stat().st_size != ref.size_bytes or file_sha256(path) != ref.sha256:
+        raise _InterchangeIntegrityError("tampered_reference")
+    return path
+
+
+def _interchange_document(run_root: Path, raw: Any) -> Mapping[str, Any]:
+    import json
+    path = _interchange_artifact(run_root, raw)
+    try:
+        value = json.loads(path.read_bytes())
+    except (ValueError, UnicodeError) as exc:
+        raise _InterchangeIntegrityError("malformed_receipt") from exc
+    if not isinstance(value, Mapping):
+        raise _InterchangeIntegrityError("malformed_receipt")
+    return value
+
+
+def _interchange_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """Receipt-authoritative, closed-dimension accounting, separate from scanner executions."""
+    from appsec_review.runtime.registry import builtin_registry
+    from appsec_review.storage.shared import verify_receipt
+
+    kinds = {"HANDOFF_VALIDATED", "HANDOFF_ACCEPTED", "HANDOFF_REJECTED",
+             "NATIVE_OUTPUT_RETAINED", "OBSERVATION_PROVENANCE_VALIDATED"}
+    jobs = frozenset(builtin_registry().job_ids())
+    integrity: Counter[str] = Counter()
+    producer_gaps: Counter[str] = Counter()
+    publications: dict[tuple[str, str], dict[str, Any]] = {}
+    native: dict[str, Mapping[str, Any]] = {}
+    batches: dict[str, Mapping[str, Any]] = {}
+    artifacts: dict[str, int] = {}
+    by_job: dict[str, Counter[str]] = {}
+    invalid = {"handoffs": False, "native_outputs": False, "observations": False}
+    seen: set[tuple[str, ...]] = set()
+    event_bound = 100_000
+    processed = 0
+    duplicates = 0
+
+    def integer(value: Any) -> int:
+        if type(value) is not int or value < 0:
+            raise _InterchangeIntegrityError("malformed_receipt")
+        return value
+
+    def boolean(value: Any) -> bool:
+        if type(value) is not bool:
+            raise _InterchangeIntegrityError("malformed_receipt")
+        return value
+
+    def shared(raw: Any, event: Mapping[str, Any], schema: str
+               ) -> tuple[Mapping[str, Any], str, Mapping[str, Any]]:
+        receipt = _interchange_document(run_root, raw)
+        if (receipt.get("schema") != "appsec-review/shared-receipt/1"
+                or receipt.get("namespace") != "native-output"):
+            raise _InterchangeIntegrityError("malformed_receipt")
+        actor = receipt.get("actor")
+        if not isinstance(actor, Mapping) or any(
+                actor.get(key) != event.get(key) for key in ("run_id", "job_id", "attempt_id")):
+            raise _InterchangeIntegrityError("identity_mismatch")
+        # Verify the original claim, all shared dependencies, and reuse provenance too.
+        verify_receipt(run_root, raw)
+        computation = receipt.get("computation")
+        if not isinstance(computation, Mapping) or computation.get("schema") != schema:
+            raise _InterchangeIntegrityError("malformed_receipt")
+        common_fields = {"schema", "parser_identity", "complete", "truncated"}
+        expected = common_fields | (
+            {"artifact", "execution_reference", "retained_bytes", "native_result_count"}
+            if schema == "appsec-review/native-output-retention/1" else
+            {"actor", "observation_count", "native_reference_count", "provenance_gap_count", "artifacts"})
+        if (set(computation) != expected or not isinstance(computation["parser_identity"], str)
+                or not computation["parser_identity"].strip()):
+            raise _InterchangeIntegrityError("malformed_receipt")
+        if boolean(computation["complete"]) and boolean(computation["truncated"]):
+            raise _InterchangeIntegrityError("malformed_receipt")
+        fingerprint = hashlib.sha256(canonical_json(computation)).hexdigest()
+        if receipt.get("fingerprint") != fingerprint:
+            raise _InterchangeIntegrityError("identity_mismatch")
+        return computation, fingerprint, receipt
+
+    for event in records:
+        kind = event.get("event_type")
+        if kind not in kinds:
+            continue
+        processed += 1
+        section = ("handoffs" if str(kind).startswith("HANDOFF_") else
+                   "native_outputs" if kind == "NATIVE_OUTPUT_RETAINED" else "observations")
+        if processed > event_bound:
+            integrity["accounting_bound_exceeded"] += 1
+            invalid[section] = True
+            continue
+        details = event.get("details", {})
+        try:
+            if event.get("run_id") != run_root.name or event.get("job_id") not in jobs:
+                raise _InterchangeIntegrityError("identity_mismatch")
+            job = str(event["job_id"])
+            if not isinstance(details, Mapping):
+                raise _InterchangeIntegrityError("malformed_receipt")
+            field = ("handoff_reference" if section == "handoffs" else
+                     "retention_receipt" if section == "native_outputs" else "provenance_receipt")
+            reference = artifact_reference_from_mapping(details.get(field))
+            key = (str(kind), str(event["run_id"]), job, str(event.get("attempt_id")),
+                   reference.path, reference.sha256)
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            if section == "handoffs":
+                from appsec_review.runtime.handoff import verify_outcomes
+                handoff = decode_handoff(_interchange_document(run_root, reference.as_dict()),
+                                         run_id=run_root.name, job_id=job, accepted_only=False)
+                if handoff["attempt_id"] != event.get("attempt_id"):
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if (kind == "HANDOFF_REJECTED") != (handoff["status"] == "REJECTED"):
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                outcomes = verify_outcomes(run_root, handoff)
+                identity = (job, str(handoff["attempt_id"]))
+                prior = publications.get(identity)
+                if prior is not None and prior["sha256"] != reference.sha256:
+                    raise _InterchangeIntegrityError("conflicting_publication")
+                duration = details.get("duration_ms")
+                if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+                        or not math.isfinite(duration) or duration < 0):
+                    raise _InterchangeIntegrityError("malformed_duration")
+                row = publications.setdefault(identity, {
+                    "sha256": reference.sha256, "handoff": handoff, "outcomes": outcomes,
+                    "duration_ms": duration, "validated": False})
+                row["validated"] |= kind == "HANDOFF_VALIDATED"
+            elif section == "native_outputs":
+                computation, fingerprint, receipt = shared(
+                    reference.as_dict(), event, "appsec-review/native-output-retention/1")
+                artifact = artifact_reference_from_mapping(computation.get("artifact"))
+                _interchange_artifact(run_root, artifact.as_dict())
+                if artifact.path != f"data/shared/objects/{artifact.sha256}":
+                    raise _InterchangeIntegrityError("malformed_reference")
+                if receipt["object"] != artifact.as_dict():
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if computation.get("execution_reference") is not None:
+                    _interchange_artifact(run_root, computation["execution_reference"])
+                if integer(computation.get("retained_bytes")) != artifact.size_bytes:
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                integer(computation.get("native_result_count"))
+                boolean(computation.get("complete"))
+                boolean(computation.get("truncated"))
+                if fingerprint not in native:
+                    native[fingerprint] = computation
+                    artifacts[artifact.sha256] = artifact.size_bytes
+                    by_job.setdefault(job, Counter())["native_output_references"] += 1
+            else:
+                computation, _, receipt = shared(
+                    reference.as_dict(), event, "appsec-review/observation-provenance-validation/1")
+                integer(computation.get("observation_count"))
+                integer(computation.get("native_reference_count"))
+                integer(computation.get("provenance_gap_count"))
+                if computation["complete"] and computation["provenance_gap_count"]:
+                    raise _InterchangeIntegrityError("malformed_receipt")
+                boolean(computation.get("complete"))
+                boolean(computation.get("truncated"))
+                actor = computation.get("actor")
+                if not isinstance(actor, Mapping) or any(
+                        actor.get(key) != event.get(key) for key in ("run_id", "job_id", "attempt_id")):
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if not isinstance(computation.get("artifacts"), list):
+                    raise _InterchangeIntegrityError("malformed_receipt")
+                for artifact in computation["artifacts"]:
+                    _interchange_artifact(run_root, artifact)
+                if _interchange_document(run_root, receipt["object"]) != computation:
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if reference.sha256 not in batches:
+                    batches[reference.sha256] = computation
+                    by_job.setdefault(job, Counter())["observation_batches"] += 1
+        except _InterchangeIntegrityError as exc:
+            integrity[exc.code] += 1
+            invalid[section] = True
+        except (ValueError, TypeError, KeyError, OSError, UnicodeError):
+            integrity["malformed_or_unverifiable_receipt"] += 1
+            invalid[section] = True
+
+    coverage = Counter({value.value: 0 for value in CoverageDisposition})
+    execution = Counter({value.value: 0 for value in ExecutionStatus})
+    accepted = rejected = validated = units = retries = retryable_gaps = 0
+    durations = []
+    for (job, _), row in publications.items():
+        handoff, outcomes = row["handoff"], row["outcomes"]
+        accepted += handoff["status"] == "ACCEPTED"
+        rejected += handoff["status"] == "REJECTED"
+        validated += row["validated"]
+        units += len(outcomes["units"])
+        retries += handoff["coverage"]["retry_required"]
+        coverage[handoff["coverage"]["disposition"]] += 1
+        execution[handoff["execution_status"]] += 1
+        durations.append(row["duration_ms"])
+        for gap in outcomes["gaps"]:
+            producer_gaps[GapCode(gap["code"]).value] += 1
+            retryable_gaps += gap["retryable"]
+        by_job.setdefault(job, Counter())["publications"] += 1
+
+    def measured(value: int, section: str, available: bool) -> int | None:
+        return value if available and not invalid[section] else None
+
+    have_handoffs, have_native, have_batches = bool(publications), bool(native), bool(batches)
+    for section, available in (("handoffs", have_handoffs), ("native_outputs", have_native),
+                               ("observations", have_batches)):
+        if not available:
+            integrity[f"{section}_unavailable"] += 1
+    return {
+        "schema": INTERCHANGE_METRICS_SCHEMA,
+        "handoffs": {
+            "accepted": measured(accepted, "handoffs", have_handoffs),
+            "rejected": measured(rejected, "handoffs", have_handoffs),
+            "validated": measured(validated, "handoffs", have_handoffs),
+            "units": measured(units, "handoffs", have_handoffs),
+            "retry_required": measured(retries, "handoffs", have_handoffs),
+            "retryable_gaps": measured(retryable_gaps, "handoffs", have_handoffs),
+            "coverage_dispositions": {key: measured(value, "handoffs", have_handoffs)
+                                      for key, value in coverage.items()},
+            "execution_statuses": {key: measured(value, "handoffs", have_handoffs)
+                                   for key, value in execution.items()},
+            "producer_gap_codes": dict(sorted(producer_gaps.items())),
+            "duration_ms": {"count": len(durations), "sum": sum(durations) if durations else None,
+                            "p50": _percentile(durations, .50), "p95": _percentile(durations, .95),
+                            "max": max(durations) if durations else None},
+            "accounting_complete": have_handoffs and not invalid["handoffs"],
+        },
+        "native_outputs": {
+            "reference_count": measured(len(native), "native_outputs", have_native),
+            "distinct_artifact_count": measured(len(artifacts), "native_outputs", have_native),
+            "distinct_artifact_bytes": measured(sum(artifacts.values()), "native_outputs", have_native),
+            **{name: measured(sum(row[field] == expected for row in native.values()),
+                              "native_outputs", have_native)
+               for name, field, expected in (("complete", "complete", True), ("incomplete", "complete", False),
+                                             ("truncated", "truncated", True))},
+            "native_result_count": measured(sum(row["native_result_count"] for row in native.values()),
+                                             "native_outputs", have_native),
+            "accounting_complete": have_native and not invalid["native_outputs"],
+        },
+        "observations": {
+            **{name: measured(sum(row[field] for row in batches.values()), "observations", have_batches)
+               for name, field in (("count", "observation_count"), ("native_reference_count", "native_reference_count"),
+                                   ("complete_batches", "complete"), ("truncated_batches", "truncated"))},
+            "incomplete_batches": measured(sum(not row["complete"] for row in batches.values()),
+                                           "observations", have_batches),
+            "provenance_complete_count": measured(sum(row["observation_count"] for row in batches.values()
+                                                       if row["complete"]), "observations", have_batches),
+            "provenance_incomplete_count": measured(sum(row["observation_count"] for row in batches.values()
+                                                         if not row["complete"]), "observations", have_batches),
+            "provenance_gap_count": measured(sum(row["provenance_gap_count"] for row in batches.values()),
+                                             "observations", have_batches),
+            "accounting_complete": have_batches and not invalid["observations"],
+        },
+        "by_job": {job: dict(sorted(counts.items())) for job, counts in sorted(by_job.items())},
+        "integrity_gap_codes": dict(sorted(integrity.items())),
+        "duplicate_events": duplicates,
+        "accounting_complete": not integrity,
+    }
+
+
+def _owasp_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    publications, gaps, seen = [], [], set()
+    latest = None
+    for record in records:
+        if record["event_type"] != "OWASP_ASSESSMENT_RECORDED":
+            continue
+        reference = record["details"].get("metrics_receipt")
+        key = (record["attempt_id"], identity_hash(reference) if isinstance(reference, Mapping) else "")
+        if key in seen:
+            continue
+        seen.add(key)
+        latest = None
+        try:
+            report = _receipt_json(run_root, reference)
+            if report.get("schema") != "appsec-review/owasp-workbench-result/1":
+                raise ValueError("unsupported OWASP metrics receipt")
+            coverage = report["coverage"]
+            if (not isinstance(coverage, Mapping) or type(coverage.get("selected_rows")) is not int
+                    or any(type(value) is not int or value < 0 for value in coverage.values())
+                    or any(value > coverage["selected_rows"] for name, value in coverage.items()
+                           if name.endswith("_rows"))):
+                raise ValueError("invalid OWASP coverage denominators")
+            batches = report["telemetry"]
+            source_resolution = Counter()
+            for batch in batches:
+                counters = batch.get("retrieval", {})
+                values = [*counters.values(), *(batch.get(name, 0) for name in (
+                    "model_calls", "model_requested_retrievals", "reused_model_results"))]
+                if any(type(value) is not int or value < 0 for value in values):
+                    raise ValueError("invalid OWASP source-resolution counters")
+                source_resolution.update(counters)
+            input_retrieval = report.get("input_retrieval", {})
+            if any(type(value) is not int or value < 0 for value in input_retrieval.values()):
+                raise ValueError("invalid OWASP input-retrieval counters")
+            latest = {
+                "attempt_id": record["attempt_id"], "receipt": reference,
+                "assessment_mode": report["assessment_mode"], "coverage": dict(coverage),
+                "manifest_sha256": report["index_manifest"]["sha256"],
+                "input_retrieval": input_retrieval,
+                "source_resolution": dict(source_resolution),
+                "model_requested_retrievals": sum(batch.get("model_requested_retrievals", 0) for batch in batches),
+                "reused_model_results": sum(batch.get("reused_model_results", 0) for batch in batches),
+                "declared_model_calls": sum(batch.get("model_calls", 0) for batch in batches),
+                "gap_count": len(report["gaps"]),
+            }
+            publications.append(latest)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+            gaps.append({"attempt_id": record["attempt_id"], "reason": "owasp_metrics_receipt_unavailable",
+                         "error_class": type(exc).__name__})
+    dispatches = [record["details"] for record in records if record["event_type"] == "MODEL_CALL_COMPLETED"
+                  and record["job_id"] == "job_owasp_control_assessment"]
+    calls = [call for call in dispatches if call.get("execution_mode") != "replay"]
+    return {
+        "latest_publication": latest, "publications": publications, "gaps": gaps,
+        "coverage_unavailable_reason": None if latest is not None else "no_valid_publication_receipt",
+        "new_model_calls": sum(record["event_type"] == "MODEL_CALL_STARTED"
+                               and record["job_id"] == "job_owasp_control_assessment"
+                               and record["details"].get("execution_mode") != "replay" for record in records),
+        "completed_model_calls": len(calls),
+        "replay_attempts": sum(call.get("execution_mode") == "replay" for call in dispatches),
+        "model_dispositions": dict(Counter(str(call.get("terminal_status")) for call in calls)),
+        "model_calls_by_role": dict(Counter(str(call.get("role")) for call in calls)),
+        "unknown_usage_calls": sum(any(call.get(name) is None for name in (
+            "input_tokens", "output_tokens")) for call in calls),
+        "verified_reuse_events": sum(record["event_type"] == "OWASP_MODEL_REUSED" for record in records),
+        "model_requested_retrieval_dispositions": dict(Counter(
+            str(record["details"].get("terminal_status")) for record in records
+            if record["event_type"] == "OWASP_RETRIEVAL_COMPLETED")),
+        "interpretation": "publication metrics are not evidence of target safety or accepted job completion",
+    }
+
+
+def _review_flow_metrics(records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    cells, milestones = {}, {}
+    for record in records:
+        event, details = record["event_type"], record["details"]
+        if event == "INFERENCE_REVIEW_CELL_COMPLETED":
+            key = (record["run_id"], record["attempt_id"], details["cell_id"])
+            cells[key] = details
+        milestone = (
+            "control_evidence" if event == "PRECOMPUTED_PRODUCT_PUBLISHED"
+            and details.get("query_set") == "control_evidence" else
+            "packages" if event == "REVIEW_PACKAGES_PUBLISHED" else
+            f"lane:{details.get('lane')}" if event == "INFERENCE_REVIEW_LANE_COMPLETED" else None)
+        if milestone:
+            milestones[(record["job_id"], record["attempt_id"], milestone)] = {
+                "stage": milestone, "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "counts": {name: value for name, value in details.items()
+                           if type(value) is int and name in {
+                               "fact_count", "package_count", "gap_count", "coverage_gap_count",
+                               "cells_run", "cells_reused", "cells_not_launched", "claims", "cells", "gaps"}},
+                "manifest_sha256": details.get("manifest_sha256"),
+                "owasp_manifest_sha256": details.get("owasp_manifest_sha256"),
+                "package_manifest_sha256": details.get("package_manifest_sha256"),
+                "reused": details.get("reused"),
+            }
+    return {
+        "cell_count": len(cells),
+        "cells_by_role": dict(Counter(str(cell["role"]) for cell in cells.values())),
+        "cell_dispositions": dict(Counter(str(cell["terminal_status"]) for cell in cells.values())),
+        "reused_cells": sum(bool(cell["reused"]) for cell in cells.values()),
+        "cell_model_dispatches": sum(cell["model_dispatches"] for cell in cells.values()),
+        "new_model_calls": sum(record["event_type"] == "MODEL_CALL_STARTED"
+                               and record["job_id"] == "job_inference_security_review"
+                               and record["details"].get("execution_mode") != "replay" for record in records),
+        "fresh_retrieval_queries": sum(cell["counts"].get("queries", 0) for cell in cells.values()
+                                       if not cell["reused"]),
+        "milestones": list(milestones.values()),
+        "interpretation": "absent milestones are unrecorded, not successful or zero-work stages",
+    }
+
+
+_NATIVE_SBOM_JOB = "job_dependency_intelligence"
+_NATIVE_SBOM_UNIT = "publication.publish_sbom"
+
+
+def _native_sbom_ref(run_root: Path, value: object) -> Mapping[str, Any]:
+    from appsec_review.storage.shared import verify_reference
+    if (not isinstance(value, Mapping) or not isinstance(value.get("path"), str)
+            or not _native_sbom_hash(value.get("sha256"))
+            or type(value.get("size_bytes")) is not int or value["size_bytes"] < 0):
+        raise ValueError("native SBOM artifact reference is incomplete")
+    verify_reference(run_root, value)
+    return {key: value[key] for key in ("path", "sha256", "size_bytes")}
+
+
+def _native_sbom_hash(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value)
+
+
+def _native_sbom_json(run_root: Path, relative: str) -> Mapping[str, Any]:
+    import json
+    from appsec_review.storage.shared import safe_path
+    value = json.loads(safe_path(run_root, relative).read_bytes())
+    if not isinstance(value, Mapping):
+        raise ValueError("native SBOM metadata is not an object")
+    return value
+
+
+def _native_sbom_receipt(run_root: Path, reference: object, *, attempt_id: str,
+                         source_fingerprint: object, input_fingerprint: object) -> Mapping[str, Any]:
+    from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import (
+        GAP_KINDS, METRIC_COUNTERS, METRICS_SCHEMA, NativeSbomMetrics,
+    )
+    ref = _native_sbom_ref(run_root, reference)
+    if ref["size_bytes"] > 64 * 1024:
+        raise ValueError("native SBOM metrics receipt exceeds its bound")
+    document = _native_sbom_json(run_root, ref["path"])
+    if (set(document) != NativeSbomMetrics.__required_keys__
+            or document.get("schema") != METRICS_SCHEMA):
+        raise ValueError("native SBOM metrics schema mismatch")
+    expected = {"run_id": run_root.name, "job_id": _NATIVE_SBOM_JOB,
+                "attempt_id": attempt_id, "unit_id": _NATIVE_SBOM_UNIT,
+                "source_fingerprint": source_fingerprint, "input_fingerprint": input_fingerprint}
+    if (not _native_sbom_hash(source_fingerprint) or not _native_sbom_hash(input_fingerprint)
+            or any(document.get(key) != value for key, value in expected.items())):
+        raise ValueError("native SBOM metrics provenance mismatch")
+    if (document["status"] not in ("SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED")
+            or document["discovery_status"] not in ("SUCCEEDED", "COMPLETED_WITH_GAPS")
+            or document["conversion_status"] not in ("SUCCEEDED", "FAILED")
+            or document["validation_status"] not in ("SUCCEEDED", "FAILED")):
+        raise ValueError("native SBOM metrics disposition is invalid")
+    counters, gaps = document["counters"], document["gaps_by_kind"]
+    if (not isinstance(counters, Mapping) or set(counters) != set(METRIC_COUNTERS)
+            or not isinstance(gaps, Mapping) or not set(gaps) <= GAP_KINDS
+            or any(type(value) is not int or value < 0
+                   for value in (*counters.values(), *gaps.values()))):
+        raise ValueError("native SBOM metrics counters are invalid")
+    failed = document["status"] == "FAILED"
+    if ((failed and (document["sbom_sha256"] is not None
+                    or document["validation_status"] != "FAILED"))
+            or (not failed and (not _native_sbom_hash(document["sbom_sha256"])
+                               or document["validation_status"] != "SUCCEEDED"))
+            or (document["status"] == "SUCCEEDED" and (
+                document["discovery_status"] != "SUCCEEDED"
+                or document["conversion_status"] != "SUCCEEDED" or any(gaps.values())))):
+        raise ValueError("native SBOM metrics dispositions contradict publication")
+    return document
+
+
+def _native_sbom_accepted(run_root: Path, *,
+                          historical: tuple[str, str] | None = None) -> Mapping[str, Any] | None:
+    from appsec_review.jobs.engineering_contracts import DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
+    from appsec_review.storage.shared import safe_path
+    latest = f"data/jobs/{_NATIVE_SBOM_JOB}/latest.json"
+    if historical is None:
+        if not safe_path(run_root, latest).exists():
+            return None
+        pointer = _native_sbom_json(run_root, latest)
+    else:
+        attempt, digest = historical
+        pointer = {"schema": "appsec-review/latest-handoff/1", "attempt_id": attempt,
+                   "handoff_path": f"data/jobs/{_NATIVE_SBOM_JOB}/attempts/{attempt}/handoff.json",
+                   "handoff_sha256": digest}
+    attempt = pointer.get("attempt_id")
+    if (pointer.get("schema") != "appsec-review/latest-handoff/1"
+            or not isinstance(attempt, str) or not attempt
+            or pointer.get("handoff_path") != f"data/jobs/{_NATIVE_SBOM_JOB}/attempts/{attempt}/handoff.json"):
+        raise ValueError("native SBOM accepted pointer is invalid")
+    handoff_ref = _native_sbom_ref(run_root, {
+        "path": pointer["handoff_path"], "sha256": pointer.get("handoff_sha256"),
+        "size_bytes": safe_path(run_root, pointer["handoff_path"]).stat().st_size,
+    })
+    handoff = decode_handoff(_native_sbom_json(run_root, handoff_ref["path"]),
+                             run_id=run_root.name, job_id=_NATIVE_SBOM_JOB)
+    if (handoff.get("attempt_id") != attempt
+            or not _native_sbom_hash(handoff.get("source_fingerprint"))):
+        raise ValueError("native SBOM framework handoff binding is invalid")
+    members = handoff.get("artifacts")
+    if not isinstance(members, list):
+        raise ValueError("native SBOM framework artifact inventory is missing")
+
+    def member(reference: object) -> Mapping[str, Any]:
+        ref = _native_sbom_ref(run_root, reference)
+        matches = [item for item in members if isinstance(item, Mapping)
+                   and item.get("path") == ref["path"]]
+        if not matches or any(any(item.get(key) != ref[key] for key in ref) for item in matches):
+            raise ValueError("native SBOM publication lacks exact framework membership")
+        return ref
+
+    outputs = handoff.get("outputs")
+    output = outputs.get("acceptance.publish_handoff") if isinstance(outputs, Mapping) else None
+    if not isinstance(output, Mapping):
+        raise ValueError("native SBOM accepted publication is missing")
+    publication_ref = member(output.get("artifact"))
+    publication = _native_sbom_json(run_root, publication_ref["path"])
+    if (publication.get("schema") != DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
+            or publication.get("source_fingerprint") != handoff["source_fingerprint"]):
+        raise ValueError("native SBOM publication snapshot/schema mismatch")
+    if "sbom" not in publication:
+        return {"document": None, "reference": None, "handoff_sha256": handoff_ref["sha256"]}
+    sbom = publication["sbom"]
+    if (not isinstance(sbom, Mapping) or sbom.get("format") != "spdx-json"
+            or sbom.get("spec_version") != "2.3"):
+        raise ValueError("native SBOM advertised publication is invalid")
+    metrics_ref = member(sbom.get("metrics"))
+    document = _native_sbom_receipt(
+        run_root, metrics_ref, attempt_id=attempt,
+        source_fingerprint=handoff["source_fingerprint"], input_fingerprint=sbom.get("input_fingerprint"))
+    if sbom.get("status") != document["status"] or "artifact" not in sbom:
+        raise ValueError("native SBOM publication/metrics disposition mismatch")
+    artifact = sbom["artifact"]
+    if artifact is None:
+        if document["status"] != "FAILED":
+            raise ValueError("native SBOM successful publication has no artifact")
+    elif member(artifact)["sha256"] != document["sbom_sha256"]:
+        raise ValueError("native SBOM publication/metrics artifact mismatch")
+    member(sbom.get("provenance"))
+    if sbom.get("baseline") is not None:
+        member(sbom["baseline"])
+    return {"document": document, "reference": metrics_ref, "handoff_sha256": handoff_ref["sha256"]}
+
+
+def _native_sbom_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import GAP_KINDS, METRIC_COUNTERS
+    gaps: list[str] = []
+    sources: dict[tuple[str, str], dict[str, Any]] = {}
+    reuse: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    handoffs: dict[tuple[str, str], set[str]] = {}
+    failures: set[tuple[str, str]] = set()
+    accepted = None
+    try:
+        accepted = _native_sbom_accepted(run_root)
+    except (OSError, ValueError, UnicodeError) as exc:
+        gaps.append(f"native SBOM accepted publication: {exc}")
+
+    for event in records:
+        details = event.get("details", {})
+        kind = event["event_type"]
+        if event.get("job_id") != _NATIVE_SBOM_JOB:
+            if kind == "NATIVE_SBOM_RESULT":
+                gaps.append("native SBOM result has an unexpected job")
+            continue
+        key = (str(event["run_id"]), str(event["attempt_id"]))
+        unit = details.get("unit_id") or ".".join(
+            str(event.get(field) or "") for field in ("step_id", "task_id"))
+        if kind == "NATIVE_SBOM_RESULT":
+            binding = {name: details.get(name) for name in (
+                "metrics_receipt", "input_fingerprint", "source_fingerprint", "status")}
+            binding["unit_id"] = unit
+            source = sources.setdefault(key, {"binding": binding, "invalid": False, "document": None})
+            if source["binding"] != binding:
+                source["invalid"] = True
+                gaps.append("native SBOM result has conflicting duplicate receipts")
+            if (unit != _NATIVE_SBOM_UNIT or event["run_id"] != run_root.name
+                    or (event.get("step_id") not in {None, "publication"})
+                    or (event.get("task_id") not in {None, "publish_sbom"})):
+                source["invalid"] = True
+                gaps.append("native SBOM result has an invalid event binding")
+        elif kind == "JOB_REUSED" or kind == "TASK_REUSED" and unit == _NATIVE_SBOM_UNIT:
+            reuse.setdefault(key, []).append(details)
+        elif kind == "HANDOFF_ACCEPTED" and _native_sbom_hash(details.get("handoff_sha256")):
+            handoffs.setdefault(key, set()).add(details["handoff_sha256"])
+        elif (kind in {"JOB_FAILED", "TASK_FAILED", "STEP_FAILED"}
+              or kind == "OPERATION_COMPLETED" and details.get("terminal_status") == "FAILED"
+              and details.get("operation_id") in {"native-sbom.discovery", "native-sbom.publication"}):
+            failures.add(key)
+
+    for key, source in sources.items():
+        if source["invalid"]:
+            continue
+        try:
+            claim = _native_sbom_json(
+                run_root, f"data/jobs/{_NATIVE_SBOM_JOB}/attempts/{key[1]}/claim.json")
+            if (claim.get("schema") != "appsec-review/attempt-claim/1"
+                    or any(claim.get(name) != value for name, value in (
+                        ("run_id", key[0]), ("job_id", _NATIVE_SBOM_JOB), ("attempt_id", key[1])))):
+                raise ValueError("native SBOM attempt claim binding mismatch")
+            binding = source["binding"]
+            if (binding["source_fingerprint"] is not None
+                    and binding["source_fingerprint"] != claim.get("source_fingerprint")):
+                raise ValueError("native SBOM event snapshot mismatch")
+            source["document"] = _native_sbom_receipt(
+                run_root, binding["metrics_receipt"], attempt_id=key[1],
+                source_fingerprint=claim.get("source_fingerprint"),
+                input_fingerprint=binding["input_fingerprint"])
+            if binding["status"] is not None and binding["status"] != source["document"]["status"]:
+                raise ValueError("native SBOM event disposition mismatch")
+        except (OSError, ValueError, UnicodeError) as exc:
+            source["invalid"] = True
+            gaps.append(f"native SBOM result receipt: {exc}")
+
+    selected = accepted["document"] if accepted is not None else None
+    legacy = accepted is not None and selected is None
+    selected_key = (run_root.name, str(selected["attempt_id"])) if selected is not None else None
+    if selected_key in sources:
+        source = sources[selected_key]
+        if (source["invalid"] or source["document"] != selected
+                or source["binding"]["metrics_receipt"] != accepted["reference"]):
+            gaps.append("native SBOM accepted metrics conflict with result event")
+            source["invalid"] = True
+            selected = None
+
+    rows = []
+    reused_count = 0
+    keys = set(sources) | failures | (set(reuse) if not legacy or sources else set())
+    for key in sorted(keys):
+        source = sources.get(key)
+        document = source["document"] if source and not source["invalid"] else None
+        reused = key in reuse
+        invalid = bool(source and source["invalid"])
+        if reused:
+            reused_publication = accepted if key == selected_key else None
+            try:
+                hashes = handoffs.get(key, set()) | {
+                    item["handoff_sha256"] for item in reuse[key]
+                    if _native_sbom_hash(item.get("handoff_sha256"))}
+                if key[0] != run_root.name or len(hashes) > 1:
+                    raise ValueError("native SBOM reuse has a conflicting handoff")
+                if reused_publication is None and len(hashes) == 1:
+                    reused_publication = _native_sbom_accepted(
+                        run_root, historical=(key[1], next(iter(hashes))))
+                if (reused_publication is None or reused_publication["document"] is None or any(
+                        item.get("handoff_sha256") is not None
+                        and item["handoff_sha256"] != reused_publication["handoff_sha256"]
+                        for item in reuse[key])):
+                    raise ValueError("native SBOM reused publication is unavailable")
+                if source and (source["invalid"] or source["document"] != reused_publication["document"]):
+                    raise ValueError("native SBOM reused metrics conflict with result event")
+                document = reused_publication["document"]
+                reused_count += 1
+            except (OSError, ValueError, UnicodeError) as exc:
+                invalid = True
+                gaps.append(f"native SBOM reuse: {exc}")
+        fresh = source is not None or key in failures
+        if document is None and not invalid:
+            gaps.append("native SBOM failed attempt has no metrics receipt")
+        status = ("INTEGRITY_ERROR" if invalid else "FAILED" if key in failures else
+                  str(document["status"]) if document is not None else "INCOMPLETE")
+        if invalid:
+            document = None
+        rows.append({
+            "run_id": key[0], "job_id": _NATIVE_SBOM_JOB, "attempt_id": key[1],
+            "unit_id": _NATIVE_SBOM_UNIT, "reused": reused, "fresh_work": fresh, "status": status,
+            "publication_status": document["status"] if document is not None else None,
+            **{name: document[name] if document is not None else None for name in (
+                "source_fingerprint", "input_fingerprint", "sbom_sha256",
+                "discovery_status", "conversion_status", "validation_status")},
+            "counters": {name: document["counters"][name] if document is not None else None
+                         for name in METRIC_COUNTERS},
+            "gaps_by_kind": {name: document["gaps_by_kind"].get(name, 0) if document is not None else None
+                             for name in sorted(GAP_KINDS)},
+            "accounting_complete": document is not None,
+            "duration_ms": None, "resources": None,
+            "resource_timing_unavailable_reason": "metrics_receipt_has_no_resource_timing",
+        })
+
+    inventory_document = selected if selected is not None and selected["status"] != "FAILED" else None
+    inventory = {
+        "availability": "available" if inventory_document is not None else "not_available",
+        **{name: selected[name] if selected is not None else None for name in (
+            "status", "source_fingerprint", "input_fingerprint", "sbom_sha256")},
+        "counters": {name: inventory_document["counters"][name] if inventory_document is not None else None
+                     for name in METRIC_COUNTERS},
+        "gaps_by_kind": {name: selected["gaps_by_kind"].get(name, 0) if selected is not None else None
+                         for name in sorted(GAP_KINDS)},
+    }
+    available = bool(rows or selected is not None)
+    if (sources or reused_count) and selected is None:
+        gaps.append("native SBOM current inventory has no accepted publication")
+    complete = available and not gaps and all(row["accounting_complete"] for row in rows)
+    return {
+        "availability": "partial" if gaps else "available" if available else "not_available",
+        "accounting_complete": complete, "attempt_count": len(rows),
+        "attempt_outcomes": dict(sorted(Counter(row["status"] for row in rows).items())),
+        "fresh_work": sum(row["fresh_work"] for row in rows),
+        "reused_publication_count": reused_count, "attempts": rows,
+        "current_inventory": inventory, "gaps": sorted(set(gaps)),
+    }
+
+
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.jobs.job_openvex_export.metrics import aggregate_openvex_metrics
+
     records, torn = PipelineLog(run_root).read()
     for record in records:
         validate_event(record)
+    openvex = aggregate_openvex_metrics(Path(run_root), records)
     tree_sitter = _tree_sitter_metrics(Path(run_root), records)
+    native_sbom = _native_sbom_metrics(Path(run_root), records)
     raw_event_count = len(records)
     raw_event_counts = Counter(str(record["event_type"]) for record in records)
     unique_records = []
@@ -800,13 +1496,17 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         if record["event_type"] == "MODEL_CALL_COMPLETED":
             model_usage.append({
                 "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "step_id": record.get("step_id"), "task_id": record.get("task_id"),
                 "invocation_id": details.get("model_invocation_id"),
+                **{name: details.get(name) for name in (
+                    "role", "persona", "cell_id", "batch_id", "package_id", "lane",
+                    "terminal_status", "error_class", "served_provider", "served_model", "execution_mode")},
                 "provider": details.get("provider"), "model": details.get("model"),
                 "duration_ms": details.get("duration_ms"), "retry_count": details.get("retry_count"),
                 "input_tokens": details.get("input_tokens"), "output_tokens": details.get("output_tokens"),
                 "cache_tokens": details.get("cache_tokens"), "cost": details.get("cost"),
                 "cost_unavailable_reason": None if details.get("cost") is not None else "no_trusted_rate_source",
-                "usage_unavailable_reason": ("provider_usage_unavailable" if any(
+                "usage_unavailable_reason": details.get("usage_unavailable_reason") or ("provider_usage_unavailable" if any(
                     details.get(name) is None for name in ("input_tokens", "output_tokens", "cache_tokens"))
                     else None),
             })
@@ -817,7 +1517,8 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             tool_calls[str(details.get("tool_id") or details.get("mcp_tool") or "unknown")] += 1
         if record["event_type"] == "FINDING_TRANSITION":
             finding_states[str(details.get("new_state"))] += 1
-        if isinstance(details.get("duration_ms"), (int, float)):
+        if (type(details.get("duration_ms")) in (int, float)
+                and math.isfinite(details["duration_ms"]) and details["duration_ms"] >= 0):
             durations_ms[str(record["event_type"])] += details["duration_ms"]
             identity = _operation_identity(record)
             operation_durations.setdefault(identity, []).append(details["duration_ms"])
@@ -935,8 +1636,15 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
+            "interchange": _interchange_metrics(Path(run_root), records),
+            "completion": completion_metrics(records),
+            "owasp": _owasp_metrics(Path(run_root), records),
+            "review_flow": _review_flow_metrics(records),
+            "openvex": openvex,
             "tree_sitter": tree_sitter,
+            "native_sbom": native_sbom,
             "codeql": _codeql_metrics(Path(run_root), records),
+            "debug_symbols": debug_symbol_metrics(records),
             "torn_tail_ignored": torn}
 
 
@@ -963,4 +1671,5 @@ def emit_model_event(log: PipelineLog, *, event_type: str, run_id: str, invocati
                "input_tokens": input_tokens, "output_tokens": output_tokens,
                "cache_tokens": cache_tokens, "error_class": error_class, **correlation}
     return log.write(event_type, run_id=run_id, job_id=str(correlation.get("job_id", "inference")),
-                     attempt_id=str(correlation.get("attempt_id", "-")), details=details)
+                     attempt_id=str(correlation.get("attempt_id", "-")),
+                     step_id=correlation.get("step_id"), task_id=correlation.get("task_id"), details=details)

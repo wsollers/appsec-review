@@ -343,3 +343,18 @@ def test_wasm_sibling_failure_isolated(tmp_path: Path) -> None:
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "crate": "SUCCEEDED", "sibling": "FAILED"}
+    from appsec_review.runtime.handoff import verify_handoff_integrity
+    run_root = config.runtime.runs_dir / run_id
+    latest = json.loads((run_root / "data" / "jobs" / "job_language_build" / "latest.json").read_text())
+    first_handoff = json.loads((run_root / latest["handoff_path"]).read_text())
+    first_by_root = {item["root"]: item for item in receipts}
+    GraphRunner(config, [build_language(executor_factory=lambda unit, profile: WasmExecutor([]))]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id,
+        force_from="job_language_build")
+    verify_handoff_integrity(run_root, first_handoff)
+    resumed = load_accepted_language_build(run_root)["receipts"]
+    second_by_root = {item["root"]: item for item in resumed}
+    assert second_by_root["crate"]["checkpoint_reused"] is True
+    assert second_by_root["crate"]["workspace"] == first_by_root["crate"]["workspace"]
+    assert second_by_root["sibling"]["checkpoint_reused"] is False
+    assert second_by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]

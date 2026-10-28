@@ -4,6 +4,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 
 - [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
+- [`job-interchange.md`](job-interchange.md) — versioned job envelopes, outcomes, native-result
+  references, observation metadata, offline schema, identity boundaries, and migration.
 - [`build-environments-and-execution-capture.md`](build-environments-and-execution-capture.md) —
   shared and project-derived build images, conditional capture control design, the pinned
   `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
@@ -15,14 +17,17 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`clang-static-analysis.md`](clang-static-analysis.md) — Clang-Tidy and Clang Static Analyzer over accepted C/C++ compile scopes.
 - [`test-coverage-ingestion.md`](test-coverage-ingestion.md) — bounded LCOV, Cobertura, JaCoCo, and LLVM coverage normalization and source binding.
 - [`profile-data.md`](profile-data.md) — bounded folded-stack, perf-script, Callgrind, and LLVM sample-profile ingestion with context-only hotness ranks.
+- [`debug-symbol-indexing.md`](debug-symbol-indexing.md) — run-selected Clang/DWARF and MSVC/PDB evidence, explicit workflow routing, bounded symbol queries, and test-first acceptance.
 - [`dependency-intelligence.md`](dependency-intelligence.md) — declared, SBOM, linker, loader, and metadata dependency resolution with OpenSSF Scorecard context.
+- [`native-sbom.md`](native-sbom.md) — bounded vendored/header-only discovery, evidence-backed identity claims, SPDX 2.3 enrichment, and metric correctness.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
 - [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.
 - [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
   runtime skills: which consumer reaches the data how.
 - [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
-- [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
+- [`owasp-control-workbench.md`](owasp-control-workbench.md) — pre-hunt OWASP flow/diagram, full pinned
+  catalogs versus four Python procedures, evidence custody, blinded review and provisional downstream context.
 - [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — faceted, basis-qualified security
   tag vocabulary, crosswalk, and tag-cloud rollup produced by `job_security_tagging`.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
@@ -34,6 +39,10 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   scope-sprawl, repeated-repair, test-churn, and ownership signals with a review-priority index.
 - [`../operations/change-context-analysis.md`](../operations/change-context-analysis.md) —
   change-context sources, export pinning, configuration, and retrieval.
+- [`../operations/target-acquisition.md`](../operations/target-acquisition.md) — hash-pinned,
+  parallel acquisition of a review system's components (Git by default with recursive submodules,
+  Perforce, GitLab/Gerrit/Azure DevOps review exports) into `targets/<system>/` by the
+  `job_target_acquisition` gate before intake, and the manifests intake records.
 - [`review-prioritization.md`](review-prioritization.md) — function-level cyclomatic and cognitive
   complexity, import coupling, boundary/privilege/suppression heuristics, CodeQL source-to-sink
   paths, and the LLM Prioritization Score.
@@ -54,8 +63,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
   route and boundary analysis, inference access, and the finding handoff design.
 - [`binary-decompilation.md`](binary-decompilation.md) — pre-run Ghidra decompilation of third-party
-  binaries: inputs, the hash-addressed publication store, gaps, how a review references a
-  publication, and the known-binary efficacy comparison.
+  binaries: inputs, the hash-addressed publication store, gaps, review intake and the
+  `job_binary_evidence_indexing` shards a review cites, and the known-binary efficacy comparison.
 - [`../operations/binary-decompilation.md`](../operations/binary-decompilation.md) — registering a
   binary, starting and verifying a decompilation, failures, and the efficacy command.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
@@ -73,7 +82,31 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   answers, and how stances become ledger states.
 - [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
   `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
-- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
+- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — delivered source for
+  PoC publication, evidence-qualified attack chains, remediation planning and assurance-labelled
+  validation, with one final gate after all producers; preserves compile-only PoC policy.
+- [`dossier-data-inventory.md`](dossier-data-inventory.md) — source-verified dossier input, query,
+  index/shard, producer, dataset visibility and provenance inventory; available evidence versus
+  admissibility, missing capabilities and the completion architecture change map.
+- [`../operations/dossier-publication.md`](../operations/dossier-publication.md) — implemented protected
+  per-confirmed-finding and per-PoC-outcome dossier publication before the final gate,
+  retained JSON/LaTeX/PDF/receipts, nonexecution assurance and render-gap behavior.
+- [`../reviews/evidence-completion-documentation-inventory.md`](../reviews/evidence-completion-documentation-inventory.md) —
+  documentation inventory/reconciliation record, source baselines, outstanding implementation
+  details and known target-link check baseline.
+- [`../operations/remediation.md`](../operations/remediation.md) — confirmed-only exact patch
+  planning, safe regression specifications, bounded nonexecuting native syntax validation,
+  protected receipts, automatic new-run defaults and remaining acceptance gaps.
+- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
+  compile-only test/control functions, immutable protected attempt files, enabled new-run pre-gate
+  ordering and explicit authenticated manual admission for frozen disabled runs.
+- [`openvex-export.md`](openvex-export.md) — standalone affected-only deterministic OpenVEX export,
+  immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
+  certified gate `/2` reader/verifier/projector and telemetry; gate-only report preserved,
+  combined verification and final landing tracked separately.
+- [`../operations/openvex-export.md`](../operations/openvex-export.md) — operator setup,
+  certified-gate dataflow and independent post-gate outputs, export-status diagrams,
+  accounting, privacy, metrics refresh and remaining validation limits.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph

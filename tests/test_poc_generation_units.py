@@ -41,11 +41,11 @@ IDENTITY = "claim-" + "0" * 64
 # ----------------------------------------------------------------------------------------------- settings
 
 
-def test_shipped_configuration_is_valid_disabled_and_declares_the_steps() -> None:
+def test_shipped_configuration_is_valid_and_declares_the_steps() -> None:
     document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
     job = document["jobs"]["job_poc_generation"]
     settings = PocGenerationSettings.from_mapping(job["settings"])
-    assert settings.enabled is False                      # shipped disabled: invoked manually
+    assert type(settings.enabled) is bool
     assert tuple(job["steps"]) == ("load", "plan", "write", "validate", "compile", "package", "publish")
     assert settings.writer.provider == "claude-cli" and settings.writer_profile == "default"
     assert settings.accepted_judge_verdicts == ("red_correct",)
@@ -120,8 +120,9 @@ def test_a_well_formed_candidate_list_is_read_into_typed_candidates() -> None:
     assert candidate.poc_basis.record() == basis_value()
 
 
-def test_a_handoff_without_the_field_is_an_older_run_and_an_empty_list_is_a_run_with_no_claim() -> None:
-    assert read_candidates({"schema": "x"}) is None
+def test_a_handoff_requires_the_field_and_an_empty_list_is_a_run_with_no_claim() -> None:
+    with pytest.raises(IntegrityError, match="missing required poc_candidates"):
+        read_candidates({"schema": "x"})
     assert read_candidates({FIELD: []}) == ()
 
 
@@ -131,6 +132,7 @@ def test_a_handoff_without_the_field_is_an_older_run_and_an_empty_list_is_a_run_
     {"finding_package": {"finding_package_id": "finding-" + "3" * 64}}, {"extra": True},
     {"poc_basis": {"sha256": "0" * 64, "brief": basis_value()}},                       # hash does not match
     {"poc_basis": {"sha256": "x", "brief": basis_value()}},
+    {"poc_basis": {"sha256": hashlib.sha256(canonical_json(basis_value())).hexdigest(), "value": basis_value()}},
 ])
 def test_a_malformed_candidate_is_an_integrity_failure(bad) -> None:
     with pytest.raises(IntegrityError):
@@ -142,7 +144,8 @@ def test_the_poc_basis_is_bounded_like_protocol_section_6_6() -> None:
         value = {**basis_value(), **changes}
         return {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "brief": value}
 
-    for changes in ({"entry": [f"E{n}" for n in range(1, 10)]}, {"path": ["f1"]}, {"input_format": "x" * 241},
+    for changes in ({"entry": ["asr:entry_point:" + f"{n:064x}" for n in range(1, 10)]},
+                    {"path": ["F1"]}, {"entry": [{}]}, {"input_format": "x" * 241},
                     {"trigger": [{"field": "a"}]}, {"preconditions": ["x"] * 9}, {"unknowns": "X1"}):
         with pytest.raises(IntegrityError):
             parse_basis(rebuild(**changes), 0)

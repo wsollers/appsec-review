@@ -133,8 +133,10 @@ def partition_scopes(scopes: Iterable[Scope], locks: Mapping[str, GrammarLock]) 
 
 def scope_fingerprint(*, target_snapshot: str, scope: Scope, grammar: GrammarLock,
                       image_id: str, normalizer_schema: str, limits: Mapping[str, int]) -> str:
+    from appsec_review.retrieval.syntax_contract import SCHEMA as PROJECTION_SCHEMA
     return hashlib.sha256(canonical_json({
         "schema": "appsec-review/tree-sitter-scope-fingerprint/1",
+        "syntax_projection": PROJECTION_SCHEMA,
         "target_snapshot": target_snapshot,
         "delivery_policy": POLICY_IDENTITY,
         "source_resolution": SOURCE_IDENTITY,

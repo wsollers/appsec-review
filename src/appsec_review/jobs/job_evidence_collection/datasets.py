@@ -19,7 +19,7 @@ DATASETS = (
             indexes=("observations",),
             route="find/search index=observations; query_precomputed query_set=scanner_correlation"),
     artifact_only("static_tool_evidence", "evidence_publication", "scanner_findings",
-                  "appsec-review/static-tool-evidence/1",
+                  "appsec-review/static-tool-evidence/2",
                   "Normalized per-tool evidence documents, checkpoints and the evidence handoff.",
                   artifacts=(_A + "/steps/*/tasks/*/evidence.json", _A + "/steps/*/tasks/*/handoff.json",
                              "data/task-checkpoints/job_evidence_collection/**"),

@@ -124,7 +124,7 @@ def test_production_profile_preserves_all_prod_settings_except_transport():
     names = {"claude-sonnet-5-5": "claude-sonnet-5.5", "claude-opus-5-5": "claude-opus-5.5"}
     for job_id, job in before["jobs"].items():
         settings = job["settings"]
-        models = ([settings["model"]] if "model" in settings else
+        models = (([settings["model"]] if "model" in settings else []) +
                   list(settings.get("models", {}).values()))
         for model in models:
             assert model["provider"] == "claude-cli"

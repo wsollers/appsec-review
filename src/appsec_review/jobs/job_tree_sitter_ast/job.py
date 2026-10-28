@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Callable, Mapping
 from concurrent.futures import as_completed
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
@@ -53,8 +55,7 @@ def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], s
         raise ValueError(f"accepted {job_id} handoff is required")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _read_verified(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError(f"{job_id} handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
     return handoff, str(pointer["handoff_sha256"])
 
 
@@ -231,7 +232,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         coverage_sha = coverage.build()
         indexes.append(IndexIdentity("analysis", "appsec-review/retrieval-index/2", coverage_sha,
             coverage_fingerprint, coverage_path.relative_to(unit.job.run_root).as_posix(),
-            {"job": "job_tree_sitter_ast", "unit": unit.unit_id}, tuple(parsed["gaps"]),
+            {"job": "job_tree_sitter_ast", "unit": unit.unit_id,
+             "scope_languages": {str(value["scope_id"]): str(value["language"])
+                                 for value in parsed["dispositions"]}}, tuple(parsed["gaps"]),
             f"tree-sitter-coverage-{unit.job.attempt_id}"))
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)

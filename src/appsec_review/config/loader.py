@@ -15,9 +15,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote, urlparse
 
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
+from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
+from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 
 
 class ProcessingMode(str, Enum):
@@ -513,6 +515,10 @@ PROFILE_MODEL_JOBS: tuple[str, ...] = (
     "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
     "job_dependency_intelligence", "job_owasp_control_assessment")
 PROFILE_NAMED_MODEL_JOBS: tuple[str, ...] = ("job_poc_generation",)
+PROFILE_COMPLETION_MODEL_JOBS: Mapping[str, str] = MappingProxyType({
+    "job_remediation_planning": "writer",
+    "job_remediation_validation": "reviewer",
+})
 PROFILE_JOB_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
     "timeout_seconds": int, "retries": int})
@@ -547,6 +553,7 @@ class AppConfig:
     overlay_path: Path | None = None
     overlay_sha256: str | None = None
     binary_decompilation: BinaryDecompilationSettings = BinaryDecompilationSettings()
+    target_acquisition: TargetAcquisitionSettings = TargetAcquisitionSettings()
     banned_functions: BannedFunctions = BannedFunctions()
     profile: str = DEFAULT_PROFILE
     profile_path: Path | None = None
@@ -555,6 +562,7 @@ class AppConfig:
     # How the profile and overlay were chosen: the process environment, or a run's launch tags
     # (``appsec_review.config.run_selection``). Recorded in a run's configuration manifest; not hashed.
     selection_source: str = "environment"
+    compiler_target: CompilerTarget = CompilerTarget.CLANG
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -579,7 +587,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
     A profile may set only: the ``model`` table of the five model-calling jobs
     (``PROFILE_JOB_MODEL_KEYS``), model profiles of the inference review
     (``PROFILE_REVIEW_MODEL_KEYS``), ``model_profile`` of its roles, and its ``budgets``
-    (``PROFILE_BUDGET_KEYS``), plus the two explicit lane exploration settings. Every other key,
+    (``PROFILE_BUDGET_KEYS``), the two lane exploration settings, team capacity and active-claim cap. Every other key,
     wrong type and empty table is rejected by name.
     """
     from .inference_review import JOB_ID, parse_team_package_budget
@@ -603,14 +611,22 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
         return [f"{field}.{key}" for key in values]
 
     root = table(document, "", {"jobs"})
-    jobs = table(root["jobs"], "jobs", {*PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, JOB_ID})
+    jobs = table(root["jobs"], "jobs", {
+        *PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, *PROFILE_COMPLETION_MODEL_JOBS, JOB_ID})
     keys: list[str] = []
     for job_id in sorted(jobs):
         field = f"jobs.{job_id}"
         job = table(jobs[job_id], field, {"settings"})
         if job_id in PROFILE_MODEL_JOBS:
-            settings = table(job["settings"], f"{field}.settings", {"model"})
-            keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
+            settings = table(job["settings"], f"{field}.settings",
+                             {"model", "models"} if job_id == "job_owasp_control_assessment" else {"model"})
+            if "model" in settings:
+                keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
+            if "models" in settings:
+                for name, model in table(settings["models"], f"{field}.settings.models").items():
+                    if name != "reviewer":
+                        raise ValueError("OWASP profiles may override only the reviewer model")
+                    keys += typed(model, f"{field}.settings.models.{name}", PROFILE_JOB_MODEL_KEYS)
             continue
         if job_id in PROFILE_NAMED_MODEL_JOBS:
             settings = table(job["settings"], f"{field}.settings", {"models"})
@@ -620,7 +636,15 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                     raise ValueError(f"configuration profile model profile name is invalid: {name}")
                 keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
             continue
-        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes"})
+        if job_id in PROFILE_COMPLETION_MODEL_JOBS:
+            model_field = PROFILE_COMPLETION_MODEL_JOBS[job_id]
+            settings = table(job["settings"], f"{field}.settings", {model_field})
+            keys += typed(settings[model_field], f"{field}.settings.{model_field}", PROFILE_REVIEW_MODEL_KEYS)
+            continue
+        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes", "teams", "rounds"})
+        for section, key in (("teams", "review_teams"), ("rounds", "max_active_claims")):
+            if section in settings:
+                keys += typed(settings[section], f"{field}.settings.{section}", {key: int})
         if "lanes" in settings:
             keys += typed(settings["lanes"], f"{field}.settings.lanes",
                           {"exploration_enabled": bool, "exploration_reserve": int})
@@ -663,16 +687,24 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
     for job_id, job in profile["jobs"].items():
         settings = job["settings"]
         if job_id in PROFILE_MODEL_JOBS:
-            base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
+            if "model" in settings:
+                base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
+            for name, values in settings.get("models", {}).items():
+                base_table(("jobs", job_id, "settings", "models", name)).update(values)
             continue
         if job_id in PROFILE_NAMED_MODEL_JOBS:
             named = ("jobs", job_id, "settings", "models")
             for name, values in settings["models"].items():
                 base_table((*named, name)).update(values)
             continue
+        if job_id in PROFILE_COMPLETION_MODEL_JOBS:
+            model_field = PROFILE_COMPLETION_MODEL_JOBS[job_id]
+            base_table(("jobs", job_id, "settings", model_field)).update(settings[model_field])
+            continue
         review = ("jobs", job_id, "settings")
-        if "lanes" in settings:
-            base_table((*review, "lanes")).update(settings["lanes"])
+        for section in ("lanes", "teams", "rounds"):
+            if section in settings:
+                base_table((*review, section)).update(settings[section])
         for name, values in settings.get("models", {}).items():
             models = base_table((*review, "models"))
             models.setdefault(name, {}).update(values)
@@ -777,7 +809,7 @@ def _config_source(path: str | Path) -> Path:
 
 
 def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None,
-                profile: str | None = None) -> AppConfig:
+                profile: str | None = None, compiler_target: str | None = None) -> AppConfig:
     """Load the explicit (or repository default) configuration, a runtime profile and an optional capacity overlay.
 
     The profile is ``profile`` when given, otherwise ``APPSEC_REVIEW_PROFILE``, otherwise ``dev``. ``dev``
@@ -822,6 +854,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
                           "keys": list(overlay_keys), "document": overlay_document}
     resolved_document = copy.deepcopy(document)
+    selected_compiler = parse_compiler_target("clang" if compiler_target is None else compiler_target)
+    resolved_document["compiler_target"] = selected_compiler.value
     review_policy = parse_review_policy(document.get("review_policy", {}))
     resolved_document["review_policy"] = review_policy.view()
     resolved_document["configuration_profile"] = profile_record
@@ -842,6 +876,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
     binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
+    target_acquisition = parse_target_acquisition(document.get("target_acquisition"), repository_root)
     banned_functions = parse_banned_functions(document.get("banned_functions"))
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
@@ -1100,12 +1135,34 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_inference_security_review":
             from .inference_review import parse_inference_review_settings
             typed_settings = parse_inference_review_settings(settings)
+        elif job_id == "job_dossier_publication":
+            from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
+            typed_settings = DossierPublicationSettings.from_mapping(settings)
+        elif job_id == "job_openvex_export":
+            from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+            typed_settings = OpenVexExportSettings.from_mapping(settings)
+        elif job_id == "job_remediation_planning":
+            from .remediation import RemediationPlanningSettings
+            typed_settings = RemediationPlanningSettings.from_mapping(settings)
+        elif job_id == "job_remediation_validation":
+            from .remediation import RemediationValidationSettings
+            typed_settings = RemediationValidationSettings.from_mapping(settings)
+        elif job_id == "job_owasp_control_assessment":
+            from .owasp import parse_settings as parse_owasp_settings
+            typed_settings = parse_owasp_settings(settings)
         elif job_id == "job_image_pin_verification":
             from .image_pin_verification import parse_image_pin_verification_settings
             typed_settings = parse_image_pin_verification_settings(settings)
         elif job_id == "job_evidence_collection":
             from .evidence_collection import parse_evidence_collection_settings
             typed_settings = parse_evidence_collection_settings(settings)
+        elif job_id == "job_debug_symbol_indexing":
+            from .debug_symbols import parse_debug_symbol_settings
+            if "compiler_target" in settings:
+                raise ValueError("compiler_target is selected at run start, not in job settings")
+            settings["compiler_target"] = selected_compiler.value
+            settings = parse_debug_symbol_settings(settings)
+            typed_settings = MappingProxyType(settings)
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -1117,6 +1174,16 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             build_capture=resolved_capture,
             exclusions=job_exclusions(job_id, value, excluded_globally),
         )
+    openvex_job = jobs.get("job_openvex_export")
+    if openvex_job is not None and openvex_job.settings["enabled"]:
+        for prerequisite in ("job_final_publication_gate", "job_inference_security_review"):
+            if prerequisite not in jobs or jobs[prerequisite].settings.get("enabled", True) is not True:
+                raise ValueError(f"enabled job_openvex_export requires enabled {prerequisite}")
+    validation = jobs.get("job_remediation_validation")
+    planning = jobs.get("job_remediation_planning")
+    if (validation is not None and validation.settings["enabled"]
+            and (planning is None or not planning.settings["enabled"])):
+        raise ValueError("job_remediation_validation requires enabled job_remediation_planning")
     codeql_job = jobs.get("job_codeql_analysis")
     if codeql_job is not None:
         # One run-bound seeding definition: CodeQL's export_queries is the source, every other seeded
@@ -1168,6 +1235,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         profile_path=profile_source,
         profile_sha256=profile_sha256,
         binary_decompilation=binary_decompilation,
+        target_acquisition=target_acquisition,
         banned_functions=banned_functions,
         review_policy=review_policy,
+        compiler_target=selected_compiler,
     )

@@ -81,17 +81,16 @@ def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package:
     identities = {row["ref"]: row for row in labels.values() if isinstance(row.get("ref"), str)}
     basis = candidate.poc_basis
     resolved: dict[str, Any] = {}
-    for label in (*basis.entry, *basis.path, *basis.unknowns):
-        row = identities.get(label)
+    for identity in (*basis.entry, *basis.path):
+        row = identities.get(identity)
         if row is None:
-            if label in set(basis.entry) | set(basis.path):
-                gaps.append(f"poc_basis label {label} does not resolve in the package view")
+            gaps.append(f"poc_basis identity {identity} does not resolve in the package view")
             continue
-        resolved[label] = {key: value for key, value in row.items()
+        resolved[identity] = {key: value for key, value in row.items()
                            if key in {"label", "ref", "summary", "text", "path", "lines", "role", "tag"}}
     path_calls: set[str] = set()
-    for label in basis.path:
-        row = resolved.get(label)
+    for identity in basis.path:
+        row = resolved.get(identity)
         if row is not None:
             path_calls.update(_function_names(str(row.get("summary", ""))))
     sink_names = (str(sink["name"]),) if sink else ()

@@ -2,6 +2,20 @@
   "schema": "appsec-review/mcp-tool-catalog/1",
   "tools": [
     {
+      "name": "query_debug_symbols",
+      "required": [
+        "mode"
+      ],
+      "properties": [
+        "mode",
+        "artifact_identity",
+        "subject",
+        "address",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
       "name": "search",
       "required": [
         "query"
@@ -182,6 +196,20 @@
       ]
     },
     {
+      "name": "query_syntax",
+      "required": [
+        "mode",
+        "subject"
+      ],
+      "properties": [
+        "mode",
+        "subject",
+        "name",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
       "name": "query_code_graph",
       "required": [
         "mode",
@@ -282,6 +310,5 @@
         "cursor"
       ]
     }
-  ],
-  "runtime_source": "appsec_review.mcp.schema:TOOLS"
+  ]
 }

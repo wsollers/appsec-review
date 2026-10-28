@@ -40,30 +40,41 @@ def _load(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _items(document: Any, key: str) -> list[dict[str, Any]]:
+def _items(document: Any, key: str) -> tuple[list[dict[str, Any]], bool, int]:
     values = document.get(key, []) if isinstance(document, Mapping) else []
     if not isinstance(values, list):
         raise ValueError(f"blint {key} report is malformed")
-    return [dict(item) for item in values[:MAX_ITEMS] if isinstance(item, Mapping)]
+    return ([{**dict(item), "_native_selector": {"kind": "json_pointer", "value": f"/{key}/{index}"}}
+             for index, item in enumerate(values[:MAX_ITEMS]) if isinstance(item, Mapping)],
+            len(values) > MAX_ITEMS, len(values))
 
 
 def assemble(reports_dir: Path) -> dict[str, Any]:
     """Read a blint ``--reports`` directory; malformed JSON raises (a parse gap, never 'clean')."""
     findings_path, reviews_path = reports_dir / FINDINGS_FILE, reports_dir / REVIEWS_FILE
-    findings = [{key: item.get(key) for key in FINDING_FIELDS if key in item}
-                for item in _items(_load(findings_path), "findings")] if findings_path.is_file() else []
+    finding_items, finding_truncated, finding_total = (
+        _items(_load(findings_path), "findings") if findings_path.is_file() else ([], False, 0))
+    review_items, review_truncated, review_total = (
+        _items(_load(reviews_path), "reviews") if reviews_path.is_file() else ([], False, 0))
+    findings = [{**{key: item.get(key) for key in FINDING_FIELDS if key in item},
+                 "_native_selector": item["_native_selector"], "_native_report": FINDINGS_FILE}
+                for item in finding_items]
     reviews = [{key: item.get(key) for key in ("id", "title", "severity", "filename", "exe_name")
                 if key in item}
-               for item in _items(_load(reviews_path), "reviews")] if reviews_path.is_file() else []
+               for item in review_items]
     analyzed = []
-    for path in sorted(reports_dir.glob("*" + METADATA_SUFFIX))[:MAX_ITEMS]:
+    metadata_paths = sorted(reports_dir.glob("*" + METADATA_SUFFIX))
+    for path in metadata_paths[:MAX_ITEMS]:
         document = _load(path)
         if not isinstance(document, Mapping):
             raise ValueError(f"blint metadata report is malformed: {path.name}")
         analyzed.append({"report": path.name,
                          **{key: document.get(key) for key in METADATA_FIELDS if key in document}})
     return {"schema": SCHEMA, "findings": findings, "finding_count": len(findings),
-            "reviews": reviews, "analyzed": analyzed, "analyzed_count": len(analyzed)}
+            "reviews": reviews, "analyzed": analyzed, "analyzed_count": len(analyzed),
+            "truncated": finding_truncated or review_truncated or len(metadata_paths) > MAX_ITEMS,
+            "reported_counts": {"findings": finding_total, "reviews": review_total,
+                                "analyzed": len(metadata_paths)}}
 
 
 def write(reports_dir: Path, destination: Path) -> Path:

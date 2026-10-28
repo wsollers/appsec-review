@@ -144,9 +144,9 @@ def accepted_final_report(run_root: Path, schema_root: Path | None = None) -> tu
     must still project the currently accepted review and index set, not just some intact old run.
     """
     from appsec_review.indexing.store import accepted_handoff
-    from appsec_review.jobs.bound_artifacts import read_bound_json, resolve_bound
+    from appsec_review.jobs.bound_artifacts import read_bound_json
     from appsec_review.jobs.job_final_publication_gate.classify import classify, gate_document
-    from appsec_review.jobs.job_final_publication_gate.verify import load_accepted_review
+    from appsec_review.jobs.job_final_publication_gate.verify import load_accepted_gate, load_accepted_review
     from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
     from appsec_review.retrieval.core import RetrievalCore
     from appsec_review.review.models import IntegrityError
@@ -163,19 +163,21 @@ def accepted_final_report(run_root: Path, schema_root: Path | None = None) -> tu
         return {"path": accepted.path, "sha256": accepted.sha256}, output
 
     _report_ref, report_output = published("job_final_report_publication")
-    gate_ref, gate_output = published("job_final_publication_gate")
     report = read_bound_json(run_root, report_output["artifact"])
-    gate = read_bound_json(run_root, gate_output["artifact"])
     schemas = SchemaSet(schema_root / "docs" / "schemas" / "final-report")
     schemas.validate("final-report", report)
-    schemas.validate("final-publication-gate", gate)
+    accepted_gate, gate = load_accepted_gate(run_root, schemas)
+    gate_ref = {"path": accepted_gate.path, "sha256": accepted_gate.sha256}
+    gate_output = accepted_gate.handoff["outputs"]["acceptance.publish_handoff"]
     verified = load_accepted_review(
         run_root, SchemaSet(schema_root / "docs" / "schemas" / "inference-security-review"),
         max_packages=len(gate["packages"])).document
+    certified = {(row["path"], row["sha256"]) for row in gate["bindings"]}
+    if not {(row["path"], row["sha256"]) for row in verified["bindings"]} <= certified:
+        raise IntegrityError("current gate does not certify every current review binding")
+    verified.update(capabilities=gate["capabilities"], attachments=gate["attachments"], bindings=gate["bindings"])
     if gate != gate_document(gate["schema"], verified, classify(verified)):
         raise IntegrityError("current gate does not project the currently accepted review")
-    for binding in gate["bindings"]:
-        resolve_bound(run_root, binding)
     provenance = report["provenance"]
     if (report["run_id"] != run_root.name or gate["run_id"] != run_root.name
             or provenance["gate_handoff"] != gate_ref

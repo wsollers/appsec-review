@@ -538,6 +538,18 @@ def test_node_native_failure_does_not_mask_source_scope() -> None:
                "no exact replayable command set" in gap for gap in plan.gaps)
 
 
+@pytest.mark.parametrize("status,gaps,expected", [
+    ("SUCCEEDED", [], "SUCCEEDED"),
+    ("NOT_APPLICABLE", [], "SUCCEEDED"),
+    ("SUCCEEDED", ["bounded export truncated"], "COMPLETED_WITH_GAPS"),
+    ("SKIPPED", ["no seeds"], "COMPLETED_WITH_GAPS"),
+    ("FAILED", ["export timed out"], "COMPLETED_WITH_GAPS"),
+])
+def test_publication_status_accounts_for_graph_export_coverage(status, gaps, expected):
+    assert publication_status([], [{"terminal_status": "SUCCEEDED"}],
+                              exports=[{"export_status": status, "gaps": gaps}]) == expected
+
+
 def test_java_commands_without_roles_derive_order_from_accepted_recipe() -> None:
     java = receipt("java", "jvm", "build-unit-aaaaaaaaaaaaaaaaaaaa",
                    commands=[{"ordinal": 1}, {"ordinal": 2}])
@@ -691,6 +703,7 @@ def test_partial_and_malformed_sarif_results_do_not_erase_valid_siblings() -> No
     records, gaps = normalize_sarif(sarif, files=[source("a.py")], root=".",
                                     query_identity="q", result_limit=10)
     assert len(records) == 1
+    assert records[0]["_native_selector"] == {"kind": "json_pointer", "value": "/runs/0/results/1"}
     assert any("was not an object" in gap for gap in gaps)
     assert any("no uniquely mapped" in gap for gap in gaps)
 
@@ -701,6 +714,10 @@ def test_sarif_contract_rejects_malformed_top_level() -> None:
 
 
 def _normalization_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from tests.test_native_result_provenance import make_owner
+    from appsec_review.storage import shared
+    owner = make_owner(tmp_path)
+    monkeypatch.setattr(shared, "current", lambda: owner)
     from appsec_review.jobs.job_codeql_analysis import job as codeql_job
 
     settings = SimpleNamespace(sarif_bytes_limit=1024 * 1024, result_limit=100, concurrency=2)
@@ -816,7 +833,9 @@ def test_normalization_admission_timeout_publishes_successful_sibling(
     monkeypatch.setattr(codeql_job, "_query_one",
                         lambda _, value, profile: {**value, "query_profile": dict(profile)})
     monkeypatch.setattr(codeql_job, "_export_isolated",
-                        lambda _, value, **kwargs: {**value, "export_status": "NOT_APPLICABLE"})
+                        lambda _, value, **kwargs: {
+                            **codeql_job._export_base(codeql_job._scope_from(value["scope"]), value),
+                            "export_status": "NOT_APPLICABLE", "gaps": []})
     monkeypatch.setattr(codeql_job, "resolve_context_manifest",
                         lambda _: (upstream, file_sha256(upstream)))
     reserve = codeql_job.ResourceAdmission.reserve
@@ -887,7 +906,7 @@ def test_normalize_scope_rejects_conflicting_or_corrupt_shard(
     else:
         queries[0]["gaps"] = ["different evidence with unchanged producer identity"]
     before = path.read_bytes()
-    with pytest.raises(ValueError, match="immutable index shard"):
+    with pytest.raises(ValueError, match="immutable (index shard|shared artifact)"):
         _normalize_one(unit, queries[0])
     assert path.read_bytes() == before
 
@@ -911,6 +930,70 @@ def test_normalize_changed_sarif_publishes_new_shard_and_preserves_prior(
     assert changed["index"]["path"] != first["index"]["path"]
     assert _normalize_one(unit, query) == changed
     assert prior.read_bytes() == before
+
+
+def test_normalization_rejects_sarif_that_differs_from_pinned_query_output(tmp_path, monkeypatch):
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    query = queries[0]
+    path = tmp_path / query["sarif"]["path"]
+    path.write_text('{"version":"2.1.0","runs":[]}', encoding="utf-8")
+    with pytest.raises(ValueError, match="identity|mismatch"):
+        _normalize_one(unit, query)
+
+
+def test_codeql_index_keeps_exact_retained_result_metadata_and_legacy_execution_gap(tmp_path, monkeypatch):
+    import sqlite3
+    from appsec_review.interchange import observation_metadata_from_mapping
+    from appsec_review.provenance import verify_native_reference
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    normalized = _normalize_one(unit, queries[0])
+    with sqlite3.connect(tmp_path / normalized["index"]["path"]) as database:
+        payload, = database.execute(
+            "SELECT payload_json FROM entities WHERE kind='tool_observation'").fetchone()
+        evidence, = database.execute(
+            "SELECT payload_json FROM entities WHERE kind='evidence_artifact'").fetchone()
+    common = observation_metadata_from_mapping(json.loads(payload)["common"])
+    reference, = common.evidence_refs
+    assert reference.selector.value == "/runs/0/results/0"
+    assert reference.execution_reference is None
+    assert common.gap_ids and any("provenance_unavailable" in gap for gap in normalized["gaps"])
+    assert json.loads(evidence)["artifact"] == reference.artifact.as_dict()
+    assert verify_native_reference(tmp_path, reference, resolve=True)["ruleId"] == "test/rule"
+
+
+def test_failed_codeql_native_bytes_are_retained_without_parsing_or_promoting_findings(tmp_path, monkeypatch):
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    query = queries[0]
+    path = tmp_path / query["sarif"]["path"]
+    path.write_bytes(b"partial invalid SARIF")
+    query.update(terminal_status="FAILED", gaps=["CodeQL query failed"],
+                 sarif={"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                        "size_bytes": path.stat().st_size})
+    normalized = _normalize_one(unit, query)
+    native = normalized["native_output"]
+    assert native["complete"] is False
+    assert normalized["observation_count"] == 0
+    assert (tmp_path / native["artifact"]["path"]).read_bytes() == b"partial invalid SARIF"
+    assert any("provenance_unavailable" in gap for gap in normalized["gaps"])
+
+
+def test_codeql_index_rejects_source_bytes_that_differ_from_accepted_scope_hash(tmp_path, monkeypatch):
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    query = next(value for value in queries if value["scope"]["language"] == "python")
+    unit.job.target_root = tmp_path / "target"
+    source_value = query["scope"]["files"][0]
+    source_path = unit.job.target_root / source_value["path"]
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_bytes(b"changed from accepted source")
+    path = tmp_path / query["sarif"]["path"]
+    sarif = json.loads(path.read_bytes())
+    sarif["runs"][0]["results"][0]["locations"] = [{
+        "physicalLocation": {"artifactLocation": {"uri": source_value["path"]}}}]
+    path.write_text(json.dumps(sarif), encoding="utf-8")
+    query["sarif"] = {"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      "size_bytes": path.stat().st_size}
+    with pytest.raises(FrameworkIntegrityError, match="source identity changed"):
+        _normalize_one(unit, query)
 
 
 def _settings_value() -> dict[str, object]:

@@ -105,7 +105,7 @@ REQUIRED_BY_FAMILY: dict[ObligationFamily, tuple[Predicate, ...]] = {
     ObligationFamily.SUPPLY_CHAIN: (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES),
 }
 # ``security_impact`` is derived, never cited: no entity kind is DIRECT for it under
-# ``predicate-admission/1``, because impact follows from the adjudicated facts of the claim (its
+# ``predicate-admission/2``, because impact follows from the adjudicated facts of the claim (its
 # weakness class and the predicates above), so requiring a cited relation would make ``confirmed``
 # unreachable. It stays in the vocabulary: relations may still be recorded for it (analyst-assessed
 # at best), and scoring derives the impact class from the claim's CWE.

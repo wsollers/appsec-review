@@ -8,10 +8,12 @@ import re
 from typing import Any, Iterable, Mapping
 
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import reference
+from appsec_review.provenance import common_metadata, merge_native_references
 
 
 SECRET_FIELDS = {"secret", "match", "password", "token", "apikey", "api_key", "private_key"}
-NORMALIZER_IDENTITY = "static-evidence/3"
+NORMALIZER_IDENTITY = "static-evidence/4"
 _ASSIGNMENT = re.compile(
     r"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*([\"']?)([^\s,;\"']+)\2"
 )
@@ -101,14 +103,15 @@ def build_envelope(
 ) -> dict[str, Any]:
     paths = set(cataloged_paths)
     records: list[dict[str, Any]] = []
-    seen_evidence_ids: set[str] = set()
+    seen_evidence_ids: dict[str, dict[str, Any]] = {}
     bounded_gaps = [str(item) for item in gaps]
     total = 0
     for observation in observations:
-        if len(records) >= bounds.max_records:
-            bounded_gaps.append("normalized record count bound reached")
-            break
-        native = redact_structure(dict(observation))
+        references = merge_native_references(observation.get("_native_refs", ()))
+        if not references:
+            bounded_gaps.append("provenance_unavailable: observation has no retained native result")
+        native = redact_structure({key: value for key, value in observation.items()
+                                   if key not in {"_native_refs", "_native_selector"}})
         message, truncated = _text(native.get("message", ""), bounds.max_field_bytes)
         if truncated:
             bounded_gaps.append("one or more normalized fields were truncated")
@@ -128,30 +131,55 @@ def build_envelope(
             "advisory": native.get("advisory"),
             "language": native.get("language"),
         }
+        for field in ("version", "purl", "repository_url", "raw_selector"):
+            if native.get(field) is not None:
+                rendered, field_truncated = _text(native[field], bounds.max_field_bytes)
+                if field_truncated:
+                    bounded_gaps.append(f"normalized {field} exceeded its field bound")
+                else:
+                    record[field] = rendered
         rule_mapping = _rule_mapping(native.get("rule_mapping"))
         if rule_mapping is not None:
             record["rule_mapping"] = rule_mapping
         if location is None:
             record["artifact_evidence"] = True
+        location_gaps = ()
+        if location is None and native.get("path"):
+            bounded_gaps.append("location_unresolved: native source path is not in the accepted catalog")
+            location_gaps = ("location_unresolved",)
         record["evidence_id"] = "evidence-" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]
+        common = common_metadata(
+            {"tool_id": str(tool.get("id") or tool.get("name") or "unknown"), **record},
+            evidence_refs=references, payload_schema="appsec-review/static-tool-evidence/2",
+            record_kind="observation" if record["category"] == "software_inventory" else "finding",
+            gaps=location_gaps,
+        )
         if record["evidence_id"] in seen_evidence_ids:
+            prior = seen_evidence_ids[record["evidence_id"]]
+            merged = merge_native_references(prior["common"]["evidence_refs"], references)
+            delta = len(canonical_json(merged)) - len(canonical_json(prior["common"]["evidence_refs"]))
+            if total + delta > bounds.max_total_bytes:
+                bounded_gaps.append("normalized total byte bound reached")
+                continue
+            prior["common"]["evidence_refs"] = merged
+            total += delta
             continue
-        seen_evidence_ids.add(record["evidence_id"])
+        if len(records) >= bounds.max_records:
+            bounded_gaps.append("normalized record count bound reached")
+            continue
+        record["common"] = common
         encoded = canonical_json(record)
         if total + len(encoded) > bounds.max_total_bytes:
             bounded_gaps.append("normalized total byte bound reached")
-            break
+            continue
         total += len(encoded)
         records.append(record)
+        seen_evidence_ids[record["evidence_id"]] = record
     artifacts = []
     for path in raw_artifacts:
-        resolved = path.resolve(strict=True)
-        if run_root.resolve() not in resolved.parents:
-            raise ValueError("raw tool artifact is not run-owned")
-        artifacts.append({"path": resolved.relative_to(run_root).as_posix(),
-                          "sha256": file_sha256(resolved), "size_bytes": resolved.stat().st_size})
+        artifacts.append(reference(run_root, path))
     return {
-        "schema": "appsec-review/static-tool-evidence/1",
+        "schema": "appsec-review/static-tool-evidence/2",
         "tool": dict(tool), "target_fingerprint": target_fingerprint,
         "applicability": dict(applicability), "coverage_scope": dict(coverage_scope),
         "exclusions_and_gaps": list(dict.fromkeys(bounded_gaps)),

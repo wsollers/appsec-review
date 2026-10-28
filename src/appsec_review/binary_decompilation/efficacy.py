@@ -25,6 +25,7 @@ from appsec_review.config import load_config
 from appsec_review.config.binary_decompilation import BinaryRequest
 from appsec_review.container_runtime import load_catalog
 from appsec_review.container_runtime.executor import Runner, _default_runner
+from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.storage import atomic_json, file_sha256
 
 from .publication import load_table, verify_publication
@@ -71,7 +72,7 @@ def fixture_argv(repository_root: Path, expectations: Mapping[str, Any], variant
     name = f"{expectations['fixture']}-{variant}"
     argv = [
         "docker", "run", "--rm", "--name", f"appsec-review-efficacy-{uuid.uuid4().hex}",
-        "--network", "none", "--read-only", "--user", tool.user,
+        "--network", "none", "--read-only", "--user", application_runtime_user(tool.user),
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", tool.cpus,
         "--memory", tool.memory, "--pids-limit", str(tool.pids_limit),
         "--tmpfs", str(catalog.policy["tmpfs"][0]), "--workdir", "/scratch",
@@ -97,7 +98,7 @@ def build_fixture(repository_root: Path, expectations: Mapping[str, Any], varian
     if inspected.exit_code != 0 or not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
         raise RuntimeError(f"cataloged image is not locally available: {tool.tool_id}")
     output_root.mkdir(parents=True, exist_ok=True)
-    output_root.chmod(0o777)  # the compiler runs as the fixed non-root container user
+    grant_runtime_user(output_root, application_runtime_user(tool.user))
     argv, name = fixture_argv(repository_root, expectations, variant, output_root, image_id)
     binary = output_root / name
     binary.unlink(missing_ok=True)

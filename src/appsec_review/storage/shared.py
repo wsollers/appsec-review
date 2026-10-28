@@ -477,18 +477,23 @@ def attempt_artifacts(root: Path, attempt_root: Path) -> list[dict[str, Any]]:
 
 @validation_operation
 def verify_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
+    from appsec_review.interchange import decode_handoff
+    from appsec_review.runtime.handoff import verify_handoff_integrity
+    handoff = decode_handoff(handoff, run_id=root.name)
     from .admission import consume_admission
-    if consume_admission(root, handoff):
+    admitted = consume_admission(root, handoff)
+    verify_handoff_integrity(root, handoff)
+    if admitted:
         return
     attempt = safe_path(root, handoff["resolving_paths"]["attempt"])
-    pinned = {item["path"]: item["sha256"] for item in handoff["artifacts"]}
+    pinned = {item["path"]: item for item in handoff["artifacts"]}
     for artifact in handoff["artifacts"]:
         if artifact["path"].startswith(OBJECTS + "/"):
             verify_reference(root, artifact)
         elif re.fullmatch(r"data/jobs/[^/]+/attempts/[^/]+/shared/[^/]+/[^/]+\.json", artifact["path"]):
             verify_receipt(root, artifact)
     for artifact in attempt_artifacts(root, attempt):
-        if pinned.get(artifact["path"]) != artifact["sha256"]:
+        if pinned.get(artifact["path"]) != artifact:
             raise ValueError(f"shared provenance missing from handoff: {artifact['path']}")
 
 

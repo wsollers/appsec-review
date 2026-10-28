@@ -196,7 +196,7 @@ def test_unknown_or_mismatched_graph_payloads_are_default_deny() -> None:
     # A graph payload never changes a non-graph kind's classification.
     assert classify("priority_item", P.AFFECTED_CONSTRUCT, (), good) is Admissibility.INDIRECT
     assert classify("tool_observation", P.AFFECTED_CONSTRUCT, (), good) is Admissibility.INDIRECT
-    # predicate-admission/1: a source span is direct only for the construct it is.
+    # predicate-admission/2: a source span is direct only for the construct it is.
     assert classify("source_span", P.AFFECTED_CONSTRUCT, (), None) is Admissibility.DIRECT
     assert classify("source_span", P.SECURITY_IMPACT, (), None) is Admissibility.ANALYST_ASSESSED
     with pytest.raises(ValueError):
@@ -295,7 +295,8 @@ def accepted_graph_run(tmp_path: Path, extra: Any = None) -> tuple[Path, dict[st
     artifact = {"path": manifest.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest),
                 "size_bytes": manifest.stat().st_size}
     handoff = attempt / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": "fixture",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff, {"source_fingerprint": SNAPSHOT, "status": "ACCEPTED", "job_id": "fixture",
                           "attempt_id": "attempt_0001", "artifacts": [artifact], "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
@@ -424,7 +425,7 @@ def test_package_reuse_basis_includes_the_evidence_rule_versions() -> None:
     from appsec_review.jobs.job_inference_security_review import job
     assert job.EVIDENCE_RULES == {
         "rule_predicates": "tool-rule-predicates/2", "admissibility": "evidence-admissibility/3",
-        "predicate_admission": "predicate-admission/1",
+        "predicate_admission": "predicate-admission/2",
         "graph_fact_predicates": "graph-fact-predicates/1",
         "graph_fact_admissibility": "graph-fact-admissibility/1",
         "obligation_policy_sha256": obligations.POLICY_SHA256}

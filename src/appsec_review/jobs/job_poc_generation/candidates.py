@@ -1,8 +1,7 @@
 """``poc_candidates`` of the accepted inference-review handoff (review-judge-and-poc.md, section 4).
 
 The producer is the judge work of ``job_inference_security_review``; this module only reads what that
-section documents, strictly. A handoff without the field is an older run: the job completes with the
-named gap ``no_poc_candidates``. A present but malformed field is an integrity failure, because the
+section documents, strictly. A missing or malformed field is an integrity failure, because the
 handoff is hash-bound and an entry that does not match the documented shape cannot be repaired here.
 
 Each entry carries ``claim_id``, ``package_id``, ``state``, ``judge_verdict``, the ``poc_basis``
@@ -29,8 +28,7 @@ FINDING_ID = re.compile(r"^finding-[0-9a-f]{64}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 PACKAGE_ID = re.compile(r"^[a-z][a-z0-9_]*-[0-9a-f]{64}$")
 EVIDENCE_REF = re.compile(r"^evrel-[0-9a-f]{64}$")
-ENTRY_REF = re.compile(r"^asr:entry_point:[0-9a-f]{64}$")
-PATH_REF = re.compile(r"^asr:call_site:[0-9a-f]{64}$")
+ENTITY_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 TEXT_LIMIT = 240
 LIST_LIMITS = {"entry": 8, "path": 16, "trigger": 8, "preconditions": 8, "unknowns": 8}
 BASIS_KEYS = frozenset({"entry", "path", "trigger", "input_format", "preconditions", "expected_observation",
@@ -86,11 +84,10 @@ def _text(value: Any, index: int, name: str, *, empty: bool = False) -> str:
     return value
 
 
-def _identities(value: Any, index: int, name: str, limit: int, pattern: re.Pattern[str]) -> tuple[str, ...]:
+def _identities(value: Any, index: int, name: str, limit: int) -> tuple[str, ...]:
     if (not isinstance(value, list) or len(value) > limit
-            or any(not isinstance(item, str) or not pattern.fullmatch(item) for item in value)
-            or len(set(value)) != len(value)):
-        raise _fail(index, f"{name} must be at most {limit} unique resolved evidence identities")
+            or any(not isinstance(item, str) or not ENTITY_ID.fullmatch(item) for item in value)):
+        raise _fail(index, f"{name} must be at most {limit} resolved entity identities")
     return tuple(value)
 
 
@@ -118,8 +115,8 @@ def parse_basis(value: Any, index: int) -> PocBasis:
         if not isinstance(items, list) or len(items) > LIST_LIMITS[key]:
             raise _fail(index, f"poc_basis.{key} must be at most {LIST_LIMITS[key]} items")
         texts[key] = tuple(_text(item, index, key) for item in items)
-    return PocBasis(_identities(body["entry"], index, "entry", LIST_LIMITS["entry"], ENTRY_REF),
-                    _identities(body["path"], index, "path", LIST_LIMITS["path"], PATH_REF), tuple(rows),
+    return PocBasis(_identities(body["entry"], index, "entry", LIST_LIMITS["entry"]),
+                    _identities(body["path"], index, "path", LIST_LIMITS["path"]), tuple(rows),
                     _text(body["input_format"], index, "input_format"), texts["preconditions"],
                     _text(body["expected_observation"], index, "expected_observation"), texts["unknowns"],
                     value["sha256"])
@@ -160,10 +157,10 @@ def parse_candidates(value: Any) -> tuple[PocCandidate, ...]:
     return tuple(parsed)
 
 
-def read_candidates(review_handoff: Mapping[str, Any]) -> tuple[PocCandidate, ...] | None:
-    """The candidates of a verified review handoff, or ``None`` for a run whose handoff has no such field."""
+def read_candidates(review_handoff: Mapping[str, Any]) -> tuple[PocCandidate, ...]:
+    """Read the required candidates field of a verified review handoff."""
     if FIELD not in review_handoff:
-        return None
+        raise IntegrityError("the review handoff is missing required poc_candidates")
     return parse_candidates(review_handoff[FIELD])
 
 

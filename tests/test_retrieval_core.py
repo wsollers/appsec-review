@@ -11,6 +11,7 @@ import threading
 
 import pytest
 
+from tests.handoff_fixture import write_fixture_handoff
 from appsec_review.mcp import RetrievalMcpAdapter, TOOLS
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -136,7 +137,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     manifest_artifact = {"path": manifest_path.relative_to(run_root).as_posix(),
                          "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
     handoff_path = run_root / "data" / "jobs" / "fixture" / "attempts" / "attempt_0001" / "handoff.json"
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, handoff_path, {"status": "ACCEPTED",
                                "job_id": "fixture", "attempt_id": "attempt_0001",
                                "artifacts": [manifest_artifact], "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
@@ -409,7 +410,7 @@ def test_attempt_input_manifest_is_pinned_to_exact_parallel_handoffs(tmp_path: P
         artifact = {"path": manifest.relative_to(run_root).as_posix(),
                     "sha256": file_sha256(manifest), "size_bytes": manifest.stat().st_size}
         handoff = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001" / "handoff.json"
-        atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+        write_fixture_handoff(run_root, handoff, {"status": "ACCEPTED",
                               "job_id": job_id, "attempt_id": "attempt_0001", "artifacts": [artifact],
                               "outputs": {"publication.publish": {"index_manifest": artifact}},
                               "upstream_handoff_sha256": {}})
@@ -453,7 +454,7 @@ def test_a_job_that_does_not_read_the_target_inherits_the_snapshot_its_upstream_
         artifact = {"path": manifest.relative_to(run_root).as_posix(),
                     "sha256": file_sha256(manifest), "size_bytes": manifest.stat().st_size}
         handoff = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001" / "handoff.json"
-        atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+        write_fixture_handoff(run_root, handoff, {"status": "ACCEPTED",
                               "job_id": job_id, "attempt_id": "attempt_0001", "artifacts": [artifact],
                               "outputs": {"publication.publish": {"index_manifest": artifact}},
                               "upstream_handoff_sha256": {}})
@@ -496,7 +497,7 @@ def test_attempt_input_manifest_verifies_each_shared_ancestor_once(tmp_path: Pat
     for job_id, path in zip(("branch_a", "branch_b"), layer):
         artifact = {**reference(path), "size_bytes": path.stat().st_size}
         handoff = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001" / "handoff.json"
-        atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+        write_fixture_handoff(run_root, handoff, {"status": "ACCEPTED",
                               "job_id": job_id, "attempt_id": "attempt_0001", "artifacts": [artifact],
                               "outputs": {"publication.publish": {"index_manifest": artifact}},
                               "upstream_handoff_sha256": {}})
@@ -539,8 +540,8 @@ def test_specialized_index_manifest_preserves_upstream_retrieval_lineage(tmp_pat
     producer_handoff = (
         run_root / "data" / "jobs" / "retrieval_producer" / "attempts" / "attempt_0001" / "handoff.json"
     )
-    atomic_json(producer_handoff, {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, producer_handoff, {
+        "status": "ACCEPTED",
         "job_id": "retrieval_producer", "attempt_id": "attempt_0001",
         "artifacts": [retrieval_artifact],
         "outputs": {"publication.publish": {"index_manifest": retrieval_artifact}},
@@ -558,8 +559,8 @@ def test_specialized_index_manifest_preserves_upstream_retrieval_lineage(tmp_pat
     specialized_handoff = (
         run_root / "data" / "jobs" / "specialized_producer" / "attempts" / "attempt_0001" / "handoff.json"
     )
-    atomic_json(specialized_handoff, {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, specialized_handoff, {
+        "status": "ACCEPTED", "source_fingerprint": core.manifest["target_snapshot"],
         "job_id": "specialized_producer", "attempt_id": "attempt_0001",
         "artifacts": [specialized_artifact],
         "outputs": {"publication.publish": {"index_manifest": specialized_artifact}},
@@ -638,7 +639,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
         "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
         "query_change_context", "query_hotspots", "query_precomputed", "query_observations",
-        "query_dataset_inventory", "query_code_graph", "list_codeql_databases", "query_codeql_neighborhood",
+        "query_dataset_inventory", "query_code_graph", "query_debug_symbols", "list_codeql_databases", "query_codeql_neighborhood",
         "query_owasp_workbench"}
     codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
                                             "build_unit": "native-main", "path": "src/auth.c"})

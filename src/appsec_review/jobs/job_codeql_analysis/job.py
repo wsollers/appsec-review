@@ -15,6 +15,7 @@ from appsec_review.applicability import (
     ApplicabilityAction, ProcessingDisposition, decision_from_mapping, finalize_processing,
     resolved_configuration_identity,
 )
+from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql import execution_metrics
 from appsec_review.codeql.runtime import (
@@ -24,6 +25,11 @@ from appsec_review.codeql.runtime import (
 )
 from appsec_review.config import CodeQLAnalysisSettings, CodeQLExportSettings
 from appsec_review.config.assurance import ReviewPolicy
+from appsec_review.interchange import decode_handoff
+from appsec_review.provenance import (
+    artifact_reference, common_metadata, retain_native_output, select_native,
+    validate_observation_provenance,
+)
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
 from appsec_review.jobs.job_language_build import load_accepted_language_build
@@ -127,9 +133,7 @@ def _accepted_handoff_identity(run_root: Path, job_id: str) -> Mapping[str, str]
     identity = {"path": str(pointer.get("handoff_path", "")),
                 "sha256": str(pointer.get("handoff_sha256", ""))}
     handoff = _safe_json(run_root, identity)
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or
-            handoff.get("status") != "ACCEPTED" or handoff.get("job_id") != job_id):
-        raise FrameworkIntegrityError(f"{job_id} handoff is not accepted")
+    decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
     return identity
 
 
@@ -244,19 +248,14 @@ def _copy_clean_target(unit: UnitContext, workspace: Path) -> None:
             copy_file(path, destination)
 
 
-def _make_workspace_accessible(workspace: Path, *, writable_files: bool = False) -> None:
-    # Dagster and the analysis container deliberately use different users. Source inputs stay
-    # immutable; directories must allow the isolated user to create traced build outputs.
-    for path in sorted(workspace.rglob("*")):
-        if path.is_dir():
-            path.chmod(0o777)
-        elif path.is_file():
-            if writable_files:
-                path.chmod(0o666)
-            else:
-                executable = bool(path.stat().st_mode & 0o111)
-                path.chmod(0o555 if executable else 0o444)
-    workspace.chmod(0o777)
+def _make_workspace_accessible(workspace: Path, runtime_user: str, *, writable_files: bool = False) -> None:
+    # Hand the tree to the analysis container's identity, owner-only. Source inputs stay immutable;
+    # directories let that identity create traced build outputs.
+    grant_runtime_user(workspace, runtime_user, recursive=True, writable_files=writable_files)
+
+
+def _runtime_user(unit: UnitContext) -> str:
+    return application_runtime_user(_settings(unit).runtime_user)
 
 
 def _verify_workspace_scope(workspace: Path, scope: CodeQLScope) -> None:
@@ -388,7 +387,7 @@ def _stage_workspace(unit: UnitContext, scope: CodeQLScope,
             raise FrameworkIntegrityError(
                 f"CodeQL scope {scope.scope_id!r} ({scope.root!r}): {exc}") from exc
     _verify_workspace_scope(workspace, scope)
-    _make_workspace_accessible(workspace)
+    _make_workspace_accessible(workspace, _runtime_user(unit))
 
 
 def _checkpoint(path: Path, identity: str, schema: str) -> Mapping[str, Any] | None:
@@ -707,6 +706,20 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
             raise FrameworkIntegrityError("accepted CodeQL query checkpoint or SARIF changed")
         sarif = load_sarif(sarif_path, bytes_limit=settings.sarif_bytes_limit,
                            result_limit=settings.result_limit)
+        original_execution = existing.get("query_execution")
+        if original_execution is None:
+            pointer = unit.job.run_root / "data" / "jobs" / "job_codeql_analysis" / "latest.json"
+            if pointer.is_file():
+                accepted = _safe_json(unit.job.run_root,
+                    _accepted_handoff_identity(unit.job.run_root, "job_codeql_analysis"))
+                execution_path = (root / "executions" / "query" / "receipt.json").relative_to(
+                    unit.job.run_root).as_posix()
+                original_execution = next((item for item in accepted["artifacts"]
+                                           if item["path"] == execution_path), None)
+        if original_execution is not None:
+            original_execution = artifact_reference(unit.job.run_root, original_execution).as_dict()
+        provenance_gaps = ([] if original_execution is not None else
+                           ["provenance_unavailable: reused CodeQL query has no verified execution receipt"])
         result_count = sum(len(run.get("results", ())) for run in sarif["runs"])
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                               **_metrics_scope(scope), action="analyze",
@@ -720,7 +733,8 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
         return {**database, "query_profile": dict(query_profile),
                 "query_identity": identity, "query_reused": True,
                 "sarif": _artifact(unit.job.run_root, sarif_path),
-                "sarif_result_count": result_count, "gaps": []}
+                "query_execution": original_execution,
+                "sarif_result_count": result_count, "gaps": provenance_gaps}
     query_database = root / "query-database"
     if query_database.exists():
         shutil.rmtree(query_database)
@@ -728,7 +742,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                         scope_id=scope.scope_id, query_profile=query_profile["query_id"],
                         tool_invocation_id=invocation):
         shutil.copytree(scope_root / "database", query_database, copy_function=copy_file)
-        _make_workspace_accessible(query_database, writable_files=True)
+        _make_workspace_accessible(query_database, _runtime_user(unit), writable_files=True)
     if sarif_path.parent.exists():
         shutil.rmtree(sarif_path.parent)
     image_value = _safe_json(unit.job.run_root, database["image"])
@@ -791,8 +805,14 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
              "sarif_result_count": result_count, "gaps": gaps}
     if status == "SUCCEEDED":
         atomic_json(checkpoint_path, {"schema": QUERY_CHECKPOINT_SCHEMA, "identity": identity,
-                    "terminal_status": "SUCCEEDED", "sarif_sha256": file_sha256(sarif_path)})
+                    "terminal_status": "SUCCEEDED", "sarif_sha256": file_sha256(sarif_path),
+                    "query_execution": execution})
         value["sarif"] = _artifact(unit.job.run_root, sarif_path)
+    elif sarif_path.is_file():
+        if sarif_path.stat().st_size <= settings.sarif_bytes_limit:
+            value["sarif"] = _artifact(unit.job.run_root, sarif_path)
+        else:
+            value["gaps"] = [*gaps, "native_output_unavailable: failed CodeQL SARIF exceeded its byte bound"]
     return value
 
 
@@ -863,9 +883,9 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     repository = unit.job.repository_root
     staging.mkdir(parents=True)
     shutil.copytree(scope_root / "database", staging / "database", copy_function=copy_file)
-    _make_workspace_accessible(staging / "database", writable_files=True)
+    _make_workspace_accessible(staging / "database", _runtime_user(unit), writable_files=True)
     shutil.copytree(repository / str(profile["source_path"]), staging / "pack")
-    _make_workspace_accessible(staging / "pack")
+    _make_workspace_accessible(staging / "pack", _runtime_user(unit))
     shutil.copyfile(repository / str(profile["columns_path"]), staging / "columns.json")
     shutil.copyfile(repository.joinpath(*_ASSET_LOCK), staging / "assets.lock.json")
     (staging / SCOPE_FILE).write_text(seeding.scope_csv(mode, depth), encoding="utf-8")
@@ -874,7 +894,7 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     for path in (staging / "columns.json", staging / "assets.lock.json", staging / SCOPE_FILE,
                  staging / SEEDS_FILE):
         path.chmod(0o444)
-    staging.chmod(0o777)
+    grant_runtime_user(staging, _runtime_user(unit))
 
 
 def _verify_export_manifest(root: Path, scope: CodeQLScope, profile: Mapping[str, Any],
@@ -1159,6 +1179,11 @@ def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
         return {**_export_base(scope, database), "export_status": "FAILED", "gaps": [gap]}
 
 
+def _export_dispositions(exports: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [{"scope_id": item["scope_id"], "language": item["language"],
+             "action": "export", "terminal_status": item["export_status"]} for item in exports]
+
+
 def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mapping[str, Any]:
     """The ``export.scopes`` unit: one bounded graph export per successful exportable database."""
     settings = _settings(unit)
@@ -1187,9 +1212,7 @@ def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mappin
             "export_count": sum(item["export_status"] == "SUCCEEDED" for item in results),
             "export_reused": sum(bool(item.get("export_reused")) for item in results),
             "gaps": gaps,
-            "dispositions": [{"scope_id": item["scope_id"], "language": item["language"],
-                              "action": "export", "terminal_status": item["export_status"]}
-                             for item in results],
+            "dispositions": _export_dispositions(results),
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
 
@@ -1198,7 +1221,8 @@ def _location(unit: UnitContext, value: Mapping[str, Any]) -> SourceLocation | N
     digest = value.get("file_sha256")
     if not isinstance(path, str) or not isinstance(digest, str):
         return None
-    source = (unit.job.target_root or Path()) / Path(*PurePosixPath(path).parts)
+    from appsec_review.storage.shared import safe_path
+    source = safe_path(unit.job.target_root or Path(), path)
     if not source.is_file() or source.is_symlink() or file_sha256(source) != digest:
         raise FrameworkIntegrityError("CodeQL normalized source identity changed")
     return SourceLocation(unit.job.source_fingerprint, path, digest, 0, source.stat().st_size,
@@ -1214,6 +1238,34 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         "query_id": "default", "kind": "default"}
     query_id = str(profile["query_id"])
     gaps = list(query.get("gaps", ()))
+    retained = None
+    records: list[dict[str, Any]] = []
+    provenance_receipt = None
+    if isinstance(query.get("sarif"), Mapping) and query.get("query_execution") is None:
+        gaps.append("provenance_unavailable: CodeQL execution receipt is unavailable")
+    if query.get("terminal_status") == "SUCCEEDED":
+        pinned_sarif = artifact_reference(unit.job.run_root, query["sarif"])
+        sarif_path = unit.job.run_root / pinned_sarif.path
+        sarif = load_sarif(sarif_path, bytes_limit=_settings(unit).sarif_bytes_limit,
+                           result_limit=_settings(unit).result_limit)
+        retained = retain_native_output(
+            unit.job.run_root, sarif_path, expected=pinned_sarif.as_dict(),
+            parser_identity=NORMALIZER_IDENTITY, complete=True,
+            native_result_count=sum(len(run.get("results", ())) for run in sarif["runs"]),
+            execution_reference=query.get("query_execution"), events=getattr(unit.job, "events", None),
+            unit_id=unit.unit_id)
+        records, normalization_gaps = normalize_sarif(sarif, files=scope.files, root=scope.root,
+            query_identity=str(query["query_identity"]), result_limit=_settings(unit).result_limit)
+        gaps.extend(normalization_gaps)
+    elif isinstance(query.get("sarif"), Mapping):
+        pinned_sarif = artifact_reference(unit.job.run_root, query["sarif"])
+        if pinned_sarif.size_bytes > _settings(unit).sarif_bytes_limit:
+            raise FrameworkIntegrityError("failed CodeQL SARIF exceeded its retained byte bound")
+        retained = retain_native_output(
+            unit.job.run_root, unit.job.run_root / pinned_sarif.path, expected=pinned_sarif.as_dict(),
+            parser_identity=NORMALIZER_IDENTITY, complete=False, native_result_count=0,
+            execution_reference=query.get("query_execution"), events=getattr(unit.job, "events", None),
+            unit_id=unit.unit_id)
     artifacts = [query[key] for key in ("database_manifest", "database_execution", "query_execution", "sarif", "image")
                  if isinstance(query.get(key), Mapping)]
     fingerprint = index_fingerprint(name="observations", target_snapshot=unit.job.source_fingerprint,
@@ -1239,16 +1291,13 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         "; ".join(gaps), {"producer": "codeql", "language": scope.language,
                           "query_profile": query_id, "query_kind": profile.get("kind"),
                           "source_languages": list(scope.source_languages),
-                          "status": query.get("terminal_status"), "scope_id": scope.scope_id}))
+                          "status": query.get("terminal_status"), "scope_id": scope.scope_id,
+                          "artifact": retained.artifact.as_dict() if retained else None,
+                          "native_output": retained.as_dict() if retained else None}))
     observation_count = support_count = 0
     if query.get("terminal_status") == "SUCCEEDED":
-        sarif = load_sarif(unit.job.run_root / query["sarif"]["path"],
-                           bytes_limit=_settings(unit).sarif_bytes_limit,
-                           result_limit=_settings(unit).result_limit)
-        records, normalization_gaps = normalize_sarif(sarif, files=scope.files, root=scope.root,
-            query_identity=str(query["query_identity"]), result_limit=_settings(unit).result_limit)
-        gaps.extend(normalization_gaps)
         source_entities: dict[str, str] = {}
+        validated_payloads = []
         for record in records:
             location_value = record.get("location")
             location = _location(unit, location_value) if isinstance(location_value, Mapping) else None
@@ -1265,6 +1314,13 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
                 "root": scope.root, "build_unit_id": scope.build_unit_id,
                 "database_identity": query.get("database_identity"),
                 "query_identity": query.get("query_identity")}
+            observation_payload["common"] = common_metadata(
+                observation_payload,
+                evidence_refs=(select_native(retained, record["_native_selector"]).as_dict(),),
+                payload_schema=NORMALIZER_IDENTITY,
+                gaps=(*(("provenance_unavailable",) if query.get("query_execution") is None else ()),
+                      *(("location_unresolved",) if location is None else ())))
+            validated_payloads.append(observation_payload)
             builder.add_entity(EntityRecord(observation, record["native_id"], record["rule_id"],
                                              record["message"], observation_payload, location))
             builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, observation.value,
@@ -1305,6 +1361,9 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
                                                     source_entities[flow_location.path], True, 1.0))
                 support_count += 1
             observation_count += 1
+        provenance_receipt = validate_observation_provenance(
+            unit.job.run_root, validated_payloads, parser_identity=NORMALIZER_IDENTITY,
+            events=getattr(unit.job, "events", None), unit_id=unit.unit_id)
         if observation_count == 0:
             gaps.append(f"CodeQL {query_id} query suite completed with zero observations; "
                         "this is not a clean classification")
@@ -1321,7 +1380,9 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         tuple(dict.fromkeys(gaps)), shard)
     return {**query, "index_identity": asdict(identity), "index": _artifact(unit.job.run_root, path),
             "observation_count": observation_count, "support_count": support_count,
-            "gaps": list(dict.fromkeys(gaps))}
+            "gaps": list(dict.fromkeys(gaps)),
+            "native_output": retained.as_dict() if retained else None,
+            "provenance_receipt": provenance_receipt}
 
 
 def _validate_config(context, _result) -> None:
@@ -1370,15 +1431,18 @@ def _validate_scope_assets(scope: CodeQLScope, settings: CodeQLAnalysisSettings,
 
 
 def publication_status(processing_decisions: Sequence[Mapping[str, Any]],
-                       scopes: Sequence[Mapping[str, Any]]) -> str:
+                       scopes: Sequence[Mapping[str, Any]], *,
+                       exports: Sequence[Mapping[str, Any]] = ()) -> str:
     """CodeQL's terminal status: missing planned coverage is COMPLETED_WITH_GAPS, never SUCCEEDED.
 
     A planned language or project whose processing decision is a GAP (for example no extractor in
-    the pinned runtime) or a scope that did not succeed leaves source unanalyzed, so an empty result
-    must not read as a clean analysis.
+    the pinned runtime), a scope that did not succeed, or an incomplete graph export leaves coverage
+    missing, so an empty result must not read as a clean analysis.
     """
     uncovered = (any(item.get("disposition") == ProcessingDisposition.GAP.value for item in processing_decisions)
-                 or any(item.get("terminal_status") != "SUCCEEDED" for item in scopes))
+                 or any(item.get("terminal_status") != "SUCCEEDED" for item in scopes)
+                 or any(item.get("export_status") not in {"SUCCEEDED", "NOT_APPLICABLE"} or item.get("gaps")
+                        for item in exports))
     return "COMPLETED_WITH_GAPS" if uncovered else "SUCCEEDED"
 
 
@@ -1550,12 +1614,13 @@ def build_job() -> Job:
             unit.job.attempt_root / "artifacts" / "codeql" / "graph-exports.json",
             {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
              "settings": asdict(settings.export_queries), "exports": exports})
+        gaps = list(dict.fromkeys(gap for item in [*normalized, *exports] for gap in item.get("gaps", ())))
         return {"scopes": normalized, "exports": exports, "graph_export_artifact": artifact,
                 "databases": results["database"], "queries": results["query"],
                 **({"predecessor_import": imported} if imported is not None else {}),
                 "observation_count": sum(int(item.get("observation_count", 0)) for item in normalized),
-                "gaps": list(dict.fromkeys(gap for item in [*normalized, *exports]
-                                           for gap in item.get("gaps", ())))}
+                "gaps": gaps, "dispositions": _export_dispositions(exports),
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         plan_value, normalized = _plan_from(unit), unit.output("execution.scopes")
@@ -1625,7 +1690,7 @@ def build_job() -> Job:
             receipt=artifact, scope_count=len(scopes), gap_count=len(gaps),
             metrics_semantics="appsec-review/review-metrics-semantics/1")
         return {"schema": SCHEMA, "artifact": artifact,
-                "terminal_status": publication_status(processing_decisions, scopes),
+                "terminal_status": publication_status(processing_decisions, scopes, exports=graph_exports),
                 "index_manifest": _artifact(unit.job.run_root, destination),
                 "item_count": normalized["observation_count"], "scope_count": len(scopes),
                 "gaps": gaps, "non_applicable": list(plan_value.non_applicable),

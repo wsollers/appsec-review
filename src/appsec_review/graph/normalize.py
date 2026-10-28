@@ -112,7 +112,17 @@ METHOD_EXACT = "codeql-location-exact"
 METHOD_LINE_ONLY = "codeql-line-only"
 METHOD_MACRO = "codeql-macro-expansion-site"
 METHOD_NAME_SCAN = "codeql-name-scan"
-ANALYSIS_RANGES = "codeql-simple-range-analysis"
+RANGE_ANALYSIS_METHODS: Mapping[str, str] = {
+    "cpp": "codeql-simple-range-analysis",
+    "java": "codeql-range-analysis",
+    "csharp": "codeql-constant-and-sign-analysis",
+    "go": "codeql-constant-and-dominating-guards",
+    "swift": "codeql-literal-only",
+    "javascript": "not-performed",
+    "python": "not-performed",
+    "ruby": "not-performed",
+    "rust": "not-performed",
+}
 SELECTION = "shortest-k"
 MAX_ENUMERATED_PATHS_PER_FLOW = 4096
 
@@ -781,12 +791,20 @@ class _Normalizer:
 
     def build_ranges(self) -> None:
         family = Family.RANGE_FACT
+        analysis = RANGE_ANALYSIS_METHODS[self.language.language]
+        rows = self.rows["ranges"]
+        if analysis == "not-performed":
+            self.family_gap(family, f"range_analysis_not_performed: the {self.language.language} export does not "
+                                    "perform semantic range analysis; empty exports are not proof of a bound")
+        if rows and all(row["applicability"] == "not_applicable" for row in rows):
+            self.family_gap(family, f"not_applicable: all {len(rows)} exported sink operands are outside the "
+                                    "integral range model; no interval is computed")
         conversions: dict[Key6, list[dict[str, Any]]] = defaultdict(list)
         for row in self.rows.get("range_conversions", ()):
             conversions[self.key6(row)].append(row)
         if "range_conversions" not in self.exports:
             self.family_gap(family, "export_unavailable: range_conversions; conversion chains are unknown")
-        for row in self.rows["ranges"]:
+        for row in rows:
             key = self.key6(row)
             sink = self.sinks.get(key)
             if sink is None:
@@ -814,7 +832,11 @@ class _Normalizer:
                               "to_type": item["to_type"], "location": _location_dict(location)})
             integral = row["applicability"] == "integral"
             if not integral:
-                gaps.append("not_applicable: the operand is not integral; no interval is computed")
+                if analysis == "not-performed":
+                    gaps.append(f"not_applicable: the {self.language.language} export does not perform range "
+                                "analysis; no interval is computed")
+                else:
+                    gaps.append("not_applicable: the operand is not integral; no interval is computed")
             interval = {"lower": _bound(row["lower"]), "upper": _bound(row["upper"])} if integral else None
             result = {
                 "sink": {"sink_site": sink.identity.value, "sink_class": sink.payload["result"]["sink_class"]},
@@ -824,7 +846,7 @@ class _Normalizer:
                          "bits": int(row["bits"])},
                 "interval": interval, "conversions": chain,
                 "sign_change": any(item["kind"] == "sign_change" for item in chain),
-                "analysis": ANALYSIS_RANGES, "precision": "may_over_approximate",
+                "analysis": analysis, "precision": "may_over_approximate",
             }
             native = {"scope_id": self.scope_id, "sink_identity": sink.identity.value, "operand_index": key[5]}
             fact = self.fact(family, native, f"{row['type_display']} operand {key[5]} of {sink.name}", result, mapped,

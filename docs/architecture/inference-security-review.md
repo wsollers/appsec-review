@@ -11,9 +11,20 @@ distinctness, remediation intake, the planned downstream job names, the closed
 CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
 and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/3`) and
 code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
-remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
-unimplemented, PoC, chains, global round barriers and cross-package variant hunts) remain design only, and no live-model
-acceptance has run.
+CVSS v4/SSVC providers, global round barriers and cross-package variant hunts remain design only.
+Compile-only PoC generation exists; `ec9257bf` adds real pre-seal chain composition/challenges,
+and integration `b702eb7` adds remediation/dossier producers, automatic new-configuration defaults,
+pre-gate ordering and completion metrics. Checkpoint `18eae9f` aligns shared `/3` review acceptance
+and extends metric parity. Integration `dd9c9ad` delivers PoC/gate/report `/2` and chain/base
+completeness isolation. The owner-verified
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is separate from
+the historical owner all-lane result at `039b24e4`, which uses offline model/compiler/renderer
+boundary doubles. The [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+keeps that bounded pass and focused consumer compatibility distinct from live reproduction and
+user-owned current-main validation.
+The [completion contract](evidence-completion-and-remediation.md) preserves the user's compile-only,
+never-executed policy; any executor diagrams/sketches below are historical unimplemented design,
+not new runtime authorization. See the [source inventory](dossier-data-inventory.md).
 Package-local follow-up rounds are now implemented inside each team: accepted, re-resolved
 supported/confirmed claims supply known-claim context, only confirmed claims seed variants, and
 semantic stability plus existing budgets bound repetition. This is not the global round-controller
@@ -70,38 +81,42 @@ producer may be unavailable, but its accepted coverage shard and gap must be pre
 is frozen for the lifetime of this review attempt; newly accepted upstream evidence creates a new
 manifest identity and selective invalidation, never an in-place update.
 
-The proposed application graph is:
+The registered completion graph at `b702eb7` is:
 
 ```text
 accepted analysis/index manifest
   -> job_inference_security_review
+     -> job_poc_generation
      -> job_remediation_planning
      -> job_remediation_validation
+     -> job_dossier_publication
      -> job_final_publication_gate
         -> job_final_report_publication
 ```
 
-Downstream contracts are exact:
+Enabled optional producers precede one final gate; new defaults enable all four, but frozen old
+runs are unchanged. Integration `dd9c9ad` aligns producer/consumer versions. Downstream
+contracts and the implemented slice's limits are:
 
 | Consumer | Packages consumed | Explicitly not consumed |
 |---|---|---|
-| `job_remediation_planning` | the handoff's `remediation_intake` (confirmed final finding packages only, decision 4), score packages, evidence requests that remain gaps, safe regression-test specifications derived from successful PoCs | the `verification_backlog` (supported findings), raw worker narratives, rejected claims, raw PoC payloads |
-| `job_remediation_validation` | finding identity and evidence, remediation proposal, safe regression-test artifact, sanitized PoC result/observed signal, score policy identity | the PoC executor, production credentials, offensive tooling |
+| `job_poc_generation` | shared verified review `/3`, exact candidate/finding/basis/evidence and native build custody; immutable protected `/2` outputs | final gate as an upstream dependency, runtime execution |
+| `job_remediation_planning` | exactly confirmed `remediation_intake`, counted evidence and bounded accepted native source; creates separate safe regression specifications | supported backlog, rejected claims, raw worker narratives, PoC context in this slice (`poc_handoff: null`) |
+| `job_remediation_validation` | accepted confirmed finding/evidence, exact planning handoff/patch, safe regression specification and native build custody | PoC context, generated regression execution, production credentials, offensive tooling |
+| `job_dossier_publication` | accepted findings/projection/source manifest, available PoC and remediation attachments, chain manifest; closed protected projection | raw prompts/transcripts/secrets, unaccepted source, the final gate |
 | `job_final_publication_gate` | accepted claim-ledger manifest, exact claim accounting, finding-package manifest, score-package manifest, attack-chain manifest, sanitized PoC status manifest, completeness and coverage gaps | unaccepted shards or model transcripts |
 | `job_final_report_publication` | publishable finding packages, separate score dimensions, confirmed/qualified chain packages, PoC outcome summaries, limitations/gaps | reusable exploit code, sensitive queries, secrets, raw prompts, private scratch artifacts |
 | retrieval finding index publisher (inside final publication) | sanitized final finding packages and their resolving citations | proposed/duplicate/out-of-scope claims unless the operator requests an internal audit view |
 
 No remediation or report job may reinterpret a claim state or a `ship-block-policy/1` status. It
-projects the accepted state and provenance from this job. The four job names are fixed (decision
-8): each is a producer in `indexing/input_matrix.py` (`INPUT_SOURCES` and
-`PLANNED_CONSUMERS`), and the handoff's `planned_consumers` lists them with the handoff fields each
-reads (`jobs/job_inference_security_review/datasets.py::PLANNED_CONSUMERS`; its `status` is the
-decision-8 reservation of the name, not a build status). `job_final_publication_gate` and
-`job_final_report_publication` are implemented ([operations](../operations/final-report.md)); the
-two remediation jobs are still `planned:` producers and are not built. Until they exist the gate
-records them as the named limitations `remediation_planning_not_run` and
-`remediation_validation_not_run`, and it records the absent attack-chain and PoC status manifests as
-unavailable inputs.
+projects the accepted state and provenance from this job. Central `indexing/input_matrix.py`
+now names actual remediation/dossier producers and the pre-gate consumer graph. Older
+`datasets.py::PLANNED_CONSUMERS` metadata still records the original four reservations; its
+`planned` status is not a current build-status claim and full metadata reconciliation is pending.
+Gate `/2` now replaces unconditional absence text with verified five-capability accounting;
+report `/2` consumes only that certified snapshot. See
+[remediation operations](../operations/remediation.md), [dossier operations](../operations/dossier-publication.md)
+and [final publication](../operations/final-report.md).
 
 ## Dagster graph
 
@@ -528,7 +543,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
-  - OWASP control failures;
+  - provisional, evidence-bound OWASP adverse hypotheses (not compliance failures or confirmed
+    vulnerabilities);
   - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
   - Dockerfile and IaC misconfiguration (`config_scanner`).
 
@@ -598,7 +614,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 | `variant` | "Claim X was confirmed; where else in this unit does the same pattern occur?" | a round-0 confirmed claim (round 1 only) |
 | `sink_up` | "Which dangerous sinks here take caller-controlled data, and what guards them?" | an accepted `sink_site` family (any state but `unavailable`) for the unit's scope (`symbol_links` alone no longer unlocks it; [code graph](code-graph-precomputation.md) decision 3) |
 | `entry_down` | "Follow this entry point's inputs inward." | an accepted `entry_point` family for the unit's scope |
-| `control_gap` | "This control failed or is missing here; what can an attacker do?" | an accepted OWASP workbench result |
+| `control_gap` | "Does this scoped adverse control hypothesis establish a vulnerability?" | accepted `control_evidence` context with original evidence; unsupported/unresolved controls are not failures |
 | `persona_sweep` | "Review this unit as the assigned specialist." | none |
 
 A strategy whose required source is unavailable is skipped with a `coverage_gap`. The panel falls
@@ -648,15 +664,22 @@ The unit of review capacity is the **review team**: `red_per_team` (default 3) r
     effective guard or control (`blue_control`), the other seeks a reachability or configuration
     break (`blue_reachability`). The blues never see each other's output.
   - *The verifier* stays blind under [R6](#r6-independence).
-- **Concurrency.** `review_teams` (default 5) is the number of teams that may run at once on the
-  host. A local overlay commonly sets it to 1. Teams are slots in one application-owned
+- **Concurrency.** `review_teams` (3 dev / 7 prod, including Copilot equivalents) is the number of
+  teams that may run at once within one run. A local overlay may lower it. Teams are slots in one application-owned
   cross-process semaphore, built on the kernel file locks in `storage/lock.py` and held under the
   run's data directory. Both lane units acquire teams from it, so `review_teams = 1` means exactly
-  one team on the machine regardless of how many Dagster units are active.
+  one team in that run regardless of how many Dagster units are active. Concurrent runs have
+  separate semaphores; this is not a host-wide call limit. The Dagster `inference_teams` pool
+  remains two lane units. Model-call concurrency is phase-dependent (up to three calls per
+  team for discovery/review, four for judges); see the
+  [operational limits](../operations/inference-security-review.md#effective-production-assignments-and-bounds).
 - **Scheduling.** The scheduler is fair-share and work-conserving. The next free team goes to the
   lane that has consumed the smaller fraction of its budget share. A lane with no queued packages
   releases its unused share to the other lane. Packages within a lane are taken in canonical
-  order: by rank, then `package_id`.
+  order: a bounded exploratory prefix alternates medium/low in rank/ID order within severity,
+  then ordinary packages by rank and `package_id`. Admission uses the same medium/low
+  alternation with lead-identity ordering, reassigning unused severity slots. Production
+  enables 20 exploratory packages; development exploration stays off.
 - **Semantics.** `review_teams` and pool limits are capacity, not semantics: they are excluded
   from every cell fingerprint, so runs at different concurrency reuse each other's cells. Budgets,
   team composition, caps, and lane shares are semantic: they decide what gets reviewed, and they
@@ -668,9 +691,13 @@ Budgets are expressed per lane in team-packages, with cell-level caps beneath th
 
 - A positive integer `budget_team_packages` is the job total. `lead_budget_share` (default 0.5)
   splits it between the lanes, and unused share flows to the other lane as described above.
-  `budget_team_packages = "all"` instead admits both complete generated package queues without
-  package-count truncation or lane-share quotas. `prod` and `copilot-prod` select `"all"`; `dev`
-  and `copilot-dev` retain 200. The run-wide budget still counts every launched package.
+  `budget_team_packages = "all"` removes that package-count budget but not the finite active-claim
+  ceiling. If package allocations exceed `max_active_claims`, fair-share/work-conserving allocation
+  is applied under the claim cap before launching teams; every allocated package receives at
+  least one claim slot and omitted packages record explicit budget gaps instead of running with
+  zero slots. `prod` and `copilot-prod` select `"all"` and 1,000 active claims; `dev`
+  and `copilot-dev` retain 200 packages and 500 active claims. Unused claim allocations are not
+  recycled; per-package caps remain 3 lead / 5 hunt. The run-wide budget counts every launched package.
 - Each cell is bounded by its model profile's turn, token, query, and timeout caps from
   [R2](#r2-worker-transport-and-bounded-retrieval-loop).
 - `max_model_turns` and the token totals are hard job ceilings. Reaching any ceiling stops new team
@@ -1058,7 +1085,7 @@ max_active_claims = 500
 max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
-review_teams = 5                 # capacity only; local overlay commonly sets 1; not fingerprinted
+review_teams = 3                 # dev; prod profile sets 7; capacity only, not fingerprinted
 red_per_team = 3
 blue_per_team = 2
 verifier_per_team = 1
@@ -1434,7 +1461,10 @@ Normative schemas live under `docs/schemas/inference-security-review/` as each s
 Closed versioned schemas exist for the red discovery result, blue and verifier results, worker
 turns, cell records, claims, evidence relations, adjudication, gaps, ledger events, score packages
 (`score-package/3`), finding packages (`finding-package/2`) and the handoff
-(`inference-review-handoff/2`); the PoC, attack-chain and completeness schemas remain to be defined.
+(`inference-review-handoff/3` from the chain writer). Chain proposal/challenge/terminal/manifest
+schemas now exist, with typed chain events in `ledger-event/1`. The shared reader now accepts
+handoff `/3` and verifies chain/package bindings; final PoC/publication contract changes are not
+silently treated as backwards-compatible.
 They use closed objects, bounded strings/arrays, enums for state, and reusable definitions for
 artifact/evidence references.
 The following documents are concise shape examples; hashes are shortened only for readability.
@@ -1609,8 +1639,11 @@ This tree is the original proposal. The implemented layout differs: the job pack
 `lead_families`, `ledger`, `models`, `obligations`, `packages`, `ranking`, `red_discovery`,
 `references`, `scope`, `ship_block`, `teams`, `units` and the `scoring/` package
 (`application_matrix_v3`, `cwe_impact`, `evidence_source`, `factors`, `interface`, `risk_model`);
-`review/rounds.py`, `review/poc/`, `review/attack_chains.py` and the CVSS/SSVC providers do not
-exist. Guidance composition lives in `src/appsec_review/guidance/`.
+`review/attack_chains.py` and job-local `chains.py` now implement continuity policy and pre-seal
+composition/challenges; `jobs/accepted_review.py` is the shared reader and downstream
+`job_remediation_*` / `job_dossier_publication` packages now exist. `review/rounds.py`,
+`review/poc/` and the CVSS/SSVC providers do not exist. Guidance composition lives in
+`src/appsec_review/guidance/`.
 
 ```text
 src/appsec_review/
@@ -2287,8 +2320,15 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 
 ### Dependencies and current gaps
 
-- The active OWASP assessment must publish accepted applicability/result/coverage shards with exact
-  evidence identities; abridged catalog/live-model gaps remain visible.
+- OWASP assessment is enabled by default across shipped profiles; the frozen job setting can
+  explicitly opt out. It publishes accepted applicability/result/coverage shards with typed
+  original evidence identities before indexing, package assembly and hunt/red-blue review. It uses
+  prior tagging/tag-cloud, graph and classification context only for bounded routing. Complete
+  pinned catalogs are present, but only four narrow Python static procedures are implemented;
+  unsupported controls/languages and missing runtime adapters remain unresolved coverage.
+  Configured worker and fresh blinded reviewer calls are implemented; live-model efficacy remains
+  unverified. Qualification is explicit, synthetic and never production-eligible. See
+  [`owasp-control-workbench.md`](owasp-control-workbench.md).
 - C++ compiled analysis must supply accepted build/AST/IR/binary shards. The separate pinned,
   licensed cross-language CodeQL job supplies database, SARIF, and observation shards when its
   operator-provided image is present. Joern/CPG is deprecated and disabled by default
@@ -2297,7 +2337,8 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 - Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
   `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (only
   `source_to_sink_reachability`, besides `affected_construct`, and only for a path result, per
-  `review/tool_rules.py`; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
+  `review/tool_rules.py`; OWASP PRECOMPUTED interpretations are indirect for **every** final
+  predicate, including `missing_or_ineffective_guard`, and
   `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/1`), and, for C/C++ scopes with an
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
@@ -2307,6 +2348,12 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   units fall back to `persona_sweep` with `required_source_unavailable`; the end-to-end test still
   plays back recordings rather than a live export;
   no graph family can satisfy `security_impact`, and static absence of a fact is never a relation.
+- OWASP `not_satisfied` is a scoped adverse assessment, not exploit confirmation; `satisfied` is
+  scoped counterevidence, not component safety. Eligible `owasp_control` leads remain provisional
+  through packages and actual red/blue/verifier requests. Authority links, original references,
+  proof scopes, counterevidence, dissent and limitations survive projection. Final claims must
+  retrieve underlying evidence and establish their own predicates; a naked source-file identity
+  alone is not a direct predicate fact. Repeated underlying sources do not multiply corroboration.
 - Post-build assessment must publish build-security shards with protected command references,
   binary identities, and gaps, without exposing exact sensitive arguments.
 - CI analysis must publish its accepted discovery, observation, correlation, and coverage shards.

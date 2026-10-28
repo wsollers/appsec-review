@@ -71,7 +71,7 @@ command, path, dependency-file, or output contract.
 
 For every native unit the job revalidates the target snapshot, successful probe identity, recipe,
 dependency hashes, build-unit root, derived image identity, and dependency edges. It then copies
-the bounded source root into `runs/<run-id>/data/build/native/units/<build-unit-id>/workspace/` and
+the bounded source root into the receipt-bound native build workspace and
 executes the accepted configure/build argv without a shell. The pinned container uses Docker's
 bridge network so declared package-manager dependencies can be downloaded,
 runs non-root with dropped capabilities and `no-new-privileges`, has a read-only root, and receives
@@ -193,8 +193,8 @@ or a configuration-cache replay would hide compilation. The command receipt's `i
 field records the operator-declared instrumentation release and every added or removed argument,
 not a hash of the supplied script.
 
-Supplied wrappers and scripts live in the reserved run-owned
-`data/build/jvm/units/<unit>/instrumentation/` directory, mounted read-only at `/appsec-jvm`.
+Supplied wrappers and scripts live in the reserved run-owned JVM unit's `instrumentation/`
+directory, mounted read-only at `/appsec-jvm`.
 Generated execution records have a separate writable mount at `/appsec-jvm-evidence`; the
 executor closes that write window on completion or failure. Neither mount overlaps `/workspace`.
 Target snapshots therefore retain target-owned lookalike paths without hashing the supplied
@@ -428,6 +428,22 @@ are run-private and require operator-declared `platform`, `build_toolchain` and 
 releases. A missing declaration emits `CHECKPOINT_MISSED` with `missing_release_identity` and
 reruns the applicable build; changing any required release invalidates the checkpoint without
 fingerprinting installed software. Unrelated query-pack declarations do not invalidate it.
+
+### Immutable retry publication
+
+Fresh generic, JVM, and WASM builds use the attempt-scoped execution root
+`data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/` within the run, with `workspace/`,
+workspace manifests, protected commands, and JVM instrumentation/evidence under that attempt.
+Execution capture keeps its existing
+`data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/execution-capture/` path; the
+attempt segment must not be added twice.
+
+Attempt isolation applies even when a sibling unit failed: forcing a later attempt does not rewrite
+workspace manifests, artifacts, or other bytes bound by an earlier accepted partial handoff.
+Successful checkpoint reuse verifies and returns the prior pinned workspace and artifact references
+rather than copying a previously accepted workspace into a new mutable unit directory. Read the
+receipt's workspace reference rather than constructing a path from the latest attempt ID.
+Existing `build_workspaces` protected dataset declarations cover these family trees.
 
 Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_COMPLETED`,
 `LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events intentionally contain identities,

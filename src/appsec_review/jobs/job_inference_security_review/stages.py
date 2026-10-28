@@ -23,7 +23,7 @@ from appsec_review.review.ledger import (
 )
 from appsec_review.review.models import (
     Admissibility, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane,
-    RelationKind, make_gap,
+    RelationKind, Role, make_gap,
 )
 from appsec_review.review.scoring import (
     DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
@@ -38,7 +38,7 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 from .datasets import PLANNED_CONSUMERS
 from .schemas import SchemaSet
 
-HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/2"
+HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/3"
 FINDING_SCHEMA = "appsec-review/finding-package/2"
 COVERAGE_SCHEMA = "appsec-review/inference-review-coverage-matrix/1"
 def scorer_actor(implementation: str) -> str:
@@ -414,17 +414,40 @@ def completeness_gaps(units: Iterable[Mapping[str, Any]], scope_gaps: Iterable[M
     return sorted({gap.gap_id: gap for gap in gaps}.values(), key=lambda gap: gap.gap_id)
 
 
-def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incomplete_gap_ratio: float
+def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incomplete_gap_ratio: float, *,
+          additional_cells: Mapping[str, str] | None = None
           ) -> tuple[Accounting, Projection, MergedLedger]:
     merged = merge_verified(shard_paths)
     projection = project(merged.events)
     expected_cells = {cell_id: Lane(lane) for item in lanes for cell_id, lane in item["expected_cells"].items()}
+    review_projection = base_review_projection(projection, additional_cells or {})
     expected_packages = {package_id: Lane(lane) for item in lanes for package_id, lane in item["packages"].items()}
     lead_accounting = {package_id: leads for item in lanes
                        for package_id, leads in (item.get("lead_accounting") or {}).items()}
-    accounting = exact_accounting(projection, expected_cells, expected_packages,
+    accounting = exact_accounting(review_projection, expected_cells, expected_packages,
                                   incomplete_gap_ratio=incomplete_gap_ratio, lead_accounting=lead_accounting)
     return accounting, projection, merged
+
+
+def base_review_projection(projection: Projection, chain_cells: Mapping[str, str]) -> Projection:
+    """Prove exact enhancement-cell coverage without changing base review completeness."""
+    from dataclasses import replace
+    tasks = {"chain_composer": Role.ATTACK_CHAIN_ANALYST, "chain_refuter": Role.BLUE_TEAM_REFUTER,
+             "chain_weakest_link_verifier": Role.INDEPENDENT_VERIFIER}
+    actual = {identity: records for identity, records in projection.cells.items()
+              if identity in chain_cells or any(record.task in tasks for record in records)}
+    if set(actual) != set(chain_cells):
+        raise IntegrityError("chain cell accounting is not exact: missing or unexpected terminal cell")
+    for identity, records in actual.items():
+        if (len(records) != 1 or records[0].task not in tasks or records[0].role is not tasks[records[0].task]
+                or records[0].lane.value != chain_cells[identity]
+                or records[0].claim_id is not None):
+            raise IntegrityError("chain cell accounting is not exact: duplicate or mismatched terminal cell")
+    chain_subjects = {"attack_chains", *projection.attack_chains, *chain_cells}
+    return replace(projection, cells={identity: records for identity, records in projection.cells.items()
+                                    if identity not in actual},
+                   gaps=tuple(gap for gap in projection.gaps
+                              if gap.subject_id not in chain_subjects and gap.gap_class is not GapClass.CHAIN_GAP))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -532,7 +555,11 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "analyst_assessed_evidence": analyst[:256],
             "missing_predicates": missing,
             "verification_review_id": review_id,
-            "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None, "attack_chains": [],
+            "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None,
+            "attack_chains": sorted(chain_id for chain_id, chain in projection.attack_chains.items()
+                                    if chain.decision is not None and chain.decision.status.value in (
+                                        "confirmed", "qualified_supported") and claim.claim_id in (
+                                            item.claim_id for item in chain.proposal.components)),
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
                              "provider_distinct": any(item["provider_distinct"] for item in verifiers),
@@ -616,10 +643,11 @@ def remediation_partition(findings: Sequence[Mapping[str, Any]]) -> tuple[list[d
 def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: str, projection: Projection,
                   accounting: Accounting, shards: Sequence[Mapping[str, Any]], findings: Sequence[Mapping[str, Any]],
                   scores: Sequence[Mapping[str, Any]], package_manifest_sha256: str,
-                  coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
+                  lead_package_manifest_sha256: str, coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
                   ship_block_policy_sha256: str, verification: Mapping[str, Any],
                   lead_severity_triage: Mapping[str, Any] | None = None,
-                  poc_candidate_list: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+                  poc_candidate_list: Sequence[Mapping[str, Any]] = (),
+                  attack_chain_manifest: Mapping[str, Any] | None = None) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
         raise IntegrityError(f"publication_error: claim accounting is not exact ({reasons})")
@@ -640,9 +668,11 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
         "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS],
         "score_packages": [{"score_id": item["score_id"], "sha256": item["sha256"]} for item in scores],
         "gap_ids": [gap.gap_id for gap in projection.gaps],
-        "package_manifest_sha256": package_manifest_sha256, "coverage_matrix": dict(coverage),
+        "package_manifest_sha256": package_manifest_sha256,
+        "lead_package_manifest_sha256": lead_package_manifest_sha256, "coverage_matrix": dict(coverage),
         "possible_duplicates": [list(pair) for pair in possible],
         "poc_candidates": [dict(item) for item in poc_candidate_list],
+        "attack_chain_manifest": dict(attack_chain_manifest) if attack_chain_manifest is not None else None,
     }
     errors = schemas.errors("handoff", handoff)
     if errors:

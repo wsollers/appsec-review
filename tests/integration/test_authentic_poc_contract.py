@@ -166,8 +166,7 @@ def authentic():
 
 def verified(chain):
     return verify_inputs(
-        chain.run_root, review_schemas=SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"),
-        gate_schemas=SchemaSet(ROOT / "docs" / "schemas" / "final-report"))
+        chain.run_root, review_schemas=SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"))
 
 
 def test_current_review_producer_is_read_by_poc_consumer() -> None:
@@ -225,7 +224,7 @@ def test_real_review_gate_and_poc_planning_use_authoritative_contracts(authentic
 
     job = build_job(infer=forbidden, executor_factory=forbidden, repository_root=ROOT)
     with lane.span("poc-planning"):
-        outcome = run_job(chain.config, job, chain.fixture.run_id, chain.upstream(GATE), chain.env)
+        outcome = run_job(chain.config, job, chain.fixture.run_id, chain.upstream(JOB), chain.env)
     assert outcome["handoff"]["completion_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
     summary = chain.read("job_poc_generation", "publish.publish_handoff", "poc-generation.json")
     assert summary["counts"]["candidates"] == len(inputs.candidates)

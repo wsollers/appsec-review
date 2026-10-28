@@ -9,7 +9,7 @@
     "run_id",
     "review",
     "inputs",
-    "unavailable_inputs",
+    "capabilities", "attachments",
     "accounting",
     "ship_block",
     "verification",
@@ -24,7 +24,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/final-publication-gate/1"
+      "const": "appsec-review/final-publication-gate/2"
     },
     "run_id": {
       "$ref": "common.schema.json#/$defs/short_text"
@@ -40,7 +40,8 @@
         "ledger_head_sha256",
         "projection_sha256",
         "ship_block_policy_sha256",
-        "package_manifest_sha256"
+        "package_manifest_sha256",
+        "lead_package_manifest_sha256"
       ],
       "properties": {
         "status": {
@@ -65,6 +66,9 @@
           "$ref": "common.schema.json#/$defs/sha256"
         },
         "package_manifest_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "lead_package_manifest_sha256": {
           "$ref": "common.schema.json#/$defs/sha256"
         }
       }
@@ -97,22 +101,8 @@
         }
       }
     },
-    "unavailable_inputs": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "attack_chain_manifest",
-        "poc_status_manifest"
-      ],
-      "properties": {
-        "attack_chain_manifest": {
-          "$ref": "common.schema.json#/$defs/unavailable"
-        },
-        "poc_status_manifest": {
-          "$ref": "common.schema.json#/$defs/unavailable"
-        }
-      }
-    },
+    "capabilities": {"$ref": "common.schema.json#/$defs/capabilities"},
+    "attachments": {"$ref": "common.schema.json#/$defs/attachments"},
     "accounting": {
       "$ref": "common.schema.json#/$defs/accounting_summary"
     },

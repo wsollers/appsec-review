@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
@@ -410,7 +411,10 @@ def configured(tmp_path: Path, *, max_nodes: int | None = None, file_top_count: 
     shutil.copytree(ROOT / "rules" / "semgrep", tmp_path / "rules" / "semgrep")
     base = load_config(tmp_path / "appsec-review.toml")
     return replace(base, runtime=replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
-                                         metadata_dir=tmp_path / "metadata"))
+                                         metadata_dir=tmp_path / "metadata"),
+                   review_policy=replace(base.review_policy, releases=ComponentReleases({
+                       **base.review_policy.releases.values, "platform": "test-platform",
+                       "validation": "test-validation"})))
 
 
 def target_copy(tmp_path: Path) -> Path:
@@ -495,10 +499,11 @@ def test_truncated_ast_is_a_named_gap_not_a_clean_file(tmp_path: Path) -> None:
 
 
 def _publish_handoff(run_root: Path, job_id: str, outputs: dict[str, Any]) -> None:
+    from tests.handoff_fixture import write_fixture_handoff
     attempt = run_root / "data" / "jobs" / job_id / "attempts" / "fixture"
     attempt.mkdir(parents=True, exist_ok=True)
     handoff = attempt / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": job_id,
+    write_fixture_handoff(run_root, handoff, {"status": "ACCEPTED", "job_id": job_id,
                           "outputs": outputs})
     atomic_json(run_root / "data" / "jobs" / job_id / "latest.json",
                 {"handoff_path": handoff.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff)})

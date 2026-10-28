@@ -4,7 +4,7 @@ Answers are a pure function of (role, task, persona, package leads or claim) so 
 definition-of-done states arise from the fixture accepted index set:
 
 * lane A ``sast_critical``: claim C1 (CWE-120) cites a lead observation for the construct and the
-  build action for every other predicate. Under ``predicate-admission/1`` only the construct counts
+  build action for every other predicate. Under ``predicate-admission/2`` only the construct counts
   (the build action is relevant to configuration, not to attacker control, reachability or guards),
   so C1 is ``supported`` and never ``confirmed``. The failure-modes lens also probes forbidden
   capabilities (an evaluator path and an out-of-scope identity).
@@ -127,6 +127,14 @@ class ScriptedInfer:
         self._log(request, "call")
         if request.role in self.scenario.get("fail_roles", ()):
             raise RuntimeError("scripted provider outage")
+        if task == "chain_composer":
+            return self._final({"candidates": [], "gaps": ["fixture_has_no_native_chain_continuity_evidence"]})
+        if task in ("chain_refuter", "chain_weakest_link_verifier"):
+            return self._final({
+                "chain_id": payload["chain"]["chain_id"],
+                "checks": [{"edge_index": index, "dimension": item["dimension"], "stance": "unresolved", "cites": []}
+                           for index, edge in enumerate(payload["chain"]["edges"]) for item in edge["obligations"]],
+                "gaps": ["fixture_has_no_native_chain_continuity_evidence"]})
         if request.role == "red_team_analyst":
             self._gate()
             return self._lead_red(request, task, payload)

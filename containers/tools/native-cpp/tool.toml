@@ -20,6 +20,7 @@ pids_limit = 256
 timeout_seconds = 600
 output_bytes = 16777216
 executable = "/opt/appsec/native.py"
+additional_executables = ["/usr/bin/python3"]
 version_argv = ["/opt/appsec/native.py", "version"]
 version_expect = "appsec-native-cpp 1.0.0"
 dependency = "ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"

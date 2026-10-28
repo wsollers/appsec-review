@@ -39,12 +39,15 @@ def _json(run, relative, document):
 
 
 def _accepted(run, name, outputs):
+    from tests.handoff_fixture import write_fixture_handoff
     artifacts = [value[key] for value in outputs.values()
                  for key in ("artifact", "index_manifest") if key in value]
-    reference = _json(run, f"data/jobs/{name}/attempts/fixture/handoff.json", {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": name,
+    relative = f"data/jobs/{name}/attempts/fixture/handoff.json"
+    path = write_fixture_handoff(run, run / relative, {
+        "source_fingerprint": SNAPSHOT, "status": "ACCEPTED", "job_id": name,
         "outputs": outputs, "artifacts": artifacts,
     })
+    reference = {"path": relative, "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
     _json(run, f"data/jobs/{name}/latest.json", {
         "handoff_path": reference["path"], "handoff_sha256": reference["sha256"],
     })

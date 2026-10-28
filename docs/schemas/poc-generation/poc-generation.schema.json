@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/poc-generation/poc-generation.schema.json",
-  "title": "Published summary of job_poc_generation (appsec-review/poc-generation/1)",
-  "description": "One row per attempted candidate with its status, bounded description, file references and hashes. The files themselves stay under data/poc/<claim-id>/ and are never indexed, linked or executed.",
+  "title": "Published compile-only PoC summary (appsec-review/poc-generation/2)",
+  "description": "Every admitted candidate has an outcome or an explicit cap. Developer files are immutable, attempt-owned and never executed.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,11 +14,11 @@
     "counts",
     "candidates",
     "omitted_claims",
-    "gaps"
+    "gaps", "execution", "runtime_verified", "result_id"
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/poc-generation/1"
+      "const": "appsec-review/poc-generation/2"
     },
     "run_id": {
       "$ref": "common.schema.json#/$defs/short_text"
@@ -27,20 +27,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "gate_handoff",
-        "gate_document",
         "review_job_handoff",
         "review_handoff",
         "manifest",
         "language_build_handoff_sha256"
       ],
       "properties": {
-        "gate_handoff": {
-          "$ref": "common.schema.json#/$defs/artifact_ref"
-        },
-        "gate_document": {
-          "$ref": "common.schema.json#/$defs/artifact_ref"
-        },
         "review_job_handoff": {
           "$ref": "common.schema.json#/$defs/artifact_ref"
         },
@@ -62,6 +54,9 @@
         }
       }
     },
+    "execution": {"const": "not_performed_by_policy"},
+    "runtime_verified": {"const": false},
+    "result_id": {"type": "null"},
     "execution_policy": {
       "const": "nothing is linked into an executable and nothing is run"
     },
@@ -182,9 +177,12 @@
         "files",
         "brief",
         "writer_receipt",
-        "gaps"
+        "gaps", "execution", "runtime_verified", "result_id"
       ],
       "properties": {
+        "execution": {"const": "not_performed_by_policy"},
+        "runtime_verified": {"const": false},
+        "result_id": {"type": "null"},
         "claim_id": {
           "$ref": "common.schema.json#/$defs/claim_id"
         },

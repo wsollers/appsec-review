@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 16000},
+    "strings": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/text"}},
+    "ref": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+      "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}, "sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "nullable_ref": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]},
+    "finding": {
+      "type": "object", "additionalProperties": false, "required": ["claim_id", "finding_package_id", "sha256"],
+      "properties": {"claim_id": {"type": "string", "minLength": 1, "maxLength": 200},
+                     "finding_package_id": {"type": "string", "minLength": 1, "maxLength": 200},
+                     "sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "assurance": {
+      "type": "object", "additionalProperties": false, "required": ["execution", "runtime_verified", "result_id"],
+      "properties": {"execution": {"const": "not_performed_by_policy"}, "runtime_verified": {"const": false},
+                     "result_id": {"type": "null"}}
+    },
+    "upstream": {
+      "type": "object", "additionalProperties": false, "required": ["review_handoff", "poc_handoff"],
+      "properties": {"review_handoff": {"$ref": "#/$defs/ref"}, "poc_handoff": {"$ref": "#/$defs/nullable_ref"},
+                     "planning_handoff": {"$ref": "#/$defs/ref"}}
+    },
+    "regression": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fixtures", "assertions", "positive_cases", "negative_cases", "before", "after", "safety_assertion"],
+      "properties": {"fixtures": {"$ref": "#/$defs/strings"}, "assertions": {"$ref": "#/$defs/strings"},
+                     "positive_cases": {"$ref": "#/$defs/strings"}, "negative_cases": {"$ref": "#/$defs/strings"},
+                     "before": {"$ref": "#/$defs/text"}, "after": {"$ref": "#/$defs/text"},
+                     "safety_assertion": {"$ref": "#/$defs/text"}}
+    },
+    "check": {
+      "type": "object", "additionalProperties": false, "required": ["status", "reason", "artifact"],
+      "properties": {
+        "status": {"enum": ["passed", "failed", "not_performed", "not_performed_by_policy", "analyst_supported",
+                            "analyst_contradicted", "analyst_unresolved", "baseline_failed", "patched_failed",
+                            "unavailable", "unsafe"]},
+        "reason": {"$ref": "#/$defs/text"}, "artifact": {"$ref": "#/$defs/nullable_ref"}
+      }
+    }
+  }
+}

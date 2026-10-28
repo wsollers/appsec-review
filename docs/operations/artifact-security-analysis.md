@@ -100,6 +100,38 @@ its observations. Standalone retrieval therefore keeps the artifact inventory, i
 target paths with identical bytes, available after security analysis. Observations resolve back to
 exact run-owned raw artifacts without inventing source-line locations for binary inputs.
 
+The [interchange upgrade](../architecture/job-interchange.md) adds common observation metadata
+and native-result references to this scanner lane. The implementation keeps
+`appsec-review/artifact-security-record/2` and `appsec-review/artifact-security-observation/1`,
+with additive common/provenance metadata. Finding normalization is
+`appsec-review/artifact-security-findings/2`, parser identity is
+`appsec-review/artifact-security-parsers/3+<policy-identity>`, and normalization is
+`appsec-review/artifact-security-normalizer/2` for retained parser-input semantics.
+Keep original scanner result identity, parser, retained byte count/hash, selector, and completeness
+alongside domain-specific artifact/package fields. A synthesized BLint report or partitioned result
+must not replace the original report/invocation provenance. Distinct selectors/invocations remain
+visible even when identical references coalesce or file bytes are stored once.
+Only safe metadata enters indexes; retained scanner bodies remain protected run artifacts.
+Missing provenance or bounded/truncated capture is a named gap, not a clean artifact verdict.
+
+`SKIPPED_NA` scans retain their result/native/execution artifact closure even though they emit no
+finding observations. Missing verified execution evidence is an explicit provenance gap.
+Normalized Syft and BLint scan summaries retain counts rather than embedding full artifact/review
+lists; Grype finding payloads keep compact package/advisory fields and a native match selector.
+These bounded projections do not discard the retained native report or replace its provenance.
+SpotBugs preserves native priority in common severity metadata, and bytecode findings remain
+`source_sast` observations rather than inventory or confirmed findings.
+
+Parser-input retention is separate from diagnostic head/tail capture. The typed setting
+`jobs.job_artifact_security_analysis.settings.parser_input_limit_bytes` defaults to 67,108,864
+bytes and must be positive. Retain the full native input within that bound so the parser and result
+selector refer to the same bytes; `stream_limit_bytes` bounds diagnostic streams instead.
+Exceeding the parser-input bound requires explicit partial coverage/truncation rather than parsing
+an unrecorded complete report while citing a truncated diagnostic copy.
+Diagnostic stdout/stderr truncation is independently reported as a coverage gap even when a
+separate parser-input report is complete. Empty scanner JSON fails parsing rather than becoming
+an empty successful observation.
+
 Built-in parsers provide bounded inventory and structural metadata. Tool-dependent coverage is
 explicit: unavailable BLint, Syft, Grype, OSV, native-symbol/hardening, JVM bytecode, or full WASM
 policy tooling is recorded as a gap, never as a clean result. Tool output is evidence only and is not

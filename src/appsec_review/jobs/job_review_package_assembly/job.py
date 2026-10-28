@@ -83,7 +83,9 @@ def build_job() -> Job:
                       "size_bytes": path.stat().st_size}
                      for path in sorted(directory.glob("*.json"))]
         unit.job.events.write("REVIEW_PACKAGES_PUBLISHED", package_count=len(manifest["packages"]),
-                              coverage_gap_count=len(gaps), manifest_sha256=accepted_sha)
+                              coverage_gap_count=len(gaps), manifest_sha256=accepted_sha,
+                              package_manifest_sha256=file_sha256(directory / "manifest.json"),
+                              counts=manifest["counts"], unit_id=unit.unit_id)
         return {"schema": SCHEMA, "accepted_manifest_sha256": accepted_sha,
                 "package_directory": directory.relative_to(run_root).as_posix(),
                 "content_sha256": manifest["content_sha256"],

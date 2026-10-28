@@ -25,7 +25,7 @@ DATASETS = (
                   "(appsec-review/codeql-graph-export-manifest/1), plus the run-level export index.",
                   artifacts=(_SCOPES + "/exports/**", _A + "/artifacts/codeql/graph-exports.json"),
                   reason="raw rows hold CodeQL internal ids; normalized facts are the graph index"),
-    indexed("codeql_observations", "execution", "codeql", "appsec-review/codeql-sarif-normalizer/2",
+    indexed("codeql_observations", "execution", "codeql", "appsec-review/codeql-sarif-normalizer/3",
             "CodeQL observations with rule identity, mapped locations and ordered flow steps.",
             indexes=("observations",), prefixes=("codeql-",),
             route="query_codeql; query_hotspots for ordered flow steps"),

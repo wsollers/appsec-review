@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "artifact", "item_count", "gaps", "terminal_status"],
+  "properties": {
+    "schema": {"const": "appsec-review/remediation-validation-handoff/1"},
+    "artifact": {"$ref": "common.schema.json#/$defs/ref"},
+    "item_count": {"type": "integer", "minimum": 0, "maximum": 100000},
+    "gaps": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/text"}},
+    "terminal_status": {"enum": ["SUCCEEDED", "SKIPPED_NA", "COMPLETED_WITH_GAPS"]}
+  }
+}

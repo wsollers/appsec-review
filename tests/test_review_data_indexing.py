@@ -19,13 +19,14 @@ from typing import Any
 
 import pytest
 
+from tests.handoff_fixture import write_fixture_handoff
 from appsec_review.config import load_config
 from appsec_review.graph.contract import GRAPH_INDEX, Family
 from appsec_review.indexing import fts_worker, input_matrix, inventory, matrix, products
 from appsec_review.indexing.store import ShardSet
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.retrieval.precomputed import QUERY_SETS, RETIRED_GRAPH_SETS
-from appsec_review.runtime.datasets import DatasetDeclaration, artifact_only
+from appsec_review.runtime.datasets import DatasetDeclaration, artifact_only, dataset_contract
 from appsec_review.indexing.build_facts import classify_command, classify_environment
 from appsec_review.indexing.store import AcceptedHandoff
 from appsec_review.mcp import RetrievalMcpAdapter
@@ -36,6 +37,7 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.observations import SEVERITY_RULE, normalize_reported_severity
 from appsec_review.jobs.job_review_data_indexing import build_job
 from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as EVIDENCE_DATASETS
+from appsec_review.jobs.job_review_prioritization.datasets import DATASETS as PRIORITY_DATASETS
 from appsec_review.jobs.job_review_package_assembly import build_job as build_package_job
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
@@ -329,7 +331,8 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
         [RelationRecord(RelationKind.OBSERVED_AT, ids["sec"], ids["exe"], True, 1.0)])
 
     ids["priority"] = LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, SNAPSHOT, {"item_id": "file:src/auth.c"}).value
-    shard("priority", "review-prioritization", {"job": "job_review_prioritization"}, [
+    shard("priority", "review-prioritization", {"job": "job_review_prioritization",
+                                              "unit": "publish.index_priority"}, [
         EntityRecord(LogicalIdentity.parse(ids["priority"]), "file:src/auth.c", "src/auth.c", "priority auth",
                      {"item_id": "file:src/auth.c", "scope": "file", "path": "src/auth.c", "language": "C",
                       "rank": 1, "score": 77.0, "features": {"cyclomatic": 7, "cognitive": 9,
@@ -384,7 +387,10 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
     def handoff(job_id: str, artifacts: list[dict[str, str]], outputs: dict[str, Any]) -> tuple[Path, str]:
         attempt = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
         path = attempt / "handoff.json"
-        atomic_json(path, {"schema": "appsec-review/job-handoff/1", "job_id": job_id, "attempt_id": "attempt_0001",
+        if job_id == "job_review_prioritization":
+            atomic_json(attempt / "claim.json", {
+                "dataset_contract": dataset_contract(job_id, ("extract", "publish"), PRIORITY_DATASETS)})
+        write_fixture_handoff(run_root, path, {"job_id": job_id, "attempt_id": "attempt_0001",
                            "status": "ACCEPTED", "completion_status": "SUCCEEDED", "outputs": outputs,
                            "artifacts": artifacts, "source_fingerprint": SNAPSHOT})
         sha = file_sha256(path)
@@ -407,7 +413,9 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
     handoff("job_language_build", [{"path": events_path.relative_to(run_root).as_posix(), "sha256": events_sha}], {})
     priority_handoff, priority_sha = handoff(
         "job_review_prioritization", [manifest, syntax],
-        {"extract.syntax_metrics": {"artifact": syntax}, "publish.index_priority": {"index_manifest": manifest}})
+        {"extract.syntax_metrics": {"artifact": syntax},
+         "publish.index_priority": {"index_manifest": manifest, "index_identity": asdict(next(
+             shard for shard in shards if shard.shard_id == "review-prioritization"))}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,
         "handoff_path": priority_handoff.relative_to(run_root).as_posix(), "handoff_sha256": priority_sha,
@@ -725,9 +733,12 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
         cursor = page["pagination"]["next_cursor"]
         if cursor is None:
             break
-    # job_cpg_analysis, job_svf_alias_analysis and job_poc_generation are disabled by default, so their input
-    # sources are absent.
-    assert len(sources) == len(input_matrix.INPUT_SOURCES) - 3
+    disabled = {job_id for job_id, job in config.jobs.items() if job.settings.get("enabled") is False}
+    expected_sources = {source if source != "secret_leads" else "<redacted>"
+                        for source, producers, *_ in input_matrix.INPUT_SOURCES
+                        if any(producer.removeprefix("planned:") not in disabled for producer in producers)}
+    assert {item["payload"]["source"] for item in sources} == expected_sources
+    assert len(sources) == len(expected_sources)
     assert all(item["payload"]["source"] != "joern_cpg" for item in sources)
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
     native = next(item["payload"] for item in language if item["payload"]["language"] == "c/c++")
@@ -1093,46 +1104,47 @@ def test_input_matrix_names_the_graph_producer_and_resolves_planned_producers_on
     assert not any("job_cpg_analysis" in item for item in discrepancies)
 
 
-DOWNSTREAM = ("job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",
+DOWNSTREAM = ("job_poc_generation", "job_remediation_planning", "job_remediation_validation",
+              "job_dossier_publication", "job_final_publication_gate", "job_openvex_export",
               "job_final_report_publication")
 
 
-def test_downstream_review_consumers_are_registered_as_planned_producers_by_name() -> None:
-    """Decision 8: the four downstream job names are fixed before any of them is built."""
+def test_downstream_review_consumers_preserve_certified_completion_order() -> None:
     from appsec_review.jobs.job_inference_security_review.datasets import PLANNED_CONSUMER_JOBS, PLANNED_CONSUMERS
     from appsec_review.runtime.registry import builtin_registry
 
     planned = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers
                if producer.startswith("planned:")}
-    remediation = DOWNSTREAM[:2]
-    assert {f"planned:{job}" for job in remediation} <= planned
-    assert not {f"planned:{job}" for job in DOWNSTREAM[2:]} & planned          # the gate and report are real producers
+    assert not {f"planned:{job}" for job in DOWNSTREAM} & planned
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
-    assert set(DOWNSTREAM[2:]) <= named
-    assert PLANNED_CONSUMER_JOBS == DOWNSTREAM
-    assert tuple(consumer.removeprefix("planned:") for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
-    # Every consumed producer is the review itself or an earlier downstream job (planned or built).
+    assert set(DOWNSTREAM) <= named
+    assert PLANNED_CONSUMER_JOBS == tuple(
+        job for job in DOWNSTREAM if job not in {"job_poc_generation", "job_dossier_publication"})
+    assert tuple(consumer for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
     for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
-        earlier = {name for job in DOWNSTREAM[:index] for name in (job, f"planned:{job}")}
-        assert set(producers) <= {"job_inference_security_review"} | earlier
+        earlier = set(DOWNSTREAM[:index])
+        assert set(producers) <= {"job_inference_security_review", "job_language_build"} | earlier
     assert all(item["status"] == "planned" and item["reads"] for item in PLANNED_CONSUMERS)
     # Remediation reads only confirmed findings (decision 4); never the verification backlog.
     reads = {item["job_id"]: set(item["reads"]) for item in PLANNED_CONSUMERS}
     assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
     assert "remediation_intake" in reads["job_remediation_planning"]
-    # The remediation jobs are not built: they are planned, never registered, and reconcile reports
-    # them as planned. The publication gate and the final report are built and registered.
-    built = {"job_final_publication_gate", "job_final_report_publication"}
-    assert set(DOWNSTREAM) & set(builtin_registry().job_ids()) == built
+    registered = set(builtin_registry().job_ids())
+    assert set(DOWNSTREAM) <= registered
     rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
     states = {item["source"]: item["producer_states"] for item in rows}
-    assert states["remediation_plans"] == [{"producer": "planned:job_remediation_planning", "status": "planned"}]
+    assert states["remediation_plans"] == [{"producer": "job_remediation_planning", "status": "unregistered"}]
     assert states["publication_gate_decisions"] == [{"producer": "job_final_publication_gate", "status": "unregistered"}]
-    rows, discrepancies = input_matrix.reconcile(built, [], [], {}, "job_review_data_indexing")
+    rows, discrepancies = input_matrix.reconcile(registered, [], [], {}, "job_review_data_indexing")
+    states = {item["source"]: item["producer_states"] for item in rows}
+    for source, producer in (("remediation_plans", "job_remediation_planning"),
+                             ("publication_gate_decisions", "job_final_publication_gate")):
+        assert states[source] == [{"producer": producer, "status": "not_executed",
+                                   "indexed_datasets": 0, "unavailable_datasets": 0}]
     assert {item["source"]: item["producer_states"][0]["status"] for item in rows}[
         "final_report_publications"] == "not_executed"
     assert not any(job in item for item in discrepancies for job in DOWNSTREAM)
-    # Once registered, a planned name resolves to the job itself without a matrix change.
+    assert builtin_registry().build("job_final_report_publication").consumes == ("job_final_publication_gate",)
     assert input_matrix.resolve_producer("planned:job_final_publication_gate", {"job_final_publication_gate"}) == \
         "job_final_publication_gate"
 

@@ -408,7 +408,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     inputs_artifact = {"path": inputs_path.relative_to(run_root).as_posix(), "sha256": file_sha256(inputs_path),
                        "size_bytes": inputs_path.stat().st_size}
     handoff_path = attempt / "handoff.json"
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "job_id": "job_review_data_indexing",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, {"job_id": "job_review_data_indexing",
                                "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
                                "artifacts": [manifest], "outputs": {"load.accepted_inputs": {"artifact": inputs_artifact}},
                                "source_fingerprint": SNAPSHOT})

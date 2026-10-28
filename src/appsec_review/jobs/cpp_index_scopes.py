@@ -9,6 +9,8 @@ mapping before a tool runs.
 
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -58,10 +60,7 @@ def load_accepted_cpp(run_root: Path) -> Mapping[str, Any]:
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _read_json_artifact(run_root, {"path": pointer.get("handoff_path"),
                                             "sha256": pointer.get("handoff_sha256")})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError("C++ compiled-analysis handoff is not accepted")
-    if handoff.get("job_id") != "job_cpp_compiled_analysis":
-        raise ValueError("accepted C++ handoff producer is invalid")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_cpp_compiled_analysis")
     result_path = str(handoff.get("resolving_paths", {}).get("result", ""))
     result_identity = next((item for item in handoff.get("artifacts", ())
                             if item.get("path") == result_path), None)
@@ -358,7 +357,7 @@ def checkpoint_identity(values: Mapping[str, Any]) -> str:
 
 def publish_scope_indexes(unit: Any, *, job_id: str, index_name: str, prefix: str,
                           results: list[Mapping[str, Any]], unavailable: Mapping[str, str],
-                          gaps: list[str]) -> dict[str, Any]:
+                          gaps: list[str], empty_reason: str = "no accepted C/C++ project scopes") -> dict[str, Any]:
     """Compose this job's scope shards and a coverage shard onto the accepted manifest.
 
     Earlier shards from the same job are replaced; every other producer's shards are kept, so
@@ -380,7 +379,7 @@ def publish_scope_indexes(unit: Any, *, job_id: str, index_name: str, prefix: st
     for case_id, reason in sorted(unavailable.items()):
         coverage.add_coverage(f"{prefix}:{case_id}", "unavailable", reason)
     if not unavailable and not results:
-        coverage.add_coverage(prefix, "unavailable", "no accepted C/C++ project scopes")
+        coverage.add_coverage(prefix, "unavailable", empty_reason)
     coverage_sha = coverage.build()
     indexes.append(IndexIdentity(index_name, "appsec-review/retrieval-index/2", coverage_sha, fingerprint,
                                  coverage_path.relative_to(run_root).as_posix(),

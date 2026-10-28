@@ -138,13 +138,18 @@ def load_runtime_skill(repository_root: Path, name: str, *, job_id: str,
     raise GuidanceError(f"runtime skill file is unavailable: {name}")
 
 
-def select_review_procedures(*, role: str, task: str) -> tuple[str, ...]:
-    """Select bounded procedures from trusted role/task IDs, never from target text."""
+def select_review_procedures(*, role: str, task: str, binary_evidence: bool = False) -> tuple[str, ...]:
+    """Select bounded procedures from trusted role/task IDs, never from target text.
+
+    ``binary_evidence`` comes from the accepted retrieval manifest (a ``binary`` shard holds a
+    configured binary), never from the model, and adds the binary-derived evidence procedure.
+    """
+    binary = ("binary-evidence",) if binary_evidence else ()
     if role in {"hypothesis_hunter", "red_team_analyst"}:
         return (("generative-investigation", "effective-control-verification") if task == "control_gap"
-                else ("generative-investigation",))
+                else ("generative-investigation",)) + binary
     return {
         "blue_team_refuter": ("effective-control-verification",),
         "independent_verifier": ("predicate-verification",),
         "adjudication_judge": ("conflict-resolution",),
-    }.get(role, ())
+    }.get(role, ()) + binary

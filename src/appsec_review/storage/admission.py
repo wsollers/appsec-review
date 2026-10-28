@@ -146,16 +146,20 @@ def _frozen(root: Path) -> tuple[dict[str, Any], str]:
     return deepcopy(policy), digest
 
 
-def sign_claim(root: Path, claim: Mapping[str, Any]) -> str:
-    """Seal a prepared managed claim in application custody, outside worker authority."""
+def claim_identity(claim: Mapping[str, Any]) -> dict[str, Any]:
     # Dagster adds scheduling annotations and changes the current op name between processes.
     annotations = {"managed_claim_authentication", "graph_started_at", "prior_graph_completion_status",
                    "completed_handoffs", "resume_decisions"}
     body = {key: value for key, value in claim.items() if key not in annotations}
     body["orchestration"] = {key: value for key, value in claim.get("orchestration", {}).items()
                              if key != "node"}
+    return body
+
+
+def sign_claim(root: Path, claim: Mapping[str, Any]) -> str:
+    """Seal a prepared managed claim in application custody, outside worker authority."""
     return hmac.new(_key(root, create=False), canonical_json({
-        "schema": "appsec-review/managed-claim/1", "claim": body}), hashlib.sha256).hexdigest()
+        "schema": "appsec-review/managed-claim/1", "claim": claim_identity(claim)}), hashlib.sha256).hexdigest()
 
 
 def verify_claim(root: Path, claim: Mapping[str, Any]) -> None:
@@ -219,9 +223,30 @@ def _evidence_snapshot(context: Any, records: list[tuple[str, str, Any]]) -> str
 
 def resolve_evidence_target(context: Any, handoffs: Mapping[str, str]) -> str:
     """Derive target trust only from the explicitly selected authenticated publications."""
-    if context.review_policy.mode is not AssuranceMode.FIRST_PARTY_MANAGED:
+    if context.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
+        return _evidence_snapshot(context, _upstream_records(context, handoffs))
+    from appsec_review.retrieval.core import _accepted_handoff
+    from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS, TARGET_INDEPENDENT_METADATA_JOBS
+    from .shared import verify_handoff
+    snapshots = set()
+    for job_id, digest in sorted(handoffs.items()):
+        handoff, _ = _accepted_handoff(context.run_root, job_id, digest)
+        verify_handoff(context.run_root, handoff)
+        if handoff["target_snapshot"] != "none":
+            snapshots.add(handoff["target_snapshot"])
+    if len(snapshots) > 1:
+        raise ValueError("claimed upstream handoffs disagree on the target snapshot")
+    if context.source_fingerprint != "none":
+        if snapshots - {context.source_fingerprint}:
+            raise ValueError("claimed upstream handoff belongs to a different target")
         return context.source_fingerprint
-    return _evidence_snapshot(context, _upstream_records(context, handoffs))
+    if context.config.job_id in TARGET_INDEPENDENT_JOBS:
+        if context.target_root is not None:
+            raise ValueError("absent-target claim cannot grant target access")
+        if not snapshots and context.config.job_id not in TARGET_INDEPENDENT_METADATA_JOBS:
+            raise ValueError("target-independent consumer requires a verified target origin")
+        return next(iter(snapshots), "none")
+    return "none"
 
 
 def admit_upstreams(context: Any, handoffs: Mapping[str, str]) -> None:
