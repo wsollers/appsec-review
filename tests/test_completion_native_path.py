@@ -144,7 +144,7 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
         "publish.publish_handoff", (JOB,))
     poc = summaries[POC]
     assert len(writer.requests) == 1
-    assert len(poc["candidates"]) == 1 and poc["omitted"] == []
+    assert len(poc["candidates"]) == 1 and poc["omitted_claims"] == []
     outcome = poc["candidates"][0]
     assert outcome["claim_id"] == candidate["claim_id"] and outcome["status"] == "compile_verified"
     compiler.assert_nothing_is_linked_or_run()
