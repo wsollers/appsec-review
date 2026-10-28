@@ -82,7 +82,7 @@
       "type": "object", "additionalProperties": false,
       "required": [
         "review", "accounting", "ship_block", "verification", "coverage", "limitations",
-        "gap_ids", "unavailable_inputs", "status"
+        "gap_ids", "capabilities", "attachments", "status"
       ],
       "properties": {
         "review": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/review"},
@@ -92,7 +92,8 @@
         "coverage": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/coverage"},
         "limitations": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/limitations"},
         "gap_ids": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/gap_ids"},
-        "unavailable_inputs": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/unavailable_inputs"},
+        "capabilities": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/capabilities"},
+        "attachments": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/attachments"},
         "status": {"$ref": "../final-report/final-publication-gate.schema.json#/properties/status"}
       }
     },

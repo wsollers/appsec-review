@@ -12,6 +12,7 @@ import pytest
 from referencing.exceptions import NoSuchResource
 
 from appsec_review.jobs.job_openvex_export import contracts as c
+from appsec_review.jobs.accepted_review import HANDOFF_SCHEMA as REVIEW_HANDOFF_SCHEMA
 from appsec_review.review.models import IntegrityError
 from tests.openvex_support import (
     SCHEMAS, enabled_settings, example_bundle, make_verified_inputs, schema_registry, schema_validator,
@@ -51,6 +52,14 @@ def test_upstream_pin_license_and_schema_resource_identity() -> None:
         assert hashlib.sha256(payload).hexdigest() == expected
         Draft202012Validator.check_schema(json.loads(payload))
     assert c.VALIDATION_PROFILE_SHA256 != c.UPSTREAM_SCHEMA_SHA256
+    gate_schema = json.loads((SCHEMAS.parent / "final-report" / "final-publication-gate.schema.json").read_bytes())
+    report_schema = json.loads((SCHEMAS.parent / "final-report" / "final-report.schema.json").read_bytes())
+    review_schema = json.loads((SCHEMAS.parent / "inference-security-review" / "handoff.schema.json").read_bytes())
+    assert gate_schema["properties"]["schema"]["const"] == c.FINAL_PUBLICATION_GATE_SCHEMA == (
+        "appsec-review/final-publication-gate/2")
+    assert report_schema["properties"]["schema"]["const"] == "appsec-review/final-report/2"
+    assert review_schema["properties"]["schema"]["const"] == REVIEW_HANDOFF_SCHEMA == (
+        "appsec-review/inference-review-handoff/3")
 
 
 def test_offline_registry_resolves_installed_layout_without_remote_retrieval(tmp_path: Path) -> None:
@@ -59,10 +68,12 @@ def test_offline_registry_resolves_installed_layout_without_remote_retrieval(tmp
         destination = installed / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(SCHEMAS / relative, destination)
-    bundle = example_bundle()
-    schema_validator("manifest.schema.json", installed).validate(c.json_body(bundle.manifest))
-    schema_validator("result.schema.json", installed).validate(c.json_body(bundle.result))
-    schema_validator("upstream/openvex-v0.2.0.schema.json", installed).validate(c.json_body(bundle.document))
+    for inputs in (make_verified_inputs(), make_verified_inputs(
+            ("publishable", "publishable", "verification_backlog"), completion_attachments=True)):
+        bundle = example_bundle(inputs)
+        schema_validator("manifest.schema.json", installed).validate(c.json_body(bundle.manifest))
+        schema_validator("result.schema.json", installed).validate(c.json_body(bundle.result))
+        schema_validator("upstream/openvex-v0.2.0.schema.json", installed).validate(c.json_body(bundle.document))
     with pytest.raises(NoSuchResource):
         schema_registry(installed).get_or_retrieve("https://example.invalid/never-fetch.json")
 
@@ -87,6 +98,96 @@ def test_synthetic_verified_inputs_and_complete_example_shapes(buckets: tuple[st
     else:
         assert bundle.document is bundle.document_bytes is bundle.document_ref is None
         assert bundle.result["outcome"] == "no_statements" and c.NO_STATEMENTS_GAP in bundle.result["gaps"]
+
+
+def test_gate_v2_completion_context_is_exact_immutable_and_does_not_change_eligibility() -> None:
+    inputs = make_verified_inputs(("publishable", "publishable", "verification_backlog"), completion_attachments=True)
+    assert inputs.gate["schema"] == c.FINAL_PUBLICATION_GATE_SCHEMA
+    assert "unavailable_inputs" not in inputs.gate
+    assert c.VerifiedInputs.from_mapping(inputs.to_json()) == inputs
+    schema_validator("../final-report/final-publication-gate.schema.json").validate(c.json_body(inputs.gate))
+    bundle = example_bundle(inputs)
+    schema_validator("manifest.schema.json").validate(c.json_body(bundle.manifest))
+    schema_validator("result.schema.json").validate(c.json_body(bundle.result))
+    context = bundle.manifest["review_context"]
+    for name in ("capabilities", "attachments", "limitations"):
+        assert c.canonical_bytes(context[name]) == c.canonical_bytes(inputs.gate[name])
+    assert inputs.gate["attachments"]["poc_generation"][0]["status"] == "compile_failed"
+    assert inputs.gate["attachments"]["attack_chains"][0]["status"] == "qualified_supported"
+    assert len(inputs.gate["attachments"]["remediation_planning"]) == 2
+    assert len(inputs.gate["attachments"]["remediation_validation"]) == 2
+    assert len(inputs.gate["attachments"]["dossiers"]) == 3
+    assert bundle.result["outcome"] == "exported_with_gaps"
+    assert bundle.result["included_findings"] == bundle.result["statement_count"] == 2
+    assert bundle.result["excluded_findings"] == 1
+    assert {statement["status"] for statement in bundle.document["statements"]} == {"affected"}
+    notice = next(item for item in context["limitations"] if item["limitation_id"] == "compile_only_nonexecution")
+    assert notice["kind"] == "notice" and notice["limitation_id"] not in bundle.result["gaps"]
+    with pytest.raises(TypeError):
+        context["attachments"]["poc_generation"][0]["files"]["source"]["sha256"] = "0" * 64
+    changed = c.json_body(bundle.manifest)
+    changed["review_context"]["unavailable_inputs"] = {}
+    assert list(schema_validator("manifest.schema.json").iter_errors(changed))
+
+
+def _rebind_gate(inputs: c.VerifiedInputs, gate: dict) -> c.VerifiedInputs:
+    payload = c.canonical_bytes(gate)
+    reference = c.ArtifactRef(inputs.provenance.gate.path, hashlib.sha256(payload).hexdigest())
+    inventory = tuple(c.SizedArtifactRef(reference.path, reference.sha256, len(payload))
+                      if item.path == reference.path else item for item in inputs.input_inventory)
+    return replace(inputs, gate=gate, provenance=replace(inputs.provenance, gate=reference), input_inventory=inventory)
+
+
+@pytest.mark.parametrize("section,path", [
+    ("inputs", ("review_handoff",)),
+    ("capabilities", ("attack_chains", "summary")),
+    ("capabilities", ("poc_generation", "handoff")),
+    ("attachments", ("attack_chains", 0, "artifact")),
+    ("attachments", ("poc_generation", 0, "files", "source")),
+    ("attachments", ("remediation_planning", 0, "plan")),
+    ("attachments", ("remediation_validation", 0, "validation")),
+    ("attachments", ("dossiers", 0, "files", "receipt")),
+])
+def test_gate_v2_context_references_require_certification_and_measured_inventory(section, path) -> None:
+    inputs = make_verified_inputs(("publishable", "publishable"), completion_attachments=True)
+    gate = c.json_body(inputs.gate)
+    reference = gate[section]
+    for part in path:
+        reference = reference[part]
+    assert reference in gate["bindings"]
+    gate["bindings"].remove(reference)
+    with pytest.raises(ValueError, match="certified bindings"):
+        _rebind_gate(inputs, gate)
+    with pytest.raises(ValueError, match="omits"):
+        replace(inputs, input_inventory=tuple(
+            item for item in inputs.input_inventory if item.reference.to_json() != reference))
+
+
+def test_legacy_gate_and_missing_v2_context_are_not_accepted_under_a_new_hash() -> None:
+    inputs = make_verified_inputs()
+    gate = c.json_body(inputs.gate)
+    gate["schema"] = "appsec-review/final-publication-gate/1"
+    with pytest.raises(ValueError, match="schema"):
+        _rebind_gate(inputs, gate)
+    gate = c.json_body(inputs.gate)
+    del gate["capabilities"]
+    del gate["attachments"]
+    gate["unavailable_inputs"] = {}
+    with pytest.raises(ValueError, match="strict capability"):
+        _rebind_gate(inputs, gate)
+
+
+def test_empty_review_has_a_bound_chain_manifest_and_notice_is_not_a_coverage_gap() -> None:
+    inputs = make_verified_inputs(())
+    chains = inputs.gate["capabilities"]["attack_chains"]
+    assert chains["enabled"] is True and chains["disposition"] == "SKIPPED_NA"
+    assert chains["summary"] in inputs.gate["bindings"]
+    assert chains["summary"] in [item.reference.to_json() for item in inputs.input_inventory]
+    clean = example_bundle(make_verified_inputs())
+    assert clean.result["outcome"] == "exported"
+    assert "compile_only_nonexecution" not in clean.result["gaps"]
+    assert len([item for item in clean.manifest["review_context"]["limitations"] if item["kind"] == "notice"]) == 1
+    assert example_bundle(inputs).result["outcome"] == "no_statements"
 
 
 def test_local_schema_objects_are_closed_and_arrays_bounded() -> None:
