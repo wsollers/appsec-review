@@ -89,7 +89,8 @@ model_profile = "strong"
 model_profile = "strong"
 
 [jobs.job_inference_security_review.settings.lanes]
-exploration_enabled = false
+# Reserve stays inside the existing package/claim/usage limits; dev remains opt-in.
+exploration_enabled = true
 exploration_reserve = 1
 
 [jobs.job_poc_generation.settings.models.default]

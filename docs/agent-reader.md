@@ -5,8 +5,10 @@ Repository-wide authority and trust rules live only in [`../AGENTS.md`](../AGENT
 Relevant bounded procedures and design references:
 
 - [`architecture/README.md`](architecture/README.md) — full architecture navigation.
+- [`operations/review-startup.md`](operations/review-startup.md) — required review inputs, full-review launch examples, startup flags and TOML-only feature gates.
 - [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
 - [`operations/operator-scripts.md`](operations/operator-scripts.md) — `scripts/` for the Dagster stack, starting, watching and ending reviews, cleaning `test/tmp` and running named test suites, with the active-run guard.
+- [`../scripts/README.md`](../scripts/README.md) — every script in `scripts/`; [`operations/codeql-analysis.md#compiling-codeql-queries`](operations/codeql-analysis.md#compiling-codeql-queries) — recompiling the CodeQL graph-export packs into the shared compile cache with `scripts/compile-codeql-queries.sh`.
 - [`operations/wsl-native-docker.md`](operations/wsl-native-docker.md) — native WSL Docker migration lessons: preservation, cross-shell inspection, image and volume identity, resource gates, and launch provenance.
 - [`operations/image-pin-verification.md`](operations/image-pin-verification.md) — mandatory pre-intake verification that local images match their pins, its failure report, and the host rebuild/re-pin/reload procedure.
 - [`operations/model-profiles.md`](operations/model-profiles.md) — the `dev` (default) and `prod` runtime profiles: selection with `APPSEC_REVIEW_PROFILE` or `--profile`, the exact prod models and limits, the distinct verifier model, and how fingerprints and the model contract treat a profile.

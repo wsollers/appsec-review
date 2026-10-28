@@ -217,7 +217,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                         run_root=unit.job.run_root, batch=request["batch"], packages=request["packages"],
                         settings=typed, worker_profile=settings["model"],
                         reviewer_profile=settings["models"][typed.reviewer_profile],
-                        resolver=resolver, infer=transport(), independent=False))
+                        resolver=resolver, infer=transport(), independent=False,
+                        attempt_id=unit.job.attempt_id, unit_id=unit.unit_id))
                     if resolver is not None else None)
                 if batch["batch_id"] not in admitted:
                     for row in result["results"]:
@@ -259,7 +260,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                 settings=typed, worker_profile=settings["model"],
                 reviewer_profile=settings["models"][typed.reviewer_profile], resolver=_resolver(unit),
                 infer=transport(), worker_result=batch["worker"],
-                validation_retrieval=batch["metrics"].get("retrieval"))
+                validation_retrieval=batch["metrics"].get("retrieval"),
+                attempt_id=unit.job.attempt_id, unit_id=unit.unit_id)
             reviewed_batches.append(value)
             return value
 
@@ -368,8 +370,12 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         ]
         value["telemetry"] = [batch["metrics"] for batch in unit.output(
             "verification.independent_review").get("batch_results", [])]
+        value["input_retrieval"] = unit.output("characterization.load_inputs").get("retrieval_metrics", {})
         value["gaps"] = sorted(set([*value["gaps"], *value["limitations"]]))
-        return {"artifact": _artifact(unit, "owasp-workbench-result.json", value),
+        artifact = _artifact(unit, "owasp-workbench-result.json", value)
+        unit.job.events.write("OWASP_ASSESSMENT_RECORDED", unit_id=unit.unit_id,
+                              metrics_receipt=artifact)
+        return {"artifact": artifact,
                 "index_manifest": value["index_manifest"], "accounting": value["accounting"],
                 "gap_count": len(value["gaps"]), "terminal_status":
                 "COMPLETED_WITH_GAPS" if value["gaps"] or any(validation.values()) else "SUCCEEDED"}

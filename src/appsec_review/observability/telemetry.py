@@ -714,6 +714,118 @@ def _codeql_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
             "gap_count": len(gaps), "gaps": gaps[:_CODEQL_GAP_LIMIT]}
 
 
+def _owasp_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    publications, gaps, seen = [], [], set()
+    latest = None
+    for record in records:
+        if record["event_type"] != "OWASP_ASSESSMENT_RECORDED":
+            continue
+        reference = record["details"].get("metrics_receipt")
+        key = (record["attempt_id"], identity_hash(reference) if isinstance(reference, Mapping) else "")
+        if key in seen:
+            continue
+        seen.add(key)
+        latest = None
+        try:
+            report = _receipt_json(run_root, reference)
+            if report.get("schema") != "appsec-review/owasp-workbench-result/1":
+                raise ValueError("unsupported OWASP metrics receipt")
+            coverage = report["coverage"]
+            if (not isinstance(coverage, Mapping) or type(coverage.get("selected_rows")) is not int
+                    or any(type(value) is not int or value < 0 for value in coverage.values())
+                    or any(value > coverage["selected_rows"] for name, value in coverage.items()
+                           if name.endswith("_rows"))):
+                raise ValueError("invalid OWASP coverage denominators")
+            batches = report["telemetry"]
+            source_resolution = Counter()
+            for batch in batches:
+                counters = batch.get("retrieval", {})
+                values = [*counters.values(), *(batch.get(name, 0) for name in (
+                    "model_calls", "model_requested_retrievals", "reused_model_results"))]
+                if any(type(value) is not int or value < 0 for value in values):
+                    raise ValueError("invalid OWASP source-resolution counters")
+                source_resolution.update(counters)
+            input_retrieval = report.get("input_retrieval", {})
+            if any(type(value) is not int or value < 0 for value in input_retrieval.values()):
+                raise ValueError("invalid OWASP input-retrieval counters")
+            latest = {
+                "attempt_id": record["attempt_id"], "receipt": reference,
+                "assessment_mode": report["assessment_mode"], "coverage": dict(coverage),
+                "manifest_sha256": report["index_manifest"]["sha256"],
+                "input_retrieval": input_retrieval,
+                "source_resolution": dict(source_resolution),
+                "model_requested_retrievals": sum(batch.get("model_requested_retrievals", 0) for batch in batches),
+                "reused_model_results": sum(batch.get("reused_model_results", 0) for batch in batches),
+                "declared_model_calls": sum(batch.get("model_calls", 0) for batch in batches),
+                "gap_count": len(report["gaps"]),
+            }
+            publications.append(latest)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+            gaps.append({"attempt_id": record["attempt_id"], "reason": "owasp_metrics_receipt_unavailable",
+                         "error_class": type(exc).__name__})
+    dispatches = [record["details"] for record in records if record["event_type"] == "MODEL_CALL_COMPLETED"
+                  and record["job_id"] == "job_owasp_control_assessment"]
+    calls = [call for call in dispatches if call.get("execution_mode") != "replay"]
+    return {
+        "latest_publication": latest, "publications": publications, "gaps": gaps,
+        "coverage_unavailable_reason": None if latest is not None else "no_valid_publication_receipt",
+        "new_model_calls": sum(record["event_type"] == "MODEL_CALL_STARTED"
+                               and record["job_id"] == "job_owasp_control_assessment"
+                               and record["details"].get("execution_mode") != "replay" for record in records),
+        "completed_model_calls": len(calls),
+        "replay_attempts": sum(call.get("execution_mode") == "replay" for call in dispatches),
+        "model_dispositions": dict(Counter(str(call.get("terminal_status")) for call in calls)),
+        "model_calls_by_role": dict(Counter(str(call.get("role")) for call in calls)),
+        "unknown_usage_calls": sum(any(call.get(name) is None for name in (
+            "input_tokens", "output_tokens")) for call in calls),
+        "verified_reuse_events": sum(record["event_type"] == "OWASP_MODEL_REUSED" for record in records),
+        "model_requested_retrieval_dispositions": dict(Counter(
+            str(record["details"].get("terminal_status")) for record in records
+            if record["event_type"] == "OWASP_RETRIEVAL_COMPLETED")),
+        "interpretation": "publication metrics are not evidence of target safety or accepted job completion",
+    }
+
+
+def _review_flow_metrics(records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    cells, milestones = {}, {}
+    for record in records:
+        event, details = record["event_type"], record["details"]
+        if event == "INFERENCE_REVIEW_CELL_COMPLETED":
+            key = (record["run_id"], record["attempt_id"], details["cell_id"])
+            cells[key] = details
+        milestone = (
+            "control_evidence" if event == "PRECOMPUTED_PRODUCT_PUBLISHED"
+            and details.get("query_set") == "control_evidence" else
+            "packages" if event == "REVIEW_PACKAGES_PUBLISHED" else
+            f"lane:{details.get('lane')}" if event == "INFERENCE_REVIEW_LANE_COMPLETED" else None)
+        if milestone:
+            milestones[(record["job_id"], record["attempt_id"], milestone)] = {
+                "stage": milestone, "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "counts": {name: value for name, value in details.items()
+                           if type(value) is int and name in {
+                               "fact_count", "package_count", "gap_count", "coverage_gap_count",
+                               "cells_run", "cells_reused", "cells_not_launched", "claims", "cells", "gaps"}},
+                "manifest_sha256": details.get("manifest_sha256"),
+                "owasp_manifest_sha256": details.get("owasp_manifest_sha256"),
+                "package_manifest_sha256": details.get("package_manifest_sha256"),
+                "reused": details.get("reused"),
+            }
+    return {
+        "cell_count": len(cells),
+        "cells_by_role": dict(Counter(str(cell["role"]) for cell in cells.values())),
+        "cell_dispositions": dict(Counter(str(cell["terminal_status"]) for cell in cells.values())),
+        "reused_cells": sum(bool(cell["reused"]) for cell in cells.values()),
+        "cell_model_dispatches": sum(cell["model_dispatches"] for cell in cells.values()),
+        "new_model_calls": sum(record["event_type"] == "MODEL_CALL_STARTED"
+                               and record["job_id"] == "job_inference_security_review"
+                               and record["details"].get("execution_mode") != "replay" for record in records),
+        "fresh_retrieval_queries": sum(cell["counts"].get("queries", 0) for cell in cells.values()
+                                       if not cell["reused"]),
+        "milestones": list(milestones.values()),
+        "interpretation": "absent milestones are unrecorded, not successful or zero-work stages",
+    }
+
+
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     records, torn = PipelineLog(run_root).read()
     for record in records:
@@ -800,13 +912,17 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         if record["event_type"] == "MODEL_CALL_COMPLETED":
             model_usage.append({
                 "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "step_id": record.get("step_id"), "task_id": record.get("task_id"),
                 "invocation_id": details.get("model_invocation_id"),
+                **{name: details.get(name) for name in (
+                    "role", "persona", "cell_id", "batch_id", "package_id", "lane",
+                    "terminal_status", "error_class", "served_provider", "served_model", "execution_mode")},
                 "provider": details.get("provider"), "model": details.get("model"),
                 "duration_ms": details.get("duration_ms"), "retry_count": details.get("retry_count"),
                 "input_tokens": details.get("input_tokens"), "output_tokens": details.get("output_tokens"),
                 "cache_tokens": details.get("cache_tokens"), "cost": details.get("cost"),
                 "cost_unavailable_reason": None if details.get("cost") is not None else "no_trusted_rate_source",
-                "usage_unavailable_reason": ("provider_usage_unavailable" if any(
+                "usage_unavailable_reason": details.get("usage_unavailable_reason") or ("provider_usage_unavailable" if any(
                     details.get(name) is None for name in ("input_tokens", "output_tokens", "cache_tokens"))
                     else None),
             })
@@ -935,6 +1051,8 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
+            "owasp": _owasp_metrics(Path(run_root), records),
+            "review_flow": _review_flow_metrics(records),
             "tree_sitter": tree_sitter,
             "codeql": _codeql_metrics(Path(run_root), records),
             "torn_tail_ignored": torn}
@@ -963,4 +1081,5 @@ def emit_model_event(log: PipelineLog, *, event_type: str, run_id: str, invocati
                "input_tokens": input_tokens, "output_tokens": output_tokens,
                "cache_tokens": cache_tokens, "error_class": error_class, **correlation}
     return log.write(event_type, run_id=run_id, job_id=str(correlation.get("job_id", "inference")),
-                     attempt_id=str(correlation.get("attempt_id", "-")), details=details)
+                     attempt_id=str(correlation.get("attempt_id", "-")),
+                     step_id=correlation.get("step_id"), task_id=correlation.get("task_id"), details=details)

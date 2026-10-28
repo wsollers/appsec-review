@@ -88,8 +88,11 @@ rebuild moves tags on the shared daemon that a live run may be using.
    release and runtime user), so no review run compiles cold afterwards:
 
    ```bash
-   python3 containers/build.py query-packs --warm
+   scripts/compile-codeql-queries.sh   # wraps containers/build.py query-packs --warm
    ```
+
+   It compiles only the packs that are not precompiled (the graph-export packs), one at a time; see
+   [Compiling CodeQL queries](codeql-analysis.md#compiling-codeql-queries).
 
 2. **Re-pin** every configured pin to the image its tag now resolves to on the local daemon:
 

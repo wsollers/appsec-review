@@ -157,10 +157,14 @@ class PackageSettings:
         ``ranking``. The dataclass defaults exist for library and test use only.
         """
         bounds = settings.packages
+        package_budget = settings.budgets.budget_team_packages
+        exploration_reserve = settings.lanes.exploration_reserve
+        if package_budget != "all":
+            exploration_reserve = min(exploration_reserve, package_budget)
         return cls(admit_severities=tuple(settings.lanes.lead_admission),
                    admit_kev=settings.lanes.lead_admission_kev,
                    exploration_enabled=settings.lanes.exploration_enabled,
-                   exploration_reserve=min(settings.lanes.exploration_reserve, settings.budgets.budget_team_packages),
+                   exploration_reserve=exploration_reserve,
                    hunt_max_units=settings.lanes.hunt_max_units, rank_weights=settings.ranking,
                    **{item.name: getattr(bounds, item.name) for item in fields(cls)
                       if item.name not in {"admit_severities", "admit_kev", "exploration_enabled", "exploration_reserve",
