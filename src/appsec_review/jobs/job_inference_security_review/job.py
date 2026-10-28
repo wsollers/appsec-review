@@ -209,6 +209,19 @@ def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[Packa
     return works
 
 
+def review_index_names(indexes: Iterable[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Accepted index names a cell may query; ``binary`` only when a shard holds a configured binary.
+
+    A coverage-only ``binary`` shard (no binary configured) grants nothing and attaches no procedure.
+    """
+    names = set()
+    for shard in indexes:
+        name = str(shard["name"])
+        if name != "binary" or (shard.get("producer") or {}).get("binary_id"):
+            names.add(name)
+    return tuple(sorted(names))
+
+
 def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repository_root: Path,
                    settings: InferenceSecurityReviewSettings, infer: Callable[..., Any], manifest_sha256: str,
                    packages_doc: Mapping[str, Any], scope_out: Mapping[str, Any],
@@ -233,7 +246,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
                          for key, values in packages_doc["rule_predicates"].items()},
         source_languages=dict(scope_out["source_languages"]),
         build_unit_languages={key: tuple(value) for key, value in scope_out["build_unit_languages"].items()},
-        index_names=tuple(sorted({str(shard["name"]) for shard in core.manifest["indexes"]})),
+        index_names=review_index_names(core.manifest["indexes"]),
         available_sources=run_sources(query_sets),
         max_page_size=settings.packages.max_page_size, max_depth=settings.packages.max_depth)
 

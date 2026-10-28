@@ -339,7 +339,7 @@ and R5 evaluates the claim.
 | Verifier `disposition` | recorded as `proposed_disposition` | A proposal; R5 decides. |
 | Any `unresolved` or empty cite list | no relation | The predicate stays open (R5 row 6 or 7). |
 
-What a cell's citation can and cannot do (`predicate-admission/1`, R3 in
+What a cell's citation can and cannot do (`predicate-admission/2`, R3 in
 [`inference-security-review.md`](inference-security-review.md)). A real label is authentic, but
 authenticity is not relevance and relevance is not support. The application classifies the
 `(entity kind, predicate)` pair and the model's wording never changes it:

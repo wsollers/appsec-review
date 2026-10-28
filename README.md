@@ -475,11 +475,12 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis
   -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
-  -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
+  -> cpg_analysis (deprecated; only when enabled) -> binary_evidence_indexing -> evidence_collection
+  -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> final_report_publication
+  -> poc_generation (optional; only when enabled) -> final_report_publication
 ```
 
 Start a review from the repository root with the virtual environment active:

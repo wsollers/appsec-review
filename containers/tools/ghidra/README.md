@@ -10,8 +10,10 @@ Design: [`docs/architecture/binary-decompilation.md`](../../../docs/architecture
 Commands: [`docs/operations/binary-decompilation.md`](../../../docs/operations/binary-decompilation.md).
 
 **Status.** Built, smoke-tested, security-probed, and run against the case-083 fixture on
-2026-10-12 (see "Verification"). Its output is binary-derived evidence. It is not source coverage,
-and no review job consumes it yet.
+2026-10-12 (see "Verification"). Its output is binary-derived evidence, not source coverage. Reviews
+consume it through `job_review_intake` and `job_binary_evidence_indexing`. The debug-symbol script
+and `--debug-symbols` option were added after that verification; rebuild the image before relying
+on them (`docs/TODO.md`).
 
 ## Files
 
@@ -24,6 +26,7 @@ and no review job consumes it yet.
 | `inventory.json` | Committed inventory of the installed closure: 2,799 files with path, kind, size, and SHA-256, plus Maven coordinates and embedded native libraries for each JAR. |
 | `ghidra-export` | The image's only cataloged executable. Validates every option, confines Ghidra's project, settings, and temporary files to `/scratch`, then runs `analyzeHeadless`. |
 | `scripts/AppsecExportProgram.java` | Ghidra post-analysis script that writes the export tables. Compiled against the pinned Ghidra classes during the image build so an API mismatch fails the build. |
+| `scripts/AppsecLoadDebugSymbols.java` | Ghidra pre-analysis script, run only with `--debug-symbols`, that loads the staged PDB before auto-analysis. Compiled during the build like the export script. |
 | `ghidra-version` | Version probe: checks the launcher, native decompiler, export script, and JDK compiler, then prints the version. |
 | `LICENSE.md` | License, provenance, and security review notes, including the open items. |
 | `downloads/` | Ignored fetch cache (`containers/.gitignore`). The 570 MB archive is never committed. |
@@ -49,8 +52,10 @@ The first build downloads the 570 MB archive and pulls the two digest-pinned sta
     [--max-functions 50000] [--max-function-bytes 262144] [--max-pcode-ops 20000]
     [--max-strings 100000] [--min-string-length 4]
     [--processor <language id>] [--cspec <compiler spec id>] [--loader <loader class>]
+    [--debug-symbols /target/<file>]
 ```
 
+- `--debug-symbols` must name one regular file directly under `/target`, beside the input.
 - `--input` must name one regular file directly under the read-only `/target` mount.
 - `--output` and `--work` must stay under `/scratch`.
 - An invalid option exits 64 before Ghidra starts.

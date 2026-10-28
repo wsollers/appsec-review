@@ -104,6 +104,9 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     for job_id in ("job_cpp_symbol_index", "job_cpg_analysis", "job_svf_alias_analysis"):
         if job_id in registered and "job_cpp_compiled_analysis" in registered:
             wave_dependencies[job_id] = ("job_cpp_compiled_analysis",)
+    if "job_binary_evidence_indexing" in registered:
+        # Reads only the binary publications intake froze; a leaf that data indexing closes.
+        wave_dependencies["job_binary_evidence_indexing"] = ("job_target_catalog",)
     if "job_post_build_security_assessment" in registered:
         wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
             if "job_cpp_compiled_analysis" in registered else

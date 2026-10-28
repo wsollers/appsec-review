@@ -158,6 +158,10 @@ def publish_export(export_root: Path, publication_root: Path, *, identity: str,
     if reason is not None:
         tables["gaps"].append({"kind": "managed_code", "address": None,
                                "detail": reason + "; native decompilation is not evidence for it"})
+    if request.get("debug_symbols_sha256") is not None and program.get("debug_symbols_loaded") is not True:
+        tables["gaps"].append({"kind": "debug_symbols_not_applied", "address": None,
+                               "detail": "the configured debug-symbol file was staged but Ghidra did not "
+                                         "apply it; names come from the binary alone"})
     for row in tables["gaps"]:
         kind = row.get("kind")
         if not isinstance(kind, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", kind):

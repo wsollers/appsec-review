@@ -231,7 +231,7 @@ def test_a_distinct_verifier_profile_is_recorded_without_changing_independence(p
 def test_a_verifier_citing_irrelevant_but_real_evidence_is_not_independent(prepared) -> None:
     """The sast_critical verifier cites a real build action for attacker control, reachability and guards.
 
-    The citations resolve, but ``predicate-admission/1`` makes them indirect for those predicates, so no
+    The citations resolve, but ``predicate-admission/2`` makes them indirect for those predicates, so no
     required predicate besides the construct has independent support and the claim reaches supported at best.
     """
     result = run_team(prepared.context(Recording(prepared.infer), attempt="c"),

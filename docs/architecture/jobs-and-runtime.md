@@ -58,6 +58,7 @@ input, output, tool, and acceptance contracts.
 | `job_sanitizer_build` | ASan/UBSan rebuild of accepted native units in a separate workspace; catalogues instrumented outputs and proves instrumentation from the ELF, never executes them | [sanitizer-build](../operations/sanitizer-build.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_cpg_analysis` | Joern code property graph (deprecated; shipped `settings.enabled = false`) | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
+| `job_binary_evidence_indexing` | Bounded `binary` retrieval shards over the Ghidra publications that review intake froze; not applicable when no binary is configured | [binary-decompilation](../operations/binary-decompilation.md) |
 | `job_post_build_security_assessment` | Build-hardening assessment | [post-build-security-assessment](../operations/post-build-security-assessment.md) |
 | `job_evidence_collection` | Deterministic static evidence | [static-analysis](../operations/static-analysis.md) |
 | `job_dependency_intelligence` | Declared, SBOM, linker and loader dependency identity with OpenSSF Scorecard context | [dependency-intelligence](../operations/dependency-intelligence.md) |

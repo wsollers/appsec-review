@@ -885,7 +885,7 @@ Model prose, reported scanner severity and FIRST EPSS have no field in the facto
 never promotes a claim: only `confirmed` and `supported` claims are scored, and contradicting
 relations never set a factor.
 
-Factors read only *counted* relations. Under `predicate-admission/1` source text cited for attacker control, reachability or guards is analyst-assessed and never counted, so the weakest `code_evidence` basis of `taint_path`, `attacker_control` and `guard_absent` is reachable only through a counted relation of a kind the table leaves direct for that predicate (none today); in practice those factors come from a mapped tool observation or a direct-eligible graph fact, or are missing with a reason.
+Factors read only *counted* relations. Under `predicate-admission/2` source text cited for attacker control, reachability or guards is analyst-assessed and never counted, so the weakest `code_evidence` basis of `taint_path`, `attacker_control` and `guard_absent` is reachable only through a counted relation of a kind the table leaves direct for that predicate (none today); in practice those factors come from a mapped tool observation or a direct-eligible graph fact, or are missing with a reason.
 
 | Factor | Closed scale (weakest first) | Derived from | Cites |
 |---|---|---|---|
@@ -1869,7 +1869,7 @@ Three questions are kept apart, because answering the first does not answer the 
 - **Support.** Does the content establish the proposition without anyone interpreting it? A source
   span proves the construct is at that location; whether a loop bounds the copy is a judgment.
 
-Relevance and support are the closed, versioned `predicate-admission/1` table
+Relevance and support are the closed, versioned `predicate-admission/2` table
 (`review/admission.py`), pinned in the obligation policy hash. Each `(kind, predicate)` cell is one of:
 
 - `direct`: the application can establish the proposition from the entity's structured content.
@@ -2298,7 +2298,7 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (only
   `source_to_sink_reachability`, besides `affected_construct`, and only for a path result, per
   `review/tool_rules.py`; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
-  `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/1`), and, for C/C++ scopes with an
+  `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/2`), and, for C/C++ scopes with an
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per

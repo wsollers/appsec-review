@@ -358,7 +358,7 @@ def checkpoint_identity(values: Mapping[str, Any]) -> str:
 
 def publish_scope_indexes(unit: Any, *, job_id: str, index_name: str, prefix: str,
                           results: list[Mapping[str, Any]], unavailable: Mapping[str, str],
-                          gaps: list[str]) -> dict[str, Any]:
+                          gaps: list[str], empty_reason: str = "no accepted C/C++ project scopes") -> dict[str, Any]:
     """Compose this job's scope shards and a coverage shard onto the accepted manifest.
 
     Earlier shards from the same job are replaced; every other producer's shards are kept, so
@@ -380,7 +380,7 @@ def publish_scope_indexes(unit: Any, *, job_id: str, index_name: str, prefix: st
     for case_id, reason in sorted(unavailable.items()):
         coverage.add_coverage(f"{prefix}:{case_id}", "unavailable", reason)
     if not unavailable and not results:
-        coverage.add_coverage(prefix, "unavailable", "no accepted C/C++ project scopes")
+        coverage.add_coverage(prefix, "unavailable", empty_reason)
     coverage_sha = coverage.build()
     indexes.append(IndexIdentity(index_name, "appsec-review/retrieval-index/2", coverage_sha, fingerprint,
                                  coverage_path.relative_to(run_root).as_posix(),
