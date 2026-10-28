@@ -90,7 +90,7 @@ class GitRunner:
     """Run one fixed Git subcommand per container execution against a sanitized repository view."""
 
     def __init__(self, executor: ContainerExecutor, target_root: Path, scratch_root: Path, source: GitSource,
-                 limits: GitLimits):
+                 limits: GitLimits, *, path_prefix: str = "."):
         if source.decision != "SUCCEEDED" or source.git_dir is None or source.snapshot_commit is None:
             raise ValueError("git runner requires a resolved history source")
         self.executor = executor
@@ -98,6 +98,7 @@ class GitRunner:
         self.scratch_root = scratch_root
         self.source = source
         self.limits = limits
+        self.path_prefix = path_prefix
         self.tool = executor.catalog.tool(TOOL_ID)
         self._prepare()
 
@@ -129,6 +130,13 @@ class GitRunner:
         safety.check_running()
         if not re.fullmatch(r"[a-z0-9_-]{1,64}", name):
             raise ValueError("git execution name is unsafe")
+        if self.path_prefix != "." and "--" in arguments:
+            separator = arguments.index("--")
+            paths = arguments[separator + 1:]
+            prefix = self.path_prefix + "/"
+            if any(not path.startswith(prefix) for path in paths):
+                raise ValueError("git path is outside its source")
+            arguments = (*arguments[:separator + 1], *(path[len(prefix):] for path in paths))
         scratch = self.scratch_root / "executions" / name
         output_name = f"{name}.bin"
         argv = (self.tool.executable, *_PROTECTED_CONFIG, "--no-pager", *arguments)

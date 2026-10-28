@@ -583,8 +583,9 @@ max_record_bytes = 1048576
 max_message_bytes = 65536
 max_changed_paths = 1000000
 
+# Discover supported source identities automatically. Explicit false denies all GitHub requests.
 [jobs.job_source_history_analysis.settings.github]
-enabled = false
+enabled = "auto"
 api_base = "https://api.github.com"
 repository = ""
 token_env = "GITHUB_TOKEN"

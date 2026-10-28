@@ -65,6 +65,8 @@ class Job:
     # Cheap deterministic identity of job inputs the target fingerprint does not cover, such as
     # version-control history. Recorded in the handoff and re-probed by resume planning.
     input_identity: Callable[[Path | None], str] | None = None
+    # Source discovery may also need the accepted, bounded catalog of this run.
+    run_input_identity: Callable[[Path | None, Path], str] | None = None
     # Publication contract: every output kind this job may emit, and the accepted upstream jobs
     # whose handoffs it reads. The dataset audit compares both with what a run actually produced.
     datasets: tuple[DatasetDeclaration, ...] = ()
@@ -80,7 +82,9 @@ class Job:
         if self.job_id in self.consumes or len(self.consumes) != len(set(self.consumes)):
             raise ValueError(f"job consumes itself or repeats an upstream job: {self.job_id}")
 
-    def probe_input_identity(self, target_root: Path | None) -> str | None:
+    def probe_input_identity(self, target_root: Path | None, run_root: Path | None = None) -> str | None:
+        if self.run_input_identity is not None and run_root is not None:
+            return self.run_input_identity(target_root, run_root)
         return self.input_identity(target_root) if self.input_identity is not None else None
 
     def configured_workers(self, step_id: str, task_id: str) -> int:

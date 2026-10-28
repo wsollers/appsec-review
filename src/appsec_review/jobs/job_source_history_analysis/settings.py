@@ -160,10 +160,10 @@ def parse_settings(settings: Mapping[str, Any]) -> HistorySettings:
     GitLimits.from_settings(git)
     github = _table(settings, "github", {"enabled", "api_base", "repository", "token_env", "max_requests",
                                          "timeout_seconds", "per_page", "max_pages", "max_records"})
-    if type(github["enabled"]) is not bool:
+    if type(github["enabled"]) is not bool and github["enabled"] != "auto":
         raise ValueError("source history github settings are invalid")
-    if github["enabled"]:
-        GitHubSettings(str(github["api_base"]), str(github["repository"]), None,
+    if github["enabled"] is not False:
+        GitHubSettings(str(github["api_base"]), str(github["repository"] or "discovery/placeholder"), None,
                        int(github["max_requests"]), int(github["timeout_seconds"]),
                        github["per_page"], github["max_pages"], github["max_records"])
         if not isinstance(github["token_env"], str) or not github["token_env"].isidentifier():
