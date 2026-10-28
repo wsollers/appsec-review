@@ -94,6 +94,16 @@ def test_changed_accepted_bytes_fail_closed(current, part):
         path.write_bytes(original)
 
 
+def test_current_report_bound_oracle_matrix(current):
+    """Reuse one authentic chain for bounded identity, stale and corruption vectors."""
+    test_current_accepted_identity_state_and_bucket_survive_to_final_report(current)
+    test_missing_current_report_is_a_gap_not_scanner_success(current)
+    test_stale_or_orphan_scanner_hit_cannot_satisfy_current_report(current)
+    for part in ("report", "manifest", "finding", "handoff"):
+        test_changed_accepted_bytes_fail_closed(current, part)
+    current[0].emit("ACCEPTANCE_CASE_FINISHED", case="bound-oracle-matrix", tamper_vectors=4)
+
+
 @pytest.mark.parametrize("blocked", [False, True], ids=["benign", "blocked"])
 def test_benign_and_blocked_real_reports_never_promote_scanner_detection(blocked):
     lane = acceptance_lane("current-blocked" if blocked else "current-benign")

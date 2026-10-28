@@ -107,6 +107,10 @@ def pytest_configure(config: pytest.Config) -> None:
     _outcome = _workspace.require_owned_path(Path(os.environ["APPSEC_ACCEPTANCE_OUTCOME"]))
     _guard(_workspace)
     for requirement in json.loads(os.environ.get("APPSEC_ACCEPTANCE_PREREQUISITES", "[]")):
+        if requirement in {"platform:linux", "platform:windows"}:
+            available = sys.platform == "linux" if requirement == "platform:linux" else os.name == "nt"
+            _prerequisites.append({"name": requirement, "available": available})
+            continue
         if not requirement.startswith("python:"):
             _prerequisites.append({"name": requirement, "available": False})
             continue

@@ -6,14 +6,46 @@
       "deadline_seconds": 720,
       "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
-      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery"],
-      "deferral": "Only individually registered obligations count. Optional tools/platforms and unjoined feature variants remain explicit gaps."
+      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli", "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "control-source-evidence", "feed-tls", "review-candidate", "current-report-oracle"],
+      "deferral": "Representative connected hermetic gate. Full graph negatives, replay/sensor, benign/blocked and OS-specific obligations have separate bounded profiles; live tools/providers/native remain unverified."
     },
     "signals": {
       "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
       "obligations": ["signal-lifecycle", "dependency-lifecycle"],
       "deferral": "Recorded compiler/SBOM and HTTP boundaries; no live tool or external service compatibility claim."
+    },
+    "graphs": {
+      "tier": "hermetic", "deadline_seconds": 180, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest"], "obligations": ["graph-consumer", "graph-matcher", "helper-cli"],
+      "deferral": "Recorded graph exports and real helper CLI, not current CodeQL/tool compatibility."
+    },
+    "process": {
+      "tier": "hermetic", "deadline_seconds": 360, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest", "python:dagster"],
+      "obligations": ["process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "record-replay-sensor"],
+      "deferral": "Portable real local processes/Dagster. Linux guardian and Windows PowerShell have explicit separate selections."
+    },
+    "process-linux": {
+      "tier": "hermetic", "deadline_seconds": 180, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest", "python:dagster", "platform:linux"],
+      "obligations": ["linux-guardian"],
+      "deferral": "Requires Linux /proc and SO_PEERCRED; not executed on Windows. No native broker commissioning."
+    },
+    "process-windows": {
+      "tier": "hermetic", "deadline_seconds": 60, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest", "platform:windows"], "obligations": ["windows-dispatch"],
+      "deferral": "Actual PowerShell with invocation-owned compiled transport; not actual WSL."
+    },
+    "controls": {
+      "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"], "obligations": ["control-source-evidence", "feed-tls"],
+      "deferral": "Actual source/standards normalization and loopback TLS. Positive source-bound control assessment/review join remains unverified."
+    },
+    "review": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"], "obligations": ["review-candidate", "review-empty-corrupt", "current-report-oracle", "review-benign-blocked"],
+      "deferral": "Scripted external model boundary, real application jobs and unchanged domain schemas; no compiler or paid provider."
     },
     "tools": {
       "tier": "tool", "deadline_seconds": 480, "case_deadline_seconds": 60,
@@ -47,6 +79,166 @@
     }
   },
   "obligations": [
+    {
+      "id": "graph-consumer", "gap_ids": ["G-A2", "G-A4", "G-A8", "G-C10"],
+      "nodes": [
+        "tests/integration/test_graph_semantic_acceptance.py::test_safe_allowlist_and_unguarded_command_remain_distinct_in_graph_consumer",
+        "tests/integration/test_graph_semantic_acceptance.py::test_python_seed_ledger_keeps_in_scope_and_names_out_of_scope",
+        "tests/integration/test_graph_semantic_acceptance.py::test_compiler_id_contamination_is_excluded_but_real_targets_remain"
+      ],
+      "boundary": "Recorded source-resolving graph rows -> actual consumers, seeded scope and compiler-id exclusion",
+      "variants": ["safe-control", "unguarded", "python-seeded", "C", "CXX"],
+      "substitutions": ["Recorded graph export; no current graph engine"],
+      "prerequisites": [], "deferrals": ["Current CodeQL/Kotlin/seeded engine exports remain unverified"]
+    },
+    {
+      "id": "graph-matcher", "gap_ids": ["G-A2", "G-A8", "G-H5"],
+      "nodes": [
+        "tests/integration/test_graph_semantic_acceptance.py::test_timed_lane_inherits_outer_root_without_relocating_source_assets",
+        "tests/integration/test_graph_semantic_acceptance.py::test_matcher_requires_and_forbids_facts_on_the_same_row",
+        "tests/integration/test_graph_semantic_acceptance.py::test_matcher_cannot_pass_vacuous_subjects",
+        "tests/integration/test_local_helper_acceptance.py::test_live_build_toolchain_definitions_cannot_silently_shadow_go_coverage"
+      ],
+      "boundary": "Exact required/forbidden row matching, nonempty subject proof and distinct Go definition retention",
+      "variants": ["missing", "forbidden", "split-columns", "missing-export", "truncated-negative", "empty-subjects"],
+      "substitutions": ["Recorded fixtures; Go live definitions are collected, not executed"],
+      "prerequisites": [], "deferrals": ["pnpm/yarn/Wasm, Lua activation and native language/runtime matrix remain unverified"]
+    },
+    {
+      "id": "helper-cli", "gap_ids": ["G-A11"], "case_deadline_seconds": 30,
+      "nodes": [
+        "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_builds_verifies_and_queries_tiny_graph_documents",
+        "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_rejects_bad_inputs_without_publishing",
+        "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_detects_changed_record_count_read_only"
+      ],
+      "boundary": "Actual owned helper subprocess -> bounded SQLite build/verify/query and failed publication",
+      "variants": ["duplicate-identity", "logical-path", "input-root", "output-root", "record-bound", "count-tamper"],
+      "substitutions": ["Tiny local documents, not engine acquisition"],
+      "prerequisites": [], "deferrals": ["Actual Lua rule execution remains a selected-tool obligation"]
+    },
+    {
+      "id": "process-configuration", "gap_ids": ["G-B3", "G-B10"],
+      "nodes": [
+        "tests/integration/test_process_lifecycle_acceptance.py::test_tagged_multiprocess_workers_receive_layers_hash_and_pool_limit",
+        "tests/integration/test_process_lifecycle_acceptance.py::test_incompatible_profile_is_refused_by_actual_executor_before_worker_admission"
+      ],
+      "boundary": "Actual tagged Dagster multiprocess admission/configuration/serialization and accepted resume",
+      "variants": ["pool-limit", "profile-layer-hash", "invalid-selection", "resume-selection", "metrics-receipts"],
+      "substitutions": ["Tiny local fixture job; scripted model catalog"],
+      "prerequisites": ["python:dagster"], "deferrals": ["Pinned DagsterRun has no create_timestamp: actual queue-delay metric unavailable, never synthesized"]
+    },
+    {
+      "id": "worker-recovery", "gap_ids": ["G-B5"],
+      "nodes": ["tests/integration/test_process_lifecycle_acceptance.py::test_killed_worker_preserves_accepted_predecessor_and_real_attempt_then_resumes"],
+      "boundary": "Actual worker death -> durable attempt/predecessor -> fresh-process accepted reuse",
+      "variants": ["accepted-predecessor", "interrupted-attempt", "fresh-resume"],
+      "substitutions": ["Tiny local job"], "prerequisites": ["python:dagster"],
+      "deferrals": ["Linux confirmed lease generations are separate platform obligations"]
+    },
+    {
+      "id": "record-replay-sensor", "gap_ids": ["G-B10", "G-B11"],
+      "nodes": [
+        "tests/integration/test_process_lifecycle_acceptance.py::test_fresh_dagster_record_and_local_replay_preserve_failures_without_live_transport",
+        "tests/integration/test_process_lifecycle_acceptance.py::test_real_step_failure_sensor_observes_failure_while_multiprocess_sibling_is_active"
+      ],
+      "boundary": "Real separate-process recording/replay and active Dagster failure sensor",
+      "variants": ["different-roots", "live-transport-forbidden", "replay-miss", "failure-preservation", "active-sibling"],
+      "substitutions": ["Owned scripted executable, no provider"],
+      "prerequisites": ["python:dagster"], "deferrals": ["Deployed API/assets/package probe remains separately authorized"]
+    },
+    {
+      "id": "submission-recovery", "gap_ids": ["G-B4"],
+      "nodes": [
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation",
+        "tests/integration/test_transport_acceptance.py::test_submission_storage_failure_dispatches_nothing"
+      ],
+      "boundary": "Actual killed submitter/loopback HTTP and durable uncertain-intent reconciliation",
+      "variants": ["intent", "remote-ack", "ack", "fsync-failure", "replace-failure", "wrong-identity", "active-identity"],
+      "substitutions": ["Owned loopback server, not deployed Dagster"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "mcp-accepted-run", "gap_ids": ["G-B13"],
+      "nodes": [
+        "tests/integration/test_transport_acceptance.py::test_real_mcp_initialization_discovery_tools_errors_and_recovery",
+        "tests/integration/test_transport_acceptance.py::test_real_mcp_manifest_pin_mismatch_fails_closed",
+        "tests/integration/test_transport_acceptance.py::test_real_mcp_malformed_first_message_does_not_kill_session_or_reuse_previous_id"
+      ],
+      "boundary": "Actual accepted intake/catalog -> actual MCP stdio process, pinned manifest and protocol recovery",
+      "variants": ["handshake", "discovery", "ping", "declared-tools", "invalid-request", "unknown-method", "parse-error", "manifest-mismatch"],
+      "substitutions": ["Tiny accepted target; no live model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "linux-guardian", "gap_ids": ["G-B1", "G-B2"],
+      "nodes": [
+        "tests/integration/test_process_lifecycle_acceptance.py::test_real_safety_executor_stops_child_grandchild_and_never_admits_queued_or_retry",
+        "tests/integration/test_transport_acceptance.py::test_real_unix_listener_cannot_be_replaced_and_disconnect_closes_admission"
+      ],
+      "boundary": "Actual Linux guardian/listener, peer credentials and fail-fast owned process tree",
+      "variants": ["sibling-grandchild", "queued-retry-refusal", "listener-ownership", "disconnect"],
+      "substitutions": ["Owned helper processes, no real native workload"],
+      "prerequisites": ["platform:linux"], "deferrals": ["Not executed on Windows; broker/native/database commissioning remains unverified"]
+    },
+    {
+      "id": "windows-dispatch", "gap_ids": ["G-B12"],
+      "nodes": ["tests/integration/test_transport_acceptance.py::test_real_powershell_dispatch_preserves_spaces_unc_distribution_and_exit_status"],
+      "boundary": "Actual Windows PowerShell -> compiled invocation-owned wsl.exe transport",
+      "variants": ["spaces", "UNC", "distribution", "arguments", "exit-status"],
+      "substitutions": ["Compiled local transport stand-in, not actual WSL"],
+      "prerequisites": ["platform:windows"], "deferrals": ["Actual WSL no-op remains separately selected and unverified"]
+    },
+    {
+      "id": "control-source-evidence", "gap_ids": ["G-C9"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_control_evidence_acceptance.py::test_configured_control_evidence_preserves_document_intent_and_reports_missing_assessment"],
+      "boundary": "Real source-document/OWASP producer normalization -> accepted source-bound retrieval, mutation rejection and explicit assessment gap",
+      "variants": ["source-lines", "intent", "hash-provenance", "limited-authority", "source-mutation", "missing-assessment"],
+      "substitutions": ["Pinned tiny standards and in-process FTS; no actual assessment/model"],
+      "prerequisites": [], "deferrals": ["Configured OWASP input has no assessment evidence/transport hook: positive assessment-to-review join unverified"]
+    },
+    {
+      "id": "feed-tls", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
+      "nodes": [
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer"
+      ],
+      "boundary": "Real loopback HTTPS -> bounded fetch/normalize/publish/query with last-good pointer preservation",
+      "variants": ["exact-limit", "headerless-stream", "truncation", "valid-json-prefix-truncation", "declared-oversize", "stream-oversize", "HTTP-503"],
+      "substitutions": ["Test-only loopback TLS key/certificate and one-CVE payload; no public refresh"],
+      "prerequisites": [], "deferrals": ["Preinstalled CVE tool database construction remains a selected-tool obligation"]
+    },
+    {
+      "id": "review-candidate", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_real_review_gate_and_poc_planning_use_authoritative_contracts"],
+      "boundary": "Actual unmodified review -> gate -> candidate verification/brief -> no-build planning",
+      "variants": ["eligible", "resolved-entry-path", "evidence-identity", "strict-risk", "dispatch-refused-without-build"],
+      "substitutions": ["Scripted external model and explicitly recorded source-bound graph/surface evidence"],
+      "prerequisites": [], "deferrals": ["Actual current compiler compatibility is not exercised; existing detailed compile tests are preserved"]
+    },
+    {
+      "id": "review-empty-corrupt", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "nodes": [
+        "tests/integration/test_authentic_poc_contract.py::test_authentic_empty_candidates_are_not_a_missing_field",
+        "tests/integration/test_authentic_poc_contract.py::test_corrupt_review_is_rejected_before_dispatch"
+      ],
+      "boundary": "Actual legitimate empty review candidate publication and accepted-byte corruption before dispatch",
+      "variants": ["empty-not-missing", "corrupt-before-dispatch"],
+      "substitutions": ["Scripted model only"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "current-report-oracle", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_current_report_bound_oracle_matrix"],
+      "boundary": "Actual accepted report -> current gate/review/manifest/evidence source resolution, never historical shard discovery",
+      "variants": ["identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper", "finding-tamper", "handoff-tamper"],
+      "substitutions": ["Scripted model and recorded upstream observation; all publication application-owned"],
+      "prerequisites": [], "deferrals": ["Scanner detection is distinct from current final-report survival"]
+    },
+    {
+      "id": "review-benign-blocked", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_benign_and_blocked_real_reports_never_promote_scanner_detection"],
+      "boundary": "Actual benign/failed-worker review -> gate -> accepted report without promoting scanner hits",
+      "variants": ["benign", "blocked", "unavailable-worker-is-not-clean-success"],
+      "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
+    },
     {
       "id": "signal-lifecycle", "gap_ids": ["G-A5", "G-B7"], "case_deadline_seconds": 120,
       "nodes": [
@@ -110,7 +302,7 @@
       "boundary": "Configured job table, MCP TOOLS, model catalogs/transports, and AST test-definition uniqueness",
       "variants": ["all-configured-jobs", "all-public-MCP-tools", "all-provider-families"],
       "substitutions": ["Static drift checks are not execution coverage"],
-      "prerequisites": [], "deferrals": ["Known shadowed Go and ELF definitions remain explicit gaps until their owners fix them"]
+      "prerequisites": [], "deferrals": ["Catalog membership and unique definitions are not runtime feature coverage"]
     }
   ],
   "catalogs": {
@@ -161,14 +353,5 @@
       "prerequisites": ["Integrated W1/W5 lanes"], "deferrals": ["Provider and guidance evaluation require separate authorization"]
     }
   ],
-  "known_duplicate_definitions": [
-    {
-      "node": "tests/test_live_build_toolchains.py::test_live_go_language_build_accepts_syscall_authoritative_capture",
-      "gap_id": "G-A8", "status": "unverified", "reason": "Second definition shadows distinct Go intent; W4 owner must preserve both tests"
-    },
-    {
-      "node": "tests/test_elf_loader_facts.py::test_loader_facts_bounds_the_interpreter_to_its_segment",
-      "gap_id": "G-H5-ELF", "status": "unverified", "reason": "Second definition shadows ELF test; outside W0 ownership"
-    }
-  ]
+  "known_duplicate_definitions": []
 }

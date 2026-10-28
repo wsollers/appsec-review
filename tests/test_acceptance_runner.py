@@ -123,6 +123,17 @@ def test_missing_prerequisites_fail_without_a_success_shaped_skip(tmp_path: Path
     assert outcome["cleanup"]["confirmed"]
 
 
+@pytest.mark.parametrize("platform_name", ["linux", "windows"])
+def test_selected_platform_prerequisite_is_required_before_collection(tmp_path: Path, platform_name: str) -> None:
+    requirement = "platform:" + platform_name
+    expected = sys.platform == "linux" if platform_name == "linux" else os.name == "nt"
+    outcome, _ = execute(tmp_path, "def test_ok(): pass\n", prerequisites=(requirement,))
+    assert outcome["pytest"]["prerequisites"] == [{"name": requirement, "available": expected}]
+    assert (outcome["exit_code"] == 0) == expected
+    assert bool(outcome["pytest"]["cases"]) == expected
+    assert outcome["cleanup"]["confirmed"]
+
+
 def test_real_hard_case_deadline_kills_only_owned_tree(tmp_path: Path) -> None:
     unrelated = subprocess.Popen([sys._base_executable, "-c", "import time; time.sleep(60)"],
                                   cwd=tmp_path, stdin=subprocess.DEVNULL,

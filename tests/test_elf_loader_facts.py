@@ -120,12 +120,12 @@ def test_loader_facts_requires_every_name_to_terminate_inside_the_string_table(
         elf.loader_facts(path)
 
 
-def test_loader_facts_bounds_the_interpreter_to_its_segment(tmp_path: Path) -> None:
+def test_loader_facts_rejects_a_trailing_terminator_outside_the_interpreter_segment(tmp_path: Path) -> None:
     image = bytearray(minimal_elf(interpreter="/lib64/ld-linux-x86-64.so.2") + b"trailing\0")
     image[len(image) - len(b"trailing\0") - 1] = ord("!")   # drop the terminator inside PT_INTERP
     path = tmp_path / "interp"
     path.write_bytes(bytes(image))
-    with pytest.raises(ValueError, match="unterminated within its declared region"):
+    with pytest.raises(ValueError, match="interpreter path is unterminated inside its owning structure"):
         elf.loader_facts(path)
 
 
