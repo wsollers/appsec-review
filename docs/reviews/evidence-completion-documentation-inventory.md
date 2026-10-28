@@ -327,3 +327,14 @@ as local executions. Under the user's final approval, documentation edits use th
 Windows worktree, Git diff/newline hygiene is inspected there, and documentation/skill/sync
 validation is Linux-only. No Windows test, live review or new target/compiler/runtime acceptance
 run is performed by this documentation revision.
+
+The Linux owner checked exact documentation commit `103b58961bcd2c988b405be2a38bb8187ff795b6`
+with `tests/test_documentation.py`, `tests/test_skill_separation.py` and `tests/test_docs_sync.py`:
+**10 passed / one failed / one skipped in 5.94 s**. The sole link-test failure lists exactly
+the same two uninstalled-target links above; no target edits or stubs were introduced.
+Skill separation passes on native POSIX. The sync-history test is skipped because Git is absent
+from the pinned offline image, **not** because ancestry was validated there. The owner confirms
+no product changes from `967d1c7f` to `103b5896`, an unchanged watermark, and clean LF/whitespace/
+worktree checks. XML/provenance and the 15 baseline proofs are retained in the parent's persistent
+`files/completion-validation-967d1c7f`. This final ledger addition is status-only, not a new
+product or live-acceptance claim.
