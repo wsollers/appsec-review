@@ -538,6 +538,18 @@ def test_node_native_failure_does_not_mask_source_scope() -> None:
                "no exact replayable command set" in gap for gap in plan.gaps)
 
 
+@pytest.mark.parametrize("status,gaps,expected", [
+    ("SUCCEEDED", [], "SUCCEEDED"),
+    ("NOT_APPLICABLE", [], "SUCCEEDED"),
+    ("SUCCEEDED", ["bounded export truncated"], "COMPLETED_WITH_GAPS"),
+    ("SKIPPED", ["no seeds"], "COMPLETED_WITH_GAPS"),
+    ("FAILED", ["export timed out"], "COMPLETED_WITH_GAPS"),
+])
+def test_publication_status_accounts_for_graph_export_coverage(status, gaps, expected):
+    assert publication_status([], [{"terminal_status": "SUCCEEDED"}],
+                              exports=[{"export_status": status, "gaps": gaps}]) == expected
+
+
 def test_java_commands_without_roles_derive_order_from_accepted_recipe() -> None:
     java = receipt("java", "jvm", "build-unit-aaaaaaaaaaaaaaaaaaaa",
                    commands=[{"ordinal": 1}, {"ordinal": 2}])
@@ -816,7 +828,9 @@ def test_normalization_admission_timeout_publishes_successful_sibling(
     monkeypatch.setattr(codeql_job, "_query_one",
                         lambda _, value, profile: {**value, "query_profile": dict(profile)})
     monkeypatch.setattr(codeql_job, "_export_isolated",
-                        lambda _, value, **kwargs: {**value, "export_status": "NOT_APPLICABLE"})
+                        lambda _, value, **kwargs: {
+                            **codeql_job._export_base(codeql_job._scope_from(value["scope"]), value),
+                            "export_status": "NOT_APPLICABLE", "gaps": []})
     monkeypatch.setattr(codeql_job, "resolve_context_manifest",
                         lambda _: (upstream, file_sha256(upstream)))
     reserve = codeql_job.ResourceAdmission.reserve

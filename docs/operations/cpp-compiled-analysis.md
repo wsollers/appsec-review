@@ -133,6 +133,11 @@ unit, the upstream failure and the job that failed; `job_clang_static_analysis` 
 `COMPLETED_WITH_GAPS`. Only a target with no native unit leaves the plan step `NOT_APPLICABLE` with an
 empty disposition map. A project whose `CMakeLists.txt` is at the target root has root `.`.
 
+The job handoff separately publishes structured per-project, per-branch dispositions for resume
+planning. Incomplete branches that are not checkpointable carry `disposition = "GAP"` and prevent
+accepted-attempt reuse. Checkpointable seeded coverage limitations remain reusable; the summary's
+disposition map is unchanged.
+
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
 reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
 executor, capture, and handoff identities. An Infer image or adapter change affects Infer

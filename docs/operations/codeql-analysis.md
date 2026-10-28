@@ -258,15 +258,20 @@ A database, declared pack release, bound or declared runner release change rerun
 does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a
 framework-integrity failure. A timeout, a non-zero exit or an invalid fresh export is a scope gap.
 A failed database is the gap "export skipped because database creation failed". A truncated query
-is a named gap. Any of these gaps makes the step's `terminal_status` `COMPLETED_WITH_GAPS`, while
-sibling scopes keep their exports.
+is a named gap. Any of these gaps makes the execution step, acceptance publication and job
+`COMPLETED_WITH_GAPS`, while sibling scopes keep their exports. The execution output publishes
+per-scope export dispositions; a failed export prevents accepted-attempt reuse on resume. Successful
+bounded exports with named limitations, and policy skips such as a scope with no seeds, do not
+become retriable failures solely because they carry a gap.
 
 Raw exports are the `codeql_graph_export` dataset (`artifact_only`). Their rows hold CodeQL
 internal ids and are never served; `job_code_graph_index` normalizes them. Consumers find them in
 the accepted handoff in three places:
 
-- `outputs["export.scopes"].artifact` points to `artifacts/codeql/graph-exports.json`
-  (`appsec-review/codeql-graph-exports/1`), with one record per scope.
+- `outputs["execution.scopes"].graph_export_artifact` points to `artifacts/codeql/graph-exports.json`
+  (`appsec-review/codeql-graph-exports/1`), with one record per scope. The handoff preserves this
+  reference and binds its path and SHA-256 in `artifacts`. Readers also accept the legacy
+  `outputs["export.scopes"].artifact` reference.
 - The `graph_exports` list in the acceptance summary (`outputs["acceptance.publish_handoff"].artifact`)
   holds the same records.
 - Every export manifest and file appears with its SHA-256 in the handoff `artifacts`.
