@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.applicability import resolved_configuration_identity
-from appsec_review.indexing.store import accepted_handoff
-from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json, resolve_bound
+from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json
 from appsec_review.jobs.engineering_contracts import (
-    FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA, FINAL_REPORT_HANDOFF_SCHEMA,
-    FINAL_REPORT_SCHEMA,
+    FINAL_REPORT_HANDOFF_SCHEMA, FINAL_REPORT_SCHEMA,
+)
+from appsec_review.jobs.job_final_publication_gate.verify import (
+    load_accepted_gate, verify_gate_snapshot as _verify_bindings,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
@@ -67,28 +68,6 @@ def _check(schemas: SchemaSet, name: str, document: Any) -> None:
         raise IntegrityError(f"{name} does not satisfy its schema: {'; '.join(errors[:3])}")
 
 
-def _verify_bindings(run_root: Path, gate: Mapping[str, Any]) -> None:
-    if gate["run_id"] != run_root.name:
-        raise IntegrityError("gate snapshot belongs to another run")
-    bindings = {(row["path"], row["sha256"]) for row in gate["bindings"]}
-    for row in gate["bindings"]:
-        resolve_bound(run_root, row)
-
-    def included(value: Any) -> None:
-        if isinstance(value, Mapping):
-            if {"path", "sha256"} <= set(value) and (value["path"], value["sha256"]) not in bindings:
-                raise IntegrityError("gate attachment is not among its certified bindings")
-            for item in value.values():
-                included(item)
-        elif isinstance(value, list):
-            for item in value:
-                included(item)
-
-    included(gate["inputs"])
-    included(gate["capabilities"])
-    included(gate["attachments"])
-
-
 def build_job(*, repository_root: Path | None = None) -> Job:
     """``repository_root`` is injectable for acceptance tests whose configuration lives elsewhere."""
 
@@ -100,29 +79,11 @@ def build_job(*, repository_root: Path | None = None) -> Job:
 
     def load(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
-        try:
-            accepted = accepted_handoff(run_root, GATE_JOB)
-        except ValueError as exc:
-            raise IntegrityError(f"accepted {GATE_JOB} handoff cannot be verified: {exc}") from exc
-        if accepted is None or accepted.handoff.get("job_id") != GATE_JOB:
-            raise IntegrityError(f"an accepted {GATE_JOB} handoff is required")
-        claimed_gate = unit.job.upstream_handoffs.get(GATE_JOB)
-        if claimed_gate is not None and claimed_gate != accepted.sha256:
-            raise IntegrityError("accepted gate differs from the report attempt's upstream identity")
-        published = (accepted.handoff.get("outputs") or {}).get("acceptance.publish_handoff")
-        if not isinstance(published, Mapping) or published.get("schema") != FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA:
-            raise IntegrityError("accepted gate handoff does not publish a supported gate document")
+        accepted, gate = load_accepted_gate(
+            run_root, _schemas(unit), expected_handoff_sha256=unit.job.upstream_handoffs.get(GATE_JOB))
+        published = accepted.handoff["outputs"]["acceptance.publish_handoff"]
         reference = published["artifact"]
-        gate = read_bound_json(run_root, reference)
-        _check(_schemas(unit), "final-publication-gate", gate)
-        if gate["schema"] != FINAL_PUBLICATION_GATE_SCHEMA or published.get("item_count") != gate["package_counts"]["total"]:
-            raise IntegrityError("gate document disagrees with its accepted handoff")
         counts = gate["package_counts"]
-        if counts["total"] != len(gate["packages"]) or sorted(
-                item["finding_package_id"] for item in gate["packages"]) != sorted(
-                identity for ids in gate["buckets"].values() for identity in ids):
-            raise IntegrityError("gate package accounting is not exact")
-        _verify_bindings(run_root, gate)
         gate_handoff = {"path": accepted.path, "sha256": accepted.sha256}
         return {"gate_handoff": gate_handoff,
                 "gate_document": {"path": reference["path"], "sha256": reference["sha256"]},
