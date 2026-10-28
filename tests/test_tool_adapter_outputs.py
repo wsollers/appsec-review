@@ -102,7 +102,11 @@ def test_artifact_blint_findings_parse_and_unanalyzed_binary_is_a_gap(tmp_path: 
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
         blint = load_accepted_artifact_security_analysis(run_root)["capabilities"]["blint"]
         assert not any("could not be parsed" in gap for gap in blint["gaps"]), blint["gaps"]
-        assert (blint["gaps"] == []) is analyzed, blint["gaps"]
+        assert blint["gaps"][0] == "build/module.wasm: delivery status is unknown (delivery_fact_unavailable)"
+        scanner_gaps = blint["gaps"][1:]
+        assert len(scanner_gaps) == (0 if analyzed else 1), scanner_gaps
+        if not analyzed:
+            assert "no per-binary analysis report" in scanner_gaps[0]
 
 
 def test_evidence_blint_invocation_and_parser_match_blint_340(tmp_path: Path) -> None:
@@ -169,8 +173,10 @@ def test_artifact_osv_missing_ecosystem_gap_names_the_data_coverage(tmp_path: Pa
     GraphRunner(config, [build_artifact_security(scanner_runner=scanner)]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     gaps = load_accepted_artifact_security_analysis(run_root)["capabilities"]["osv"]["gaps"]
-    assert len(gaps) == 1 and "offline OSV snapshot lacks ecosystem crates.io" in gaps[0], gaps
-    assert "exited 127" not in gaps[0]
+    assert len(gaps) == 2, gaps
+    assert gaps[0] == "build/Cargo.lock: delivery status is unknown (delivery_fact_unavailable)"
+    assert "offline OSV snapshot lacks ecosystem crates.io" in gaps[1]
+    assert "exited 127" not in gaps[1]
 
 
 def _osv_snapshot(root: Path, ecosystems: tuple[str, ...]) -> Path:

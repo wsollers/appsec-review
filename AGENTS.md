@@ -84,6 +84,17 @@ agents that inspect or change the repository. It is not a prompt for review work
 
 ## Workspace hygiene
 
+- Do development, builds, and tests on Linux or inside WSL. Native Windows work requires the
+  user's explicit permission for that session; Windows support is not permission to use it.
+  In WSL, use a Linux-filesystem checkout and its own Linux virtual environment, not a checkout
+  under `/mnt/c` or another Windows drive. NTFS mounts do not provide the private POSIX path
+  custody required by the native builder tests.
+- When Windows work is approved, preserve line endings and byte identities. Follow
+  `.gitattributes` and `.editorconfig`: portable source, PowerShell, and shell scripts use LF;
+  Windows `.bat` and `.cmd` files check out as CRLF; byte-pinned rule packs, data, and fixtures
+  retain their committed bytes on every platform. Do not rely on `core.autocrlf`, normalize
+  evidence before hashing, or regenerate hashes just to accept an editor's newline conversion.
+  Before committing, inspect `git diff --check` and `git ls-files --eol` for accidental changes.
 - Keep disposable test state under `test/tmp/`. When concurrent or focused pytest sessions need
   isolation, use a unique descendant such as `--basetemp=test/tmp/<session-name>`; never create
   ad hoc scratch directories at the repository root or directly under `test/`.

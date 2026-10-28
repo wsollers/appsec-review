@@ -127,6 +127,29 @@ Hash-pinned downloads for the images are fetched and checked by `containers/buil
 The pipeline is a Linux x86-64 execution vertical: builds, scanners, and CodeQL all run in Linux
 containers. On a Windows machine, WSL 2 is the most direct route.
 
+For repository development and tests, use Linux or WSL with the checkout on the Linux filesystem
+(for example, `~/src/appsec-review`, not `/mnt/c/...`). Windows-mounted checkouts can fail POSIX
+path-custody checks even when Python runs inside WSL. Repository agents need explicit user
+permission to work on native Windows; see [AGENTS.md](AGENTS.md).
+
+### Line endings and hashes
+
+[.gitattributes](.gitattributes) controls line endings independently of a user's `core.autocrlf`.
+Portable text, including Bash and PowerShell, uses LF on both platforms. `.bat` and `.cmd` files
+use CRLF in the working tree and canonical LF in Git. Git blob identities therefore agree across
+platforms, although a raw working-tree SHA-256 changes when line endings change.
+
+Rule packs, reference data, test fixtures and acceptance seeds are marked `-text`: Git checks out
+their exact committed bytes, including any upstream CRLF or mixed endings, without conversion.
+Their raw hashes and byte offsets must stay identical everywhere; do not normalize them before
+verification or refresh a lock merely to hide conversion. [.editorconfig](.editorconfig) supplies
+matching editor defaults without changing those byte-pinned inputs.
+
+Attributes do not rewrite an existing checkout. If it already has converted files, preserve any
+local edits and use a fresh clone on the Linux filesystem. Do not blindly run
+`git add --renormalize .`: changes to byte-pinned content require an intentional source update and
+the corresponding provenance/lock procedure.
+
 ## Setup on Linux
 
 Install the prerequisites (Debian/Ubuntu shown; use your distribution's equivalents elsewhere):

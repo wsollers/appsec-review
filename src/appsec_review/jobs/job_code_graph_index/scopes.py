@@ -2,7 +2,8 @@
 
 docs/architecture/code-graph-precomputation.md sections 7.1 to 7.4 are normative. Everything here
 reads run-owned, hash-verified material only: the accepted ``job_codeql_analysis`` handoff (its
-``export.scopes`` index, plan and per-scope export manifests), the accepted retrieval manifest
+hash-bound result's ``execution.scopes`` export index, plan and per-scope export manifests), the
+accepted retrieval manifest
 (clangd, LLVM IR, Clang AST, CodeQL observation and prioritization shards) and the accepted
 target bytes the CodeQL plan names. Nothing runs an analyzer or scans a target tree.
 """
@@ -155,7 +156,9 @@ def load_codeql_inputs(run_root: Path, source_fingerprint: str) -> dict[str, Any
             raise IntegrityError(f"accepted CodeQL handoff does not bind its {what}")
         return read_artifact(run_root, identity)
 
-    outputs = handoff.get("outputs") or {}
+    result_path = str((handoff.get("resolving_paths") or {}).get("result", ""))
+    result = read_bound({"path": result_path, "sha256": bound.get(result_path)}, "result")
+    outputs = result.get("outputs") or {}
     if "execution.scopes" in outputs:
         execution = outputs["execution.scopes"]
         if not isinstance(execution, Mapping):
@@ -169,8 +172,6 @@ def load_codeql_inputs(run_root: Path, source_fingerprint: str) -> dict[str, Any
     index = read_bound(export_index, "graph export index")
     if not isinstance(index, Mapping) or index.get("schema") != GRAPH_EXPORTS_SCHEMA:
         raise IntegrityError("accepted CodeQL graph export index schema is unsupported")
-    result_path = str((handoff.get("resolving_paths") or {}).get("result", ""))
-    result = read_bound({"path": result_path, "sha256": bound.get(result_path)}, "result")
     plan_identity = ((result.get("outputs") or {}).get("plan.inventory") or {}).get("plan")
     plan = read_bound(plan_identity, "plan")
     plan_scopes = {str(item["scope_id"]): item for item in plan.get("scopes", ())}

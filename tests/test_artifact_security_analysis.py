@@ -238,7 +238,8 @@ def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tm
     assert set(calls) == {"syft", "grype"}
     assert accepted["capabilities"]["osv"]["not_applicable_inputs"]["count"] == 1
     blint = accepted["capabilities"]["blint"]
-    assert blint["terminal_status"] == "NOT_APPLICABLE" and not blint["gaps"]
+    assert blint["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert blint["gaps"] == ["build/module.wasm: delivery status is unknown (delivery_fact_unavailable)"]
     assert blint["not_applicable_inputs"]["count"] == 1
     assert blint["not_applicable_inputs"]["items"][0]["reason_code"] == "INPUT_FORMAT_UNSUPPORTED"
     raw = list((run_root / "data" / "jobs" / "job_artifact_security_analysis" / "attempts").rglob("stdout.bin"))

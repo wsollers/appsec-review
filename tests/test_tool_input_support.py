@@ -1,7 +1,8 @@
 """Regression tests: tools are never launched on inputs outside their declared support.
 
-Unsupported inputs are SKIPPED_NA with a reason and a separate count; they never appear as gaps or
-failures. A supported input on which a tool fails still yields a gap. Every runner is injected.
+Unsupported inputs are SKIPPED_NA with a reason and a separate count; they never become scanner failures.
+Independent delivery-coverage gaps remain visible. A supported input on which a tool fails still yields a gap.
+Every runner is injected.
 """
 
 from __future__ import annotations
@@ -291,11 +292,12 @@ def test_artifact_scanner_unsupported_formats_are_never_launched(tmp_path: Path)
     # WebAssembly is neither a native binary, JVM bytecode, nor an osv-scanner lockfile.
     assert not {"blint", "spotbugs", "osv"} & set(calls)
     osv = accepted["capabilities"]["osv"]
-    assert osv["terminal_status"] == "NOT_APPLICABLE" and osv["gaps"] == []
+    delivery_gap = "build/module.wasm: delivery status is unknown (delivery_fact_unavailable)"
+    assert osv["terminal_status"] == "COMPLETED_WITH_GAPS" and osv["gaps"] == [delivery_gap]
     assert osv["not_applicable_inputs"]["items"][0]["reason_code"] == "INPUT_FORMAT_UNSUPPORTED"
     assert not any("osv" in gap or "blint" in gap for gap in accepted["gaps"])
-    # The only remaining gap is the built-in WebAssembly validator gap, unrelated to scanner input support.
-    assert all("WebAssembly feature" in gap for gap in accepted["gaps"]), accepted["gaps"]
+    # Neither the delivery uncertainty nor the built-in Wasm validator gap is a scanner support failure.
+    assert all(gap == delivery_gap or "WebAssembly feature" in gap for gap in accepted["gaps"]), accepted["gaps"]
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
 
 
@@ -308,7 +310,7 @@ def test_artifact_osv_empty_lockfile_report_is_skipped_na(tmp_path: Path) -> Non
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     osv = load_accepted_artifact_security_analysis(run_root)["capabilities"]["osv"]
     assert "osv" in calls
-    assert osv["gaps"] == []
+    assert osv["gaps"] == ["build/requirements.txt: delivery status is unknown (delivery_fact_unavailable)"]
     assert osv["not_applicable_inputs"]["items"][0]["reason_code"] == "TOOL_REPORTED_UNSUPPORTED_INPUT"
 
 

@@ -29,7 +29,7 @@ FINDING_ID = re.compile(r"^finding-[0-9a-f]{64}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 PACKAGE_ID = re.compile(r"^[a-z][a-z0-9_]*-[0-9a-f]{64}$")
 EVIDENCE_REF = re.compile(r"^(?:asr:[a-z][a-z0-9_]*:[0-9a-f]{64}|evrel-[0-9a-f]{64})$")
-LABEL = re.compile(r"^[A-Z][0-9]{1,3}$")
+ENTITY_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 TEXT_LIMIT = 240
 LIST_LIMITS = {"entry": 8, "path": 16, "trigger": 8, "preconditions": 8, "unknowns": 8}
 BASIS_KEYS = frozenset({"entry", "path", "trigger", "input_format", "preconditions", "expected_observation",
@@ -85,23 +85,24 @@ def _text(value: Any, index: int, name: str, *, empty: bool = True) -> str:
     return value
 
 
-def _labels(value: Any, index: int, name: str, limit: int) -> tuple[str, ...]:
-    if (not isinstance(value, list) or len(value) > limit or len(set(value)) != len(value)
-            or any(not isinstance(item, str) or not LABEL.match(item) for item in value)):
-        raise _fail(index, f"{name} must be at most {limit} unique labels")
+def _identities(value: Any, index: int, name: str, limit: int) -> tuple[str, ...]:
+    if (not isinstance(value, list) or len(value) > limit
+            or any(not isinstance(item, str) or not ENTITY_ID.fullmatch(item) for item in value)
+            or len(set(value)) != len(value)):
+        raise _fail(index, f"{name} must be at most {limit} unique entity identities")
     return tuple(value)
 
 
 def parse_basis(value: Any, index: int) -> PocBasis:
-    if not isinstance(value, Mapping) or set(value) != {"sha256", "value"}:
-        raise _fail(index, "poc_basis must hold exactly sha256 and value")
-    body = value["value"]
+    if not isinstance(value, Mapping) or set(value) != {"sha256", "brief"}:
+        raise _fail(index, "poc_basis must hold exactly sha256 and brief")
+    body = value["brief"]
     if not isinstance(body, Mapping) or set(body) != BASIS_KEYS:
-        raise _fail(index, f"poc_basis.value must define exactly {sorted(BASIS_KEYS)}")
+        raise _fail(index, f"poc_basis.brief must define exactly {sorted(BASIS_KEYS)}")
     if not isinstance(value["sha256"], str) or not SHA256.match(value["sha256"]):
         raise _fail(index, "poc_basis.sha256 must be a SHA-256")
     if hashlib.sha256(canonical_json(body)).hexdigest() != value["sha256"]:
-        raise _fail(index, "poc_basis.sha256 is not the SHA-256 of the canonical poc_basis.value")
+        raise _fail(index, "poc_basis.sha256 is not the SHA-256 of the canonical poc_basis.brief")
     triggers = body["trigger"]
     if not isinstance(triggers, list) or len(triggers) > LIST_LIMITS["trigger"]:
         raise _fail(index, "poc_basis.trigger must be at most 8 rows")
@@ -116,8 +117,8 @@ def parse_basis(value: Any, index: int) -> PocBasis:
         if not isinstance(items, list) or len(items) > LIST_LIMITS[key]:
             raise _fail(index, f"poc_basis.{key} must be at most {LIST_LIMITS[key]} items")
         texts[key] = tuple(_text(item, index, key) for item in items)
-    return PocBasis(_labels(body["entry"], index, "entry", LIST_LIMITS["entry"]),
-                    _labels(body["path"], index, "path", LIST_LIMITS["path"]), tuple(rows),
+    return PocBasis(_identities(body["entry"], index, "entry", LIST_LIMITS["entry"]),
+                    _identities(body["path"], index, "path", LIST_LIMITS["path"]), tuple(rows),
                     _text(body["input_format"], index, "input_format"), texts["preconditions"],
                     _text(body["expected_observation"], index, "expected_observation"), texts["unknowns"],
                     value["sha256"])
@@ -156,10 +157,10 @@ def parse_candidates(value: Any) -> tuple[PocCandidate, ...]:
     return tuple(parsed)
 
 
-def read_candidates(review_handoff: Mapping[str, Any]) -> tuple[PocCandidate, ...] | None:
-    """The candidates of a verified review handoff, or ``None`` for a run whose handoff has no such field."""
+def read_candidates(review_handoff: Mapping[str, Any]) -> tuple[PocCandidate, ...]:
+    """Read the required candidates field of a verified review handoff."""
     if FIELD not in review_handoff:
-        return None
+        raise IntegrityError("the review handoff is missing required poc_candidates")
     return parse_candidates(review_handoff[FIELD])
 
 

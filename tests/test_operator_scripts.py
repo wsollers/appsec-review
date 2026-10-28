@@ -862,6 +862,8 @@ def test_clean_temp_skips_git_tracked_entries(box: Sandbox) -> None:
     subprocess.run([*git, "init", "-q"], check=True)
     subprocess.run([*git, "add", "-f", "test/tmp/tracked/file.txt"], check=True)
     subprocess.run([*git, "commit", "-qm", "x"], check=True)
+    # Submission tests fake Git; this cleanup test must query the real index it just created.
+    (box.bin / "git").unlink()
     aged(tmp / "tracked", 9)
     result = box.run("clean-temp", "--yes")
     assert result.returncode == 0 and "contains git-tracked files" in result.stdout
