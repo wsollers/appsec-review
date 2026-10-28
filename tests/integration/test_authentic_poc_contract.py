@@ -14,6 +14,7 @@ from appsec_review.jobs.job_poc_generation.candidates import parse_candidates
 from appsec_review.jobs.job_poc_generation.inputs import verify_inputs
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
+from appsec_review.storage.validation import validation_scope
 from tests.final_report_support import GATE, REPORT, Chain, environment, job_tables, run_job, gate_job, report_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay
 from tests.fixtures.inference_review.builder import RUN_ID, build_accepted_index_set
@@ -32,7 +33,9 @@ def acceptance_lane(name: str) -> LaneWorkspace:
 def attach_call_chain(fixture):
     """Direct p(s) -> strcpy flow and absent guard over the fixture's real bytes."""
     from appsec_review.graph.contract import Family
-    from appsec_review.retrieval import EntityKind, EntityRecord, LogicalIdentity
+    from appsec_review.retrieval import (
+        EntityKind, EntityRecord, LogicalIdentity, RelationKind, RelationRecord,
+    )
     from tests.review.test_graph_admissibility import SCOPE_ID, graph_entity, results_for
     from tests.review.test_packages_graph_context import PARSE, SNAPSHOT, _location, _span
     from tests.review.test_packages_memory_context import _publish
@@ -79,11 +82,17 @@ def attach_call_chain(fixture):
         "recorded-public-surface", "surface:entry:http-public", "recorded public entry context",
         {"tag": "surface:entry:http-public", "basis": "declared",
          "subject": {"logical_id": fixture.ids[PARSE], "component_id": "component:0002"}}, location)
+    lead = EntityRecord(
+        LogicalIdentity.parse(fixture.ids["sast_critical"]), "sast_critical", "c.strcpy", "c.strcpy tool-semgrep",
+        {"tool_id": "tool-semgrep", "native_rule_id": "c.strcpy", "category": "source_sast",
+         "native_severity": "CRITICAL", "message": "c.strcpy lead", "rule_mapping": {"cwe": ["CWE-120"]},
+         "language": "C"}, location)
     _publish(fixture, [
-        ("graph", "authentic-symbols", {"job": "job_code_graph_index", "build_unit_id": "native-main"},
-         [p], [], ("graph:native:symbols", "complete", None)),
+        ("observations", "authentic-lead", {"job": "job_evidence_collection", "producer": "tool-semgrep"},
+         [lead], [RelationRecord(RelationKind.OBSERVED_AT, lead.identity.value, fixture.ids[PARSE], True, 1.0)],
+         ("authentic-lead", "complete", None)),
         ("graph", "authentic-facts", {"job": "job_code_graph_index", "build_unit_id": "native-main"},
-         [sink, call, entry, flow, guard], [], ("graph:native:facts", "complete", None)),
+         [p, sink, call, entry, flow, guard], [], ("graph:native:facts", "complete", None)),
         ("tags", "authentic-surface-tags", {"job": "job_security_tagging", "family": "surface_data"},
          [tag], [], ("recorded-public-surface", "complete", None))])
     return entry.identity.value, call.identity.value
@@ -140,11 +149,12 @@ def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=Fa
     env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(lane.root, 1))}
     with environment(env):
         JobRunner(load_config(config))._bind_configuration(lane.runs_dir / RUN_ID)
-    omit = ("opengrep", "codeql", "osv", "priority", "history", "tags", "scanner_correlation",
+    omit = ("semgrep", "opengrep", "codeql", "osv", "priority", "history", "tags", "scanner_correlation",
             "dependency_advisories", "gitleaks")
     fixture = build_accepted_index_set(lane.root / "data", runs_dir=lane.runs_dir,
-                                       omit=omit + (("semgrep",) if ci_only else ("ci",)),
-                                       omit_feeds=("osv", "nvd", "kev", "epss"))
+                                       omit=omit + (("components", "build", "reference_intelligence")
+                                                    if ci_only else ("ci",)),
+                                       omit_feeds=("osv", "nvd", "kev", "epss") + (("mitre",) if ci_only else ()))
     assert fixture.runs_dir == lane.runs_dir
     if not ci_only:
         attach_call_chain(fixture)
@@ -175,8 +185,9 @@ def authentic():
 
 
 def verified(chain):
-    return verify_inputs(
-        chain.run_root, review_schemas=SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"))
+    with validation_scope(chain.run_root):
+        return verify_inputs(
+            chain.run_root, review_schemas=SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"))
 
 
 def test_current_review_producer_is_read_by_poc_consumer() -> None:
@@ -209,25 +220,28 @@ def test_real_review_and_poc_planning_use_authoritative_contracts(authentic):
     from tests import poc_support
 
     lane, chain = authentic
-    inputs = verified(chain)
-    assert inputs.candidates
     from appsec_review.jobs.bound_artifacts import read_bound_json
-    handoff = chain.handoff(JOB)
-    documents = [read_bound_json(chain.run_root, handoff["outputs"][f"{name}_review.teams"]["artifact"])
-                 for name in ("lead", "hunt")]
-    assert sum(len(document["launched"]) for document in documents) <= 1
-    assert all(len(rounds) <= 1 for document in documents for rounds in document["rounds"].values())
-    for candidate in inputs.candidates:
-        assert candidate.state in {"supported", "confirmed"}
-        assert candidate.judge_verdict == "red_correct"
-        assert candidate.evidence_refs == tuple(inputs.findings[candidate.finding_package_id]["direct_evidence"])
-        package = load_package(chain.run_root, inputs, candidate.package_id)
-        view = build_view(package, retrieval_core(chain.run_root, inputs), ViewLimits())
-        brief = build_brief(
-            candidate, finding=inputs.findings[candidate.finding_package_id], package=package,
-            view=view, sink=sink_of(package), unit=None, headers=None, settings=poc_support.settings())
-        assert not any(gap.startswith("poc_basis label") for gap in brief.gaps)
-        assert set(candidate.poc_basis.entry + candidate.poc_basis.path) <= set(brief.document["poc_basis_labels"])
+    with lane.span("verify-poc-contract"), validation_scope(chain.run_root):
+        inputs = verified(chain)
+        assert len(inputs.candidates) == 1
+        handoff = chain.handoff(JOB)
+        documents = [read_bound_json(chain.run_root, handoff["outputs"][f"{name}_review.teams"]["artifact"])
+                     for name in ("lead", "hunt")]
+        assert sum(len(document["launched"]) for document in documents) == 1
+        assert all(len(rounds) <= 1 for document in documents for rounds in document["rounds"].values())
+        for candidate in inputs.candidates:
+            assert candidate.state in {"supported", "confirmed"}
+            assert candidate.judge_verdict == "red_correct"
+            finding = inputs.findings[candidate.finding_package_id]
+            assert finding["ship_block"]["technical_severity"] in {"high", "critical"}
+            assert candidate.evidence_refs == tuple(finding["direct_evidence"])
+            package = load_package(chain.run_root, inputs, candidate.package_id)
+            view = build_view(package, retrieval_core(chain.run_root, inputs), ViewLimits())
+            brief = build_brief(
+                candidate, finding=finding, package=package,
+                view=view, sink=sink_of(package), unit=None, headers=None, settings=poc_support.settings())
+            assert not any(gap.startswith("poc_basis label") for gap in brief.gaps)
+            assert set(candidate.poc_basis.entry + candidate.poc_basis.path) <= set(brief.document["poc_basis_labels"])
 
     def forbidden(*args, **kwargs):
         raise AssertionError("no model or compiler may be dispatched by the planning lane")
