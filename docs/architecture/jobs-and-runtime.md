@@ -195,7 +195,9 @@ while either skip remains explicit without becoming a gap or evidence of securit
 The same dispositions apply to each input a job hands to an external tool. The inputs every
 tool consumer can process are declared once, typed, in `src/appsec_review/tool_inputs.py`
 (`TOOL_INPUT_SUPPORT`): file suffixes, names, or path shapes for source/configuration scanners,
-bounded-magic artifact formats for produced-artifact scanners, and translation-unit suffixes for
+bounded-magic artifact formats for produced-artifact scanners (with media/asset formats from
+`src/appsec_review/media_assets.py` excluded from the Syft and Grype package catalogers), and
+translation-unit suffixes for
 Clang-family compile databases. Target-analysis planning, evidence collection, CI configuration
 analysis, artifact security analysis, and the C/C++ scope jobs partition their candidates through
 that table **before launch**:

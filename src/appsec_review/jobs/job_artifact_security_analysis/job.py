@@ -22,7 +22,7 @@ from appsec_review.tool_inputs import (
     InputDecision, bounded_diagnostic, not_applicable_summary, osv_missing_ecosystem_gap,
     osv_missing_ecosystems, osv_reported_no_package_sources, partition_artifacts,
 )
-from appsec_review.applicability import ReasonCode
+from appsec_review.applicability import ProcessingDisposition, ReasonCode
 from appsec_review.jobs.delivery_scope import (
     POLICY_IDENTITY, analysis_scope, delivery_gap, scope_fields,
 )
@@ -208,7 +208,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
                            int(settings["archive_member_bytes"]), int(settings["archive_ratio_limit"]),
                            int(settings["archive_depth_limit"]))
     path = _safe_file(unit.job.run_root, artifact)
-    classification = classify(path, artifact)
+    classification = classify(path, artifact, name=_artifact_name(artifact))
     scanner_identity = (str(settings.get("scanner_identities", {}).get(capability, "unavailable")) +
                         (":" + ADAPTERS[capability].identity if capability in ADAPTERS else "")
                         if capability not in {"inventory", "native", "jvm", "packages", "wasm"}
@@ -431,13 +431,18 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 if gap := delivery_gap(artifact):
                     gaps.append(gap)
                 path = _safe_file(unit.job.run_root, artifact)
-                classification = classify(path, artifact)
+                classification = classify(path, artifact, name=_artifact_name(artifact))
                 if key is not None:
                     # Declared format support decides before launch; unsupported is SKIPPED_NA.
                     decision = partition_artifacts(key, ((str(artifact["artifact_id"]), _artifact_name(artifact),
                                                           classification.get("format")),))
                     if decision.not_applicable:
                         skipped.extend(item.as_dict() for item in decision.not_applicable)
+                        scope_dispositions[-1] = {
+                            **scope_dispositions[-1], "format": classification.get("format"),
+                            "input_disposition": ProcessingDisposition.SKIPPED_NA.value,
+                            "input_reason_code": decision.not_applicable[0].reason_code.value,
+                            "input_reason": decision.not_applicable[0].reason}
                         continue
                 elif not _applicable(capability, classification):
                     continue

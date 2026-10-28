@@ -26,10 +26,13 @@ from types import MappingProxyType
 from typing import Any
 
 from appsec_review.applicability import ProcessingDisposition, ReasonCode
+from appsec_review.media_assets import MEDIA_ASSET_FORMATS
 
 
 SCHEMA = "appsec-review/tool-input-support/1"
 MAX_RECORDED_ITEMS = 200
+_MEDIA_ASSET_DESCRIPTION = ("media and asset files (images, audio, video, fonts, 3D models, textures, "
+                            "game data) carry no package metadata a cataloger can read")
 
 C_CPP_SOURCE = frozenset({".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"})
 SOURCE_SUFFIXES = frozenset({
@@ -116,6 +119,9 @@ class InputSupport:
     formats: frozenset[str] = frozenset()
     any_input: bool = False
     interpreters: frozenset[str] = frozenset()
+    # With ``any_input`` only: classified artifact formats the tool can never use (media/assets).
+    excluded_formats: frozenset[str] = frozenset()
+    excluded_description: str = ""
 
     def __post_init__(self) -> None:
         forms = (bool(self.suffixes or self.names or self.predicate), bool(self.formats), self.any_input)
@@ -123,6 +129,8 @@ class InputSupport:
             raise ValueError(f"tool input support declaration is ambiguous: {self.key}")
         if any(not value.startswith(".") or value != value.lower() for value in self.suffixes):
             raise ValueError(f"tool input suffixes must be lowercase dotted suffixes: {self.key}")
+        if self.excluded_formats and not (self.any_input and self.excluded_description):
+            raise ValueError(f"excluded formats need any_input and a description: {self.key}")
 
     def supports_path(self, path: str) -> bool:
         if self.any_input:
@@ -132,7 +140,9 @@ class InputSupport:
                 (self.predicate is not None and self.predicate(pure)))
 
     def supports_format(self, value: str | None) -> bool:
-        return self.any_input or (value is not None and value in self.formats)
+        if self.any_input:
+            return value not in self.excluded_formats
+        return value is not None and value in self.formats
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,8 +255,16 @@ _declare(
                  formats=frozenset({"elf", "pe", "dotnet-assembly", "coff", "macho", "android-package"})),
     InputSupport("artifact:tool-spotbugs", "JVM classes and archives",
                  formats=frozenset({"jvm-class", "jvm-archive"})),
-    InputSupport("artifact:tool-syft", "any produced artifact file", any_input=True),
-    InputSupport("artifact:tool-grype", "any produced artifact file", any_input=True),
+    # Package catalogers find nothing in media and asset files (images, audio, video, fonts, 3D
+    # models, textures, game data). A denylist of positively recognized media is used rather than an
+    # allowlist: Syft's catalogers also match by file name and embedded content (manifests, version
+    # strings) the classifier reports as ``unknown``, so an allowlist would silently drop coverage.
+    InputSupport("artifact:tool-syft", "any produced artifact file except media and asset files",
+                 any_input=True, excluded_formats=MEDIA_ASSET_FORMATS,
+                 excluded_description=_MEDIA_ASSET_DESCRIPTION),
+    InputSupport("artifact:tool-grype", "any produced artifact file except media and asset files",
+                 any_input=True, excluded_formats=MEDIA_ASSET_FORMATS,
+                 excluded_description=_MEDIA_ASSET_DESCRIPTION),
     # osv-scanner selects an extractor by file name only; it has no extractor for produced binaries,
     # archives, objects, or package metadata, so those are never launched.
     InputSupport("artifact:tool-osv-scanner", "lockfiles and manifests osv-scanner extracts offline",
@@ -329,6 +347,10 @@ def partition_formats(key: str, items: Iterable[tuple[str, str | None]]) -> Inpu
     for identity, value in items:
         if declared.supports_format(value):
             supported.append(identity)
+        elif value in declared.excluded_formats:
+            skipped.append(InputDecision(
+                identity, key, ReasonCode.INPUT_FORMAT_UNSUPPORTED,
+                f"{key} excludes {declared.excluded_description}; artifact format is {value}"))
         else:
             skipped.append(InputDecision(
                 identity, key, ReasonCode.INPUT_FORMAT_UNSUPPORTED,

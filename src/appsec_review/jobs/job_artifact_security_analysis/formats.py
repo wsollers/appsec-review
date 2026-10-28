@@ -11,6 +11,8 @@ import tarfile
 from typing import Any
 import zipfile
 
+from appsec_review.media_assets import MEDIA_ASSET_FAMILY, recognize as recognize_asset
+
 
 @dataclass(frozen=True, slots=True)
 class ArchiveLimits:
@@ -30,8 +32,14 @@ def _safe_member(name: str) -> bool:
     return not any(part in {"", ".", ".."} for part in PurePosixPath(normalized).parts)
 
 
-def classify(path: Path, producer: Mapping[str, Any], *, probe_bytes: int = 1024 * 1024) -> dict[str, Any]:
-    """Classify from bounded bytes plus accepted producer metadata, never extension alone."""
+def classify(path: Path, producer: Mapping[str, Any], *, name: str = "",
+             probe_bytes: int = 1024 * 1024) -> dict[str, Any]:
+    """Classify from bounded bytes plus accepted producer metadata.
+
+    An extension alone never classifies executable, object, or archive content. ``name`` (the
+    artifact's own file name) is consulted only for media/asset files whose bytes matched none of
+    those formats, through the unambiguous suffixes declared in ``appsec_review.media_assets``.
+    """
     with path.open("rb") as stream:
         head = stream.read(probe_bytes)
     declared = str(producer.get("kind", "")).lower()
@@ -110,6 +118,15 @@ def classify(path: Path, producer: Mapping[str, Any], *, probe_bytes: int = 1024
         else:
             result.update(format="jvm-resource-archive", family="jvm",
                           classification_basis=[*result["classification_basis"], "bounded-member-names"])
+    # Media/asset magic outranks a producer kind; a suffix is a fallback only for bytes nothing else
+    # recognized (``unknown``), never for content a producer declared as native or bundled.
+    by_kind = "accepted-producer-kind" in result["classification_basis"]
+    if (result["format"] == "unknown" or by_kind) and (
+            asset := recognize_asset(head, "" if by_kind else name or path.name)) is not None:
+        result.update(format=asset.format, family=MEDIA_ASSET_FAMILY,
+                      asset_category=asset.asset.category.value,
+                      classification_basis=["bounded-magic"] if asset.basis == "bounded-magic"
+                      else ["bounded-magic-unrecognized", "media-suffix"])
     result["declared_kind"] = declared
     return result
 
