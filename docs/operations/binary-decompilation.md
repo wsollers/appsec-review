@@ -46,6 +46,23 @@ authorization = "Vendor agreement 2026-014 section 7 permits security analysis"
 | `sha256` | Expected hash. The run is refused if the file differs. |
 | `authorization` | Why you may reverse-engineer this file. Recorded in the publication. |
 | `processor`, `compiler_spec`, `loader` | Optional overrides when Ghidra misdetects the file, for example a raw firmware image. |
+| `required` | Optional, default `false`. When `true`, a review fails at intake if this binary has no verifiable publication. |
+| `debug_symbols_path`, `debug_symbols_sha256` | Optional PDB for a PE binary and its expected hash. Both or neither. The PDB is loaded before analysis and changes the publication identity. |
+
+For a Windows binary with its PDB:
+
+```toml
+[[binary_decompilation.binaries]]
+id = "vendor-service"
+path = "inputs/vendor/service.exe"
+sha256 = "<sha256 of service.exe>"
+debug_symbols_path = "inputs/vendor/service.pdb"
+debug_symbols_sha256 = "<sha256 of service.pdb>"
+authorization = "Vendor agreement 2026-014 section 7 permits security analysis"
+```
+
+A `debug_symbols_not_applied` gap means Ghidra did not accept the PDB, usually because it belongs
+to a different build of the binary.
 
 Capacity and limits are set once in `[binary_decompilation]`. The defaults are 8 GiB memory, a
 6 GiB JVM heap, 4 CPUs, a 2-hour container limit, a 1-hour analysis limit, and 60 seconds per
@@ -143,12 +160,26 @@ appsec-review start --target targets/<project>
 Use the same configuration file for both commands. The run freezes the configuration, including
 each binary's `id`, `path`, and `sha256`, under `runs/<run-id>/data/configuration/`.
 
-**Current limit.** `job_review_intake` does not yet resolve or record publications, and no review
-worker retrieves them. Today the publication is available to you and to tooling through
-`appsec_review.binary_decompilation.resolve_current(data_dir, sha256)`, which verifies it and
-returns its identity and manifest hash. The intake step, retrieval indices, and worker guidance
-are designed in the architecture page and not implemented. A review also still needs a source
-target directory.
+The review then consumes the publication:
+
+1. `job_review_intake` (`binary_evidence.resolve_publications`) verifies each publication again and
+   records its identity and manifest hash in
+   `runs/<run-id>/data/jobs/job_review_intake/.../binary-evidence.json`. A binary without a
+   verifiable publication is a `binary_decompilation_unavailable` gap, or an intake failure when
+   `required = true`.
+2. `job_binary_evidence_indexing` builds one bounded `binary` retrieval shard per binary. Check its
+   handoff and events (`BINARY_EVIDENCE_INDEX_COMPLETED`) for counts and gaps. `COMPLETED_WITH_GAPS`
+   lists every truncation, unresolved call, publication gap, and managed-code binary.
+3. Review workers search the `binary` index, read pseudo-C by function, and receive the
+   `binary-evidence` runtime skill. A binary finding must cite a function or call site by binary
+   hash, function address, and pseudo-C line; a citation of an import or string alone is rejected
+   as a gap.
+
+Index bounds are in `[jobs.job_binary_evidence_indexing.settings]`. With no configured binaries the
+job is `NOT_APPLICABLE` and the review is unchanged.
+
+**Current limit.** A review still needs a source target directory. The binary-only target kind is
+designed in the architecture page and not implemented.
 
 ## Reuse, re-running, and forcing
 
@@ -222,7 +253,7 @@ without `--force`.
 ## Tests
 
 ```sh
-python -m pytest tests/test_ghidra_tool.py tests/test_binary_decompilation.py
+python -m pytest tests/test_ghidra_tool.py tests/test_binary_decompilation.py tests/test_binary_evidence_indexing.py
 python -m pytest tests/test_live_ghidra_decompilation.py --basetemp=test/tmp/ghidra-live
 ```
 

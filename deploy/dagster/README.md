@@ -218,42 +218,51 @@ For a `wave1_review` run, repeat `--required-family <family>` (for example `nati
 to require zero-gap `SUCCEEDED` language-build receipts for that family and resolve their
 retained capture artifacts; the verifier fails if any such receipt is missing, failed, or gapped.
 
-With the current registry, the cross-job dependencies are:
+With the current registry and shipped configuration, the cross-job dependencies are (from
+`wave1_dependencies` in `src/appsec_review/orchestration/topology.py`):
 
 ```text
 model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
   -> ci_configuration_analysis
   -> target_analysis_plan
 target_catalog -> source_history_analysis -> target_analysis_plan
-target_analysis_plan -> tree_sitter_ast -> change_context_analysis
+target_catalog -> binary_evidence_indexing
 target_analysis_plan -> project_build -> language_build -> artifact_indexing
+language_build -> tree_sitter_ast -> change_context_analysis
+language_build -> sanitizer_build
 artifact_indexing -> test_coverage
 artifact_indexing -> profile_data
 artifact_indexing -> artifact_security_analysis
-language_build -> cpp_compiled_analysis -> clang_static_analysis
+target_analysis_plan -> evidence_collection
+language_build + evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
 cpp_compiled_analysis -> post_build_security_assessment
 cpp_compiled_analysis -> cpp_symbol_index
-cpp_compiled_analysis -> cpg_analysis  # only when jobs.job_cpg_analysis.settings.enabled = true
-target_analysis_plan -> evidence_collection
+cpp_compiled_analysis -> cpg_analysis            # only when jobs.job_cpg_analysis.settings.enabled = true
+cpp_compiled_analysis -> svf_alias_analysis      # only when jobs.job_svf_alias_analysis.settings.enabled = true
 target_catalog + language_build + artifact_indexing + evidence_collection + cpp_compiled_analysis
   -> dependency_intelligence
 language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_analysis
-  + clang_static_analysis + cpp_symbol_index + cpg_analysis
+  + clang_static_analysis + cpp_symbol_index + cpg_analysis + svf_alias_analysis
   + post_build_security_assessment + evidence_collection
   + tree_sitter_ast + change_context_analysis -> codeql_analysis
 post_build_security_assessment + evidence_collection + artifact_security_analysis
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
 codeql_analysis + owasp_control_assessment -> review_prioritization
 codeql_analysis + cpp_compiled_analysis + clang_static_analysis + cpp_symbol_index
-  + tree_sitter_ast + review_prioritization -> code_graph_index
+  + svf_alias_analysis + tree_sitter_ast + review_prioritization -> code_graph_index
 codeql_analysis + owasp_control_assessment + review_prioritization + code_graph_index
   -> security_tagging
-test_coverage + profile_data + dependency_intelligence + security_tagging
+test_coverage + profile_data + sanitizer_build + binary_evidence_indexing
+  + dependency_intelligence + security_tagging
   -> review_data_indexing -> review_package_assembly -> document_issue_analysis
-  -> inference_security_review -> final_publication_gate -> final_report_publication
+  -> inference_security_review -> final_publication_gate
+  -> [poc_generation]                            # only when jobs.job_poc_generation.settings.enabled = true
+  -> final_report_publication
 ```
 
-`wave1_review` contains every registered job except the standalone
+Disabled jobs are transparent: their edges disappear and dependents keep their remaining inputs.
+`review_data_indexing` depends on every remaining leaf, derived rather than named.
+`wave1_review` contains every registered, enabled job except the standalone
 `third_party_data_sync` job, and `final_report_publication` is its single terminal job.
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in

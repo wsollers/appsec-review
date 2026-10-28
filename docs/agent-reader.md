@@ -30,6 +30,7 @@ Relevant bounded procedures and design references:
 - [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
 - [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — typed, bounded repair proposals (apt packages, allowlisted environment, pinned package manager, manifest restores) for failed project-build image probes.
 - [`../pipeline/skills/post-build-security-assessment/SKILL.md`](../pipeline/skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
+- [`../pipeline/skills/binary-evidence/SKILL.md`](../pipeline/skills/binary-evidence/SKILL.md) — review-cell guidance on how decompiled binary evidence differs from source and how to cite it (binary hash, function address, pseudo-C line).
 - [`../.claude/skills/parallel-implementation/SKILL.md`](../.claude/skills/parallel-implementation/SKILL.md) — development skill (repository agents only) for splitting an approved design into parallel agent chunks and merging them.
 - [`../.claude/skills/multi-session-coordination/SKILL.md`](../.claude/skills/multi-session-coordination/SKILL.md) — development skill (repository agents only) for working alongside other agent sessions: claims, single owners of host-specific pins, shared hosts, and handoffs.
 - [`../.claude/skills/docs-sync/SKILL.md`](../.claude/skills/docs-sync/SKILL.md) — development skill (repository agents only) for reconciling the docs with the code delta since the commit recorded in [`docs-sync.json`](docs-sync.json).
@@ -66,7 +67,8 @@ Operations, one page per job or service:
   the `job_target_acquisition` gate and `acquire-target` acquire pinned Git (default, with submodules),
   Perforce, and GitLab/Gerrit/Azure DevOps review-export components in parallel into `targets/<system>/`.
 - [`operations/binary-decompilation.md`](operations/binary-decompilation.md) — pre-run Ghidra decompilation of
-  third-party binaries, publications, and the known-binary efficacy check; design in
+  third-party binaries, publications, review intake, `job_binary_evidence_indexing`, and the
+  known-binary efficacy check; design in
   [`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
 - [`operations/post-build-security-assessment.md`](operations/post-build-security-assessment.md) — build-hardening assessment.
 - [`operations/static-analysis.md`](operations/static-analysis.md) — deterministic static evidence collection.

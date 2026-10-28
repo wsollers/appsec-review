@@ -8,7 +8,7 @@ them. They are different, and this page is the one place that says which is whic
 | **Retrieval tool** | A typed, bounded read of accepted index shards, for example `search`, `find`, `read_excerpt`, `trace`, `resolve_evidence`, `query_observations`, `query_build_security`, `query_code_graph`. The names and parameter schemas are in `docs/schemas/retrieval-mcp-tools.json` and `src/appsec_review/mcp/schema.py`. | Every consumer below. |
 | **Retrieval core** | `appsec_review.retrieval`: the code that opens the accepted shards read-only and answers a tool call. | Jobs, review cells, and the MCP adapter. |
 | **MCP adapter** | `appsec_review.mcp` and the `appsec-review-mcp` command: a read-only JSON-RPC (MCP) stdio server over the retrieval core, pinned to one accepted run. | External clients and the OWASP workbench. **Not** review cells. |
-| **Runtime skill** | A bounded guidance file under `pipeline/skills/<name>/SKILL.md`, registered for one job and hash-pinned with its guidance. | Configured model workers, including the review roles' selected evidence-checking procedures. It grants no tools. |
+| **Runtime skill** | A bounded guidance file under `pipeline/skills/<name>/SKILL.md`, registered for one job and hash-pinned with its guidance. | Configured model workers, including the review roles' selected evidence-checking procedures and the `binary-evidence` skill (attached to review cells only when the run has a binary shard). It grants no tools. |
 
 ## How each consumer reaches the data
 
@@ -57,7 +57,10 @@ Producers publish shards ahead of the review: the multilingual CodeQL code graph
 edges, `sink_site`, `range_fact`, `guard_fact`, `dataflow_path`, `flow_summary`, `entry_point`) from the
 seeded CodeQL neighborhood to the configured call depth, plus observations, build provenance, tags and
 history. The code graph is seeded around finding locations, not whole-program. The Joern CPG producer
-is disabled by default. A package carries the identities and, under review protocol v2, the labelled
+is disabled by default. When `[binary_decompilation]` configures binaries, `job_binary_evidence_indexing`
+publishes bounded `binary` shards (`binary_function`, `binary_call_site`, `binary_import`,
+`binary_string`) from the frozen Ghidra publications; they are read with the same `search`, `find`,
+`trace` and `read_excerpt` tools ([`binary-decompilation.md`](binary-decompilation.md)). A package carries the identities and, under review protocol v2, the labelled
 neighborhood facts for its lead; everything else is a retrieval-tool call.
 
 Export packs and language catalogs now exist for C/C++, Java/Kotlin, JavaScript/TypeScript,

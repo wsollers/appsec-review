@@ -4,7 +4,7 @@ Answers are a pure function of (role, task, persona, package leads or claim) so 
 definition-of-done states arise from the fixture accepted index set:
 
 * lane A ``sast_critical``: claim C1 (CWE-120) cites a lead observation for the construct and the
-  build action for every other predicate. Under ``predicate-admission/1`` only the construct counts
+  build action for every other predicate. Under ``predicate-admission/2`` only the construct counts
   (the build action is relevant to configuration, not to attacker control, reachability or guards),
   so C1 is ``supported`` and never ``confirmed``. The failure-modes lens also probes forbidden
   capabilities (an evaluator path and an out-of-scope identity).

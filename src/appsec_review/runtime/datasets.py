@@ -22,7 +22,7 @@ FAMILIES = (
     "configuration", "catalog", "analysis_plan", "build", "source", "syntax", "compiled", "symbols",
     "cpg", "artifacts", "sbom", "scanner_findings", "codeql", "ci", "history", "change_context",
     "priority", "tags", "owasp", "reference_feeds", "inventory", "links", "precomputed",
-    "execution_receipts", "documents", "inference_review", "graph",
+    "execution_receipts", "documents", "inference_review", "graph", "binary",
 )
 STORES = ("retrieval", "owasp")
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")

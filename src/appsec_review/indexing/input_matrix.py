@@ -60,6 +60,8 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("scanner_correlation", "review_package", "hotspot_context"),
      ("query_observations", "query_precomputed", "coverage")),
     ("clangd_symbols", ("job_cpp_symbol_index",), "current", ("symbol_links",), ("core", "query_precomputed")),
+    # Ghidra pseudo-C, call neighbourhoods, imports and strings of configured third-party binaries.
+    ("binary_decompilation", ("job_binary_evidence_indexing",), "current", (), ("core", "coverage")),
     # SVF points-to sets and indirect-call targets are a C/C++ cross-check input of the graph index.
     ("svf_points_to", ("job_svf_alias_analysis",), "current", (), ("core", "query_code_graph")),
     # Instrumented native builds are protected, artifact-only evidence for a later execution stage.

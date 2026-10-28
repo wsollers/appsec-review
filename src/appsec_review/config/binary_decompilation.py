@@ -38,12 +38,24 @@ class BinaryRequest:
     processor: str | None = None
     compiler_spec: str | None = None
     loader: str | None = None
+    # A review that cannot resolve a verified publication for a required binary fails intake; an
+    # optional binary becomes a named binary_decompilation_unavailable gap.
+    required: bool = False
+    # A PDB (or other debug-symbol file) Ghidra loads before analysis, pinned by its own hash.
+    debug_symbols_path: Path | None = None
+    debug_symbols_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if not _BINARY_ID.fullmatch(self.binary_id):
             raise ValueError(f"binary id must be a lowercase slug: {self.binary_id!r}")
         if not _SHA256.fullmatch(self.sha256):
             raise ValueError(f"binary {self.binary_id} needs a lowercase SHA-256")
+        if type(self.required) is not bool:
+            raise ValueError(f"binary {self.binary_id} required must be a boolean")
+        if (self.debug_symbols_path is None) != (self.debug_symbols_sha256 is None):
+            raise ValueError(f"binary {self.binary_id} must set debug_symbols and debug_symbols_sha256 together")
+        if self.debug_symbols_sha256 is not None and not _SHA256.fullmatch(self.debug_symbols_sha256):
+            raise ValueError(f"binary {self.binary_id} needs a lowercase debug_symbols_sha256")
         if not self.authorization.strip():
             raise ValueError(f"binary {self.binary_id} needs an authorization statement")
         for value, pattern, field in ((self.processor, _LANGUAGE, "processor"),
@@ -129,7 +141,13 @@ _SETTING_KEYS = {
     "analysis_timeout_seconds", "decompile_timeout_seconds", "max_binary_bytes", "max_functions",
     "max_function_bytes", "max_pcode_ops", "max_strings", "min_string_length", "output_file_bytes",
 }
-_BINARY_KEYS = {"id", "path", "sha256", "authorization", "processor", "compiler_spec", "loader"}
+_BINARY_KEYS = {"id", "path", "sha256", "authorization", "processor", "compiler_spec", "loader",
+                "required", "debug_symbols", "debug_symbols_sha256"}
+
+
+def _resolve(value: str, repository_root: Path) -> Path:
+    path = Path(value)
+    return path.resolve() if path.is_absolute() else (repository_root / path).resolve()
 
 
 def _optional_text(value: Mapping[str, Any], key: str, field: str) -> str | None:
@@ -164,15 +182,23 @@ def parse_binary_decompilation(value: object, repository_root: Path) -> BinaryDe
         for key in ("id", "path", "sha256", "authorization"):
             if not isinstance(item.get(key), str) or not item[key].strip():
                 raise ValueError(f"{field}.{key} must be a non-empty string")
-        path = Path(item["path"])
+        required = item.get("required", False)
+        if type(required) is not bool:
+            raise ValueError(f"{field}.required must be a boolean")
+        symbols = _optional_text(item, "debug_symbols", field)
+        if symbols is not None and not symbols.strip():
+            raise ValueError(f"{field}.debug_symbols must be a non-empty string")
         binaries.append(BinaryRequest(
             binary_id=item["id"],
-            path=path.resolve() if path.is_absolute() else (repository_root / path).resolve(),
+            path=_resolve(item["path"], repository_root),
             sha256=item["sha256"],
             authorization=item["authorization"],
             processor=_optional_text(item, "processor", field),
             compiler_spec=_optional_text(item, "compiler_spec", field),
             loader=_optional_text(item, "loader", field),
+            required=required,
+            debug_symbols_path=_resolve(symbols, repository_root) if symbols is not None else None,
+            debug_symbols_sha256=_optional_text(item, "debug_symbols_sha256", field),
         ))
     settings = {key: value[key] for key in _SETTING_KEYS if key in value}
     for key in ("tool_id", "memory", "max_heap"):

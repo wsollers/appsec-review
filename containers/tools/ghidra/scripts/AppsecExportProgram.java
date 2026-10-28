@@ -44,6 +44,7 @@ import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Instruction;
 import ghidra.program.model.listing.InstructionIterator;
 import ghidra.program.model.listing.Listing;
+import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.PcodeOp;
@@ -243,6 +244,9 @@ public class AppsecExportProgram extends HeadlessScript {
 		program.addProperty("min_address", format(currentProgram.getMinAddress()));
 		program.addProperty("max_address", format(currentProgram.getMaxAddress()));
 		program.addProperty("analysis_timed_out", analysisTimeoutOccurred());
+		// Set by Ghidra's PDB analyzer when it applied a debug-symbol file to this program.
+		program.addProperty("debug_symbols_loaded",
+			currentProgram.getOptions(Program.PROGRAM_INFO).getBoolean("PDB Loaded", false));
 		JsonArray blocks = new JsonArray();
 		for (MemoryBlock block : currentProgram.getMemory().getBlocks()) {
 			JsonObject item = new JsonObject();
