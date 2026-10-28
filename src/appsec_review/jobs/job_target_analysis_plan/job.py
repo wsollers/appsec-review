@@ -546,9 +546,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 "index_manifest": indexed["index_manifest"], "index_identity": indexed["index_identity"],
                 "item_count": indexed["item_count"], "gaps": list(plan["coverage_gaps"]),
                 "terminal_status": resolution["terminal_status"],
-                "dispositions": {"selected_scanners": len(plan["scanner_selections"]),
-                                 "skipped_scanners": len(plan["scanner_non_selections"]),
-                                 "model_calls": resolution["model_calls"]}}
+                "disposition_counts": {"selected_scanners": len(plan["scanner_selections"]),
+                                       "skipped_scanners": len(plan["scanner_non_selections"]),
+                                       "model_calls": resolution["model_calls"]}}
 
     u = Unit
     units = (
