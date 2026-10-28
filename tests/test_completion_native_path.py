@@ -248,7 +248,8 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     assert report["findings"] == [item for item in gate["packages"] if item["bucket"] == "publishable"]
     assert report["poc_outcomes"]["items"] == gate["attachments"]["poc_generation"]
     assert report["dossiers"]["items"] == gate["attachments"]["dossiers"]
-    public = json.dumps(report) + resolve_bound(root, publication["markdown"]).read_text()
+    markdown = accepted[REPORT].handoff["outputs"]["report.render"]["artifact"]
+    public = json.dumps(report) + resolve_bound(root, markdown).read_text()
     for protected in ("strcpy(b, s);", "if (strlen(s) < sizeof b)", *SOURCES):
         assert protected not in public
     assert outcome["runtime_verified"] is False and outcome["result_id"] is None
@@ -303,4 +304,4 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
 
     again = run(report_job(repository_root=support.ROOT), "acceptance.publish_handoff", (GATE,))
     assert again["artifact"]["sha256"] == publication["artifact"]["sha256"]
-    assert again["markdown"]["sha256"] == publication["markdown"]["sha256"]
+    assert accepted[REPORT].handoff["outputs"]["report.render"]["artifact"]["sha256"] == markdown["sha256"]
