@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "upstream", "finding", "adjudication_id", "status", "reason",
+               "violated_invariant", "corrected_invariant", "evidence_ids", "patch", "compatibility_effects",
+               "affected_interfaces", "residual_risks", "deployment_prerequisites", "regression_spec",
+               "validation_checks", "scope_limitations", "assurance", "provenance", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/remediation-plan/1"},
+    "run_id": {"$ref": "common.schema.json#/$defs/text"},
+    "upstream": {"$ref": "common.schema.json#/$defs/upstream"},
+    "finding": {"$ref": "common.schema.json#/$defs/finding"},
+    "adjudication_id": {"$ref": "common.schema.json#/$defs/text"},
+    "status": {"enum": ["proposal_generated", "manual_design_required", "insufficient_evidence"]},
+    "reason": {"$ref": "common.schema.json#/$defs/text"},
+    "violated_invariant": {"$ref": "common.schema.json#/$defs/text"},
+    "corrected_invariant": {"$ref": "common.schema.json#/$defs/text"},
+    "evidence_ids": {"$ref": "common.schema.json#/$defs/strings"},
+    "patch": {"$ref": "common.schema.json#/$defs/nullable_ref"},
+    "compatibility_effects": {"$ref": "common.schema.json#/$defs/strings"},
+    "affected_interfaces": {"$ref": "common.schema.json#/$defs/strings"},
+    "residual_risks": {"$ref": "common.schema.json#/$defs/strings"},
+    "deployment_prerequisites": {"$ref": "common.schema.json#/$defs/strings"},
+    "regression_spec": {"$ref": "common.schema.json#/$defs/regression"},
+    "validation_checks": {"$ref": "common.schema.json#/$defs/strings"},
+    "scope_limitations": {"$ref": "common.schema.json#/$defs/strings"},
+    "assurance": {"$ref": "common.schema.json#/$defs/assurance"},
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["settings_sha256", "source_context", "writer_receipt", "guidance_bundle_sha256"],
+      "properties": {"settings_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+                     "source_context": {"$ref": "common.schema.json#/$defs/ref"},
+                     "writer_receipt": {"$ref": "common.schema.json#/$defs/ref"},
+                     "guidance_bundle_sha256": {"$ref": "common.schema.json#/$defs/sha256"}}
+    },
+    "gaps": {"$ref": "common.schema.json#/$defs/strings"}
+  }
+}
