@@ -58,6 +58,8 @@ runs the current inference-review job using scripted inference. Framework handof
 change the review/gate/report domain `/2` contracts.
 
 PoC planning consumes the direct accepted review and its strict candidate eligibility rules.
+The native candidate fixture therefore follows review directly, without a prerequisite gate;
+the CI final-survival fixture follows the actual review -> gate -> report chain.
 The no-accepted-build case proves that eligible candidates retain the missing-build disposition:
 planning does not dispatch a compiler or model without an accepted build. It is not a successful
 PoC experiment. Empty candidate lists are valid explicit outcomes; missing/corrupt contracts must
@@ -77,6 +79,16 @@ Scanner observation enumeration remains useful diagnostic detection data, but ca
 final survival. Orphan/historical shards, missing current reports, changed accepted bytes and
 stale review/gate references cannot satisfy this oracle. Benign/blocked publication is tested
 separately rather than equated with an empty scanner index.
+
+Latest-main fixture reconciliation must freeze the actual configuration before constructing
+synthetic upstream handoffs and bind the explicitly claimed upstream digest. A one-lead-package,
+no-hunt configuration is a legitimate tiny selection when declared explicitly; it must not
+silently disable the contract being tested.
+
+Each oracle evaluation needs a fresh production `validation_scope`. It may batch unchanged
+negative expected identities into one evaluation, but must not reuse a validation cache across
+tamper attempts. These reconciliation requirements do not themselves establish a passing
+latest-main execution.
 
 ## Isolation and evidence boundaries
 

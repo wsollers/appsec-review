@@ -162,8 +162,14 @@ For new fixtures:
 4. Use application producers and certified validators at real joins. Write framework
    `handoff/2` fixture envelopes through `tests.handoff_fixture.write_fixture_handoff`; do not
    replace unchanged review/gate/report domain contracts to make an integration pass.
+   Freeze the actual configuration before synthetic upstream handoffs, and bind their
+   explicitly claimed upstream digest. Declare tiny selections such as one lead package and
+   no hunt in the test configuration, rather than weakening validation.
 5. Add exact inventory nodes, budgets, substitutions and named deferrals. Preserve substantive
    existing unit/job coverage; deleting failing tests does not establish integration adequacy.
+6. Give each oracle evaluation a fresh production `validation_scope`, especially after
+   restoring or tampering with accepted bytes. Batch unchanged negative expected identities
+   in a single evaluation where appropriate; do not cache validation across mutations.
 
 ## Remaining commissioning
 

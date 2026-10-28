@@ -23,6 +23,22 @@ and source-resolving current accepted-manifest validation; scanner hits or orpha
 shards cannot establish final survival. PoC planning consumes the direct accepted review and
 strict candidate eligibility, and does not dispatch compilers/models without an accepted build.
 
+### Latest-main source transition remains in progress
+
+The coordinator is correcting shared fixtures, not production behavior: framework `handoff/2`
+requires the actual configuration to be frozen before synthetic upstream handoffs and an
+explicitly claimed upstream digest. The native candidate chain follows the current direct
+review -> PoC dependency without a prerequisite gate; the CI oracle keeps the actual
+review -> gate -> report chain.
+
+Bounding the fixture to one explicitly configured lead package and no hunt is a valid tiny
+selection, not permission to weaken contracts. Oracle evaluation uses a fresh per-call
+production `validation_scope`, with no cached validation across tamper attempts; unchanged
+negative expected identities can be batched in one evaluation.
+
+This transition has no final latest-main pass at this update. Earlier measurements remain
+revision-scoped; fixture corrections and reduced work alone do not complete public calibration.
+
 ## Shared decisions
 
 1. Acceptance state lives only under a unique `test/tmp/acceptance/<invocation>/<lane>/`.
