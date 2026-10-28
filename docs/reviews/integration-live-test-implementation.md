@@ -244,11 +244,29 @@ serial execution, 120 seconds per node including a three-second cleanup reserve,
   remaining owned processes. The artifact in the consumer checkout is
   `test/tmp/acceptance/acceptance-4dc38d6786e040108b39bc3d2401944c/review-reconciled-public/result.json`,
   with process logs/outcomes/supervisor records and production metrics version 5 retained
-  under the same root.
+  under the same root. Final `handoff.json` is persisted beside that result.
+
+A separate bounded direct functional matrix check, without the audit plugin, also timed out
+at 117.014358 seconds with zero remaining owned processes. Its real review took 42.479609
+seconds and gate 34.818231 seconds; the report fixture completed at 104.102093 seconds. The
+batched positive/four-negative/orphan oracle evaluation then started but did not complete
+within the cap. This rules out describing the current failure as merely audit-plugin
+overhead; rewritten oracle/mutation coverage remains unverified even directly. Its record is
+`test/tmp/acceptance/acceptance-2f80d7ea53b140fb9216cccf89d7ec8f/review-matrix-direct/direct-result.json`
+in the consumer checkout.
+
+The pure producer-contract test passed in 1.86 seconds, and 14 owned nodes collected in 4.13
+seconds; collection is not execution. The affected empty/corruption/benign/blocked nodes were
+not rerun on this follow-up revision, so their earlier results remain bound to their earlier
+source. The completed `06a4ea6c` consumer file is byte-unchanged. No further runs, increased
+caps, integrity weakening, cross-call validation-cache sharing or shared-helper changes are
+claimed by this handoff.
 
 The exhaustive oracle remains unverified under its 120-second cap. Representative/exhaustive
-obligation splitting or separate authorized harness performance work needs explicit ownership;
-this result is neither a cap escalation nor retry-to-green evidence.
+obligation splitting needs real authenticated prerequisite producer artifacts with explicit
+separate budgets, or parent-owned publication/harness performance work first. Merely splitting
+assertions cannot fix a fresh public fixture that alone exhausts the execution allowance.
+This result is neither a cap escalation nor retry-to-green evidence.
 
 ## Shared decisions
 
@@ -384,6 +402,7 @@ reported; setup duration is unavailable unless captured separately.
 | `5d7a35c4`, public `review` | Failed, six cases, 593.872 s | Candidate/oracle timed out; four other cases passed |
 | `09cbf227`, focused harness/inventory/lanes units | 42 passed, one host-symlink skip, 59.27 s | Direct unit validation; symlink capability and public calibration remain gaps |
 | `b72e79a9`, exact-node candidate/oracle follow-up | Candidate passed 112.285527 s; oracle timed out 117.024162 s; group 229.923300 s, both cleanups zero | No oracle assertion reached; not a green review profile |
+| `b72e79a9`, bounded direct functional matrix | Timeout 117.014358 s, cleanup zero; report fixture completed 104.102093 s | Audit plugin absent; oracle evaluation started but did not complete, so not merely guard overhead |
 
 Final result paths, exact calibration revision, working-tree/source identities, per-case budgets,
 collection/setup overhead and cleanup must come from the corresponding public driver's

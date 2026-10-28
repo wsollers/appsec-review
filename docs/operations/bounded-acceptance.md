@@ -225,3 +225,8 @@ timed out the exhaustive current-report oracle before its fixture returned. No o
 assertion was reached. This is a material remaining 120-second adequacy gap, not accepted
 report proof or a green `review`/`quick` profile; intermediate validated/completed job events
 cannot substitute for accepted final output.
+A separate direct matrix check without the audit plugin also timed out after the report
+fixture completed and oracle evaluation began. This is not merely guard overhead.
+Separating representative/exhaustive work requires separately budgeted authenticated producer
+prerequisites or publication/harness performance work; splitting assertions alone is not
+evidence that fresh public fixtures fit.
