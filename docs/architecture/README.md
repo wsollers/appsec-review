@@ -81,6 +81,11 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — proposed end-to-end
   PoC publication, evidence-qualified attack chains, remediation planning and assurance-labelled
   validation, with one final gate after all producers; preserves compile-only PoC policy.
+- [`openvex-export.md`](openvex-export.md) — planned affected-only deterministic OpenVEX export,
+  immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
+  optional-tail report fan-in and telemetry (design only, not implemented).
+- [`../operations/openvex-export.md`](../operations/openvex-export.md) — draft operator setup,
+  trust/dataflow and report-state diagrams, output/accounting semantics, privacy and recovery.
 - [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
