@@ -336,23 +336,79 @@ project, the database and the scope.
   process (per-key lock, in-memory memo) before the first export action. A compile that fails or
   times out makes that export `FAILED` with a named gap; it is never read as "no flows".
   Events use tool id `codeql-graph-export-compile`.
-- **Platform warm compile.** `python containers/build.py query-packs --warm` compiles every
+- **Platform warm compile.** `scripts/compile-codeql-queries.sh` (a wrapper over
+  `python containers/build.py query-packs --warm`) compiles every
   warm-registered pack into the same volume review runs mount (the name is derived from the
   declared CodeQL release in `appsec-review.toml` and the uid that reads it), so after a CodeQL
   release change one warm step, not the first review run, pays the cold compile. Its checks are
-  platform maintenance and never count as customer-review assurance.
+  platform maintenance and never count as customer-review assurance. See
+  [Compiling CodeQL queries](#compiling-codeql-queries).
 - **Cache sharing trade-off.** The job's compilation cache is shared by every run of the same
   user and declared releases. It holds only compiled QL derived from repository-owned packs and
   the image's libraries (evaluation binds the scope and seeds with `--external`, so no project
   data enters it), but it is writable state that outlives a run.
-- **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed (its 117 queries
-  took 48 min 36 s with `--check-only` on the rebuilt payload, so the registry gives it a 7200 s
-  timeout); registering it with `warm = true` would add that cost to every payload rebuild; it was
-  left off. Its dependencies ship inside the
+- **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed: every one of its
+  117 queries ships a precompiled `.qlx` in the image (checked in `audit-codeql:custom-2.27.0`),
+  which `database analyze` loads, so the registry sets `warm = false` with a `warm_skip_reason`.
+  Its `--check-only` verification took 48 min 36 s on the rebuilt payload, so the registry gives it
+  a 7200 s timeout. Its dependencies ship inside the
   `cert-cpp-coding-standards.tgz` member of the licensed zip, so the image needs no other member
   packs.
 - **Detecting a cold cache.** A compile event longer than a couple of minutes, or an export that
   fails with a compile timeout, means the volume was empty or the payload changed.
+
+### Compiling CodeQL queries
+
+Run `scripts/compile-codeql-queries.sh` (Windows: `scripts\compile-codeql-queries.ps1`) on the
+review host before starting review runs whenever:
+
+- the CodeQL image or `review_policy.releases.codeql` changes: the compile-cache volume name is
+  derived from the release and the runtime uid, so a new release starts with an empty volume;
+- any QL, `qlpack.yml` or suite under `rules/codeql-graph-export/<language>/` changes (also re-pin
+  the pack as described in
+  [Changing the pack or catalog](../../rules/codeql-graph-export/README.md#changing-the-pack-or-catalog));
+- the cache volume was removed or recreated.
+
+What it compiles, and what it skips on purpose:
+
+- **Compiled:** every CodeQL pack registered with `warm = true` in `rules/registry.toml`, which is
+  the repository-authored graph-export packs (`cpp`, `java`, `csharp`, `javascript`, `python`,
+  `ruby`, `go`, `rust`). Each takes about 2-4 minutes cold at a 7 GB budget. `swift` is deferred
+  because CodeQL cannot extract Swift on Linux.
+- **Skipped:** the standard query packs in the image (`/opt/codeql/qlpacks/codeql/*-queries`) and
+  the licensed CERT pack (`/opt/codeql/custom-queries/cert-cpp`) ship precompiled `.qlx` files, and
+  `codeql database analyze` loads those (`Loaded .../Xxe.qlx`, zero compiles). Never warm them:
+  compiling the C/C++ analyze suites took 2.8 hours and produced nothing analyze uses.
+- Non-CodeQL packs are skipped; they have nothing to compile.
+
+The compile is idempotent: CodeQL's cache is content addressed, so a pack already in the volume is
+a cache hit and takes seconds.
+
+Memory: the review host runs these containers in one cgroup
+(`appsecreview.slice/appsecreview-actions.slice`, `memory.max` 10 GB) shared with other sessions.
+Two compiles at 6-7 GB each are OOM-killed, and a 3 GB budget thrashes the garbage collector. The
+script therefore compiles one pack at a time with `--ram 7000 --threads 8` by default, and refuses
+(exit 3) while another compile container (`appsec-review-warm-*` or `warm-*`) is running unless
+`--allow-concurrent` is given.
+
+```bash
+scripts/compile-codeql-queries.sh --dry-run              # list the packs and docker commands
+scripts/compile-codeql-queries.sh                        # compile everything that needs it
+scripts/compile-codeql-queries.sh --language go,java     # only some languages
+scripts/compile-codeql-queries.sh --ram 6000 --threads 4 graph-export-cpp
+```
+
+```powershell
+.\scripts\compile-codeql-queries.ps1 -DryRun
+.\scripts\compile-codeql-queries.ps1 -Language go,java -Ram 7000 -Threads 8
+```
+
+Everything runs on Linux Docker. On Windows the PowerShell twin always runs the bash script inside
+WSL (`-Distro`, else the distribution of a `\\wsl.localhost\<distro>\` checkout, else the WSL
+default); Windows-native Docker is not supported. Under `pwsh` on Linux it runs the bash script
+directly. Per-pack logs go to `runs/container-builds/<timestamp>-packs-<pid>/logs/<pack>.warm.log`.
+Exit codes: `0` compiled or cached, `1` a pack failed, `2` usage error, `3` refused because another
+compile is running.
 
 ### Seeded export
 
