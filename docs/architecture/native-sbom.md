@@ -2,11 +2,13 @@
 
 ## Status, scope, and decisions
 
-This is an implementation design, not a claim that the feature already exists or that its tests
-have passed. It was checked against baseline `fcac43068d17f139a9d94393b03fe128c6127f12`;
-`git merge-base --is-ancestor <baseline> HEAD` returned zero, and HEAD equaled the baseline.
-This design changes only this document. Implementation has two file-disjoint chunks and a final
-coordinator-owned integration gate below.
+Implemented as an additive native discovery and SPDX publication path in
+`job_dependency_intelligence`. The starting baseline was
+`fcac43068d17f139a9d94393b03fe128c6127f12`. Three isolated implementation chunks cover discovery,
+SPDX algorithms, and metric aggregation; the coordinator owns job integration and acceptance.
+The [implementation record](../reviews/native-sbom-implementation.md) records the verified
+commits, real-image result, and baseline/environment limitations. The
+[operator guide](../operations/native-sbom.md) describes the published interface.
 
 1. **SPDX is the organization's SBOM standard.** Every new generated, converted, edited,
    enriched, or test SBOM in this work is **SPDX 2.3 JSON**, validated against its actual,
@@ -39,9 +41,11 @@ coordinator-owned integration gate below.
 Related existing architecture: [dependency intelligence](dependency-intelligence.md),
 [retrieval surfaces](retrieval-surfaces.md), and [telemetry](telemetry.md).
 
-## Verified implementation starting points
+## Verified baseline starting points
 
 Repository-relative paths in this document identify code, not target-owned instructions.
+This table records the original gaps and extension points; the implemented path replaces
+`_native_inputs` with authenticated collection in `integration.py`.
 
 | Existing file / symbol | Reuse or necessary extension |
 | --- | --- |
@@ -197,6 +201,10 @@ POSIX paths on disk, following existing storage contracts; host `Path` use remai
   have a bounded JSON pointer and optional protected command id/argv hash or artifact id.
   A claim must have at least one resolving selector. Identity hashes the complete canonical
   evidence record excluding `evidence_id`; duplicate evidence is deduplicated.
+  Text evidence uses `target` or `workspace` domain; structured command/artifact evidence
+  uses `run` and binds its path/hash/backing to the exact structured artifact. Integration
+  retains content-addressed, protected normalized rows with their original accepted-source
+  references, so selectors address actual normalized `argv`, `path`, and loader fields.
 - `Claim = {value: str | None, status: "unknown" | "inferred" | "corroborated" |
   "conflicted", evidence_ids: list[str], alternatives: list[str]}`.
 - `NativeCandidate` retains the existing `candidate_id`, `native_name`, `observations`,
@@ -222,6 +230,8 @@ POSIX paths on disk, following existing storage contracts; host `Path` use remai
   `appsec-review/native-sbom-provenance/1`; it maps every emitted package SPDXID to baseline
   package selectors and/or native candidate/evidence ids, merge decisions, and conflicts.
   It also records exact input identities, algorithm/schema identities, and coverage.
+  `provenance.packages` is an SPDXID-keyed mapping containing `baseline_packages`,
+  `native_candidate_ids`, `evidence_ids`, `merge_decisions`, and `conflicts`.
 
 ### Pure functions owned by the core chunk
 
@@ -541,6 +551,11 @@ successful zero. No new cache or generic runner instrumentation is necessary.
 ## Implementation ownership and sequence
 
 The coordinator owns this design, the initial shared contract module, and final integration.
+The original two-chunk plan below was split further without shared file ownership: discovery
+and SPDX each had an isolated core agent, and `telemetry.py` plus
+`test_native_sbom_metrics.py` had a third isolated implementation agent. The coordinator also
+owns `integration.py`, `.gitattributes`, and the additive Syft envelope publication in
+`job_evidence_collection/job.py`. The shared contract remained unchanged.
 The design assignment itself does not authorize implementation commits or pushes. For a later
 authorized implementation, agree the shared module first, then commit that contract locally
 before agents branch so they use the same API. Pass its exact commit and require ancestry
