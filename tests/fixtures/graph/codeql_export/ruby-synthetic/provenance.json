@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "ruby-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/synthetic.rb for the appsec-review/graph-export-ruby pack. They are a deliberately chosen subset of what the pack would export (for example calls inside ActiveRecord or framework code are omitted), written to exercise the Ruby cases; they are not a CodeQL recording. bqrs_sha256 values are SHA-256 of the text 'hand-authored ruby-synthetic bqrs <query_id>'.",
+  "cases": {
+    "remote_to_sql": "params[:name] concatenated into User.find_by_sql in UsersController#show, line 21",
+    "remote_to_command": "params[:cmd] to Kernel#system in UsersController#run, lines 27 and 29",
+    "remote_to_path": "params[:path] through Store#fetch / CachedStore#fetch to File.read, lines 8 and 14",
+    "remote_to_ssrf": "params[:host] to Net::HTTP.get in UsersController#download, line 34",
+    "remote_to_deserialization": "params[:blob] to Marshal.load in UsersController#restore, line 39",
+    "argv_source": "ARGV[0] in Cli.main flows through Cli.query into User.find_by_sql, line 64",
+    "environment_source": "ENV[\"EDITOR\"] in Cli.main flows to Kernel#system, line 66",
+    "sanitized_path": "File.basename(path) wraps the File.read operand in Store#fetch, line 8",
+    "dominating_guard": "system(cmd) at line 27 is controlled by cmd == \"status\" on the true branch",
+    "non_dominating_guard": "system(cmd) at line 29 follows the if without being controlled by it",
+    "cross_function_summary": "CachedStore#fetch passes parameter path to File.read; Cli.query returns tainted name",
+    "virtual_dispatch": "store_for(...).fetch resolves to Store#fetch and CachedStore#fetch, line 43",
+    "unresolved_reflective_call": "send(helper) in UsersController#dispatch_action, line 48",
+    "range_not_applicable": "Ruby integers are arbitrary precision; every ranges row is not_applicable"
+  }
+}

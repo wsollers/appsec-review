@@ -413,7 +413,7 @@ def _query_predicates() -> dict[str, tuple[str, list[tuple[str, str]]]]:
 
 
 def test_columns_contract_is_closed_and_equals_the_ql_query_predicates() -> None:
-    assert set(COLUMNS) == {"schema", "export_schema", "languages"} and set(COLUMNS["languages"]) == {"cpp"}
+    assert set(COLUMNS) == {"schema", "export_schema", "languages"} and {"cpp"} <= set(COLUMNS["languages"])
     assert COLUMNS["export_schema"] == contract.EXPORT_SCHEMA
     assert RUNNER.export_queries(COLUMNS, "cpp") == QUERIES
     predicates = _query_predicates()
