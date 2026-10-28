@@ -1,10 +1,8 @@
-"""job_poc_generation end to end over the offline review chain.
+"""PoC edge cases over an accepted offline review with scripted candidate permutations.
 
-The scripted inference review produces the accepted review; ``poc_candidates`` is written into its handoff
-where the judge work will write it; the gate and then the PoC job run through the application runner with
-a scripted writer, a recording fake build container and an accepted-build lookup over a copy of
-cpp-multivuln; the final report then reads the PoC handoff. Nothing is a model, a container or Dagster,
-and nothing produced is ever executed.
+The PoC job consumes the review directly, using a scripted writer and compiler boundary adapter.
+The final gate certifies its artifacts before the report reads only that gate snapshot. No model,
+container or Dagster is invoked, and generated code is never executed.
 """
 from __future__ import annotations
 
@@ -73,7 +71,7 @@ def rows_of(frozen):
 
 
 def scenario(chain, tmp_path_factory, candidates, scripts, executor=None, *, report=False, **kwargs):
-    """Restore the accepted review, add ``candidates``, run the gate, the PoC job and (optionally) the report."""
+    """Restore the accepted review, add candidates, run PoC and optionally certify and publish."""
     chain.prepare(candidates)
     writer = Writer(scripts)
     executor = executor or poc_support.FakeExecutor(ast_by_source)
@@ -507,12 +505,14 @@ def test_the_final_report_schema_accepts_the_poc_block_and_agrees_with_jsonschem
     closed = SchemaSet(ROOT / "docs" / "schemas" / "final-report")
     report = unit_json(mixed, "report.assemble", "final-report.json", REPORT)
     assert list(validator.iter_errors(report)) == [] and closed.errors("final-report", report) == []
+    item_index = next(index for index, item in enumerate(report["poc_outcomes"]["items"])
+                      if item["status"] == "compile_verified")
     broken = []
-    for edit in (lambda r: r["poc_outcomes"]["items"][0].update(status="Done!"),
-                 lambda r: r["poc_outcomes"]["items"][0].update(claim_id="claim-short"),
-                 lambda r: r["poc_outcomes"]["items"][0]["files"].pop("source"),
-                 lambda r: r["poc_outcomes"]["items"][0].update(description=""),
-                 lambda r: r["poc_outcomes"]["items"][0].update(surprise=1),
+    for edit in (lambda r: r["poc_outcomes"]["items"][item_index].update(status="Done!"),
+                 lambda r: r["poc_outcomes"]["items"][item_index].update(claim_id="claim-short"),
+                 lambda r: r["poc_outcomes"]["items"][item_index]["files"].pop("source"),
+                 lambda r: r["poc_outcomes"]["items"][item_index].update(description=""),
+                 lambda r: r["poc_outcomes"]["items"][item_index].update(surprise=1),
                  lambda r: r["poc_outcomes"].update(poc_handoff={"path": "../x", "sha256": "0" * 64})):
         mutated = deepcopy(report)
         edit(mutated)
