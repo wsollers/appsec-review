@@ -67,6 +67,8 @@ def test_malformed_common_never_falls_back_to_legacy(reader, bad):
     ({"tool_id": "tool-spotbugs", "category": "binary", "severity": 1}, "tool-spotbugs", "binary", "high"),
     ({"scanner_identity": "custom", "category": "secret_detection", "severity": "unmapped"},
      "custom", "secret", "unknown"),
+    ({"tool_id": "tool-spotbugs", "category": "bytecode_analysis", "severity": "HIGH"},
+     "tool-spotbugs", "source_sast", "high"),
 ])
 def test_legacy_parity_projects_explicit_provenance_gap_without_invented_native_refs(payload, scanner, kind, severity):
     common = observation_projection(payload)

@@ -48,7 +48,7 @@ _SCANNER_LABELS = {
 # carries its scanner category (``binary_hardening``, ``vulnerability_matching``, ``bytecode_analysis``), a scan-run
 # summary carries ``software_inventory`` (inventory scans) or ``tool_diagnostic`` (every other scan).
 _CLASS_BY_CATEGORY = {
-    "source_sast": "source_sast", "shell_lint": "source_sast",
+    "source_sast": "source_sast", "shell_lint": "source_sast", "bytecode_analysis": "source_sast",
     "secret": "secret", "secret_detection": "secret", "secrets": "secret",
     "vulnerability_matching": "dependency", "dependency": "dependency", "configuration": "configuration",
     "iac": "configuration", "workflow": "configuration", "config_lint": "configuration",
