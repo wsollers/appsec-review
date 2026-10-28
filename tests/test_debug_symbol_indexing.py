@@ -214,20 +214,15 @@ def test_routes_publish_normalized_evidence_and_preserve_upstream(tmp_path, targ
 
 
 @pytest.mark.parametrize("target", ["clang", "msvc"])
-def test_rehash_drift_prevents_extractor_and_records_gap(tmp_path, target):
+def test_rehash_drift_prevents_extractor_and_publication(tmp_path, target):
     context, artifacts, _ = _seed(tmp_path, target, debug=target == "msvc")
     (context.run_root / artifacts[0]["path"]).write_bytes(b"changed")
     calls = []
     result = build_job(extractor=_extractor(calls)).execute(context)
-    assert result["failed_units"] == []
+    assert result["failed_units"] == [f"extract.{'msvc_pdb' if target == 'msvc' else 'clang_dwarf'}"]
     assert calls == []
-    publication = result["outputs"]["acceptance.publish_handoff"]
-    assert publication["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert any("integrity" in gap for gap in publication["gaps"])
-    _, database = _shard(context, result)
-    with database:
-        assert not database.execute("SELECT * FROM entities").fetchall()
-        assert database.execute("SELECT 1 FROM coverage WHERE status='unavailable'").fetchone()
+    assert "acceptance.publish_handoff" not in result["outputs"]
+    assert "FrameworkIntegrityError" in context.events.path.read_text()
 
 
 @pytest.mark.parametrize("reason", ["pdb_guid_age_mismatch", "tool_unavailable", "unsupported_binary_format"])
@@ -259,7 +254,8 @@ def test_separate_debug_bytes_must_match_accepted_hash_before_reader(tmp_path):
     calls = []
     result = build_job(extractor=_extractor(calls)).execute(context)
     assert calls == []
-    assert "integrity" in " ".join(result["outputs"]["acceptance.publish_handoff"]["gaps"])
+    assert result["failed_units"] == ["extract.msvc_pdb"]
+    assert "acceptance.publish_handoff" not in result["outputs"]
 
 
 def test_build_artifact_references_come_from_matching_accepted_language_metadata(tmp_path):
@@ -280,10 +276,32 @@ def test_post_reader_artifact_drift_does_not_publish_records(tmp_path):
         binary.write_bytes(b"mutated while extracting")
         return Extraction((SymbolRecord("fn:1", RecordKind.SYMBOL, "unsafe"),), producer="fixture/1")
     result = build_job(extractor=extract).execute(context)
+    assert result["failed_units"] == ["extract.clang_dwarf"]
+    assert "acceptance.publish_handoff" not in result["outputs"]
+
+
+def test_escaped_artifact_reference_is_an_integrity_failure(tmp_path):
+    from appsec_review.jobs.job_debug_symbol_indexing.job import FrameworkIntegrityError, _probe
+
+    artifact = {"artifact_identity": "fixture", "kind": "executable",
+                "reference": {"path": "../outside", "sha256": "a" * 64, "size_bytes": 1}}
+    with pytest.raises(FrameworkIntegrityError, match="reference is invalid"):
+        _probe(tmp_path, artifact, 1024)
+
+
+def test_reader_exception_is_an_observable_gap_not_an_integrity_success(tmp_path):
+    context, _, _ = _seed(tmp_path)
+
+    def broken_reader(*_args, **_kwargs):
+        raise RuntimeError("private diagnostic")
+
+    result = build_job(extractor=broken_reader).execute(context)
     assert result["status"] == "COMPLETED_WITH_GAPS"
-    _, database = _shard(context, result)
-    with database:
-        assert database.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 0
+    assert "reader_failed: RuntimeError" in " ".join(
+        result["outputs"]["acceptance.publish_handoff"]["gaps"])
+    events = context.events.path.read_text()
+    assert "DEBUG_SYMBOL_ARTIFACT_FAILED" in events
+    assert "private diagnostic" not in events
 
 
 def test_accepted_loader_verifies_handoff_summary_decision_and_manifest(tmp_path):

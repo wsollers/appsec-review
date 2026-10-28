@@ -53,6 +53,10 @@ _RECORD_KINDS = {
 }
 
 
+class FrameworkIntegrityError(ValueError):
+    """Accepted run-owned evidence or its resolving reference changed."""
+
+
 def _digest(value: Any) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
@@ -72,7 +76,7 @@ def _verify(root: Path, ref: Mapping[str, Any], label: str, maximum: int | None 
             raise ValueError("content hash mismatch")
         return path
     except (OSError, KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f"{label} integrity verification failed") from exc
+        raise FrameworkIntegrityError(f"{label} integrity verification failed") from exc
 
 
 def _artifact(unit: UnitContext, name: str, document: Mapping[str, Any]) -> dict[str, Any]:
@@ -208,7 +212,10 @@ def _probe(root: Path, artifact: Mapping[str, Any], maximum: int) -> dict[str, A
     try:
         if not isinstance(ref, Mapping):
             raise ValueError("accepted object reference unavailable")
-        path = safe_path(root, ref["path"])
+        try:
+            path = safe_path(root, ref["path"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise FrameworkIntegrityError("binary/debug artifact reference is invalid") from exc
         size = path.stat().st_size
         if size > maximum:
             value["observed"] = {"size_bytes": size, "error": "max_input_bytes"}
@@ -219,6 +226,8 @@ def _probe(root: Path, artifact: Mapping[str, Any], maximum: int) -> dict[str, A
             header = stream.read(64)
         debug = header.startswith(b"Microsoft C/C++ MSF") or is_debug
         return {**artifact, "probe": value, "path": path, "is_debug": debug}
+    except FrameworkIntegrityError:
+        raise
     except (OSError, KeyError, TypeError, ValueError):
         value.setdefault("observed", {"error": "artifact_integrity_unavailable"})
         return {**artifact, "probe": value, "is_debug": is_debug, "gap": "artifact_integrity_unavailable"}
@@ -521,7 +530,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
                         _verify(unit.job.run_root, candidate["reference"], "debug artifact",
                                 settings["reader"]["max_input_bytes"])
                     if not isinstance(result, Extraction):
-                        raise ValueError("invalid extraction contract")
+                        raise FrameworkIntegrityError("invalid extraction contract")
                     if len(result.records) > settings["reader"]["max_records"]:
                         gaps.append("max_records")
                         continue
@@ -538,8 +547,10 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
                             break
                     else:
                         gaps.extend(_private_text(gap) for gap in result.gaps or ("debug_symbols_unavailable",))
-                except Exception:
-                    gaps.append("reader_failed_or_artifact_integrity_changed")
+                except FrameworkIntegrityError:
+                    raise
+                except Exception as exc:
+                    gaps.append(f"reader_failed: {type(exc).__name__}")
             distinct = {(candidate["reference"]["sha256"] if candidate else artifact["reference"]["sha256"])
                         for _, candidate in matches}
             if len(distinct) > 1:
