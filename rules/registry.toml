@@ -14,6 +14,10 @@
 #   image           catalog image id, or the operator-provided CodeQL source tag, used to verify
 #   library         the analysis library version the pack is written against; asserted present
 #   verify          check-only (type-check, no query plan) | validate (engine-native validation)
+#   warm            CodeQL only: true when `query-packs --warm` (scripts/compile-codeql-queries.sh)
+#                   fully compiles the pack into the shared compile cache; false for packs that ship
+#                   precompiled .qlx (warm_skip_reason says why). warm_threads, warm_ram_mb and
+#                   warm_timeout_seconds override the compile defaults for one pack.
 #   state           enabled | deferred
 #
 # `library` is pinned deliberately. A CodeQL pack that declares `codeql/cpp-all: "*"` binds to
@@ -33,7 +37,7 @@ suite = "graph-export.qls"
 image = "audit-codeql:custom-2.27.0"
 library = "codeql/cpp-all@12.1.0"
 verify = "check-only"
-# `query-packs --warm` fully compiles this pack into the platform warm volume (keyed by image id).
+# `query-packs --warm` fully compiles this pack into the shared compile cache review runs mount.
 warm = true
 state = "enabled"
 description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
@@ -159,6 +163,10 @@ suite = "codeql-suites/cert-cpp-default.qls"
 image = "audit-codeql:custom-2.27.0"
 library = "codeql/cpp-all@12.1.0"
 verify = "check-only"
+# All 117 queries ship a precompiled .qlx in the image and `database analyze` loads those, so a
+# warm compile would only spend hours re-deriving what is already compiled.
+warm = false
+warm_skip_reason = "ships precompiled .qlx for every query; analyze loads them"
 state = "enabled"
 description = "Licensed CERT C++ 2016 coding-standards pack, release-pinned at 2.62.0 and layered into the CodeQL source image."
 

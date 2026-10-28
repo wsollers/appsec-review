@@ -67,6 +67,9 @@ agents that inspect or change the repository. It is not a prompt for review work
   testing on a shared host, and when handing work to another session.
 - Keep the docs true to the code: after a batch of merged PRs, follow
   `.claude/skills/docs-sync/SKILL.md` to reconcile them with the delta since `docs/docs-sync.json`.
+- After a CodeQL image or release change, or any change to graph-export or custom QL, recompile
+  with `scripts/compile-codeql-queries.sh` (Windows: `scripts/compile-codeql-queries.ps1`, which
+  runs it in WSL) before starting review runs; never warm the precompiled standard query suites.
 - Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
   specifically instructs you to merge that pull request.
 

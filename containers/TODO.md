@@ -37,8 +37,9 @@
   a defect. The committed `image_id` pins in `appsec-review.toml`, `containers/catalog.toml` and
   `containers/tools/codeql/assets.lock.json` currently name whichever host last re-pinned
   (Zarathustra, 2026-10-15), so every other host fails its pin checks until it re-pins. Exception:
-  `buildenv-rust-wasm` is pinned to `sha256:9b358785…` (replacing `sha256:38cc04b7…`), built with
-  `python containers/build.py build audit-buildenv-rust-wasm` on a WSL 2 host. The pinned images
+  `buildenv-rust-wasm` is pinned to `sha256:ad6df7a2…` (replacing `sha256:38cc04b7…`), built with
+  `python containers/build.py build audit-buildenv-rust-wasm` on a WSL 2 host from the Dockerfile that
+  installs `rust-src`, which the CodeQL Rust extractor needs to resolve `std`. The pinned images
     build from this repository's Dockerfiles on any Linux Docker host (the CodeQL images with
     `containers/tools/codeql/build-source-image.sh`). Remaining:
   resolve each pinned tag to the local host's image ID when a run starts and bind that observed ID

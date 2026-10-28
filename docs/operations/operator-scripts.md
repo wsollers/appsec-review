@@ -10,6 +10,9 @@ built and started by `deploy/dagster/bin/lifecycle.py` and a review is still the
 Dagster job described in [`wave1-review.md`](wave1-review.md) and
 [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
+Every script in `scripts/`, including `render-report` and `compile-codeql-queries` which are not
+`ops.py` commands, is listed in [`../../scripts/README.md`](../../scripts/README.md).
+
 ## Conventions
 
 - Run any script from any directory; the repository is found from the script's own path, and paths

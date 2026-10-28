@@ -47,13 +47,13 @@ module GraphExport {
   predicate locationColumns(
     Location l, string path, int startLine, int startColumn, int endLine, int endColumn
   ) {
-    path = l.getFile().getRelativePath() and
+    path = sourcePath(l.getFile()) and
     startLine = l.getStartLine() and
     startColumn = l.getStartColumn() and
     endLine = l.getEndLine() and
     endColumn = l.getEndColumn()
     or
-    not exists(l.getFile().getRelativePath()) and
+    not exists(sourcePath(l.getFile())) and
     path = "" and
     startLine = 0 and
     startColumn = 0 and
@@ -61,8 +61,18 @@ module GraphExport {
     endColumn = 0
   }
 
+  /**
+   * The path of `f` relative to the database source root, when `f` is project source. CMake's
+   * configure-time compiler probes (`CMakeFiles/<version>/CompilerId*`) are traced by the build but
+   * are generated into the build directory, never accepted sources, so they are excluded.
+   */
+  string sourcePath(File f) {
+    result = f.getRelativePath() and
+    not result.matches("%CMakeFiles/%")
+  }
+
   /** Holds when `e` lies inside the database source root (an accepted source file). */
-  predicate inSource(Locatable e) { exists(e.getLocation().getFile().getRelativePath()) }
+  predicate inSource(Locatable e) { exists(sourcePath(e.getLocation().getFile())) }
 
   /** A function whose definition lies inside the source root. */
   class SourceFunction extends Function {
@@ -102,7 +112,7 @@ module GraphExport {
    */
   predicate seedMatch(string path, int startLine, int endLine, SourceFunction f) {
     exportSeed(path, startLine, endLine) and
-    f.getDefinition().getFile().getRelativePath() = path and
+    sourcePath(f.getDefinition().getFile()) = path and
     startLine <= functionEndLine(f) and
     endLine >= f.getDefinition().getLocation().getStartLine()
   }

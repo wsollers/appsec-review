@@ -331,10 +331,10 @@ implementation:
 - measure seeded versus whole-program export time on a 20k-100k LOC project, and tune the default
   `seed_depth` and `seed_limit` from the numbers;
 - measure one batched `codeql database run-queries` over all queries against serial runs;
-- make `query-packs --warm` a routine step of the host image procedure after a CodeQL image
-  rebuild, as a compile check (it fills a platform volume keyed by the image id; review runs share
-  a separate cache keyed by the declared CodeQL and runner releases, so only the first run after a
-  release change compiles cold; see `docs/operations/codeql-analysis.md`), and make the live
+- make `scripts/compile-codeql-queries.sh` a routine step of the host image procedure after a
+  CodeQL image rebuild (it fills the shared compile cache review runs mount, keyed by the declared
+  CodeQL release, so no run compiles cold; see `docs/operations/codeql-analysis.md`; the analyze
+  query suites ship precompiled `.qlx` and must not be warmed), and make the live
   CodeQL tests opt-in;
 - measure the seeded packs for Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C# and Rust
   (they use the same two external predicates, `exportScope` and `exportSeed`);

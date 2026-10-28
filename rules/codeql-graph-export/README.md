@@ -163,9 +163,10 @@ runner then:
    sorted by relative path), file count, `qlpack.yml`, suite and `columns.json` equal
    `export_query_packs.<language>` in `containers/tools/codeql/assets.lock.json`;
 2. relies on the compile cache populated beforehand by the separate `compile` action (cold 10-22
-   minutes, warm about 45 seconds). The cache volume is keyed by the declared CodeQL and runner
-   releases and the runtime user, so it is shared across runs: a pack compiles cold only after
-   one of those, or the pack's own bytes, change. It then compiles every query once (`codeql query
+   minutes, warm about 45 seconds). The cache volume is keyed by the declared CodeQL release and
+   the runtime user, so it is shared across runs: a pack compiles cold only after the CodeQL
+   release or the pack's own bytes change, and `scripts/compile-codeql-queries.sh` (a wrapper over
+   `containers/build.py query-packs --warm`) fills it ahead of any run. It then compiles every query once (`codeql query
    compile`, a cache hit) and runs `codeql database run-queries
    --threads --ram --external=exportScope=<scope.csv> --external=exportSeed=<seeds.csv> -- <db>
    <pack>/<query>.ql` for each query file;
@@ -221,3 +222,7 @@ the tests enforce this.
    When a live row legitimately differs from a hand-authored synthetic recording or expectation,
    fix the recording or `expected-facts.json` in the same change and regenerate the golden with
    `APPSEC_REVIEW_REGENERATE_GRAPH_GOLDEN=1`.
+5. Recompile the changed packs into the shared compile cache before starting review runs:
+   `scripts/compile-codeql-queries.sh --language <language>` (Windows:
+   `scripts\compile-codeql-queries.ps1 -Language <language>`, which runs it in WSL). See
+   [Compiling CodeQL queries](../../docs/operations/codeql-analysis.md#compiling-codeql-queries).

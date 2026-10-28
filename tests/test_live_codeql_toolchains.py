@@ -144,9 +144,9 @@ def test_live_codeql_inventory_matches_the_pinned_extractors_and_query_packs(
     )
     assert not execution.timed_out and execution.exit_code == 0
     inventory = json.loads((scratch / "inventory.json").read_text(encoding="utf-8"))
-    assert set(settings.languages) <= set(inventory["extractors"])
-    assert set(inventory["query_packs"]) == set(settings.languages)
-    assert inventory["custom_query_packs"]["cpp"][0]["query_id"] == "cert-cpp"
+    assert inventory["schema"] == "appsec-review/codeql-extractor-inventory/1"
+    assert inventory["assurance"] == "capability_availability_only"
+    assert set(settings.languages) <= set(inventory["languages"])
 
 
 @pytest.mark.parametrize(("profile", "runtime_user"), [("source", "1000:1000"), ("native", "10001:10001")])

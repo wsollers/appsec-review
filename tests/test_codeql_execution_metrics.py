@@ -88,6 +88,9 @@ def test_absent_or_empty_per_query_sources_are_named_gaps_never_zero(tmp_path: P
 
 def test_export_metrics_come_from_the_manifest_and_name_rows_without_evaluate_time() -> None:
     manifest = json.loads((NATIVE / "export-manifest.json").read_text(encoding="utf-8"))
+    timing = {"evaluate_ms", "decode_ms", "compile_s"}
+    manifest = {**manifest, "exports": [{key: value for key, value in entry.items() if key not in timing}
+                                        for entry in manifest["exports"]]}
     document = metrics.export_query_metrics(manifest)
     assert document["observed_query_count"] == len(manifest["exports"]) > 0
     assert all(row["duration_ms"] is None for row in document["queries"])
@@ -285,7 +288,8 @@ def test_export_and_compile_emit_identity_per_query_metrics_and_reuse(tmp_path: 
     assert view["by_action"]["compile"]["count"] == 1
     export_rows = [row for row in codeql["by_query"] if row["action"] == "export"]
     assert export_rows and all(row["result_count"] is not None for row in export_rows)
-    assert any("has no evaluate_ms" in gap for gap in codeql["gaps"])
+    # The native recording is a live export, so its manifest carries per-query evaluate_ms.
+    assert all(row["runtime_ms"]["unmeasured_count"] == 0 for row in export_rows)
     assert any("no runner compile summary" in gap for gap in codeql["gaps"])
     reused = [row for row in codeql["executions"] if row["status"] == "REUSED"]
     assert reused[0]["per_query"]["status"] == "not_applicable"
