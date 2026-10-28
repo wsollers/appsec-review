@@ -424,7 +424,7 @@ names or inspects raw run directories.
 `job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
 publishes the accepted inventory before `job_review_package_assembly`. Implemented:
 
-- **Inventory and audit.** All 33 currently registered jobs declare datasets in their own
+- **Inventory and audit.** All 37 currently registered jobs declare datasets in their own
   `datasets.py`. The registry/configuration equality check, rather than this prose count, is the
   acceptance authority.
   The audit compares declarations with the resolved configuration, accepted handoffs, every

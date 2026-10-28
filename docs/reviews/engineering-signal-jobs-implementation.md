@@ -77,7 +77,7 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
 - Re-audited the current central TOML, producer dataset declarations, direct CLI order, generated
   Dagster dependencies, review-data product rules, schemas, focused tests, and the accepted
   multivuln fixture contract rather than carrying forward the original implementation summary.
-- The current registry and configuration each contain 33 jobs; the input-source matrix contains 54
+- The current registry and configuration each contain 37 jobs; the input-source matrix contains 56
   rows; review-data indexing publishes ten precomputed products. These counts are descriptive and
   are guarded by executable consistency tests rather than treated as runtime authority.
 - Operator topology, data-flow tables, navigation, graph implementation status, profile context,

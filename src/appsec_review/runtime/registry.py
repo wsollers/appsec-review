@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from appsec_review.runtime.job import Job
 
@@ -29,6 +29,17 @@ class JobRegistry:
         """Return registered semantic job ids in deterministic order."""
 
         return tuple(sorted(self._factories))
+
+    def require_matches(self, configured: Iterable[str], *, surface: str) -> None:
+        """Refuse to run when the configured jobs and the registered jobs differ."""
+
+        registered, configured = set(self._factories), set(configured)
+        if registered != configured:
+            raise ValueError(
+                f"{surface} job/config mismatch: "
+                f"missing_config={sorted(registered - configured)}, "
+                f"missing_registration={sorted(configured - registered)}"
+            )
 
 
 def builtin_registry() -> JobRegistry:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import json
 import os
 from types import MappingProxyType
 
@@ -67,6 +69,25 @@ def test_executor_uses_argv_and_enforces_mounts_policy_digest_and_bounds(tmp_pat
     assert len([call for call in calls if call[:2] == ["docker", "run"]]) == 1
 
 
+def test_execution_receipt_records_environment_identity(tmp_path: Path) -> None:
+    def runner(argv, timeout):
+        if tuple(argv[:3]) == ("docker", "image", "inspect"):
+            return CommandOutcome(0, (DIGEST + "\n").encode(), b"")
+        return CommandOutcome(0, b"", b"")
+
+    target = tmp_path / "target"
+    target.mkdir()
+    scratch = tmp_path / "run" / "scratch"
+    executor = ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner)
+    first = executor.execute(ExecutionRequest("tool-fixture", ("/bin/fixture",), target, scratch,
+                                              environment={"MODE": "a"}))
+    receipt = json.loads((scratch / "execution.json").read_text(encoding="utf-8"))
+    assert receipt["environment_sha256"] == {"MODE": hashlib.sha256(b"a").hexdigest()}
+    second = executor.execute(ExecutionRequest("tool-fixture", ("/bin/fixture",), target, scratch,
+                                               environment={"MODE": "b"}))
+    assert first.environment_sha256 != second.environment_sha256
+
+
 def test_executor_rejects_digest_mismatch_and_docker_socket_mount(tmp_path: Path) -> None:
     target = tmp_path / "target"
     target.mkdir()
@@ -118,7 +139,7 @@ def test_scratch_is_writable_only_while_the_scanner_runs(tmp_path: Path) -> None
     with pytest.raises(OSError):
         ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner).execute(
             ExecutionRequest("tool-fixture", ("/bin/fixture",), target, scratch))
-    assert modes == [0o777]
+    assert modes == [0o700]
     assert scratch.stat().st_mode & 0o777 == 0o755
 
 

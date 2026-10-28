@@ -450,7 +450,8 @@ def _handoff_review_fields(intake=(), backlog=()) -> dict:
     from appsec_review.review.ship_block import summarize
 
     rows = [*intake, *backlog]
-    return {"remediation_intake": list(intake), "verification_backlog": list(backlog),
+    return {"package_manifest_sha256": SHA, "lead_package_manifest_sha256": SHA,
+            "remediation_intake": list(intake), "verification_backlog": list(backlog),
             "ship_block": {**summarize({"lane": row["lane"], "status": row["ship_block_status"]} for row in rows),
                            "policy_sha256": SHA},
             "verification": {"require_distinct_model_for_ship_blocking": True,

@@ -40,7 +40,8 @@
         "ledger_head_sha256",
         "projection_sha256",
         "ship_block_policy_sha256",
-        "package_manifest_sha256"
+        "package_manifest_sha256",
+        "lead_package_manifest_sha256"
       ],
       "properties": {
         "status": {
@@ -65,6 +66,9 @@
           "$ref": "common.schema.json#/$defs/sha256"
         },
         "package_manifest_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "lead_package_manifest_sha256": {
           "$ref": "common.schema.json#/$defs/sha256"
         }
       }

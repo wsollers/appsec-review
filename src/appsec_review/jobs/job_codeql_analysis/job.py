@@ -15,6 +15,7 @@ from appsec_review.applicability import (
     ApplicabilityAction, ProcessingDisposition, decision_from_mapping, finalize_processing,
     resolved_configuration_identity,
 )
+from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql.runtime import (
     CodeQLImage, EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, GraphExportIntegrityError, compile_cache_volume,
@@ -243,19 +244,14 @@ def _copy_clean_target(unit: UnitContext, workspace: Path) -> None:
             copy_file(path, destination)
 
 
-def _make_workspace_accessible(workspace: Path, *, writable_files: bool = False) -> None:
-    # Dagster and the analysis container deliberately use different users. Source inputs stay
-    # immutable; directories must allow the isolated user to create traced build outputs.
-    for path in sorted(workspace.rglob("*")):
-        if path.is_dir():
-            path.chmod(0o777)
-        elif path.is_file():
-            if writable_files:
-                path.chmod(0o666)
-            else:
-                executable = bool(path.stat().st_mode & 0o111)
-                path.chmod(0o555 if executable else 0o444)
-    workspace.chmod(0o777)
+def _make_workspace_accessible(workspace: Path, runtime_user: str, *, writable_files: bool = False) -> None:
+    # Hand the tree to the analysis container's identity, owner-only. Source inputs stay immutable;
+    # directories let that identity create traced build outputs.
+    grant_runtime_user(workspace, runtime_user, recursive=True, writable_files=writable_files)
+
+
+def _runtime_user(unit: UnitContext) -> str:
+    return application_runtime_user(_settings(unit).runtime_user)
 
 
 def _verify_workspace_scope(workspace: Path, scope: CodeQLScope) -> None:
@@ -387,7 +383,7 @@ def _stage_workspace(unit: UnitContext, scope: CodeQLScope,
             raise FrameworkIntegrityError(
                 f"CodeQL scope {scope.scope_id!r} ({scope.root!r}): {exc}") from exc
     _verify_workspace_scope(workspace, scope)
-    _make_workspace_accessible(workspace)
+    _make_workspace_accessible(workspace, _runtime_user(unit))
 
 
 def _checkpoint(path: Path, identity: str, schema: str) -> Mapping[str, Any] | None:
@@ -694,7 +690,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                         scope_id=scope.scope_id, query_profile=query_profile["query_id"],
                         tool_invocation_id=invocation):
         shutil.copytree(scope_root / "database", query_database, copy_function=copy_file)
-        _make_workspace_accessible(query_database, writable_files=True)
+        _make_workspace_accessible(query_database, _runtime_user(unit), writable_files=True)
     if sarif_path.parent.exists():
         shutil.rmtree(sarif_path.parent)
     image_value = _safe_json(unit.job.run_root, database["image"])
@@ -823,9 +819,9 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     repository = unit.job.repository_root
     staging.mkdir(parents=True)
     shutil.copytree(scope_root / "database", staging / "database", copy_function=copy_file)
-    _make_workspace_accessible(staging / "database", writable_files=True)
+    _make_workspace_accessible(staging / "database", _runtime_user(unit), writable_files=True)
     shutil.copytree(repository / str(profile["source_path"]), staging / "pack")
-    _make_workspace_accessible(staging / "pack")
+    _make_workspace_accessible(staging / "pack", _runtime_user(unit))
     shutil.copyfile(repository / str(profile["columns_path"]), staging / "columns.json")
     shutil.copyfile(repository.joinpath(*_ASSET_LOCK), staging / "assets.lock.json")
     (staging / SCOPE_FILE).write_text(seeding.scope_csv(mode, depth), encoding="utf-8")
@@ -834,7 +830,7 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     for path in (staging / "columns.json", staging / "assets.lock.json", staging / SCOPE_FILE,
                  staging / SEEDS_FILE):
         path.chmod(0o444)
-    staging.chmod(0o777)
+    grant_runtime_user(staging, _runtime_user(unit))
 
 
 def _verify_export_manifest(root: Path, scope: CodeQLScope, profile: Mapping[str, Any],

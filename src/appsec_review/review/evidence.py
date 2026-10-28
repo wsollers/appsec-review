@@ -28,7 +28,7 @@ from appsec_review.graph.contract import (
     ineligibility_reasons, mapped_predicates,
 )
 from appsec_review.graph.bounds import fact_bounds_destination, sink_destination_bytes
-from appsec_review.retrieval.core import RetrievalCore
+from appsec_review.retrieval.core import RetrievalCore, RetrievalGap, RetrievalIntegrityError
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (  # make_gap is re-exported for compatibility
@@ -151,7 +151,9 @@ def _sink_destination(core: RetrievalCore, sink: Any) -> int | None:
             payload = found[0].get("payload") if found and found[0].get("kind") == EntityKind.GUARD_FACT.value else None
             if isinstance(payload, Mapping) and isinstance(payload.get("result"), Mapping):
                 results.append(payload["result"])
-    except Exception:  # noqa: BLE001 - an unreadable lookup means "not shown", never a contradiction
+    except RetrievalIntegrityError:
+        raise
+    except (RetrievalGap, LookupError, ValueError):  # unavailable means "not shown", never a contradiction
         return None
     return sink_destination_bytes(results)
 

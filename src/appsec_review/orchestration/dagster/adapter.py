@@ -348,15 +348,8 @@ def build_definitions(
     source = config_path or os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")
     config = load_config(source)
     registry = registry or builtin_registry()
+    registry.require_matches(config.jobs, surface="Dagster")
     registered = set(registry.job_ids())
-    configured = set(config.jobs)
-    if registered != configured:
-        missing_config = sorted(registered - configured)
-        missing_registration = sorted(configured - registered)
-        raise ValueError(
-            "Dagster job/config mismatch: "
-            f"missing_config={missing_config}, missing_registration={missing_registration}"
-        )
 
     # A job-level enabled flag controls dispatch. Keep disabled jobs registered so configuration
     # validation and a future enablement still work, but make them transparent to every graph.
