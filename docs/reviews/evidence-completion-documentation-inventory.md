@@ -7,10 +7,17 @@ merged into the isolated documentation branch, followed by checkpoints `18eae9f`
 `3f28d871`, final integration `dd9c9ad`, dossier rendering follow-up `e9a8333a` and metric
 parity `0ece65d3` (source checkpoint `885175060097870a1b12a085bccd356a55b56157`);
 then combined source `6975aef29eb09e1fb57385db98cb7d859108e362`, which contains documentation
-correction `bcb982c4` and main `093f26d5`. Final contract/acceptance gaps are recorded below.
+correction `bcb982c4` and main `093f26d5`, followed by stable
+`a709a10b01eac70f5f449db5be478b910178f884`. Its product trees are identical to the owner-tested
+`039b24e4125a7e969c2fd32766abfed756d55759`; subsequent changes through that stable checkpoint are
+test expectations and operating documentation. Final source
+`967d1c7f55f7741bedd9b07ef740b5b746ddde09` then merges strict OpenVEX contracts/fixtures
+`f4f746bf`, without changing gate/common source or commissioning an exporter.
+Final contract/acceptance boundaries are recorded below.
 The controlling delivery decisions are
 [completion design section 11](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions).
-This is a documentation implementation record, not evidence that the full new pipeline runs.
+This is a documentation implementation record. Historical owner-reported all-lane semantics,
+controlled boundary doubles and remaining current-main/live validation are distinguished below.
 
 ## Delivered inventory
 
@@ -106,13 +113,17 @@ Important source-verified distinctions for integration:
 | `0ece65d3c37af71a131c8f071d68b648feaf9133` | Adds actual chain `not_launched` outcomes and a complete `CellStatus`-shaped aggregate regression, resolving the reported status allowlist gap. Parent reports 25 metric/log regressions passing. |
 | `6975aef29eb09e1fb57385db98cb7d859108e362` | Merges main `093f26d5`, preserving topology-derived CLI `_graph_order` and linear direct execution over the same enabled jobs as Dagster. Registry/config/producer declarations now total 42 jobs / 132 datasets; accepted binary shards, syntax-only navigation, OWASP full-citation projection and expanded telemetry are inventoried. Both required hunt/lead manifest hashes are checked; PoC brief entry/path identities resolve through `ref`, never display labels. Source integration is not acceptance. |
 | `dbfe7973`, `872ca63df503d6cac562487c3bb5db3f47d9998d` | Generation regressions persist/replay summaries, replace stale caches, preserve source-log bytes, incorporate newly appended events without recounting old events, and retain fixed `certified_outcome_counts` including zero. Source has the report-count checkpoint at `872ca63d`; it is not an outcome-disposition field. |
+| `967d1c7f55f7741bedd9b07ef740b5b746ddde09` | Strict OpenVEX shared contracts/fixtures align only to gate `/2`, require exact nested inputs/capability/attachment refs in certified bindings and refresh transitive schema locks. Gate/common producer source is unchanged; no exporter, report fan-in/links or new registered job is commissioned. Owner reports 309 focused Linux passes, including both OpenVEX files and coupled completion/integrity/profile checks. |
 | Shared review acceptance | Now verifies `/3`, run identity, duplicate identities, canonical PoC-basis digest, individual review-package refs and ledger-bound chain publication/memberships. The reader mismatch is resolved; real producer registration is still not a full accepted-run result. |
 | Remediation operations | Added a focused operating page for exact inert patch bytes, confirmed-only accounting, seven assurance dimensions, native syntax-only coverage, defaults/profiles, protected artifacts, statuses and telemetry. |
 | Dossier operations | Reconciled exact units, source/producer verification, bounds/pin, attempt-owned files, closed projection, render status/receipt and failure-retention behavior from source. |
 | Metrics | Reconciled `run-metrics/3.completion` / `completion-process-metrics/1`, seven fixed lanes, per-event counters/outcomes/durations, explicit-null usage and bounded measurement gaps. These count attempted work/retries, not accepted findings; overlapping stages are not additive. |
 
-Remaining acceptance work: full native all-lane semantics and Linux real-review remediation
-acceptance; residual historical consumer metadata remains explicit. The aggregate `not_launched`
+The original native all-lane check now has a bounded owner-reported result in the
+[acceptance ledger](#acceptance-ledger); it is not live compiler/model/renderer reproduction or
+current-main authorization. Consumer compatibility and residual historical metadata
+are recorded separately; the final focused OpenVEX result closes that compatibility failure.
+The aggregate `not_launched`
 status parity gap is resolved. Source contracts, registration, disabled-manual admission
 and snapshot isolation are implemented, not still proposed. The parent reported
 152 central checks and 42 contract/dossier checks passing on its source commits; those are not
@@ -129,22 +140,21 @@ target vulnerability, actual target PoC compile or full native all-lane pass.
 
 An earlier parent report described a frozen native `aeb6d11c` batch with 828 coupled units passed,
 two deselected and one Dagster C++ AST-to-IR topology assertion failure under baseline
-investigation. The known preflight baseline failure was excluded from that batch. The separately
-delegated native cross-lane semantic run remains pending; neither report is a clean all-lane result.
+investigation. The known preflight baseline failure was excluded from that batch. That batch is
+historical, not a clean all-lane or full-suite result; the later native result is recorded below.
 
 Subsequent QA stopped incomplete and found that plain `git archive` on Windows converted
 shell/fixture bytes to CRLF. Its contaminated 42 failures / 28 errors cannot classify either the
 product delta or a broad baseline. Byte-exact snapshots require
-`git -c core.autocrlf=false archive <commit>`. The parent is rerunning the 828 coupled cases from
-corrected snapshots; QA is rerunning two baseline classifiers with line-ending controls.
-Those reruns remain pending. The earlier counts and the narrow preflight baseline attribution
-must not be promoted to a broad clean-baseline claim.
+`git -c core.autocrlf=false archive <commit>`. Later byte-exact checks and baseline classifiers
+supersede the initial pending reruns; their bounded results appear below. The contaminated counts
+and narrow preflight attribution must not be promoted to a broad clean-baseline claim.
 
 The user reiterated unit coverage for telemetry/metrics generation. The initially pending
 persistence/replay/source-log-immutability regression is now delivered in `dbfe7973`, with
-certified report count coverage in `872ca63d`. The all-lane owner still checks actual producer
-events through the persisted metrics summary. Unit generation coverage does not itself close
-that separate all-lane acceptance boundary.
+certified report count coverage in `872ca63d`. The later all-lane owner also checked actual
+producer events and summary derivation. Unit generation coverage alone does not establish
+that separate result or live execution.
 
 ## Combined-source checkpoint and current acceptance
 
@@ -159,14 +169,31 @@ project only cited, bounded accepted material; there is no automatic wholesale d
 `run-metrics/4` adds CodeQL execution/query views while retaining completion semantics `/1`,
 OWASP/review-flow, Tree-sitter receipt/resource accounting and correlated nullable model usage.
 Zero completion measurement gaps is distinct from legitimate review evidence/source/redaction
-gaps; the all-lane owner's `ab25bff8` checkpoint now checks that propagation. This is an attributed
-test checkpoint, not a local full native result or automatically accepted combined run.
+gaps; the all-lane owner's `ab25bff8` and final `c0e6be00` tests check that propagation.
+Metric fix `b9e69d17` scopes capability `enabled`/`dispositions` maps to the gate certification
+event, rather than misclassifying generic step lifecycle lists. The same 770-record owner log
+(reported hash prefix `51101028`) replays with measurement gaps reduced from 23 to zero while
+retaining true producer buckets; the parent reports 48 focused Windows metric/log/review passes.
+These are attributed historical results, not tests newly executed by this documentation session.
 
 OpenVEX shared settings/contracts, schema locks and design documents exist, but no exporter
 job/configuration/dataset/metrics producer is registered. It is not counted as a 43rd job or a
 dossier input. Its inherited post-gate PoC sibling diagram and report `/1` proposal predate
 current pre-gate PoC and certified report `/2`; future implementation must reconcile them
 explicitly. The operations boundary now names that mismatch without claiming exporter delivery.
+Final `967d1c7f` reconciles the shared records and fixtures with gate `/2` only: legacy `/1`
+and `unavailable_inputs` are rejected, every nested input/capability/attachment reference must
+belong to certified gate bindings, and offline transitive schema hashes are refreshed.
+The [shared-contract README](../schemas/openvex-export/README.md) records this boundary;
+it does not implement filesystem acceptance, export assembly or report fan-in.
+
+### Acceptance ledger
+
+This ledger is bounded to the named snapshots. It is not a full-repository clean result,
+shipping approval, proof of exploit execution or authorization for a new/live main review.
+Root `AGENTS.md` leaves integration, acceptance and live Dagster validation user-owned.
+The branch inventory remains 42 jobs / 132 dataset kinds; later main symbol/SBOM changes and
+its final combined validation belong to the separate main owner and are outside this source.
 
 | Reported validation | Current attribution / limit |
 | --- | --- |
@@ -174,12 +201,43 @@ explicitly. The operations boundary now names that mismatch without claiming exp
 | Remediation `68915bb7bc7abd15013030761f9bd22e9e09e279` | Owner reports Linux 256 passed / zero skips on the exact remediation snapshot. It does not certify every combined lane. |
 | Dossier `e9a8333a` | Owner reports 387 passed / 14 skipped, including two real PDF tests; sample/gallery and receipt hashes remain as recorded. |
 | Certified report metrics `872ca63d` | Parent reports focused tests passed on Windows and Linux, covering summary persistence/replay/cache/source-log integrity. |
-| Two baseline assertions | QA now reproduces both on an LF-verified baseline and passes shell/golden controls. This supersedes their earlier pending narrow classification; the contaminated broad baseline remains incomplete, not acceptance. |
-| Combined main-plus-feature Linux suite | 111-file validation is ongoing. The first attempt exposed root-user/capability environment failures; retry runs unprivileged uid 1000. No final result is claimed here. |
-| Actual-producer all-lane semantics | Still pending. Review/source/redaction gaps must propagate even when telemetry measurement-gap count is zero. |
+| Native all-lane source `039b24e4` | Owner reports **2 passed in 306.43 s**: configuration equality and genuine review-emitted candidate through all seven lanes, unchanged states/scores/ship decisions, exact gap inheritance, sanitized gate-only report, ignored corrupted optional pointers and deterministic second JSON/Markdown hashes. Model/compiler/renderer boundaries use offline doubles; this is not live runtime/compiler reproduction. Owner retains artifacts in `combined-results/`. |
+| Stable source `a709a10b` | Product trees remain identical to `039b24e4`. Test-only updates include the three commissioned chain guidance tasks (106 guidance checks passed), shared-reader monkeypatch retargeting (three integrity checks passed) and a separate four-profile automatic PoC/planning/validation/dossier defaults check (passed). None makes OWASP opt-in. |
+| Coupled core `7f4c9b0a` | Parent reports 542 passed / three failed in 667.007 s. Two OWASP package `/6` `oneOf` failures independently reproduce on main `093f26d5`; the third stale gate-private monkeypatch is corrected by targeting the shared reader (`d788`), with three integrity checks passing. These phases are not added as independent unique tests. |
+| Runtime profiles `a709a10b` | Owner reports 62 passed / four failed in 9.71 s. Exact main `093f26d5` independently reproduces all four stale `OWASP True is False` expectations in 2.56 s, with archived test/config bytes matching Git blobs. OWASP assessment remains enabled by default; no default was changed to satisfy stale assertions. |
+| Final deduplicated coupled-unit ledger | Across incremental frozen XMLs, with final OpenVEX results replacing the three old integration failures, parent reports **1527 unique passed, six independently main-baseline failures (two OWASP + four profiles), one optional PowerShell-parser skip**. All 40 selected files were exercised. This combines phases, not one clean aggregate run or the full repository; named phase results remain the primary attribution and overlapping totals must not be added. |
+| Broad 111-file attempts | Partial, not a full-repository pass. Initial root-user/capability failures are environment limitations, not silently counted as product passes. Correct HOME/tmp and empty HOSTNAME make main's multiprocess Dagster timing control pass; no product defect is inferred from that earlier environment. |
+| Narrow OpenVEX compatibility `967d1c7f` | Owner reports **309 passed in 7.80 s** on immutable Linux source: both full OpenVEX contract/settings files (180 cases), completion contracts/wiring/publication/metrics, shared integrity and new four-profile defaults. All 15 baseline failures are independently proven on main `093f26d5`; no residual feature-coupled failure is reported. This commissions no exporter, report links/fan-in or 43rd job and is not a full-suite result. |
 
-This checkpoint does not advance the main sync watermark or change product/schema/image bytes.
-The dossier image gallery and sample files inherited from main are preserved.
+The owner-observed native scenario has two confirmed findings (native and CI), one
+`compile_verified` PoC outcome at the doubled compiler boundary, planning outcomes
+`proposal_generated: 1` / `manual_design_required: 1`, validation outcomes `build_checked: 1` /
+`manual_validation_required: 1`, and three rendered dossier outcomes at the doubled renderer
+boundary with four truthful inherited/source gaps. The gate binds eight attachments; report
+counts are publishable 2 / backlog 2 / withheld 0. Certified attachment counts are
+`attack_chains: 0`, `dossiers: 3`, `poc_generation: 1`, `remediation_planning: 2`,
+`remediation_validation: 2`. The observed chain lane has no admitted chain: observation is not
+proof of deployed-chain continuity. All seven lanes are observed with zero telemetry measurement
+gaps, while review/source/evidence/redaction limitations remain intact. Real seeded PDF rendering
+is the separate sample result below, not the native test's renderer double.
+
+#### Independently reproduced baseline selectors
+
+Parent/QA reports **15 named failing selectors** reproduced on exact main `093f26d5`, not a
+generally clean baseline. The groups are three CodeQL integration selectors; preflight
+`RUN/RUN` versus `RUN/REUSE`; the stale Dagster intake `target_acquisition` versus old
+image-verification expectation; two binary UID/schema `1000` versus `10001` expectations;
+two binary CLI fake-lambda `profile` keyword cases; two OWASP package `/6` `oneOf` cases;
+and four runtime-profile `OWASP=False` assertions against main's unchanged `True` default.
+Shell/golden controls pass on LF-verified snapshots. The OpenVEX failures were feature-coupled,
+not baseline; final contracts/fixture alignment and focused Linux verification close them.
+Neither correction nor baseline classification excuses unexecuted coverage.
+
+This authored checkpoint changes only documentation; merged owner contracts/schema/fixture
+changes remain attributed to `f4f746bf`. It does not advance the main sync watermark or alter image bytes.
+The dossier image gallery and sample files inherited from main are preserved. The user approved
+these final compatibility/test-fixture/docs edits in existing Windows worktrees with **Linux-only
+validation**; no Windows test or live-review run is authorized by this update.
 
 ## Retained sample and release boundary
 
@@ -259,3 +317,24 @@ exactly the two known target failures; whitespace checks pass. Only seven scoped
 files change relative to `6975aef2`; the inherited watermark, gallery and samples are unchanged.
 The checkout-local environment is retained for later checks; this selection's named
 `test/tmp/docs-combined-6975` fixture directory is removed after verification.
+
+The final bounded revision integrates `967d1c7f` by ancestry and authors only architecture,
+operations and this review record. It updates stale pending-native claims and the metrics
+heading/links, corrects OWASP's actual default-enabled behavior, and preserves the 42-job /
+132-dataset inventory, main sync watermark and real sample/gallery bytes. Owner-attributed
+native, remediation, renderer, baseline and final compatibility checks above are not relabelled
+as local executions. Under the user's final approval, documentation edits use the existing
+Windows worktree, Git diff/newline hygiene is inspected there, and documentation/skill/sync
+validation is Linux-only. No Windows test, live review or new target/compiler/runtime acceptance
+run is performed by this documentation revision.
+
+The Linux owner checked exact documentation commit `103b58961bcd2c988b405be2a38bb8187ff795b6`
+with `tests/test_documentation.py`, `tests/test_skill_separation.py` and `tests/test_docs_sync.py`:
+**10 passed / one failed / one skipped in 5.94 s**. The sole link-test failure lists exactly
+the same two uninstalled-target links above; no target edits or stubs were introduced.
+Skill separation passes on native POSIX. The sync-history test is skipped because Git is absent
+from the pinned offline image, **not** because ancestry was validated there. The owner confirms
+no product changes from `967d1c7f` to `103b5896`, an unchanged watermark, and clean LF/whitespace/
+worktree checks. XML/provenance and the 15 baseline proofs are retained in the parent's persistent
+`files/completion-validation-967d1c7f`. This final ledger addition is status-only, not a new
+product or live-acceptance claim.

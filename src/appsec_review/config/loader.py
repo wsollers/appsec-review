@@ -19,6 +19,7 @@ from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisit
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
+from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 
 
 class ProcessingMode(str, Enum):
@@ -561,6 +562,7 @@ class AppConfig:
     # How the profile and overlay were chosen: the process environment, or a run's launch tags
     # (``appsec_review.config.run_selection``). Recorded in a run's configuration manifest; not hashed.
     selection_source: str = "environment"
+    compiler_target: CompilerTarget = CompilerTarget.CLANG
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -807,7 +809,7 @@ def _config_source(path: str | Path) -> Path:
 
 
 def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None,
-                profile: str | None = None) -> AppConfig:
+                profile: str | None = None, compiler_target: str | None = None) -> AppConfig:
     """Load the explicit (or repository default) configuration, a runtime profile and an optional capacity overlay.
 
     The profile is ``profile`` when given, otherwise ``APPSEC_REVIEW_PROFILE``, otherwise ``dev``. ``dev``
@@ -852,6 +854,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
                           "keys": list(overlay_keys), "document": overlay_document}
     resolved_document = copy.deepcopy(document)
+    selected_compiler = parse_compiler_target("clang" if compiler_target is None else compiler_target)
+    resolved_document["compiler_target"] = selected_compiler.value
     review_policy = parse_review_policy(document.get("review_policy", {}))
     resolved_document["review_policy"] = review_policy.view()
     resolved_document["configuration_profile"] = profile_record
@@ -1152,6 +1156,13 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_evidence_collection":
             from .evidence_collection import parse_evidence_collection_settings
             typed_settings = parse_evidence_collection_settings(settings)
+        elif job_id == "job_debug_symbol_indexing":
+            from .debug_symbols import parse_debug_symbol_settings
+            if "compiler_target" in settings:
+                raise ValueError("compiler_target is selected at run start, not in job settings")
+            settings["compiler_target"] = selected_compiler.value
+            settings = parse_debug_symbol_settings(settings)
+            typed_settings = MappingProxyType(settings)
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -1227,4 +1238,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         target_acquisition=target_acquisition,
         banned_functions=banned_functions,
         review_policy=review_policy,
+        compiler_target=selected_compiler,
     )

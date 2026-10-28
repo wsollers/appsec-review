@@ -32,7 +32,10 @@ gate/report `/2`, authenticated disabled-manual-PoC admission and chain/base com
 Gate certification rehashes nested optional artifacts and freezes capability/attachment accounting;
 the report never discovers later producers. The
 [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is owner-verified;
-full native all-lane acceptance remains pending. Registration and unit coverage do not establish it. The
+the historical owner `039b24e4` all-lane result uses offline model/compiler/renderer boundary
+doubles. Its bounded pass is not live reproduction or a full-repository/current-main acceptance;
+see the [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
+Registration and unit coverage alone establish neither. The
 [dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
 lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and
 dataset/input-matrix surfaces that must change together.
@@ -40,7 +43,7 @@ Combined source `6975aef2` retains main's topology-derived CLI `_graph_order` ra
 a separate hardcoded job list. Both required hunt/lead package-manifest hashes are checked by the
 shared `/3` reader, and PoC briefs resolve entry/path entity identities rather than display labels.
 OpenVEX shared contracts/settings and design documents are present, but no exporter is registered
-or configured; it is not part of the 42-job count or current terminal-report dependencies.
+or configured; it is not part of the 43-job count or current terminal-report dependencies.
 In both graphs, enabled prioritization and code-graph indexing feed security tagging,
 then OWASP consumes accepted tag-cloud/classification context before review data indexing and
 package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is enabled by
@@ -61,7 +64,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 42 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 43 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -80,6 +83,7 @@ input, output, tool, and acceptance contracts.
 | `job_project_build` | Project images, probes, and image repair | [project-build](../operations/project-build.md) |
 | `job_language_build` | Generic language and WebAssembly builds | [language-build](../operations/language-build.md), [wasm-build](../operations/wasm-build.md) |
 | `job_artifact_indexing` | Produced-artifact index | [artifact-indexing](../operations/artifact-indexing.md) |
+| `job_debug_symbol_indexing` | Run-selected Clang/DWARF or MSVC/PDB evidence, bounded normalized symbol queries and explicit coverage | [debug-symbol-indexing](debug-symbol-indexing.md) |
 | `job_test_coverage` | Hash-verified import of retained LCOV, Cobertura, JaCoCo and LLVM coverage | [test-coverage-ingestion](../operations/test-coverage-ingestion.md) |
 | `job_profile_data` | Hash-verified import of retained folded-stack, perf-script, Callgrind and LLVM sample profiles | [profile-data](../operations/profile-data.md) |
 | `job_artifact_security_analysis` | Produced-artifact security analysis | [artifact-security-analysis](../operations/artifact-security-analysis.md) |
@@ -533,12 +537,11 @@ but never links or runs what the model wrote. A direct dispatch of this one job 
 (`cli.MANUAL_JOB_IDS`) ([`../operations/poc-generation.md`](../operations/poc-generation.md)).
 
 `job_final_publication_gate` and `job_final_report_publication` call no model. The gate reads the
-accepted inference review handoff and re-hashes every artifact it binds; the report reads the
-accepted gate handoff. Their remaining old post-gate PoC discovery/hardcoded capability behavior
-is a pending contract replacement, not the new snapshot contract. Neither may reinterpret a
-claim state or ship-block status, and integrity failure fails the job. Real remediation producers
-now exist; [final-report operations](../operations/final-report.md) marks the unfinished
-gate certification boundary rather than treating those producers as absent.
+accepted inference review and completion handoffs and re-hashes every artifact it binds; the report
+reads only the accepted gate snapshot, never discovering later producer pointers. Neither may
+reinterpret a claim state or ship-block status, and integrity failure fails the job.
+[Final-report operations](../operations/final-report.md) describes the certified capability and
+attachment boundary.
 The C++ analysis container only replays bounded compile units for analysis. Application code validates
 workspace manifests, compile commands, and artifacts; converts tool failures to explicit gaps; and
 retains framework integrity failures as hard failures. See

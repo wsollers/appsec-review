@@ -19,7 +19,7 @@ Never sees red reasoning or the sibling blue cell; the two blue questions stay d
 
 ## Tools
 `find`, `list_codeql_databases`, `query_artifacts`, `query_build_security`, `query_ci_configuration`,
-`query_code_graph`, `query_codeql_neighborhood`, `query_syntax`, `read_excerpt`, `resolve_evidence`, `trace`.
+`query_code_graph`, `query_codeql_neighborhood`, `query_debug_symbols`, `query_syntax`, `read_excerpt`, `resolve_evidence`, `trace`.
 
 ## Examples
 The examples use the labels of a package for a `memcpy` in `src/packet.cpp` line 16: L1 is the lead, S1 the

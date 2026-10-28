@@ -105,6 +105,10 @@ FILE_SIZE_SIGNAL_EXIT = 128 + int(getattr(signal, "SIGXFSZ", 25))
 _MEMORY_LIMIT = re.compile(r"[1-9][0-9]{0,5}[mg]")
 
 
+class ImageUnavailableError(RuntimeError):
+    """The requested immutable image is absent, not a failed scanner invocation."""
+
+
 def _stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -141,8 +145,8 @@ class ContainerExecutor:
 
     def resolve_image(self, tool: ToolImage) -> str:
         outcome = self._run_control(("docker", "image", "inspect", tool.tag, "--format", "{{.Id}}"))
-        if outcome.exit_code != 0:
-            raise RuntimeError(f"cataloged image is not locally available: {tool.tool_id}")
+        if outcome.exit_code != 0 or outcome.timed_out:
+            raise ImageUnavailableError(f"cataloged image is not locally available: {tool.tool_id}")
         image_id = outcome.stdout.decode("utf-8", "replace").strip()
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
             raise ValueError(f"Docker returned a non-immutable image id for {tool.tool_id}")

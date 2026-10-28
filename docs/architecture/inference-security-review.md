@@ -17,8 +17,11 @@ and integration `b702eb7` adds remediation/dossier producers, automatic new-conf
 pre-gate ordering and completion metrics. Checkpoint `18eae9f` aligns shared `/3` review acceptance
 and extends metric parity. Integration `dd9c9ad` delivers PoC/gate/report `/2` and chain/base
 completeness isolation. The owner-verified
-[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) does not establish
-full native all-lane acceptance, which remains pending.
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is separate from
+the historical owner all-lane result at `039b24e4`, which uses offline model/compiler/renderer
+boundary doubles. The [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+keeps that bounded pass and focused consumer compatibility distinct from live reproduction and
+user-owned current-main validation.
 The [completion contract](evidence-completion-and-remediation.md) preserves the user's compile-only,
 never-executed policy; any executor diagrams/sketches below are historical unimplemented design,
 not new runtime authorization. See the [source inventory](dossier-data-inventory.md).
@@ -2317,7 +2320,8 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 
 ### Dependencies and current gaps
 
-- The opt-in OWASP assessment publishes accepted applicability/result/coverage shards with typed
+- OWASP assessment is enabled by default across shipped profiles; the frozen job setting can
+  explicitly opt out. It publishes accepted applicability/result/coverage shards with typed
   original evidence identities before indexing, package assembly and hunt/red-blue review. It uses
   prior tagging/tag-cloud, graph and classification context only for bounded routing. Complete
   pinned catalogs are present, but only four narrow Python static procedures are implemented;

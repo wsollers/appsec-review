@@ -13,8 +13,11 @@ The CLI now parses explicit gate re-admission as
 `run job_final_publication_gate --run-id <id> --upstream-from-run --admit-manual-poc`.
 It is restricted to that job with both preceding flags. The gate authenticates the exact accepted
 PoC digest in its upstream identity; ordinary `latest.json` discovery cannot activate a disabled
-manual PoC. Full native all-lane acceptance is still separate from this source contract and the
-owner-verified [seeded PDF sample](dossier-publication.md#verified-seeded-sample).
+manual PoC. The historical owner `039b24e4` all-lane check uses a genuine review-emitted candidate
+but offline model/compiler/renderer boundary doubles; its `compile_verified` outcome is not live
+compiler or runtime reproduction. That bounded result and the real
+[seeded PDF sample](dossier-publication.md#verified-seeded-sample) remain distinct in the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
 
 `job_poc_generation` writes, for each finding the judge agreed is correct, a **proof-of-concept unit-test
 function** that a developer can add to a test target and watch in a debugger, and checks that it **compiles**

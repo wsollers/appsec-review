@@ -1,0 +1,346 @@
+---
+MSF:
+  SuperBlock:
+    BlockSize:       4096
+    FreeBlockMap:    2
+    NumBlocks:       18
+    NumDirectoryBytes: 116
+    Unknown1:        0
+    BlockMapAddr:    3
+  NumDirectoryBlocks: 1
+  DirectoryBlocks: [ 17 ]
+  NumStreams:      15
+  FileSize:        73728
+StreamSizes:     [ 0, 93, 224, 649, 1220, 0, 568, 592, 112, 44, 120, 348, 
+                   464, 90, 48 ]
+StreamMap:
+  - Stream:          [  ]
+  - Stream:          [ 16 ]
+  - Stream:          [ 7 ]
+  - Stream:          [ 12 ]
+  - Stream:          [ 14 ]
+  - Stream:          [  ]
+  - Stream:          [ 4 ]
+  - Stream:          [ 5 ]
+  - Stream:          [ 6 ]
+  - Stream:          [ 8 ]
+  - Stream:          [ 9 ]
+  - Stream:          [ 10 ]
+  - Stream:          [ 11 ]
+  - Stream:          [ 13 ]
+  - Stream:          [ 15 ]
+StringTable:
+  - '/work/fixture/tests/fixtures/debug_symbols/inline.c'
+PdbStream:
+  Age:             1
+  Guid:            '{E61E70FB-3F1A-FCB7-4C4C-44205044422E}'
+  Signature:       3860754683
+  Features:        [ VC140 ]
+  Version:         VC70
+DbiStream:
+  VerHeader:       V70
+  Age:             1
+  BuildNumber:     36363
+  PdbDllVersion:   0
+  PdbDllRbld:      0
+  Flags:           0
+  MachineType:     Amd64
+  Modules:
+    - Module:          '/work/test/tmp/inline.obj'
+      ObjFile:         '/work/test/tmp/inline.obj'
+      SourceFiles:
+        - '/work/fixture/tests/fixtures/debug_symbols/inline.c'
+      Subsections:
+        - !InlineeLines
+          HasExtraFiles:   false
+          Sites:
+            - FileName:        '/work/fixture/tests/fixtures/debug_symbols/inline.c'
+              LineNum:         3
+              Inlinee:         4098
+        - !Lines
+          CodeSize:        16
+          Flags:           [  ]
+          RelocOffset:     0
+          RelocSegment:    1
+          Blocks:
+            - FileName:        '/work/fixture/tests/fixtures/debug_symbols/inline.c'
+              Lines:
+                - Offset:          0
+                  LineStart:       4
+                  IsStatement:     false
+                  EndDelta:        0
+                - Offset:          15
+                  LineStart:       4
+                  IsStatement:     false
+                  EndDelta:        0
+              Columns:         []
+        - !FileChecksums
+          Checksums:
+            - FileName:        '/work/fixture/tests/fixtures/debug_symbols/inline.c'
+              Kind:            MD5
+              Checksum:        952C6A8ECE79CD726FAF466D3BD2E84A
+      Modi:
+        Signature:       4
+        Records:
+          - Kind:            S_OBJNAME
+            ObjNameSym:
+              Signature:       0
+              ObjectName:      'test\tmp\inline.obj'
+          - Kind:            S_COMPILE3
+            Compile3Sym:
+              Flags:           [  ]
+              Machine:         X64
+              FrontendMajor:   18
+              FrontendMinor:   1
+              FrontendBuild:   3
+              FrontendQFE:     0
+              BackendMajor:    18013
+              BackendMinor:    0
+              BackendBuild:    0
+              BackendQFE:      0
+              Version:         'Ubuntu clang version 18.1.3 (1ubuntu1)'
+          - Kind:            S_GPROC32
+            ProcSym:
+              PtrParent:       0
+              PtrEnd:          228
+              PtrNext:         0
+              CodeSize:        16
+              DbgStart:        0
+              DbgEnd:          0
+              FunctionType:    4104
+              Offset:          0
+              Segment:         1
+              Flags:           [ HasOptimizedDebugInfo ]
+              DisplayName:     entry
+          - Kind:            S_FRAMEPROC
+            FrameProcSym:
+              TotalFrameBytes: 0
+              PaddingFrameBytes: 0
+              OffsetToPadding: 0
+              BytesOfCalleeSavedRegisters: 0
+              OffsetOfExceptionHandler: 0
+              SectionIdOfExceptionHandler: 0
+              Flags:           [ SafeBuffers, OptimizedForSpeed ]
+          - Kind:            S_INLINEES
+            CallerSym:
+              FuncID:          [ 4098 ]
+          - Kind:            S_INLINESITE
+            InlineSiteSym:
+              PtrParent:       100
+              PtrEnd:          224
+              Inlinee:         4098
+          - Kind:            S_LOCAL
+            LocalSym:
+              Type:            4098
+              Flags:           [ IsParameter, IsOptimizedOut ]
+              VarName:         p
+          - Kind:            S_INLINESITE_END
+            ScopeEndSym:     {}
+          - Kind:            S_END
+            ScopeEndSym:     {}
+          - Kind:            S_BUILDINFO
+            BuildInfoSym:
+              BuildId:         4105
+    - Module:          '* Linker *'
+      ObjFile:         ''
+      Modi:
+        Signature:       4
+        Records:
+          - Kind:            S_OBJNAME
+            ObjNameSym:
+              Signature:       0
+              ObjectName:      '* Linker *'
+          - Kind:            S_COMPILE3
+            Compile3Sym:
+              Flags:           [  ]
+              Machine:         X64
+              FrontendMajor:   0
+              FrontendMinor:   0
+              FrontendBuild:   0
+              FrontendQFE:     0
+              BackendMajor:    14
+              BackendMinor:    10
+              BackendBuild:    25019
+              BackendQFE:      0
+              Version:         LLVM Linker
+          - Kind:            S_ENVBLOCK
+            EnvBlockSym:
+              Entries:
+                - cwd
+                - '/work'
+                - exe
+                - '/work/lld-link'
+                - pdb
+                - '/work/tests/fixtures/debug_symbols/inline.pdb'
+                - cmd
+                - '/debug:full /pdb:tests/fixtures/debug_symbols/inline.pdb /entry:entry /subsystem:console /nodefaultlib /out:tests/fixtures/debug_symbols/inline.exe'
+          - Kind:            S_SECTION
+            SectionSym:
+              SectionNumber:   1
+              Alignment:       12
+              Rva:             4096
+              Length:          16
+              Characteristics: 1610612768
+              Name:            .text
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            16
+              Characteristics: 1610612768
+              Offset:          0
+              Segment:         1
+              Name:            .text
+          - Kind:            S_SECTION
+            SectionSym:
+              SectionNumber:   2
+              Alignment:       12
+              Rva:             8192
+              Length:          98
+              Characteristics: 1073741888
+              Name:            .rdata
+          - Kind:            S_SECTION
+            SectionSym:
+              SectionNumber:   3
+              Alignment:       12
+              Rva:             12288
+              Length:          16
+              Characteristics: 3221225536
+              Name:            .data
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            0
+              Characteristics: 3221225536
+              Offset:          0
+              Segment:         3
+              Name:            .data
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            16
+              Characteristics: 3221225600
+              Offset:          0
+              Segment:         3
+              Name:            .bss
+TpiStream:
+  Version:         VC80
+  Records:
+    - Kind:            LF_STRUCTURE
+      Class:
+        MemberCount:     0
+        Options:         [ None, ForwardReference ]
+        FieldList:       0
+        Name:            Pair
+        UniqueName:      ''
+        DerivationList:  0
+        VTableShape:     0
+        Size:            0
+    - Kind:            LF_MODIFIER
+      Modifier:
+        ModifiedType:    4096
+        Modifiers:       [ None, Volatile ]
+    - Kind:            LF_POINTER
+      Pointer:
+        ReferentType:    4097
+        Attrs:           65548
+    - Kind:            LF_ARGLIST
+      ArgList:
+        ArgIndices:      [ 4098 ]
+    - Kind:            LF_PROCEDURE
+      Procedure:
+        ReturnType:      116
+        CallConv:        NearC
+        Options:         [ None ]
+        ParameterCount:  1
+        ArgumentList:    4099
+    - Kind:            LF_FIELDLIST
+      FieldList:
+        - Kind:            LF_MEMBER
+          DataMember:
+            Attrs:           3
+            Type:            116
+            FieldOffset:     0
+            Name:            left
+        - Kind:            LF_MEMBER
+          DataMember:
+            Attrs:           3
+            Type:            19
+            FieldOffset:     8
+            Name:            right
+    - Kind:            LF_STRUCTURE
+      Class:
+        MemberCount:     2
+        Options:         [ None ]
+        FieldList:       4101
+        Name:            Pair
+        UniqueName:      ''
+        DerivationList:  0
+        VTableShape:     0
+        Size:            16
+    - Kind:            LF_ARGLIST
+      ArgList:
+        ArgIndices:      [  ]
+    - Kind:            LF_PROCEDURE
+      Procedure:
+        ReturnType:      116
+        CallConv:        NearC
+        Options:         [ None ]
+        ParameterCount:  0
+        ArgumentList:    4103
+IpiStream:
+  Version:         VC80
+  Records:
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          'fixture\tests\fixtures\debug_symbols\inline.c'
+    - Kind:            LF_UDT_SRC_LINE
+      UdtSourceLine:
+        UDT:             4102
+        SourceFile:      4096
+        LineNumber:      1
+    - Kind:            LF_FUNC_ID
+      FuncId:
+        ParentScope:     0
+        FunctionType:    4100
+        Name:            add
+    - Kind:            LF_FUNC_ID
+      FuncId:
+        ParentScope:     0
+        FunctionType:    4104
+        Name:            entry
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          fixture
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          'tests/fixtures/debug_symbols/inline.c'
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          ''
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          '/usr/lib/llvm-18/bin/clang'
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          '"-cc1" "-triple" "x86_64-pc-windows-msvc19.33.0" "-emit-obj" "-mincremental-linker-compatible" "-disable-free" "-clear-ast-before-backend" "-disable-llvm-verifier" "-discard-value-names" "-mrelocation-model" "pic" "-pic-level" "2" "-mframe-pointer=none" "-fmath-errno" "-ffp-contract=on" "-fno-rounding-math" "-mconstructor-aliases" "-funwind-tables=2" "-target-cpu" "x86-64" "-tune-cpu" "generic" "-gno-column-info" "-gcodeview" "-debug-info-kind=constructor" "-fdebug-compilation-dir=fixture" "-fdebug-prefix-map=/work=fixture" "-fcoverage-compilation-dir=/work" "-resource-dir" "/usr/lib/llvm-18/lib/clang/18" "-internal-isystem" "/usr/lib/llvm-18/lib/clang/18/include" "-O2" "-ferror-limit" "19" "-fno-use-cxa-atexit" "-fms-extensions" "-fms-compatibility" "-fms-compatibility-version=19.33" "-fskip-odr-check-in-gmf" "-fdelayed-template-parsing" "-vectorize-loops" "-vectorize-slp" "-faddrsig" "-x" "c"'
+    - Kind:            LF_BUILDINFO
+      BuildInfo:
+        ArgIndices:      [ 4100, 4103, 4101, 4102, 4104 ]
+PublicsStream:
+  Records:
+    - Kind:            S_PUB32
+      PublicSym32:
+        Flags:           [ Function ]
+        Offset:          0
+        Segment:         1
+        Name:            entry
+    - Kind:            S_PUB32
+      PublicSym32:
+        Flags:           [  ]
+        Offset:          0
+        Segment:         3
+        Name:            global_pair
+...

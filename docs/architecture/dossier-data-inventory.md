@@ -5,12 +5,17 @@ Status: source-verified inventory, initially at contract commit
 and assurance fix `7641fa5`, then reader/metric checkpoint `18eae9f`, remediation `e769645f` and
 index-admission `3f28d871`, final integration `dd9c9ad`, rendering `e9a8333a` and metric parity
 `0ece65d3`, then combined source `6975aef29eb09e1fb57385db98cb7d859108e362`
-(including main `093f26d5`), 2026-10-28. The combined inventory contains **42 registered/configured
-jobs, 132 dataset kinds, 20 public retrieval tools, 18 logical SQLite indexes and 16 allowed
+(including main `093f26d5`) and stable `a709a10b` (product trees identical to owner-tested
+`039b24e4`), followed by contracts-only OpenVEX handoff `967d1c7f`, 2026-10-28,
+and reconciliation with main `799ea3c2` for debug symbols and native SBOM evidence.
+The combined inventory contains **43 registered/configured
+jobs, 142 dataset kinds, 21 public retrieval tools, 19 logical SQLite indexes and 16 allowed
 query sets (10 produced, 6 pending)**. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,
 central wiring, process metrics, immutable PoC `/2`, gate/report `/2` and chain/base isolation now
-exist. The owner verified the seeded PDF sample; full native all-lane semantics remain unaccepted. Shared completion
+exist. The owner verified the seeded PDF sample and historical native all-lane semantics with
+offline model/compiler/renderer boundary doubles; neither is live execution or current-main
+acceptance. Shared completion
 schema identities and assurance remain in
 [`completion_contracts.py`](../../src/appsec_review/jobs/completion_contracts.py).
 The delivery contract is
@@ -45,7 +50,7 @@ The distinction between **available**, **admissible**, and **publishable** is es
 | Adjudication / finding | Deterministic obligations and independent verification determine state, independently of model agreement or document rendering. | [`review/adjudication.py`](../../src/appsec_review/review/adjudication.py), `adjudicate`; [`review/independence.py`](../../src/appsec_review/review/independence.py), `verify_independence` |
 | Protected dossier projection | Only cited direct/analyst-assessed relation rows, bounded resolving excerpts and allowlisted finding/score/chain/PoC/remediation/provenance fields enter the model. Inventory availability does not automatically copy every dataset into it. | [`job_dossier_publication/job.py`](../../src/appsec_review/jobs/job_dossier_publication/job.py), `_excerpts`, `_chains`, `_remediation`; [`reporting/dossiers.py`](../../src/appsec_review/reporting/dossiers.py), `build_dossier` |
 | Public projection | Only approved fields and hash-bound references leave the protected developer artifact. | Shared [`jobs/accepted_review.py`](../../src/appsec_review/jobs/accepted_review.py), `project_finding`, `project_score`; [`job_final_publication_gate/attachments.py`](../../src/appsec_review/jobs/job_final_publication_gate/attachments.py) certifies closed attachment projections. Report assembly reads only that certified snapshot. |
-| Planned export | OpenVEX design, typed shared settings/contracts and schema locks exist; no registered exporter, dataset declaration, commissioned output or metrics section exists at this checkpoint. | [`jobs/job_openvex_export/contracts.py`](../../src/appsec_review/jobs/job_openvex_export/contracts.py), [`settings.py`](../../src/appsec_review/jobs/job_openvex_export/settings.py); [design](openvex-export.md). It is not a 43rd job or a dossier input. |
+| Planned export | OpenVEX design, typed shared settings/contracts and schema locks exist; `967d1c7f` aligns records/fixtures with strict gate `/2` and nested certified binding coverage. No registered exporter, dataset declaration, commissioned output or metrics section exists. | [`jobs/job_openvex_export/contracts.py`](../../src/appsec_review/jobs/job_openvex_export/contracts.py), [`settings.py`](../../src/appsec_review/jobs/job_openvex_export/settings.py); [shared-contract boundary](../schemas/openvex-export/README.md), [design](openvex-export.md). It is not a 43rd job or a dossier input. |
 
 Only complete `direct` and `direct_for_mapped_predicate` relations count toward obligations.
 `analyst_assessed` and `indirect` evidence remains useful context, not counted proof. The six closed
@@ -126,6 +131,7 @@ pagination/truncation; exhausted bounds are never evidence of absence.
 | `resolve_evidence` | required `identity` | Observation/artifact/finding to supporting identities; no cursor; retain unresolved dependencies and coverage gaps. |
 | `coverage` | `indexes` | Accepted producer, entity/relation counts and scoped coverage/gaps. |
 | `query_artifacts` | `artifact_identity`, `sha256`, `kind`, `format`, `language`, `runtime`, `platform`, `architecture`, `build_unit`, `project`, `component`, `producing_build_action`, `package`, `purl`, `scanner`, `tool`, `coverage_status`, `shard` | Exact artifact and linked evidence facets. Coverage is `complete`, `partial`, `unavailable`, `stale`. |
+| `query_debug_symbols` | required `mode`; exact `subject` or `artifact_identity`; optional build-relative `address`, `limit`, `cursor` | Accepted build-bound DWARF/PDB evidence, not inferred call graphs. Address and coverage require an artifact identity; source ranges require verified source identities. Layout queries use an artifact or exact normalized type identity. |
 | `query_build_security` | `project`, `build_root`, `build_action`, `configuration`, `compile_unit`, `linked_artifact`, `producer`, `shard` | Accepted build-hardening and source/build/artifact scope, not deployment proof. |
 | `query_ci_configuration` | `provider`, `pipeline`, `workflow`, `stage`, `job`, `step`, `tool`, `rule`, `category`, `canonical_finding`, `shard` | CI observations and correlated canonical CI records, not automatically inference-confirmed findings. |
 | `query_codeql` | `language`, `source_language`, `scope`, `build_unit`, `rule`, `level`, `path`, `shard` | CodeQL observations; `shard` must match `codeql-*`. Tool severity remains scanner-reported. |
@@ -252,7 +258,7 @@ target document or source-only producer to invent deployed identity/privilege/ti
 
 ## 4. Physical indexes, shards and producer ownership
 
-The 18 logical retrieval indexes are defined by
+The 19 logical retrieval indexes are defined by
 [`retrieval/index.py::INDEX_NAMES`](../../src/appsec_review/retrieval/index.py).
 Each immutable SQLite/FTS shard carries `name`, `shard_id`, schema, SHA-256, fingerprint,
 run-relative path, producer and gaps. Its `entities`, `locations`, `relations`, `coverage`,
@@ -268,6 +274,7 @@ No single file named after an index should be assumed when it has multiple shard
 | `artifacts` | `job_artifact_indexing`: `catalog-*`, `members-*`, `relations-*` | Produced/accepted-input artifact identities, formats, content hashes, archive members and build relations; `query_artifacts`, `resolve_evidence`. |
 | `build_security` | `job_post_build_security_assessment` | Accepted compile/link/artifact hardening observations, symbols/sections and coverage; `query_build_security`. |
 | `compiled` | `job_cpp_compiled_analysis`: `cpp-*-binary` | Binary symbols and resolving source/build relationships, not a deployed process. |
+| `debug_symbols` | `job_debug_symbol_indexing`: `symbols-*` | Build-bound normalized DWARF/PDB symbols, layouts, inline frames, compilation units and explicit coverage; `query_debug_symbols`. Raw symbol input and reader execution receipts remain protected. |
 | `analysis` | Catalog declarations; Tree-sitter syntax/coverage; target plan (`target-analysis-plan*`); C++ `cpp-*-ast`, `cpp-*-ir` and blocked branches; clangd `clangd-*`; SVF `svf-cpp-scope-*`, `svf-coverage-*`; test/profile `test-coverage-*`, `profile-data-*` | AST/IR/symbols, planning, alias/memory, coverage/profile facts; `query_syntax` for Tree-sitter projections, `find`, `trace`, `read_excerpt`, precomputed joins, and scoped neighborhood copies where produced. |
 | `observations` | Evidence collection per tool; CodeQL `codeql-*`; Clang `clang-static-*`, `clang-static-coverage-*`; C++ `cpp-*-infer`; CI `ci_*`; artifact scans `artifact-security*`; Joern `joern-*`, `joern-coverage-*` | Normalized scanner evidence, severity/suppression/duplicate/location/flow metadata and coverage; `query_observations`, `query_codeql`, `query_ci_configuration`. Coverage-only output is not successful semantic analysis. |
 | `evidence` | CI `ci_findings*` | Correlated canonical CI findings; resolve to observations/source. The entity kind `finding_package` here is not sufficient to make it an inference-confirmed package. |
@@ -350,8 +357,8 @@ the pin a finding used. See [dependency intelligence](dependency-intelligence.md
 
 ## 6. Per-dataset visibility and retention
 
-This table accounts for all 132 `DATASETS` output kinds in the 42 integrated job `datasets.py` modules:
-46 indexed, 57 artifact-only and 29 protected declarations
+This table accounts for all 142 `DATASETS` output kinds in the 43 integrated job `datasets.py` modules:
+47 indexed, 64 artifact-only and 31 protected declarations
 (120 kinds / 37 modules at the original contract baseline; 126 / 40 before the main integration).
 Each producer name links to that declaration, which owns artifact patterns, schema and query route;
 the [physical index catalog](#4-physical-indexes-shards-and-producer-ownership) identifies its shards.
@@ -381,6 +388,7 @@ sanitized public references do not make those bytes public.
 | [`job_project_build`](../../src/appsec_review/jobs/job_project_build/datasets.py) | none | `project_build_dispatch` A(s) | `probe_workspaces`, `image_build_streams` |
 | [`job_language_build`](../../src/appsec_review/jobs/job_language_build/datasets.py) | `build_actions`, `jvm_build_actions` | `language_build_receipts` A(s) | `build_workspaces` |
 | [`job_artifact_indexing`](../../src/appsec_review/jobs/job_artifact_indexing/datasets.py) | `artifact_catalog`, `archive_members`, `artifact_relationships` | `artifact_index_summary` | none |
+| [`job_debug_symbol_indexing`](../../src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py) | `normalized_symbols` | `symbol_coverage`, `target_decision`, `debug_symbol_summary` | `raw_artifact_refs`, `reader_executions` |
 | [`job_artifact_security_analysis`](../../src/appsec_review/jobs/job_artifact_security_analysis/datasets.py) | `artifact_security_observations` | `artifact_security_results` | `artifact_scanner_io` |
 | [`job_cpp_compiled_analysis`](../../src/appsec_review/jobs/job_cpp_compiled_analysis/datasets.py) | `cpp_build_graph`, `clang_ast`, `llvm_ir`, `infer_observations`, `binary_symbols`, `cpp_blocked_branches` | `cpp_plan_and_summary` A(s) | `cpp_case_material` |
 | [`job_clang_static_analysis`](../../src/appsec_review/jobs/job_clang_static_analysis/datasets.py) | `clang_static_observations`, `clang_static_scope_coverage` | `clang_static_summary` | `clang_static_raw` |
@@ -395,7 +403,7 @@ sanitized public references do not make those bytes public.
 | [`job_code_graph_index`](../../src/appsec_review/jobs/job_code_graph_index/datasets.py) | `code_graph_facts` | `code_graph_stages`, `code_graph_checkpoints`, `code_graph_summary` | none |
 | [`job_test_coverage`](../../src/appsec_review/jobs/job_test_coverage/datasets.py) | `test_coverage` | `test_coverage_handoff` | none |
 | [`job_profile_data`](../../src/appsec_review/jobs/job_profile_data/datasets.py) | `profile_data` | `profile_data_handoff` | none |
-| [`job_dependency_intelligence`](../../src/appsec_review/jobs/job_dependency_intelligence/datasets.py) | `dependency_context` | `scorecard_responses`, `dependency_intelligence_handoff` | none |
+| [`job_dependency_intelligence`](../../src/appsec_review/jobs/job_dependency_intelligence/datasets.py) | `dependency_context` | `native_discovery`, `native_spdx`, `native_sbom_provenance`, `native_sbom_metrics`, `scorecard_responses`, `dependency_intelligence_handoff` | none |
 | [`job_owasp_control_assessment`](../../src/appsec_review/jobs/job_owasp_control_assessment/datasets.py) | `owasp_workbench` (separate store) | `owasp_documents` | `owasp_model_receipts` |
 | [`job_review_prioritization`](../../src/appsec_review/jobs/job_review_prioritization/datasets.py) | `priority_items` | `prioritization_documents` | none |
 | [`job_security_tagging`](../../src/appsec_review/jobs/job_security_tagging/datasets.py) | `tag_assignments` | `tagging_documents` | none |
@@ -472,7 +480,7 @@ These are regenerable operational views, not another retrieval index or an evide
 route. Hash-bound metric receipts resolve run-owned artifacts; malformed/changed/escaping receipts
 remain integrity gaps. Dossiers may retain safe scope/status references and omissions, not raw
 logs or prompts. [Telemetry architecture](telemetry.md#evidence-completion-tracking-commissioned)
-and [metrics operations](../operations/metrics.md#completion-rollout-tracking-pending-integration)
+and [metrics operations](../operations/metrics.md#completion-rollout-tracking)
 record actual completion aggregates, producer events and remaining instrumentation gaps.
 
 ## 7. Engineering evidence and explicit gaps
@@ -545,14 +553,14 @@ hashes, identity-resolved PoC briefs and summary persistence/report-count regres
 | Delivered surface | Source-verified state / remaining boundary |
 | --- | --- |
 | Shared review reader | `jobs/accepted_review.py` verifies handoff `/3`, ledger-bound chain publication/memberships, original actor/cell receipts, nested review-package refs, run identity, duplicate identities and the PoC-basis digest. |
-| Pre-gate topology | Registry and central config contain the same 42 jobs. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate/report. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
+| Pre-gate topology | Registry and central config contain the same 43 jobs. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, debug symbols, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate/report. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
 | Chains | Three pre-seal units, strict native continuity policy, protected dataset/manifest and exact actor-receipt accounting exist. `stages.base_review_projection` validates exact enhancement-cell coverage while excluding those cells/gaps from base completeness accounting; the full ledger/projection retains them and publication exposes enhancement gaps separately. Integrity failures still fail. |
 | PoC / gate / report | Immutable protected PoC attempt files and exact `/2` producer/provenance contracts; gate `/2` verifies all optional nested artifacts, candidate partitions and five-capability accounting; report `/2` consumes only the frozen certified snapshot. Disabled manual PoC requires explicit authenticated upstream admission, never silent pointer discovery. |
 | Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Job-scoped validated role bundles are hash-pinned; uncommissioned native profiles retain manual outcomes. Neither PoC context nor regression-function compilation is commissioned. |
-| Dossiers | Real semantic job, strict typed bounds, closed projection, hardened renderer and `dossier-rendering-receipt/1` exist. Gate certification is implemented. Owner-verified seeded PDFs, navigation and repeat rendering are recorded in [operations](../operations/dossier-publication.md#verified-seeded-sample); full native all-lane evidence remains pending. |
-| Metrics | `run-metrics/4.completion` preserves `completion-process-metrics/1` alongside OWASP/review-flow/Tree-sitter/CodeQL/model views. Fixed lane/status/capability maps include `not_launched` and certified report outcome counts; limits are nonadditive and unknown tokens remain unavailable. Persisted-summary/cache/replay/source-log-integrity regressions exist; full actual-producer all-lane acceptance remains separate. |
+| Dossiers | Real semantic job, strict typed bounds, closed projection, hardened renderer and `dossier-rendering-receipt/1` exist. Gate certification is implemented. Owner-verified seeded PDFs, navigation and repeat rendering are recorded in [operations](../operations/dossier-publication.md#verified-seeded-sample); the historical all-lane check separately uses a renderer double and preserves inherited/source gaps. |
+| Metrics | `run-metrics/4.completion` preserves `completion-process-metrics/1` alongside OWASP/review-flow/Tree-sitter/CodeQL/model views. Fixed lane/status/capability maps include `not_launched` and certified report outcome counts; limits are nonadditive and unknown tokens remain unavailable. `b9e69d17` scopes enabled/disposition maps to the gate certification event. Historical owner all-lane checks observe seven lanes / zero measurement gaps without clearing review/evidence gaps; current-main/live acceptance remains separate. |
 | Index admission / resume inventory | `3f28d871` excludes the three new completion consumers from active pre-review acceptance. `registry_providers` still returns **all registered file owners and dataset declarations** for resume auditing; do not remove downstream ownership just because its output is not yet a pre-review input. |
-| OpenVEX | Shared contract/settings/schema-lock and design/operations documents only. No `build_job`, registry/config entry, dataset publication, exporter/report wiring or emitted `openvex` metrics section exists; the inherited `/1` report/post-gate-PoC proposal must be reconciled with current `/2` completion ordering before implementation. |
+| OpenVEX | Shared contract/settings/schema-lock and design/operations documents only. `967d1c7f` aligns the records and fixtures to gate `/2`, rejects legacy `/1` and requires nested refs within certified bindings. No `build_job`, registry/config entry, dataset publication, exporter/report wiring or emitted `openvex` metrics section exists; the inherited design's `/1` report/post-gate-PoC proposal still needs current `/2` ordering before implementation. |
 
 Current versions are explicit, not implicit upgrades of old accepted runs:
 
@@ -566,13 +574,22 @@ Current versions are explicit, not implicit upgrades of old accepted runs:
 | Final publication | `final-publication-gate/2`, `final-publication-gate-handoff/2`, `final-report/2`, `final-report-handoff/2`; shared engineering constants and [final-report schemas](../schemas/final-report/). |
 | Telemetry | `telemetry-event/1`, `run-metrics/4`, `completion-process-metrics/1`, `tree-sitter-metrics/1`, `codeql-execution-metrics/1`; observational operator data, not evidence-admission schemas. Completion was first added to `/3`; current `/4` also includes CodeQL action/query views. |
 
-Full native all-lane semantics, Linux real-review remediation acceptance and residual historical
-consumer metadata remain unresolved here. The seeded PDF sample and reported metric parity
-correction are reconciled, not remaining acceptance gaps.
-The parent reports the exact remediation Linux suite at `68915bb7` passed 256 / zero skips,
-and certified report metric tests passed on Windows and Linux; these bounded checks do not certify
-combined source `6975aef2`. Its 111-file main-plus-feature Linux validation and actual-producer
-all-lane run are still pending. Initial root-user/capability environment failures are not
-silently treated as product passes; retry is unprivileged uid 1000.
-No target scan, assumed deployment, compilation or generic metrics pass substitutes for those
-acceptance results.
+The [bounded acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+records owner source `039b24e4`: two checks passed in 306.43 s, including actual seven-lane
+producer flow, zero telemetry measurement gaps, exact inherited gaps, unchanged finding
+state/score/ship decisions and deterministic second report hashes. Model/compiler/renderer
+boundaries are doubles, not live runtime/compiler reproduction. Stable `a709a10b` has the same
+product trees. Separate remediation Linux 256 / zero skips and real seeded PDF results remain
+attributed to their own snapshots.
+
+Final immutable `967d1c7f` has 309 focused Linux passes, including all 180 cases in both OpenVEX
+files and coupled completion/integrity/profile checks; no residual feature-coupled failure is
+reported. Named phase results are the primary attribution. The final deduplicated coupled ledger
+across incremental frozen XMLs is 1527 unique passes, six independently main-baseline failures
+and one optional PowerShell-parser skip, covering all 40 selected files. This is not one clean
+aggregate run; overlapping phase totals must not be added.
+Fifteen named baseline selectors independently reproduce on main `093f26d5`;
+this is not full-repository clean acceptance. The broad 111-file attempts remain partial.
+Current-main merged-source validation, user-owned live validation and residual historical
+consumer metadata are not closed by the historical native result. No target scan, assumed
+deployment, doubled compile outcome or generic metrics pass substitutes for those boundaries.

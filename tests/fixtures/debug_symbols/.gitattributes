@@ -1,0 +1,8 @@
+# Source bytes and recorded debug checksums must survive Windows checkouts unchanged.
+* -text
+*.c whitespace=cr-at-eol
+# LLVM's verbatim recordings include intentional trailing spaces.
+*.txt whitespace=-blank-at-eol,cr-at-eol
+*.yaml whitespace=-blank-at-eol,cr-at-eol
+.gitattributes text eol=lf
+README.md text eol=lf

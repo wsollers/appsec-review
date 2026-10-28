@@ -100,6 +100,12 @@ Analyzer, `clangd-indexer`, `cppcheck`, `infer`, `svf`), code property graph and
 Clang 18 comes from those images, not from the host; the host needs `clang++-18` only for the
 opt-in live test above.
 
+**Native SBOMs use SPDX 2.3 JSON.** Dependency intelligence augments the source inventory with
+bounded vendored/header-only discovery, without requiring CMake, Conan, or a successful build.
+Exact source evidence, uncertain/conflicting versions, coverage gaps, provenance, and measured
+publication outcomes remain visible. It reuses the Syft image; see
+[`docs/operations/native-sbom.md`](docs/operations/native-sbom.md).
+
 **CodeQL** is not in the catalog. Its licensed payload (CLI, extractors, query packs) is not in this
 repository: on any Linux Docker host (native Linux or WSL 2, not Windows PowerShell)
 `containers/tools/codeql/build-source-image.sh` downloads the pinned CodeQL bundle and
@@ -520,7 +526,7 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> ci_configuration_analysis -> source_history_analysis
   -> target_analysis_plan
   -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
-  -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
+  -> artifact_indexing -> test_coverage -> profile_data -> debug_symbol_indexing -> artifact_security_analysis
   -> evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
   -> sanitizer_build -> cpp_symbol_index -> cpg_analysis (deprecated; only when enabled)
   -> svf_alias_analysis (opt-in; only when enabled) -> binary_evidence_indexing
@@ -554,6 +560,14 @@ appsec-review start --system storefront
 
 The command prints a JSON summary that includes the `run_id` (for example `2026-10-08-0001`). Use
 it to inspect or resume the run:
+
+`start --compiler-target clang|msvc` selects the native debug-symbol lane for that run
+(default `clang`); `--target` still names the checkout. The compiler selection is frozen with
+the configuration and restored on resume. This selects DWARF versus native PDB analysis, not a
+Windows build environment. Symbol extraction automatically reuses the accepted build image;
+managed compiler images include both LLVM readers, with the pinned native analysis image
+covering prebuilt artifacts and older/incompatible build environments. No host LLVM paths
+are required. See the [debug-symbol design](docs/architecture/debug-symbol-indexing.md).
 
 ```bash
 appsec-review logs --run-id <run-id>
@@ -625,12 +639,14 @@ third-party metadata sync remains standalone.
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
 [`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).
-`final_publication_gate` and `final_report_publication` call no model: they re-verify the accepted
-inference review and write `final-report.json` and a deterministic `final-report.md`; see
+`final_publication_gate` and `final_report_publication` call no model: the gate certifies the accepted
+review and pre-gate completion evidence, and the report reads only that certified gate snapshot to
+write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
 Enabled PoC generation, remediation planning/validation and dossier publication run **before**
-the single final gate. PoC and remediation checks are compile-only, never runtime reproduction
-or a verified fix. New-run defaults do not change frozen historical configurations; manual
+the single final gate by default for new reviews. PoC and remediation checks are compile-only:
+functions are never linked or run, and checks establish neither runtime reproduction nor a verified
+fix. New-run defaults do not change frozen historical configurations; manual
 disabled PoC output requires explicit gate admission. See
 [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md),
 [remediation](docs/operations/remediation.md) and [dossiers](docs/operations/dossier-publication.md).

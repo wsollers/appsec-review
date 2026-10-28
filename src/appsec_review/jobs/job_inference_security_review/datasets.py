@@ -13,8 +13,8 @@ _J = "data/jobs/job_inference_security_review"
 _A = _J + "/attempts/*"
 # The single input is the accepted run/index manifest; its producer handoff is the data-indexing job.
 CONSUMES = ("job_review_data_indexing",)
-# Decision 8: the downstream jobs that consume this job's handoff, fixed by name before they exist.
-# Producers are resolved by ``indexing/input_matrix.py``; ``reads`` names their handoff inputs.
+# Historical handoff declarations retain their schema-defined "planned" label; it does not
+# describe current registration. Live dependencies are in orchestration/topology.py.
 # Remediation reads only ``remediation_intake`` (confirmed findings, decision 4).
 PLANNED_CONSUMERS: tuple[dict[str, object], ...] = tuple(
     {"job_id": job_id, "status": "planned", "reads": list(reads)} for job_id, reads in (

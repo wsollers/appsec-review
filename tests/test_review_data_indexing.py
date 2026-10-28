@@ -726,8 +726,10 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
         if cursor is None:
             break
     disabled = {job_id for job_id, job in config.jobs.items() if job.settings.get("enabled") is False}
-    expected_sources = {source for source, producers, *_ in input_matrix.INPUT_SOURCES
+    expected_sources = {source if source != "secret_leads" else "<redacted>"
+                        for source, producers, *_ in input_matrix.INPUT_SOURCES
                         if any(producer.removeprefix("planned:") not in disabled for producer in producers)}
+    assert {item["payload"]["source"] for item in sources} == expected_sources
     assert len(sources) == len(expected_sources)
     assert all(item["payload"]["source"] != "joern_cpg" for item in sources)
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
@@ -1108,8 +1110,8 @@ def test_downstream_review_consumers_preserve_certified_completion_order() -> No
     assert not {f"planned:{job}" for job in DOWNSTREAM} & planned
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
     assert set(DOWNSTREAM) <= named
-    assert set(PLANNED_CONSUMER_JOBS) <= set(DOWNSTREAM)
-    assert "job_openvex_export" in PLANNED_CONSUMER_JOBS
+    assert PLANNED_CONSUMER_JOBS == tuple(
+        job for job in DOWNSTREAM if job not in {"job_poc_generation", "job_dossier_publication"})
     assert tuple(consumer for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
     for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
         earlier = set(DOWNSTREAM[:index])
@@ -1119,13 +1121,18 @@ def test_downstream_review_consumers_preserve_certified_completion_order() -> No
     reads = {item["job_id"]: set(item["reads"]) for item in PLANNED_CONSUMERS}
     assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
     assert "remediation_intake" in reads["job_remediation_planning"]
-    built = set(DOWNSTREAM)
-    assert set(DOWNSTREAM) & set(builtin_registry().job_ids()) == built
+    registered = set(builtin_registry().job_ids())
+    assert set(DOWNSTREAM) <= registered
     rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
     states = {item["source"]: item["producer_states"] for item in rows}
     assert states["remediation_plans"] == [{"producer": "job_remediation_planning", "status": "unregistered"}]
     assert states["publication_gate_decisions"] == [{"producer": "job_final_publication_gate", "status": "unregistered"}]
-    rows, discrepancies = input_matrix.reconcile(built, [], [], {}, "job_review_data_indexing")
+    rows, discrepancies = input_matrix.reconcile(registered, [], [], {}, "job_review_data_indexing")
+    states = {item["source"]: item["producer_states"] for item in rows}
+    for source, producer in (("remediation_plans", "job_remediation_planning"),
+                             ("publication_gate_decisions", "job_final_publication_gate")):
+        assert states[source] == [{"producer": producer, "status": "not_executed",
+                                   "indexed_datasets": 0, "unavailable_datasets": 0}]
     assert {item["source"]: item["producer_states"][0]["status"] for item in rows}[
         "final_report_publications"] == "not_executed"
     assert not any(job in item for item in discrepancies for job in DOWNSTREAM)

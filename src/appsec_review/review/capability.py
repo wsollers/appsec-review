@@ -22,6 +22,8 @@ from typing import Any, Mapping
 from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, QUERY_CODE_GRAPH
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.retrieval.graph import request_error as graph_request_error
+from appsec_review.debug_symbols.contract import INDEX_NAME as DEBUG_SYMBOL_INDEX, QUERY_TOOL as QUERY_DEBUG_SYMBOLS
+from appsec_review.retrieval.debug_symbols import request_error as debug_symbol_request_error, row_in_scope
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.retrieval.neighborhood import LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD
 from appsec_review.retrieval.syntax import QUERY_SYNTAX, row_in_scope as syntax_row_in_scope
@@ -64,6 +66,7 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     QUERY_CODE_GRAPH: frozenset({GRAPH_INDEX}),
     LIST_CODEQL_DATABASES: frozenset({GRAPH_INDEX}),
     QUERY_CODEQL_NEIGHBORHOOD: frozenset({GRAPH_INDEX}),
+    QUERY_DEBUG_SYMBOLS: frozenset({DEBUG_SYMBOL_INDEX}),
     QUERY_SYNTAX: frozenset({"analysis"}),
 }
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
@@ -252,6 +255,12 @@ class CellCapability:
         scope = payload.get("scope") if isinstance(payload, Mapping) else None
         return isinstance(scope, Mapping) and scope.get("scope_id") in self.graph_scopes
 
+    def debug_symbol_row_in_scope(self, row: Mapping[str, Any], granted=()) -> bool:
+        if row.get("graph_links") and GRAPH_INDEX not in self.indexes:
+            return False
+        return DEBUG_SYMBOL_INDEX in self.indexes and row_in_scope(
+            row, lambda identity: self.entity_in_scope(identity) or identity in granted, self.graph_scopes)
+
     def syntax_row_in_scope(self, row: Mapping[str, Any]) -> bool:
         return "analysis" in self.indexes and syntax_row_in_scope(row, self.entities)
 
@@ -321,6 +330,8 @@ class CellCapability:
             return deny("schema_violation", "expand takes exactly one of label, ref or files")
         if tool == QUERY_CODE_GRAPH and (error := graph_request_error(parameters)):
             return deny("schema_violation", error)
+        if tool == QUERY_DEBUG_SYMBOLS and (error := debug_symbol_request_error(parameters)):
+            return deny("schema_violation", error)
         for key, value in parameters.items():
             for text in _strings(value):
                 if key in _PARAMETER_EXEMPT_FROM_TEXT_CHECK or (key in IDENTITY_PARAMETERS and
@@ -356,6 +367,8 @@ class CellCapability:
                 return deny("index_not_granted", "requested index is not granted")
         elif tool in TOOL_INDEXES and not TOOL_INDEXES[tool] <= set(self.indexes):
             return deny("index_not_granted", f"{tool} reads indexes not granted to this cell")
+        if tool == QUERY_DEBUG_SYMBOLS and parameters.get("mode") == "graph_links" and GRAPH_INDEX not in self.indexes:
+            return deny("index_not_granted", "debug-symbol graph_links also requires the graph index")
         if "limit" in schema["properties"]:
             if int(parameters.get("limit", self.page_size)) > self.page_size:
                 return deny("page_cap_exceeded", "limit exceeds the cell page size")

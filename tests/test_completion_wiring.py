@@ -71,6 +71,29 @@ def test_indexing_excludes_every_downstream_consumer_but_retains_file_ownership(
     assert consumers <= declarations.keys()
 
 
+def test_completion_inventory_matches_combined_job_and_retrieval_declarations() -> None:
+    from appsec_review.jobs.job_review_data_indexing.job import registry_providers
+    from appsec_review.mcp.schema import TOOLS
+    from appsec_review.retrieval.index import INDEX_NAMES
+
+    job_ids, declarations, _consumes = registry_providers()
+    inventory = (ROOT / "docs" / "architecture" / "dossier-data-inventory.md").read_text(encoding="utf-8")
+    rows = {line.split("`")[1]: line.split("|")[2:5]
+            for line in inventory.splitlines() if line.startswith("| [`job_")}
+    assert set(rows) == set(job_ids)
+    columns = {"indexed": 0, "artifact_only": 1, "protected": 2}
+    for job_id, datasets in declarations.items():
+        for dataset in datasets:
+            assert f"`{dataset.output_kind}`" in rows[job_id][columns[dataset.disposition]]
+    count = sum(len(datasets) for datasets in declarations.values())
+    assert f"**{len(job_ids)} registered/configured\njobs, {count} dataset kinds" in inventory
+    assert f"{len(TOOLS)} public retrieval tools, {len(INDEX_NAMES)} logical SQLite indexes" in inventory
+    for tool in TOOLS:
+        assert f"| `{tool['name']}` |" in inventory
+    for index in INDEX_NAMES:
+        assert f"| `{index}` |" in inventory
+
+
 @pytest.mark.parametrize("job_id", OPTIONAL[1:])
 def test_new_completion_jobs_never_receive_the_live_target(job_id) -> None:
     assert job_id in TARGET_INDEPENDENT_JOBS

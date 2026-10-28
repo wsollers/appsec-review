@@ -2,6 +2,20 @@
   "schema": "appsec-review/mcp-tool-catalog/1",
   "tools": [
     {
+      "name": "query_debug_symbols",
+      "required": [
+        "mode"
+      ],
+      "properties": [
+        "mode",
+        "artifact_identity",
+        "subject",
+        "address",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
       "name": "search",
       "required": [
         "query"

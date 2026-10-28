@@ -20,7 +20,7 @@ stands behind a side; a verdict names a side only by its letter and rests on cit
 side argued or how confident it sounds.
 
 ## Tools
-`find`, `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_syntax`,
+`find`, `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_debug_symbols`, `query_syntax`,
 `read_excerpt`, `resolve_evidence`, `trace`.
 
 ## Examples

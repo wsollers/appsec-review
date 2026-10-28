@@ -150,7 +150,8 @@ def test_the_run_manifest_records_the_selection(checkout: Path, tmp_path: Path) 
     run_root = tmp_path / "run"
     JobRunner(config)._bind_configuration(run_root)
     manifest = json.loads((run_root / "data" / "configuration" / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["selection"] == {"profile": "prod", "overlay": _overlay(checkout), "source": "run_tags"}
+    assert manifest["selection"] == {"profile": "prod", "overlay": _overlay(checkout),
+                                     "compiler_target": "clang", "source": "run_tags"}
     with pytest.raises(ValueError, match="profile prod, overlay .*cap.toml; this attempt resolved profile dev"):
         JobRunner(load_config(checkout / "appsec-review.toml"))._bind_configuration(run_root)
 

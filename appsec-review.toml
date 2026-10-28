@@ -1273,6 +1273,36 @@ workers = 8
 workers = 1
 [jobs.job_artifact_indexing.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_debug_symbol_indexing]
+name = "debug_symbol_indexing"
+workers = 2
+
+[jobs.job_debug_symbol_indexing.settings]
+enabled = true
+max_artifacts = 128
+
+[jobs.job_debug_symbol_indexing.settings.reader]
+max_input_bytes = 536870912
+max_output_bytes = 16777216
+max_records = 100000
+max_depth = 128
+timeout_seconds = 120
+# Readers run in the accepted compiler image, with the pinned native analysis image
+# as the offline compatibility environment. Host executable paths are not settings.
+
+[jobs.job_debug_symbol_indexing.steps.decide]
+workers = 1
+[jobs.job_debug_symbol_indexing.steps.decide.tasks.target]
+
+[jobs.job_debug_symbol_indexing.steps.extract]
+workers = 2
+[jobs.job_debug_symbol_indexing.steps.extract.tasks.clang_dwarf]
+[jobs.job_debug_symbol_indexing.steps.extract.tasks.msvc_pdb]
+
+[jobs.job_debug_symbol_indexing.steps.acceptance]
+workers = 1
+[jobs.job_debug_symbol_indexing.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_test_coverage]
 name = "test_coverage"
 workers = 4
@@ -2310,6 +2340,16 @@ command_token_limit = 4096
 metadata_file_limit = 10000
 metadata_bytes_per_file = 1048576
 inference_candidate_bytes = 32768
+native_source_bytes_limit = 67108864
+native_root_limit = 2048
+native_evidence_limit = 50000
+native_evidence_per_candidate = 32
+native_field_bytes = 4096
+native_path_chars = 512
+sbom_input_bytes = 16777216
+sbom_element_limit = 100000
+sbom_output_bytes = 33554432
+sbom_conversion_timeout_seconds = 120
 repository_hosts = ["github.com", "gitlab.com"]
 
 [jobs.job_dependency_intelligence.settings.model]
@@ -2352,6 +2392,7 @@ workers = 4
 
 [jobs.job_dependency_intelligence.steps.publication]
 workers = 1
+[jobs.job_dependency_intelligence.steps.publication.tasks.publish_sbom]
 [jobs.job_dependency_intelligence.steps.publication.tasks.publish_context]
 
 [jobs.job_dependency_intelligence.steps.acceptance]

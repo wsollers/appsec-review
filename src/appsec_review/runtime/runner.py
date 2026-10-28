@@ -84,6 +84,7 @@ class JobRunner:
             "sources": [dict(layer) for layer in self.config.layers],
             "selection": {"profile": self.config.profile,
                           "overlay": str(self.config.overlay_path) if self.config.overlay_path else None,
+                          "compiler_target": self.config.compiler_target.value,
                           "source": self.config.selection_source},
             "resolved": {"path": "resolved.json", "sha256": self.config.resolved_sha256},
         })

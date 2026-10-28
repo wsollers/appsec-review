@@ -15,7 +15,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`clang-static-analysis.md`](clang-static-analysis.md) — Clang-Tidy and Clang Static Analyzer over accepted C/C++ compile scopes.
 - [`test-coverage-ingestion.md`](test-coverage-ingestion.md) — bounded LCOV, Cobertura, JaCoCo, and LLVM coverage normalization and source binding.
 - [`profile-data.md`](profile-data.md) — bounded folded-stack, perf-script, Callgrind, and LLVM sample-profile ingestion with context-only hotness ranks.
+- [`debug-symbol-indexing.md`](debug-symbol-indexing.md) — run-selected Clang/DWARF and MSVC/PDB evidence, explicit workflow routing, bounded symbol queries, and test-first acceptance.
 - [`dependency-intelligence.md`](dependency-intelligence.md) — declared, SBOM, linker, loader, and metadata dependency resolution with OpenSSF Scorecard context.
+- [`native-sbom.md`](native-sbom.md) — bounded vendored/header-only discovery, evidence-backed identity claims, SPDX 2.3 enrichment, and metric correctness.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
 - [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.

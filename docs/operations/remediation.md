@@ -4,7 +4,12 @@ Status: producers `6278e580`, central wiring `b702eb7` and follow-up `e769645f`,
 are real registered jobs, enabled in new configurations by the user's rollout decision.
 The shared reader now verifies review `/3` and nested chain/package bindings (`18eae9f`).
 Final gate/report `/2` now certify these exact plan/patch/upstream attachments (`dd9c9ad`).
-**End-to-end acceptance is pending**: full native all-lane and Linux real-review semantic acceptance.
+The owner-reported historical `039b24e4` all-lane check passes native and manual outcomes with
+offline model/compiler/renderer boundary doubles; it is not live compiler/runtime reproduction.
+The separate remediation Linux suite at `68915bb7` reports 256 passed / zero skips. Focused
+consumer compatibility and remaining manual/current-main validation are recorded in the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger);
+neither result establishes a full-repository clean verdict or a fixed finding.
 Existing frozen configurations are not rewritten or silently enabled by new defaults.
 
 These jobs attach proposals/checks to immutable accepted findings. They do not edit the user

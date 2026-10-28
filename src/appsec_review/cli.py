@@ -70,6 +70,8 @@ def parser() -> argparse.ArgumentParser:
 
     start = commands.add_parser("start", help="start the deterministic review graph")
     target_choice(start)
+    start.add_argument("--compiler-target", choices=("clang", "msvc"), default="clang",
+                       help="native debug-symbol compiler family for this run (default: clang)")
 
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
@@ -129,7 +131,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if getattr(args, "admit_manual_poc", False) and (
             args.job_id != "job_final_publication_gate" or not args.upstream_from_run or not args.run_id):
         parser().error("--admit-manual-poc requires run job_final_publication_gate --run-id --upstream-from-run")
-    config = load_config(args.config, profile=args.profile)
+    compiler = getattr(args, "compiler_target", None)
+    if args.command in {"run", "plan-resume", "resume"} and getattr(args, "run_id", None):
+        preliminary = load_config(args.config, profile=args.profile)
+        manifest_path = (preliminary.runtime.runs_dir / args.run_id /
+                         "data" / "configuration" / "manifest.json")
+        if manifest_path.is_file():
+            compiler = json.loads(manifest_path.read_text(encoding="utf-8")).get(
+                "selection", {}).get("compiler_target", "clang")
+    config = load_config(args.config, profile=args.profile, compiler_target=compiler)
     if args.command == "schedules":
         schedules = {
             job_id: {

@@ -9,8 +9,12 @@ Completion reconciliation (`dd9c9ad`): judge candidates now use canonical
 directly, writes immutable protected PoC/provenance `/2`, then dossiers and one final gate precede
 gate-only report `/2`. New configurations enable the lane; frozen disabled runs require explicit
 authenticated manual admission. [Operations](../operations/poc-generation.md) are the current
-source-backed recipe; full native all-lane acceptance is still separate from the owner-verified
+source-backed recipe. The historical owner all-lane result at `039b24e4` uses offline
+model/compiler/renderer boundary doubles and is separate from the real
 [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample).
+Neither authorizes live reproduction or current-main reviews; the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+records focused consumer compatibility and remaining user-owned current-main/manual validation.
 
 ## 1. What the owner decided
 

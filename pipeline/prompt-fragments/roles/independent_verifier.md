@@ -20,7 +20,7 @@ Blind: receives no red or blue reasoning, and runs on a model profile distinct f
 roles when configuration requires it.
 
 ## Tools
-`find`, `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_syntax`,
+`find`, `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_debug_symbols`, `query_syntax`,
 `read_excerpt`, `resolve_evidence`, `trace`.
 
 ## Examples
