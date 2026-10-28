@@ -75,7 +75,11 @@ def test_common_envelope_binds_verified_outcomes_without_copying_task_payload(tm
     ({"terminal_status": "SKIPPED_POLICY"}, "skipped_policy", False),
     ({"terminal_status": "COMPLETED_WITH_GAPS", "gaps": ["bounded deterministic limitation"]}, "partial", False),
     ({"terminal_status": "INVALID_COMPILE_DATABASE"}, "unavailable", False),
+    ({"terminal_status": "BLOCKED_BY_COMPILE"}, "unavailable", False),
+    ({"terminal_status": "BLOCKED"}, "unavailable", True),
     ({"terminal_status": "FAILED"}, "unavailable", True),
+    ({"terminal_status": "TIMED_OUT"}, "unavailable", True),
+    ({"terminal_status": "OOM_KILLED"}, "unavailable", True),
     ({"terminal_status": "future-status"}, "unavailable", False),
 ])
 def test_producer_coverage_does_not_override_successful_execution(tmp_path, producer, expected, retry):
