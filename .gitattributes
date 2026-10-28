@@ -1,10 +1,11 @@
-# Hash-pinned hand-authored recordings: byte-exact, never end-of-line converted.
+# Hash-pinned, hand-authored graph-export recordings and goldens: byte-exact, never end-of-line converted.
 tests/fixtures/graph/codeql_export/ruby-synthetic/** -text
 tests/fixtures/graph/expected/ruby-synthetic/** -text
-# Byte-exact graph-export fixtures: manifest sizes and hashes cover the LF bytes.
 tests/fixtures/graph/codeql_export/go-synthetic/** -text
 tests/fixtures/graph/expected/go-synthetic/** -text
 tests/fixtures/graph/codeql_export/java-synthetic/** -text
 tests/fixtures/graph/expected/java-synthetic/** -text
+tests/fixtures/graph/codeql_export/python-synthetic/** -text
+tests/fixtures/graph/expected/python-synthetic/** -text
 tests/fixtures/graph/codeql_export/swift-synthetic/** -text
 tests/fixtures/graph/expected/swift-synthetic/** -text
