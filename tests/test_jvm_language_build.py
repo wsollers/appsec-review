@@ -410,7 +410,7 @@ def test_jvm_build_index_is_mcp_queryable_without_protected_streams(tmp_path: Pa
                    indexes=(identity,))
     manifest_artifact = {"path": manifest.relative_to(run_root).as_posix(),
         "sha256": file_sha256(manifest), "size_bytes": manifest.stat().st_size}
-    handoff = run_root / "data" / "jobs" / "job_language_build" / "jvm-index-handoff.json"
+    handoff = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "jvm-index" / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
     write_fixture_handoff(run_root, handoff, {"source_fingerprint": fingerprint, "status": "ACCEPTED",
         "job_id": "job_language_build", "attempt_id": "jvm-index", "artifacts": [manifest_artifact],

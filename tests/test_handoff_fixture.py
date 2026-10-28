@@ -24,7 +24,7 @@ def test_synthetic_fixture_publishes_actual_hash_bound_accounting(tmp_path):
         assert path.stat().st_size == reference["size_bytes"]
         assert file_sha256(path) == reference["sha256"]
     outcomes = json.loads((tmp_path / handoff["outcomes"]["path"]).read_text())
-    assert outcomes["units"][0]["unit_id"] == "publish"
+    assert outcomes["units"][0]["unit_id"] == "fixture.publish"
     assert outcomes["units"][0]["execution_status"] == "SUCCEEDED"
 
 
