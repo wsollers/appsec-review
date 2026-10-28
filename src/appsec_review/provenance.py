@@ -84,6 +84,7 @@ def retain_native_output(
     count_work("native_output_bytes", obj.size_bytes)
     if events is not None:
         events.write("NATIVE_OUTPUT_RETAINED", unit_id=unit_id,
+                     **{key: owner.actor[key] for key in ("run_id", "job_id", "attempt_id")},
                      **identity, retention_receipt=receipt)
     return reference
 
@@ -195,6 +196,7 @@ def consume_native_references(root: Path, references: Iterable[Mapping[str, Any]
     for ref in merge_native_references(references):
         verify_native_reference(root, ref)
         count_work("native_output_references")
+        count_work("native_output_bytes", ref["artifact"]["size_bytes"])
         receipts.append(owner.consume_receipt(ref["retention_receipt"]))
     return receipts
 
@@ -246,6 +248,7 @@ def validate_observation_provenance(
     count_work("provenance_gaps", gap_count)
     if events is not None:
         events.write("OBSERVATION_PROVENANCE_VALIDATED", unit_id=unit_id,
+                     **{key: owner.actor[key] for key in ("run_id", "job_id", "attempt_id")},
                      **{key: document[key] for key in (
                          "parser_identity", "observation_count", "native_reference_count", "complete", "truncated")},
                      provenance_receipt=receipt)

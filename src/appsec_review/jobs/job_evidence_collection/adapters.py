@@ -305,7 +305,7 @@ def _blint_args(executable: str, selection: Applicability) -> tuple[str, ...]:
 
 def _json(payload: bytes) -> Any:
     if not payload.strip():
-        return []
+        raise ValueError("scanner output is empty")
     return json.loads(payload.decode("utf-8"))
 
 
@@ -542,8 +542,11 @@ def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
             lines = item["start_line"]
             item["start_line"] = lines[0] if lines else 1
             item["end_line"] = lines[-1] if lines else 1
-    for path in _checkov_parsing_errors(documents):
-        result.append({"gap_only": True, "coverage_gap": f"checkov could not parse {path}"})
+    for document_index, document in enumerate(documents):
+        prefix = (document_index,) if isinstance(value, list) else ()
+        for index, path in enumerate(document.get("results", {}).get("parsing_errors", []) or []):
+            result.append({"gap_only": True, "coverage_gap": f"checkov could not parse {path}",
+                           "_native_selector": json_selector(*prefix, "results", "parsing_errors", index).as_dict()})
     return result
 
 

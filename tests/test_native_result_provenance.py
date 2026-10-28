@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -75,6 +74,15 @@ def test_retention_reuse_preserves_original_computation_identity(tmp_path, owner
     assert reused["producer_receipt"] == first.retention_receipt.as_dict()
     consumed = consume_native_references(tmp_path, [first.as_dict()], owner=consumer)
     assert shared.verify_receipt(tmp_path, consumed[0])["producer_receipt"] == first.retention_receipt.as_dict()
+
+
+def test_native_reuse_counts_both_referenced_objects_and_bytes(tmp_path, owner, monkeypatch):
+    from appsec_review import provenance
+    native = retained(tmp_path, b'{"a":1}')
+    counters = []
+    monkeypatch.setattr(provenance, "count_work", lambda name, value=1: counters.append((name, value)))
+    consume_native_references(tmp_path, [native.as_dict()], owner=make_owner(tmp_path, 2))
+    assert counters == [("native_output_references", 1), ("native_output_bytes", native.artifact.size_bytes)]
 
 
 @pytest.mark.parametrize("damage", ["tamper", "missing", "receipt", "execution"])
@@ -205,6 +213,8 @@ def test_provenance_events_are_ref_only_and_counts_are_hash_bound(tmp_path, owne
     receipt = validate_observation_provenance(tmp_path, [payload], parser_identity="fixture/1", events=events)
     records = [json.loads(line) for line in events.path.read_text().splitlines()]
     assert [item["event"] for item in records] == ["NATIVE_OUTPUT_RETAINED", "OBSERVATION_PROVENANCE_VALIDATED"]
+    assert all({key: record[key] for key in ("run_id", "job_id", "attempt_id")} == {
+        key: owner.actor[key] for key in ("run_id", "job_id", "attempt_id")} for record in records)
     assert "never-in-events" not in events.path.read_text()
     proof = shared.verify_receipt(tmp_path, receipt)
     assert proof["computation"]["observation_count"] == 1
@@ -283,3 +293,188 @@ def test_no_native_input_is_an_explicit_provenance_gap_not_a_fabricated_referenc
                                      "observation": {"matches": []}, "gaps": ["scanner failed"]})
     assert not findings and summary.payload["common"]["gap_ids"]
     assert not summary.payload["common"]["evidence_refs"]
+
+
+def test_partitioned_osv_invocations_keep_their_own_native_output_and_execution(tmp_path, owner):
+    from appsec_review.jobs.job_evidence_collection.adapters import Applicability, ScanCatalog
+    from appsec_review.jobs.job_evidence_collection.job import _Invocation, _run_invocation
+    adapter = adapter_registry()["tool-osv-scanner"]
+    unit_root = owner.attempt_root / "steps" / "vulnerability_matching" / "tasks" / "osv_scanner_scan"
+    events = EventLog(owner.attempt_root / "events.jsonl")
+    unit = SimpleNamespace(
+        unit_id="vulnerability_matching.osv_scanner_scan", unit_root=unit_root,
+        job=SimpleNamespace(run_root=tmp_path, run_id=tmp_path.name, attempt_id=owner.attempt_root.name,
+                            target_root=tmp_path, tools=SimpleNamespace(enable_swift=False), events=events))
+    class Executor:
+        def execute(self, request):
+            root = request.scratch_root
+            root.mkdir(parents=True, exist_ok=True)
+            advisory = "CVE-A" if "project-a" in request.argv[-1] else "CVE-B"
+            atomic_json(root / "output.json", {"results": [{"packages": [{
+                "package": {"name": advisory}, "vulnerabilities": [{"id": advisory}]}]}]})
+            (root / "stdout.bin").write_bytes(b"")
+            (root / "stderr.bin").write_bytes(b"")
+            atomic_json(root / "execution.json", {"tool": "osv", "subject": advisory})
+            return SimpleNamespace(
+                stdout_path=(root / "stdout.bin").relative_to(tmp_path).as_posix(),
+                stderr_path=(root / "stderr.bin").relative_to(tmp_path).as_posix(),
+                receipt_path=(root / "execution.json").relative_to(tmp_path).as_posix(),
+                stdout_truncated=False, stderr_truncated=False, timed_out=False, oom_killed=False, exit_code=0)
+    catalog = ScanCatalog("a" * 64, "b" * 64, (), ())
+    outcomes = []
+    for index, project in enumerate(("project-a", "project-b")):
+        selection = Applicability(True, "fixture", (f"{project}/Cargo.lock",), "lockfiles")
+        outcomes.append(_run_invocation(
+            unit, adapter, catalog, _Invocation(selection, (), project), index,
+            executor=Executor(), tool=SimpleNamespace(name="osv", version="1", executable="/osv", output_bytes=4096),
+            image_id="sha256:" + "a" * 64, fail_tool=None, retries=0, swift_present=False,
+            environment={}, memory=None, input_identities={}))
+    references = [outcome.observations[0]["_native_refs"][0] for outcome in outcomes]
+    assert references[0]["artifact"] != references[1]["artifact"]
+    assert references[0]["execution_reference"] != references[1]["execution_reference"]
+    assert [verify_native_reference(tmp_path, ref, resolve=True)["id"] for ref in references] == ["CVE-A", "CVE-B"]
+    assert all(ref["selector"]["value"] == "/results/0/packages/0/vulnerabilities/0" for ref in references)
+
+
+@pytest.mark.parametrize("exit_code,timed_out", [(2, False), (0, True), (128, False)])
+def test_static_failed_and_no_package_invocations_retain_exact_native_output(tmp_path, owner, exit_code, timed_out):
+    from appsec_review.jobs.job_evidence_collection.adapters import Applicability, ScanCatalog
+    from appsec_review.jobs.job_evidence_collection.job import _Invocation, _run_invocation
+    adapter = adapter_registry()["tool-osv-scanner"]
+    unit = SimpleNamespace(
+        unit_id="vulnerability_matching.osv_scanner_scan",
+        unit_root=owner.attempt_root / "steps" / "vulnerability_matching" / "tasks" / "osv_scanner_scan",
+        job=SimpleNamespace(run_root=tmp_path, run_id=tmp_path.name, attempt_id=owner.attempt_root.name,
+                            target_root=tmp_path, tools=SimpleNamespace(enable_swift=False),
+                            events=EventLog(owner.attempt_root / "events.jsonl")))
+    payload = b'{"results":[]}'
+    class Executor:
+        def execute(self, request):
+            root = request.scratch_root
+            root.mkdir(parents=True, exist_ok=True)
+            (root / "output.json").write_bytes(payload)
+            (root / "stdout.bin").write_bytes(b"")
+            (root / "stderr.bin").write_bytes(
+                b"Scanned /target/Cargo.lock file and found 0 packages\nNo package sources found")
+            atomic_json(root / "execution.json", {"exit_code": exit_code, "timed_out": timed_out})
+            return SimpleNamespace(
+                stdout_path=(root / "stdout.bin").relative_to(tmp_path).as_posix(),
+                stderr_path=(root / "stderr.bin").relative_to(tmp_path).as_posix(),
+                receipt_path=(root / "execution.json").relative_to(tmp_path).as_posix(),
+                stdout_truncated=False, stderr_truncated=False, timed_out=timed_out,
+                oom_killed=False, exit_code=exit_code)
+    outcome = _run_invocation(
+        unit, adapter, ScanCatalog("a" * 64, "b" * 64, (), ()),
+        _Invocation(Applicability(True, "fixture", ("Cargo.lock",), "lockfiles"), (), None), 0,
+        executor=Executor(), tool=SimpleNamespace(name="osv", version="1", executable="/osv", output_bytes=4096),
+        image_id="sha256:" + "a" * 64, fail_tool=None, retries=0, swift_present=False,
+        environment={}, memory=None, input_identities={})
+    native, = outcome.native_outputs
+    assert (tmp_path / native["artifact"]["path"]).read_bytes() == payload
+    assert native["complete"] is (exit_code == 128)
+    assert native["execution_reference"] and native["retention_receipt"]
+    assert not outcome.observations
+    assert bool(outcome.not_applicable) is (exit_code == 128)
+
+
+def test_static_source_hash_mismatch_rejects_even_cached_indexing(tmp_path, owner):
+    from appsec_review.jobs.job_evidence_collection.job import _build_producer_shard
+    target = tmp_path / "target"
+    target.mkdir()
+    source = target / "main.py"
+    source.write_bytes(b"original\n")
+    evidence_path = owner.attempt_root / "evidence.json"
+    atomic_json(evidence_path, {"records": [{"evidence_id": "one", "native_rule_id": "r", "location": {
+        "path": "main.py", "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "start_line": 1, "end_line": 1}}]})
+    artifact = shared.reference(tmp_path, evidence_path)
+    output = {"tool_id": "tool-semgrep", "normalized_artifact": artifact, "artifact": artifact,
+              "terminal_status": "SUCCEEDED", "record_count": 1, "gaps": []}
+    unit = SimpleNamespace(job=SimpleNamespace(
+        run_root=tmp_path, target_root=target, source_fingerprint="a" * 64,
+        events=EventLog(owner.attempt_root / "events.jsonl")),
+        output=lambda _: output, unit_id="source_sast.semgrep_index")
+    _build_producer_shard(unit, "source_sast.semgrep_normalize")
+    source.write_bytes(b"changed!\n")
+    with pytest.raises(ValueError, match="source hash differs"):
+        _build_producer_shard(unit, "source_sast.semgrep_normalize")
+
+
+def test_artifact_parser_input_is_retained_whole_not_as_diagnostic_head_tail(tmp_path, owner):
+    from appsec_review.jobs.job_artifact_security_analysis.job import _scan_one
+    path = tmp_path / "data" / "artifact.bin"
+    path.write_bytes(b"\0asm\x01\0\0\0")
+    artifact = {**shared.reference(tmp_path, path), "artifact_id": "artifact-one",
+                "canonical_identity": "asr:wasm_module:one", "producer": {}, "kind": "wasm-module"}
+    document = {"artifacts": [{"name": "pkg", "version": "1", "metadata": "x" * 200}]}
+    payload = json.dumps(document).encode()
+    settings = {"archive_member_limit": 10, "archive_expanded_bytes": 4096, "archive_member_bytes": 4096,
+                "archive_ratio_limit": 10, "archive_depth_limit": 2, "scanner_identities": {"syft": "fixture/1"},
+                "timeout_seconds": 10, "stream_limit_bytes": 32, "diagnostic_tail_bytes": 8,
+                "parser_input_limit_bytes": 4096}
+    unit = SimpleNamespace(
+        unit_id="analyze.syft",
+        job=SimpleNamespace(config=SimpleNamespace(settings=settings), run_root=tmp_path,
+                            attempt_root=owner.attempt_root, run_id=tmp_path.name, attempt_id=owner.attempt_root.name,
+                            events=EventLog(owner.attempt_root / "events.jsonl")),
+        output=lambda _: {"language_build_handoff_sha256": "a" * 64,
+                          "artifact_index": {"sha256": "b" * 64}})
+    scan = _scan_one(unit, artifact, "syft", lambda *args: {
+        "stdout": b"diagnostic" * 10, "stderr": b"", "exit_code": 0, "payload": payload})
+    native = scan["native_output"]
+    assert (tmp_path / native["artifact"]["path"]).read_bytes() == payload
+    assert native["complete"] is True
+    assert scan["result_artifact"]["sha256"] == shared.reference(
+        tmp_path, tmp_path / scan["result_artifact"]["path"])["sha256"]
+    assert "result_artifact" not in json.loads((tmp_path / scan["result_artifact"]["path"]).read_bytes())
+    settings["parser_input_limit_bytes"] = 32
+    truncated = _scan_one(unit, artifact, "syft", lambda *args: {
+        "stdout": b"", "stderr": b"", "exit_code": 0, "payload": payload})
+    assert truncated["native_output"]["complete"] is False
+    assert truncated["observation"] == {} and truncated["gaps"]
+    summary, findings = scan_records(truncated)
+    assert not findings and summary.payload["scan_outcome"] == "not_completed"
+
+
+def test_blint_assembly_reports_bounds_and_keeps_original_pre_filter_selectors(tmp_path, monkeypatch):
+    from appsec_review import blint_report
+    monkeypatch.setattr(blint_report, "MAX_ITEMS", 2)
+    atomic_json(tmp_path / "findings.json", {"findings": [None, {"id": "X"}, {"id": "omitted"}]})
+    atomic_json(tmp_path / "one-metadata.json", {"file_path": "one"})
+    assembled = blint_report.assemble(tmp_path)
+    assert assembled["truncated"] and assembled["reported_counts"]["findings"] == 3
+    finding, = assembled["findings"]
+    assert finding["_native_selector"]["value"] == "/findings/1"
+    assert finding["_native_report"] == "findings.json"
+
+
+def test_empty_scanner_output_is_not_a_complete_zero_finding_scan():
+    with pytest.raises(ValueError, match="empty"):
+        parse_json(b" \n")
+    with pytest.raises(ValueError, match="parser failed"):
+        adapter_registry()["tool-gitleaks"].parse(b"")
+
+
+def test_grype_legacy_projection_is_small_and_full_match_remains_native(tmp_path, owner):
+    match = {"artifact": {"name": "pkg", "version": "1", "purl": "pkg:generic/pkg@1"},
+             "vulnerability": {"id": "CVE-A", "severity": "High", "description": "x" * 60_000},
+             "matchDetails": ["x" * 60_000]}
+    document = {"matches": [match]}
+    native = retained(tmp_path, json.dumps(document).encode())
+    _, findings = scan_records({"capability": "grype", "fingerprint": "a" * 64, "artifact": {},
+                                "observation": document, "native_output": native.as_dict(), "gaps": []})
+    finding, = findings
+    assert len(json.dumps(finding.payload)) < 4096
+    reference, = finding.payload["common"]["evidence_refs"]
+    assert verify_native_reference(tmp_path, reference, resolve=True) == match
+
+
+def test_syft_summary_keeps_inventory_semantics_without_native_inventory_copy(tmp_path, owner):
+    document = {"artifacts": [{"name": "one"}, {"name": "two"}]}
+    native = retained(tmp_path, json.dumps(document).encode())
+    summary, findings = scan_records({"capability": "syft", "fingerprint": "a" * 64, "artifact": {},
+                                     "observation": document, "native_output": native.as_dict(), "gaps": []})
+    assert not findings and summary.kind == "scan_summary"
+    assert summary.payload["common"]["observation_class"] == "inventory"
+    assert "artifacts" not in summary.payload["observation"]
+    assert summary.payload["observation"]["artifact_count_reported"] == 2

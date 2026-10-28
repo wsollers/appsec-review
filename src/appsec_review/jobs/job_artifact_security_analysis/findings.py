@@ -119,8 +119,13 @@ def _grype(observation: Mapping[str, Any]) -> Iterator[Finding]:
         yield Finding(check, _text(vulnerability.get("severity")),
                       f"{check} affects {subject}"[:MESSAGE_BOUND], CATEGORY_VULNERABILITY, "tool-grype", subject,
                       {"package_name": name, "package_version": version, "advisory_id": check,
-                       # advisory_pairs (indexing.links) reads exactly this one match, as it read the whole list
-                       "observation": {"matches": [match]}}, json_selector("matches", index).as_dict())
+                       # Keep the legacy advisory-pair projection; the full match is retained natively.
+                       "observation": {"matches": [{
+                           "artifact": {key: _text(package.get(key), 512)
+                                        for key in ("name", "version", "purl")},
+                           "vulnerability": {key: _text(vulnerability.get(key), 512)
+                                             for key in ("id", "severity")},
+                       }]}}, json_selector("matches", index).as_dict())
 
 
 def _osv(observation: Mapping[str, Any]) -> Iterator[Finding]:
@@ -185,6 +190,14 @@ def _summary_observation(capability: str, observation: Mapping[str, Any], kept: 
     if drops:
         body["finding_count_reported"] = total
         body["finding_records"] = kept
+    if capability == "syft":
+        body.pop("artifacts", None)
+        body["artifact_count_reported"] = observation.get(
+            "_native_result_count", len(_list(observation.get("artifacts"))))
+    if capability == "blint":
+        body.pop("reviews", None)
+        body["review_count_reported"] = _mapping(observation.get("reported_counts")).get(
+            "reviews", len(_list(observation.get("reviews"))))
     return body
 
 
@@ -217,7 +230,9 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
         {**summary_payload, "tool_id": scan.get("tool_identity", {}).get("scanner") or capability,
          "native_rule_id": capability},
         evidence_refs=(summary_ref,) if summary_ref else (), payload_schema=RECORD_SCHEMA,
-        record_kind=RECORD_KIND_SUMMARY, gaps=("provenance_unavailable",) if not summary_ref else ())
+        record_kind=RECORD_KIND_SUMMARY,
+        gaps=("provenance_unavailable",) if not summary_ref or any(
+            gap.startswith("provenance_unavailable") for gap in gaps) else ())
     summary = Record(RECORD_KIND_SUMMARY, {"fingerprint": fingerprint}, fingerprint, capability,
                      f"{capability} scan of {artifact.get('path')}: {outcome}, "
                      f"{len(kept) if splitter is not None else 'no'} finding(s)", summary_payload)
@@ -240,8 +255,11 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
                   if finding.native_report else summary_ref)
         references = (select_native(native, finding.selector).as_dict(),) if native else ()
         payload["common"] = common_metadata(
-            payload, evidence_refs=references, payload_schema=RECORD_SCHEMA,
-            gaps=("provenance_unavailable",) if not references else ())
+            {**payload, **({"native_severity": finding.fields["native_priority"]}
+                           if "native_priority" in finding.fields else {})},
+            evidence_refs=references, payload_schema=RECORD_SCHEMA,
+            gaps=("provenance_unavailable",) if not references or any(
+                gap.startswith("provenance_unavailable") for gap in gaps) else ())
         native_id = f"{fingerprint}:{finding.check_id}:{finding.subject}:{occurrence}"
         records.append(Record(RECORD_KIND_FINDING, identity_key, native_id[:512], finding.check_id,
                               f"{capability} {finding.check_id} {finding.subject}: {finding.message}"[:1024],

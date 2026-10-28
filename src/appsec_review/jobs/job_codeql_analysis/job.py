@@ -812,6 +812,11 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                     "terminal_status": "SUCCEEDED", "sarif_sha256": file_sha256(sarif_path),
                     "query_execution": execution})
         value["sarif"] = _artifact(unit.job.run_root, sarif_path)
+    elif sarif_path.is_file():
+        if sarif_path.stat().st_size <= settings.sarif_bytes_limit:
+            value["sarif"] = _artifact(unit.job.run_root, sarif_path)
+        else:
+            value["gaps"] = [*gaps, "native_output_unavailable: failed CodeQL SARIF exceeded its byte bound"]
     return value
 
 
@@ -1217,7 +1222,8 @@ def _location(unit: UnitContext, value: Mapping[str, Any]) -> SourceLocation | N
     digest = value.get("file_sha256")
     if not isinstance(path, str) or not isinstance(digest, str):
         return None
-    source = (unit.job.target_root or Path()) / Path(*PurePosixPath(path).parts)
+    from appsec_review.storage.shared import safe_path
+    source = safe_path(unit.job.target_root or Path(), path)
     if not source.is_file() or source.is_symlink() or file_sha256(source) != digest:
         raise FrameworkIntegrityError("CodeQL normalized source identity changed")
     return SourceLocation(unit.job.source_fingerprint, path, digest, 0, source.stat().st_size,
@@ -1236,9 +1242,9 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
     retained = None
     records: list[dict[str, Any]] = []
     provenance_receipt = None
+    if isinstance(query.get("sarif"), Mapping) and query.get("query_execution") is None:
+        gaps.append("provenance_unavailable: CodeQL execution receipt is unavailable")
     if query.get("terminal_status") == "SUCCEEDED":
-        if query.get("query_execution") is None:
-            gaps.append("provenance_unavailable: CodeQL execution receipt is unavailable")
         pinned_sarif = artifact_reference(unit.job.run_root, query["sarif"])
         sarif_path = unit.job.run_root / pinned_sarif.path
         sarif = load_sarif(sarif_path, bytes_limit=_settings(unit).sarif_bytes_limit,
@@ -1252,6 +1258,15 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         records, normalization_gaps = normalize_sarif(sarif, files=scope.files, root=scope.root,
             query_identity=str(query["query_identity"]), result_limit=_settings(unit).result_limit)
         gaps.extend(normalization_gaps)
+    elif isinstance(query.get("sarif"), Mapping):
+        pinned_sarif = artifact_reference(unit.job.run_root, query["sarif"])
+        if pinned_sarif.size_bytes > _settings(unit).sarif_bytes_limit:
+            raise FrameworkIntegrityError("failed CodeQL SARIF exceeded its retained byte bound")
+        retained = retain_native_output(
+            unit.job.run_root, unit.job.run_root / pinned_sarif.path, expected=pinned_sarif.as_dict(),
+            parser_identity=NORMALIZER_IDENTITY, complete=False, native_result_count=0,
+            execution_reference=query.get("query_execution"), events=getattr(unit.job, "events", None),
+            unit_id=unit.unit_id)
     artifacts = [query[key] for key in ("database_manifest", "database_execution", "query_execution", "sarif", "image")
                  if isinstance(query.get(key), Mapping)]
     fingerprint = index_fingerprint(name="observations", target_snapshot=unit.job.source_fingerprint,
@@ -1304,7 +1319,8 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
                 observation_payload,
                 evidence_refs=(select_native(retained, record["_native_selector"]).as_dict(),),
                 payload_schema=NORMALIZER_IDENTITY,
-                gaps=("provenance_unavailable",) if query.get("query_execution") is None else ())
+                gaps=(*(("provenance_unavailable",) if query.get("query_execution") is None else ()),
+                      *(("location_unresolved",) if location is None else ())))
             validated_payloads.append(observation_payload)
             builder.add_entity(EntityRecord(observation, record["native_id"], record["rule_id"],
                                              record["message"], observation_payload, location))

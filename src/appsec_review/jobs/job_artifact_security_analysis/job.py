@@ -67,7 +67,11 @@ def _identity(run_root: Path, path: Path) -> dict[str, Any]:
 
 
 def _safe_file(run_root: Path, identity: Mapping[str, Any]) -> Path:
-    path = (run_root / str(identity.get("path", ""))).resolve()
+    from appsec_review.storage.shared import safe_path
+    try:
+        path = safe_path(run_root, str(identity.get("path", "")))
+    except ValueError as exc:
+        raise FrameworkIntegrityError("accepted produced artifact path is invalid") from exc
     if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
         raise FrameworkIntegrityError("accepted produced artifact path is invalid")
     if file_sha256(path) != identity.get("sha256") or (
@@ -359,6 +363,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     stream_limit, tail = int(settings["stream_limit_bytes"]), int(settings["diagnostic_tail_bytes"])
     stdout_identity = _stream(unit, root, "stdout.bin", stdout, stream_limit, tail)
     stderr_identity = _stream(unit, root, "stderr.bin", stderr, stream_limit, tail)
+    if stdout_identity["truncated"] or stderr_identity["truncated"]:
+        gaps.append(f"{capability} diagnostic streams were truncated at their configured byte bound")
     raw_artifacts = [stdout_identity, stderr_identity]
     native_output = None
     native_reports = {}
@@ -375,6 +381,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             observation = {}
     else:
         gaps.append("provenance_unavailable: scanner supplied no exact parser input")
+    if capability in ADAPTERS and observation and execution_receipt is None:
+        gaps.append("provenance_unavailable: scanner supplied no verified execution receipt")
     for report, relative in native_report_paths.items():
         if report != "findings.json" or capability != "blint":
             raise FrameworkIntegrityError("unexpected native scanner report source")
@@ -468,6 +476,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
             effective_runner = scanner_runner
             observations, gaps = [], []
             skipped: list[Mapping[str, Any]] = []
+            skipped_scan_artifacts: list[Mapping[str, Any]] = []
             scope_dispositions: list[Mapping[str, Any]] = []
             key = _support_key(capability)
             for artifact in loaded["artifacts"]:
@@ -502,12 +511,15 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 result = _scan_one(unit, artifact, capability, effective_runner)
                 if result.get("terminal_status") == "SKIPPED_NA" and result.get("not_applicable"):
                     skipped.append(result["not_applicable"])
+                    skipped_scan_artifacts.append({key: result[key] for key in (
+                        "result_artifact", "native_output", "native_reports", "execution_receipt")})
                     continue
                 observations.append(result)
                 gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in result["gaps"])
             return {"capability": capability, "observations": observations,
                     "observation_count": len(observations), "gaps": gaps,
                     "scope_dispositions": scope_dispositions,
+                    "not_applicable_scan_artifacts": skipped_scan_artifacts,
                     "not_applicable_inputs": not_applicable_summary(skipped),
                     "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if observations else "NOT_APPLICABLE"}
         return handler
@@ -524,11 +536,14 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         path = unit.job.run_root / "data" / "indices" / "observations" / f"artifact-security-{fingerprint}.sqlite"
         gaps = [*loaded["producer_gaps"], *[gap for capability in CAPABILITIES
                  for gap in unit.output(f"analyze.{capability}")["gaps"]]]
+        records = [scan_records(row) for row in observations]
+        gaps = list(dict.fromkeys((*gaps, *(gap for summary, _ in records
+                                           for gap in summary.payload["gaps"]))))
         if not path.is_file():
             builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                                    target_snapshot=unit.job.source_fingerprint, shard_id="artifact-security")
             artifact_entities: dict[str, str] = {}
-            for row in observations:
+            for row, (summary, findings) in zip(observations, records):
                 artifact = row["artifact"]
                 artifact_id = LogicalIdentity.parse(str(artifact["canonical_identity"]))
                 if artifact_id.value not in artifact_entities:
@@ -536,7 +551,6 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                     builder.add_entity(EntityRecord(artifact_id, artifact["sha256"],
                         PurePosixPath(str(artifact.get("workspace_path") or artifact["path"])).name,
                         f"produced artifact {row['classification']['format']}", artifact))
-                summary, findings = scan_records(row)
                 validate_observation_provenance(
                     unit.job.run_root, (record.payload for record in (summary, *findings)),
                     parser_identity=PARSER_IDENTITY, events=unit.job.events, unit_id=unit.unit_id)
@@ -576,7 +590,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 upstream_manifests=[loaded["artifact_index"]])
         manifest = _identity(unit.job.run_root, manifest_path)
         load_verified_manifest(unit.job.run_root, manifest_path, manifest["sha256"])
-        finding_count = sum(len(scan_records(row)[1]) for row in observations)
+        finding_count = sum(len(findings) for _, findings in records)
         return {"index_identity": asdict(identity), "index_manifest": manifest,
                 "observation_count": len(observations), "finding_count": finding_count,
                 "record_schema": RECORD_SCHEMA, "gaps": gaps,

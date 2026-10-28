@@ -56,7 +56,9 @@ def _bounded(value: Any, *, depth: int = 0, truncations: set[str] | None = None)
 def parse_json(payload: bytes) -> Mapping[str, Any]:
     if len(payload) > 64 * 1024 * 1024:
         raise ValueError("scanner JSON exceeds parser byte bound")
-    raw = json.loads(payload.decode("utf-8")) if payload.strip() else {}
+    if not payload.strip():
+        raise ValueError("scanner JSON output is empty")
+    raw = json.loads(payload.decode("utf-8"))
     truncations: set[str] = set()
     value = _bounded(raw, truncations=truncations)
     return {**(value if isinstance(value, Mapping) else {"records": value}),

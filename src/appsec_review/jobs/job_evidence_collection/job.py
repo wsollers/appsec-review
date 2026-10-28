@@ -641,6 +641,28 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                     shutil.copyfile(source, destination)
             execution_target = staged_target
         gaps: list[str] = []
+        native_start = len(outcome.native_outputs)
+        result = None
+
+        def retain_available_report(*, complete: bool) -> None:
+            output = (scratch / adapter.output_file.removeprefix("/scratch/")
+                      if adapter.output_file else attempt_paths[0])
+            if output.is_file() and output.stat().st_size > tool.output_bytes:
+                gaps.append(f"native_output_unavailable: expected report exceeded its byte bound{subject}")
+                output = attempt_paths[0]
+            if not output.is_file():
+                output = attempt_paths[0]
+            if output.is_file() and output.stat().st_size <= tool.output_bytes:
+                outcome.native_outputs.append(retain_native_output(
+                    unit.job.run_root, output, parser_identity=adapter.parser_identity,
+                    complete=complete and not (
+                        result.stdout_truncated if output == attempt_paths[0] else False),
+                    native_result_count=0,
+                    execution_reference=_artifact(unit.job.run_root, attempt_paths[2]),
+                    events=unit.job.events, unit_id=unit.unit_id).as_dict())
+            else:
+                gaps.append(f"native_output_unavailable: no report within its byte bound{subject}")
+
         try:
             if fail_tool == adapter.tool_id:
                 raise RuntimeError(f"injected bounded failure: {adapter.tool_id}{subject}")
@@ -669,6 +691,7 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
             if (adapter.tool_id == "tool-osv-scanner" and attempt_paths[1].is_file() and
                     no_packages_declared(result.exit_code, attempt_paths[1].read_bytes(), selection.files)):
                 # Every lockfile was scanned and declares no packages: nothing can match an advisory.
+                retain_available_report(complete=True)
                 outcome.not_applicable = [InputDecision(
                     path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
                     "osv-scanner scanned the lockfile and found 0 packages") for path in selection.files]
@@ -797,6 +820,8 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                                   **project_fields)
             return outcome
         except (RuntimeError, subprocess.SubprocessError) as exc:
+            if result is not None and len(outcome.native_outputs) == native_start:
+                retain_available_report(complete=False)
             outcome.error_class = type(exc).__name__
             outcome.observations = []
             outcome.gaps.extend((*gaps, str(exc)))
@@ -1052,6 +1077,26 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
     output = dict(unit.output(normalize_unit))
     evidence = _read_artifact(unit.job.run_root, output["normalized_artifact"])
     producer = str(output["tool_id"])
+    from appsec_review.storage.shared import safe_path
+    sources: dict[str, tuple[str, bytes]] = {}
+    for record in evidence.get("records", ()):
+        location_value = record.get("location")
+        if not location_value:
+            continue
+        if location_value["path"] in sources:
+            if location_value.get("source_sha256") != sources[location_value["path"]][0]:
+                raise ValueError("static evidence source hash differs from accepted catalog")
+            continue
+        if unit.job.target_root is None:
+            raise ValueError("static evidence accepted source root is unavailable")
+        target_path = safe_path(unit.job.target_root, location_value["path"])
+        if not target_path.is_file():
+            raise ValueError("static evidence accepted source is unavailable")
+        source_sha = location_value.get("source_sha256")
+        data = target_path.read_bytes()
+        if not isinstance(source_sha, str) or hashlib.sha256(data).hexdigest() != source_sha:
+            raise ValueError("static evidence source hash differs from accepted catalog")
+        sources[location_value["path"]] = source_sha, data
     shard_id = producer.removeprefix("tool-").replace("-", "_")
     fingerprint = index_fingerprint(
         name="observations", target_snapshot=unit.job.source_fingerprint,
@@ -1096,27 +1141,19 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
         location = None
         source_id = None
         if location_value:
-            target_path = (unit.job.target_root or Path()) / location_value["path"]
-            if not target_path.is_file():
-                raise ValueError("static evidence accepted source is unavailable")
-            if target_path.is_file():
-                source_sha = location_value.get("source_sha256")
-                if (not isinstance(source_sha, str) or target_path.is_symlink()
-                        or file_sha256(target_path) != source_sha):
-                    raise ValueError("static evidence source hash differs from accepted catalog")
-                data = target_path.read_bytes()
-                line_offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
-                start_line, end_line = int(location_value["start_line"]), int(location_value["end_line"])
-                start_byte = line_offsets[min(start_line - 1, len(line_offsets) - 1)]
-                end_byte = line_offsets[min(end_line, len(line_offsets) - 1)] if end_line < len(line_offsets) else len(data)
-                location = SourceLocation(
-                    target_snapshot=unit.job.source_fingerprint, path=location_value["path"],
-                    file_sha256=source_sha, start_byte=start_byte, end_byte=end_byte,
-                    start_line=start_line, end_line=end_line, start_column=1, end_column=1,
-                    producer_location={"tool": producer, **location_value},
-                    mapping_method="producer-line-location", confidence=1.0)
-                source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
-                                                   {"path": location_value["path"], "sha256": source_sha})
+            source_sha, data = sources[location_value["path"]]
+            line_offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
+            start_line, end_line = int(location_value["start_line"]), int(location_value["end_line"])
+            start_byte = line_offsets[min(start_line - 1, len(line_offsets) - 1)]
+            end_byte = line_offsets[min(end_line, len(line_offsets) - 1)] if end_line < len(line_offsets) else len(data)
+            location = SourceLocation(
+                target_snapshot=unit.job.source_fingerprint, path=location_value["path"],
+                file_sha256=source_sha, start_byte=start_byte, end_byte=end_byte,
+                start_line=start_line, end_line=end_line, start_column=1, end_column=1,
+                producer_location={"tool": producer, **location_value},
+                mapping_method="producer-line-location", confidence=1.0)
+            source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                               {"path": location_value["path"], "sha256": source_sha})
         builder.add_entity(EntityRecord(
             observation_id, record["evidence_id"], str(record.get("native_rule_id", "observation")),
             " ".join(str(record.get(key) or "") for key in (

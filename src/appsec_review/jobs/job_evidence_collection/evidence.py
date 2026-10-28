@@ -8,6 +8,7 @@ import re
 from typing import Any, Iterable, Mapping
 
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import reference
 from appsec_review.provenance import common_metadata, merge_native_references
 
 
@@ -135,11 +136,16 @@ def build_envelope(
             record["rule_mapping"] = rule_mapping
         if location is None:
             record["artifact_evidence"] = True
+        location_gaps = ()
+        if location is None and native.get("path"):
+            bounded_gaps.append("location_unresolved: native source path is not in the accepted catalog")
+            location_gaps = ("location_unresolved",)
         record["evidence_id"] = "evidence-" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]
         common = common_metadata(
             {"tool_id": str(tool.get("id") or tool.get("name") or "unknown"), **record},
             evidence_refs=references, payload_schema="appsec-review/static-tool-evidence/2",
             record_kind="observation" if record["category"] == "software_inventory" else "finding",
+            gaps=location_gaps,
         )
         if record["evidence_id"] in seen_evidence_ids:
             prior = seen_evidence_ids[record["evidence_id"]]
@@ -164,11 +170,7 @@ def build_envelope(
         seen_evidence_ids[record["evidence_id"]] = record
     artifacts = []
     for path in raw_artifacts:
-        resolved = path.resolve(strict=True)
-        if run_root.resolve() not in resolved.parents:
-            raise ValueError("raw tool artifact is not run-owned")
-        artifacts.append({"path": resolved.relative_to(run_root).as_posix(),
-                          "sha256": file_sha256(resolved), "size_bytes": resolved.stat().st_size})
+        artifacts.append(reference(run_root, path))
     return {
         "schema": "appsec-review/static-tool-evidence/2",
         "tool": dict(tool), "target_fingerprint": target_fingerprint,
