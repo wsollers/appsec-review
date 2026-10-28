@@ -42,6 +42,7 @@ measurement into evidence for newly added cases.
 | Process/control plane | Real subprocess/Dagster configuration, worker death/resume, durable intent/reconciliation, MCP stdio errors/recovery, record/replay and sensor observations | Deployed service, provider and native commissioning; Linux paths need Linux execution |
 | Controls/feeds | Configured document/standards normalization and real tiny loopback HTTPS fetch/publication/failure preservation | Positive source-bound assessment/review hook and public-feed live computation |
 | Review/publication | Real review producer, accepted review/gate, PoC eligibility/planning and current final-report consumer/oracle | Real model quality, compiler execution, PoC success and optional OpenVEX/completion fan-in |
+| Triage/referral/presentation | Real triage ordering/admission and bound review handoff; foreign-anchor repair, next-round referral deduplication and stable convergence; accepted gate/report counts, states, gaps and provenance rendered to HTML/LaTeX | Named-profile enrollment, specialist dispatch/resolution, cross-package/lane referrals, saturation and stale/historical renderer selection |
 
 Scripted inference answers only the external model boundary. Recorded receipts/rows answer only
 the declared compiler, graph or HTTP boundary. Assertions must consume the application's accepted
@@ -80,6 +81,19 @@ Scanner observation enumeration remains useful diagnostic detection data, but ca
 final survival. Orphan/historical shards, missing current reports, changed accepted bytes and
 stale review/gate references cannot satisfy this oracle. Benign/blocked publication is tested
 separately rather than equated with an empty scanner index.
+
+The consumer extension at `06a4ea6c` uses the existing typed synthetic accepted-index producer
+and scripts only the external inference callable. Its real review, gate and report outputs are
+not injected. CI-only fixtures omit unrelated build/component/reference shards and feeds;
+missing facts remain gaps. Three exact nodes passed under the actual supervisor/plugin, but
+that is not a named inventory/profile CLI execution or exhaustive consumer coverage.
+
+The renderer test has one authentic hash-bound current publication. `reporting.sources.RunReader`
+still selects by globs rather than a current-accepted renderer API; this test does not establish
+stale/historical selection or tamper rejection by rendering. That limitation is separate from
+the current-report oracle's certified accepted-reference validation.
+Next-round referral transport, deduplication, foreign-anchor repair and convergence are proven
+for this fixture, while `unresolved_specialist_referral:ci_cd_pipeline` remains explicit.
 
 Latest-main fixture reconciliation must freeze the actual configuration before constructing
 synthetic upstream handoffs and bind the explicitly claimed upstream digest. A one-lead-package,

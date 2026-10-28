@@ -89,11 +89,74 @@ The child validates those identities before installing the audit hook, and the r
 their source hashes. Mutations and all other protected data remain denied. Control fixtures
 now explicitly select and re-pin all five tiny abridged OWASP catalogs instead of inheriting
 the newly expanded production catalogs. Guard/inventory focused validation passed 7 tests in
-8.81 seconds; it is not a whole-profile result. W5 has been instructed to merge this correction
-and rerun; its new public verification is still outstanding.
+8.81 seconds; it is not a whole-profile result. At that checkpoint W5 was instructed to merge
+the correction and rerun. Its later final exact-node guarded result is recorded below; named
+profile enrollment and whole-quick verification remain outstanding.
 
 The coordinating session obtained explicit native Windows authorization. That authorization
 does not commission Linux, WSL, native containers or other sessions; Linux remains unverified.
+
+### W5 final bounded consumer handoff
+
+Consumer tip `06a4ea6c3ba2a572b3701d9977df76a896e4bf9e` contains parent `19c7c000`
+(and `6265bbc7` / `bfe7f38b`). Its sole file difference from that parent is the new
+`tests/integration/test_review_consumer_acceptance.py`. The implementation commits are
+`67d83bc40c7360a2fca5566fc8d69da5765f2e38` and
+`06a4ea6c3ba2a572b3701d9977df76a896e4bf9e`; merge `e81f8f5a` incorporates the parent guard.
+This handoff changes no production code, schemas, shared helpers, runner or inventory.
+
+The final direct execution passed all three nodes in 181.27 seconds pytest / 183.725 seconds
+subprocess wall. The final **exact-node supervised** execution used the real public
+`supervised_pytest` and `tests.acceptance_plugin` boundary and passed 3/3 in 225.664 seconds.
+It was serial (one worker), with a 360-second group cap and an explicitly measured 120-second
+real-job exception for each case, including a three-second cleanup reserve. Every Windows Job
+Object cleanup confirmed zero remaining owned processes. The direct child also exited; no
+services were started.
+
+All node names below have prefix `tests/integration/test_review_consumer_acceptance.py::`.
+
+| Exact node suffix | Direct call time | Supervised wall / pytest time |
+| --- | --- | --- |
+| `test_triage_assessment_orders_admits_and_binds_real_review_handoff` | 45.09 s | 56.455 / 52.265 s |
+| `test_authentic_publication_renders_counts_states_gaps_and_provenance` | 95.71 s | 114.521 / 110.380 s |
+| `test_worker_referral_deduplicates_next_round_after_foreign_repair` | 36.40 s | 53.864 / 49.779 s |
+
+This is **not a named inventory/profile CLI run**. Enrollment and integrated profile
+calibration remain coordinator-owned and outstanding. Earlier larger consumer fixtures hit
+execution cutoffs despite confirmed cleanup; the final CI-only reduction removes unrelated
+build/component/reference shards and all feeds, retains source/CI observations and leaves
+missing facts as gaps. It uses the existing typed synthetic accepted-index producer fixture
+and scripts only the external inference callable. All real job units, schemas, index-to-review
+consumption, gate/report publication and hash-bound outputs remain; no accepted review, gate
+or report output is injected.
+
+Artifacts are retained in the isolated `test/tmp/agent-worktrees/consumers/` checkout, at these
+paths relative to that checkout:
+
+- Public-boundary root:
+  `test/tmp/acceptance/acceptance-d751c3b1b0f74f65ac78ed2140e9a269/consumer-verified-public/`.
+  `handoff.json` and `consumer-result.json` retain full node/results/resources/cleanup and log
+  paths; `publication/report.html` and `publication/report.tex` retain the rendered output.
+  Driver streams are `driver/events.jsonl` and `driver/data/logs/pipeline.jsonl`.
+- The same root's `runs/2026-10-28-0301`, `runs/2026-10-28-0302` and
+  `runs/2026-10-28-0303` each retain `data/telemetry/summary.json`, verified as
+  `appsec-review/run-metrics/5`.
+- Direct root:
+  `test/tmp/acceptance/acceptance-c6aa9951898b418eadf0c3e5fb78f962/consumer-final-direct/`,
+  retaining `consumer-result.json` and `pytest.log`.
+
+The remaining consumer limits are substantive:
+
+- The renderer consumes one authentic hash-bound current publication. Its
+  `reporting.sources.RunReader` still selects globs rather than using a current-accepted
+  renderer API; stale/historical-render selection and tamper rejection are unverified.
+- Referral transport to the next round, deduplication, foreign-anchor validation/repair and
+  convergence are demonstrated. Dedicated specialist dispatch/resolution is not:
+  `unresolved_specialist_referral:ci_cd_pipeline` remains explicit.
+- Request-count/active-claim saturation, cross-package/lane referrals, actual concurrent review
+  execution and optional live/native/provider/CodeQL capabilities are not established.
+- Three bounded nodes do not make all W5 obligations, any named profile or the whole quick
+  lane exhaustive or verified.
 
 ## Shared decisions
 
@@ -219,7 +282,9 @@ reported; setup duration is unavailable unless captured separately.
 | Same W2 measurements | Maximum tagged case 52.435 s including cleanup, below its 60 s cap | Does not establish every new integrated case's budget |
 | Latest-main reconciliation, first public `review` attempt | 6 cases failed, 49.071 s | Active coordinator debugging; neither a passing profile nor a final diagnosis |
 | `6265bbc7`, public `quick` | Failed: 39/45 cases passed, 717.061 s, cleanup confirmed | Six failures detailed above; not a whole-profile green result |
-| `19c7c000`, guard/inventory focused validation | 7 passed, reported 8.81 s | Narrow correction validation only; public quick/W5 reruns outstanding |
+| `19c7c000`, guard/inventory focused validation | 7 passed, reported 8.81 s | Narrow correction validation only; later W5 exact-node result below, whole quick still pending |
+| `06a4ea6c`, W5 final direct tests | 3 passed, 181.27 s pytest / 183.725 s wall | Direct execution, not a named profile |
+| `06a4ea6c`, W5 exact-node supervisor/plugin | 3/3 passed, 225.664 s group, all owned trees empty after cleanup | Actual guarded boundary, but no named inventory/profile CLI enrollment or integrated quick claim |
 
 Final result paths, exact calibration revision, working-tree/source identities, per-case budgets,
 collection/setup overhead and cleanup must come from the corresponding public driver's
@@ -238,8 +303,9 @@ Do not reconstruct unavailable setup metrics by subtracting unrelated test-body 
   deliberately fail as unimplemented, not successfully skipped.
 - Positive source-bound OWASP assessment-to-review remains unverified. Unknown original
   recorded-feed production cannot be claimed as a real live computation.
-- New triage/referral/presentation joins belong to the separate W5 workstream and remain
-  unverified at this checkpoint.
+- Three bounded W5 triage/referral/presentation nodes have exact-node guarded evidence above;
+  named-profile enrollment/integrated calibration and the listed specialist, renderer-selection,
+  saturation and cross-lane obligations remain unverified.
 - Two existing ELF catalog tests assert an exact gap count and fail after the new
   `delivery_fact_unavailable` gap. The dependency verifier error-wording discrepancy described
   above is also baseline. Neither is silently converted into passing acceptance.

@@ -187,6 +187,18 @@ integration remains absent; the controls case proves the configured source-evide
 its named missing-assessment gap. The pinned Dagster run object lacks `create_timestamp`, so
 queue-delay timing is unavailable.
 
-Triage/referral/presentation joins and final integrated calibration are separate pending work
-until their own results are recorded. See the implementation record before treating older
-focused, nested-plugin or direct pytest timings as public-driver acceptance evidence.
+At `06a4ea6c`, three triage/referral/presentation nodes passed through the real
+`supervised_pytest` and `tests.acceptance_plugin` boundary in 225.664 seconds, with all owned
+Windows trees cleaned up. Each used a measured 120-second real-job exception and the serial
+group had a 360-second cap. This was an exact-node supervised execution, **not** a named
+inventory/profile CLI run; it does not change the profile table above or establish final
+integrated calibration.
+
+These cases prove bounded triage/admission, next-round referral deduplication/foreign-anchor
+repair/convergence and authentic accepted gate/report HTML/LaTeX rendering. They do not prove
+specialist dispatch/resolution, referral/active-claim saturation, cross-package/lane referrals,
+actual concurrent review execution, or stale/historical renderer selection and tamper
+rejection. `unresolved_specialist_referral:ci_cd_pipeline` remains a gap rather than fabricated
+specialist resolution. The implementation record retains exact nodes, commit, timings,
+artifacts and these limitations; do not treat direct tests or guarded exact-node results as a
+passing named public profile.
