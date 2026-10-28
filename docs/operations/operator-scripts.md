@@ -10,6 +10,9 @@ built and started by `deploy/dagster/bin/lifecycle.py` and a review is still the
 Dagster job described in [`wave1-review.md`](wave1-review.md) and
 [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
+For a first launch, see [review startup: features and flags](review-startup.md), which separates
+required inputs, per-run options, stack settings and TOML-only feature gates.
+
 ## Conventions
 
 - Run any script from any directory; the repository is found from the script's own path, and paths
@@ -164,9 +167,8 @@ differ would silently clamp every concurrent run. When a run is active or the le
 `review-start` resolves the new run's budget and compares it with each active run's budget (from that
 run's tags, defaulting to the container's selection) and with every recorded lease. It refuses
 (exit 3) on any difference and names the conflicts. `--force` does not override this: wait for the
-other runs or choose a matching selection. Overlays on `main` cannot yet set `review_policy.resources`,
-so today every selection shares one budget; the guard covers future overlays and leases from other
-launchers.
+other runs or choose a matching selection. Capacity overlays can set `review_policy.resources.*`;
+the guard also covers leases from other launchers.
 
 `--purge-volumes` is separate and explicit. It prints the project's containers and volumes (the
 PostgreSQL database and the Dagster storage, with every run's history), refuses without `--yes`, and
@@ -276,10 +278,11 @@ not be deleted to obtain a retry. Recovery requires separately approved compatib
 and a supported, explicitly linked new run segment; this option does not implement automatic
 re-execution or authorize a second submission.
 
-The target, the capacity overlay and the recording mode are environment variables of the running
-containers, fixed when they were created. `review-start` therefore checks the requested `--target`,
-`--overlay` and `--recording` against the code-location container and refuses (exit 3) with the
-`stack-restart` command that would change them; it never changes a running stack.
+The target and recording mode are environment variables of the running containers, fixed when they
+were created. `review-start` checks the requested `--target` and `--recording` against the
+code-location container and refuses (exit 3) with the `stack-restart` command that would change
+them; it never changes a running stack. Profile and capacity overlay can instead be selected
+[per run](#per-run-profile-and-overlay), subject to the provider and resource-budget guards.
 
 | Script | Purpose |
 | --- | --- |
