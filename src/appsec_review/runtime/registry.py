@@ -37,6 +37,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_model_connectivity import build_job as build_model_connectivity
     from appsec_review.container_runtime.build_executor import _run as run_command
     from appsec_review.jobs.job_image_pin_verification import build_job as build_image_pin_verification
+    from appsec_review.jobs.job_target_acquisition import build_job as build_target_acquisition
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
@@ -78,6 +79,7 @@ def builtin_registry() -> JobRegistry:
     registry = JobRegistry()
     registry.register("job_model_connectivity", lambda: build_model_connectivity(check_models=check_models))
     registry.register("job_image_pin_verification", lambda: build_image_pin_verification(runner=run_command))
+    registry.register("job_target_acquisition", build_target_acquisition)
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_source_history_analysis", build_source_history)

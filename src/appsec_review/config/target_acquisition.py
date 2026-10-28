@@ -1,9 +1,13 @@
 """Typed ``[target_acquisition]`` configuration for the user-invoked ``acquire-target`` command.
 
-Each ``[[target_acquisition.targets]]`` table pins one source revision exactly: a Git commit (its
-submodules follow the gitlinks recorded in that commit), a Perforce submitted changelist, or a code
-review revision (GitLab merge-request head, Gerrit patch set, Azure DevOps pull-request iteration).
-Credentials never appear here; a table names only the environment variables that hold them.
+A review *system* (``[[target_acquisition.systems]]``) is composed of one or more *components*
+(``[[target_acquisition.systems.components]]``), because one reviewed system may live in more than one
+source-control system. Each component pins one source revision exactly: a Git commit (the default
+kind; its submodules follow the gitlinks recorded in that commit), a Perforce submitted changelist, or
+a code-review revision (GitLab merge-request head, Gerrit patch set, Azure DevOps pull-request
+iteration). Components are acquired in parallel into ``targets/<system>/<component>/`` and reviewed
+together as ``targets/<system>``. Credentials never appear here; a table names only the environment
+variables that hold them.
 """
 
 from __future__ import annotations
@@ -83,6 +87,8 @@ class ReviewExportSource:
 
 @dataclass(frozen=True, slots=True)
 class TargetRequest:
+    """One component of a system; ``target_id`` is the component id."""
+
     target_id: str
     kind: str
     git: GitSource | None = None
@@ -110,6 +116,31 @@ class TargetRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class SystemRequest:
+    """A reviewed system composed of independently pinned components."""
+
+    system_id: str
+    components: tuple[TargetRequest, ...]
+
+    def __post_init__(self) -> None:
+        if not self.components:
+            raise ValueError(f"target_acquisition system {self.system_id} must define components")
+        identifiers = [item.target_id for item in self.components]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError(f"target_acquisition system {self.system_id} component ids must be unique")
+
+    def component(self, component_id: str) -> TargetRequest:
+        for item in self.components:
+            if item.target_id == component_id:
+                return item
+        raise KeyError(f"component is not configured: {self.system_id}/{component_id}")
+
+    def spec(self) -> dict[str, Any]:
+        return {"system": self.system_id,
+                "components": {item.target_id: item.spec() for item in self.components}}
+
+
+@dataclass(frozen=True, slots=True)
 class TargetAcquisitionSettings:
     targets_dir: str = "targets"
     records_dir: str = "data/target-acquisitions"
@@ -127,7 +158,9 @@ class TargetAcquisitionSettings:
     max_diff_bytes: int = 67108864
     # Permit file:// and local-path Git sources and plain-HTTP loopback review APIs. Tests only.
     allow_local_sources: bool = False
-    targets: tuple[TargetRequest, ...] = field(default=())
+    # Components of one system are acquired concurrently by at most this many workers.
+    max_parallel_components: int = 4
+    systems: tuple[SystemRequest, ...] = field(default=())
 
     def __post_init__(self) -> None:
         for name in ("targets_dir", "records_dir"):
@@ -145,26 +178,28 @@ class TargetAcquisitionSettings:
             "max_files": (1, 50_000_000), "max_total_bytes": (1, 1024 ** 4),
             "max_file_bytes": (1, 64 * 1024 ** 3), "max_path_bytes": (64, 65536),
             "max_submodule_depth": (0, 64), "max_diff_bytes": (1024, 8 * 1024 ** 3),
+            "max_parallel_components": (1, 64),
         }
         for name, (low, high) in bounds.items():
             _bounded_int(getattr(self, name), f"target_acquisition.{name}", low, high)
         if type(self.allow_local_sources) is not bool:
             raise ValueError("target_acquisition.allow_local_sources must be a Boolean")
-        identifiers = [item.target_id for item in self.targets]
+        identifiers = [item.system_id for item in self.systems]
         if len(identifiers) != len(set(identifiers)):
-            raise ValueError("target_acquisition.targets ids must be unique")
+            raise ValueError("target_acquisition.systems ids must be unique")
 
-    def target(self, target_id: str) -> TargetRequest:
-        for item in self.targets:
-            if item.target_id == target_id:
+    def system(self, system_id: str) -> SystemRequest:
+        for item in self.systems:
+            if item.system_id == system_id:
                 return item
-        raise KeyError(f"target is not configured: {target_id}")
+        raise KeyError(f"system is not configured: {system_id}")
 
 
 _SETTING_KEYS = {
     "targets_dir", "records_dir", "git_executable", "p4_executable", "command_timeout_seconds",
     "http_timeout_seconds", "max_http_response_bytes", "max_review_commits", "max_files", "max_total_bytes",
     "max_file_bytes", "max_path_bytes", "max_submodule_depth", "max_diff_bytes", "allow_local_sources",
+    "max_parallel_components",
 }
 _KIND_KEYS = {
     "git": {"url", "commit", "submodules", "fetch_refs"},
@@ -204,12 +239,11 @@ def _source_url(value: str, field_name: str) -> str:
     return value
 
 
-def _parse_target(item: Mapping[str, Any], index: int, repository_root: Path) -> TargetRequest:
-    field_name = f"target_acquisition.targets[{index}]"
+def _parse_target(item: Mapping[str, Any], field_name: str, repository_root: Path) -> TargetRequest:
     if not isinstance(item, Mapping):
         raise ValueError(f"{field_name} must be a table")
     target_id = _text(item, "id", field_name, pattern=_TARGET_ID)
-    kind = item.get("kind")
+    kind = item.get("kind", "git")
     if kind not in KINDS:
         raise ValueError(f"{field_name}.kind must be one of {', '.join(KINDS)}")
     unknown = set(item) - {"id", "kind"} - _KIND_KEYS[kind]
@@ -284,12 +318,28 @@ def parse_target_acquisition(value: object, repository_root: Path) -> TargetAcqu
         return TargetAcquisitionSettings()
     if not isinstance(value, Mapping):
         raise ValueError("[target_acquisition] must be a table")
-    unknown = set(value) - _SETTING_KEYS - {"targets"}
+    unknown = set(value) - _SETTING_KEYS - {"systems"}
     if unknown:
         raise ValueError("target_acquisition has unknown settings: " + ", ".join(sorted(unknown)))
-    targets_value = value.get("targets", [])
-    if not isinstance(targets_value, list):
-        raise ValueError("target_acquisition.targets must be an array of tables")
-    targets = tuple(_parse_target(item, index, repository_root) for index, item in enumerate(targets_value))
+    systems_value = value.get("systems", [])
+    if not isinstance(systems_value, list):
+        raise ValueError("target_acquisition.systems must be an array of tables")
+    systems = tuple(_parse_system(item, index, repository_root) for index, item in enumerate(systems_value))
     settings = {key: value[key] for key in _SETTING_KEYS if key in value}
-    return TargetAcquisitionSettings(**settings, targets=targets)
+    return TargetAcquisitionSettings(**settings, systems=systems)
+
+
+def _parse_system(item: object, index: int, repository_root: Path) -> SystemRequest:
+    field_name = f"target_acquisition.systems[{index}]"
+    if not isinstance(item, Mapping):
+        raise ValueError(f"{field_name} must be a table")
+    unknown = set(item) - {"id", "components"}
+    if unknown:
+        raise ValueError(f"{field_name} has unknown settings: " + ", ".join(sorted(unknown)))
+    system_id = _text(item, "id", field_name, pattern=_TARGET_ID)
+    components = item.get("components")
+    if not isinstance(components, list) or not components or len(components) > 256:
+        raise ValueError(f"{field_name}.components must be a non-empty array of tables")
+    return SystemRequest(system_id, tuple(
+        _parse_target(component, f"{field_name}.components[{position}]", repository_root)
+        for position, component in enumerate(components)))

@@ -334,10 +334,21 @@ evaluation, keep it outside this repository and point `APPSEC_EVALUATOR_GUIDE` a
 Any other target works the same way: clone it beneath `targets/` and pass its path with `--target`
 (direct CLI) or `APPSEC_REVIEW_TARGET` (Dagster).
 
-To acquire a pinned target instead, use `appsec-review acquire-target`. It handles three sources:
-a Git commit with its submodules checked out recursively, a submitted Perforce changelist, or a
-GitLab, Gerrit, or Azure DevOps review revision. It writes a hash-pinned manifest and records gaps.
-It never touches an existing checkout. See
+To review a pinned **system** instead, configure it under `[[target_acquisition.systems]]`. A
+system has one or more components, because one reviewed system may span several source-control
+systems. Each component is a Git commit (the default kind) with its submodules checked out
+recursively, a submitted Perforce changelist, or a GitLab, Gerrit, or Azure DevOps review revision.
+Then run:
+
+```bash
+appsec-review start --system storefront
+```
+
+The `job_target_acquisition` gate acquires every component in parallel into
+`targets/<system>/<component>/` before intake, and discovery then runs once over the composed
+`targets/<system>/` root. `appsec-review acquire-target --system <id>` does the same outside a run.
+Acquisition writes hash-pinned manifests, records failed components as named gaps, and never
+touches an existing checkout. See
 [`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md).
 
 ## Build the tool container images
@@ -475,7 +486,8 @@ host fetched the official listing and archive and verified the published SHA-256
 The direct CLI runs this linear graph:
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> source_history_analysis
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
+  -> source_history_analysis
   -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
@@ -494,6 +506,13 @@ Start a review from the repository root with the virtual environment active:
 appsec-review start --target targets/appsec-multi-vuln
 ```
 
+Or name a configured system; `target_acquisition` acquires or re-verifies its components before
+intake and the rest of the graph reviews the composed `targets/<system>/` root:
+
+```bash
+appsec-review start --system storefront
+```
+
 The command prints a JSON summary that includes the `run_id` (for example `2026-10-08-0001`). Use
 it to inspect or resume the run:
 
@@ -505,7 +524,8 @@ appsec-review plan-tools --run-id <run-id>
 appsec-review metrics --run-id <run-id>
 ```
 
-Explain and then perform a resume. `plan-resume` is read-only apart from its audit event:
+Explain and then perform a resume (pass `--system <id>` instead of `--target` for a system run).
+`plan-resume` is read-only apart from its audit event:
 
 ```bash
 appsec-review plan-resume --run-id <run-id> --target targets/appsec-multi-vuln

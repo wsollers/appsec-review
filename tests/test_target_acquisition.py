@@ -27,7 +27,8 @@ from appsec_review.jobs.job_change_context_analysis.settings import ExportSource
 from appsec_review.jobs.job_change_context_analysis.sources import load_export, review_records_from_export
 from appsec_review.target_acquisition import review_exports
 from appsec_review.target_acquisition.acquire import (
-    MANIFEST_SCHEMA, acquire_target, find_acquisition, intake_record, verify_target)
+    MANIFEST_SCHEMA, SYSTEM_MANIFEST_SCHEMA, acquire_system, acquire_target, find_acquisition, intake_record,
+    verify_system, verify_target)
 from appsec_review.target_acquisition.safety import AcquisitionError, check_git_url, safe_relative, scrub
 
 
@@ -71,8 +72,12 @@ def add_symlink_entry(repo: Path, path: str, target: str) -> None:
     git(repo, "update-index", "--add", "--cacheinfo", f"120000,{blob},{path}")
 
 
+SYSTEM = "sys"
+
+
 def settings_for(repository: Path, targets: list[dict[str, Any]], **overrides: Any) -> TargetAcquisitionSettings:
-    return parse_target_acquisition({"allow_local_sources": True, **overrides, "targets": targets}, repository)
+    return parse_target_acquisition(
+        {"allow_local_sources": True, **overrides, "systems": [{"id": SYSTEM, "components": targets}]}, repository)
 
 
 @pytest.fixture()
@@ -90,7 +95,7 @@ def test_configuration_defaults_and_repository_table_parse() -> None:
     assert config.target_acquisition.targets_dir == "targets"
     assert config.target_acquisition.records_dir == "data/target-acquisitions"
     assert config.target_acquisition.allow_local_sources is False
-    assert config.target_acquisition.targets == ()
+    assert config.target_acquisition.systems == ()
 
 
 @pytest.mark.parametrize("target, message", [
@@ -120,13 +125,13 @@ def test_configuration_defaults_and_repository_table_parse() -> None:
 ])
 def test_configuration_refuses_unsafe_or_incomplete_targets(tmp_path: Path, target: dict, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        parse_target_acquisition({"targets": [target]}, tmp_path)
+        parse_target_acquisition({"systems": [{"id": "s", "components": [target]}]}, tmp_path)
 
 
 def test_configuration_refuses_duplicate_ids_and_escaping_directories(tmp_path: Path) -> None:
     item = {"id": "a", "kind": "git", "url": "https://example.com/r.git", "commit": "a" * 40}
     with pytest.raises(ValueError, match="unique"):
-        parse_target_acquisition({"targets": [item, item]}, tmp_path)
+        parse_target_acquisition({"systems": [{"id": "s", "components": [item, item]}]}, tmp_path)
     with pytest.raises(ValueError, match="relative path"):
         parse_target_acquisition({"targets_dir": "../elsewhere"}, tmp_path)
     with pytest.raises(ValueError, match="unknown"):
@@ -175,10 +180,10 @@ def test_git_acquisition_pins_commit_and_nested_submodules(workspace: Path, tmp_
     top = git(top_repo, "rev-parse", "HEAD")
 
     settings = settings_for(workspace, [{"id": "svc", "kind": "git", "url": top_repo.as_uri(), "commit": top}])
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("svc"),
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"),
                             environ={})
     assert result["status"] == "PARTIAL", result
-    target = workspace / "targets" / "svc"
+    target = workspace / "targets" / SYSTEM / "svc"
     assert (target / "main.c").is_file()
     assert (target / "deps/middle/middle.c").is_file()
     assert not (target / "deps/middle/later.c").exists()
@@ -206,22 +211,22 @@ def test_git_acquisition_pins_commit_and_nested_submodules(workspace: Path, tmp_
     assert not any(path.is_file() for path in (target / ".git" / "hooks").glob("*")) \
         if (target / ".git" / "hooks").exists() else True
 
-    verified = verify_target(repository_root=workspace, settings=settings, request=settings.target("svc"))
+    verified = verify_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"))
     assert verified["status"] == "VERIFIED" and verified["acquisition_status"] == "PARTIAL"
     (target / "main.c").write_text("tampered\n", encoding="utf-8")
-    changed = verify_target(repository_root=workspace, settings=settings, request=settings.target("svc"))
+    changed = verify_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"))
     assert changed["status"] == "MISMATCH" and "target_changed_since_acquisition" in changed["problems"]
 
 
 @needs_git
 def test_git_acquisition_never_touches_an_existing_checkout(workspace: Path, tmp_path: Path) -> None:
     commit = make_repo(tmp_path / "src", {"a.py": "x = 1\n"})
-    existing = workspace / "targets" / "svc"
+    existing = workspace / "targets" / SYSTEM / "svc"
     existing.mkdir(parents=True)
     (existing / "mine.txt").write_text("user owned\n", encoding="utf-8")
     settings = settings_for(workspace, [{"id": "svc", "kind": "git", "url": (tmp_path / "src").as_uri(),
                                          "commit": commit}])
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("svc"), environ={})
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"), environ={})
     assert result["status"] == "REFUSED" and "already exists" in result["error"]
     assert [path.name for path in existing.iterdir()] == ["mine.txt"]
 
@@ -235,7 +240,7 @@ def test_git_acquisition_without_submodules_names_each_gitlink(workspace: Path, 
     git(top_repo, "commit", "--quiet", "-m", "gitlink")
     settings = settings_for(workspace, [{"id": "svc", "kind": "git", "url": top_repo.as_uri(),
                                          "commit": git(top_repo, "rev-parse", "HEAD"), "submodules": "none"}])
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("svc"), environ={})
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"), environ={})
     assert result["status"] == "PARTIAL"
     assert [(gap["path"], gap["reason"]) for gap in result["gaps"]] == [("leaf", "submodule_not_materialized")]
 
@@ -246,18 +251,18 @@ def test_git_acquisition_failures_publish_nothing(workspace: Path, tmp_path: Pat
     missing = "0123456789abcdef0123456789abcdef01234567"
     settings = settings_for(workspace, [{"id": "svc", "kind": "git", "url": (tmp_path / "src").as_uri(),
                                          "commit": missing}])
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("svc"), environ={})
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"), environ={})
     assert result["status"] == "FAILED" and missing in result["error"]
-    assert not (workspace / "targets" / "svc").exists()
-    assert not (workspace / "data" / "target-acquisitions" / "svc").exists()
-    assert [path.name for path in (workspace / "targets").iterdir()] == []
+    assert not (workspace / "targets" / SYSTEM / "svc").exists()
+    assert not (workspace / "data" / "target-acquisitions" / SYSTEM / "components" / "svc").exists()
+    assert [path.name for path in (workspace / "targets" / SYSTEM).iterdir()] == []
     failure = json.loads((workspace / result["failure_record"]).read_text(encoding="utf-8"))
     assert failure["status"] == "FAILED" and failure["spec"]["commit"] == missing
 
     # file:// sources need allow_local_sources at acquisition time, not only at parse time.
     strict = settings_for(workspace, [{"id": "svc2", "kind": "git", "url": (tmp_path / "src").as_uri(),
                                        "commit": missing}], allow_local_sources=False)
-    refused = acquire_target(repository_root=workspace, settings=strict, request=strict.target("svc2"), environ={})
+    refused = acquire_target(repository_root=workspace, settings=strict, system_id=SYSTEM, request=strict.system(SYSTEM).component("svc2"), environ={})
     assert refused["status"] == "REFUSED" and "allow_local_sources" in refused["error"]
 
 
@@ -266,9 +271,9 @@ def test_git_acquisition_enforces_size_bounds(workspace: Path, tmp_path: Path) -
     commit = make_repo(tmp_path / "src", {"big.bin": "x" * 5000, "small.txt": "y\n"})
     settings = settings_for(workspace, [{"id": "svc", "kind": "git", "url": (tmp_path / "src").as_uri(),
                                          "commit": commit}], max_file_bytes=4096)
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("svc"), environ={})
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("svc"), environ={})
     assert result["status"] == "FAILED" and "max_file_bytes" in result["error"]
-    assert not (workspace / "targets" / "svc").exists()
+    assert not (workspace / "targets" / SYSTEM / "svc").exists()
 
 
 # ---------------------------------------------------------------------------------------------- Perforce
@@ -352,10 +357,10 @@ def test_perforce_acquisition_verifies_digests_and_names_gaps(workspace: Path, t
     ]}
     executable, log = fake_p4(tmp_path, depot)
     settings = settings_for(workspace, [perforce_target()], p4_executable=str(executable))
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("engine"),
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("engine"),
                             environ=P4_ENV)
     assert result["status"] == "PARTIAL", result
-    target = workspace / "targets" / "engine"
+    target = workspace / "targets" / SYSTEM / "engine"
     assert (target / "src/main.c").read_text() == "int main(void) { return 0; }\n"
     assert os.access(target / "src/run.sh", os.X_OK)
     assert (target / "docs/a@b.txt").is_file()
@@ -367,7 +372,7 @@ def test_perforce_acquisition_verifies_digests_and_names_gaps(workspace: Path, t
     assert identity["changelist"] == 1234 and identity["effective_change"] == 1200
     assert identity["server"]["serverID"] == "fake-1" and identity["file_count"] == 4
 
-    record_dir = workspace / "data" / "target-acquisitions" / "engine"
+    record_dir = workspace / "data" / "target-acquisitions" / SYSTEM / "components" / "engine"
     files = json.loads((record_dir / "perforce-files.json").read_text(encoding="utf-8"))
     assert hashlib.sha256((record_dir / "perforce-files.json").read_bytes()).hexdigest() == identity["files_sha256"]
     assert [item["path"] for item in files["files"]] == ["docs/a@b.txt", "src/main.c", "src/run.sh", "src/version.h"]
@@ -401,12 +406,12 @@ def test_perforce_acquisition_refusals(workspace: Path, tmp_path: Path, depot: d
                                        message: str) -> None:
     executable, _log = fake_p4(tmp_path, depot)
     settings = settings_for(workspace, [perforce_target()], p4_executable=str(executable))
-    result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("engine"),
+    result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("engine"),
                             environ=environ)
     assert result["status"] == status and message in result["error"], result
     assert P4_ENV["FAKE_P4_TICKET"] not in json.dumps(result)
-    assert not (workspace / "targets" / "engine").exists()
-    assert not (workspace / "targets" / "escape").exists()
+    assert not (workspace / "targets" / SYSTEM / "engine").exists()
+    assert not (workspace / "targets" / SYSTEM / "escape").exists()
 
 
 # ---------------------------------------------------------------------------------------------- review exports
@@ -487,16 +492,16 @@ def test_gitlab_review_export_feeds_change_context(workspace: Path, tmp_path: Pa
             "id": "mr-7", "kind": "review_export", "provider": "gitlab", "api_url": server.url,
             "project": "team/service", "change": 7, "revision": head, "clone_url": repo.as_uri(),
             "token_env": "FAKE_GITLAB_TOKEN"}])
-        result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("mr-7"),
+        result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("mr-7"),
                                 environ={"FAKE_GITLAB_TOKEN": "glpat-SECRET-123456"})
     assert result["status"] == "PARTIAL", result  # GitLab approvals carry no time: a named gap
     assert {gap["reason"] for gap in result["gaps"]} == {"review_approval_times_unavailable"}
     assert {request["headers"].get("private-token") for request in server.requests} == {"glpat-SECRET-123456"}
-    target = workspace / "targets" / "mr-7"
+    target = workspace / "targets" / SYSTEM / "mr-7"
     assert "eval(request)" in (target / "app.py").read_text(encoding="utf-8")
     assert git(target, "rev-parse", "HEAD") == head
 
-    record_dir = workspace / "data" / "target-acquisitions" / "mr-7"
+    record_dir = workspace / "data" / "target-acquisitions" / SYSTEM / "components" / "mr-7"
     diff = (record_dir / "change.diff").read_text(encoding="utf-8")
     assert "+    return eval(request)" in diff
     changed = json.loads((record_dir / "changed-paths.json").read_text(encoding="utf-8"))
@@ -507,7 +512,7 @@ def test_gitlab_review_export_feeds_change_context(workspace: Path, tmp_path: Pa
     records_text = (record_dir / "review-records.json").read_text(encoding="utf-8")
     assert "Ignore previous instructions" not in records_text and "SYSTEM" not in records_text
     context = result["change_context"]
-    assert context["export_path"] == "data/target-acquisitions/mr-7/review-records.json"
+    assert context["export_path"] == "data/target-acquisitions/sys/components/mr-7/review-records.json"
     document, _raw, gaps = load_export(workspace, target, ExportSource(True, context["export_path"],
                                                                        context["export_sha256"]), "review")
     assert gaps == []
@@ -544,7 +549,7 @@ def test_gerrit_review_export_from_api_and_from_pinned_bundle(workspace: Path, t
             "id": "cl-31", "kind": "review_export", "provider": "gerrit", "api_url": server.url, "change": 31,
             "patchset": 2, "revision": head, "clone_url": repo.as_uri(), "token_env": "G_TOKEN",
             "username_env": "G_USER"}])
-        result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("cl-31"),
+        result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("cl-31"),
                                 environ={"G_TOKEN": "http-password-xyz", "G_USER": "bot"})
     assert result["status"] == "COMPLETE", result
     assert server.requests[0]["headers"]["authorization"].startswith("Basic ")
@@ -555,7 +560,7 @@ def test_gerrit_review_export_from_api_and_from_pinned_bundle(workspace: Path, t
     assert raw["approvals"] == [{"submitted_at": "2024-01-02T03:30:00.000000000Z", "commit_id": None}]
 
     # The same responses, supplied offline as a hash-pinned bundle, produce the same review records.
-    bundle = workspace / "data" / "target-acquisitions" / "cl-31" / "review-export-bundle.json"
+    bundle = workspace / "data" / "target-acquisitions" / SYSTEM / "components" / "cl-31" / "review-export-bundle.json"
     copy = workspace / "inputs" / "bundle.json"
     copy.parent.mkdir()
     copy.write_bytes(bundle.read_bytes())
@@ -563,7 +568,7 @@ def test_gerrit_review_export_from_api_and_from_pinned_bundle(workspace: Path, t
         "id": "cl-31-offline", "kind": "review_export", "provider": "gerrit", "source": "bundle",
         "bundle_path": "inputs/bundle.json", "bundle_sha256": hashlib.sha256(copy.read_bytes()).hexdigest(),
         "change": 31, "patchset": 2, "revision": head, "clone_url": repo.as_uri()}])
-    offline = acquire_target(repository_root=workspace, settings=pinned, request=pinned.target("cl-31-offline"),
+    offline = acquire_target(repository_root=workspace, settings=pinned, system_id=SYSTEM, request=pinned.system(SYSTEM).component("cl-31-offline"),
                              environ={})
     assert offline["status"] == "COMPLETE", offline
     assert offline["change_context"]["export_sha256"] == result["change_context"]["export_sha256"]
@@ -572,7 +577,7 @@ def test_gerrit_review_export_from_api_and_from_pinned_bundle(workspace: Path, t
         "id": "cl-31-bad", "kind": "review_export", "provider": "gerrit", "source": "bundle",
         "bundle_path": "inputs/bundle.json", "bundle_sha256": "0" * 64, "change": 31, "patchset": 2,
         "revision": head, "clone_url": repo.as_uri()}])
-    refused = acquire_target(repository_root=workspace, settings=tampered, request=tampered.target("cl-31-bad"),
+    refused = acquire_target(repository_root=workspace, settings=tampered, system_id=SYSTEM, request=tampered.system(SYSTEM).component("cl-31-bad"),
                              environ={})
     assert refused["status"] == "REFUSED" and "bundle_sha256" in refused["error"]
 
@@ -598,7 +603,7 @@ def test_azure_devops_review_export(workspace: Path, tmp_path: Path) -> None:
             "id": "pr-55", "kind": "review_export", "provider": "azure_devops", "api_url": server.url + "/org",
             "project": "proj", "repository": "svc", "change": 55, "iteration": 3, "revision": head,
             "clone_url": repo.as_uri(), "token_env": "ADO_PAT"}])
-        result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("pr-55"),
+        result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("pr-55"),
                                 environ={"ADO_PAT": "ado-pat-secret"})
     assert result["status"] == "PARTIAL", result
     assert {gap["reason"] for gap in result["gaps"]} == {"review_approval_times_unavailable"}
@@ -619,17 +624,17 @@ def test_review_export_refuses_revision_drift_and_redirects(workspace: Path, tmp
         settings = settings_for(workspace, [{
             "id": "mr-7", "kind": "review_export", "provider": "gitlab", "api_url": server.url,
             "project": "team/service", "change": 7, "revision": head, "clone_url": repo.as_uri()}])
-        result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("mr-7"),
+        result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("mr-7"),
                                 environ={})
     assert result["status"] == "REFUSED" and "pinned revision" in result["error"]
-    assert not (workspace / "targets" / "mr-7").exists()
+    assert not (workspace / "targets" / SYSTEM / "mr-7").exists()
 
     redirected = {"/api/v4/projects/team%2Fservice/merge_requests/7": (302, "http://169.254.169.254/latest")}
     with _Server(redirected) as server:
         settings = settings_for(workspace, [{
             "id": "mr-8", "kind": "review_export", "provider": "gitlab", "api_url": server.url,
             "project": "team/service", "change": 7, "revision": head, "clone_url": repo.as_uri()}])
-        result = acquire_target(repository_root=workspace, settings=settings, request=settings.target("mr-8"),
+        result = acquire_target(repository_root=workspace, settings=settings, system_id=SYSTEM, request=settings.system(SYSTEM).component("mr-8"),
                                 environ={})
     assert result["status"] == "REFUSED" and "redirect" in result["error"]
     assert len(server.requests) == 1
@@ -655,14 +660,15 @@ def test_review_export_response_size_bound(tmp_path: Path) -> None:
 
 
 def test_intake_record_carries_gaps_and_detects_drift(workspace: Path, tmp_path: Path) -> None:
-    target = workspace / "targets" / "svc"
-    target.mkdir(parents=True)
-    (target / "main.py").write_text("print(1)\n", encoding="utf-8")
-    record_dir = workspace / "data" / "target-acquisitions" / "svc"
+    target = workspace / "targets" / SYSTEM
+    (target / "svc").mkdir(parents=True)
+    (target / "svc" / "main.py").write_text("print(1)\n", encoding="utf-8")
+    record_dir = workspace / "data" / "target-acquisitions" / SYSTEM
     record_dir.mkdir(parents=True)
     tree = raw_snapshot(target)
     (record_dir / "manifest.json").write_text(json.dumps({
-        "schema": MANIFEST_SCHEMA, "acquisition_id": "svc@0", "target_path": "targets/svc", "status": "PARTIAL",
+        "schema": SYSTEM_MANIFEST_SCHEMA, "acquisition_id": "sys@0", "target_path": "targets/sys",
+        "status": "PARTIAL",
         "identity": {"kind": "git"}, "identity_sha256": "0" * 64, "tree": tree,
         "gaps": [{"path": "x", "reason": "submodule_not_materialized"}]}), encoding="utf-8")
     assert find_acquisition(workspace, "data/target-acquisitions", target) == record_dir / "manifest.json"
@@ -712,24 +718,210 @@ def test_review_intake_publishes_the_acquisition_record(tmp_path: Path) -> None:
     assert [gap["reason"] for gap in acquisition["gaps"]] == ["perforce_digest_unverified"]
 
 
+def system_config(tmp_path: Path, components: str) -> Path:
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
+        "allow_local_sources = false", "allow_local_sources = true").replace(
+        "[review_policy.releases]\n",
+        '[review_policy.releases]\nplatform = "fixture-platform/1"\nvalidation = "fixture-validation/1"\n', 1)
+        + textwrap.dedent(f"""
+        [[target_acquisition.systems]]
+        id = "{SYSTEM}"
+        """) + textwrap.dedent(components), encoding="utf-8")
+    return config_path
+
+
+def git_component(component_id: str, source: Path, commit: str) -> str:
+    return f"""
+        [[target_acquisition.systems.components]]
+        id = "{component_id}"
+        url = "{source.as_uri()}"
+        commit = "{commit}"
+        """
+
+
 @needs_git
 def test_cli_acquire_target_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from appsec_review.cli import main
 
-    commit = make_repo(tmp_path / "src", {"a.py": "x = 1\n"})
-    config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
-        "allow_local_sources = false", "allow_local_sources = true") + textwrap.dedent(f"""
-        [[target_acquisition.targets]]
-        id = "svc"
-        kind = "git"
-        url = "{(tmp_path / 'src').as_uri()}"
-        commit = "{commit}"
-        """), encoding="utf-8")
-    assert main(["--config", str(config_path), "acquire-target", "--target", "svc"]) == 0
-    first = json.loads(capsys.readouterr().out)
-    assert first[0]["status"] == "COMPLETE"
-    assert main(["--config", str(config_path), "acquire-target", "--target", "svc", "--verify-only"]) == 0
+    first_commit = make_repo(tmp_path / "a", {"a.py": "x = 1\n"})
+    second_commit = make_repo(tmp_path / "b", {"b.py": "y = 2\n"})
+    config_path = system_config(tmp_path, git_component("a", tmp_path / "a", first_commit) +
+                                git_component("b", tmp_path / "b", second_commit))
+    command = ["--config", str(config_path), "acquire-target", "--system", SYSTEM]
+    # Selecting one component leaves the other a named gap.
+    assert main([*command, "--component", "a"]) == 2
+    partial = json.loads(capsys.readouterr().out)[0]
+    assert partial["status"] == "PARTIAL"
+    assert [(gap["path"], gap["reason"]) for gap in partial["gaps"]] == [("b", "component_not_acquired")]
+    # The second run verifies "a" without touching it and acquires "b".
+    assert main(command) == 0
+    complete = json.loads(capsys.readouterr().out)[0]
+    assert complete["status"] == "COMPLETE"
+    assert {key: value["action"] for key, value in complete["components"].items()} == {
+        "a": "verified", "b": "acquired"}
+    assert main([*command, "--verify-only"]) == 0
     assert json.loads(capsys.readouterr().out)[0]["status"] == "VERIFIED"
-    assert main(["--config", str(config_path), "acquire-target", "--target", "svc"]) == 1
-    assert json.loads(capsys.readouterr().out)[0]["status"] == "REFUSED"
+    repository_root = load_config(config_path).runtime.repository_root
+    (repository_root / "targets" / SYSTEM / "b" / "b.py").write_text("y = 3\n", encoding="utf-8")
+    assert main([*command, "--verify-only"]) == 1
+    assert json.loads(capsys.readouterr().out)[0]["status"] == "MISMATCH"
+    with pytest.raises(SystemExit):
+        main(["--config", str(config_path), "acquire-target", "--component", "a"])
+    with pytest.raises(SystemExit):
+        main([*command, "--component", "missing"])
+
+
+# ---------------------------------------------------------------------------------------------- systems
+
+
+def test_system_configuration_defaults_to_git_and_rejects_ambiguity(tmp_path: Path) -> None:
+    component = {"id": "svc", "url": "https://example.com/r.git", "commit": "a" * 40}
+    settings = parse_target_acquisition({"systems": [{"id": "s", "components": [
+        component, {**component, "id": "lib"}]}]}, tmp_path)
+    system = settings.system("s")
+    assert [item.kind for item in system.components] == ["git", "git"]
+    assert system.spec()["system"] == "s" and set(system.spec()["components"]) == {"svc", "lib"}
+    assert settings.max_parallel_components == 4
+    with pytest.raises(KeyError):
+        settings.system("missing")
+    for document, message in (
+            ({"systems": [{"id": "s", "components": []}]}, "components"),
+            ({"systems": [{"id": "s", "components": [component]}, {"id": "s", "components": [component]}]},
+             "unique"),
+            ({"targets": [component]}, "unknown"),
+            ({"max_parallel_components": 0}, "max_parallel_components")):
+        with pytest.raises(ValueError, match=message):
+            parse_target_acquisition(document, tmp_path)
+
+
+@needs_git
+def test_system_acquisition_runs_components_in_parallel_and_names_failures(
+        workspace: Path, tmp_path: Path) -> None:
+    service = make_repo(tmp_path / "service", {"app.py": "import lib\n"})
+    library = make_repo(tmp_path / "library", {"lib.py": "VALUE = 1\n"})
+    missing = "0123456789abcdef0123456789abcdef01234567"
+    settings = settings_for(workspace, [
+        {"id": "service", "url": (tmp_path / "service").as_uri(), "commit": service},
+        {"id": "library", "url": (tmp_path / "library").as_uri(), "commit": library},
+        {"id": "broken", "url": (tmp_path / "library").as_uri(), "commit": missing}], max_parallel_components=3)
+    system = settings.system(SYSTEM)
+    result = acquire_system(repository_root=workspace, settings=settings, system=system, environ={})
+    assert result["status"] == "PARTIAL"
+    assert [(gap["path"], gap["reason"]) for gap in result["gaps"]] == [("broken", "component_acquisition_failed")]
+    root = workspace / "targets" / SYSTEM
+    assert sorted(path.name for path in root.iterdir()) == ["library", "service"]
+    manifest_path = workspace / "data" / "target-acquisitions" / SYSTEM / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema"] == SYSTEM_MANIFEST_SCHEMA and manifest["target_path"] == "targets/sys"
+    assert manifest["tree"]["sha256"] == raw_snapshot(root)["sha256"] == result["tree_sha256"]
+    assert set(manifest["identity"]) == {"service", "library"}
+    assert manifest["identity"]["service"]["identity"]["commit"] == service
+    assert manifest["components"]["broken"]["status"] == "FAILED"
+    assert hashlib.sha256(manifest_path.read_bytes()).hexdigest() == result["manifest_sha256"]
+    assert find_acquisition(workspace, settings.records_dir, root) == manifest_path
+
+    # Re-acquisition verifies the available components without touching them.
+    before = {path: path.stat().st_mtime_ns for path in root.rglob("*")}
+    again = acquire_system(repository_root=workspace, settings=settings, system=system, environ={})
+    assert {key: value["action"] for key, value in again["components"].items()} == {
+        "service": "verified", "library": "verified", "broken": "acquired"}
+    assert {path: path.stat().st_mtime_ns for path in root.rglob("*")} == before
+    assert again["tree_sha256"] == result["tree_sha256"]
+
+    stray = root / "notes.txt"
+    stray.write_text("operator note\n", encoding="utf-8")
+    flagged = acquire_system(repository_root=workspace, settings=settings, system=system, environ={})
+    assert ("notes.txt", "unconfigured_system_entry") in {(gap["path"], gap["reason"]) for gap in flagged["gaps"]}
+    assert verify_system(repository_root=workspace, settings=settings, system=system)["status"] == "MISMATCH"
+
+
+@needs_git
+def test_system_acquisition_refuses_a_user_owned_directory(workspace: Path, tmp_path: Path) -> None:
+    commit = make_repo(tmp_path / "src", {"a.py": "x = 1\n"})
+    existing = workspace / "targets" / SYSTEM
+    existing.mkdir(parents=True)
+    (existing / "mine.txt").write_text("user owned\n", encoding="utf-8")
+    settings = settings_for(workspace, [{"id": "svc", "url": (tmp_path / "src").as_uri(), "commit": commit}])
+    result = acquire_system(repository_root=workspace, settings=settings, system=settings.system(SYSTEM),
+                            environ={})
+    assert result["status"] == "REFUSED" and "never pulls" in result["error"]
+    assert sorted(path.name for path in existing.iterdir()) == ["mine.txt"]
+    assert not (workspace / "data" / "target-acquisitions").exists()
+
+
+def test_system_acquisition_fails_when_no_component_is_available(workspace: Path, tmp_path: Path) -> None:
+    settings = settings_for(workspace, [{"id": "svc", "url": (tmp_path / "absent").as_uri(), "commit": "a" * 40}])
+    result = acquire_system(repository_root=workspace, settings=settings, system=settings.system(SYSTEM),
+                            environ={})
+    assert result["status"] == "FAILED" and result["tree_sha256"] is None
+    assert result["gaps"][0]["reason"] == "component_acquisition_failed"
+
+
+def available_models(provider: str, names, *, timeout_seconds: int):
+    return {"provider": provider, "transport": True, "method": "catalog", "listed": sorted(names),
+            "error": None, "models": {name: {"available": True, "detail": "listed by the provider"}
+                                      for name in names}}
+
+
+@needs_git
+def test_acquisition_gate_composes_the_system_before_intake(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_review_intake import build_job as build_intake
+    from appsec_review.jobs.job_target_acquisition import build_job as build_acquisition
+    from appsec_review.runtime import GraphRunner
+    from appsec_review.runtime.launch import SYSTEM_ENVIRONMENT
+
+    service = make_repo(tmp_path / "service", {"app.py": "def main():\n    return 1\n"})
+    library = make_repo(tmp_path / "library", {"lib.py": "VALUE = 1\n"})
+    config = load_config(system_config(tmp_path, git_component("service", tmp_path / "service", service) +
+                                       git_component("library", tmp_path / "library", library)))
+    target = config.runtime.repository_root / "targets" / SYSTEM
+    jobs = [build_acquisition(environ={SYSTEM_ENVIRONMENT: SYSTEM}), build_intake(check_models=available_models)]
+    runner = GraphRunner(config, jobs)
+    outcome = runner.run(target_root=target, source_fingerprint=None)
+    assert outcome["status"] == "SUCCEEDED", outcome
+    assert sorted(path.name for path in target.iterdir()) == ["library", "service"]
+    run_root = config.runtime.runs_dir / outcome["run_id"]
+    acquired = json.loads(next(run_root.rglob("target-acquisition-result.json")).read_text(encoding="utf-8"))
+    assert acquired["status"] == "COMPLETE" and set(acquired["components"]) == {"service", "library"}
+    copy = next(run_root.rglob("system-manifest.json"))
+    assert hashlib.sha256(copy.read_bytes()).hexdigest() == acquired["manifest_sha256"]
+    intake = json.loads(next(run_root.rglob("review-intake.json")).read_text(encoding="utf-8"))
+    acquisition = intake["fingerprint"]["acquisition"]
+    assert acquisition["schema"] == SYSTEM_MANIFEST_SCHEMA and acquisition["tree_matches"] is True
+    assert acquisition["acquisition_id"] == acquired["acquisition_id"]
+    events = [json.loads(line)["event_type"] for line in
+              (run_root / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert events.index("TARGET_FINGERPRINTED") > events.index("RUN_STARTED")
+
+    # Resuming re-verifies the live gate and reuses the intake bound to the unchanged composed tree.
+    decisions = {item["job_id"]: item["action"] for item in runner.run(
+        target_root=target, source_fingerprint=None, run_id=outcome["run_id"])["decisions"]}
+    assert decisions == {"job_target_acquisition": "RUN", "job_review_intake": "REUSE"}
+
+
+def test_acquisition_gate_without_a_requested_system_changes_nothing(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_target_acquisition import build_job as build_acquisition
+    from appsec_review.runtime import JobRunner
+
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    outcome = JobRunner(config).run(build_acquisition(environ={}), target_root=None, source_fingerprint="none")
+    result = json.loads(next(Path(outcome["attempt_root"]).rglob("target-acquisition-result.json")).read_text(
+        encoding="utf-8"))
+    assert result["status"] == "NOT_REQUESTED"
+    assert not (config.runtime.repository_root / "targets").exists()
+
+
+def test_acquisition_gate_follows_image_pin_in_the_topology() -> None:
+    from appsec_review.orchestration.topology import gate_ids, wave1_dependencies
+    from appsec_review.runtime.registry import builtin_registry
+
+    ids = list(builtin_registry().job_ids())
+    assert "job_target_acquisition" in ids
+    assert gate_ids(set(ids)) == ("job_model_connectivity", "job_image_pin_verification", "job_target_acquisition")
+    dependencies = wave1_dependencies(set(ids))
+    assert dependencies is not None
+    assert dependencies["job_target_acquisition"] == ("job_image_pin_verification",)
+    assert dependencies["job_review_intake"] == ("job_target_acquisition",)

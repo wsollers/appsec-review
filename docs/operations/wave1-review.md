@@ -6,7 +6,8 @@ accepted handoffs, but they do not currently expose the same review topology.
 The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> source_history_analysis
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
+  -> source_history_analysis
   -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
@@ -24,6 +25,11 @@ enabled catalog image, build profile and CodeQL source image resolves on the loc
 its pin; any missing image or moved tag fails the run (see
 [`image-pin-verification.md`](image-pin-verification.md)). The pipeline never builds images. Setting
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
+
+Both surfaces then run `target_acquisition`. For `start --system <id>` (Dagster:
+`APPSEC_REVIEW_SYSTEM=<id>`) it acquires or re-verifies every component of the configured system in
+parallel into `targets/<system>/` and intake reviews that composed root; otherwise it records
+`NOT_REQUESTED` (see [`target-acquisition.md`](target-acquisition.md)).
 
 The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
 control assessment, or security tagging, and `third_party_data_sync` runs separately (`appsec-review

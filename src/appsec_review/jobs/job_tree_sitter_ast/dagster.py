@@ -26,7 +26,7 @@ def build_dagster_job(config, runner_factory):
     def begin(context):
         tags = dict(context.dagster_run.tags)
         reject_run_selection(config, tags, "tree_sitter_ast")
-        inputs = launch_inputs(job, target=configured_target(config.runtime.repository_root),
+        inputs = launch_inputs(job, target=configured_target(config.runtime.repository_root, config.target_acquisition.targets_dir),
                                upstream_handoffs=launch_upstream_handoffs(
                                    config.runtime.runs_dir, tags, in_graph=False) or {})
         claim = launch_begin(runner_factory(config), job, inputs,

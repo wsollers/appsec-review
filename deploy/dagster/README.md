@@ -95,7 +95,13 @@ Choose the Claude subscription login. The Windows host's Claude login is separat
 container login; neither is copied into the image or repository.
 For a bounded acceptance target already beneath the read-only `targets/` mount, set
 `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
-deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
+deployment defaults to `/opt/app/targets/appsec-multi-vuln`. The code location also honours
+`APPSEC_REVIEW_SYSTEM=<id>`, which makes `target_acquisition` acquire a configured multi-component
+system into `targets/<id>/` before intake, but this compose deployment neither passes that variable
+nor mounts `targets/` writable, so here the gate records `NOT_REQUESTED`. Acquire a system on the
+host with `appsec-review acquire-target --system <id>` and point `APPSEC_REVIEW_TARGET` at
+`/opt/app/targets/<id>`; see
+[`../../docs/operations/target-acquisition.md`](../../docs/operations/target-acquisition.md).
 
 The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
 models and larger token limits from `profiles/prod.toml`, which the image copies next to
@@ -215,7 +221,8 @@ retained capture artifacts; the verifier fails if any such receipt is missing, f
 With the current registry, the cross-job dependencies are:
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> ci_configuration_analysis
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
+  -> ci_configuration_analysis
   -> target_analysis_plan
 target_catalog -> source_history_analysis -> target_analysis_plan
 target_analysis_plan -> tree_sitter_ast -> change_context_analysis
@@ -259,9 +266,11 @@ The code location also defines:
   namespaced `standalone__`; a standalone launch joins the application run named by its
   `appsec/application_run_id` tag, and its input validators require that run's accepted upstream
   handoffs;
-- `ci_configuration_review`: `model_connectivity -> image_pin_verification -> review_intake -> target_catalog ->
+- `ci_configuration_review`: `model_connectivity -> image_pin_verification -> target_acquisition -> review_intake ->
+  target_catalog ->
   ci_configuration_analysis`;
-- `project_build_review`: `model_connectivity -> image_pin_verification -> review_intake -> target_catalog ->
+- `project_build_review`: `model_connectivity -> image_pin_verification -> target_acquisition -> review_intake ->
+  target_catalog ->
   target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis`.
 
 The configured schedule and a manual launch enter the same generated semantic DAG. Schedule cron,
