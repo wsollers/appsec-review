@@ -46,7 +46,9 @@ def test_real_hash_bound_disk_and_exact_classifier_projection(tmp_path, monkeypa
     assert verified.source.acquisition is None
     assert {item.path for item in verified.input_inventory} >= {
         disk.scope_ref["path"], disk.manifest_ref["path"], disk.config_ref["path"],
+        disk.chain_manifest_ref["path"], *(ref["path"] for ref in disk.lane_refs.values()),
         *(ref["path"] for ref in disk.lane_manifest_refs.values()),
+        *(ref["path"] for ref in disk.lane_package_refs.values()),
     }
     assert verified.total_input_bytes == sum((disk.root / item.path).stat().st_size
                                              for item in verified.input_inventory)
@@ -84,7 +86,7 @@ def test_recomputed_gate_digest_does_not_authorize_semantic_changes(tmp_path, mo
 
 @pytest.mark.parametrize("reference", [
     "gate_ref", "review_ref", "scope_ref", "manifest_ref", "projection_ref", "ledger_ref",
-    "receipt_ref", "coverage_ref", "config_ref", "review_job_ref", "gate_job_ref",
+    "receipt_ref", "coverage_ref", "config_ref", "review_job_ref", "gate_job_ref", "chain_manifest_ref",
 ])
 def test_each_consumed_reference_is_verified_from_bytes(tmp_path, monkeypatch, reference):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
@@ -100,6 +102,59 @@ def test_both_lane_manifest_bytes_are_checked_before_review_authority(tmp_path, 
     (disk.root / disk.lane_manifest_refs[lane]["path"]).write_bytes(b"{}")
     assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
     assert not disk.calls
+
+
+@pytest.mark.parametrize("lane", ["lead", "hunt"])
+@pytest.mark.parametrize("reference", ["lane_refs", "lane_package_refs"])
+def test_authenticated_lane_sets_and_package_bytes_are_bounded_before_authority(tmp_path, monkeypatch, lane, reference):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    (disk.root / getattr(disk, reference)[lane]["path"]).write_bytes(b"{}")
+    assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
+    assert not disk.calls
+
+
+@pytest.mark.parametrize("schema", ["appsec-review/inference-review-handoff/2", "unknown"])
+def test_review_preflight_has_no_legacy_adapter(tmp_path, monkeypatch, schema):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    disk.review["schema"] = schema
+    disk.refresh_review()
+    assert_failure(disk.verify, c.ExportFailureReason.SCHEMA_INVALID)
+    assert not disk.calls
+
+
+def test_chain_preflight_bounds_proposals_decisions_and_original_actor_receipts(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    artifact = disk.put("data/review/chains/chain.json", {"synthetic": "chain"})
+    proposal = disk.put("data/review/chains/proposal.json", {"synthetic": "proposal"})
+    challenge = disk.put("data/review/chains/challenge-receipt.json", {"synthetic": "challenge"})
+    cell_id = "cell-synthetic-composer"
+    composer = disk.put(f"data/jobs/{inputs.REVIEW_JOB}/cells/{cell_id}/attempt-1.json",
+                        {"synthetic": "composer"})
+    disk.chain_manifest["items"] = [{"artifact": artifact}]
+    disk.review["attack_chain_manifest"] = disk.put(disk.chain_manifest_ref["path"], disk.chain_manifest)
+    disk.projection["attack_chains"] = {"synthetic": {
+        "proposal": {"composer": {"conversation_id": cell_id}}, "proposal_artifact": proposal,
+        "challenges": [{"actor": {"conversation_id": "cell-synthetic-challenge"}, "receipt": challenge}],
+        "decision": {"artifact": artifact},
+    }}
+    disk.projection["cells"] = {cell_id: [{"task": "chain_composer", "attempts": 1,
+                                          "receipt_sha256": composer["sha256"]}],
+                                "unused-composer": [{"task": "chain_composer", "attempts": 1,
+                                                     "receipt_sha256": c.json_sha256("not an admitted actor")}]}
+    projection_ref = disk.put(disk.projection_ref["path"], disk.projection)
+    receipt = json.loads((disk.root / disk.receipt_ref["path"]).read_bytes())
+    receipt["projection_file_sha256"] = projection_ref["sha256"]
+    disk.review_handoff["outputs"]["publication.publish_claim_ledger"]["artifact"] = disk.put(
+        disk.receipt_ref["path"], receipt)
+    disk.review_handoff["outputs"]["publication.publish_handoff"]["artifact"] = disk.put(
+        disk.review_ref["path"], disk.review)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    inputs._preflight_review(reader, disk.review_handoff)
+    assert {ref["path"] for ref in (artifact, proposal, challenge, composer)} <= {
+        ref.path for ref in reader.inventory}
+    assert not disk.calls  # Synthetic chain references exercise preflight only, not ledger authority.
+    (disk.root / composer["path"]).write_bytes(b"changed")
+    assert_failure(reader.reprove, c.ExportFailureReason.INPUT_TAMPERED)
 
 
 @pytest.mark.parametrize("job", [inputs.GATE_JOB, inputs.REVIEW_JOB])
@@ -158,6 +213,116 @@ def test_review_helper_failure_is_not_swallowed_and_preserves_cause(tmp_path, mo
     assert spy.call_count == 1
 
 
+def test_shared_snapshot_authority_is_used_with_the_admitted_gate_identity(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    original = inputs.load_accepted_gate
+    calls = []
+
+    def load(root, schemas, *, expected_handoff_sha256):
+        calls.append((root, schemas.directory, expected_handoff_sha256))
+        return original(root, schemas, expected_handoff_sha256=expected_handoff_sha256)
+
+    monkeypatch.setattr(inputs, "load_accepted_gate", load)
+    disk.verify()
+    assert calls == [(disk.root, ROOT / "docs" / "schemas" / "final-report", disk.gate_job_ref["sha256"])]
+
+
+def test_snapshot_authority_failure_is_closed_and_preserves_cause(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    cause = IntegrityError("certified snapshot rejected despite a fresh handoff digest")
+    spy = Mock(side_effect=cause)
+    monkeypatch.setattr(inputs, "load_accepted_gate", spy)
+    assert assert_failure(disk.verify, c.ExportFailureReason.SEMANTIC_INVALID).__cause__ is cause
+    assert spy.call_count == 1
+
+
+@pytest.mark.parametrize("timestamp", ["2026-10-28T10:00:00+01:60", "2026-10-28T10:00:00+24:00"])
+def test_original_gate_completion_timestamp_is_not_normalized_before_strict_boundary(tmp_path, monkeypatch, timestamp):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    disk.gate_handoff["completed_at"] = timestamp
+    disk.publish(inputs.GATE_JOB, disk.gate_handoff)
+    error = assert_failure(disk.verify, c.ExportFailureReason.SEMANTIC_INVALID)
+    assert isinstance(error.__cause__, ValueError)
+    assert "RFC3339" in str(error.__cause__)
+
+
+@pytest.mark.parametrize("swapped", ["handoff", "gate"])
+def test_snapshot_authority_result_cannot_swap_the_bounded_admission(tmp_path, monkeypatch, swapped):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    original = inputs.load_accepted_gate
+
+    def load(*args, **kwargs):
+        accepted, gate = original(*args, **kwargs)
+        if swapped == "handoff":
+            accepted = replace(accepted, path=f"data/jobs/{inputs.GATE_JOB}/attempts/other/handoff.json")
+        else:
+            gate["status"] = "COMPLETE"
+        return accepted, gate
+
+    monkeypatch.setattr(inputs, "load_accepted_gate", load)
+    assert_failure(disk.verify, c.ExportFailureReason.INPUT_STALE)
+
+
+def test_certified_chain_is_measured_durably_and_producer_heads_are_not_reinterpreted(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, buckets=("publishable", "publishable"))
+    chain_ref = disk.add_certified_chain()
+    verified = disk.verify()
+    optional_jobs = ("job_poc_generation", "job_remediation_planning", "job_remediation_validation",
+                     "job_dossier_publication", "job_attack_chain_composition")
+    pointers = {f"data/jobs/{job}/latest.json" for job in optional_jobs}
+    for path in pointers:
+        disk.put(path, b"not valid JSON")
+    original = Path.open
+
+    def no_optional_heads(path, *args, **kwargs):
+        assert path not in {disk.root / name for name in pointers}
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", no_optional_heads)
+    current = disk.verify()
+    assert current == verified
+    inputs.reprove_inputs(disk.root, verified, disk.settings, ROOT)
+    references = {ref.reference for ref in verified.input_inventory}
+    assert {c.ArtifactRef(**chain_ref), c.ArtifactRef(**disk.chain_manifest_ref)} <= references
+    assert not pointers & {ref.path for ref in verified.input_inventory}
+    for name in ("inputs", "capabilities", "attachments"):
+        assert set(inputs._references(c.json_body(verified.gate[name]))) <= references
+
+
+@pytest.mark.parametrize("surface", ["capabilities", "attachments"])
+def test_nested_completion_reference_must_be_certified_not_merely_readable(tmp_path, monkeypatch, surface):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    reference = disk.put("data/unbound/certificate.json", {"synthetic": "not certified"})
+    if surface == "capabilities":
+        disk.authority[surface]["dossiers"]["handoff"] = reference
+    else:
+        disk.authority[surface]["attack_chains"] = [{
+            "chain_id": "chain-" + c.json_sha256("unbound chain"), "status": "qualified_supported",
+            "component_claim_ids": ["claim-" + c.json_sha256(str(index)) for index in range(2)],
+            "artifact": reference, "gap_count": 1, "disposition": "assessed",
+        }]
+    disk.publish_gate()
+    error = assert_failure(disk.verify, c.ExportFailureReason.SEMANTIC_INVALID)
+    assert isinstance(error.__cause__, IntegrityError)
+    assert "certified bindings" in str(error.__cause__)
+
+
+@pytest.mark.parametrize("reference", ["chain", "manifest"])
+def test_certified_chain_bytes_are_rehashed_after_snapshot_authority(tmp_path, monkeypatch, reference):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, buckets=("publishable", "publishable"))
+    chain_ref = disk.add_certified_chain()
+    target = chain_ref if reference == "chain" else disk.chain_manifest_ref
+    original = inputs.load_accepted_gate
+
+    def load(*args, **kwargs):
+        result = original(*args, **kwargs)
+        (disk.root / target["path"]).write_bytes(b"changed after authority")
+        return result
+
+    monkeypatch.setattr(inputs, "load_accepted_gate", load)
+    assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
+
+
 @pytest.mark.parametrize("field", ["manifest_sha256", "target_snapshot", "run_id", "schema", "shards"])
 def test_rehashed_accepted_scope_cannot_swap_identity(tmp_path, monkeypatch, field):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
@@ -170,8 +335,8 @@ def test_rehashed_accepted_scope_cannot_swap_identity(tmp_path, monkeypatch, fie
     disk.review_handoff["outputs"]["scope.accept_manifest"]["artifact"] = reference
     disk.review_job_ref = disk.publish(inputs.REVIEW_JOB, disk.review_handoff)
     disk.authority["inputs"]["job_handoff"] = disk.review_job_ref
-    disk.authority["bindings"] = [disk.review_job_ref if row["path"] == disk.review_job_ref["path"] else row
-                                  for row in disk.authority["bindings"]]
+    updates = {ref["path"]: ref for ref in (reference, disk.review_job_ref)}
+    disk.authority["bindings"] = [updates.get(row["path"], row) for row in disk.authority["bindings"]]
     disk.publish_gate()
     assert_failure(disk.verify, c.ExportFailureReason.IDENTITY_CONFLICT)
 
@@ -239,7 +404,7 @@ def test_pointer_changed_during_verification_fails_without_mutating_old_handoff(
     assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
 
 
-@pytest.mark.parametrize("operation", ["start", "upstream"])
+@pytest.mark.parametrize("operation", ["start", "review", "gate"])
 def test_deadline_is_checked_at_start_and_after_upstream_verifier(tmp_path, monkeypatch, operation):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     now = [0.0]
@@ -248,13 +413,14 @@ def test_deadline_is_checked_at_start_and_after_upstream_verifier(tmp_path, monk
         reader = inputs.BoundedInputReader(disk.root, disk.settings, deadline=0.0)
         assert_failure(lambda: reader.read(c.ArtifactRef(**disk.gate_ref)), c.ExportFailureReason.TIMED_OUT)
     else:
-        original = inputs.load_accepted_review
+        name = "load_accepted_review" if operation == "review" else "load_accepted_gate"
+        original = getattr(inputs, name)
 
         def expire(*args, **kwargs):
             now[0] = 121.0
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(inputs, "load_accepted_review", expire)
+        monkeypatch.setattr(inputs, name, expire)
         assert_failure(disk.verify, c.ExportFailureReason.TIMED_OUT)
 
 
@@ -349,8 +515,8 @@ def test_rehashed_review_settings_cannot_disagree_with_semantic_review_hash(tmp_
     disk.gate_handoff["resolved_config_sha256"] = reference["sha256"]
     disk.review_job_ref = disk.publish(inputs.REVIEW_JOB, disk.review_handoff)
     disk.authority["inputs"]["job_handoff"] = disk.review_job_ref
-    disk.authority["bindings"] = [disk.review_job_ref if ref["path"] == disk.review_job_ref["path"] else ref
-                                 for ref in disk.authority["bindings"]]
+    updates = {ref["path"]: ref for ref in (reference, disk.review_job_ref)}
+    disk.authority["bindings"] = [updates.get(ref["path"], ref) for ref in disk.authority["bindings"]]
     disk.config_ref = reference
     disk.publish_gate()
     assert_failure(disk.verify, c.ExportFailureReason.IDENTITY_CONFLICT)
