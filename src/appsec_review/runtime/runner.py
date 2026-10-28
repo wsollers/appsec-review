@@ -145,6 +145,7 @@ class JobRunner:
             tools=self.config.tools,
             review_policy=self.config.review_policy,
             evidence_target_snapshot=claim.get("evidence_target_snapshot"),
+            upstream_handoffs=MappingProxyType(dict(claim.get("upstream_handoffs", {}))),
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
             input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
