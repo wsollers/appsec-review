@@ -1,9 +1,13 @@
 # OpenVEX findings export
 
-Implemented in `5d2d1a44eaae5cc5939d36fa463036185d3ece13`. This guide describes the
-local exporter, configuration, report projection and telemetry at that commit; it does not
-establish integration, acceptance or live Dagster validation. The
-[design](../architecture/openvex-export.md) records the scope and trust decisions.
+**Certified-gate adaptation in progress at
+`ede3c107b16aedebc97c2659372ac9ae80fde348`.** The user-selected architecture is standalone
+post-gate export with gate-only reporting. Strict contracts/settings and the shared topology
+reflect gate `/2`, review `/3`; real input verifier/projector adaptation is not yet complete
+at this base. This guide separates that required boundary from delivered settings and operator
+interfaces. It does not claim final `/2` execution, integration, acceptance or live Dagster
+validation. See the [design](../architecture/openvex-export.md) and
+[verification record](../reviews/openvex-export-implementation.md).
 
 ## What this export means
 
@@ -24,7 +28,7 @@ ship-block decisions and coverage remain separate dimensions, preserved without 
 
 ## Trust and data flow
 
-The exporter reads accepted, hash-bound run artifacts, not the current target checkout
+The exporter contract reads accepted, hash-bound run artifacts, not the current target checkout
 or advice in target-owned guidance. It re-verifies the gate against the accepted review,
 including package accounting, evidence and both package manifests; resolves accepted scope;
 and binds the full frozen configuration separately from the semantic review-settings hash.
@@ -32,7 +36,8 @@ and binds the full frozen configuration separately from the semantic review-sett
 ```mermaid
 flowchart TD
     Operator["Operator: issuer, common action, repository identity"] --> Config["Frozen pre-run configuration"]
-    Review["Accepted review, ledger, packages and evidence"] --> Gate["Accepted publication gate"]
+    Review["Accepted review /3, ledger, packages and evidence"] --> Gate["Certified gate /2"]
+    Completion["Pre-gate PoC, chains, remediation and dossier context"] --> Gate
     Scope["Accepted scope and source manifest"] --> Verify["Verify inputs and exact identities"]
     Config --> Verify
     Review --> Verify
@@ -44,10 +49,18 @@ flowchart TD
     Vex --> Result["openvex-result.json: hashes, counts and outcome"]
     Companion --> Result
     Result --> Accept["Recheck pins and bytes; runner accepts handoff"]
-    Accept --> Report["Final report: verified local references"]
+    Accept --> OperatorView["Protected export status and metrics only"]
 ```
 
-Validation pins eight local resources: six schemas, the upstream license and its lock.
+The gate's `capabilities` and `attachments` are authoritative context; every nested reference
+must already belong to its certified bindings, not merely appear in the exporter's inventory.
+PoC/chain/dossier availability is not an eligibility filter, but corrupt certified context
+is an integrity failure. Preserve `gap`, `not_run` and `notice` limitations distinctly:
+`compile_only_nonexecution` is a notice, not an export gap or proof of a fixed finding.
+
+The strict resource contract pins **nine** local resources: seven schemas, the upstream
+license and its lock. Transitive `final-report.schema.json` supplies PoC-item definitions
+referenced by gate `/2`; it is not permission to load final-report data or discover attachments.
 The loader uses the source schema directory when present, otherwise installed wheel resources;
 an existing corrupt/incomplete source copy fails rather than falling back to another copy.
 It never retrieves a schema or the JSON-LD context during export.
@@ -64,7 +77,8 @@ Mutable gate/review/intake `latest.json` pointers and the exact `data/indices/ac
 pointer are bounded and rechecked during input admission, but are **not durable exported
 evidence bindings**. Immutable accepted handoffs, manifests, index shards and other input
 bytes remain bound. A valid newer upstream pointer therefore makes an old export stale
-for current reporting, without corrupting its historical immutable evidence.
+for current export status/latest-accepted metrics, without corrupting its historical immutable
+evidence or discarding independently reverified historical semantic work.
 
 ## Configure before creating a run
 
@@ -160,33 +174,41 @@ paths may differ after new upstream attempts even when OpenVEX semantic bytes do
 
 ## Operation and outputs
 
-In the normal graph, enabled export and optional compile-only PoC generation are
-independent siblings after the gate. The final report waits for every enabled sibling.
-When both are disabled, the report depends directly on the gate. The direct CLI runs the
-enabled optional jobs sequentially; Dagster may schedule siblings independently.
+Enabled PoC generation, remediation planning/validation and dossier publication run **before
+one final gate**. Chains are part of review before its seal. The gate then feeds independent
+report and OpenVEX-export peers. Report source, schema and `CONSUMES` stay gate-only;
+export neither attaches itself to the report nor adds a report prerequisite.
 
 ```mermaid
 flowchart LR
-    Review["Inference review"] --> Gate["Final publication gate"]
-    Gate --> Export["OpenVEX export if enabled"]
-    Gate --> PoC["PoC generation if enabled"]
-    Export --> Report["Final report: single terminal"]
-    PoC --> Report
-    Gate -. "Direct dependency when neither optional job is enabled" .-> Report
+    Review["Review /3: chains before seal"] --> PoC["Enabled PoC"]
+    PoC --> Plan["Enabled remediation planning"]
+    Plan --> Validate["Enabled remediation validation"]
+    Validate --> Dossiers["Enabled dossiers"]
+    Dossiers --> Gate["Single certified gate /2"]
+    Review --> Gate
+    Gate --> Report["Gate-only final report /2"]
+    Gate --> Export["Standalone OpenVEX if enabled"]
 ```
 
-Export does not wait for, inspect live output from, or require PoC generation. The report
-continues to consume its separate accepted PoC handoff. PoC `compile_verified` means
-compilation only, not exploitation; `compile_failed` does not refute an affected finding.
-See [PoC operation](poc-generation.md).
+The diagram compresses the pre-gate completion dependencies; disabled jobs are transparent
+according to frozen configuration. Export reads the gate's certified context, not live optional
+producer output. PoC `compile_verified` means compilation only, not exploitation;
+`compile_failed` does not refute an affected finding. See [PoC operation](poc-generation.md)
+and [completion publication](final-report.md). The direct CLI dispatches export before report
+sequentially; Dagster exposes independent gate-dependent peers. A failed sequential export can
+stop the driver before report dispatch, but is not a report-input dependency.
 
 Use standalone dispatch **only for a run whose original frozen configuration enabled export**
 and whose required upstream jobs already have accepted handoffs:
 
 ```text
 appsec-review run job_openvex_export --run-id <id> --upstream-from-run
-appsec-review run job_final_report_publication --run-id <id> --upstream-from-run
 ```
+
+There is no required report rerun after export. A standalone report uses the accepted gate
+snapshot only and cannot discover or admit newer producer output. Create/re-certify the gate
+through the completion workflow when those upstream outputs change.
 
 The unit topology is
 `load.verify_inputs -> export.assemble -> acceptance.publish_handoff`.
@@ -197,9 +219,9 @@ Use the accepted job handoff's references, not a guessed attempt path or newest-
 | Artifact | Meaning |
 | --- | --- |
 | `verified-inputs.json` | Bounded, verified input identities from the load unit. |
-| `schemas/` under the load task | Eight hash-pinned schema/license/lock snapshots, including transitive final-report definitions, retained with the accepted output. |
+| `schemas/` under the load task | Nine hash-pinned schema/license/lock snapshots, including transitive PoC-item definitions; no report data input. |
 | `openvex.json` | Nonempty upstream-compatible document with `affected` statements; absent when no statements qualify. |
-| `openvex-manifest.json` | Protected companion: provenance, source qualification, per-package inclusion/exclusion, statement-to-evidence mapping, separate scores/independence/ship-block context, limitations, bindings and exact counts. |
+| `openvex-manifest.json` | Protected companion: provenance, source qualification, exact certified capabilities/attachments, per-package inclusion/exclusion, statement-to-evidence mapping, separate scores/independence/ship-block context, limitations, bindings and exact counts. |
 | `openvex-result.json` | Accepted handoff's artifact: outcome, gate identity, manifest reference, document reference or null, counts and gaps. |
 
 Every gate package must appear once in the companion as `included`,
@@ -215,15 +237,19 @@ package. Zero is explicit, never a stand-in for an unreadable input.
 | `no_statements` | No publishable confirmed packages; null document reference and no document file, companion retained, named non-clean gap; `COMPLETED_WITH_GAPS`. |
 
 The empty-result gap is `openvex_no_publishable_confirmed_findings`.
+Only `kind = gap` limitations make a nonempty export `exported_with_gaps`; policy-not-run
+and compile-only notices stay visible without becoming gaps.
 An empty `statements` array is invalid OpenVEX and is not written. Invalid settings,
 corrupt/missing evidence, stale input, schema/semantic failure, unsafe paths, bound
 exceedance and timeout fail the whole attempt with no new accepted handoff, rather than
 producing `no_statements`. Acceptance rechecks pointers and bytes to catch concurrent changes.
 
-## Report states and recovery
+## Export status and recovery
 
-The [final-report block](final-report.md#openvex-export-projection) distinguishes
-export state from vulnerability status:
+The protected status-reader/metrics interface distinguishes export state from vulnerability
+status. Despite the retained Python names `ExportReportView`/`ExportReportState`, these are
+**operator export views, not final-report fields**. A failure is an attempt outcome with no
+new acceptance, not `no_statements` or a fabricated successful status.
 
 ```mermaid
 flowchart TD
@@ -232,34 +258,34 @@ flowchart TD
     Enabled -->|Yes| Accepted{"Accepted export exists?"}
     Accepted -->|No| Missing["not_run: explicit limitation, no link"]
     Accepted -->|Yes| Valid{"Integrity valid?"}
-    Valid -->|No| Error["Fail report: no corrupt fallback"]
+    Valid -->|No| Error["Export-reader integrity failure: no corrupt fallback"]
     Valid -->|Yes| Current{"Current gate, review, config and release?"}
     Current -->|No| Stale["stale: rerun export, no document link"]
     Current -->|Yes| Reprove["Re-prove current upstream authority and pointer stability"]
     Reprove -->|Invalid or changed| Error
     Reprove -->|Valid and unchanged| Nonempty{"Nonempty export?"}
-    Nonempty -->|Yes| Available["available: verified local document and companion refs"]
+    Nonempty -->|Yes| Available["available: protected document and companion refs"]
     Nonempty -->|No| Empty["no_statements: companion only, not a clean verdict"]
 ```
 
-Normal enabled-export failure blocks a refreshed report in either orchestrator. A standalone
-report run dispatched early can describe `not_run` or `stale`; neither is an accepted export
-outcome. Corruption is an integrity failure, not a missing/stale success. Existing immutable
-accepted output is usable only if all current identities and bytes still match, never as the
-claimed output of a failed attempt. Historical verification rehashes
+The final report does not inspect this state, link export files or gain publication gaps from
+disabled/missing/empty/stale export. It consumes only certified gate `/2`.
+Corruption is an export-reader integrity failure, not a missing/stale success. Existing immutable
+accepted output is current only if all present authority pins and bytes still match, never as
+the claimed output of a failed attempt. Historical verification rehashes
 immutable inputs and every runtime-declared output artifact, checks release/identities and
-validates exact canonical reassembly. Before showing references, the report also re-proves
+validates exact canonical reassembly. Before exposing current output, the operator reader re-proves
 current upstream authority and checks that acceptance did not change.
 
-The report's `handoff`, `result`, `manifest` and `document` references are nullable
+The operator view's `handoff`, `result`, `manifest` and `document` references are nullable
 `{path, sha256}` objects, not public URLs; its statement/included/excluded counts are nullable
 too. `disabled`, `not_run` and `stale` expose no output references or accepted counts.
 `no_statements` retains handoff/result/companion references and exact counts, but no document.
-Missing, empty and stale states add publication gaps without changing the original claims,
-gate counts or ship-block decisions.
+Missing, empty and stale states remain explicit non-clean export observations without changing
+claims, gate counts, ship-block decisions or report publication status.
 
-For stale output, rerun export against current accepted upstream handoffs, then rerun the
-report. For settings changes, create a new run instead. For integrity/bound failures, inspect
+For stale output, rerun export against current certified upstream handoffs; no report rerun is
+required by export. For settings changes, create a new run instead. For integrity/bound failures, inspect
 the protected failure receipts and repair the actual upstream problem; do not edit receipts,
 drop packages, lower assertions or use old files to make the job appear successful.
 
@@ -280,11 +306,19 @@ limitations into unsupported OpenVEX properties.
 statements/bytes, empty results, failures, reuse and unavailable observations. Runtime timing
 belongs in telemetry, not deterministic export artifacts. A completion event or a file on disk
 does not prove acceptance; the runner's accepted handoff is authoritative. The ordinary runtime
-metrics snapshot precedes `HANDOFF_ACCEPTED`; the report tail's later snapshot or
+metrics snapshot precedes `HANDOFF_ACCEPTED`; a later job snapshot or
 `appsec-review metrics --run-id <id>` refreshes accepted semantic counts. A successful export
 can therefore be awaiting reconciliation in its initial summary, not an accepted zero.
 
+Latest state/`latest_accepted` requires current authority through `load_export`; cumulative
+semantic counters independently reverify historical accepted bundles through
+`read_accepted_export`, deduplicated by accepted handoff digest. A newer gate/review pointer
+can stale latest without invalidating historical work. Tampered/unreadable historical bytes
+preserve known execution counts but make their semantic contribution unknown with a named gap.
+
 Focused offline unit files cover settings/contracts, input custody, projection/validation,
-handler deadlines, report consumers, topology/wiring and metrics. This documentation pass
-does not establish an integration, acceptance, live Dagster or full-suite result. Those manual
-checks remain unverified until separately recorded; unit success alone cannot establish them.
+handler deadlines, export consumers, topology/wiring and metrics. At the pinned reconciliation
+base, strict contract/wiring tests do not establish that the real `/2` verifier/projector has
+finished adaptation. This documentation pass does not establish final `/2` execution,
+integration, acceptance, live Dagster, full-suite or updated installed-wheel validation.
+Those checks remain unverified until separately recorded; unit success alone cannot establish them.

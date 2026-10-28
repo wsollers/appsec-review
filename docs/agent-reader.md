@@ -25,11 +25,12 @@ Relevant bounded procedures and design references:
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
 - [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository).
 - [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, AST/compile checks, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
-- [`architecture/openvex-export.md`](architecture/openvex-export.md) — planned affected-only OpenVEX
+- [`architecture/openvex-export.md`](architecture/openvex-export.md) — standalone affected-only OpenVEX
   export: issuer/action inputs, source-snapshot/full-configuration identity, protected companion,
-  deterministic validation and telemetry (design only, not implemented).
-- [`operations/openvex-export.md`](operations/openvex-export.md) — draft OpenVEX configuration,
-  trust/dataflow and optional-tail diagrams, output/report states, privacy and recovery.
+  certified gate `/2` context, gate-only reporting and telemetry; adaptation in progress.
+- [`operations/openvex-export.md`](operations/openvex-export.md) — OpenVEX configuration,
+  certified-gate/independent-export diagrams, operator status, privacy and metrics refresh;
+  final `/2` execution validation remains unclaimed.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
   delivered completion source and approved dossier decisions: compile-only PoC before one final gate,

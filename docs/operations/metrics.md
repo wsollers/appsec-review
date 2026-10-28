@@ -119,19 +119,21 @@ does not enable producers in old immutable configurations. Automatic validation 
 PoC still record no runtime execution; no throughput or successful build metric establishes
 reproduction, a passing negative control or a fixed finding. Neither stream nor its metrics may
 include raw source, patches, PoC payloads, prompts or credentials.
-## Planned OpenVEX metrics
+## OpenVEX metrics
 
-**Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**
-The [OpenVEX design](../architecture/openvex-export.md#12-first-class-telemetry-and-metrics)
-specifies an additive `openvex` section with semantics `appsec-review/openvex-metrics/1`
-in the existing run-owned summary, preserving OWASP/review-flow metrics. No Prometheus,
-exporter SDK or network endpoint is planned. See the [draft operator guide](openvex-export.md)
-for eligibility, outcomes and protected output handling.
+The additive `openvex` section has semantics `appsec-review/openvex-metrics/1` in the
+existing run-owned summary, preserving completion/OWASP/review-flow metrics. It is an
+**export operator view**, not a final-report block: report `/2` remains gate-only.
+At `ede3c107`, strict gate `/2` contracts/wiring are reconciled but real verifier/projector
+adaptation is incomplete; the metric contract below is not a claim of final `/2` execution.
+No Prometheus, exporter SDK or network endpoint is added. See the
+[operator guide](openvex-export.md) and
+[telemetry design](../architecture/openvex-export.md#12-first-class-telemetry-and-metrics).
 
-| Planned field | Meaning |
+| Field | Meaning |
 | --- | --- |
 | `openvex_export_attempts_total` | Terminal fresh attempts by `outcome`: `exported`, `exported_with_gaps`, `no_statements`, `failed`, reconciled against runtime terminals. |
-| `openvex_export_reuses_total` | Runtime `JOB_REUSED`, without a new duration sample. |
+| `openvex_export_reuses_total` | Deduplicated runtime `JOB_REUSED`, without a fresh attempt, duration or document-size sample. |
 | `openvex_export_failures_total` | Failures by closed `phase` and `reason`, including pre-domain admission failure from runtime `JOB_FAILED`. |
 | `openvex_export_statements_total` | Accepted fresh statements only, with `status = affected`; explicit zero for accepted empty results. |
 | `openvex_export_findings_total` | Every gate package once per accepted fresh result, by `disposition = included/excluded` and `reason = included/gate_verification_backlog/gate_withheld`. |
@@ -140,7 +142,7 @@ for eligibility, outcomes and protected output handling.
 | `openvex_export_phase_duration_seconds` | Fresh operation-duration histograms by phase; inclusive measurements are not necessarily exclusive work. |
 | `openvex_export_document_bytes` | Accepted fresh nonempty document-size histogram. |
 
-Planned phases are `load`, `assemble`, `validate`, `accept`; operation stages are
+Phases are `load`, `assemble`, `validate`, `accept`; operation stages are
 `openvex.verify_inputs`, `openvex.assemble`, `openvex.validate`, `openvex.accept`.
 Failure reasons are restricted to `configuration_invalid`, `input_missing`, `input_stale`,
 `input_tampered`, `identity_conflict`, `schema_invalid`, `semantic_invalid`, `bound_exceeded`,
@@ -151,21 +153,48 @@ Duration buckets in seconds are
 document-size buckets in bytes are
 `1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 33554432, +Inf`.
 Histogram JSON contains cumulative fixed buckets, `count`, `sum` and measured/unmeasured
-counts. Reuse, crashes or missing measurements do not supply fake zero durations.
+counts. With no measured samples `sum` is null, not zero; a measured zero is valid.
+Reuse, crashes and missing measurements never supply fake zero durations.
+Accepted `no_statements` contributes explicit zero statement/document-byte totals but
+no document-size sample, because no document exists.
 
-The section is also intended to expose `configured_enabled`, `latest_state`, latest
-accepted counts, zero-filled exclusions and telemetry gaps/conflicts. `disabled` and
+The section also exposes `configured_enabled`, `latest_state`, `latest_accepted`,
+`accepted_fresh_output_count`, zero-filled exclusions in accepted counts and telemetry
+`gaps`/`conflicts`, plus `accounting_complete`. `disabled` and
 `not_run` are not successful attempts. Missing/unreadable accepted artifacts yield null
 accepted counts with a named gap, not zeros. Read counts from bounded, hash-verified
 accepted results, not just emitted events; distinguish cumulative work from latest output.
 
-The event sequence is designed around `OPENVEX_EXPORT_STARTED`,
+Events are `OPENVEX_EXPORT_STARTED`,
 `OPENVEX_INPUTS_VERIFIED`, `OPENVEX_EXPORT_ACCOUNTED`, `OPENVEX_EXPORT_COMPLETED`
 and `OPENVEX_EXPORT_FAILED`. A completed domain event followed by failed runner
-finalization must not increment accepted statements/bytes. Lifecycle deduplication uses
-`(run_id, job_id, attempt_id, invocation_id)`; semantic totals deduplicate accepted handoff
-digests. Missing/conflicting terminal records are telemetry gaps, not fabricated success.
+finalization must not increment accepted statements/bytes. Domain outcome, runtime success
+and `HANDOFF_ACCEPTED` are reconciled; semantic counts require full accepted-output verification
+of immutable inputs, runtime-declared artifacts and canonical reassembly.
+
+**Current state versus cumulative work:** `latest_accepted`/`latest_state` require current
+gate/review/configuration/release authority through `load_export`. Cumulative semantic
+counters independently reverify each historical accepted output through `read_accepted_export`
+and deduplicate its handoff digest. A legitimate newer pointer can make latest stale without
+invalidating historical semantic work. If historical bytes become unreadable/tampered,
+known execution counts remain but the unavailable semantic contribution is not counted;
+named gaps expose incomplete accounting. With no verifiable accepted output, totals are null,
+not manufactured zeros.
+
+Attempts correlate by run/job/attempt and domain `invocation_id`; reuse correlation prefers
+`invocation_id`, then `dagster_run_id`, then stable `event_id`, distinguishing real repeated
+invocations from duplicate records. Missing/conflicting terminals, phase measurements or
+acceptance produce explicit gaps/conflicts. `attempts` holds correlation details and
+`duplicate_lifecycle_records` records deduplication.
 Timing stays in logs/receipts/summary, outside deterministic document/manifest/result bytes.
+
+The ordinary runtime metrics snapshot is written **before** `HANDOFF_ACCEPTED`. A later
+job snapshot or `appsec-review metrics --run-id <id>` refreshes accepted semantics after
+acceptance. An initial missing-acceptance gap/null total is not an accepted empty export.
+No runtime sequencing change or background metrics service is added. Corrupt accepted output
+is an export-reader integrity failure; the metrics wrapper records `latest_state = stale`
+with `latest_accepted_output_unavailable`, not a clean result. The final report does not
+read this operator status or gain new publication gaps from it.
 
 No finding/claim/product/run IDs, hashes, filesystem paths, repository/issuer/action text,
 source, credentials or model/error strings are permitted as metric labels. Run/job/attempt/

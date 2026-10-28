@@ -1,13 +1,16 @@
 # OpenVEX shared contracts
 
-These are **Wave 0 contracts, not an installed exporter**. No registry, dispatch, TOML,
-runtime, report, telemetry aggregation or installed-resource wiring is introduced here.
-The export design is [OpenVEX findings export](../../architecture/openvex-export.md).
-For upstream publication contracts, the later
+These are the **strict shared contracts for standalone post-gate export**, reconciled at
+`ede3c107b16aedebc97c2659372ac9ae80fde348` (including `f4f746bf`). The repository has an
+exporter job, registry/CLI/Dagster wiring, typed TOML settings, protected datasets, operator
+status and metrics; real input verifier/projector adaptation to the certified `/2` boundary
+is still in progress at this base. Synthetic contracts do not establish final execution.
+The [OpenVEX design](../../architecture/openvex-export.md) and
+[operator guide](../../operations/openvex-export.md) describe the boundary.
+For upstream publication contracts, the
 [evidence-completion architecture](../../architecture/evidence-completion-and-remediation.md)
 is authoritative: accepted review `/3`, one gate `/2` after completion producers, and a
-gate-only report `/2`. These shared contracts are reconciled against exact candidate
-`7f4c9b0a1e099fd507c33611f78c2cc890f05a5f`; they do not implement or alter that graph.
+gate-only report `/2`. Export is an independent post-gate peer, not a report input.
 
 The official OpenVEX v0.2.0 schema is retained byte-for-byte under `upstream/`, at commit
 `61b5f885d0f481f48683c93345e49ef1a6e9fdff`. Its SHA-256 is
@@ -17,7 +20,7 @@ byte hashes, sizes and OpenVEX contributor attribution. No runtime download is p
 
 ## Public Python boundary
 
-`src/appsec_review/jobs/job_openvex_export/contracts.py` imports no unimplemented chunks.
+`src/appsec_review/jobs/job_openvex_export/contracts.py` is the pure shared record boundary.
 All records are frozen/slotted. JSON object fields are copied recursively into immutable
 mapping proxies and tuples; `json_body(value)` returns a detached ordinary JSON projection.
 `canonical_bytes(value)` validates finite JSON/depth and delegates to `storage.canonical_json`
@@ -51,7 +54,7 @@ The input implementation must additionally enforce **lower configured**
 bounds, all accepted hashes/schemas/cross-identities and current pointer custody.
 Synthetic record construction is not an acceptance API.
 
-The Wave 1 implementation signatures are:
+The verifier/projector signatures are unchanged:
 
 ```python
 verify_inputs(run_root, settings, repository_root) -> VerifiedInputs
@@ -88,6 +91,16 @@ schema identities/pins, validation-profile hash, filenames, fixed status note, t
 source, component name and all hard bounds are exported constants. Histogram consumers
 append their cumulative `+Inf` bucket; it is not a JSON nonfinite number.
 
+`ExportReportView`/`ExportReportState` are retained Python names for the **export operator
+view**, not final-report fields. `read_accepted_export(run_root, handoff, settings,
+repository_root)` revalidates immutable historical bundles; `load_export(run_root, settings,
+repository_root, *, exporter_release, gate_handoff=None)` additionally requires current
+authority for latest output. Metrics separately preserve each independently reverified
+historical accepted contribution, deduped by accepted handoff digest. Valid pointer
+advancement makes latest stale without corrupting historical evidence. Unreadable/tampered
+historical bytes retain known execution counts but leave semantic contribution unknown with
+a named accounting gap. No final-report consumer or data-discovery route is implied.
+
 ## Settings and trust
 
 `OpenVexExportSettings.from_mapping(value)` requires exactly the design v1 keys, even
@@ -121,7 +134,7 @@ exact accounting and sorted path/hash bindings. The closed `review_context` now 
 the exact gate `/2` `capabilities` and `attachments` in place of the removed `/1`
 `unavailable_inputs`, including compile-only nonexecution assurances and limitations of
 kind `notice`. Notices are preserved but do not become review gaps. Local OpenVEX
-manifest/result identities remain `/1` in this contracts-only pre-integration base; the
+manifest/result identities remain `/1` on the pre-issued contract; the
 validation-profile digest changes to bind the corrected context and upstream schema pins.
 No previously issued runtime export is being migrated.
 Package rows nest the **unchanged**
@@ -151,14 +164,23 @@ final-report/final-report.schema.json
 
 The third resource is necessary because gate `/2` common definitions reference the
 report `/2` PoC attachment item schema. It does not introduce a report data dependency.
-`SCHEMA_SHA256` pins all seven schema files; `VALIDATION_PROFILE_SHA256` incorporates
+`SCHEMA_SHA256` pins all seven schema files; with upstream license and lock this is
+**nine run-owned pinned snapshots**. `VALIDATION_PROFILE_SHA256` incorporates
 those pins and the versioned profile. The final-report resources are the original,
 deliberately changed source bytes, not normalized copies; the OpenVEX upstream schema,
 license and lock are unchanged. Load schemas into an explicit offline
 `referencing.Registry` and reject unknown resources; never use the review `SchemaSet`
-for upstream OpenVEX or retrieve the JSON-LD context. Packaging and the actual installed
-wheel-resource test belong to integration; Wave 0 tests exercise the offline registry
-against the same synthetic installed directory layout.
+for upstream OpenVEX or retrieve the JSON-LD context. Source resources take precedence:
+an existing corrupt/incomplete source directory is an error, not a fallback trigger.
+Contract tests exercise the offline registry against a synthetic installed-directory layout.
+
+An earlier exact-wheel pure projection/offline fallback passed using `sys.prefix/share`
+resources with the previous schema closure; the `/2` nine-resource closure still needs an
+exact-commit installed-wheel recheck. That check does not establish a self-contained
+application: the earlier standalone job import without application resources failed because
+`pipeline/guidance/registry.json` was missing. A configured application checkout/guidance
+is still required for complete job imports/execution. No full installed-job execution,
+integration, acceptance or live Dagster result is claimed here.
 
 ## Test fixtures and verification
 
@@ -190,4 +212,5 @@ Focused Windows unit command (explicitly authorized for this isolated worktree):
 ```
 
 Integration, acceptance and live Dagster runs remain manual. Unit boundary examples
-establish neither real-run acceptance nor runtime/report/metrics integration.
+establish neither real-run acceptance nor completed `/2` runtime/metrics adaptation.
+Final-report publication remains independently gate-only.

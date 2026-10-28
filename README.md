@@ -529,10 +529,15 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> code_graph_index -> security_tagging
   -> owasp_control_assessment (enabled by default)
   -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> openvex_export (opt-in; only when enabled)
-  -> poc_generation (opt-in; only when enabled) -> final_report_publication
+  -> document_issue_analysis -> inference_security_review (chains before seal)
+  -> poc_generation -> remediation_planning -> remediation_validation -> dossier_publication
+  -> final_publication_gate -> openvex_export (opt-in; only when enabled)
+  -> final_report_publication
 ```
+
+The completion producers above run before one certified gate when enabled. The direct driver
+dispatches post-gate export and report sequentially, but they are independent graph peers:
+the report consumes only the gate snapshot, never OpenVEX output.
 
 Start a review from the repository root with the virtual environment active:
 
@@ -623,10 +628,12 @@ workspace and never runs a produced binary; see
 `final_publication_gate` and `final_report_publication` call no model: they re-verify the accepted
 inference review and write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
-`poc_generation` is an optional job between them, shipped disabled and run by hand on a finished run
-(`appsec-review run job_poc_generation --run-id <id> --upstream-from-run`): a model writes a unit-test function with no
-`main` for each finding the judge agreed with, deterministic validators and a compile check in the build image verify it,
-and nothing is linked or run; see [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md).
+Enabled PoC generation, remediation planning/validation and dossier publication run **before**
+the single final gate. PoC and remediation checks are compile-only, never runtime reproduction
+or a verified fix. New-run defaults do not change frozen historical configurations; manual
+disabled PoC output requires explicit gate admission. See
+[`docs/operations/poc-generation.md`](docs/operations/poc-generation.md),
+[remediation](docs/operations/remediation.md) and [dossiers](docs/operations/dossier-publication.md).
 
 `job_openvex_export` produces deterministic, model-free
 OpenVEX `affected` statements only for the accepted gate's publishable confirmed findings,
@@ -635,8 +642,10 @@ including refusal of manual dispatch while disabled, and requires explicit immut
 issuer/action/repository settings. Products identify the reviewed source snapshot and full
 configuration, not a released binary or version range; local export does not authorize public
 disclosure. Empty exports retain explicit non-clean accounting without writing an invalid empty
-OpenVEX document. In Dagster, enabled OpenVEX and PoC jobs are siblings after the gate;
-the report waits for every enabled tail, whereas direct CLI execution is sequential.
+OpenVEX document. The user-selected boundary is **standalone post-gate export with gate-only reporting**:
+OpenVEX is not a report field, attachment or prerequisite. At source
+`ede3c107`, strict gate `/2` contracts and topology are reconciled; exporter verifier/projector
+adaptation is still in progress, not evidence of final `/2` execution validation.
 See the [design](docs/architecture/openvex-export.md) and
 [operator guide and diagrams](docs/operations/openvex-export.md).
 

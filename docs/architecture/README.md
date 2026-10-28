@@ -96,11 +96,12 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
   compile-only test/control functions, immutable protected attempt files, enabled new-run pre-gate
   ordering and explicit authenticated manual admission for frozen disabled runs.
-- [`openvex-export.md`](openvex-export.md) — planned affected-only deterministic OpenVEX export,
+- [`openvex-export.md`](openvex-export.md) — standalone affected-only deterministic OpenVEX export,
   immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
-  optional-tail report fan-in and telemetry (design only, not implemented).
-- [`../operations/openvex-export.md`](../operations/openvex-export.md) — draft operator setup,
-  trust/dataflow and report-state diagrams, output/accounting semantics, privacy and recovery.
+  certified gate `/2` contracts and telemetry; gate-only report preserved, adaptation in progress.
+- [`../operations/openvex-export.md`](../operations/openvex-export.md) — operator setup,
+  certified-gate dataflow and independent post-gate outputs, export-status diagrams,
+  accounting, privacy, metrics refresh and remaining validation limits.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
