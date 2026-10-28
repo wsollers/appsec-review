@@ -26,11 +26,13 @@ review (chains before seal) -> enabled PoC / planning / validation / dossiers
                            -> one final gate -> final report
 ```
 
-The report closes the completion publication path. The disabled-by-default standalone
-OpenVEX exporter is an independent post-gate peer when enabled, not a report dependency.
+The report closes the completion publication path. The default-on standalone OpenVEX exporter
+automatically generates/verifies protected local files as an independent post-gate peer,
+not a report dependency or completion barrier. Explicit opt-out leaves it disabled;
+historical frozen disabled runs do not change.
 Gate and report are shipped enabled. Disabling the gate also makes the report transparent
 (there is no certified input); enabled pre-gate completion producers remain, rather than
-moving after the gate or disappearing. Enabling export requires gate and review enabled.
+moving after the gate or disappearing. Enabled export requires gate and review enabled.
 Disabling only report publication leaves the gate's certified snapshot available to other
 consumers, including separately enabled export.
 
@@ -202,7 +204,7 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 ### Standalone OpenVEX is not a report input
 
 The user selected standalone post-gate export while preserving gate-only reporting.
-At `e628041cd734d854e749aa4e373bdc718d9a7363`, report dependencies and `CONSUMES` are exactly
+At `74d931273a383f2f33bac90d3569a070a0ef612d`, report dependencies and `CONSUMES` are exactly
 `job_final_publication_gate`; report `/2` has no `openvex_export` block, output links or
 live optional attachment discovery. This supersedes the earlier OpenVEX report-link/fan-in
 proposal, not the pre-gate completion design.
@@ -216,11 +218,13 @@ An exporter failure is not a report-input integrity failure. A sequential direct
 on a failed export before reaching report dispatch, but that ordering does not add a report
 dependency; standalone report publication still requires only its valid certified gate.
 
-The [OpenVEX operator guide](openvex-export.md) covers the issuer/action configuration,
-source identity, standalone outputs, privacy and status recovery. The certified-gate shared
+The [OpenVEX operator guide](openvex-export.md) covers no-setup tool/action defaults, automatic
+accepted-snapshot identity, explicit opt-out/strict overrides, standalone outputs, privacy
+and status recovery.
+The default-on change adds no external publication/signature or new topology. The certified-gate shared
 reader, exporter input verifier and projector are assembled at this source boundary.
 The [implementation record](../reviews/openvex-export-implementation.md) tracks combined
-focused verification and final exact-main reconciliation; no real accepted whole-chain,
+focused verification and policy-change landing; no real accepted whole-chain,
 integration, acceptance, Linux or live Dagster result is claimed here.
 
 ### What the report never contains
