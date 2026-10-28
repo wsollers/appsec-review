@@ -59,8 +59,10 @@
    "counts": {},
    "facts": 10,
    "family": "range_fact",
-   "gaps": [],
-   "status": "complete"
+   "gaps": [
+    "not_applicable: all 10 exported sink operands are outside the integral range model; no interval is computed"
+   ],
+   "status": "partial"
   }
  ],
  "facts": [
@@ -10098,7 +10100,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10195,7 +10197,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10292,7 +10294,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10389,7 +10391,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10486,7 +10488,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10583,7 +10585,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10680,7 +10682,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10777,7 +10779,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10874,7 +10876,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -10971,7 +10973,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-range-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,

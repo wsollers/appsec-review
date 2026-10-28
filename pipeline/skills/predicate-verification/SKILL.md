@@ -18,6 +18,11 @@ the path's actual guard, range, alias and mutation facts, not just its endpoint 
 destination write, calculate source availability and destination capacity separately, accounting
 for arithmetic width, termination bytes and every relevant path.
 
+Granted precomputed syntax navigation can locate definitions, written calls, imports and identifier
+occurrences when semantic analysis is missing. Resolve each relevant node to its source excerpt.
+Syntax-only names remain unresolved; they do not discharge a dataflow, target-resolution or
+input-control obligation. Missing build or database coverage stays a separate gap.
+
 Across an asynchronous boundary, verify which principal and object state survive serialization
 and which checks occur again at consumption. A producer-side check may not protect a later
 operation on changed state. For configuration, separate documented defaults from observed

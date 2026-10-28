@@ -17,6 +17,7 @@ from typing import Any
 
 from appsec_review import seeding
 from appsec_review.codeql.runtime import GraphExportIntegrityError, load_graph_exports
+from appsec_review.graph.catalog import LANGUAGE_ALIASES
 from appsec_review.graph.contract import (
     ADMISSIBILITY_RULE, CROSS_CHECK_RULE, GRAPH_INDEX, NORMALIZE_RULE, Coverage, Family, GraphFact, GraphSettings,
     Producer,
@@ -327,18 +328,25 @@ def restored_secondary(run_root: Path, present: Iterable[Mapping[str, Any]]) -> 
     return [restored[key] for key in sorted(restored)]
 
 
+def _native_scope(scope: Mapping[str, Any]) -> bool:
+    return LANGUAGE_ALIASES.get(str(scope.get("language") or "").strip().lower()) == "cpp"
+
+
 def assign_secondary(run_root: Path, shards: Iterable[Mapping[str, Any]],
                      scopes: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, list[dict[str, Any]]]]:
-    """Give each accepted clangd/IR/AST shard to exactly one CodeQL scope.
+    """Give each accepted native secondary shard to exactly one compatible C/C++ CodeQL scope.
 
     A shard belongs to the scope whose planned files hold the most of the shard's located paths (ties by
     scope id). A shard never serves two scopes, so a cross-check verdict can never mix evidence from
     two build units. A shard that touches no scope file is not used.
     """
     files = {str(scope["scope_id"]): {str(item["path"]) for item in scope["files"]}
-             for scope in scopes if scope["export_status"] == SUCCEEDED}
+             for scope in scopes if scope["export_status"] == SUCCEEDED and _native_scope(scope)}
     assigned: dict[str, dict[str, list[dict[str, Any]]]] = {
-        scope_id: {producer.value: [] for producer in SECONDARY_PRODUCERS} for scope_id in files}
+        str(scope["scope_id"]): {producer.value: [] for producer in SECONDARY_PRODUCERS}
+        for scope in scopes if scope["export_status"] == SUCCEEDED}
+    if not files:
+        return assigned
     for shard in sorted(shards, key=shard_key):
         producer = secondary_producer(shard)
         if producer is None:
@@ -359,10 +367,11 @@ def project_root_key(value: Any) -> str:
 
 def assign_analyzers(shards: Iterable[Mapping[str, Any]],
                      scopes: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, list[dict[str, Any]]]]:
-    """clang-static and joern-cpg shards go to every CodeQL scope of the same project root, by name."""
+    """clang-static and joern-cpg shards go to compatible C/C++ scopes of the same project root."""
     roots: dict[str, list[str]] = {}
     for scope in scopes:
-        roots.setdefault(project_root_key(scope.get("root")), []).append(str(scope["scope_id"]))
+        if _native_scope(scope):
+            roots.setdefault(project_root_key(scope.get("root")), []).append(str(scope["scope_id"]))
     assigned = {str(scope["scope_id"]): {producer.value: [] for producer in ANALYZER_JOBS.values()}
                 for scope in scopes}
     for shard in sorted(shards, key=shard_key):

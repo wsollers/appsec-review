@@ -223,10 +223,13 @@ makes its queries and export eligible, and query/export failures do not invalida
 The job-level topology is planning, ready-scope execution, then acceptance. Resource admission
 still applies; [current conservative limits](performance-assurance.md#scheduling-and-limits)
 do not permit two ordinary actions to overlap. Its design is
-[code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. Only C/C++
-has a pack in this change. Every other language records the export disposition `NOT_APPLICABLE`
-with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This is a named
-disposition, not a failure and not a clean result.
+[code-graph precomputation](../architecture/code-graph-precomputation.md) sections 7 and 8.
+Packs/catalogs exist for C/C++, Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and
+deferred Swift. Execution requires the corresponding configured pins and an accepted database;
+Swift remains policy-disabled. An unconfigured language records `NOT_APPLICABLE` with the reason
+"no hash-pinned CodeQL graph export pack for `<language>`". This is a named disposition, not a
+failure and not a clean result. The generic graph index and retrieval consume every accepted
+language export; native cross-check shards are C/C++-only.
 
 Configuration lives in `appsec-review.toml`:
 
@@ -420,9 +423,12 @@ For a fresh `appsec-multi-vuln` run, verify:
 7. `query_codeql` returns the same accepted observations; and
 8. deployment verification reports per-language and per-profile execution, SARIF, observation,
    and gap counts; and
-9. every successful C/C++ database has a `SUCCEEDED` graph export whose manifest is bound to the
-   handoff, every other language reports `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py`
-   passes (not yet run).
+9. every successful database with a configured export pack has a separately reported graph export
+   whose manifest is bound to the handoff; unsupported/unconfigured exports have precise
+   `NOT_APPLICABLE` dispositions. Verify each language's seven family coverage rows, including
+   partial/unavailable range capability, separately from database/query success.
+   `tests/live/test_code_graph_live.py` remains the native end-to-end gate; recorded multilingual
+   normalizer fixtures alone do not prove live image or database acceptance.
 
 ## Live acceptance
 
