@@ -51,8 +51,13 @@ def test_compile_only_assurance_requires_the_null_result_field() -> None:
 
 @pytest.mark.parametrize("record", [
     None, [], "not an assurance", True,
-    {**nonexecution_assurance(), "executed": True},
 ])
-def test_compile_only_assurance_rejects_nonrecords_and_extra_fields(record) -> None:
+def test_compile_only_assurance_rejects_nonrecords(record) -> None:
     with pytest.raises(IntegrityError):
         verify_nonexecution_assurance(record)
+
+
+def test_compile_only_assurance_may_be_embedded_in_a_schema_validated_candidate() -> None:
+    verify_nonexecution_assurance({
+        **nonexecution_assurance(), "claim_id": "claim-one", "status": "compile_verified",
+    })

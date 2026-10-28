@@ -79,3 +79,40 @@ For fleet/control-plane state, `python deploy/dagster/bin/run_report.py` reports
 run list alongside bounded slow-operation rankings collected from available summaries. It separates
 completed, queued, genuinely running, stale, and orphaned Dagster records. `--stale-seconds`
 controls classification; the command is read-only.
+
+## Evidence-completion tracking (commissioned)
+
+The user requires telemetry and metrics from the first implementation of the
+[completion lanes](evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
+not instrumentation added after rollout. At inventory baseline `5f5548d`, the existing event writer
+and generic aggregations are available, but completion-specific producer events and summary
+fields remain pending integration. Reconcile their exact names and schema version from source;
+this table is the tracking requirement, not an implemented event catalog.
+
+Reuse [`EventLog.write`](../../src/appsec_review/observability/events.py) through `context.events`
+and [`aggregate_run_metrics`](../../src/appsec_review/observability/telemetry.py), retaining the
+canonical pipeline stream and regenerable `data/telemetry/summary.json`. No separate telemetry
+backend or Azure service is requested.
+
+| Surface | Required process observations |
+| --- | --- |
+| Stages and attempts | Start/terminal correlation, duration, attempt/reuse and stage progress, enabled/disabled or empty-scope disposition, caps, gaps and failures; unmatched/conflicting lifecycle records remain explicit. |
+| PoC candidates | Eligible and terminal candidate counts; policy refusal, unsupported/unavailable, compile outcome, cap/timeout and producer failure. Compilation remains distinct from runtime execution. |
+| Chains | Seed/composition/challenge counts, terminal continuity decisions, bounds and missing-edge/verification gaps before ledger sealing. Metrics cannot replace the accepted chain manifest. |
+| Remediation | Confirmed-only intake, proposal outcomes and byte-edit applicability; adapter selections, static/build/manual outcomes, rejections and adapter failures. No `fixed` or runtime-success counter follows from a static/build check. |
+| Dossiers | Eligible confirmed-finding/PoC counts, source retention, per-item render status, PDF success/failure/timeout, output counts, duration, caps and cleanup gaps. A retained LaTeX source is not a successful PDF. |
+| Gate and report | Accepted input/capability accounting, certified attachment counts, integrity failures and missing-producer/coverage gaps, without inventing target evidence from throughput. |
+| Model work | Correlated model/retry/duration and provider usage where emitted. Unknown token/cache/cost data remains unknown, not an instrumented zero or an inferred bill. |
+
+Use low-cardinality stage/lane/status/adapter/error-class aggregates. Exact run/attempt/candidate
+and artifact hashes are diagnostic correlation fields, not unbounded metric-label dimensions.
+Do not double-count per-item outcomes again as stage summaries or add overlapping inclusive
+durations as wall time. Failed, skipped, capped and disabled work must remain distinguishable.
+
+Producer fields must be allowlisted before `context.events.write`: its attempt log receives fields
+before the central writer bounds/redacts them. Never emit source, patch or PoC payloads, raw prompts,
+credentials or arbitrary model/compiler diagnostics into either stream. Use counts, closed statuses,
+bounded error classes and resolving hashes instead; existing key-based redaction is not permission
+to log arbitrary content under a different key. Metrics are operational accounting, not admissible
+security evidence or a public dossier payload. See [metrics operations](../operations/metrics.md)
+and the [dossier input inventory](dossier-data-inventory.md).
