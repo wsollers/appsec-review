@@ -23,7 +23,7 @@ from appsec_review.review.ledger import (
 )
 from appsec_review.review.models import (
     Admissibility, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane,
-    RelationKind, make_gap,
+    RelationKind, Role, make_gap,
 )
 from appsec_review.review.scoring import (
     DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
@@ -420,16 +420,34 @@ def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incom
     merged = merge_verified(shard_paths)
     projection = project(merged.events)
     expected_cells = {cell_id: Lane(lane) for item in lanes for cell_id, lane in item["expected_cells"].items()}
-    for cell_id, lane in (additional_cells or {}).items():
-        if cell_id in expected_cells:
-            raise IntegrityError("chain cell duplicates an intake cell identity")
-        expected_cells[cell_id] = Lane(lane)
+    review_projection = base_review_projection(projection, additional_cells or {})
     expected_packages = {package_id: Lane(lane) for item in lanes for package_id, lane in item["packages"].items()}
     lead_accounting = {package_id: leads for item in lanes
                        for package_id, leads in (item.get("lead_accounting") or {}).items()}
-    accounting = exact_accounting(projection, expected_cells, expected_packages,
+    accounting = exact_accounting(review_projection, expected_cells, expected_packages,
                                   incomplete_gap_ratio=incomplete_gap_ratio, lead_accounting=lead_accounting)
     return accounting, projection, merged
+
+
+def base_review_projection(projection: Projection, chain_cells: Mapping[str, str]) -> Projection:
+    """Prove exact enhancement-cell coverage without changing base review completeness."""
+    from dataclasses import replace
+    tasks = {"chain_composer": Role.ATTACK_CHAIN_ANALYST, "chain_refuter": Role.BLUE_TEAM_REFUTER,
+             "chain_weakest_link_verifier": Role.INDEPENDENT_VERIFIER}
+    actual = {identity: records for identity, records in projection.cells.items()
+              if identity in chain_cells or any(record.task in tasks for record in records)}
+    if set(actual) != set(chain_cells):
+        raise IntegrityError("chain cell accounting is not exact: missing or unexpected terminal cell")
+    for identity, records in actual.items():
+        if (len(records) != 1 or records[0].task not in tasks or records[0].role is not tasks[records[0].task]
+                or records[0].lane.value != chain_cells[identity]
+                or records[0].claim_id is not None):
+            raise IntegrityError("chain cell accounting is not exact: duplicate or mismatched terminal cell")
+    chain_subjects = {"attack_chains", *projection.attack_chains, *chain_cells}
+    return replace(projection, cells={identity: records for identity, records in projection.cells.items()
+                                    if identity not in actual},
+                   gaps=tuple(gap for gap in projection.gaps
+                              if gap.subject_id not in chain_subjects and gap.gap_class is not GapClass.CHAIN_GAP))
 
 
 # ------------------------------------------------------------------------------------------------
