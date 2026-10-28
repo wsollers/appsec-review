@@ -7,11 +7,12 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from appsec_review.config.inference_review import JOB_ID
 from appsec_review.jobs.completion_contracts import ATTACK_CHAIN_MANIFEST_SCHEMA
 from appsec_review.review import attack_chains as policy
 from appsec_review.review.capability import CellCapability, IN_PROCESS_TOOLS
-from appsec_review.review.cells import CellSpec
-from appsec_review.review.identity import sha256_hex
+from appsec_review.review.cells import RECEIPT_SCHEMA, CellSpec
+from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.ledger import LedgerWriter, Projection
 from appsec_review.review.models import (
     CellStatus, ChainStatus, ClaimState, ContinuityDimension, ContinuityOutcome, GapClass, IntegrityError, Lane, Role,
@@ -90,14 +91,38 @@ def _empty_edge(left: str, right: str, output: str, input_: str) -> policy.Edge:
                        tuple(policy.Obligation(dimension) for dimension in ContinuityDimension))
 
 
+class _ResolutionBudgetExceeded(Exception):
+    pass
+
+
+class _BoundedResolutionCore:
+    def __init__(self, ctx: ReviewContext) -> None:
+        self.ctx, self.remaining = ctx, ctx.settings.attack_chains.max_queries
+        self.manifest, self.limits = ctx.core.manifest, ctx.core.limits
+
+    def _query(self, operation: str, **parameters):
+        if self.remaining == 0 or not self.ctx.budget.cell_launch_allowed():
+            raise _ResolutionBudgetExceeded
+        self.remaining -= 1
+        self.ctx.budget.charge(retrieval_queries=1)
+        return getattr(self.ctx.core, operation)(**parameters)
+
+    def trace(self, **parameters):
+        return self._query("trace", **parameters)
+
+    def find(self, **parameters):
+        return self._query("find", **parameters)
+
+
 def _resolve(ctx: ReviewContext, edge: policy.Edge, environment: str, *, cites=None):
     settings = ctx.settings.attack_chains
-    if not ctx.budget.cell_launch_allowed():
-        return edge, ("continuity_resolution:job_budget_exhausted",)
-    ctx.budget.charge(retrieval_queries=1)
-    return policy.resolve_edge(
-        ctx.core, edge, environment, producers=settings.continuity_producers, limit=ctx.max_page_size,
-        evidence_limit=settings.max_evidence_per_obligation, cited_relations=cites)
+    try:
+        return policy.resolve_edge(
+            _BoundedResolutionCore(ctx), edge, environment, producers=settings.continuity_producers,
+            limit=ctx.max_page_size, evidence_limit=settings.max_evidence_per_obligation, cited_relations=cites)
+    except _ResolutionBudgetExceeded:
+        empty = replace(edge, obligations=tuple(policy.Obligation(dimension) for dimension in ContinuityDimension))
+        return empty, ("continuity_resolution:query_or_job_budget_exhausted",)
 
 
 def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[Mapping[str, Any]], *,
@@ -396,9 +421,41 @@ def verify_publication(run_root: Path, projection: Projection, reference: Mappin
                 or item["limitations"] != list(view.decision.limitations)
                 or item["component_claim_ids"] != [component.claim_id for component in proposal.components]):
             raise IntegrityError("attack-chain manifest, artifact and ledger decision disagree")
+        _verify_actor_receipt(run_root, projection, proposal.composer, "composer", "succeeded", None, schemas)
         for challenge in view.challenges:
-            if challenge.receipt:
-                receipt = read_artifact(run_root, policy.document(challenge.receipt))
-                if receipt["turns"][0]["request_sha256"] != challenge.request_sha256:
-                    raise IntegrityError("chain challenge is not bound to its original independent request")
+            receipt = _verify_actor_receipt(run_root, projection, challenge.actor, challenge.kind,
+                                            challenge.status, challenge.receipt, schemas)
+            if receipt and receipt["turns"][0]["request_sha256"] != challenge.request_sha256:
+                raise IntegrityError("chain challenge is not bound to its original independent request")
     return manifest
+
+
+def _verify_actor_receipt(run_root: Path, projection: Projection, actor, kind: str, status: str,
+                          reference: policy.Artifact | None, schemas):
+    task, role, schema = TASKS[kind]
+    cell_id = actor.conversation_id
+    records = projection.cells.get(cell_id, ())
+    if (len(records) != 1 or records[0].task != task or records[0].role is not role
+            or records[0].status.value != status or records[0].claim_id is not None
+            or actor.actor_id != make_id("actor", 1, {"cell_id": cell_id})):
+        raise IntegrityError("chain actor is not bound to exactly one matching terminal cell")
+    record = records[0]
+    if record.receipt_sha256 is None:
+        if status != "not_launched" or record.attempts or reference is not None:
+            raise IntegrityError("attempted chain work is missing its original receipt")
+        return None
+    path = (run_root / "data" / "jobs" / JOB_ID / "cells" / cell_id / f"attempt-{record.attempts}.json")
+    expected = policy.Artifact(path.relative_to(run_root).as_posix(), record.receipt_sha256)
+    if reference is not None and reference != expected:
+        raise IntegrityError("chain challenge receipt is not its terminal cell's receipt")
+    receipt = read_artifact(run_root, policy.document(expected))
+    if (receipt.get("schema") != RECEIPT_SCHEMA or receipt.get("cell_id") != cell_id
+            or receipt.get("provider") != actor.provider or receipt.get("model") != actor.model
+            or receipt.get("status") != status or receipt.get("attempt") != record.attempts
+            or receipt.get("validator_version") != policy.POLICY or not receipt.get("turns")):
+        raise IntegrityError("chain actor, status and original cell receipt disagree")
+    if status == "succeeded":
+        if receipt.get("result_sha256") != sha256_hex(receipt.get("result")):
+            raise IntegrityError("chain cell result hash does not match its original result")
+        schemas.validate(schema, receipt["result"])
+    return receipt

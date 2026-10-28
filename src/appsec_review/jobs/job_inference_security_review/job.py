@@ -4,6 +4,7 @@ Units, in dependency order: ``scope.accept_manifest``, ``scope.assemble_scope``,
 ``triage.lead_severity`` (audited severity for leads the scanner left unknown; see
 ``review/lead_triage.py``), ``packages.assemble_lead_packages``, ``packages.assemble_hunt_packages``, ``lead_review.teams``,
 ``hunt_review.teams``, ``merge.claims``, ``adjudicate.apply_policy``, ``scoring.score_claims``,
+``attack_chains.compose_candidates``, ``attack_chains.refute_edges``, ``attack_chains.verify_weakest_links``,
 ``completeness.audit``, ``publication.publish_claim_ledger``, ``publication.publish_handoff``.
 The two lane units depend only on their own package unit, so Dagster runs them in parallel; actual
 model concurrency is the run-wide review-team semaphore. Ordinary failures become typed gaps and a
@@ -42,7 +43,7 @@ from appsec_review.review.lead_triage import (
     run_triage,
 )
 from appsec_review.review.ledger import LedgerWriter, project
-from appsec_review.review.models import ClaimState, IntegrityError, Lane, Predicate
+from appsec_review.review.models import CellStatus, ChainStatus, ClaimState, IntegrityError, Lane, Predicate
 from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
 )
@@ -512,6 +513,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             scope_out=unit.output("scope.assemble_scope"), manifest_path=scope.manifest_path)
 
     def chain_compose(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
         ctx = chain_context(unit)
         projection = project(stages.merge_verified(shard_paths(unit, LEDGER_UNITS[:4])).events)
         adjudications = _read(unit.job.run_root, unit.output("adjudicate.apply_policy")["artifact"])["adjudications"]
@@ -536,12 +538,17 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         ledger_path = unit.unit_root / "ledger.jsonl"
         document = chains.compose(ctx, projection, adjudications, extra_verifier_claims=extra, seeds=seeds,
                                   out_dir=unit.unit_root / "proposals", ledger_path=ledger_path, stream=unit.unit_id)
+        unit.job.events.write("INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED",
+                              **document["accounting"], expanded=document["exploration"]["expanded"],
+                              frontier_truncated=document["exploration"]["frontier_truncated"],
+                              gaps=len(document["gaps"]), duration_ms=max(0, int((time.monotonic() - started) * 1000)))
         return {"artifact": _write(unit, "composition.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "gaps": document["gaps"],
                 "terminal_status": _status(document["gaps"])}
 
     def chain_challenge(kind: str) -> Callable[[UnitContext], Mapping[str, Any]]:
         def handler(unit: UnitContext) -> Mapping[str, Any]:
+            started = time.monotonic()
             composition = _read(unit.job.run_root, unit.output("attack_chains.compose_candidates")["artifact"])
             previous = (_read(unit.job.run_root, unit.output("attack_chains.refute_edges")["artifact"])
                         if kind == "weakest_link_verifier" else None)
@@ -551,8 +558,22 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             result = {"artifact": _write(unit, "challenges.json", document),
                       "ledger_shard": _artifact(unit.job.run_root, ledger_path), "gaps": document.get("gaps", []),
                       "terminal_status": _status(document.get("gaps", []))}
+            status_counts = {status.value: sum(item["status"] == status.value for item in document["challenges"])
+                             for status in CellStatus}
+            unit.job.events.write(
+                "INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED", kind=kind,
+                challenges=len(document["challenges"]), outcomes=status_counts,
+                independent=sum(item["independent"] for item in document["challenges"]),
+                gaps=sum(len(item["gaps"]) for item in document["challenges"]),
+                duration_ms=max(0, int((time.monotonic() - started) * 1000)))
             if "attack_chain_manifest" in document:
                 result["attack_chain_manifest"] = document["attack_chain_manifest"]
+                manifest = chains.read_artifact(unit.job.run_root, document["attack_chain_manifest"])
+                unit.job.events.write(
+                    "INFERENCE_REVIEW_ATTACK_CHAINS_PUBLISHED", **manifest["accounting"],
+                    outcomes={status.value: sum(item["status"] == status.value for item in manifest["items"])
+                              for status in ChainStatus},
+                    gaps=len(manifest["gaps"]), duration_ms=max(0, int((time.monotonic() - started) * 1000)))
             return result
         return handler
 

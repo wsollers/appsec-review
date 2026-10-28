@@ -12,32 +12,37 @@ from typing import Any, Mapping, Sequence
 
 from appsec_review.review.models import IntegrityError
 
-from .verify import ATTACK_CHAIN_UNAVAILABLE, POC_UNAVAILABLE
-
 LIMITATION_ORDER = (
     "review_degraded", "review_empty", "review_incomplete", "lane_degraded", "gaps_recorded", "coverage_incomplete",
     "pending_distinct_verification", "technical_severity_unrated", "decision_pending", "findings_without_scores",
     "withheld_packages", "possible_duplicates", "remediation_planning_not_run", "remediation_validation_not_run",
-    "attack_chain_composition_not_run", "poc_lane_not_run")
+    "attack_chain_composition_not_run", "poc_lane_not_run", "dossiers_not_run",
+    "poc_generation_gap", "attack_chains_gap", "remediation_planning_gap", "remediation_validation_gap", "dossiers_gap",
+    "compile_only_nonexecution")
 
 
-def withheld_reasons(package: Mapping[str, Any]) -> list[str]:
+def withheld_reasons(package: Mapping[str, Any], attachments: Mapping[str, Any]) -> list[str]:
     reasons = []
-    if package["poc"] is not None:
+    if package["poc"] is not None and not any(
+            row["finding_package_id"] == package["finding_package_id"] and
+            row["status"] == package["poc"]["status"] and row["result_id"] == package["poc"]["result_id"]
+            for row in attachments.get("poc_generation", ())):
         reasons.append("poc_outcome_unavailable")
-    if package["attack_chains"]:
+    chains = {row["chain_id"] for row in attachments.get("attack_chains", ())}
+    if not set(package["attack_chains"]) <= chains:
         reasons.append("attack_chain_unavailable")
     return reasons
 
 
-def bucket_packages(packages: Sequence[Mapping[str, Any]], partition: Mapping[str, Sequence[str]]
+def bucket_packages(packages: Sequence[Mapping[str, Any]], partition: Mapping[str, Sequence[str]],
+                    attachments: Mapping[str, Any]
                     ) -> list[dict[str, Any]]:
     """Place every package in exactly one bucket; a package the handoff did not partition is an error."""
     confirmed, supported = set(partition["confirmed"]), set(partition["supported"])
     placed = []
     for package in sorted(packages, key=lambda item: item["finding_package_id"]):
         identity = package["finding_package_id"]
-        reasons = withheld_reasons(package)
+        reasons = withheld_reasons(package, attachments)
         if reasons:
             bucket = "withheld"
         elif identity in confirmed and package["state"] == "confirmed":
@@ -124,17 +129,22 @@ def limitations(verified: Mapping[str, Any], packages: Sequence[Mapping[str, Any
     if verified["possible_duplicate_pairs"]:
         add("possible_duplicates", "gap", f"{verified['possible_duplicate_pairs']} claim pair(s) are nominated as possible "
             "duplicates and were not merged.", verified["possible_duplicate_pairs"])
-    add("remediation_planning_not_run", "not_run", "job_remediation_planning does not exist yet, so no remediation plan "
-        "was produced. This is a named limitation of the pipeline, not a failure.")
-    add("remediation_validation_not_run", "not_run", "job_remediation_validation does not exist yet, so no remediation "
-        "was validated. This is a named limitation of the pipeline, not a failure.")
-    add("attack_chain_composition_not_run", "not_run", ATTACK_CHAIN_UNAVAILABLE)
-    add("poc_lane_not_run", "not_run", POC_UNAVAILABLE)
+    not_run = {"poc_generation": "poc_lane_not_run", "attack_chains": "attack_chain_composition_not_run",
+               "remediation_planning": "remediation_planning_not_run",
+               "remediation_validation": "remediation_validation_not_run", "dossiers": "dossiers_not_run"}
+    for name, record in verified["capabilities"].items():
+        if record["disposition"] == "SKIPPED_POLICY":
+            add(not_run[name], "not_run", f"{name}: {record['reason']}")
+        elif record["disposition"] == "GAP":
+            add(f"{name}_gap", "gap", f"{name}: {record['reason']}",
+                max(1, record["gap_count"] + record["omitted_count"]))
+    add("compile_only_nonexecution", "notice", "PoC functions, negative controls and remediation regressions were "
+        "not executed by policy. Compile checks are not runtime reproduction; build checks do not resolve findings.")
     return [found[identity] for identity in LIMITATION_ORDER if identity in found]
 
 
 def classify(verified: Mapping[str, Any]) -> dict[str, Any]:
-    packages = bucket_packages(verified["packages"], verified["partition"])
+    packages = bucket_packages(verified["packages"], verified["partition"], verified["attachments"])
     found = limitations(verified, packages)
     return {
         "packages": packages, "package_counts": package_counts(packages),
@@ -146,11 +156,10 @@ def classify(verified: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def gate_document(schema: str, verified: Mapping[str, Any], classification: Mapping[str, Any]) -> dict[str, Any]:
-    """Assemble the gate document (schema ``final-publication-gate/1``)."""
+    """Assemble the gate document (schema ``final-publication-gate/2``)."""
     return {
         "schema": schema, "run_id": verified["run_id"], "review": verified["review"], "inputs": verified["inputs"],
-        "unavailable_inputs": {"attack_chain_manifest": {"state": "unavailable", "reason": ATTACK_CHAIN_UNAVAILABLE},
-                               "poc_status_manifest": {"state": "unavailable", "reason": POC_UNAVAILABLE}},
+        "capabilities": verified["capabilities"], "attachments": verified["attachments"],
         "accounting": verified["accounting"], "ship_block": verified["ship_block"],
         "verification": verified["verification"], "coverage": verified["coverage"],
         "packages": classification["packages"], "package_counts": classification["package_counts"],
