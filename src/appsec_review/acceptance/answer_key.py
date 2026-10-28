@@ -177,6 +177,13 @@ def current_report_findings(run_root: Path, *, schema_root: Path | None = None) 
     Scanner detection remains available through ``observations_from_run``/``evaluate``. It cannot
     satisfy this outcome oracle: a row must survive review, publication and current-pointer checks.
     """
+    from appsec_review.storage.validation import validation_scope
+
+    with validation_scope(Path(run_root)):
+        return _current_report_findings(Path(run_root), schema_root)
+
+
+def _current_report_findings(run_root: Path, schema_root: Path | None) -> list[dict[str, Any]]:
     from appsec_review.acceptance.system import accepted_final_report
     from appsec_review.review.evidence import _content_record
     from appsec_review.review.identity import sha256_hex

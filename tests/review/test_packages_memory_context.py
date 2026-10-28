@@ -55,10 +55,17 @@ def _publish(fixture: FixtureRun, shards: list[tuple[str, str, dict[str, Any], l
     handoff_path = run_root / pointer["handoff_path"]
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     sha = file_sha256(manifest_path)
-    for artifact in handoff["artifacts"]:
-        if artifact["path"] == pointer["manifest_path"]:
-            artifact["sha256"] = sha
-    atomic_json(handoff_path, handoff)
+    reference = {"path": pointer["manifest_path"], "sha256": sha,
+                 "size_bytes": manifest_path.stat().st_size}
+    handoff["artifacts"] = [reference]
+    for output in handoff["outputs"].values():
+        if output.get("index_manifest", {}).get("path") == pointer["manifest_path"]:
+            output["index_manifest"] = reference
+    result_path = run_root / handoff["resolving_paths"]["result"]
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    atomic_json(result_path, {**result, "outputs": handoff["outputs"]})
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, handoff)
     atomic_json(pointer_path, {**pointer, "manifest_sha256": sha, "handoff_sha256": file_sha256(handoff_path)})
 
 

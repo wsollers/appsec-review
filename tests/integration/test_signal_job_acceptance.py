@@ -11,11 +11,11 @@ import pytest
 from appsec_review.acceptance.lanes import LaneWorkspace
 from appsec_review.jobs.job_artifact_indexing import build_job as artifact_job
 from appsec_review.jobs.job_profile_data import build_job as profile_job, load_accepted_profile_data
-from appsec_review.jobs.job_review_intake import build_job as intake_job
 from appsec_review.jobs.job_target_catalog import build_job as catalog_job
 from appsec_review.jobs.job_test_coverage import build_job as coverage_job, load_accepted_test_coverage
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage.validation import validation_scope
 from tests.test_artifact_indexing import RUN_ID, _identity, _publish_changed_language_receipts, _seed
 
 
@@ -38,16 +38,12 @@ REPORTS = {
 }
 
 
-def _available(provider, models, *, timeout_seconds):
-    return {"provider": provider, "listed": list(models),
-            "models": {name: {"available": True, "reason": "scripted catalog boundary"} for name in models}}
-
-
 def _prepare(workspace: LaneWorkspace):
     base = workspace.root / "fixture"
     base.mkdir()
     config, target, snapshot, run_root, receipts, accepted, handoff, latest = _seed(
-        base, source_files={"src/main.c": "int hot(void) { return 1; }\nint main(void) { return hot(); }\n"})
+        base, source_files={"src/main.c": "int hot(void) { return 1; }\nint main(void) { return hot(); }\n"},
+        build_families=("native", "dotnet"))
     assert config.runtime.runs_dir.is_relative_to(workspace.root)
     receipt = receipts[0]
     build_root = run_root / receipt["workspace"]
@@ -67,9 +63,7 @@ def _prepare(workspace: LaneWorkspace):
     atomic_json(manifest_path, manifest)
     receipt["workspace_manifest"] = _identity(run_root, manifest_path)
     _publish_changed_language_receipts(run_root, receipts, accepted, handoff, latest)
-    GraphRunner(config, [intake_job(check_models=_available), catalog_job()]).run(
-        run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
-    GraphRunner(config, [artifact_job()]).run(
+    GraphRunner(config, [catalog_job(), artifact_job()]).run(
         run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
     return config, target, snapshot, run_root
 
@@ -94,8 +88,9 @@ def test_full_signal_jobs_preserve_report_source_and_context_semantics(acceptanc
         result = GraphRunner(config, [coverage_job(), profile_job()]).run(
             run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
         assert result["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
-        coverage = load_accepted_test_coverage(run_root)
-        profile = load_accepted_profile_data(run_root)
+        with validation_scope(run_root):
+            coverage = load_accepted_test_coverage(run_root)
+            profile = load_accepted_profile_data(run_root)
         populated = next(unit for unit in coverage["build_units"] if unit["files"])
         assert {row["format"] for row in populated["artifacts"]} == {"lcov", "cobertura", "jacoco", "llvm"}
         assert len(populated["files"]) == 4

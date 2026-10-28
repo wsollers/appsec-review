@@ -143,6 +143,13 @@ def accepted_final_report(run_root: Path, schema_root: Path | None = None) -> tu
     Directory scans and historical attempts are deliberately not fallback sources. The report
     must still project the currently accepted review and index set, not just some intact old run.
     """
+    from appsec_review.storage.validation import validation_scope
+
+    with validation_scope(Path(run_root)):
+        return _accepted_final_report(Path(run_root), schema_root)
+
+
+def _accepted_final_report(run_root: Path, schema_root: Path | None) -> tuple[dict, Any, dict]:
     from appsec_review.indexing.store import accepted_handoff
     from appsec_review.jobs.bound_artifacts import read_bound_json
     from appsec_review.jobs.job_final_publication_gate.classify import classify, gate_document

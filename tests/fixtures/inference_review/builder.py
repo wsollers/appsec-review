@@ -411,7 +411,9 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     from tests.handoff_fixture import write_fixture_handoff
     write_fixture_handoff(run_root, handoff_path, {"job_id": "job_review_data_indexing",
                                "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
-                               "artifacts": [manifest], "outputs": {"load.accepted_inputs": {"artifact": inputs_artifact}},
+                               "artifacts": [manifest], "outputs": {
+                                   "load.accepted_inputs": {"artifact": inputs_artifact},
+                                   "publish.inventory_index": {"index_manifest": manifest}},
                                "source_fingerprint": SNAPSHOT})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,

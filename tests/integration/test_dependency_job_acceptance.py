@@ -11,12 +11,11 @@ from appsec_review.jobs.job_artifact_indexing import build_job as artifact_job
 from appsec_review.jobs.job_dependency_intelligence import (
     HttpResponse, build_job as dependency_job, load_accepted_dependency_intelligence,
 )
-from appsec_review.jobs.job_review_intake import build_job as intake_job
 from appsec_review.jobs.job_target_catalog import build_job as catalog_job
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, index_fingerprint, write_manifest
 from appsec_review.runtime import GraphRunner, Job, JobRunner, Unit, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
-from tests.integration.test_signal_job_acceptance import _available
+from appsec_review.storage.validation import validation_scope
 from tests.test_artifact_indexing import RUN_ID, _identity, _publish_changed_language_receipts, _seed
 
 
@@ -53,7 +52,8 @@ def _recorded_empty_sbom_job() -> Job:
 def _prepare(workspace: LaneWorkspace):
     base = workspace.root / "fixture"
     base.mkdir()
-    config, target, snapshot, root, receipts, accepted, handoff, latest = _seed(base)
+    config, target, snapshot, root, receipts, accepted, handoff, latest = _seed(
+        base, build_families=("native",))
     settings = config.job("job_dependency_intelligence").settings["scorecard"]
     cache_root = config.runtime.repository_root / settings["cache_root"]
     workspace.require_owned_path(cache_root)
@@ -82,8 +82,7 @@ def _prepare(workspace: LaneWorkspace):
     atomic_json(manifest_path, manifest)
     native["workspace_manifest"] = _identity(root, manifest_path)
     _publish_changed_language_receipts(root, receipts, accepted, handoff, latest)
-    GraphRunner(config, [intake_job(check_models=_available), catalog_job(),
-                         _recorded_empty_sbom_job(), artifact_job()]).run(
+    GraphRunner(config, [catalog_job(), _recorded_empty_sbom_job(), artifact_job()]).run(
         run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
     return config, target, snapshot, root, cache_root
 
@@ -103,7 +102,8 @@ def test_dependency_job_deduplicates_requests_and_publishes_bound_exposure_and_c
         runner = JobRunner(config)
         job = dependency_job(scorecard_transport=transport)
         runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
-        first = load_accepted_dependency_intelligence(root)
+        with validation_scope(root):
+            first = load_accepted_dependency_intelligence(root)
         assert len(calls) == 1
         assert calls[0][0].endswith("/projects/github.com/example/tiny-native")
         assert first["scorecard_metrics"] == {
@@ -135,7 +135,8 @@ def test_dependency_job_deduplicates_requests_and_publishes_bound_exposure_and_c
         assert any(cache_root.rglob("*.json"))
         first_handoff = first["handoff_sha256"]
         runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
-        second = load_accepted_dependency_intelligence(root)
+        with validation_scope(root):
+            second = load_accepted_dependency_intelligence(root)
         assert second["handoff_sha256"] != first_handoff
         assert len(calls) == 1, "fresh cache must avoid a second HTTP request"
         assert second["scorecard_metrics"] == {

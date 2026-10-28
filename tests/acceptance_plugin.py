@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from appsec_review.acceptance.lanes import LaneWorkspace
-from appsec_review.storage import atomic_json
+from appsec_review.acceptance.lanes import STATIC_REFERENCE_INPUTS, LaneWorkspace
+from appsec_review.storage import atomic_json, file_sha256
 
 
 _workspace: LaneWorkspace | None = None
@@ -36,6 +36,15 @@ def _guard(workspace: LaneWorkspace) -> None:
     null_device = Path(os.devnull).resolve()
     protected = [workspace.repository / name for name in ("runs", "targets", "data")]
     protected = [path.resolve() for path in protected]
+    pinned = json.loads(os.environ.get("APPSEC_ACCEPTANCE_STATIC_INPUTS", "{}"))
+    if not isinstance(pinned, dict) or set(pinned) - set(STATIC_REFERENCE_INPUTS):
+        raise pytest.UsageError("acceptance static reference selection is not allowed")
+    read_only = set()
+    for relative, expected in pinned.items():
+        path = workspace.repository / relative
+        if path.resolve() != path or not path.is_file() or file_sha256(path) != expected:
+            raise pytest.UsageError(f"acceptance static reference identity changed: {relative}")
+        read_only.add(path)
 
     def path_of(value):
         if isinstance(value, (str, bytes, os.PathLike)):
@@ -51,12 +60,14 @@ def _guard(workspace: LaneWorkspace) -> None:
             path = path_of(args[0])
             if path == null_device:
                 return
-            if path is not None and any(path.is_relative_to(item) for item in protected):
-                raise PermissionError("acceptance forbids production and target access")
             mode = args[1] or ""
             flags = args[2] or 0
-            if (any(char in mode for char in "wax+") or flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT)
-                    ) and not owned(args[0]):
+            writing = (any(char in mode for char in "wax+")
+                       or flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+            if (path is not None and any(path.is_relative_to(item) for item in protected)
+                    and (writing or path not in read_only)):
+                raise PermissionError("acceptance forbids production and target access")
+            if writing and not owned(args[0]):
                 raise PermissionError("acceptance writes must stay in the invocation workspace")
         elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod", "os.truncate", "os.utime"}:
             if not owned(args[0]):
