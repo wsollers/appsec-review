@@ -44,7 +44,7 @@ OUTCOMES = frozenset({
     "confirmed", "qualified_supported", "refuted", "insufficient_evidence",
     "compile_verified", "compile_failed", "policy_rejected", "generated", "unavailable",
     "artifact_generated", "policy_denied", "unsafe_to_attempt",
-    "not_applicable", "not_attempted", "skipped_policy", "capped",
+    "not_applicable", "not_attempted", "not_launched", "skipped_policy", "capped",
     "proposal_generated", "manual_design_required", "rejected", "inconclusive",
     "build_checked", "static_checked", "manual_validation_required",
     "rendered", "render_failed", "latex_only", "confirmed_finding", "poc",

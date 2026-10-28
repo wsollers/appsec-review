@@ -106,3 +106,19 @@ def test_configured_limits_are_ranges_not_additive_retry_work() -> None:
     event = report["lanes"]["dossiers"]["events"]["DOSSIER_BATCH_PLANNED"]
     assert event["counters"] == {"admitted": 4}
     assert event["limits"] == {"max_dossiers": {"min": 10, "max": 10}}
+
+
+def test_chain_challenge_supports_every_real_cell_status_including_not_launched() -> None:
+    from appsec_review.review.models import CellStatus
+
+    outcomes = {status.value: 0 for status in CellStatus}
+    outcomes["not_launched"] = 2
+    report = completion_metrics([{
+        "job_id": "job_inference_security_review",
+        "event_type": "INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED",
+        "details": {"kind": "refuter", "challenges": 2, "outcomes": outcomes},
+    }])
+    assert report["measurement_gaps"] == []
+    event = report["lanes"]["attack_chains"]["events"][
+        "INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED"]
+    assert event["outcomes"] == {f"outcomes.{status}": count for status, count in outcomes.items()}
