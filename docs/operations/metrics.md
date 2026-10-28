@@ -30,6 +30,14 @@ action with its `per_query` status, and `gaps` names every missing per-query sou
 runtime. Sources and limits are described in
 [CodeQL execution telemetry](codeql-analysis.md#execution-telemetry).
 
+The top-level `debug_symbols` section records the selected compiler target, decision count,
+index attempt count, artifact failures, the latest emitted index snapshot, and query counts
+by closed mode. Snapshot record/artifact/gap counts and duration describe the latest
+publication, not the sum of repeated attempts. Query totals describe observed retrieval
+work. Missing index telemetry or missing/invalid numeric fields remain null with explicit
+unavailability or `metric_gaps`; they are not zero-result success. Symbol names, source
+paths, and private debug payloads are never metric dimensions.
+
 Pipeline appends still validate the bounded tail and contiguous sequence under the process lock.
 Decoded sequence values are cached for at most 256 exact record byte strings (at most 16 MiB of
 record bytes), not by path, timestamp or file size. Changed bytes must be decoded again; tail

@@ -82,6 +82,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         wave_dependencies["job_test_coverage"] = ("job_artifact_indexing",)
     if "job_profile_data" in registered and "job_artifact_indexing" in registered:
         wave_dependencies["job_profile_data"] = ("job_artifact_indexing",)
+    if "job_debug_symbol_indexing" in registered and "job_artifact_indexing" in registered:
+        wave_dependencies["job_debug_symbol_indexing"] = ("job_artifact_indexing",)
     if "job_artifact_security_analysis" in registered:
         wave_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
             if "job_artifact_indexing" in registered else ("job_language_build",))
@@ -119,7 +121,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
             "job_evidence_collection", "job_cpp_compiled_analysis") if job_id in wave_dependencies)
     if "job_codeql_analysis" in registered:
         codeql_dependencies = [job_id for job_id in (
-            "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
+            "job_language_build", "job_artifact_indexing", "job_debug_symbol_indexing",
+            "job_artifact_security_analysis",
             "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
             "job_svf_alias_analysis",
             "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast",
@@ -159,7 +162,7 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # Tagging reads the accepted retrieval manifest, so it follows its last publisher, and it
         # closes the wave so the graph keeps exactly one terminal job.
         tagging_dependencies = ["job_codeql_analysis"] if "job_codeql_analysis" in registered else [
-            job_id for job_id in ("job_language_build", "job_artifact_indexing",
+            job_id for job_id in ("job_language_build", "job_artifact_indexing", "job_debug_symbol_indexing",
                                   "job_artifact_security_analysis", "job_cpp_compiled_analysis",
                                   "job_clang_static_analysis",
                                   "job_post_build_security_assessment", "job_evidence_collection",

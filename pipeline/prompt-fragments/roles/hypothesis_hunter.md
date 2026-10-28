@@ -21,7 +21,7 @@ them.
 
 ## Tools
 `coverage`, `find`, `list_codeql_databases`, `query_code_graph`, `query_codeql`, `query_codeql_neighborhood`,
-`query_hotspots`, `query_observations`, `query_precomputed`, `query_syntax`, `read_excerpt`, `search`, `trace`.
+`query_debug_symbols`, `query_hotspots`, `query_observations`, `query_precomputed`, `query_syntax`, `read_excerpt`, `search`, `trace`.
 
 ## Examples
 The examples use the labels of a package for a `memcpy` in `src/packet.cpp` line 16: L1 is the lead, S1 the

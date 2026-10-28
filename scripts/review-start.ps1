@@ -3,7 +3,8 @@
 Launch wave1_review on the target the stack is built for; returns at once.
 .DESCRIPTION
 PowerShell twin of scripts/review-start.sh with the same options (-PascalCase). -Profile and -Overlay
-select the runtime profile (same provider family) and capacity overlay for this run only; -Target and
+select the runtime profile (same provider family) and capacity overlay for this run only.
+-CompilerTarget selects clang/DWARF or msvc/PDB analysis for this run; -Target and
 -Recording must match the container. -Wsl re-runs the bash
 twin inside the WSL distribution named by -Distro (default Ubuntu-24.04) with translated paths; use it
 when the Dagster stack runs in WSL. -Help prints the option list. Details: docs/operations/operator-scripts.md.
@@ -14,6 +15,7 @@ param(
     [string]$Overlay,
     [ValidateSet('record', 'replay', 'off')][string]$Recording,
     [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile,
+    [ValidateSet('clang', 'msvc')][string]$CompilerTarget,
     [string]$RunId,
     [double]$IdWait,
     [switch]$StopOnFirstError,

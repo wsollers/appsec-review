@@ -32,6 +32,7 @@ INDEX_NAMES = (
     "inventory",
     "links", "documents",
     "graph",
+    "debug_symbols",
     "binary",
 )
 
@@ -243,6 +244,9 @@ class IndexBuilder:
                     json.dumps(sanitize_producer_data(relation.payload or {}), sort_keys=True),
                 ))
             database.executemany("INSERT INTO coverage VALUES (?, ?, ?)", sorted(set(self.coverage)))
+            if self.name == "debug_symbols":
+                from appsec_review.retrieval.debug_symbol_index import build_lookup
+                build_lookup(database, entities)
             database.commit()
             database.execute("VACUUM")
         finally:

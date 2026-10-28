@@ -52,7 +52,8 @@ def _envelope(run, config):
     if (expected.get("base_sha256") != config.source_sha256
             or expected.get("profile") != profile["name"]
             or expected.get("profile_sha256") != profile.get("sha256")
-            or expected.get("overlay_sha256") != overlay.get("sha256")):
+            or expected.get("overlay_sha256") != overlay.get("sha256")
+            or expected.get("compiler_target", "clang") != resolved.get("compiler_target", "clang")):
         raise ValueError("deployed configuration differs from the frozen safety envelope")
     return envelope
 

@@ -67,6 +67,14 @@ publishes bounded `binary` shards (`binary_function`, `binary_call_site`, `binar
 `trace` and `read_excerpt` tools ([`binary-decompilation.md`](binary-decompilation.md)). A package carries the identities and, under review protocol v2, the labelled
 neighborhood facts for its lead; everything else is a retrieval-tool call.
 
+The default-on debug-symbol producer adds a separate `debug_symbols` shard for
+the run-selected Clang/DWARF or MSVC/native-PDB lane. `query_debug_symbols`
+provides bounded symbols, address/source ranges, type layouts, inline frames,
+compilation units, coverage and existing graph links. Both review-cell and MCP
+capabilities constrain these reads. This is a retrieval tool, not a runtime
+skill or an interactive debugger; see [the design](debug-symbol-indexing.md) and
+[operations](../operations/debug-symbol-indexing.md).
+
 Export packs and language catalogs now exist for C/C++, Java/Kotlin, JavaScript/TypeScript,
 Python, Ruby, Go, C#, Rust and deferred Swift. Actual availability depends on accepted databases,
 configured pins and per-family coverage; only C/C++ has native cross-check producers. Swift
