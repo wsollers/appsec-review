@@ -322,7 +322,7 @@ def test_handoff_events_are_hash_bound_closed_metadata_and_not_reemitted_on_reus
     assert sum(event["event"] == "HANDOFF_VALIDATED" for event in after) == 1
 
 
-@pytest.mark.parametrize("source_field", ["source_inventory", "native_files"])
+@pytest.mark.parametrize("source_field", ["source_inventory", "native_files", "native_artifacts"])
 def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artifact_refs(tmp_path, source_field):
     def produce(unit):
         manifest = json.loads((unit.job.run_root / "data/configuration/manifest.json").read_bytes())
@@ -350,6 +350,31 @@ def test_graph_export_artifact_survives_common_handoff_projection(tmp_path):
     graph = outcome["handoff"]["outputs"]["work.only"]["graph_export_artifact"]
     assert graph in outcome["handoff"]["artifacts"]
     verify_handoff_integrity(root, outcome["handoff"])
+
+
+def test_native_inventory_keeps_nested_evidence_artifacts_bound_and_verified(tmp_path):
+    def produce(unit):
+        path = unit.unit_root / "protected-native-inputs.json"
+        atomic_json(path, {"schema": "fixture/1", "artifacts": []})
+        return {"native_artifacts": [{
+            "domain": "workspace", "root_id": "native-build",
+            "path": "data/customer.o", "sha256": "a" * 64, "size_bytes": 4,
+            "evidence_source": {"artifact": reference(unit.job.run_root, path),
+                                "json_pointer": "/artifacts/0"},
+        }]}
+
+    _, _, _, outcome, root = publish(tmp_path, produce)
+    record = outcome["result"]["outputs"]["work.only"]["native_artifacts"][0]
+    bound = record["evidence_source"]["artifact"]
+    assert bound in outcome["handoff"]["artifacts"]
+    assert collect_artifacts(root, {"native_artifacts": [record]}) == [bound]
+    for changed in ({"run_path": "data/missing.o"},
+                    {"evidence_source": {"artifact": {**bound, "sha256": "0" * 64}}}):
+        with pytest.raises(ValueError):
+            collect_artifacts(root, {"native_artifacts": [{**record, **changed}]})
+    (root / bound["path"]).write_bytes(b"changed")
+    with pytest.raises(ValueError):
+        verify_handoff_integrity(root, outcome["handoff"])
 
 
 def test_scoped_binary_inventory_binds_explicit_run_path_not_display_path(tmp_path):
