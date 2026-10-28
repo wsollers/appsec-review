@@ -62,7 +62,8 @@ def _guard(workspace: LaneWorkspace) -> None:
                 return
             mode = args[1] or ""
             flags = args[2] or 0
-            writing = any(char in mode for char in "wax+") or flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT)
+            writing = (any(char in mode for char in "wax+")
+                       or flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
             if (path is not None and any(path.is_relative_to(item) for item in protected)
                     and (writing or path not in read_only)):
                 raise PermissionError("acceptance forbids production and target access")

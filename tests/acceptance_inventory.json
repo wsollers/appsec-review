@@ -7,23 +7,23 @@
       "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
       "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli", "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "control-source-evidence", "feed-tls", "review-candidate", "current-report-oracle"],
-      "deferral": "Representative connected hermetic gate. Full graph negatives, replay/sensor, benign/blocked and OS-specific obligations have separate bounded profiles; live tools/providers/native remain unverified."
+      "deferral": "Representative connected hermetic gate. Full signal-integrity, helper-input, TLS, submission-barrier, MCP-integrity, consumer, replay/sensor, benign/blocked and OS-specific matrices have separate bounded profiles; genuine OWASP assessment and live tools/providers/native remain unverified."
     },
     "signals": {
       "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
-      "obligations": ["signal-lifecycle", "dependency-lifecycle"],
+      "obligations": ["signal-lifecycle", "signal-integrity", "dependency-lifecycle"],
       "deferral": "Recorded compiler/SBOM and HTTP boundaries; no live tool or external service compatibility claim."
     },
     "graphs": {
       "tier": "hermetic", "deadline_seconds": 180, "case_deadline_seconds": 60,
-      "prerequisites": ["python:pytest"], "obligations": ["graph-consumer", "graph-matcher", "helper-cli"],
+      "prerequisites": ["python:pytest"], "obligations": ["graph-consumer", "graph-matcher", "helper-cli", "helper-input-matrix"],
       "deferral": "Recorded graph exports and real helper CLI, not current CodeQL/tool compatibility."
     },
     "process": {
-      "tier": "hermetic", "deadline_seconds": 360, "case_deadline_seconds": 60,
+      "tier": "hermetic", "deadline_seconds": 480, "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest", "python:dagster"],
-      "obligations": ["process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "record-replay-sensor"],
+      "obligations": ["process-configuration", "process-profile-refusal", "worker-recovery", "submission-recovery", "submission-barrier-matrix", "mcp-accepted-run", "mcp-integrity-matrix", "record-replay-sensor"],
       "deferral": "Portable real local processes/Dagster. Linux guardian and Windows PowerShell have explicit separate selections."
     },
     "process-linux": {
@@ -39,13 +39,19 @@
     },
     "controls": {
       "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
-      "prerequisites": ["python:pytest"], "obligations": ["control-source-evidence", "feed-tls"],
-      "deferral": "Actual source/standards normalization and loopback TLS. Positive source-bound control assessment/review join remains unverified."
+      "prerequisites": ["python:pytest"], "obligations": ["control-source-evidence", "feed-tls", "feed-tls-negative-matrix"],
+      "deferral": "Actual source/standards qualification and loopback TLS. Genuine assessment, positive source-bound control assessment, precomputed control facts and review join remain unverified."
     },
     "review": {
       "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"], "obligations": ["review-candidate", "review-empty-corrupt", "current-report-oracle", "review-benign-blocked"],
       "deferral": "Scripted external model boundary, real application jobs and unchanged domain schemas; no compiler or paid provider."
+    },
+    "consumers": {
+      "tier": "hermetic", "deadline_seconds": 360, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["review-triage", "publication-rendering", "review-referral"],
+      "deferral": "Actual bounded jobs with scripted model transport. Historical renderer selection, specialist resolution, saturation and cross-lane referral matrices remain unverified."
     },
     "tools": {
       "tier": "tool", "deadline_seconds": 480, "case_deadline_seconds": 60,
@@ -108,24 +114,35 @@
       "id": "helper-cli", "gap_ids": ["G-A11"], "case_deadline_seconds": 30,
       "nodes": [
         "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_builds_verifies_and_queries_tiny_graph_documents",
-        "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_rejects_bad_inputs_without_publishing",
         "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_detects_changed_record_count_read_only"
       ],
-      "boundary": "Actual owned helper subprocess -> bounded SQLite build/verify/query and failed publication",
-      "variants": ["duplicate-identity", "logical-path", "input-root", "output-root", "record-bound", "count-tamper"],
+      "boundary": "Actual owned helper subprocess -> bounded SQLite build/verify/query and read-only tamper rejection",
+      "variants": ["build-verify-query", "count-tamper"],
       "substitutions": ["Tiny local documents, not engine acquisition"],
       "prerequisites": [], "deferrals": ["Actual Lua rule execution remains a selected-tool obligation"]
     },
     {
-      "id": "process-configuration", "gap_ids": ["G-B3", "G-B10"],
-      "nodes": [
-        "tests/integration/test_process_lifecycle_acceptance.py::test_tagged_multiprocess_workers_receive_layers_hash_and_pool_limit",
-        "tests/integration/test_process_lifecycle_acceptance.py::test_incompatible_profile_is_refused_by_actual_executor_before_worker_admission"
-      ],
+      "id": "helper-input-matrix", "gap_ids": ["G-A11"], "case_deadline_seconds": 30,
+      "nodes": ["tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_rejects_bad_inputs_without_publishing"],
+      "boundary": "Actual helper subprocess rejects malformed and out-of-root inputs without publication",
+      "variants": ["duplicate-identity", "logical-path", "input-root", "output-root", "record-bound"],
+      "substitutions": ["Tiny local documents, not engine acquisition"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "process-configuration", "gap_ids": ["G-B3", "G-B10"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_process_lifecycle_acceptance.py::test_tagged_multiprocess_workers_receive_layers_hash_and_pool_limit"],
       "boundary": "Actual tagged Dagster multiprocess admission/configuration/serialization and accepted resume",
-      "variants": ["pool-limit", "profile-layer-hash", "invalid-selection", "resume-selection", "metrics-receipts"],
+      "variants": ["pool-limit", "profile-layer-hash", "resume-selection", "metrics-receipts"],
       "substitutions": ["Tiny local fixture job; scripted model catalog"],
-      "prerequisites": ["python:dagster"], "deferrals": ["Pinned DagsterRun has no create_timestamp: actual queue-delay metric unavailable, never synthesized"]
+      "prerequisites": ["python:dagster"], "deferrals": ["Pinned DagsterRun has no create_timestamp: actual queue-delay metric unavailable, never synthesized", "Previous 60-second supervisor cap expired after pytest passed in 54.88 seconds; this real-job exception includes interpreter completion and owned cleanup"]
+    },
+    {
+      "id": "process-profile-refusal", "gap_ids": ["G-B3"],
+      "nodes": ["tests/integration/test_process_lifecycle_acceptance.py::test_incompatible_profile_is_refused_by_actual_executor_before_worker_admission"],
+      "boundary": "Actual executor rejects incompatible configuration before worker admission",
+      "variants": ["invalid-selection"], "substitutions": ["Tiny local fixture job"],
+      "prerequisites": ["python:dagster"], "deferrals": []
     },
     {
       "id": "worker-recovery", "gap_ids": ["G-B5"],
@@ -136,7 +153,7 @@
       "deferrals": ["Linux confirmed lease generations are separate platform obligations"]
     },
     {
-      "id": "record-replay-sensor", "gap_ids": ["G-B10", "G-B11"],
+      "id": "record-replay-sensor", "gap_ids": ["G-B10", "G-B11"], "case_deadline_seconds": 120,
       "nodes": [
         "tests/integration/test_process_lifecycle_acceptance.py::test_fresh_dagster_record_and_local_replay_preserve_failures_without_live_transport",
         "tests/integration/test_process_lifecycle_acceptance.py::test_real_step_failure_sensor_observes_failure_while_multiprocess_sibling_is_active"
@@ -149,23 +166,39 @@
     {
       "id": "submission-recovery", "gap_ids": ["G-B4"],
       "nodes": [
-        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation",
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation[remote-ack]",
         "tests/integration/test_transport_acceptance.py::test_submission_storage_failure_dispatches_nothing"
       ],
       "boundary": "Actual killed submitter/loopback HTTP and durable uncertain-intent reconciliation",
-      "variants": ["intent", "remote-ack", "ack", "fsync-failure", "replace-failure", "wrong-identity", "active-identity"],
+      "variants": ["remote-ack", "fsync-failure", "replace-failure", "wrong-identity", "active-identity"],
       "substitutions": ["Owned loopback server, not deployed Dagster"],
       "prerequisites": [], "deferrals": []
     },
     {
-      "id": "mcp-accepted-run", "gap_ids": ["G-B13"],
+      "id": "submission-barrier-matrix", "gap_ids": ["G-B4"],
       "nodes": [
-        "tests/integration/test_transport_acceptance.py::test_real_mcp_initialization_discovery_tools_errors_and_recovery",
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation[intent]",
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation[ack]"
+      ],
+      "boundary": "Actual submitter death before dispatch and after received acknowledgement",
+      "variants": ["intent", "ack"], "substitutions": ["Owned loopback HTTP server, not deployed Dagster"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "mcp-accepted-run", "gap_ids": ["G-B13"],
+      "nodes": ["tests/integration/test_transport_acceptance.py::test_real_mcp_initialization_discovery_tools_errors_and_recovery"],
+      "boundary": "Actual accepted intake/catalog -> actual MCP stdio process, pinned manifest and protocol recovery",
+      "variants": ["handshake", "discovery", "ping", "declared-tools", "invalid-request", "unknown-method"],
+      "substitutions": ["Tiny accepted target; no live model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "mcp-integrity-matrix", "gap_ids": ["G-B13"],
+      "nodes": [
         "tests/integration/test_transport_acceptance.py::test_real_mcp_manifest_pin_mismatch_fails_closed",
         "tests/integration/test_transport_acceptance.py::test_real_mcp_malformed_first_message_does_not_kill_session_or_reuse_previous_id"
       ],
-      "boundary": "Actual accepted intake/catalog -> actual MCP stdio process, pinned manifest and protocol recovery",
-      "variants": ["handshake", "discovery", "ping", "declared-tools", "invalid-request", "unknown-method", "parse-error", "manifest-mismatch"],
+      "boundary": "Actual accepted-run MCP rejects changed manifest and recovers malformed-first requests without stale IDs",
+      "variants": ["manifest-mismatch", "first-message-parse-error", "prior-id-not-reused"],
       "substitutions": ["Tiny accepted target; no live model"], "prerequisites": [], "deferrals": []
     },
     {
@@ -190,21 +223,35 @@
     {
       "id": "control-source-evidence", "gap_ids": ["G-C9"], "case_deadline_seconds": 120,
       "nodes": ["tests/integration/test_control_evidence_acceptance.py::test_configured_control_evidence_preserves_document_intent_and_reports_missing_assessment"],
-      "boundary": "Real source-document/OWASP producer normalization -> accepted source-bound retrieval, mutation rejection and explicit assessment gap",
-      "variants": ["source-lines", "intent", "hash-provenance", "limited-authority", "source-mutation", "missing-assessment"],
-      "substitutions": ["Pinned tiny standards and in-process FTS; no actual assessment/model"],
-      "prerequisites": [], "deferrals": ["Configured OWASP input has no assessment evidence/transport hook: positive assessment-to-review join unverified"]
+      "boundary": "Real source-document/catalog -> explicit OWASP qualification -> accepted Workbench retrieval with mutation rejection",
+      "variants": ["source-lines", "intent", "hash-provenance", "qualification-only", "source-mutation", "missing-assessment"],
+      "substitutions": ["Five explicitly pinned abridged standards and run-owned qualification input; disabled inference"],
+      "prerequisites": [], "deferrals": ["Genuine assessment, positive source-bound assessment, precomputed control facts and assessment-to-review join remain unverified; qualification never establishes customer target safety"]
     },
     {
       "id": "feed-tls", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
       "nodes": [
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev",
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer"
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[declared-exact]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/valid-json-interrupted-ValueError-Content-Length mismatch]"
       ],
       "boundary": "Real loopback HTTPS -> bounded fetch/normalize/publish/query with last-good pointer preservation",
-      "variants": ["exact-limit", "headerless-stream", "truncation", "valid-json-prefix-truncation", "declared-oversize", "stream-oversize", "HTTP-503"],
+      "variants": ["exact-limit", "valid-json-prefix-truncation"],
       "substitutions": ["Test-only loopback TLS key/certificate and one-CVE payload; no public refresh"],
       "prerequisites": [], "deferrals": ["Preinstalled CVE tool database construction remains a selected-tool obligation"]
+    },
+    {
+      "id": "feed-tls-negative-matrix", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
+      "nodes": [
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[stream-exact]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/interrupted-ValueError-Content-Length mismatch]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/oversize-declared-ValueError-byte bound]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/oversize-stream-ValueError-byte bound]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/status-HTTPError-503]"
+      ],
+      "boundary": "Real loopback TLS streaming bounds, truncation and HTTP failures preserve last-good publication",
+      "variants": ["headerless-stream", "truncation", "declared-oversize", "stream-oversize", "HTTP-503"],
+      "substitutions": ["Test-only loopback certificate and tiny payload; no public refresh"],
+      "prerequisites": [], "deferrals": []
     },
     {
       "id": "review-candidate", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
@@ -240,15 +287,43 @@
       "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
     },
     {
+      "id": "review-triage", "gap_ids": ["G-C3"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_review_consumer_acceptance.py::test_triage_assessment_orders_admits_and_binds_real_review_handoff"],
+      "boundary": "Actual triage ordering/admission retains severity, reason and accepted review artifact binding",
+      "variants": ["ordering", "admission", "severity", "artifact-binding"],
+      "substitutions": ["Recorded accepted upstream index; only external Infer transport is scripted"],
+      "prerequisites": [], "deferrals": ["Request-count and active-claim saturation are unverified"]
+    },
+    {
+      "id": "publication-rendering", "gap_ids": ["G-C2", "G-C7"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_review_consumer_acceptance.py::test_authentic_publication_renders_counts_states_gaps_and_provenance"],
+      "boundary": "Actual review -> gate -> report -> HTML/LaTeX with counts, states, gaps and provenance",
+      "variants": ["HTML", "LaTeX", "current-publication"],
+      "substitutions": ["Scripted model transport; authentic application-owned publication"],
+      "prerequisites": [], "deferrals": ["Historical/stale renderer selection and renderer tamper rejection remain unverified"]
+    },
+    {
+      "id": "review-referral", "gap_ids": ["G-C5", "G-C6"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_review_consumer_acceptance.py::test_worker_referral_deduplicates_next_round_after_foreign_repair"],
+      "boundary": "Actual worker referral repair -> next-round deduplication and bounded convergence",
+      "variants": ["foreign-anchor-repair", "deduplication", "round-cutoff"],
+      "substitutions": ["Scripted external model transport"],
+      "prerequisites": [], "deferrals": ["Specialist resolution and cross-package/cross-lane referral remain unverified"]
+    },
+    {
       "id": "signal-lifecycle", "gap_ids": ["G-A5", "G-B7"], "case_deadline_seconds": 120,
-      "nodes": [
-        "tests/integration/test_signal_job_acceptance.py::test_full_signal_jobs_preserve_report_source_and_context_semantics",
-        "tests/integration/test_signal_job_acceptance.py::test_changed_profile_cannot_publish_an_accepted_signal"
-      ],
-      "boundary": "Accepted intake/catalog/artifact -> complete coverage/profile jobs -> immutable queryable publication",
-      "variants": ["lcov", "cobertura", "jacoco", "llvm", "folded-hotspots", "hash-tamper"],
-      "substitutions": ["Recorded external compiler receipts", "Scripted model availability catalog"],
+      "nodes": ["tests/integration/test_signal_job_acceptance.py::test_full_signal_jobs_preserve_report_source_and_context_semantics"],
+      "boundary": "Real catalog/artifact -> complete coverage/profile jobs -> immutable queryable publication",
+      "variants": ["lcov", "cobertura", "jacoco", "llvm", "folded-hotspots", "missing-signal-build"],
+      "substitutions": ["Recorded native and managed compiler receipts; unrelated intake is independently covered"],
       "prerequisites": [], "deferrals": ["Compiler-generated report provenance and downstream review consumption are separate obligations"]
+    },
+    {
+      "id": "signal-integrity", "gap_ids": ["G-A5", "G-B7"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_signal_job_acceptance.py::test_changed_profile_cannot_publish_an_accepted_signal"],
+      "boundary": "Changed recorded profile bytes fail the actual producer before accepted publication",
+      "variants": ["hash-tamper", "no-accepted-output", "typed-failure"],
+      "substitutions": ["Recorded compiler receipts"], "prerequisites": [], "deferrals": []
     },
     {
       "id": "dependency-lifecycle", "gap_ids": ["G-A5"], "case_deadline_seconds": 120,

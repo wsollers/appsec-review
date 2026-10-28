@@ -226,10 +226,13 @@ def test_guard_allows_only_pinned_static_taxonomy_reads_and_never_mutation(tmp_p
         "        path = repository / relative\n"
         "        assert json.loads(path.read_text(encoding='utf-8'))\n"
         "        with pytest.raises(PermissionError): path.write_text('changed')\n"
+        "        with pytest.raises(PermissionError): os.open(path, os.O_RDONLY | os.O_TRUNC)\n"
         "        with pytest.raises(PermissionError): path.unlink()\n"
         "    with pytest.raises(PermissionError):\n"
         "        (repository / 'data' / 'not-an-allowed-reference.json').read_bytes()\n")
     assert outcome["exit_code"] == 0 and outcome["cleanup"]["confirmed"], outcome
+    assert set(outcome["static_input_identities"]) == {
+        "data/reference/taxonomy/vocabulary.json", "data/reference/taxonomy/crosswalk.json"}
 
 
 def test_guard_rejects_changed_static_reference_identity_before_running_tests(tmp_path: Path, monkeypatch) -> None:
@@ -277,14 +280,15 @@ def test_suite_deadline_includes_collection_cases_and_cleanup(tmp_path: Path, mo
 
 @pytest.mark.parametrize("overrides", [
     {"parallel": True}, {"background": True}, {"suite": "fast"},
-    {"extra": ["-k", "something"]}, {"deadline": 721}, {"case_deadline": 61}, {"workers": 3},
+    {"extra": ["-k", "something"]}, {"deadline": 721}, {"case_deadline": 121}, {"workers": 3},
     {"case_deadline": 3},
 ])
 def test_acceptance_rejects_unsafe_or_unbounded_options(overrides: dict) -> None:
     assert ops_tests.run_acceptance(arguments(**overrides), ROOT) == 2
 
 
-def test_unconfirmed_cleanup_cannot_pass_even_with_successful_pytest(monkeypatch, capsys) -> None:
+@pytest.mark.parametrize("failure", ["cleanup", "static-input"])
+def test_cleanup_and_source_identity_must_hold_even_with_successful_pytest(monkeypatch, capsys, failure) -> None:
     monkeypatch.delenv("APPSEC_PYTHON", raising=False)
     inventory = json.loads((ROOT / ops_tests.INVENTORY).read_text(encoding="utf-8"))
     nodes = [node for item in inventory["obligations"]
@@ -292,7 +296,12 @@ def test_unconfirmed_cleanup_cannot_pass_even_with_successful_pytest(monkeypatch
 
     def fake_supervisor(python, arguments, workspace, key, **options):
         collecting = "--collect-only" in arguments
-        return {"outcome": "completed", "exit_code": 0, "cleanup": {"confirmed": collecting},
+        pins = json.loads(ops_tests.acceptance_environment(workspace)["APPSEC_ACCEPTANCE_STATIC_INPUTS"])
+        if failure == "static-input":
+            pins["data/reference/taxonomy/vocabulary.json"] = "0" * 64
+        return {"outcome": "completed", "exit_code": 0,
+                "cleanup": {"confirmed": collecting or failure != "cleanup"},
+                "static_input_identities": pins,
                 "pytest": {"collected": nodes if collecting else arguments, "prerequisites": [],
                            "cases": [] if collecting else [{"node": arguments[0], "outcome": "passed"}]}}
 
@@ -300,7 +309,11 @@ def test_unconfirmed_cleanup_cannot_pass_even_with_successful_pytest(monkeypatch
     assert ops_tests.run_acceptance(arguments(), ROOT) == 1
     path = Path(capsys.readouterr().out.split("result: ", 1)[1].strip())
     result = json.loads(path.read_text(encoding="utf-8"))
-    assert "cleanup_unconfirmed" in result["failures"] and result["cleanup"]["confirmed"] is False
+    if failure == "cleanup":
+        assert "cleanup_unconfirmed" in result["failures"] and result["cleanup"]["confirmed"] is False
+    else:
+        assert result["cleanup"]["confirmed"]
+        assert all(case["reason"] == "static_reference_changed_during_suite" for case in result["cases"])
     assert result["failed_obligations"]
 
 

@@ -412,6 +412,7 @@ def supervised_pytest(python: str, arguments: list[str], workspace, key: str,
                f"--basetemp={directory / 'temporary'}", *arguments]
     result = {"command": command, "log": str(directory / "pytest.log"), "outcome": "error",
               "duration_seconds": 0.0, "cleanup": {"confirmed": True, "started": False},
+              "static_input_identities": json.loads(environment["APPSEC_ACCEPTANCE_STATIC_INPUTS"]),
               "pytest": None, "exit_code": None}
     # Reserve cleanup inside both the per-case and suite cap, not after them.
     execution_end = deadline - _CLEANUP_SECONDS
@@ -641,6 +642,9 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
                         record["passed"] = (outcome["outcome"] == "completed" and outcome["exit_code"] == 0
                                             and outcome["cleanup"]["confirmed"] and len(cases) == 1
                                             and cases[0]["node"] == node and cases[0]["outcome"] == "passed")
+                        if any(result["source_identities"].get(path) != expected
+                               for path, expected in outcome["static_input_identities"].items()):
+                            record.update(passed=False, reason="static_reference_changed_during_suite")
                         return record
 
                     with ThreadPoolExecutor(max_workers=spec.workers) as executor:
