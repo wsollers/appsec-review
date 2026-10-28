@@ -200,7 +200,7 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
         if new_conflicts:
             result.update(status=Status.REJECTED.value, reason="static_patch_policy_failed")
             return
-        role_text, guidance_sha = guidance(repo(unit), root, "remediation_reviewer")
+        role_text, guidance_sha = guidance(repo(unit), root, "remediation_reviewer", job_id=unit.job.config.job_id)
         from appsec_review.inference import infer as default_infer
         answer, receipt = run_model(
             infer=infer or default_infer, profile=configured.reviewer, role="remediation_reviewer",
@@ -237,7 +237,13 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             result.update(status=Status.MANUAL_VALIDATION_REQUIRED.value,
                           reason="patch_scope_not_covered_by_native_adapter")
             return
-        profile = BuildProfile("native", build.image_tag, build.image_id, build.image_user)
+        try:
+            profile = BuildProfile("native", build.image_tag, build.image_id, build.image_user)
+        except ValueError:
+            checks["build"] = _check("unsafe", "accepted build facts do not commission a pinned native profile")
+            result.update(status=Status.MANUAL_VALIDATION_REQUIRED.value,
+                          reason="accepted_build_profile_uncommissioned")
+            return
         executor = (executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
             profile, timeout_seconds=configured.command_timeout_seconds, output_bytes=configured.output_bytes,
             network="none"))
