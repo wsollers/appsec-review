@@ -165,6 +165,15 @@ Deviations from the white paper (also published in the accepted document):
 | no accepted Tree-sitter rows (failed scope, unavailable grammar) | `ast_unavailable` gap |
 | generated file | `generated_file_not_scored` gap |
 | `max_files`, `max_file_bytes`, `max_functions` reached | `file_bound_reached`, `file_byte_bound_reached`, `function_bound_reached` |
+| no catalog language (binary, media, other non-source) or outside the delivery scope | counted in the step's `skipped` as `not_source` or `out_of_delivery_scope`; not scored |
+
+`max_file_bytes` is checked from catalog metadata before any Tree-sitter row or target byte is
+loaded, so an oversized file reports `file_byte_bound_reached` (and `skipped.file_byte_bound`) even
+when it also has no accepted rows. Syntax extraction is a bounded stream: a scratch SQLite index maps
+each candidate file to the byte spans of its rows in the hash-verified shards (shards are sorted by
+row bytes, so a file's rows are not contiguous), one file is parsed at a time, and `syntax-facts.json`
+is written record by record with bytes identical to a whole-document canonical write. The step holds
+a `[…settings.syntax_metrics_reservation]` resource admission lease for its whole extent.
 
 ## Dependency topology (`appsec-review/import-graph/1`)
 

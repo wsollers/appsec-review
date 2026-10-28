@@ -23,6 +23,8 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.observability.spans import operation_span
+from appsec_review.runtime.resources import Reservation, ResourceAdmission
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language, is_swift_path
 from appsec_review.jobs.component_ownership import resolve_root_ownership
@@ -33,10 +35,11 @@ from . import scoring
 from .complexity import COGNITIVE_DEVIATIONS, COGNITIVE_IDENTITY, CYCLOMATIC_IDENTITY, file_summary, function_units
 from .dependencies import GRAPH_IDENTITY, GraphBuilder, extract, import_modules
 from .heuristics import Extractor
-from .inputs import accepted_handoff, has_handoff, read_json, read_lines
+from .inputs import accepted_handoff, has_handoff, read_json
 from .languages import MAPPING_IDENTITY, SPECS, UNSCORED_GRAMMARS
 from .rules import RULES_IDENTITY
 from .semantic import CODEQL_LANGUAGES, codeql_paths, semgrep_signals
+from .streaming import FilesDocumentWriter, ShardRowIndex
 from .syntax import SourceFile, build_tree, code_lines
 from appsec_review.jobs.job_review_prioritization.datasets import CONSUMES, DATASETS
 
@@ -60,6 +63,9 @@ INT_SETTINGS = {
 INDEX_SETTINGS = {"file_top_fraction": float, "file_top_count": int, "function_top_fraction": float,
                   "function_top_count": int, "max_indexed_items": int, "max_evidence_links_per_item": int,
                   "max_graph_neighbors": int}
+# Admission ledger reservation for the in-process syntax_metrics step: (minimum, maximum) per key.
+RESERVATION_SETTINGS = {"cpu": (1, 256), "memory_mb": (1, 1024 * 1024), "io_slots": (0, 256),
+                        "admission_timeout_seconds": (1, 7 * 24 * 3600)}
 # Catalog language -> grammar for languages this batch scores (".tsx" files route to the TSX grammar).
 SCORED_LANGUAGES = {"C": "c", "C++": "cpp", "C/C++": "cpp", "Java": "java", "C#": "csharp", "Go": "go",
                     "JavaScript": "javascript", "TypeScript": "typescript", "Rust": "rust", "PHP": "php",
@@ -132,6 +138,11 @@ def _settings(context) -> Mapping[str, Any]:
     if not isinstance(sources, Mapping) or set(sources) != {"history", "semgrep", "codeql"} or any(
             type(value) is not bool for value in sources.values()):
         raise ValueError("review prioritization sources must enable or disable history, semgrep, and codeql")
+    reservation = settings.get("syntax_metrics_reservation")
+    if not isinstance(reservation, Mapping) or set(reservation) != set(RESERVATION_SETTINGS) or any(
+            type(reservation[key]) is not int or not low <= reservation[key] <= high
+            for key, (low, high) in RESERVATION_SETTINGS.items()):
+        raise ValueError("review prioritization syntax_metrics_reservation is invalid")
     return settings
 
 
@@ -245,6 +256,17 @@ def build_job() -> Job:
 
     def syntax_metrics(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit.job)
+        reservation = settings["syntax_metrics_reservation"]
+        action = "review_prioritization.syntax_metrics"
+        admission = ResourceAdmission(unit.job.metadata_root, unit.job.review_policy.resources)
+        request = Reservation(reservation["cpu"], reservation["memory_mb"], reservation["io_slots"])
+        with admission.reserve(request, events=unit.job.events, action=action,
+                               timeout_seconds=reservation["admission_timeout_seconds"],
+                               unit_id=unit.unit_id) as lease_id, \
+                operation_span(unit.job.events, action, unit_id=unit.unit_id, resource_lease_id=lease_id):
+            return extract_syntax(unit, settings)
+
+    def extract_syntax(unit: UnitContext, settings: Mapping[str, Any]) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_inputs")
         files = catalog_files(unit)
         tree = read_json(unit.job.run_root, loaded["inputs"]["tree_sitter_artifact"])
@@ -263,121 +285,153 @@ def build_job() -> Job:
                                              f"{disposition.get('reason') or 'no shard'}")
                 continue
             shard_rows.append(disposition["artifact"])
-        rows_by_path: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-        for identity in shard_rows:
-            for row in read_lines(unit.job.run_root, identity):
-                rows_by_path[str(row["path"])].append(row)
-        gaps: list[str] = []
+        del tree
+        path_gaps: list[tuple[str, str]] = []
         unscored: Counter[str] = Counter()
-        records: dict[str, dict[str, Any]] = {}
-        function_budget = int(settings["max_functions"])
-        thresholds = list(settings["cyclomatic_thresholds"])
-        processed = 0
+        skipped: Counter[str] = Counter()
+        candidates: list[str] = []
+        # Decide from catalog metadata alone, before any AST row or target byte is loaded.
         for path in sorted(files):
             value = files[path]
             language = value["language"]
             grammar = SCORED_LANGUAGES.get(str(language))
-            if grammar == "typescript" and path.endswith(".tsx"):
-                grammar = "tsx"
             if grammar is None:
-                if language is not None:
+                if language is None:
+                    skipped["not_source"] += 1
+                else:
                     unscored[str(language)] += 1
                 continue
-            file_gaps = sorted(set(reasons.get(path, ())))
-            rows = rows_by_path.get(path)
             if not source_in_scope(value):
-                continue
-            if not rows:
-                gaps.append(f"{path}: ast_unavailable ({'; '.join(file_gaps) or 'no accepted Tree-sitter rows'})")
-                continue
-            if any("node limit" in reason or "limit" in reason for reason in file_gaps):
-                gaps.append(f"{path}: ast_truncated ({'; '.join(file_gaps)})")
-                continue
-            if processed >= int(settings["max_files"]):
-                gaps.append(f"{path}: file_bound_reached")
+                skipped["out_of_delivery_scope"] += 1
                 continue
             if value["size_bytes"] > int(settings["max_file_bytes"]):
-                gaps.append(f"{path}: file_byte_bound_reached")
+                skipped["file_byte_bound"] += 1
+                path_gaps.append((path, "file_byte_bound_reached"))
                 continue
-            if any(row.get("file_sha256") != value["sha256"] for row in rows):
-                raise ValueError(f"Tree-sitter rows do not match the accepted catalog hash: {path}")
-            row_grammar = str(rows[0]["location"]["producer_location"].get("grammar"))
-            if row_grammar in UNSCORED_GRAMMARS or row_grammar not in SPECS:
-                unscored[f"grammar:{row_grammar}"] += 1
-                continue
-            processed += 1
-            spec = SPECS[row_grammar]
-            data = _target_bytes(unit, path, value["sha256"], value)
-            root, errors = build_tree(rows)
-            source = SourceFile(path, value["sha256"], row_grammar, spec.language, data, root, errors)
-            units, truncated = function_units(source, spec, count_error_propagation=bool(
-                settings["count_error_propagation"]), limit=max(0, function_budget))
-            function_budget -= len(units)
-            imports, declarations = extract(source, spec)
-            extractor = Extractor(source, spec, units, import_modules(imports), settings)
-            extractor.run()
-            for item in extractor.signals:
-                item["signal_id"] = _identity("sig", item["producer"], item["rule_id"], item["path"], item["start_byte"],
-                                              item["end_byte"], item["function_id"], item["category"], item["surface"])
-            for item in extractor.suppressions:
-                item["signal_id"] = _identity("sup", item["rule_id"], item["path"], item["start_byte"], item["end_byte"])
-            sloc = len(code_lines(root))
-            file_record_gaps = [gap] if (gap := delivery_gap(value)) else []
-            if errors or "parse diagnostics present" in file_gaps:
-                file_record_gaps.append(f"parse_errors:{errors}")
-            unsupported: Counter[str] = Counter()
-            for item in units:
-                item.pop("_node", None)
-                unsupported.update(item["unsupported_constructs"])
-                owned = [signal for signal in extractor.signals if signal["function_id"] == item["function_id"]]
-                suppressions = [entry for entry in extractor.suppressions if entry["function_id"] == item["function_id"]]
-                item["signal_counts"] = _count(owned)
-                item["suppression_counts"] = _count(suppressions)
-                item["suppression_count"] = len(suppressions)
-            file_record_gaps.extend(f"unsupported_construct:{name}:{count}" for name, count in sorted(unsupported.items()))
-            if truncated:
-                file_record_gaps.append("function_bound_reached")
-            signals = _ordered(extractor.signals)
-            limit = int(settings["max_signals_per_file"])
-            if len(signals) > limit:
-                file_record_gaps.append(f"signals_truncated:{len(signals) - limit}")
-            records[path] = {
-                "path": path, "sha256": value["sha256"], "size_bytes": value["size_bytes"],
-                "line_count": source.line_count(), "language": spec.language, "grammar": row_grammar,
-                "component_id": value["component_id"], "parse_error_count": errors,
-                "generated": bool(value.get("generated")), **scope_fields(value),
-                **source_native(value),
-                "canonical_artifact_identity": value.get("canonical_artifact_identity"),
-                "build_unit_id": value.get("build_unit_id"), "workspace_path": value.get("workspace_path"),
-                **file_summary(units, sloc, thresholds),
-                "signal_counts": _count(extractor.signals), "suppression_counts": _count(extractor.suppressions),
-                "suppression_count": len(extractor.suppressions), "units": units, "signals": signals[:limit],
-                "suppressions": extractor.suppressions[:limit], "imports": imports, "declarations": declarations,
-                "gaps": file_record_gaps,
-            }
-            gaps.extend(f"{path}: {gap}" for gap in file_record_gaps)
-        gaps.extend(f"language_not_scored:{language} ({count} files)" for language, count in sorted(unscored.items()))
-        if function_budget <= 0:
-            gaps.append("function_bound_reached")
-        by_language: dict[str, dict[str, Any]] = {}
-        for language in sorted({item["language"] for item in records.values()}):
-            members = [item for item in records.values() if item["language"] == language]
-            values = [int(unit_value["cyclomatic"]) for item in members for unit_value in item["units"]]
-            by_language[language] = {
-                "file_count": len(members), "function_count": len(values), "sloc": sum(item["sloc"] for item in members),
-                "cyclomatic_average": round(sum(values) / len(values), 6) if values else None,
-                "share_above_threshold": {str(limit): round(sum(1 for value in values if value > limit) / len(values), 6)
-                                          if values else None for limit in thresholds},
-                "suppression_count": sum(item["suppression_count"] for item in members),
-            }
-        document = {"schema": "appsec-review/review-prioritization-syntax/1",
-                    "identities": {"cyclomatic": CYCLOMATIC_IDENTITY, "cognitive": COGNITIVE_IDENTITY,
-                                   "rules": RULES_IDENTITY, "mapping": MAPPING_IDENTITY},
-                    "files": records, "by_language": by_language}
-        unit.job.events.write("REVIEW_PRIORITIZATION_SYNTAX_EXTRACTED", file_count=len(records),
-                              function_count=sum(len(item["units"]) for item in records.values()), gap_count=len(gaps))
-        return {"artifact": _write(unit, "syntax-facts.json", document), "file_count": len(records),
-                "function_count": sum(len(item["units"]) for item in records.values()), "gaps": gaps,
+            candidates.append(path)
+        function_budget = int(settings["max_functions"])
+        thresholds = list(settings["cyclomatic_thresholds"])
+        limit = int(settings["max_signals_per_file"])
+        aggregates: dict[str, dict[str, Any]] = {}
+        file_count = function_count = processed = 0
+        artifact_path = unit.unit_root / "artifacts" / "syntax-facts.json"
+        writer = FilesDocumentWriter(artifact_path)
+        try:
+            with ShardRowIndex(unit.job.run_root, shard_rows, candidates, unit.unit_root / "scratch") as index:
+                for path in candidates:
+                    value = files[path]
+                    file_gaps = sorted(set(reasons.get(path, ())))
+                    if not index.has_rows(path):
+                        path_gaps.append((path, f"ast_unavailable ({'; '.join(file_gaps) or 'no accepted Tree-sitter rows'})"))
+                        continue
+                    if any("node limit" in reason or "limit" in reason for reason in file_gaps):
+                        path_gaps.append((path, f"ast_truncated ({'; '.join(file_gaps)})"))
+                        continue
+                    if processed >= int(settings["max_files"]):
+                        path_gaps.append((path, "file_bound_reached"))
+                        continue
+                    rows = index.rows(path)
+                    if any(row.get("file_sha256") != value["sha256"] for row in rows):
+                        raise ValueError(f"Tree-sitter rows do not match the accepted catalog hash: {path}")
+                    row_grammar = str(rows[0]["location"]["producer_location"].get("grammar"))
+                    if row_grammar in UNSCORED_GRAMMARS or row_grammar not in SPECS:
+                        unscored[f"grammar:{row_grammar}"] += 1
+                        continue
+                    processed += 1
+                    spec = SPECS[row_grammar]
+                    data = _target_bytes(unit, path, value["sha256"], value)
+                    root, errors = build_tree(rows)
+                    del rows
+                    source = SourceFile(path, value["sha256"], row_grammar, spec.language, data, root, errors)
+                    units, truncated = function_units(source, spec, count_error_propagation=bool(
+                        settings["count_error_propagation"]), limit=max(0, function_budget))
+                    function_budget -= len(units)
+                    imports, declarations = extract(source, spec)
+                    extractor = Extractor(source, spec, units, import_modules(imports), settings)
+                    extractor.run()
+                    for item in extractor.signals:
+                        item["signal_id"] = _identity("sig", item["producer"], item["rule_id"], item["path"],
+                                                      item["start_byte"], item["end_byte"], item["function_id"],
+                                                      item["category"], item["surface"])
+                    for item in extractor.suppressions:
+                        item["signal_id"] = _identity("sup", item["rule_id"], item["path"], item["start_byte"],
+                                                      item["end_byte"])
+                    sloc = len(code_lines(root))
+                    file_record_gaps = [gap] if (gap := delivery_gap(value)) else []
+                    if errors or "parse diagnostics present" in file_gaps:
+                        file_record_gaps.append(f"parse_errors:{errors}")
+                    unsupported: Counter[str] = Counter()
+                    for item in units:
+                        item.pop("_node", None)
+                        unsupported.update(item["unsupported_constructs"])
+                        owned = [signal for signal in extractor.signals if signal["function_id"] == item["function_id"]]
+                        suppressions = [entry for entry in extractor.suppressions
+                                        if entry["function_id"] == item["function_id"]]
+                        item["signal_counts"] = _count(owned)
+                        item["suppression_counts"] = _count(suppressions)
+                        item["suppression_count"] = len(suppressions)
+                    file_record_gaps.extend(f"unsupported_construct:{name}:{count}"
+                                            for name, count in sorted(unsupported.items()))
+                    if truncated:
+                        file_record_gaps.append("function_bound_reached")
+                    signals = _ordered(extractor.signals)
+                    if len(signals) > limit:
+                        file_record_gaps.append(f"signals_truncated:{len(signals) - limit}")
+                    summary = file_summary(units, sloc, thresholds)
+                    writer.add(path, {
+                        "path": path, "sha256": value["sha256"], "size_bytes": value["size_bytes"],
+                        "line_count": source.line_count(), "language": spec.language, "grammar": row_grammar,
+                        "component_id": value["component_id"], "parse_error_count": errors,
+                        "generated": bool(value.get("generated")), **scope_fields(value),
+                        **source_native(value),
+                        "canonical_artifact_identity": value.get("canonical_artifact_identity"),
+                        "build_unit_id": value.get("build_unit_id"), "workspace_path": value.get("workspace_path"),
+                        **summary,
+                        "signal_counts": _count(extractor.signals), "suppression_counts": _count(extractor.suppressions),
+                        "suppression_count": len(extractor.suppressions), "units": units, "signals": signals[:limit],
+                        "suppressions": extractor.suppressions[:limit], "imports": imports,
+                        "declarations": declarations, "gaps": file_record_gaps,
+                    })
+                    path_gaps.extend((path, gap) for gap in file_record_gaps)
+                    totals = aggregates.setdefault(spec.language, {
+                        "file_count": 0, "function_count": 0, "sloc": 0, "cyclomatic_sum": 0,
+                        "above": dict.fromkeys(thresholds, 0), "suppression_count": 0})
+                    cyclomatic = [int(item["cyclomatic"]) for item in units]
+                    totals["file_count"] += 1
+                    totals["function_count"] += len(cyclomatic)
+                    totals["sloc"] += summary["sloc"]
+                    totals["cyclomatic_sum"] += sum(cyclomatic)
+                    for threshold in thresholds:
+                        totals["above"][threshold] += sum(1 for item in cyclomatic if item > threshold)
+                    totals["suppression_count"] += len(extractor.suppressions)
+                    file_count += 1
+                    function_count += len(units)
+            # Stable sort keeps per-file gaps in catalog path order, as before the pre-filter existed.
+            gaps = [f"{path}: {gap}" for path, gap in sorted(path_gaps, key=lambda item: item[0])]
+            gaps.extend(f"language_not_scored:{language} ({count} files)"
+                        for language, count in sorted(unscored.items()))
+            if function_budget <= 0:
+                gaps.append("function_bound_reached")
+            by_language = {language: {
+                "file_count": totals["file_count"], "function_count": totals["function_count"], "sloc": totals["sloc"],
+                "cyclomatic_average": round(totals["cyclomatic_sum"] / totals["function_count"], 6)
+                if totals["function_count"] else None,
+                "share_above_threshold": {str(threshold): round(totals["above"][threshold] / totals["function_count"], 6)
+                                          if totals["function_count"] else None for threshold in thresholds},
+                "suppression_count": totals["suppression_count"],
+            } for language, totals in sorted(aggregates.items())}
+            writer.finish({"schema": "appsec-review/review-prioritization-syntax/1",
+                           "identities": {"cyclomatic": CYCLOMATIC_IDENTITY, "cognitive": COGNITIVE_IDENTITY,
+                                          "rules": RULES_IDENTITY, "mapping": MAPPING_IDENTITY},
+                           "by_language": by_language})
+        except BaseException:
+            writer.abort()
+            raise
+        skipped_counts = dict(sorted(skipped.items()))
+        unit.job.events.write("REVIEW_PRIORITIZATION_SYNTAX_EXTRACTED", file_count=file_count,
+                              function_count=function_count, gap_count=len(gaps), skipped=skipped_counts)
+        return {"artifact": _artifact(unit.job.run_root, artifact_path), "file_count": file_count,
+                "function_count": function_count, "skipped": skipped_counts, "gaps": gaps,
                 "terminal_status": _status(gaps)}
 
     def syntax_doc(unit: UnitContext) -> Mapping[str, Any]:
