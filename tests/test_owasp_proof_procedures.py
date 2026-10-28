@@ -224,17 +224,21 @@ def test_same_site_survives_narrower_excerpt_and_distinct_resolving_entities(tmp
                                     locator=locator)
     span = resolver.materialize(span_identity, component_id=COMPONENT)
     rule = procedure_for(controls["V1.2.4"])
+    assert narrowed["truncated"] and not evidence["truncated"] and not span["truncated"]
+    assert resolver.resolve(narrowed["reference"], component_id=COMPONENT) == narrowed
     assert subjects(rule, evidence) == subjects(rule, narrowed) == subjects(rule, span)
     obligations = instantiate(controls["V1.2.4"], _row(controls["V1.2.4"], evidence),
                               [span, narrowed, evidence, evidence], max_subjects=1)
     assert instantiate(controls["V1.2.4"], _row(controls["V1.2.4"], evidence),
                        [evidence, evidence, narrowed, span], max_subjects=1) == obligations
-    [obligation] = obligations
+    obligation, gap = obligations
     assert obligation["supported"]
     assert obligation["subject"]["locator"]["lines"] == [2, 2]
     assert obligation["subject"]["locator"]["columns"] == [11, len(SQL.splitlines()[1])]
     assert obligation["evidence_ids"] == sorted({span["evidence_id"], narrowed["evidence_id"],
                                                evidence["evidence_id"]})
+    assert not gap["supported"] and gap["required_outcome"] == "cannot_verify"
+    assert "1 accepted subject lines omitted" in gap["reason"]
 
 
 def test_multiline_utf8_offsets_and_dedented_context_are_real_file_coordinates(tmp_path: Path, controls) -> None:
@@ -244,8 +248,10 @@ def test_multiline_utf8_offsets_and_dedented_context_are_real_file_coordinates(t
     narrowed = resolver.materialize(evidence["reference"]["source_identity"], component_id=COMPONENT,
                                     locator=locator)
     [whole] = _obligations(controls["V1.2.4"], evidence)
-    [partial] = _obligations(controls["V1.2.4"], narrowed)
+    partial, gap = _obligations(controls["V1.2.4"], narrowed)
     assert whole["subject_id"] == partial["subject_id"]
+    assert narrowed["truncated"] and not gap["supported"]
+    assert gap["required_outcome"] == "cannot_verify"
     site = whole["subject"]
     assert site["locator"]["lines"] == [2, 4]
     assert site["locator"]["columns"] == [len("    café = 'é'; return ".encode()), 5]
@@ -321,12 +327,25 @@ def test_unresolvable_source_creates_a_named_coverage_gap(
 
 def test_material_source_coverage_limit_remains_unknown_even_with_one_named_site(tmp_path: Path, controls) -> None:
     source = SQL + "# bounded source context\n" * 125 + "opaque_later_query()\n"
-    _, evidence, _ = _accepted(tmp_path, source)
-    assert evidence["limitations"]
+    resolver, evidence, _ = _accepted(tmp_path, source)
+    assert evidence["truncated"] and evidence["limitations"]
+    assert resolver.resolve(evidence["reference"], component_id=COMPONENT) == evidence
     supported, gap = _obligations(controls["V1.2.4"], evidence)
     assert supported["supported"] and not gap["supported"]
-    assert "trailing lines omitted" in gap["reason"]
+    assert "8 accepted subject lines omitted" in gap["reason"]
     assert gap["required_outcome"] == "cannot_verify"
+    for name, clipped_source in (
+        ("character-clipped", SQL + "#" + "x" * 17000 + "\n"),
+        ("line-and-character-clipped", SQL + "# context\n" * 117 + "#" + "x" * 17000
+         + "\n" + "# omitted\n" * 5),
+    ):
+        _, clipped, _ = _accepted(tmp_path / name, clipped_source)
+        assert clipped["truncated"] and len(clipped["excerpt"]) == 16000
+        assert len(clipped["excerpt"].splitlines()) == clipped["reference"]["locator"]["lines"][1]
+        assert subjects(procedure_for(controls["V1.2.4"]), clipped) == []
+        [clipped_gap] = _obligations(controls["V1.2.4"], clipped)
+        assert not clipped_gap["supported"] and clipped_gap["required_outcome"] == "cannot_verify"
+        assert "excerpt character cap reached" in clipped_gap["reason"]
 
 
 def test_runtime_network_is_unsupported_even_if_runtime_category_is_claimed(tmp_path: Path, controls) -> None:
@@ -376,6 +395,7 @@ def test_acceptance_re_resolves_and_rejects_another_site_in_the_same_entity(tmp_
     obligations = _obligations(control, evidence)
     first_only = resolver.materialize(evidence["reference"]["source_identity"], component_id=COMPONENT,
         locator={**evidence["reference"]["locator"], "lines": [1, 1]})
+    assert first_only["truncated"]
     package = {"control": control, "component": {"component_id": COMPONENT},
                "proof_obligations": obligations}
     # This exercises citation/subject binding, deliberately making no satisfied/adverse predicate claim.
@@ -388,7 +408,8 @@ def test_acceptance_re_resolves_and_rejects_another_site_in_the_same_entity(tmp_
     first, second = accept_obligations(package, proposal, resolver)
     assert first["citation_checks"][0]["resolution"] == "resolved"
     assert first["citation_checks"][0]["subject_binding"]
-    assert first["supporting"] == [first_only["reference"]]
+    assert not first["supporting"]
+    assert "truncated" in first["gaps"][0]
     assert second["citation_checks"][0]["resolution"] == "resolved"
     assert not second["citation_checks"][0]["subject_binding"] and not second["supporting"]
     assert "named subject" in second["gaps"][0]
