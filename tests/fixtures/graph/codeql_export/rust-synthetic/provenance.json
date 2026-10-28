@@ -1,0 +1,23 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "rust-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/ (a zero-network Cargo workspace: src/main.rs plus offline stand-ins for reqwest, rusqlite and serde_json under vendor/, pinned by Cargo.lock). They are a deliberately chosen subset of what the appsec-review/graph-export-rust pack would export (for example intermediate pattern nodes on paths and some library-summary flow pairs are omitted), written to exercise the cases below; they are not a CodeQL recording. Canonical paths of std and vendored callees follow the codeql/rust-all 0.2.21 models-as-data names and are live-unverified. bqrs_sha256 values are SHA-256 of the text 'hand-authored synthetic bqrs <query_id>'.",
+  "cases": {
+    "remote_to_sql": "path_flows: reqwest::blocking::get (line 37) reaches <rusqlite::Connection>::execute argument 0 at line 20 through dyn Store::save and as_owned",
+    "remote_to_command": "path_flows: the remote body reaches Command::new argument 0 at line 42 (run_tool)",
+    "remote_to_ssrf": "path_flows: the remote body reaches <reqwest::blocking::client::Client>::request argument 1 at line 62 (request-url)",
+    "remote_to_deserialization": "sink_sites/path_flows: serde_json::from_str at line 66 is a catalog API sink (model api) reached by the remote body",
+    "argv_and_env_sources": "source_sites: std::env::args (line 83, commandargs) and std::env::var (line 86, environment)",
+    "sanitized_path": "path_sanitizers: std::fs::canonicalize (line 56) on the argv flow to fs::read_to_string at line 57, which counts one dominating sanitizer",
+    "guarded_sink": "guards: tool.len() < 16 (line 46) dominates Command::new at line 47, true_branch",
+    "unguarded_sink": "guards: Command::new at line 42 has only a none row",
+    "cross_function_flow_summary": "flow_summaries: as_owned parameter 0 reaches its return value (taint, through the to_string summary)",
+    "virtual_dispatch": "call_sites: store.save(body) at line 79 on Box<dyn Store>, two virtual_resolved candidates",
+    "unresolved_indirect_call": "call_sites: the closure call bump(...) at line 89 is unresolved_indirect",
+    "not_applicable_range": "ranges: every sink operand is not_applicable (codeql/rust-all 0.2.21 has no range analysis)"
+  }
+}

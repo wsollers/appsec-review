@@ -2058,6 +2058,267 @@
           ]
         }
       ]
+    },
+    "rust": {
+      "model_library": "codeql/rust-all",
+      "export_pack": "appsec-review/graph-export-rust",
+      "sinks": [
+        {
+          "rule_id": "rust.sink.api.from_str",
+          "match": {
+            "api": "from_str",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.api.from_slice",
+          "match": {
+            "api": "from_slice",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.api.from_reader",
+          "match": {
+            "api": "from_reader",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.api.deserialize",
+          "match": {
+            "api": "deserialize",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.model.sql-injection",
+          "match": {
+            "model": "sql-injection"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "rust.sink.model.command-injection",
+          "match": {
+            "model": "command-injection"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "rust.sink.model.path-injection",
+          "match": {
+            "model": "path-injection"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "rust.sink.model.request-url",
+          "match": {
+            "model": "request-url"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "rust.sink.model.log-injection",
+          "match": {
+            "model": "log-injection"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "rust.sink.model.html-injection",
+          "match": {
+            "model": "html-injection"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "rust.sink.model.alloc-size",
+          "match": {
+            "model": "alloc-size"
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-770"
+        },
+        {
+          "rule_id": "rust.sink.model.alloc-layout",
+          "match": {
+            "model": "alloc-layout"
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-770"
+        },
+        {
+          "rule_id": "rust.sink.model.pointer-access",
+          "match": {
+            "model": "pointer-access"
+          },
+          "sink_class": "memory_read",
+          "cwe_family": "CWE-825"
+        },
+        {
+          "rule_id": "rust.sink.model.disable-certificate",
+          "match": {
+            "model": "disable-certificate"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-295"
+        },
+        {
+          "rule_id": "rust.sink.model.hasher-input",
+          "match": {
+            "model": "hasher-input"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-328"
+        },
+        {
+          "rule_id": "rust.sink.model.credentials-key",
+          "match": {
+            "model": "credentials-key"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-798"
+        },
+        {
+          "rule_id": "rust.sink.model.credentials-iv",
+          "match": {
+            "model": "credentials-iv"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-798"
+        },
+        {
+          "rule_id": "rust.sink.model.credentials-nonce",
+          "match": {
+            "model": "credentials-nonce"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-798"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "rust.source.api.accept",
+          "match": {
+            "api": "accept",
+            "declared_in": [
+              "std::net::tcp::TcpListener"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "rust.source.api.recv_from",
+          "match": {
+            "api": "recv_from",
+            "declared_in": [
+              "std::net::udp::UdpSocket"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "rust.source.model.remote",
+          "match": {
+            "model": "remote"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "rust.source.model.commandargs",
+          "match": {
+            "model": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "rust.source.model.environment",
+          "match": {
+            "model": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "rust.source.model.file",
+          "match": {
+            "model": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "rust.source.model.stdin",
+          "match": {
+            "model": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "rust.source.model.database",
+          "match": {
+            "model": "database"
+          },
+          "source_class": "database"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "rust.sanitizer.canonicalize",
+          "api": "canonicalize",
+          "declared_in": [
+            "std::fs",
+            "std::path::Path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        }
+      ]
     }
   }
 }
