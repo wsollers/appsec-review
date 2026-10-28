@@ -1,11 +1,13 @@
 # Evidence completion documentation inventory
 
-Date: 2026-10-28. Phase: initial source inventory and documentation change map.
+Date: 2026-10-28. Phase: source inventory and partial implementation reconciliation.
 Inspected source: `5f5548da3d039f73c7d6858d2b28a4593a264efe`; ancestry verified with
-`git merge-base --is-ancestor`. No completion implementation commits have been reconciled yet.
+`git merge-base --is-ancestor`. Delivered source `b702eb7` and assurance fix `7641fa5` are now
+merged into the isolated documentation branch, followed by checkpoints `18eae9f`, `e769645f`, `3f28d871`;
+final contract/acceptance gaps are recorded below.
 The controlling delivery decisions are
 [completion design section 11](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions).
-This is a documentation implementation record, not evidence that the planned pipeline runs.
+This is a documentation implementation record, not evidence that the full new pipeline runs.
 
 ## Delivered inventory
 
@@ -16,7 +18,7 @@ The [dossier data inventory](../architecture/dossier-data-inventory.md) records:
 - all 19 public retrieval tool names, bounded selectors, graph modes, neighborhood families and
   consumer-specific source windows; 17 logical indexes and their shard ownership;
 - all 16 allowed precomputed query-set names, the 10 actual producers and 6 pending products;
-- all 120 dataset output kinds in the 37 baseline producer declaration modules, separated into
+- all 120 baseline dataset output kinds / 37 modules, expanded to 126 kinds / 40 integrated modules, separated into
   indexed, artifact-only and protected sensitivity/disposition;
 - source/build/document, CodeQL/Clang/AST/IR/CPG/SVF, artifact/dependency/CVE/SBOM,
   CI/IaC/hardening, coverage/profile/history/change/control/tag/prioritization data, and
@@ -24,7 +26,8 @@ The [dossier data inventory](../architecture/dossier-data-inventory.md) records:
 
 Sources were inspected as repository implementation, not target/evaluator data.
 No target checkout, evaluator ground truth, runtime skill instructions, raw prompt or credential
-was loaded for this work. No product/config/schema/test/container/pin files were changed.
+was loaded for this work. No product/config/schema/test/container/pin edits were authored here;
+delivered implementation commits were merged for source verification.
 No broad `docs-sync` reconciliation was performed and `docs/docs-sync.json` is unchanged.
 
 ## Documentation map
@@ -43,26 +46,26 @@ No broad `docs-sync` reconciliation was performed and `docs/docs-sync.json` is u
 | [Architecture navigation](../architecture/README.md), [agent navigation](../agent-reader.md) | Link inventory, proposed dossier operations and this record without introducing authority. |
 | [Wave1 operations](../operations/wave1-review.md), [inference design](../architecture/inference-security-review.md), [review package contract](../architecture/review-package-contract.md), [red output](../architecture/red-discovery-output.md), [indexing design](../architecture/indexing-and-query-reuse.md) | Integration follow-up: reconcile precise producer placement, package/reference schemas, chain publication, input matrix and availability; do not rewrite unrelated historic design. |
 
-## Rollout decision awaiting implementation reconciliation
+## Rollout decisions and implementation boundary
 
 After the initial inventory commit, the user explicitly selected **Run both automatically for new
 reviews** for remediation planning and bounded nonexecuting validation. The manager will enable
 both in central new-configuration defaults; automatic compile-only PoC and dossier publication
 are also intended after implementation acceptance. Existing runs must retain their immutable
 frozen configuration rather than inherit changed checkout defaults. This records the user-directed
-decision, not source verification that these defaults have shipped. Runtime reproduction,
+decision; central defaults were subsequently source-verified in `b702eb7`. Runtime reproduction,
 negative-control execution and `fixed` assurance remain unauthorized and unclaimed.
 
 The user additionally requires telemetry and metrics from the outset. Existing
 `observability/events.py::EventLog` / `PipelineLog` and
 `observability/telemetry.py::aggregate_run_metrics` were inspected for the follow-up inventory.
-Completion-specific observations and summary fields await implementation, not a separate Azure
-or telemetry backend. Track stages/candidates, model usage where emitted, low-cardinality
+Completion-specific observations and summary fields were subsequently delivered in part by
+`b702eb7`, not a separate Azure/backend. Track stages/candidates, model usage where emitted, low-cardinality
 outcomes, durations, caps, adapter/render failures and integrity/coverage gaps. Producer allowlists
 must exclude raw source/patch/PoC/prompt/credential content before writing either local or central
 events; central key redaction does not sanitize the earlier local write.
 
-## Unresolved implementation details
+## Original contract-time gaps
 
 The baseline only declares completion schema constants, `FindingBinding` and nonexecution helpers
 in `jobs/completion_contracts.py`. Chain composition/ledger events, remediation producers, dossier
@@ -81,6 +84,30 @@ Important source-verified distinctions for integration:
 | Publication ordering | PoC currently consumes gate; report separately discovers a gate-bound PoC handoff. Gate hardcodes PoC/chain/remediation absence. Integration must remove the cycle risk and post-gate discovery, not run the gate twice. |
 | Protected content | Existing PoC source is declared artifact-only/internal, not automatically public. New developer dossiers are explicitly protected and must exclude secrets/raw prompts/transcripts. Standalone diagnostic interchange is not the dossier allowlist. |
 | Assurance | Compile-only PoC, instrumentation and build-checked patches never prove runtime reproduction, passing negative controls, fixed/resolved findings or deployment. |
+
+## Delivered-source reconciliation
+
+| Source | Documentation reconciliation |
+| --- | --- |
+| `b702eb7183642bbce9398a736b02d41f7bbf631f` | Includes chain `ec9257bf`, dossier `065f736c`, remediation `6278e580`; registers 40 jobs, 126 dataset outputs, typed central/profile configuration, new-run automatic defaults, pre-gate direct/Dagster ordering, validation/planning constraint, CLI manual-PoC flag and completion metrics. |
+| `7641fa50f91597a6dcdbe9a15147198dc34ac455` | Restores embedded nonexecution-assurance validation for schema-validated full producer rows, with a safe Mapping guard. The earlier exact-key regression is not retained as a current gap. |
+| `18eae9fd189c66303cf4e9bdd6a871d1713438ff` | Includes reader `/3` alignment `6f168400` and metric parity: all seven actual PoC statuses/native outcomes, fixed capability counts/dispositions/enabled maps, flags/dimensions, configured-limit ranges, separate null-token measurements and missing-turn counters. |
+| `e769645f4628039cb9aa8fbf4bb7354764b2df52` | Preserves unknown remediation token dimensions and genuine zero, emits unavailable metadata, validates/closed-scopes shared governing fragments and role responsibility with exact bundle pinning, and reports uncommissioned native `BuildProfile` as manual validation. |
+| `3f28d871455707f2c7e27d230d6765c9cc5ae6ba` | Extends active pre-review downstream exclusions to the new completion jobs; preserves **all** `registry_providers` file ownership/declarations for resume auditing. The reported indexing-admission regression is resolved at this source boundary. |
+| Shared review acceptance | Now verifies `/3`, run identity, duplicate identities, canonical PoC-basis digest, individual review-package refs and ledger-bound chain publication/memberships. The reader mismatch is resolved; real producer registration is still not a full accepted-run result. |
+| Remediation operations | Added a focused operating page for exact inert patch bytes, confirmed-only accounting, seven assurance dimensions, native syntax-only coverage, defaults/profiles, protected artifacts, statuses and telemetry. |
+| Dossier operations | Reconciled exact units, source/producer verification, bounds/pin, attempt-owned files, closed projection, render status/receipt and failure-retention behavior from source. |
+| Metrics | Reconciled `run-metrics/3.completion` / `completion-process-metrics/1`, seven fixed lanes, per-event counters/outcomes/durations, explicit-null usage and bounded measurement gaps. These count attempted work/retries, not accepted findings; overlapping stages are not additive. |
+
+Remaining source/acceptance work: final gate/PoC `/2` contracts, final report
+snapshot-only attachment consumption, authenticated manual admission end to end, chain/base-finding
+coverage isolation, residual consumer metadata, full chain/PoC/gate/report candidate telemetry,
+the actual seeded PDF/sample and Linux real-review semantic acceptance. The parent reported
+152 central checks and 42 contract/dossier checks passing on its source commits; those are not
+relabelled as tests run by this documentation session or as end-to-end acceptance. The parent
+also reports 24 metrics/pipeline-log/review regressions passing at `18eae9f`; the remediation owner
+reports 241 Windows unit passes / one privilege skip for its follow-up. Those results are not
+relabelled as local documentation checks or Linux real-review semantic acceptance.
 
 ## Checks and limitations
 
@@ -102,6 +129,11 @@ the correct indexed/artifact-only/protected column across all 37 producer module
 the exact 19 public tool names, 17 logical indexes and 16 allowed query-set names against their
 source declarations. The six pending query products remain explicitly distinguished from the
 ten implemented ones.
+
+After merging `b702eb7` and `7641fa5`, the same link check still reports exactly those two
+uninstalled-target links. The focused AST completeness/disposition check now passes for all
+**126 outputs across 40 producer modules**. No target, runtime pipeline, compiler or renderer
+was run to substitute for the pending integration acceptance.
 
 `git -c core.whitespace=cr-at-eol diff --check` passes, preserving the already tracked CRLF style
 of the two navigation pages rather than treating carriage returns as added trailing whitespace.

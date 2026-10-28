@@ -133,11 +133,18 @@ resolved limits, so changing either invalidates red cell reuse.
    `blocked`, `no_proposal`, or `unaccounted` in the lane document. Those summaries feed the
    handoff accounting (`leads_expected`, `leads_by_outcome`). Admitted chain seeds go to the lane's
    bounded `chain-seeds.json` (`appsec-review/red-chain-seeds/1`), with the claim ids their steps'
-   proposals normalized to. They are inputs for the later chain slice and never claims.
+   proposals normalized to. The implemented pre-seal chain composer consumes only eligible
+   adjudicated claim-id hints from them; seed prose/edges are stripped and never become
+   continuity evidence or independent claims.
 7. Publish one terminal record for every expected worker cell, including invalid output, timeout,
    or no proposals. A malformed cell is a named gap; it does not erase accepted leads or imply a
    clean target.
 
 The red output is an input to [inference security review](inference-security-review.md). Blue and
 blind verifier pools receive normalized claims and original cited evidence under separate bounded
-capabilities. Attack-chain composition and refutation occur after claim adjudication.
+capabilities. Attack-chain composition and refutation now occur after adjudication/scoring and
+before completeness and ledger sealing, under bounded `attack_chains` units. Five continuity
+dimensions must resolve to commissioned native facts; an empty default producer allowlist cannot
+turn source narrative into a deployed attack chain. See the
+[completion contract](evidence-completion-and-remediation.md) and
+[inference operations](../operations/inference-security-review.md).

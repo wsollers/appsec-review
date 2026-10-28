@@ -52,9 +52,23 @@ or vulnerabilities.
 The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
 requires PoC, chain, remediation, dossier and final-publication tracking from their first
 implementation. The existing `metrics` command and summary path remain the operating surface;
-no separate backend is needed. At baseline `5f5548d`, lane-specific event/aggregate names are not
-implemented. Do not treat their absence in an older summary as zero candidates, zero failures or
-complete coverage; reconcile exact fields after implementation commits arrive.
+no separate backend is needed. Integration `b702eb7` adds `completion` to `run-metrics/3`, with
+`completion-process-metrics/1` semantics. This is observational attempted-work accounting, not
+accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
+parity and nonadditive limits; final producer instrumentation is still being reconciled.
+
+Use `completion.lanes.<lane>.observed` and `.events.<event>` for the seven fixed lane buckets
+listed in [telemetry architecture](../architecture/telemetry.md#evidence-completion-tracking-commissioned).
+Each event reports `count`, allowlisted `counters`/`outcomes`, fixed `flags`/`dimensions`,
+`limits`, `unavailable_token_measurements` and `duration_ms.{count,p50,p95,max,summed_work}`.
+Configured dossier/source/evidence limits are observed `{min,max}` ranges, **never sums**.
+Capability attachment/gap/omission counts, enabled/disposition maps, explicit manual admission,
+render/adapter-attempt flags and fixed kind/role/adapter dimensions are retained where emitted.
+`unavailable_token_measurements` counts explicit-null token fields;
+`counters.usage_unavailable_count` counts producer-reported missing-usage turns instead.
+Neither means a missing field was measured as zero. An unobserved lane is not an observed zero.
+`measurement_gap_count` and bounded `measurement_gaps` identify invalid emitted readings; they
+do not independently prove all expected candidates/stages were measured.
 
 Operators must be able to follow stage and candidate progress, terminal dispositions, caps,
 coverage/integrity gaps, retry/reuse, adapter/render failures and durations. Correlate individual
@@ -63,7 +77,11 @@ lane/stage/status/error class. Compare accepted candidate/attachment manifests w
 raw lifecycle volume is not the number of unique eligible findings, proposals or rendered PDFs.
 Report missing/duplicate/conflicting process coverage explicitly rather than hiding it in success
 counts. Model usage applies only where actually emitted; missing provider tokens/cache/cost data
-is unavailable, not zero.
+must remain unavailable, not zero. Remediation follow-up `e769645f` now preserves per-dimension
+unknown totals as null, genuine measured zero and unavailable-turn metadata. An invocation with
+no completed turns has null totals and an unavailable flag even though its unavailable-turn count
+is zero. Generic lifecycle events do not substitute for
+missing candidate/outcome instrumentation in the other pending producers.
 
 Check frozen run settings before interpreting an absent lane. The
 [new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)

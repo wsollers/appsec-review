@@ -1,13 +1,24 @@
 # Operating proof-of-concept generation
 
-**Completion transition (proposed):** this page describes the implemented post-gate producer at
-contract commit `5f5548d`. The [completion design](../architecture/evidence-completion-and-remediation.md)
-moves PoC before the single final gate, replaces mutable `data/poc/<claim-id>/` packaging with
-immutable attempt-owned artifacts, and adds explicit nonexecution assurance and protected
-[per-outcome dossiers](dossier-publication.md). Those input/path/schema/topology changes are
-not implemented at this baseline. [Dossier data inventory](../architecture/dossier-data-inventory.md)
+**Partial completion integration (`b702eb7`):** the registered graph now moves PoC before the
+single final gate and enables it for new configurations. The handler/publication contract below
+is still the old gate-coupled implementation from `5f5548d`, not an operational recipe for that new
+graph. Its replacement will use
+immutable attempt-owned artifacts and add explicit nonexecution assurance and protected
+[per-outcome dossiers](dossier-publication.md). Final PoC/gate `/2` contracts are pending;
+checkpoint `18eae9f` aligns the shared `/3` review reader and verifies PoC-basis digests.
+Old frozen runs are not silently enabled or upgraded.
+[Dossier data inventory](../architecture/dossier-data-inventory.md)
 enumerates the actual accepted inputs and bounded retrieval; compiling either function still
 does not observe its behavior.
+
+The CLI now parses explicit gate re-admission as
+`run job_final_publication_gate --run-id <id> --upstream-from-run --admit-manual-poc`.
+It is restricted to that job with both preceding flags. End-to-end digest authentication awaits
+the final gate contract; no ordinary `latest.json` discovery is permission to activate a disabled
+manual PoC.
+
+## Legacy handler reference
 
 `job_poc_generation` writes, for each finding the judge agreed is correct, a **proof-of-concept unit-test
 function** that a developer can add to a test target and watch in a debugger, and checks that it **compiles**
@@ -20,7 +31,8 @@ took where that document left a choice open are in its section 8.
 - The pipeline **never executes it**. It parses it, runs deterministic validators on the clang AST, compiles it
   (syntax, plain object, sanitizer object) and checks that the symbols the object needs resolve. Nothing is linked
   into an executable and nothing is run.
-- The job is **shipped disabled** and invoked by hand on a finished run.
+- At the original contract baseline the job was shipped disabled and invoked by hand on a
+  finished run; current new-configuration defaults are enabled as noted above.
 
 ```text
 job_final_publication_gate -> job_poc_generation -> job_final_report_publication   (only when enabled)

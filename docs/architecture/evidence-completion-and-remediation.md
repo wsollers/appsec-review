@@ -1,13 +1,23 @@
 # Evidence completion and remediation
 
-Status: proposed design, not an implementation or a change to execution authorization.
-Inspected baseline: `d2b64774`, 2026-10-28.
+Status: implementation contract, partially delivered; no change to execution authorization.
+Original inspected baseline: `d2b64774`. Source reconciliation: `b702eb7`, `7641fa5`, `18eae9f`,
+2026-10-28.
 
 The [dossier data inventory](dossier-data-inventory.md) records the source-verified available
 inputs, bounded queries/indexes, producer ownership, visibility and evidence gaps at contract
-commit `5f5548d`. [Dossier operations](../operations/dossier-publication.md) records the proposed
-operational boundary; the [documentation implementation record](../reviews/evidence-completion-documentation-inventory.md)
-tracks source reconciliation without claiming the producers below are already implemented.
+commit `5f5548d` and the delivered integration. [Dossier operations](../operations/dossier-publication.md)
+and [remediation operations](../operations/remediation.md) describe the implemented producers and
+their limits; the [documentation implementation record](../reviews/evidence-completion-documentation-inventory.md)
+tracks reconciliation and acceptance gaps.
+
+The chain, remediation and dossier producers, central configuration/registration/pre-gate graph
+and completion metrics now exist. The shared reader now accepts review `/3` and verifies nested
+chain/package bindings. Gate/PoC final contracts and report snapshot consumption are still pending.
+Chain/base-coverage isolation and the live seeded PDF also remain follow-ups. The graph being
+registered is therefore **not** a claim of end-to-end operational acceptance. The sections below
+retain the original design rationale and requirements; current delivered data is enumerated in
+the [inventory reconciliation](dossier-data-inventory.md#delivered-source-and-remaining-integration).
 
 ## Recommendation
 
@@ -22,7 +32,7 @@ execute them**. A compiled function is developer documentation, not an observed 
 Runtime proof, automatic patch application to a target, and automatic release clearance are not
 part of this proposal.
 
-## 1. What is missing today
+## 1. What was missing at the original baseline
 
 The gap is partly missing implementation and partly publication ordering:
 

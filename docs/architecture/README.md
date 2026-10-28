@@ -73,19 +73,24 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   answers, and how stances become ledger states.
 - [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
   `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
-- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — proposed end-to-end
+- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — partially delivered end-to-end
   PoC publication, evidence-qualified attack chains, remediation planning and assurance-labelled
   validation, with one final gate after all producers; preserves compile-only PoC policy.
 - [`dossier-data-inventory.md`](dossier-data-inventory.md) — source-verified dossier input, query,
   index/shard, producer, dataset visibility and provenance inventory; available evidence versus
   admissibility, missing capabilities and the completion architecture change map.
-- [`../operations/dossier-publication.md`](../operations/dossier-publication.md) — proposed
+- [`../operations/dossier-publication.md`](../operations/dossier-publication.md) — implemented protected
   protected per-confirmed-finding and per-PoC-outcome dossier publication before the final gate,
   retained JSON/LaTeX/PDF/receipts, nonexecution assurance and render-gap behavior.
 - [`../reviews/evidence-completion-documentation-inventory.md`](../reviews/evidence-completion-documentation-inventory.md) —
-  initial documentation inventory/reconciliation record, source baseline, outstanding implementation
+  documentation inventory/reconciliation record, source baselines, outstanding implementation
   details and known target-link check baseline.
-- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
+- [`../operations/remediation.md`](../operations/remediation.md) — confirmed-only exact patch
+  planning, safe regression specifications, bounded nonexecuting native syntax validation,
+  protected receipts, automatic new-run defaults and remaining acceptance gaps.
+- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
+  compile-only test/control functions, enabled new-run pre-gate ordering and the pending input/
+  immutable-publication contract transition.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+import gc
 import json
 import os
 from pathlib import Path
@@ -31,8 +32,6 @@ def job_tables(job_id: str) -> str:
     lines: list[str] = []
     for line in text[start:].splitlines():
         if line.startswith("[") and job_id not in line:
-            break
-        if line.startswith("#") and lines and not lines[-1].strip():
             break
         lines.append(line)
     return "\n".join(lines) + "\n"
@@ -123,6 +122,7 @@ class Chain:
     def restore(self) -> None:
         """Put the run tree back exactly as it was when the chain finished (after a tamper test)."""
         assert self.snapshot is not None
+        gc.collect()
         shutil.rmtree(self.base)
         shutil.copytree(self.snapshot, self.base)
 

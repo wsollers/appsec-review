@@ -1,14 +1,18 @@
 # Operating the final publication gate and the final report
 
-**Completion transition (proposed):** at contract commit `5f5548d`, the optional PoC producer
-still follows the gate and the report discovers its outcome separately. The gate's hardcoded
-PoC/chain/remediation limitations are not evidence that the compile-only PoC producer is absent.
-The [completion design](../architecture/evidence-completion-and-remediation.md) replaces this with
+**Partial completion integration (`b702eb7`):** the registered graph now places PoC, remediation
+and dossiers before one final gate. The gate/report contracts below remain the old implementation:
+they have not yet been replaced by final `/2` snapshot contracts. Checkpoint `18eae9f` aligns the
+shared review reader with writer `/3`, including nested chain/package bindings. Hardcoded absence limitations and
+post-gate PoC discovery are pending replacement, not evidence that the new producers are absent.
+The [completion design](../architecture/evidence-completion-and-remediation.md) requires
 one gate-certified snapshot after every enabled producer, including protected
 [dossiers](dossier-publication.md). Its exact inputs, visibility and unresolved integration
 surfaces are cataloged in the [dossier inventory](../architecture/dossier-data-inventory.md).
-The operational behavior and schema versions below remain the implemented baseline, not that
-new graph.
+The reference behavior/schema versions below describe the legacy projector, not acceptance of the
+new graph. New defaults do not rewrite old frozen configurations.
+
+## Legacy gate/report reference
 
 `job_final_publication_gate` and `job_final_report_publication` are the terminal publication jobs of
 `wave1_review`. They turn the accepted `job_inference_security_review` handoff into the pipeline's

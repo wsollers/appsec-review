@@ -58,6 +58,19 @@ def test_direct_completion_order_agrees_with_publication_dependencies() -> None:
     assert POST_INDEX_JOB_IDS[-1] == REPORT
 
 
+def test_indexing_excludes_every_downstream_consumer_but_retains_file_ownership() -> None:
+    from appsec_review.jobs.job_review_data_indexing.job import DOWNSTREAM_JOBS, registry_providers
+
+    job_ids, declarations, _consumes = registry_providers()
+    registered = set(job_ids)
+    dependencies = wave1_dependencies(registered)
+    assert dependencies is not None
+    consumers = {job_id for job_id in dependencies
+                 if "job_review_data_indexing" in upstream_closure(job_id, dependencies, registered)}
+    assert DOWNSTREAM_JOBS == consumers
+    assert consumers <= declarations.keys()
+
+
 @pytest.mark.parametrize("job_id", OPTIONAL[1:])
 def test_new_completion_jobs_never_receive_the_live_target(job_id) -> None:
     assert job_id in TARGET_INDEPENDENT_JOBS
