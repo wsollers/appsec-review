@@ -215,6 +215,23 @@ def test_hermetic_guard_refuses_external_writes_commands_and_connections(tmp_pat
     assert sentinel.read_text(encoding="utf-8") == "unchanged"
 
 
+def test_guard_allows_only_pinned_static_taxonomy_reads_and_never_mutation(tmp_path: Path) -> None:
+    outcome, _ = execute(tmp_path,
+        "import json, os, pathlib, pytest\n"
+        "def test_static_reference():\n"
+        f"    repository = pathlib.Path({str(ROOT)!r})\n"
+        "    pins = json.loads(os.environ['APPSEC_ACCEPTANCE_STATIC_INPUTS'])\n"
+        "    assert len(pins) == 2\n"
+        "    for relative in pins:\n"
+        "        path = repository / relative\n"
+        "        assert json.loads(path.read_text(encoding='utf-8'))\n"
+        "        with pytest.raises(PermissionError): path.write_text('changed')\n"
+        "        with pytest.raises(PermissionError): path.unlink()\n"
+        "    with pytest.raises(PermissionError):\n"
+        "        (repository / 'data' / 'not-an-allowed-reference.json').read_bytes()\n")
+    assert outcome["exit_code"] == 0 and outcome["cleanup"]["confirmed"], outcome
+
+
 def test_suite_deadline_includes_collection_cases_and_cleanup(tmp_path: Path, monkeypatch) -> None:
     case_file = tmp_path / "test_suite.py"
     case_file.write_text("import time\ndef test_first(): time.sleep(60)\ndef test_second(): time.sleep(60)\n",
