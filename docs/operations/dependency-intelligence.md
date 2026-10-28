@@ -7,8 +7,12 @@ indexing, and evidence collection. Its central configuration must declare this t
 2. `resolution.detect_dependencies`, `resolution.infer_repositories`
 3. `repositories.deduplicate`
 4. `scorecards.fetch`
-5. `publication.publish_context`
+5. `publication.publish_sbom`, `publication.publish_context`
 6. `acceptance.publish_handoff`
+
+The SPDX 2.3 native enrichment and its telemetry have a separate
+[operator guide](native-sbom.md). Its status describes inventory coverage, independently of
+repository inference and Scorecard availability.
 
 Configure positive deterministic bounds for dependency and unique-repository counts, native candidate count, command
 tokens, metadata file count/bytes, and inference candidate bytes. Configure a repository-host

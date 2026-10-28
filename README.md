@@ -100,6 +100,12 @@ Analyzer, `clangd-indexer`, `cppcheck`, `infer`, `svf`), code property graph and
 Clang 18 comes from those images, not from the host; the host needs `clang++-18` only for the
 opt-in live test above.
 
+**Native SBOMs use SPDX 2.3 JSON.** Dependency intelligence augments the source inventory with
+bounded vendored/header-only discovery, without requiring CMake, Conan, or a successful build.
+Exact source evidence, uncertain/conflicting versions, coverage gaps, provenance, and measured
+publication outcomes remain visible. It reuses the Syft image; see
+[`docs/operations/native-sbom.md`](docs/operations/native-sbom.md).
+
 **CodeQL** is not in the catalog. Its licensed payload (CLI, extractors, query packs) is not in this
 repository: on any Linux Docker host (native Linux or WSL 2, not Windows PowerShell)
 `containers/tools/codeql/build-source-image.sh` downloads the pinned CodeQL bundle and

@@ -69,6 +69,15 @@ SONAMEs. When hash-bound workspace manifests contain pkg-config or CMake package
 fields such as name, version, URL, and repository are retained. Each observation carries its
 command id/hash or artifact hash.
 
+The [native SPDX path](native-sbom.md) additionally discovers cataloged vendored and header-only
+dependencies without a successful build or package-manager prerequisite. Literal header
+versions, scoped package documents, include/library arguments, and artifact names retain
+root-scoped evidence and independent identity/release/upstream claim states. Filename and ABI
+versions remain hints; only corroborated releases become asserted SPDX versions. The existing
+Syft image converts its accepted source inventory to SPDX 2.3 JSON before deterministic
+enrichment, official-schema/semantic validation, provenance, and telemetry publication.
+See the [operator guide](../operations/native-sbom.md) for artifacts, bounds, and gap triage.
+
 Only an unresolved native candidate may reach model inference. The request contains one bounded
 candidate, evidence-reference allowlist, supported repository hosts, a registered persona, role,
 task, and runtime skill. The result schema is

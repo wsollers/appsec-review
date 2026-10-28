@@ -308,7 +308,8 @@ def test_guidance_and_job_public_api_are_registered() -> None:
     assert job.consumes == ("job_target_catalog", "job_language_build", "job_artifact_indexing",
                             "job_evidence_collection")
     assert {item.output_kind for item in job.datasets} == {
-        "dependency_context", "scorecard_responses", "dependency_intelligence_handoff"}
+        "dependency_context", "scorecard_responses", "dependency_intelligence_handoff",
+        "native_discovery", "native_spdx", "native_sbom_provenance", "native_sbom_metrics"}
 
 
 def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) -> None:
