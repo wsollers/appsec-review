@@ -78,13 +78,14 @@ def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package:
     """Assemble the brief; ``gaps`` names everything the writer was not given."""
     gaps: list[str] = []
     labels = rows_by_label(view.document) if view is not None else {}
+    references = {row["ref"]: row for row in labels.values() if isinstance(row.get("ref"), str)}
     basis = candidate.poc_basis
     resolved: dict[str, Any] = {}
     for label in (*basis.entry, *basis.path, *basis.unknowns):
-        row = labels.get(label)
+        row = references.get(label)
         if row is None:
             if label in set(basis.entry) | set(basis.path):
-                gaps.append(f"poc_basis label {label} does not resolve in the package view")
+                gaps.append(f"poc_basis reference {label} does not resolve in the package view")
             continue
         resolved[label] = {key: value for key, value in row.items()
                            if key in {"label", "ref", "summary", "text", "path", "lines", "role", "tag"}}
