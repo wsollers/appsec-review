@@ -7,7 +7,7 @@ Enabling it does not authorize target execution.
 
 ## Placement and authority
 
-In Dagster's `wave1_review`, accepted source, component, build and static-analysis producers feed
+In direct and Dagster graphs, accepted source, component, build and static-analysis producers feed
 prioritization, code-graph indexing and security tagging before OWASP. The workbench uses the tag
 cloud, classifications and graph context to route bounded work. They are **not control proof**.
 There is no dependency from prioritization or tagging back to OWASP.
@@ -30,9 +30,11 @@ flowchart TD
   P -->|retrieve original evidence for each final predicate| B
 ```
 
-This is the enabled Dagster path, not a claim that the direct CLI has the same jobs. At feature
-base `6ff64d81`, `cli.GRAPH_JOB_IDS` still omits security tagging and OWASP; direct `start`/`resume`
-cannot automatically run this chain. See [wave 1 operations](../operations/wave1-review.md).
+Direct `start`/`resume`/`plan-resume` and Dagster select this chain when the jobs are enabled.
+Direct `--force-from` accepts tagging or OWASP only when enabled; OWASP remains disabled by
+default. This is shared OWASP ordering, not full graph parity: the direct graph still omits
+CI/post-build branches, and third-party sync remains standalone. See
+[wave 1 operations](../operations/wave1-review.md).
 
 ## Catalog authority, completeness and licensing
 
