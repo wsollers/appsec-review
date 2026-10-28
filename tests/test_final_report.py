@@ -799,7 +799,7 @@ def test_cli_graph_places_the_new_jobs_after_the_review() -> None:
     from appsec_review import cli
 
     completion = (JOB, "job_poc_generation", "job_remediation_planning", "job_remediation_validation",
-                  "job_dossier_publication", GATE, REPORT)
+                  "job_dossier_publication", GATE, "job_openvex_export", REPORT)
     assert cli.POST_INDEX_JOB_IDS[-len(completion):] == completion
 
 
