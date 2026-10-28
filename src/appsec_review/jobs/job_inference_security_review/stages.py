@@ -38,7 +38,7 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 from .datasets import PLANNED_CONSUMERS
 from .schemas import SchemaSet
 
-HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/2"
+HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/3"
 FINDING_SCHEMA = "appsec-review/finding-package/2"
 COVERAGE_SCHEMA = "appsec-review/inference-review-coverage-matrix/1"
 def scorer_actor(implementation: str) -> str:
@@ -414,11 +414,16 @@ def completeness_gaps(units: Iterable[Mapping[str, Any]], scope_gaps: Iterable[M
     return sorted({gap.gap_id: gap for gap in gaps}.values(), key=lambda gap: gap.gap_id)
 
 
-def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incomplete_gap_ratio: float
+def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incomplete_gap_ratio: float, *,
+          additional_cells: Mapping[str, str] | None = None
           ) -> tuple[Accounting, Projection, MergedLedger]:
     merged = merge_verified(shard_paths)
     projection = project(merged.events)
     expected_cells = {cell_id: Lane(lane) for item in lanes for cell_id, lane in item["expected_cells"].items()}
+    for cell_id, lane in (additional_cells or {}).items():
+        if cell_id in expected_cells:
+            raise IntegrityError("chain cell duplicates an intake cell identity")
+        expected_cells[cell_id] = Lane(lane)
     expected_packages = {package_id: Lane(lane) for item in lanes for package_id, lane in item["packages"].items()}
     lead_accounting = {package_id: leads for item in lanes
                        for package_id, leads in (item.get("lead_accounting") or {}).items()}
@@ -532,7 +537,11 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "analyst_assessed_evidence": analyst[:256],
             "missing_predicates": missing,
             "verification_review_id": review_id,
-            "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None, "attack_chains": [],
+            "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None,
+            "attack_chains": sorted(chain_id for chain_id, chain in projection.attack_chains.items()
+                                    if chain.decision is not None and chain.decision.status.value in (
+                                        "confirmed", "qualified_supported") and claim.claim_id in (
+                                            item.claim_id for item in chain.proposal.components)),
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
                              "provider_distinct": any(item["provider_distinct"] for item in verifiers),
@@ -619,7 +628,8 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
                   coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
                   ship_block_policy_sha256: str, verification: Mapping[str, Any],
                   lead_severity_triage: Mapping[str, Any] | None = None,
-                  poc_candidate_list: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+                  poc_candidate_list: Sequence[Mapping[str, Any]] = (),
+                  attack_chain_manifest: Mapping[str, Any] | None = None) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
         raise IntegrityError(f"publication_error: claim accounting is not exact ({reasons})")
@@ -643,6 +653,7 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
         "package_manifest_sha256": package_manifest_sha256, "coverage_matrix": dict(coverage),
         "possible_duplicates": [list(pair) for pair in possible],
         "poc_candidates": [dict(item) for item in poc_candidate_list],
+        "attack_chain_manifest": dict(attack_chain_manifest) if attack_chain_manifest is not None else None,
     }
     errors = schemas.errors("handoff", handoff)
     if errors:

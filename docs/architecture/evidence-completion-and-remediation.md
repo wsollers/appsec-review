@@ -3,6 +3,12 @@
 Status: proposed design, not an implementation or a change to execution authorization.
 Inspected baseline: `d2b64774`, 2026-10-28.
 
+The [dossier data inventory](dossier-data-inventory.md) records the source-verified available
+inputs, bounded queries/indexes, producer ownership, visibility and evidence gaps at contract
+commit `5f5548d`. [Dossier operations](../operations/dossier-publication.md) records the proposed
+operational boundary; the [documentation implementation record](../reviews/evidence-completion-documentation-inventory.md)
+tracks source reconciliation without claiming the producers below are already implemented.
+
 ## Recommendation
 
 Complete the pipeline with one final publication gate **after** every evidence-producing job.

@@ -93,6 +93,24 @@ max_queries = 8
 max_turns = 6
 timeout_seconds = 600
 
+[jobs.job_remediation_planning.settings.writer]
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+max_turns = 6
+max_queries = 4
+timeout_seconds = 900
+
+[jobs.job_remediation_validation.settings.reviewer]
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 16000
+max_turns = 2
+max_queries = 0
+timeout_seconds = 900
+
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = "all"
 max_model_turns = 60000
