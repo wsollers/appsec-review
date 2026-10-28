@@ -1,7 +1,8 @@
 """Accepted OWASP authority -> indirect control product -> provisional lead and model context."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from copy import deepcopy
+from dataclasses import asdict, dataclass, replace
 import json
 from pathlib import Path
 from typing import Any
@@ -99,6 +100,137 @@ def project_and_assemble(fixture) -> DownstreamArtifacts:
     rows = tuple(projected_scope.store.entities(projected_scope.producer("control_evidence").shards,
                                                  kinds=("precomputed_fact",)))
     return DownstreamArtifacts(derived, projection, rows, projected_scope, collection, assembly, core, views)
+
+
+@dataclass(frozen=True)
+class ReviewRoleArtifacts:
+    result: Any
+    requests: tuple[Any, ...]
+    context: Any
+    work: Any
+    source_identity: str
+    cwe_reference: dict[str, Any]
+
+
+def run_review_roles(fixture, downstream: DownstreamArtifacts, *, package_id: str) -> ReviewRoleArtifacts:
+    """Run one actual lead team with the scripted SQL hypothesis; never replace the real role inputs.
+
+    Call once per selected package, after project_and_assemble and outside the OWASP publication scope.
+    The chosen package must contain one lead and original resolving source evidence. The script's lead
+    alias is nomination only: every predicate citation, including verifier retrieval, uses original source.
+    """
+    from types import MappingProxyType
+
+    from appsec_review.config import load_config
+    from appsec_review.guidance.coverage import crosswalk_tags
+    from appsec_review.jobs.job_inference_security_review.job import (
+        EVIDENCE_RULES, _taxonomy, package_works, review_context,
+    )
+    from appsec_review.jobs.job_inference_security_review.teams import run_team
+    from appsec_review.review import tool_rules
+    from appsec_review.review.claims import normalize_cwe
+    from appsec_review.review.identity import sha256_hex
+    from appsec_review.review.packages import publish_packages
+    from appsec_review.review.references import load_cwe_reference
+    from tests.fixtures.inference_review.fake_infer import ScriptedInfer
+    from tests.review.test_team_handler import Recording
+
+    root = fixture.run_root
+    if root.resolve() != downstream.scope.run_root.resolve():
+        raise ValueError("review roles require the same accepted run as the downstream projection")
+    package = next(item for item in downstream.assembly.packages if item.package_id == package_id)
+    document = package.document()
+    if package.kind != "finding_lead" or len(document["lead_menu"]) != 1:
+        raise ValueError("the bounded role-delivery helper requires one finding-lead package")
+    lead = document["lead_menu"][0]
+    assessments = ([lead["control_assessment"]] if lead.get("control_assessment") else [
+        entry["control_assessment"] for entry in document["context"] if entry.get("control_assessment")])
+    source_kinds = {"source_file", "source_span", "symbol", "ast_node", "ir_entity"}
+    references = [ref for assessment in assessments for ref in assessment["evidence"]
+                  if ref.get("resolved") is True and ref.get("entity_kind") in source_kinds
+                  and ref.get("locator", {}).get("kind") == "source"]
+    if not references:
+        raise ValueError("role-delivery coverage requires an original resolving OWASP source reference")
+    source = references[0]["source_identity"]
+    if source not in document["retrieval"]["entity_ids"]:
+        raise ValueError("the original OWASP source is outside the package retrieval grant")
+
+    attempt = root / "data" / "jobs" / "job_inference_security_review" / "attempts" / (
+        "owasp-role-delivery-" + package.sha256[:16])
+    attempt.mkdir(parents=True, exist_ok=True)
+    scope_path = attempt / "evidence-map.json"
+    atomic_json(scope_path, downstream.scope.evidence_map())
+    manifest_path = publish_packages(downstream.assembly, attempt / "assembly")
+    _, crosswalk = _taxonomy(ROOT)
+    menus = [entry for item in downstream.assembly.packages for entry in item.document()["lead_menu"]]
+    fallback = {normalize_cwe(cwe) for entry in menus for cwe in entry.get("rule_cwe", ())}
+    fallback.update(normalize_cwe(tag.split(":", 1)[1]) for tag in crosswalk_tags(crosswalk)
+                    if tag.startswith("cwe:"))
+    reference = load_cwe_reference(root).with_fallback(frozenset(item for item in fallback if item))
+    packages_doc = {
+        "accepted_cwe_ids": sorted(reference.accepted_ids), "cwe_reference": reference.record(),
+        "rule_predicates": {entry["observation_id"]: [item.value for item in tool_rules.lead_predicates(entry)]
+                            for entry in menus},
+        "packages": [{
+            "package_id": package_id, "lane": package.lane, "sha256": package.sha256,
+            "rank": [0, package_id], "unit_key": package.unit_key,
+            "basis": sha256_hex({"package": package.sha256, "evidence_rules": EVIDENCE_RULES}),
+            "entities": document["retrieval"]["entity_ids"],
+            "path": (manifest_path.parent / "packages" / f"{package_id}.json").relative_to(root).as_posix(),
+        }],
+    }
+    settings = load_config(ROOT / "appsec-review.toml").job("job_inference_security_review").typed_settings
+    settings = replace(settings,
+        rounds=replace(settings.rounds, max_rounds=1, stable_rounds_required=1, max_active_claims=1),
+        teams=replace(settings.teams, review_teams=1, red_per_team=3, blue_per_team=2, verifier_per_team=1),
+        lanes=replace(settings.lanes, lead_max_claims_per_package=1),
+        budgets=replace(settings.budgets, budget_team_packages=1, max_model_turns=16,
+                        max_input_tokens=1_000_000, max_output_tokens=65_536,
+                        max_retrieval_queries=16, timeout_seconds=120),
+        retry=replace(settings.retry, max_attempts=1, backoff_seconds=()),
+        models=MappingProxyType({name: replace(profile, max_turns=2, max_queries=2, timeout_seconds=30,
+                                               max_input_tokens=65_536, max_output_tokens=4096, retries=0)
+                                 for name, profile in settings.models.items()}))
+    ids = {**fixture.ids, "sast_high": lead["observation_id"],
+           "svc/api/handler.py": source, "unit:py-svc": source}
+    scripted = ScriptedInfer({"ids": ids})
+
+    def source_only_script(request, *, timeout_seconds):
+        response = scripted(request, timeout_seconds=timeout_seconds)
+        proposal = deepcopy(response.proposal)
+        if request.role == "red_team_analyst":
+            for claim in proposal.get("result", {}).get("claims", ()):
+                claim["affected"] = [source]
+                claim["support"] = {"affected_construct": [source]}
+                if claim.get("cwe") not in reference.accepted_ids:
+                    claim.pop("cwe", None)
+        elif request.role == "independent_verifier":
+            if proposal.get("action") == "retrieve":
+                for query in proposal["requests"]:
+                    query["parameters"]["identity"] = source
+            else:
+                proposal["result"]["disposition"] = "insufficient_evidence"
+                proposal["result"]["why"] = (
+                    "Scripted verifier re-retrieved original source; remaining SQL obligations are unresolved.")
+                for value in proposal["result"].get("per_predicate", {}).values():
+                    value["cites"] = [source]
+        return replace(response, proposal=proposal)
+
+    recording = Recording(source_only_script)
+    context = review_context(run_root=root, run_id=downstream.scope.run_id, attempt_root=attempt,
+        repository_root=ROOT, settings=settings, infer=recording,
+        manifest_path=downstream.scope.manifest_path, manifest_sha256=downstream.scope.manifest_sha256,
+        packages_doc=packages_doc,
+        scope_out={"artifact": {"path": scope_path.relative_to(root).as_posix(),
+                               "sha256": file_sha256(scope_path)},
+                   "source_languages": {item.identity: item.language for item in downstream.scope.source_files
+                                        if item.language},
+                   "build_unit_languages": {item.build_unit_id: list(item.languages)
+                                            for item in downstream.scope.build_units}})
+    context.receipts_root = attempt / "cells"
+    [work] = package_works(root, packages_doc)
+    result = run_team(context, work, launch=True)
+    return ReviewRoleArtifacts(result, tuple(recording.requests), context, work, source, reference.record())
 
 
 def _references(fixture, component: str = COMPONENT, path: str = "svc/api/handler.py") -> tuple[dict, dict]:
@@ -412,3 +544,59 @@ def test_trusted_service_authorization_control_maps_to_permission_weakness():
     record = {"control_identity": "asvs:5.0.0:V8.3.1", "component_id": COMPONENT}
     result = products._control_assessment(record, {}, {}, None)
     assert result["rule_cwe"] == ["CWE-862"]
+
+
+@pytest.mark.parametrize("satisfied", [False, True], ids=["adverse", "benign-context"])
+def test_synthetic_publication_reaches_actual_red_blue_and_verifier_requests(tmp_path, satisfied):
+    """This smoke seeds a synthetic accepted row; the coordinator covers the actual OWASP job."""
+    from tests.fixtures.inference_review.fake_infer import NARRATIVES
+
+    fixture = _fixture(tmp_path)
+    row = _record(*_references(fixture))
+    if satisfied:
+        row.update(control_status="satisfied", verification_status="independently_assessed", lead_eligible=False)
+        row["observations"] = []
+        row["obligations"][0].update(outcome="satisfied", final_outcome="satisfied",
+                                     disposition="independently_assessed")
+    _publish(fixture, [row])
+    downstream = project_and_assemble(fixture)
+    if satisfied:
+        assert not any(lead.family == "owasp_control" for lead in downstream.collection.leads)
+        package = next(item for item in downstream.assembly.packages if item.kind == "finding_lead"
+                       and item.lead_ids == (fixture.ids["sast_high"],))
+    else:
+        package = next(item for item in downstream.assembly.packages if item.kind == "finding_lead"
+                       and item.lead_family == "owasp_control")
+    original_ids = dict(fixture.ids)
+    roles = run_review_roles(fixture, downstream, package_id=package.package_id)
+    assert fixture.ids == original_ids
+    assert roles.result.launched and roles.result.claims
+    assert roles.cwe_reference["source"] == "fallback"
+    assert "mitre_feed_unavailable" in roles.cwe_reference["gap"]
+    assert {request.role for request in roles.requests} >= {
+        "red_team_analyst", "blue_team_refuter", "independent_verifier"}
+    assert all(cell.status.value == "succeeded" for cell in roles.result.cells)
+    assert roles.result.relations
+    assert all(relation.entity_id == roles.source_identity for relation in roles.result.relations)
+    assert all(not round_record["variant_seed_ids"] for round_record in roles.result.rounds)
+    [verifier] = [cell for cell in roles.result.cells if cell.role.value == "independent_verifier"]
+    retrieved = [relation for relation in roles.result.relations if relation.producing_cell_id == verifier.cell_id]
+    assert retrieved and all(relation.retrieval_receipt_sha256 == verifier.receipt_sha256 for relation in retrieved)
+    assert any(request.transcript for request in roles.requests if request.role == "independent_verifier")
+    for request in roles.requests:
+        if request.role not in {"red_team_analyst", "blue_team_refuter", "independent_verifier"}:
+            continue
+        view = request.task_input["input"]["package"]
+        assessments = ([item["control_assessment"] for item in view["leads"] if item.get("control_assessment")]
+                       + [item["control_assessment"] for item in view["other_context"]
+                          if item.get("control_assessment")])
+        assessment = next(item for item in assessments if item["control_identity"] == CONTROL)
+        assert assessment["control_status"] == ("satisfied" if satisfied else "not_satisfied")
+        assert assessment["obligations"] == row["obligations"]
+        assert assessment["limitations"] == row["limitations"]
+        assert assessment["disagreements"] == row["disagreements"]
+        assert all(evidence["resolved"] for evidence in assessment["evidence"])
+        if request.role == "independent_verifier":
+            assert "statement" not in request.task_input["input"]["claim"]
+            text = json.dumps(asdict(request))
+            assert NARRATIVES["C2"] not in text and "blue rationale" not in text
