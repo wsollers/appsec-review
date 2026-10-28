@@ -626,6 +626,17 @@ inference review and write `final-report.json` and a deterministic `final-report
 (`appsec-review run job_poc_generation --run-id <id> --upstream-from-run`): a model writes a unit-test function with no
 `main` for each finding the judge agreed with, deterministic validators and a compile check in the build image verify it,
 and nothing is linked or run; see [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md).
+
+**Planned, not implemented:** `job_openvex_export` will produce deterministic, model-free
+OpenVEX `affected` statements only for the accepted gate's publishable confirmed findings,
+with a protected evidence/limitations companion. It is designed to be disabled by default,
+including refusal of manual dispatch while disabled, and requires explicit immutable pre-run
+issuer/action/repository settings. Products identify the reviewed source snapshot and full
+configuration, not a released binary or version range; local export does not authorize public
+disclosure. See the [design](docs/architecture/openvex-export.md) and
+[draft operator guide and diagrams](docs/operations/openvex-export.md). The current graph above
+does not yet include this job.
+
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Model profiles: dev and prod
