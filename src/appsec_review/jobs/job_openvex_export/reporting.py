@@ -120,13 +120,16 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         manifest_ref, SizedArtifactRef(result_reference.path, result_reference.sha256, len(result_bytes)),
     )
     validate_export(bundle, verified, settings)
+    implementation_identity = accepted.get("implementation_identity")
+    if implementation_identity is None:
+        implementation_identity = "undeclared"
     if (published.get("item_count") != result["statement_count"]
             or accepted.get("resolved_config_sha256") != verified.provenance.resolved_config_sha256
             or accepted.get("upstream_handoff_sha256", {}).get("job_final_publication_gate")
             != verified.provenance.gate_handoff.sha256
             or accepted.get("upstream_handoff_sha256", {}).get("job_inference_security_review")
             != verified.provenance.review_handoff.sha256
-            or accepted.get("implementation_identity") != manifest["provenance"]["exporter_release"]):
+            or implementation_identity != manifest["provenance"]["exporter_release"]):
         raise ExportError("accepted export identities disagree", reason=Reason.IDENTITY_CONFLICT,
                           phase=ExportPhase.ACCEPT)
     artifacts = {}

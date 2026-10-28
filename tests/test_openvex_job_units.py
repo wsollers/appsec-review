@@ -47,7 +47,8 @@ class ExportUnits:
                 "run_id": disk.gate["run_id"], "job_id": JOB_ID, "attempt_id": "unit",
             }),
         )
-        self.release = policy.releases.values.get(JOB_ID, policy.releases.values.get("platform", "undeclared"))
+        self.implementation_identity = policy.releases.values.get(JOB_ID, policy.releases.values.get("platform"))
+        self.release = "undeclared" if self.implementation_identity is None else self.implementation_identity
         disk.put((attempt / "claim.json").relative_to(disk.root).as_posix(), {
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -88,7 +89,7 @@ class ExportUnits:
         handoff.update({
             "attempt_id": self.context.attempt_id,
             "completion_status": self.outputs["acceptance.publish_handoff"]["terminal_status"],
-            "schema_identity": OPENVEX_EXPORT_HANDOFF_SCHEMA, "implementation_identity": self.release,
+            "schema_identity": OPENVEX_EXPORT_HANDOFF_SCHEMA, "implementation_identity": self.implementation_identity,
             "resolved_config_sha256": self.disk.config_ref["sha256"],
             "upstream_handoff_sha256": {
                 "job_final_publication_gate": self.disk.gate_job_ref["sha256"],
@@ -241,6 +242,22 @@ def test_release_or_report_gate_mismatch_is_stale_without_any_output_links(tmp_p
     for view in (units.view(release="another-release"), units.view(gate={"path": "data/other.json", "sha256": "f" * 64})):
         assert view.state == ExportReportState.STALE
         assert view.document is view.manifest is view.result is view.statement_count is None
+
+
+def test_undeclared_export_release_matches_nullable_runtime_identity_not_a_declared_release(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    units = ExportUnits(disk)
+    units.assemble()
+    handoff = units.accept()
+    assert units.release == "undeclared"
+    assert handoff["implementation_identity"] is None
+    bundle = read_accepted_export(disk.root, units.reference, disk.settings, ROOT)
+    assert bundle.manifest["provenance"]["exporter_release"] == "undeclared"
+    assert units.view().state == ExportReportState.AVAILABLE
+    handoff["implementation_identity"] = "different-declared-release"
+    reference = ArtifactRef.from_mapping(disk.publish(JOB_ID, handoff))
+    with pytest.raises(ExportError):
+        read_accepted_export(disk.root, reference, disk.settings, ROOT)
 
 
 def test_a_new_valid_gate_pointer_does_not_invalidate_old_bytes_but_makes_export_stale(tmp_path, monkeypatch):
