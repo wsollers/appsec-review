@@ -22,13 +22,17 @@ jobs between inference review and the single final gate, followed by report publ
 single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
-**Partial completion integration:** `b702eb7` registers the pre-gate graph, three new jobs, typed
+**Delivered completion source:** `b702eb7` registers the pre-gate graph, three new jobs, typed
 settings/profiles and dataset/input-matrix wiring. PoC/planning/validation/dossiers default enabled
 for new configurations; old frozen runs are unchanged. Validation without planning is rejected.
 The [completion design](evidence-completion-and-remediation.md) preserves compile-only policy.
 Checkpoint `18eae9f` aligns the shared review reader with writer `/3` and verifies nested chain
-and package bindings. Final PoC/gate/report contracts and chain isolation are pending. Registration therefore does
-not yet establish end-to-end acceptance. The
+and package bindings. Integration `dd9c9ad` supplies immutable protected PoC `/2`,
+gate/report `/2`, authenticated disabled-manual-PoC admission and chain/base completeness isolation.
+Gate certification rehashes nested optional artifacts and freezes capability/attachment accounting;
+the report never discovers later producers. The
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is owner-verified;
+full native all-lane acceptance remains pending. Registration and unit coverage do not establish it. The
 [dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
 lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and
 dataset/input-matrix surfaces that must change together.
@@ -82,7 +86,7 @@ input, output, tool, and acceptance contracts.
 | `job_document_issue_analysis` | Private document candidate ledger with verified source mappings | [document-issue-analysis](../operations/document-issue-analysis.md) |
 | `job_inference_security_review` | Two-lane evidence-bound inference review (slice 1: claim ledger, adjudication, one scorer, accepted handoff) | [inference-security-review](inference-security-review.md) |
 | `job_final_publication_gate` | Deterministic, model-free gate: re-verifies the accepted review handoff from bytes and classifies every finding package as publishable, verification backlog or withheld, with named limitations | [final-report](../operations/final-report.md) |
-| `job_poc_generation` | Default enabled for new configurations, ordered before the final gate; writes compile-only test/control functions. Final pre-gate input/immutable publication contract is pending integration | [poc-generation](../operations/poc-generation.md) |
+| `job_poc_generation` | Default enabled for new configurations; reads accepted review directly, writes immutable protected compile-only test/control functions and `/2` outcome/provenance before the gate | [poc-generation](../operations/poc-generation.md) |
 | `job_remediation_planning` | Confirmed-only inert exact patches, separate regression specifications and accounted manual/insufficient/capped outcomes | [remediation](../operations/remediation.md) |
 | `job_remediation_validation` | Exact scratch applicability, independent semantic assessment, selected static/native syntax checks and cleanup; never runtime verification | [remediation](../operations/remediation.md) |
 | `job_dossier_publication` | Protected per-confirmed-finding and per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate; real PDF only when rendered | [dossier-publication](../operations/dossier-publication.md) |

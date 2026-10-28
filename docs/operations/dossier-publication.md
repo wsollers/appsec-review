@@ -3,8 +3,9 @@
 Status: producer delivered in `065f736c`, centrally wired in `b702eb7`, assurance compatibility
 fixed in `7641fa5` (2026-10-28). The semantic job, protected loader, renderer, typed settings and
 receipts are implemented. Checkpoint `18eae9f` aligns shared review `/3` acceptance and nested
-bindings. **End-to-end acceptance remains pending**: final PoC/gate/report
-attachment contracts and a real seeded PDF sample are not yet reconciled here.
+bindings. Final `dd9c9ad` delivers PoC/gate/report `/2` and exact dossier membership/file/receipt
+certification. The owner verified the [seeded PDF sample](#verified-seeded-sample), accepted
+review `/3` to dossier path and repeat rendering. **Full native all-lane acceptance remains pending**.
 The [source-verified data inventory](../architecture/dossier-data-inventory.md) lists actual
 producer/index/query/provenance surfaces and unavailable capabilities.
 
@@ -21,8 +22,8 @@ The registered graph is review (including chain ledger/manifest before sealing),
 PoC, optional confirmed-only planning/validation, then dossier publication, **one final gate**,
 and the terminal public report. Dossiers never consume the final gate: that would create a cycle.
 The gate certifies their manifest, and the report exposes only certified references and statuses.
-The [PoC](poc-generation.md) and [report](final-report.md) pages identify the remaining contract
-transition; an ordered graph alone does not make incompatible accepted handoffs usable.
+The [PoC](poc-generation.md) and [report](final-report.md) pages describe exact `/2` certification;
+an ordered graph alone does not make incompatible old accepted handoffs usable.
 
 The implemented units in
 [`job_dossier_publication/job.py`](../../src/appsec_review/jobs/job_dossier_publication/job.py) are:
@@ -81,8 +82,64 @@ The hardened image uses no network, read-only inputs/template, no shell escape a
 `SOURCE_DATE_EPOCH=0`. JSON and LaTeX are written before the render attempt. `rendered` requires
 successful bounded execution and retained PDF bytes; ordinary failure gives `render_failed` with
 no PDF ref, while policy-disabled rendering gives `latex_only`. Both keep JSON/LaTeX/receipt.
-Integrity failures stop publication. The image pin is source-verified here; owner-reported smoke
-and the real seeded sample must still be reconciled with retained evidence before acceptance.
+Integrity failures stop publication. The image pin is source-verified here; the owner smoked that
+image and retained the real seeded sample below. Template fix `e9a8333a` checksum-checks `.toc`
+changes so LaTeX reruns even when `LastPage` is unchanged; it does not change the image pin.
+
+## Verified seeded sample
+
+The owner retained `runs/dossier-navigation-final`; paths below are relative to that run root.
+These ignored run artifacts are not committed documentation fixtures or assumed to exist in
+every checkout.
+
+| Dossier | PDF path | PDF bytes | PDF SHA-256 |
+| --- | --- | --- | --- |
+| Confirmed finding | `data/sample/confirmed_finding/dossier.pdf` | 44436 | `aa5e39f288bbddcd338e30206727fae73cb562331a37c145ce1346cc6e79d230` |
+| PoC outcome | `data/sample/poc/dossier.pdf` | 44461 | `b6549728745b9c2986fc2948c97e4cab367d500569c535f16e362aa72b54f3e6` |
+
+| Dossier | Receipt path | Receipt SHA-256 |
+| --- | --- | --- |
+| Confirmed finding | `data/sample/confirmed_finding/receipt.json` | `17f0d7a6c289b2fee5f60d16ee86630d665431dd69f9bd393e80aaf8f5c671d7` |
+| PoC outcome | `data/sample/poc/receipt.json` | `2e2871ede35949526f7976f03214a3eb7aab876d1147f26d545f3950a90e1028` |
+
+The parent verified eight manifest hashes plus the execution/template/document receipt identities
+against integrated source, and inspected page 1 and 2 previews. The owner checked all seven TOC
+entries against actual pages, including "Finding brief" on page 2, and preserved
+`application_risk_matrix/3`. Its final reported result is 387 passed / 14 skipped, including
+accepted review `/3` to dossier and two live repeat-render tests. This documentation session did
+not regenerate or visually inspect these PDFs; these are attributed owner/parent checks.
+The seeded presentation/nonexecution example establishes neither a real-target vulnerability,
+target PoC compilation nor full native cross-lane acceptance.
+
+### Sample page previews
+
+These committed images are documentation snapshots of the **synthetic seeded sample**, not real
+target review evidence. The original PDFs, LaTeX, JSON and rendering receipts remain run-owned
+artifacts under `runs/dossier-navigation-final`; the paths and hashes above identify their source.
+
+| Confirmed-finding dossier: cover and contents | PoC dossier: cover and contents |
+| --- | --- |
+| ![Synthetic confirmed-finding dossier cover with contents, status and nonexecution notice](../assets/dossier-samples/confirmed-finding-cover.png) | ![Synthetic proof-of-concept dossier cover with contents and explicit runtime-proof-not-run status](../assets/dossier-samples/poc-cover.png) |
+
+<details>
+<summary>Finding brief, separate risk dimensions and resolving evidence (page 2)</summary>
+
+![Synthetic finding brief, independent risk dimensions and source-evidence bindings](../assets/dossier-samples/confirmed-finding-evidence.png)
+
+</details>
+
+<details>
+<summary>Assurance limitations and artifact provenance (page 4)</summary>
+
+![Synthetic dossier showing unverified remediation, missing chain context, coverage gaps and hash-bound provenance](../assets/dossier-samples/confirmed-finding-provenance.png)
+
+</details>
+
+Refresh these snapshots from the corresponding `preview.png`, `evidence-preview.png` and
+`provenance-preview.png` after regenerating the PDFs with the
+[seed fixture](../../tests/dossier_fixture.py) and
+[live rendering tests](../../tests/test_dossier_live.py). Copy the generated images unchanged;
+do not hand-edit them or substitute protected real-review material.
 
 ## Process telemetry
 
@@ -128,7 +185,8 @@ public. Every format must preserve:
 
 The [rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
 is wired as automatic planning, bounded validation, compile-only PoC and dossier defaults for new
-configurations; rollout acceptance still depends on the remaining contracts and sample. Existing runs retain their
+configurations; rollout acceptance still depends on full native semantics, separately from the
+verified seeded sample. Existing runs retain their
 frozen settings: new checkout defaults must not silently enable a previously disabled producer
 when resuming or publishing an old run. Automatic processing does not authorize runtime execution
 or imply reproduction or a fixed finding.
@@ -140,12 +198,18 @@ Tampered bytes, inconsistent bindings, cross-review attachments or malformed acc
 must fail integrity validation, not become success-shaped empty sections.
 
 Retries must write a new immutable attempt and leave earlier accepted artifact bytes intact.
-Resume must invalidate consumers when any consumed review, PoC, plan, validation, settings,
-schema, tool or rendering identity changes. The final gate must verify all referenced bytes and
-certify one snapshot before reporting.
+Resume invalidates dependent consumers on changed accepted inputs/configuration/schema and
+declared implementation/validation/tool releases. Rendering receipts retain template hashes, but
+template/code edits alone are not automatic reuse invalidation: supplied platform identity uses
+[operator-declared releases](performance-assurance.md#operator-declared-releases), not payload
+fingerprints. Corrected supplied software needs the intended declared release and a new versioned
+run; never rewrite an old run's frozen release/configuration. Final gate `/2` verifies referenced bytes, exact
+membership/cap partitions and optional upstream identities, then certifies one snapshot; report
+`/2` reads only its sanitized status/ref projection and rehashes that binding set.
 
-Before calling the new end-to-end graph operational, reconcile final PoC/gate/report
-contracts, explicit manual admission, enabled/disabled combinations, tamper rejection, deterministic
-and public-data leakage checks and the live PDF sample. Producer factories and declarations alone
+Before calling the new end-to-end graph operational, complete native all-lane semantic acceptance.
+The verified seeded sample does not close that gap. Final contracts, explicit manual admission, capability combinations,
+tamper rejection and deterministic/public-protected projection now have source-defined regression
+coverage, but producer factories and unit tests alone
 are not that acceptance result. Track checks and remaining gaps in the
 [implementation record](../reviews/evidence-completion-documentation-inventory.md).

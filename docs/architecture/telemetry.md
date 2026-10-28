@@ -88,8 +88,9 @@ not instrumentation added after rollout. Integration `b702eb7` adds completion a
 remediation/dossier events to the existing system. Checkpoint `18eae9f` adds aggregate parity for
 real PoC/native statuses, capability maps, flags and nonadditive limits. Remediation follow-up
 `e769645f` preserves unknown token dimensions/null versus genuine measured zero and emits unavailable
-metadata. Final PoC/gate/report/chain instrumentation is still being reconciled. The table below records
-the complete tracking requirement, not a claim that every producer already emits every dimension.
+metadata. Final `dd9c9ad` adds actual chain composition/challenge/publication, PoC outcome,
+gate capability/admission and report assembly events. The table below records the complete tracking
+requirement, not a claim that every producer emits every dimension or provider usage measurement.
 
 Reuse [`EventLog.write`](../../src/appsec_review/observability/events.py) through `context.events`
 and [`aggregate_run_metrics`](../../src/appsec_review/observability/telemetry.py), retaining the
@@ -120,8 +121,10 @@ Invalid/nonfinite/negative/oversized measurements and invalid capability/outcome
 `measurement_gap_count`; at most 200 named `measurement_gaps` are retained.
 `COUNTERS`, `OUTCOMES`, `OUTCOME_FIELDS`, `LIMITS`, `CAPABILITIES`, `CAPABILITY_COUNTERS`, `FLAGS`
 and `DIMENSIONS` are closed in the source module. Aggregator support for a field does not prove a
-producer emitted it; in particular pending final producer instrumentation is not supplied by
-synthetic metrics fixtures. Aggregate counters
+producer emitted it; synthetic metrics fixtures do not substitute for actual process observations.
+Checkpoint `0ece65d3` adds the real chain challenge map's `not_launched` status to the aggregate
+allowlist, with a full `CellStatus`-shaped regression. Its presence still does not establish
+accepted challenge coverage. Aggregate counters
 exclude arbitrary text, candidate ids, paths, provider prose and raw payloads.
 
 These are event-scoped **attempted work**: retries count; neither stage totals nor overlapping

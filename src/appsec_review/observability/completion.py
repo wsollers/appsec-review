@@ -33,7 +33,7 @@ OUTCOME_FIELDS = ("outcomes", "outcome_counts", "by_kind", "by_status")
 LIMITS = ("max_dossiers", "max_source_excerpts", "max_evidence_rows")
 CAPABILITIES = frozenset({"poc_generation", "attack_chains", "remediation_planning",
                           "remediation_validation", "dossiers"})
-CAPABILITY_COUNTERS = ("attachment_counts", "gap_counts", "omitted_counts")
+CAPABILITY_COUNTERS = ("attachment_counts", "gap_counts", "omitted_counts", "certified_outcome_counts")
 FLAGS = ("explicit_poc_admission", "frontier_truncated", "pdf_requested", "render_failed",
          "baseline_attempted", "patched_attempted", "usage_unavailable")
 DIMENSIONS = {"kind": {"confirmed_finding", "poc", "refuter", "weakest_link_verifier"},

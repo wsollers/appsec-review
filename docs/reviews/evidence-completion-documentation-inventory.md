@@ -1,9 +1,11 @@
 # Evidence completion documentation inventory
 
-Date: 2026-10-28. Phase: source inventory and partial implementation reconciliation.
+Date: 2026-10-28. Phase: source inventory and delivered-contract reconciliation.
 Inspected source: `5f5548da3d039f73c7d6858d2b28a4593a264efe`; ancestry verified with
 `git merge-base --is-ancestor`. Delivered source `b702eb7` and assurance fix `7641fa5` are now
-merged into the isolated documentation branch, followed by checkpoints `18eae9f`, `e769645f`, `3f28d871`;
+merged into the isolated documentation branch, followed by checkpoints `18eae9f`, `e769645f`,
+`3f28d871`, final integration `dd9c9ad`, dossier rendering follow-up `e9a8333a` and metric
+parity `0ece65d3` (source checkpoint `885175060097870a1b12a085bccd356a55b56157`);
 final contract/acceptance gaps are recorded below.
 The controlling delivery decisions are
 [completion design section 11](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions).
@@ -67,7 +69,7 @@ events; central key redaction does not sanitize the earlier local write.
 
 ## Original contract-time gaps
 
-The baseline only declares completion schema constants, `FindingBinding` and nonexecution helpers
+At the original baseline, the source only declared completion schema constants, `FindingBinding` and nonexecution helpers
 in `jobs/completion_contracts.py`. Chain composition/ledger events, remediation producers, dossier
 job/renderer and their accepted artifacts are not implemented here. Final versions and exact shapes
 of review/PoC/gate/report summaries, optional-job admission, frozen snapshot binding, validation
@@ -94,20 +96,65 @@ Important source-verified distinctions for integration:
 | `18eae9fd189c66303cf4e9bdd6a871d1713438ff` | Includes reader `/3` alignment `6f168400` and metric parity: all seven actual PoC statuses/native outcomes, fixed capability counts/dispositions/enabled maps, flags/dimensions, configured-limit ranges, separate null-token measurements and missing-turn counters. |
 | `e769645f4628039cb9aa8fbf4bb7354764b2df52` | Preserves unknown remediation token dimensions and genuine zero, emits unavailable metadata, validates/closed-scopes shared governing fragments and role responsibility with exact bundle pinning, and reports uncommissioned native `BuildProfile` as manual validation. |
 | `3f28d871455707f2c7e27d230d6765c9cc5ae6ba` | Extends active pre-review downstream exclusions to the new completion jobs; preserves **all** `registry_providers` file ownership/declarations for resume auditing. The reported indexing-admission regression is resolved at this source boundary. |
+| `dd9c9adac140a1a4f5eb43e67962545f0edcf48f` | Includes chain final `dd1f8018` and PoC/gate/report `c44eddc1`: protected immutable PoC source/provenance `/2`, exact candidate partition/bindings, five-capability gate `/2`, authenticated disabled-manual-PoC admission and report `/2` reading only certified bindings. Removes the gate-to-PoC dependency and post-gate producer discovery. |
+| Chain final | Charges every physical native `trace`/`find` under per-edge/run budgets; incomplete/capped evidence cannot prove continuity, configuration contradictions refute it. Exact actor/terminal-cell/original-receipt checks and `base_review_projection` isolate ordinary enhancement failures/gaps from base completeness while retaining full ledger/publication accounting. |
+| `e9a8333ab8b3914ccdb8b8ec90186cbb8c282a6e` | Template checksum/rerun warning covers changed `.toc` even when `LastPage` is unchanged; preserves chain identity text in the protected dossier projection. No image pin change. Owner reports actual navigation/determinism acceptance; retained sample references are recorded separately from all-lane semantics. |
+| `0ece65d3c37af71a131c8f071d68b648feaf9133` | Adds actual chain `not_launched` outcomes and a complete `CellStatus`-shaped aggregate regression, resolving the reported status allowlist gap. Parent reports 25 metric/log regressions passing. |
 | Shared review acceptance | Now verifies `/3`, run identity, duplicate identities, canonical PoC-basis digest, individual review-package refs and ledger-bound chain publication/memberships. The reader mismatch is resolved; real producer registration is still not a full accepted-run result. |
 | Remediation operations | Added a focused operating page for exact inert patch bytes, confirmed-only accounting, seven assurance dimensions, native syntax-only coverage, defaults/profiles, protected artifacts, statuses and telemetry. |
 | Dossier operations | Reconciled exact units, source/producer verification, bounds/pin, attempt-owned files, closed projection, render status/receipt and failure-retention behavior from source. |
 | Metrics | Reconciled `run-metrics/3.completion` / `completion-process-metrics/1`, seven fixed lanes, per-event counters/outcomes/durations, explicit-null usage and bounded measurement gaps. These count attempted work/retries, not accepted findings; overlapping stages are not additive. |
 
-Remaining source/acceptance work: final gate/PoC `/2` contracts, final report
-snapshot-only attachment consumption, authenticated manual admission end to end, chain/base-finding
-coverage isolation, residual consumer metadata, full chain/PoC/gate/report candidate telemetry,
-the actual seeded PDF/sample and Linux real-review semantic acceptance. The parent reported
+Remaining acceptance work: full native all-lane semantics and Linux real-review remediation
+acceptance; residual historical consumer metadata remains explicit. The aggregate `not_launched`
+status parity gap is resolved. Source contracts, registration, disabled-manual admission
+and snapshot isolation are implemented, not still proposed. The parent reported
 152 central checks and 42 contract/dossier checks passing on its source commits; those are not
 relabelled as tests run by this documentation session or as end-to-end acceptance. The parent
 also reports 24 metrics/pipeline-log/review regressions passing at `18eae9f`; the remediation owner
 reports 241 Windows unit passes / one privilege skip for its follow-up. Those results are not
 relabelled as local documentation checks or Linux real-review semantic acceptance.
+The parent additionally reports PoC 219 fast / nine report tests, chain 178 fast / six earlier
+real workflow tests; the dossier owner's final result is 387 passed / 14 skipped, including
+accepted review `/3` to dossier and two live repeat-render tests. Its baseline
+agent attributes the Linux preflight `RUN/RUN` versus `RUN/REUSE` failure to pre-existing
+`5f5548da`, not this completion delta. None of those reports is relabelled as a local execution,
+target vulnerability, actual target PoC compile or full native all-lane pass.
+
+An earlier parent report described a frozen native `aeb6d11c` batch with 828 coupled units passed,
+two deselected and one Dagster C++ AST-to-IR topology assertion failure under baseline
+investigation. The known preflight baseline failure was excluded from that batch. The separately
+delegated native cross-lane semantic run remains pending; neither report is a clean all-lane result.
+
+Subsequent QA stopped incomplete and found that plain `git archive` on Windows converted
+shell/fixture bytes to CRLF. Its contaminated 42 failures / 28 errors cannot classify either the
+product delta or a broad baseline. Byte-exact snapshots require
+`git -c core.autocrlf=false archive <commit>`. The parent is rerunning the 828 coupled cases from
+corrected snapshots; QA is rerunning two baseline classifiers with line-ending controls.
+Those reruns remain pending. The earlier counts and the narrow preflight baseline attribution
+must not be promoted to a broad clean-baseline claim.
+
+The user reiterated unit coverage for telemetry/metrics generation. The parent is adding a
+persistence/replay/source-log-immutability regression, while the all-lane owner checks actual
+producer events through the persisted metrics summary. These are pending validation additions,
+not delivered product-behavior changes or a completed all-lane result.
+
+## Retained sample and release boundary
+
+[Dossier operations](../operations/dossier-publication.md#verified-seeded-sample) records the exact
+PDF/receipt paths, byte counts and hashes for owner-retained `runs/dossier-navigation-final`.
+The parent verified eight manifest hashes and execution/template/document receipt identities
+against integrated source, then inspected page 1 and 2 previews. The owner checked all seven TOC
+entries, including "Finding brief" on page 2; `application_risk_matrix/3` is preserved.
+These are attributed seeded presentation/nonexecution checks, not PDFs regenerated or visually
+inspected by this documentation session, target vulnerability evidence or native all-lane acceptance.
+
+Source verification of `runtime/job.py::Job.identities` confirms the existing
+[operator-declared release policy](../operations/performance-assurance.md#operator-declared-releases):
+legacy `runtime_identity` callbacks are not reuse authority. Render receipt template hashes
+establish provenance, not automatic code/template-edit invalidation. An intended supplied-software
+update needs the appropriate declared release, new versioned run and explicit new attempt;
+old frozen configuration/releases are not rewritten. No automatic payload-hash hook is promised.
 
 ## Checks and limitations
 
@@ -141,3 +188,12 @@ The repository root was inspected; this work created no disposable root material
 non-documentation changes.
 No model, runtime pipeline, build container, target analysis, remediation execution or live PDF
 was exercised in this initial documentation phase.
+
+Final local reconciliation at source checkpoint `8851750` again reports exactly the same two
+baseline missing links, no introduced link failures, and all 126 dataset outputs in their correct
+disposition columns across 40 modules. Standard-library source checks cover all seven real
+`CellStatus` values and seven PoC statuses in the metrics allowlist, seven lanes, and disjoint
+configured-limit/counter vocabularies; a full zero-valued cell-status map introduces no measurement
+gap. The seeded-sample section anchor and whitespace check pass. Root/status inspection shows
+only the 18 intended documentation files changed, with no disposable root output or authored
+product changes. Real PDF and native test results above remain attributed, not local executions.
