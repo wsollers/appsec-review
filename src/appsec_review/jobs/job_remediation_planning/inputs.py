@@ -106,6 +106,7 @@ class SourceReader:
                                 "build": build.identity()}
         if len(self.relations) > self.bounds.max_list_items:
             self.gaps.append("evidence_relation_bound_reached")
+        self.gaps = list(dict.fromkeys(self.gaps))
 
     def retrieve(self, request: Mapping[str, Any]) -> dict[str, Any]:
         if set(request) != {"path", "start_line", "end_line"}:

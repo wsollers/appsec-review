@@ -96,7 +96,8 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
                                       "gaps": reader.gaps}
                     context_ref = write_json(unit, f"{index}/source-context.json", source_context)
                     if not text:
-                        text, guidance_sha = guidance(repo(unit), root, "remediation_writer")
+                        text, guidance_sha = guidance(repo(unit), root, "remediation_writer",
+                                                      job_id=unit.job.config.job_id)
                     evidence_ids = {item["relation_id"] for item in relations}
                     task = {"kind": "remediation_proposal", "finding": identity, "title": finding["title"],
                             "accepted_evidence": relations, "source_files": list(reader.files.values()),
