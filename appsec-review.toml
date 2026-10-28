@@ -21,7 +21,7 @@ approved_first_party_projects = []
 # changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
 codeql = "codeql-2.27.0-cert-v2.62.0"
 codeql_runner = "appsec-codeql-runner-89568569"
-job_openvex_export = "openvex-export-1"
+job_openvex_export = "openvex-export-2"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.
@@ -2972,18 +2972,18 @@ workers = 1
 workers = 1
 [jobs.job_final_publication_gate.steps.acceptance.tasks.publish_handoff]
 
-# Local OpenVEX impact statements. Configure the issuer, accurate common action and stable
-# repository identity before creating an enabled run; no source release or remediation is inferred.
+# Generate and validate local OpenVEX automatically after the certified gate.
+# Empty repository_iri uses a deterministic accepted-source namespace, never an inferred release.
 [jobs.job_openvex_export]
 name = "openvex_export"
 workers = 1
 
 [jobs.job_openvex_export.settings]
-enabled = false
-author_kind = "organization"
-author = ""
-role = ""
-action_statement = ""
+enabled = true
+author_kind = "tool"
+author = "AppSec Review"
+role = "Automated local application-security review"
+action_statement = "Review and remediate the confirmed findings using the accompanying evidence; validate any fix before relying on it."
 repository_iri = ""
 max_packages = 10000
 max_bindings = 30000

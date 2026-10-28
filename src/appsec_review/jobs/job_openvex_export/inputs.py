@@ -30,7 +30,7 @@ from .contracts import (
     ArtifactRef, ExportError, ExportFailureReason as Reason, ExportPhase, ExportProvenance,
     RepositoryIdentityBasis, SizedArtifactRef, SourceIdentity, VerifiedFinding, VerifiedInputs,
     canonical_bytes, json_sha256, parse_json_bytes, require_run_path,
-    require_sha256, validate_repository_iri,
+    require_sha256, snapshot_repository_iri, validate_repository_iri,
 )
 from .settings import OpenVexExportSettings
 
@@ -378,6 +378,8 @@ def _scope(reader: BoundedInputReader, scope: Mapping[str, Any], review: Mapping
 
 def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapshot: str,
             config_ref: ArtifactRef, resolved: Mapping[str, Any], manifest: Mapping[str, Any]) -> SourceIdentity:
+    automatic = not settings.repository_iri
+    repository_iri = settings.repository_iri or snapshot_repository_iri(snapshot)
     qualifications = [
         "Identity is the accepted reviewed source snapshot and frozen configuration, not a released artifact.",
         "Configuration SHA-256: " + config_ref.sha256,
@@ -389,7 +391,13 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
         qualifications.append("Accepted metadata includes build index shards; this does not assert build success.")
     intake = _accepted(reader, INTAKE_JOB, optional=True)
     acquisition_ref = None
-    basis = RepositoryIdentityBasis.OPERATOR_DECLARED
+    basis = (RepositoryIdentityBasis.SOURCE_SNAPSHOT if automatic
+             else RepositoryIdentityBasis.OPERATOR_DECLARED)
+    if automatic:
+        qualifications.append(
+            "Repository identity is a local namespace derived from the accepted source snapshot; "
+            "no repository publisher, release or distribution identity is asserted."
+        )
     if intake is not None:
         _require(intake.handoff.get("resolved_config_sha256") == config_ref.sha256,
                  "accepted intake configuration is stale", Reason.INPUT_STALE)
@@ -425,12 +433,12 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
                     _require(spec[revision_key] == identity[revision_key],
                              "acquisition source revisions disagree", Reason.IDENTITY_CONFLICT)
             repository = spec.get("url") if spec.get("kind") == "git" else spec.get("clone_url")
-            if repository is not None:
+            if repository is not None and not automatic:
                 with _errors(reader.phase, Reason.IDENTITY_CONFLICT):
                     validate_repository_iri(repository)
                 _require(repository == settings.repository_iri,
                          "operator repository identity conflicts with accepted acquisition", Reason.IDENTITY_CONFLICT)
-            else:
+            elif not automatic:
                 qualifications.append("Acquisition establishes no single repository IRI; repository identity is operator asserted.")
             qualifications.extend((
                 "Accepted acquisition status: " + acquisition["status"],
@@ -438,10 +446,11 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
                 else "Acquired tree differs from the reviewed snapshot; no acquired revision is asserted as the reviewed tree.",
                 "Accepted acquisition gaps SHA-256: " + json_sha256(record["gaps"]),
             ))
-            basis = RepositoryIdentityBasis.ACCEPTED_ACQUISITION
-    if acquisition_ref is None:
+            if not automatic:
+                basis = RepositoryIdentityBasis.ACCEPTED_ACQUISITION
+    if acquisition_ref is None and not automatic:
         qualifications.append("No accepted acquisition provenance supplies a repository or commit; repository identity is operator asserted.")
-    return SourceIdentity(settings.repository_iri, basis, snapshot, acquisition_ref, tuple(qualifications))
+    return SourceIdentity(repository_iri, basis, snapshot, acquisition_ref, tuple(qualifications))
 
 
 def _findings(reader: BoundedInputReader, gate: Mapping[str, Any], review: Mapping[str, Any],

@@ -531,7 +531,7 @@ def test_conflicting_phase_samples_are_unmeasured_and_not_doubled(tmp_path, monk
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_disabled_and_not_run_are_explicit_states_not_success(tmp_path, monkeypatch, enabled):
-    settings = enabled_settings() if enabled else OpenVexExportSettings()
+    settings = enabled_settings() if enabled else OpenVexExportSettings(enabled=False)
     AcceptedBoundary(tmp_path, monkeypatch, settings=settings)
     report = section(tmp_path)
     assert report["configured_enabled"] is enabled

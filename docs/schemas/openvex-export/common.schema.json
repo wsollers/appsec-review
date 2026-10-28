@@ -106,7 +106,7 @@
       "properties": {
         "product_id": {"$ref": "#/$defs/identifier"},
         "repository_iri": {"$ref": "#/$defs/identifier"},
-        "repository_identity_basis": {"enum": ["operator_declared", "accepted_acquisition"]},
+        "repository_identity_basis": {"enum": ["source_snapshot", "operator_declared", "accepted_acquisition"]},
         "target_snapshot": {"$ref": "#/$defs/sha256"},
         "acquisition": {"oneOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "null"}]},
         "qualifications": {

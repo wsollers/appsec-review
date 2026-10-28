@@ -424,6 +424,19 @@ def test_deadline_is_checked_at_start_and_after_upstream_verifier(tmp_path, monk
         assert_failure(disk.verify, c.ExportFailureReason.TIMED_OUT)
 
 
+@pytest.mark.parametrize("acquisition", [None, "https://example.test/repository", "git@example.test:private/repository"])
+def test_automatic_identity_needs_no_repository_setup_or_publication_claim(tmp_path, monkeypatch, acquisition):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=OpenVexExportSettings(), acquisition=acquisition)
+    verified = disk.verify()
+    assert verified.source.repository_iri == c.snapshot_repository_iri(disk.snapshot)
+    assert verified.source.repository_identity_basis == c.RepositoryIdentityBasis.SOURCE_SNAPSHOT
+    assert verified.source.target_snapshot == disk.snapshot
+    assert (verified.source.acquisition is not None) is (acquisition is not None)
+    assert any("no repository publisher" in value for value in verified.source.qualifications)
+    assert "private/repository" not in repr(verified.source)
+    inputs.reprove_inputs(disk.root, verified, disk.settings, ROOT)
+
+
 def test_matching_acquisition_qualifies_identity_without_guessing_product_hash(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch, acquisition=enabled_settings().repository_iri)
     verified = disk.verify()

@@ -25,8 +25,13 @@ def _check_inputs(inputs: c.VerifiedInputs, settings: OpenVexExportSettings) -> 
                             phase=c.ExportPhase.ASSEMBLE) from exc
     if inputs.settings_sha256 != settings.settings_sha256():
         _fail("export settings differ from verified frozen settings", c.ExportFailureReason.INPUT_STALE)
-    if inputs.source.repository_iri != settings.repository_iri:
+    if settings.repository_iri and inputs.source.repository_iri != settings.repository_iri:
         _fail("reviewed source and operator repository identities disagree", c.ExportFailureReason.IDENTITY_CONFLICT)
+    if not settings.repository_iri and (
+            inputs.source.repository_identity_basis != c.RepositoryIdentityBasis.SOURCE_SNAPSHOT
+            or inputs.source.repository_iri != c.snapshot_repository_iri(inputs.source.target_snapshot)):
+        _fail("automatic repository identity does not match the accepted source snapshot",
+              c.ExportFailureReason.IDENTITY_CONFLICT)
     if (len(inputs.findings) > settings.max_packages or len(inputs.input_inventory) > settings.max_bindings
             or any(ref.size_bytes > settings.max_artifact_bytes for ref in inputs.input_inventory)
             or inputs.total_input_bytes > settings.max_total_input_bytes):

@@ -147,6 +147,22 @@ def test_output_reader_rejects_a_hardlink_created_during_read(tmp_path, monkeypa
     assert calls[0] == 2
 
 
+@pytest.mark.parametrize("buckets", [(), ("publishable",)])
+def test_checked_in_defaults_generate_verify_and_accept_without_setup(tmp_path, monkeypatch, buckets):
+    settings = load_config(ROOT / "appsec-review.toml", profile="dev", overlay="").job(JOB_ID).typed_settings
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, buckets=buckets, settings=settings)
+    units = ExportUnits(disk)
+    units.assemble()
+    units.accept()
+    bundle = read_accepted_export(disk.root, units.reference, disk.settings, ROOT)
+    assert bundle.result["statement_count"] == len(buckets)
+    assert bundle.manifest["products"][0]["repository_identity_basis"] == "source_snapshot"
+    assert (bundle.document is not None) is bool(buckets)
+    if bundle.document is not None:
+        assert bundle.document["author"] == "AppSec Review"
+    assert units.view().state == (ExportReportState.AVAILABLE if buckets else ExportReportState.NO_STATEMENTS)
+
+
 @pytest.mark.parametrize("buckets", [(), ("publishable",), ("verification_backlog",), ("withheld",),
                                     ("publishable", "verification_backlog", "withheld")])
 def test_units_prove_outputs_and_expose_only_exact_accepted_export_state(tmp_path, monkeypatch, buckets):
