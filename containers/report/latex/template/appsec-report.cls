@@ -27,6 +27,11 @@
 \RequirePackage{titlesec}
 \RequirePackage{microtype}
 \RequirePackage[hidelinks,bookmarksnumbered=false,pdfusetitle=false]{hyperref}
+\RequirePackage{rerunfilecheck}
+%% The cover TOC can change pagination without changing the last-page label.
+\RerunFileCheck{\jobname.toc}{%
+  \@ifundefined{tf@toc}{}{\immediate\closeout\tf@toc}%
+}{Rerun to get table-of-contents entries right}
 \RequirePackage[skins,breakable]{tcolorbox}
 \input{appsec-palette.tex}
 

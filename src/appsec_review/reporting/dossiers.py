@@ -174,7 +174,7 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
             "notice": "Proposal/checks only. Not fixed, resolved, or regression verified."})
     chain_views = []
     for row in project.rows(chains, "chains"):
-        chain_views.append({key: project.text(row.get(key), "chain." + key)
+        chain_views.append({key: project.text(row.get(key), "chain." + key, identity=key == "chain_id")
                             for key in ("chain_id", "status", "objective")} | {
             "qualifications": [project.text(item, "chain.qualification")
                                for item in project.rows(row.get("qualifications", ()), "chain.qualifications")]})
