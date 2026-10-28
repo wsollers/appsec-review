@@ -11,6 +11,7 @@ from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import
 )
 from appsec_review.observability import PipelineLog, aggregate_run_metrics
 from appsec_review.storage import atomic_json, file_sha256
+from tests.handoff_fixture import write_fixture_handoff
 
 
 JOB = "job_dependency_intelligence"
@@ -101,7 +102,7 @@ def _accept(root: Path, case: dict, *, sbom: object = ...) -> dict:
     case["publication"] = publication
     publication_ref = _write(root, f"{case['base']}/dependency-intelligence-handoff.json", publication)
     handoff = {
-        "schema": "appsec-review/job-handoff/1", "job_id": JOB,
+        "job_id": JOB,
         "attempt_id": case["document"]["attempt_id"], "status": "ACCEPTED",
         "source_fingerprint": SNAPSHOT,
         "outputs": {"acceptance.publish_handoff": {"artifact": publication_ref}},
@@ -109,7 +110,9 @@ def _accept(root: Path, case: dict, *, sbom: object = ...) -> dict:
     }
     if case["artifact"] is not None:
         handoff["artifacts"].append(case["artifact"])
-    case["handoff"] = handoff
+    path = root / case["base"] / "handoff.json"
+    write_fixture_handoff(root, path, handoff)
+    case["handoff"] = json.loads(path.read_text(encoding="utf-8"))
     return _save_handoff(root, case)
 
 

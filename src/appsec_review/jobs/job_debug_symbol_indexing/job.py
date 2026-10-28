@@ -685,6 +685,8 @@ def _validate_config(context, _result) -> None:
 
 
 def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.interchange import decode_handoff
+
     pointer_path = run_root / "data" / "jobs" / JOB_ID / "latest.json"
     if not pointer_path.is_file():
         raise ValueError("accepted debug-symbol handoff is required")
@@ -692,10 +694,9 @@ def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
     handoff_ref = {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]}
     path = safe_path(run_root, handoff_ref["path"])
     handoff_ref["size_bytes"] = path.stat().st_size
-    handoff = json.loads(_verify(run_root, handoff_ref, "accepted debug-symbol handoff").read_text())
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED"
-            or handoff.get("job_id") != JOB_ID):
-        raise ValueError("debug-symbol handoff is not accepted")
+    handoff = decode_handoff(
+        json.loads(_verify(run_root, handoff_ref, "accepted debug-symbol handoff").read_text()),
+        run_id=run_root.name, job_id=JOB_ID)
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     artifact = published.get("artifact", {})
     if not any(item.get("path") == artifact.get("path") and item.get("sha256") == artifact.get("sha256")

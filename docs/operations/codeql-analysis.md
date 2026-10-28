@@ -475,7 +475,7 @@ twice.
 
 SARIF 2.1 results, rule metadata, severities, fingerprints, suppressions, baseline state, locations,
 and code-flow steps are normalized into immutable `observations` shards. Each step records its
-SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/2`), so alternative paths
+SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/3`), so alternative paths
 for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
 sink as a verified semantic path. Exact path matches are
 distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher's
@@ -487,6 +487,21 @@ shards) and `job_review_data_indexing` (every producer).
 
 Use the `query_codeql` MCP tool to filter accepted observations by language, original source
 language, scope, build unit, rule, severity, path, or CodeQL shard.
+
+The [interchange provenance upgrade](../architecture/job-interchange.md) retains the original SARIF
+file and resolves each normalized observation to its original RFC 6901 result pointer, parser,
+execution receipt, and retained byte identity. Common metadata supplements SARIF rules, flows,
+suppressions, fingerprints, and source locations rather than replacing them. The normalizer upgrade
+uses `appsec-review/codeql-sarif-normalizer/3`; historical results retain their recorded version.
+Database and query checkpoint schema/identity are unchanged. A normalizer/provenance-only
+change invalidates derived observations, not an otherwise valid CodeQL database checkpoint.
+SARIF ingestion is not a new external exporter, and raw SARIF bodies are not added to inference.
+
+When a failed action left bounded SARIF, it is retained as incomplete diagnostic evidence with no
+normalized finding observations; an oversized failed report is an explicit native-output gap.
+Missing query execution receipts and unresolved source locations produce provenance gaps.
+Source locations are safely resolved and checked against accepted hashes, not trusted from a
+scanner-supplied path.
 
 ## Acceptance checklist
 

@@ -98,7 +98,16 @@ def fixture(tmp_path: Path):
 
 
 def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints(tmp_path: Path) -> None:
+    import zipfile
+    from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot
+
     config, target = fixture(tmp_path)
+    archive = tmp_path / "osv-npm.zip"
+    with zipfile.ZipFile(archive, "w"):
+        pass
+    publish_snapshot(tmp_path / "data" / "feeds" / "osv", feed_id="osv",
+                     schema="appsec-review/osv-snapshot/1",
+                     files={"sources/npm.zip": archive}, manifest_fields={"source": "unit-fixture"})
     fingerprint = source_fingerprint(target)
     base = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan()]).run(
         target_root=target, source_fingerprint=fingerprint)
@@ -442,13 +451,16 @@ def test_checkov_runs_every_planned_input_unrestricted_and_unrecognized_inputs_a
     broken = json.dumps({"check_type": "cloudformation", "results": {"parsing_errors": ["/../target/bad.yaml"]}}).encode()
     assert checkov_unreported_inputs(broken, ("bad.yaml",)) == []
     parsed = adapter.parse(broken)
-    assert parsed == [{"gap_only": True, "coverage_gap": "checkov could not parse /../target/bad.yaml"}]
+    assert parsed == [{"gap_only": True, "coverage_gap": "checkov could not parse /../target/bad.yaml",
+                       "_native_selector": {"kind": "json_pointer", "value": "/results/parsing_errors/0"}}]
 
 
 def test_gitleaks_capitalised_location_keys_are_read() -> None:
     import json
 
+    from appsec_review.jobs.job_evidence_collection.adapters import adapter_registry
+
     report = [{"RuleID": "generic-api-key", "Description": "Secret-named literal",
                "StartLine": 6, "EndLine": 7, "File": "/target/src/config.cpp", "Secret": "REDACTED"}]
-    (record,) = ADAPTERS["tool-gitleaks"].parse(json.dumps(report).encode())
+    (record,) = adapter_registry()["tool-gitleaks"].parse(json.dumps(report).encode())
     assert (record["path"], record["start_line"], record["end_line"]) == ("/target/src/config.cpp", 6, 7)

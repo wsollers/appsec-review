@@ -268,7 +268,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     reusable, reuse_reason = releases.require(*_RELEASE_COMPONENTS)
     fingerprint = _fingerprint(dispatch, accepted, producer, upstream, settings,
                                releases=releases, policy=unit.job.review_policy.view())
-    root = unit.job.run_root / "data" / "build" / "wasm" / "units" / build_unit_id
+    root = (unit.job.run_root / "data" / "build" / "wasm" / "units" / build_unit_id /
+            "attempts" / unit.job.attempt_id)
     workspace = root / "workspace"
     namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
     cache = unit.job.metadata_root / "wasm-builds" / namespace / fingerprint / "accepted.json"
@@ -283,10 +284,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             prior_workspace = Path(str(prior.get("workspace", "")))
             if not prior_workspace.is_dir() or prior_workspace.is_symlink():
                 raise WasmIntegrityError("wasm-build checkpoint workspace is unavailable")
-            if prior_workspace.resolve() != workspace.resolve():
-                if root.exists(): shutil.rmtree(root)
-                shutil.copytree(prior_workspace.parent, root)
             receipt = dict(prior["receipt"])
+            if (unit.job.run_root.resolve() not in prior_workspace.resolve().parents
+                    or prior_workspace.resolve() != (unit.job.run_root / receipt["workspace"]).resolve()):
+                raise WasmIntegrityError("wasm-build checkpoint workspace identity differs")
             identities = [*receipt.get("artifacts", ()), receipt.get("workspace_manifest", {}),
                           receipt.get("protected_tool_invocations", {})]
             for command in receipt.get("commands", ()):
@@ -299,8 +300,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 path = unit.job.run_root / str(identity.get("path", ""))
                 if not path.is_file() or path.is_symlink() or file_sha256(path) != identity.get("sha256"):
                     raise WasmIntegrityError("wasm-build checkpoint artifact identity changed")
-            return {**receipt, "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
-                    "checkpoint_reused": True, "completed_at": datetime.now(timezone.utc).isoformat()}
+            return {**receipt, "checkpoint_reused": True,
+                    "completed_at": datetime.now(timezone.utc).isoformat()}
 
     _copy_source(unit, dispatch, workspace)
     before = _snapshot(workspace, int(settings["workspace_file_limit"]))
@@ -323,7 +324,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     raw_commands = [*recipe["configure_commands"], *recipe["build_commands"]]
     native_sources = bool(dispatch.get("native_components"))
     captures: list[tuple[int, Any]] = []
-    capture_root = root / "attempts" / unit.job.attempt_id / "execution-capture"
+    capture_root = root / "execution-capture"
     if capture_root.exists():
         shutil.rmtree(capture_root)
     for ordinal, raw in enumerate(raw_commands, 1):

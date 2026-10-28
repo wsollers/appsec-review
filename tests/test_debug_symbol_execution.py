@@ -14,6 +14,7 @@ from appsec_review.debug_symbols import execution
 from appsec_review.jobs.job_debug_symbol_indexing import build_job, load_accepted_debug_symbols
 from appsec_review.storage import atomic_json, file_sha256
 from tests.test_debug_symbol_indexing import _seed
+from tests.handoff_fixture import write_fixture_handoff
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,8 +83,8 @@ def _run(tmp_path, monkeypatch, catalog, target="clang", *, produced=True, fixtu
     if "acceptance.publish_handoff" in result["outputs"]:
         output = result["outputs"]["acceptance.publish_handoff"]
         handoff = context.attempt_root / "handoff.json"
-        atomic_json(handoff, {
-            "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+        write_fixture_handoff(context.run_root, handoff, {
+            "status": "ACCEPTED",
             "job_id": context.config.job_id, "outputs": {"acceptance.publish_handoff": output},
             "artifacts": [output["artifact"], output["index_manifest"]]})
         atomic_json(context.run_root / "data" / "jobs" / context.config.job_id / "latest.json", {

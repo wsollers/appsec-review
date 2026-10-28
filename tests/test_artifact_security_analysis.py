@@ -19,6 +19,7 @@ from appsec_review.retrieval import IndexBuilder, IndexIdentity, RetrievalCore, 
 from appsec_review.retrieval.index import INDEX_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import RunStore, atomic_json, file_sha256
+from tests.handoff_fixture import write_fixture_handoff
 
 
 ROOT = Path(__file__).parents[1]
@@ -122,8 +123,8 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
         assert accepted["capabilities"]["spotbugs"]["terminal_status"] == "COMPLETED_WITH_GAPS"
         assert any(("scanner exited 1" if exit_code else "output could not be parsed") in gap
                    for gap in accepted["capabilities"]["spotbugs"]["gaps"])
-        raw = list((run_root / "data" / "jobs" / "job_artifact_security_analysis" / "attempts").rglob(
-            "parser-input.bin"))
+        raw = list((run_root / "data" / "jobs" / "job_artifact_security_analysis" / "attempts").glob(
+            "*/artifacts/asa/*/spotbugs/parser-input.bin"))
         assert raw and raw[0].read_bytes() == b""
 
 
@@ -178,7 +179,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
                 "size_bytes": accepted_path.stat().st_size}
     handoff_path = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "attempt_0001" / "handoff.json"
     handoff_path.parent.mkdir(parents=True)
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, handoff_path, {"status": "ACCEPTED",
         "job_id": "job_language_build", "attempt_id": "attempt_0001", "artifacts": [accepted, manifest],
         "outputs": {"acceptance.publish_handoff": {"artifact": accepted, "index_manifest": manifest}}})
     pointer = handoff_path.parents[2] / "latest.json"
@@ -195,7 +196,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     indexing_handoff_path = (run_root / "data" / "jobs" / "job_artifact_indexing" / "attempts" /
                              "attempt_0001" / "handoff.json")
     indexing_handoff_path.parent.mkdir(parents=True)
-    atomic_json(indexing_handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, indexing_handoff_path, {"status": "ACCEPTED",
         "job_id": "job_artifact_indexing", "attempt_id": "attempt_0001",
         "artifacts": [indexing_summary, manifest],
         "outputs": {"acceptance.publish_handoff": {"artifact": indexing_summary, "index_manifest": manifest}}})
@@ -262,6 +263,48 @@ def test_changed_accepted_artifact_is_an_integrity_failure(tmp_path: Path) -> No
     with pytest.raises(RuntimeError, match="partial failure"):
         GraphRunner(config, [build_job()]).run(target_root=target,
             source_fingerprint=fingerprint, run_id=run_id)
+
+
+def test_no_package_scan_exposes_native_reference_closure_without_a_finding(tmp_path: Path) -> None:
+    config, run_id, run_root, target, fingerprint, _ = _fixture(
+        tmp_path, payload=b"version = 3\n", name="Cargo.lock", kind="lockfile")
+    def scanner(capability, path, artifact, timeout, limit):
+        execution = (run_root / "data" / "jobs" / "job_artifact_security_analysis" / "attempts" /
+                     "attempt_0001" / "steps" / "analyze" / "tasks" / "osv" / "containers" /
+                     "fixture" / "execution.json")
+        atomic_json(execution, {"exit_code": 128, "tool": "osv"})
+        return {"stdout": b"No package sources found", "stderr": b"", "exit_code": 128,
+                "payload": b'{"results":[]}', "execution_receipt": {
+                    "path": execution.relative_to(run_root).as_posix(), "sha256": file_sha256(execution),
+                    "size_bytes": execution.stat().st_size}}
+    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    handoff_path = run_root / json.loads((
+        run_root / "data" / "jobs" / "job_artifact_security_analysis" / "latest.json").read_bytes())["handoff_path"]
+    handoff = json.loads(handoff_path.read_bytes())
+    output = json.loads((handoff_path.parent / "steps" / "analyze" / "tasks" / "osv" /
+                         "result.json").read_bytes())
+    assert not output["observations"] and output["not_applicable_inputs"]["count"] == 1
+    scan, = output["not_applicable_scan_artifacts"]
+    assert scan["result_artifact"] and scan["native_output"]["retention_receipt"]
+    assert scan["execution_receipt"]["path"] == scan["native_output"]["execution_reference"]["path"]
+    assert (run_root / scan["native_output"]["artifact"]["path"]).read_bytes() == b'{"results":[]}'
+    assert scan["native_output"]["artifact"] in handoff["artifacts"]
+
+
+def test_finding_record_bound_is_reported_in_publication_coverage(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.jobs.job_artifact_security_analysis import findings
+    monkeypatch.setattr(findings, "FINDING_BOUND", 1)
+    config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path)
+    def scanner(capability, path, artifact, timeout, limit):
+        payload = ({"matches": [{"vulnerability": {"id": "CVE-A"}}, {"vulnerability": {"id": "CVE-B"}}]}
+                   if capability == "grype" else {"artifacts": []})
+        return {"stdout": b"", "stderr": b"", "exit_code": 0, "payload": json.dumps(payload).encode()}
+    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    accepted = load_accepted_artifact_security_analysis(run_root)
+    assert accepted["finding_count"] == 1
+    assert any("2 findings; only the first 1 are recorded" in gap for gap in accepted["gaps"])
 
 
 @pytest.mark.parametrize("declared_releases", (False, True))

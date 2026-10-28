@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
@@ -137,9 +139,7 @@ def _accepted_job(run_root: Path, job_id: str) -> tuple[dict[str, Any], str]:
     pointer = json.loads(latest.read_text(encoding="utf-8"))
     handoff = json.loads(_safe_read(run_root, {"path": pointer.get("handoff_path"),
                                                "sha256": pointer.get("handoff_sha256")}).decode())
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != job_id):
-        raise ValueError(f"{job_id} handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
     return handoff, str(pointer["handoff_sha256"])
 
 

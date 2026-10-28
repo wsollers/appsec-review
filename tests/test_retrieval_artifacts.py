@@ -9,6 +9,8 @@ import sys
 
 import pytest
 
+from tests.handoff_fixture import write_fixture_handoff
+
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import (
     INDEX_SCHEMA, ArtifactQueryRequest, EntityKind, EntityRecord, IndexBuilder, IndexIdentity,
@@ -105,7 +107,7 @@ def _artifact_fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(),
                 "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
     handoff_path = attempt / "handoff.json"
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, handoff_path, {"status": "ACCEPTED",
         "job_id": "fixture", "attempt_id": "attempt_0001", "artifacts": [manifest], "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,

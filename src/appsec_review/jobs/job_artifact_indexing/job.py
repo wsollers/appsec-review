@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict
@@ -280,9 +282,10 @@ def _accepted_language_manifest(run_root: Path) -> dict[str, str]:
                                         "sha256": pointer.get("handoff_sha256")},
                               "language-build handoff")
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != "job_language_build"):
-        raise ArtifactIndexIntegrityError("language-build handoff is not accepted")
+    try:
+        handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_language_build")
+    except ValueError as exc:
+        raise ArtifactIndexIntegrityError("language-build handoff is not accepted") from exc
     raw = handoff.get("outputs", {}).get("acceptance.publish_handoff", {}).get("index_manifest")
     if not isinstance(raw, Mapping):
         raise ArtifactIndexIntegrityError("accepted language-build index manifest is required")
@@ -742,9 +745,7 @@ def load_accepted_artifact_index(run_root: Path) -> Mapping[str, Any]:
                                                "sha256": pointer.get("handoff_sha256")},
                               "artifact-indexing handoff")
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != "job_artifact_indexing"):
-        raise ValueError("artifact-indexing handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=Path(run_root).name, job_id="job_artifact_indexing")
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
     manifest = published.get("index_manifest") if isinstance(published, Mapping) else None

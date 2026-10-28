@@ -11,6 +11,7 @@ from typing import Any, Callable, Iterable, Mapping
 import xml.etree.ElementTree as ET
 
 from appsec_review import blint_report
+from appsec_review.provenance import json_selector, xml_selector
 from appsec_review.storage import canonical_json
 from appsec_review.tool_inputs import (
     C_CPP_SOURCE, NATIVE_BINARIES, SEI_CERT_SOURCE, SOURCE_SUFFIXES,
@@ -304,7 +305,7 @@ def _blint_args(executable: str, selection: Applicability) -> tuple[str, ...]:
 
 def _json(payload: bytes) -> Any:
     if not payload.strip():
-        return []
+        raise ValueError("scanner output is empty")
     return json.loads(payload.decode("utf-8"))
 
 
@@ -339,16 +340,17 @@ CATEGORY_CONFIG_LINT, CATEGORY_CI_SECURITY = "config_lint", "ci_security"
 
 def _list_records(payload: bytes, category: str) -> list[dict[str, Any]]:
     value = _json(payload)
-    items = value if isinstance(value, list) else value.get(
-        "results", value.get("findings", value.get("comments", []))
-    )
+    key = next((key for key in ("results", "findings", "comments") if key in value), "results")
+    items = value if isinstance(value, list) else value.get(key, [])
     # Gitleaks reports File/StartLine/EndLine in capitalised keys; read them as well as the lowercase spellings.
     # The category is the scanner's class, never a field of the scanner output.
     return [{**_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
                        message=("message", "Description", "description", "text"),
                        path_keys=("path", "file", "filename", "File"),
                        line_keys=("line", "start_line", "lineNumber", "StartLine"), category=category),
-             "category": category} for item in items]
+             "category": category,
+             "_native_selector": json_selector(*( () if isinstance(value, list) else (key,)), index).as_dict()}
+            for index, item in enumerate(items)]
 
 
 def _gitleaks_parser(payload: bytes) -> list[dict[str, Any]]:
@@ -373,12 +375,14 @@ def _mobsfscan_parser(payload: bytes) -> list[dict[str, Any]]:
     for rule_id, result in _json(payload).get("results", {}).items():
         metadata = result.get("metadata", {})
         files = result.get("files") or [{}]
-        for item in files:
+        for index, item in enumerate(files):
             lines = item.get("match_lines") or [1, 1]
             records.append({
                 "rule_id": rule_id, "message": metadata.get("description") or rule_id,
                 "severity": metadata.get("severity"), "category": "source_sast",
                 "path": item.get("file_path"), "start_line": lines[0], "end_line": lines[-1],
+                "_native_selector": json_selector("results", rule_id, "files", index).as_dict()
+                    if result.get("files") else json_selector("results", rule_id).as_dict(),
             })
     return records
 
@@ -387,7 +391,7 @@ def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
     """Parse Semgrep CE / OpenGrep JSON, keeping engine errors and skipped targets as coverage gaps."""
     document = _json(payload)
     records: list[dict[str, Any]] = []
-    for item in document.get("results", []):
+    for index, item in enumerate(document.get("results", [])):
         extra = item.get("extra", {}) if isinstance(item.get("extra"), Mapping) else {}
         rule_id = str(item.get("check_id"))
         record = {
@@ -395,6 +399,7 @@ def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
             "severity": extra.get("severity"), "category": "source_sast",
             "path": item.get("path"), "start_line": item.get("start", {}).get("line"),
             "end_line": item.get("end", {}).get("line"),
+            "_native_selector": json_selector("results", index).as_dict(),
         }
         if SEI_CERT_RULE_PREFIX in rule_id:
             # Engines prefix rule IDs with the config directory; keep the pack-owned identity and the
@@ -403,21 +408,24 @@ def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
             metadata = extra.get("metadata", {}) if isinstance(extra.get("metadata"), Mapping) else {}
             record["rule_mapping"] = {key: metadata[key] for key in SEI_CERT_METADATA if key in metadata}
         records.append(record)
-    for error in document.get("errors", []) if isinstance(document, Mapping) else []:
+    for index, error in enumerate(document.get("errors", []) if isinstance(document, Mapping) else []):
         if isinstance(error, Mapping):
             location = error.get("path") or error.get("rule_id") or "engine"
             text = " ".join(str(error.get("message") or error.get("type") or "error").split())[:300]
             records.append({"gap_only": True,
+                            "_native_selector": json_selector("errors", index).as_dict(),
                             "coverage_gap": f"engine reported {error.get('level', 'error')} for {location}: {text}"})
     paths = document.get("paths", {}) if isinstance(document, Mapping) else {}
-    for skipped in (paths.get("skipped") or []) if isinstance(paths, Mapping) else []:
+    for index, skipped in enumerate((paths.get("skipped") or []) if isinstance(paths, Mapping) else []):
         if isinstance(skipped, Mapping):
             if semgrep_skip_not_applicable(skipped.get("reason")):
                 # No rule or language of the configured packs applies: SKIPPED_NA, not a gap.
                 records.append({"gap_only": True, "not_applicable_input": str(skipped.get("path")),
+                                "_native_selector": json_selector("paths", "skipped", index).as_dict(),
                                 "not_applicable_reason": f"engine skipped target: {skipped.get('reason')}"})
                 continue
             records.append({"gap_only": True,
+                            "_native_selector": json_selector("paths", "skipped", index).as_dict(),
                             "coverage_gap": f"engine skipped {skipped.get('path')}: {skipped.get('reason')}"})
     return records
 
@@ -496,39 +504,49 @@ def _shellcheck_parser(payload: bytes) -> list[dict[str, Any]]:
     value = _json(payload)
     items = value if isinstance(value, list) else value.get("comments", [])
     records: list[dict[str, Any]] = []
-    for item in items:
+    for index, item in enumerate(items):
+        selector = json_selector(*( () if isinstance(value, list) else ("comments",)), index).as_dict()
         if isinstance(item, Mapping) and shellcheck_unsupported_dialect(item):
             records.append({"gap_only": True, "not_applicable_input": str(item.get("file")),
+                            "_native_selector": selector,
                             "not_applicable_reason": "tool-shellcheck reported SC1071: "
                             "ShellCheck only supports sh/bash/dash/ksh scripts"})
             continue
         records.append({**_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
                                   message=("message", "Description", "description", "text"),
-                                  category=CATEGORY_SHELL_LINT), "category": CATEGORY_SHELL_LINT})
+                                  category=CATEGORY_SHELL_LINT), "category": CATEGORY_SHELL_LINT,
+                        "_native_selector": selector})
     return records
 
 
 def _gosec_parser(payload: bytes) -> list[dict[str, Any]]:
-    return [_record(item, rule=("rule_id",), message=("details",), path_keys=("file",),
-                    line_keys=("line",), category=CATEGORY_SOURCE_SAST) for item in _json(payload).get("Issues", [])]
+    return [{**_record(item, rule=("rule_id",), message=("details",), path_keys=("file",),
+                       line_keys=("line",), category=CATEGORY_SOURCE_SAST),
+             "_native_selector": json_selector("Issues", index).as_dict()}
+            for index, item in enumerate(_json(payload).get("Issues", []))]
 
 
 def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
     value = _json(payload)
     documents = value if isinstance(value, list) else [value]
     result = []
-    for document in documents:
-        for item in document.get("results", {}).get("failed_checks", []):
-            result.append(_record(item, rule=("check_id",), message=("check_name",),
+    for document_index, document in enumerate(documents):
+        prefix = (document_index,) if isinstance(value, list) else ()
+        for index, item in enumerate(document.get("results", {}).get("failed_checks", [])):
+            result.append({**_record(item, rule=("check_id",), message=("check_name",),
                                   path_keys=("file_path",), line_keys=("file_line_range",),
-                                  category="configuration"))
+                                  category="configuration"),
+                           "_native_selector": json_selector(*prefix, "results", "failed_checks", index).as_dict()})
     for item in result:
         if isinstance(item["start_line"], list):
             lines = item["start_line"]
             item["start_line"] = lines[0] if lines else 1
             item["end_line"] = lines[-1] if lines else 1
-    for path in _checkov_parsing_errors(documents):
-        result.append({"gap_only": True, "coverage_gap": f"checkov could not parse {path}"})
+    for document_index, document in enumerate(documents):
+        prefix = (document_index,) if isinstance(value, list) else ()
+        for index, path in enumerate(document.get("results", {}).get("parsing_errors", []) or []):
+            result.append({"gap_only": True, "coverage_gap": f"checkov could not parse {path}",
+                           "_native_selector": json_selector(*prefix, "results", "parsing_errors", index).as_dict()})
     return result
 
 
@@ -574,13 +592,14 @@ def checkov_unreported_inputs(payload: bytes, inputs: Iterable[str]) -> list[str
 
 def _trivy_parser(payload: bytes) -> list[dict[str, Any]]:
     result = []
-    for section in _json(payload).get("Results", []):
-        for item in section.get("Misconfigurations") or []:
+    for section_index, section in enumerate(_json(payload).get("Results", [])):
+        for index, item in enumerate(section.get("Misconfigurations") or []):
             target = str(section.get("Target", "")).replace("/scratch/inputs/", "")
             result.append({"rule_id": item.get("ID"), "message": item.get("Message") or item.get("Title"),
                            "severity": item.get("Severity"), "category": "configuration",
                            "path": target, "start_line": item.get("CauseMetadata", {}).get("StartLine"),
-                           "end_line": item.get("CauseMetadata", {}).get("EndLine")})
+                           "end_line": item.get("CauseMetadata", {}).get("EndLine"),
+                           "_native_selector": json_selector("Results", section_index, "Misconfigurations", index).as_dict()})
     return result
 
 
@@ -595,6 +614,7 @@ def _syft_parser(payload: bytes) -> list[dict[str, Any]]:
             "repository_url": item.get("repository_url") or metadata.get("repository")
                               or metadata.get("vcs_url"),
             "raw_selector": f"/artifacts/{index}",
+            "_native_selector": json_selector("artifacts", index).as_dict(),
             "path": next((loc.get("path") for loc in item.get("locations", [])
                           if isinstance(loc, Mapping)), None), "start_line": 1,
         })
@@ -606,30 +626,44 @@ def _grype_parser(payload: bytes) -> list[dict[str, Any]]:
              "message": item.get("vulnerability", {}).get("description") or item.get("vulnerability", {}).get("id"),
              "severity": item.get("vulnerability", {}).get("severity"), "category": "vulnerability_matching",
              "package": item.get("artifact", {}).get("name"), "component": item.get("artifact", {}).get("id"),
-             "advisory": item.get("vulnerability", {}).get("id")} for item in _json(payload).get("matches", [])]
+             "advisory": item.get("vulnerability", {}).get("id"),
+             "_native_selector": json_selector("matches", index).as_dict()}
+            for index, item in enumerate(_json(payload).get("matches", []))]
 
 
 def _osv_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
-    for result in _json(payload).get("results", []):
-        for package in result.get("packages", []):
-            for vulnerability in package.get("vulnerabilities", []):
+    for result_index, result in enumerate(_json(payload).get("results", [])):
+        for package_index, package in enumerate(result.get("packages", [])):
+            for index, vulnerability in enumerate(package.get("vulnerabilities", [])):
                 records.append({"rule_id": vulnerability.get("id"), "message": vulnerability.get("summary") or vulnerability.get("id"),
                     "severity": "UNKNOWN", "category": "vulnerability_matching", "package": package.get("package", {}).get("name"),
-                    "advisory": vulnerability.get("id"), "path": result.get("source", {}).get("path"), "start_line": 1})
+                    "advisory": vulnerability.get("id"), "path": result.get("source", {}).get("path"), "start_line": 1,
+                    "_native_selector": json_selector("results", result_index, "packages", package_index,
+                                                       "vulnerabilities", index).as_dict()})
     return records
+
+
+def _xml_results(root: ET.Element, local_name: str):
+    ordinals: dict[str, int] = {}
+    for element in root.iter():
+        ordinal = ordinals.get(element.tag, 0)
+        ordinals[element.tag] = ordinal + 1
+        if element.tag.rsplit("}", 1)[-1] == local_name:
+            yield element, xml_selector(element, ordinal).as_dict()
 
 
 def _spotbugs_parser(payload: bytes) -> list[dict[str, Any]]:
     root = ET.fromstring(payload.decode("utf-8"))
     records = []
-    for bug in root.findall(".//BugInstance"):
-        source = bug.find("SourceLine")
+    for bug, selector in _xml_results(root, "BugInstance"):
+        source = next((item for item in bug if item.tag.rsplit("}", 1)[-1] == "SourceLine"), None)
         records.append({"rule_id": bug.get("type"), "message": (bug.findtext("LongMessage") or bug.get("type")),
                         "severity": bug.get("priority"), "category": "source_sast",
                         "path": source.get("sourcepath") if source is not None else None,
                         "start_line": source.get("start") if source is not None else 1,
-                        "end_line": source.get("end") if source is not None else 1})
+                        "end_line": source.get("end") if source is not None else 1,
+                        "_native_selector": selector})
     return records
 
 
@@ -648,8 +682,12 @@ def _blint_parser(payload: bytes) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = [
         {"rule_id": item.get("id"), "message": item.get("title") or item.get("id"),
          "severity": item.get("severity"), "category": "binary_hardening",
-         "path": item.get("filename") or item.get("exe_name"), "start_line": 1, "end_line": 1}
-        for item in document.get("findings", [])]
+         "path": item.get("filename") or item.get("exe_name"), "start_line": 1, "end_line": 1,
+         "_native_selector": item.get("_native_selector", json_selector("findings", index).as_dict()),
+         "_native_report": item.get("_native_report")}
+        for index, item in enumerate(document.get("findings", []))]
+    if document.get("truncated"):
+        records.append({"gap_only": True, "coverage_gap": "blint report assembly was truncated"})
     if not document.get("analyzed"):
         records.append({"gap_only": True,
                         "coverage_gap": "blint produced no per-binary analysis report for the selected binaries"})
@@ -667,8 +705,8 @@ def _cppcheck_parser(payload: bytes) -> list[dict[str, Any]]:
     root = ET.fromstring(payload.decode("utf-8"))
     records = []
     gap_ids = {"missingInclude", "missingIncludeSystem", "noValidConfiguration", "toomanyconfigs"}
-    for error in root.findall(".//errors/error"):
-        location = error.find("location")
+    for error, selector in _xml_results(root, "error"):
+        location = next((item for item in error if item.tag.rsplit("}", 1)[-1] == "location"), None)
         record = {
             "rule_id": error.get("id", "cppcheck"), "message": error.get("verbose") or error.get("msg", ""),
             "severity": error.get("severity", "UNKNOWN"), "category": "source_sast",
@@ -676,6 +714,7 @@ def _cppcheck_parser(payload: bytes) -> list[dict[str, Any]]:
             "start_line": location.get("line") if location is not None else 1,
             "end_line": location.get("line") if location is not None else 1,
             "language": "C/C++",
+            "_native_selector": selector,
         }
         if error.get("id") in gap_ids:
             record["coverage_gap"] = f"Cppcheck {error.get('id')}: {record['message']}"
@@ -689,9 +728,9 @@ def _pmd_parser(payload: bytes) -> list[dict[str, Any]]:
     if value.get("configurationErrors"):
         raise ValueError("PMD reported a ruleset configuration error")
     records: list[dict[str, Any]] = []
-    for document in value.get("files", []):
+    for file_index, document in enumerate(value.get("files", [])):
         path = document.get("filename")
-        for item in document.get("violations", []):
+        for index, item in enumerate(document.get("violations", [])):
             priority = item.get("priority")
             pmd_severity = {
                 1: "CRITICAL", 2: "HIGH", 3: "MEDIUM", 4: "LOW", 5: "LOW",
@@ -702,32 +741,36 @@ def _pmd_parser(payload: bytes) -> list[dict[str, Any]]:
                 "severity": pmd_severity, "category": "source_sast",
                 "path": path, "start_line": item.get("beginline", 1), "end_line": item.get("endline", 1),
                 "language": "Java",
+                "_native_selector": json_selector("files", file_index, "violations", index).as_dict(),
             })
-        for error in document.get("processingErrors", []):
+        for index, error in enumerate(document.get("processingErrors", [])):
             records.append({"rule_id": "pmd-processing-error", "message": error.get("msg", ""),
                             "severity": "ERROR", "category": "tool_diagnostic", "path": path,
                             "start_line": 1, "end_line": 1,
-                            "coverage_gap": f"PMD could not process {path}", "gap_only": True})
+                            "coverage_gap": f"PMD could not process {path}", "gap_only": True,
+                            "_native_selector": json_selector("files", file_index, "processingErrors", index).as_dict()})
     return records
 
 
 def _phpstan_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
     for path, value in _json(payload).get("files", {}).items():
-        for message in value.get("messages", []):
+        for index, message in enumerate(value.get("messages", [])):
             records.append({"rule_id": message.get("identifier", "phpstan"), "message": message.get("message"),
                             "severity": "ERROR", "category": "source_sast", "path": path,
-                            "start_line": message.get("line", 1)})
+                            "start_line": message.get("line", 1),
+                            "_native_selector": json_selector("files", path, "messages", index).as_dict()})
     return records
 
 
 def _phpcs_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
     for path, value in _json(payload).get("files", {}).items():
-        for message in value.get("messages", []):
+        for index, message in enumerate(value.get("messages", [])):
             records.append({"rule_id": message.get("source", "phpcs"), "message": message.get("message"),
                             "severity": message.get("type", "WARNING"), "category": "source_sast", "path": path,
-                            "start_line": message.get("line", 1)})
+                            "start_line": message.get("line", 1),
+                            "_native_selector": json_selector("files", path, "messages", index).as_dict()})
     return records
 
 

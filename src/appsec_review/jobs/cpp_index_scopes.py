@@ -9,6 +9,8 @@ mapping before a tool runs.
 
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -58,10 +60,7 @@ def load_accepted_cpp(run_root: Path) -> Mapping[str, Any]:
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _read_json_artifact(run_root, {"path": pointer.get("handoff_path"),
                                             "sha256": pointer.get("handoff_sha256")})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError("C++ compiled-analysis handoff is not accepted")
-    if handoff.get("job_id") != "job_cpp_compiled_analysis":
-        raise ValueError("accepted C++ handoff producer is invalid")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_cpp_compiled_analysis")
     result_path = str(handoff.get("resolving_paths", {}).get("result", ""))
     result_identity = next((item for item in handoff.get("artifacts", ())
                             if item.get("path") == result_path), None)

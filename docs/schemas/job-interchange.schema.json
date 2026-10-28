@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/job-interchange.schema.json",
+  "title": "Shared job interchange wire contracts",
+  "$comment": "Structural validation only. The authoritative Python contracts are in src/appsec_review/interchange.py. Artifact bytes, input-set hashing, selector resolution, target identity, and admission require application validation. All references are local for offline validation.",
+  "oneOf": [
+    {"$ref": "#/$defs/handoff"},
+    {"$ref": "#/$defs/outcomes"},
+    {"$ref": "#/$defs/nativeResultReference"},
+    {"$ref": "#/$defs/observationMetadata"},
+    {"$ref": "#/$defs/producerGap"}
+  ],
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "not": {"pattern": "\\u0000"}
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifactPath": {
+      "allOf": [
+        {"$ref": "#/$defs/text"},
+        {"not": {"pattern": "(^/|//|/$|(^|/)\\.{1,2}(/|$)|[\\\\:])"}}
+      ],
+      "description": "Canonical run-relative POSIX path, not a host path or URL. Application admission also rejects links, escapes, and changed bytes."
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"$ref": "#/$defs/artifactPath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "nullableArtifactReference": {
+      "anyOf": [
+        {"$ref": "#/$defs/artifactReference"},
+        {"type": "null"}
+      ]
+    },
+    "executionStatus": {"enum": ["SUCCEEDED", "FAILED", "SKIPPED"]},
+    "coverageDisposition": {
+      "enum": ["complete", "partial", "unavailable", "not_applicable", "skipped_policy"]
+    },
+    "gapIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/sha256"}
+    },
+    "coverageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disposition", "gap_count", "retry_required"],
+      "properties": {
+        "disposition": {"$ref": "#/$defs/coverageDisposition"},
+        "gap_count": {"type": "integer", "minimum": 0},
+        "retry_required": {"type": "boolean"}
+      },
+      "allOf": [{
+        "if": {"properties": {"disposition": {"const": "complete"}}},
+        "then": {
+          "properties": {
+            "gap_count": {"const": 0},
+            "retry_required": {"const": false}
+          }
+        }
+      }]
+    },
+    "resultSelector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {"const": "document"},
+            "value": {"type": "null"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {"const": "json_pointer"},
+            "value": {
+              "type": "string",
+              "anyOf": [{"const": ""}, {"pattern": "^/"}],
+              "not": {"pattern": "~(?![01])"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {"const": "xml_ordinal"},
+            "value": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["element", "ordinal"],
+              "properties": {
+                "element": {"$ref": "#/$defs/text"},
+                "ordinal": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {"const": "byte_range"},
+            "value": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["start", "end"],
+              "properties": {
+                "start": {"type": "integer", "minimum": 0},
+                "end": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        }
+      ],
+      "description": "Selects the original retained result, not a synthesized merged result. Application validation checks byte-range ordering/bounds and whether the selector resolves."
+    },
+    "nativeResultReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "artifact", "selector", "parser_identity",
+        "execution_reference", "retention_receipt", "complete"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/native-result-reference/1"},
+        "artifact": {"$ref": "#/$defs/artifactReference"},
+        "selector": {"$ref": "#/$defs/resultSelector"},
+        "parser_identity": {"$ref": "#/$defs/text"},
+        "execution_reference": {"$ref": "#/$defs/nullableArtifactReference"},
+        "retention_receipt": {"$ref": "#/$defs/nullableArtifactReference"},
+        "complete": {"type": "boolean"}
+      }
+    },
+    "producerGap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "gap_id", "code", "unit_id", "scope_id", "reason",
+        "retryable", "evidence_refs"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/producer-gap/1"},
+        "gap_id": {"$ref": "#/$defs/sha256"},
+        "code": {
+          "enum": [
+            "producer_failed", "producer_blocked", "input_unavailable",
+            "output_missing", "parser_error", "truncated", "location_unresolved",
+            "empty_result", "provenance_unavailable", "unknown_producer_status",
+            "producer_reported_gap"
+          ]
+        },
+        "unit_id": {"anyOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "scope_id": {"anyOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "reason": {"$ref": "#/$defs/text"},
+        "retryable": {"type": "boolean"},
+        "evidence_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/artifactReference"}
+        }
+      }
+    },
+    "unitOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit_id", "execution_status", "producer_status", "coverage_disposition",
+        "result_reference", "status_reference", "gap_ids"
+      ],
+      "properties": {
+        "unit_id": {"$ref": "#/$defs/text"},
+        "execution_status": {"$ref": "#/$defs/executionStatus"},
+        "producer_status": {"anyOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "coverage_disposition": {"$ref": "#/$defs/coverageDisposition"},
+        "result_reference": {"$ref": "#/$defs/nullableArtifactReference"},
+        "status_reference": {"$ref": "#/$defs/nullableArtifactReference"},
+        "gap_ids": {"$ref": "#/$defs/gapIds"}
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "run_id", "job_id", "attempt_id", "target_snapshot",
+        "units", "gaps", "coverage"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/job-outcomes/1"},
+        "run_id": {"$ref": "#/$defs/text"},
+        "job_id": {"$ref": "#/$defs/text"},
+        "attempt_id": {"$ref": "#/$defs/text"},
+        "target_snapshot": {"$ref": "#/$defs/text"},
+        "units": {"type": "array", "items": {"$ref": "#/$defs/unitOutcome"}},
+        "gaps": {"type": "array", "items": {"$ref": "#/$defs/producerGap"}},
+        "coverage": {"$ref": "#/$defs/coverageSummary"}
+      },
+      "description": "Detailed publication accounting. Application admission reconciles identities, unique unit/gap IDs, artifact membership, gap references, and the coverage summary against the handoff."
+    },
+    "reportedSeverity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "native", "basis", "rule"],
+      "properties": {
+        "value": {"enum": ["critical", "high", "medium", "low", "info", "unknown"]},
+        "native": {"$ref": "#/$defs/text"},
+        "basis": {"$ref": "#/$defs/text"},
+        "rule": {"$ref": "#/$defs/text"}
+      }
+    },
+    "observationMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "observation_class", "record_kind", "scanner", "rule_id",
+        "reported_severity", "evidence_refs", "gap_ids", "payload_schema"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/observation/1"},
+        "observation_class": {
+          "enum": [
+            "source_sast", "secret", "dependency", "configuration",
+            "inventory", "binary", "diagnostic", "other"
+          ]
+        },
+        "record_kind": {"enum": ["finding", "scan_summary", "observation"]},
+        "scanner": {"$ref": "#/$defs/text"},
+        "rule_id": {"$ref": "#/$defs/text"},
+        "reported_severity": {"$ref": "#/$defs/reportedSeverity"},
+        "evidence_refs": {
+          "type": "array",
+          "description": "Repeated entries are structurally allowed. Producer normalization may coalesce identical reference values but preserves distinct selectors and invocation identities.",
+          "items": {"$ref": "#/$defs/nativeResultReference"}
+        },
+        "gap_ids": {"$ref": "#/$defs/gapIds"},
+        "payload_schema": {"$ref": "#/$defs/text"}
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "description": "Common envelope. Producer-owned outputs and existing extension fields are preserved, not replaced by a universal observation payload.",
+      "additionalProperties": true,
+      "required": [
+        "schema", "run_id", "job_id", "attempt_id", "status", "completion_status",
+        "execution_status", "outputs", "artifacts", "upstream_handoff_sha256",
+        "resolved_config_sha256", "job_config_sha256", "source_fingerprint",
+        "target_snapshot", "implementation_identity", "schema_identity",
+        "validation_identity", "tool_identity", "input_identity", "input_manifest",
+        "dataset_contract_sha256", "input_set_sha256", "coverage", "outcomes",
+        "resolving_paths", "started_at", "completed_at"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/job-handoff/2"},
+        "run_id": {"$ref": "#/$defs/text"},
+        "job_id": {"$ref": "#/$defs/text"},
+        "attempt_id": {"$ref": "#/$defs/text"},
+        "status": {"enum": ["ACCEPTED", "REJECTED"]},
+        "completion_status": {"$ref": "#/$defs/text"},
+        "execution_status": {"$ref": "#/$defs/executionStatus"},
+        "outputs": {"type": "object"},
+        "artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/artifactReference"}
+        },
+        "upstream_handoff_sha256": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/text"},
+          "additionalProperties": {"$ref": "#/$defs/sha256"}
+        },
+        "resolved_config_sha256": {"$ref": "#/$defs/sha256"},
+        "job_config_sha256": {"$ref": "#/$defs/sha256"},
+        "source_fingerprint": {"$ref": "#/$defs/text"},
+        "target_snapshot": {"$ref": "#/$defs/text"},
+        "evidence_target_snapshot": {"$ref": "#/$defs/text"},
+        "implementation_identity": {"$ref": "#/$defs/text"},
+        "schema_identity": {"$ref": "#/$defs/text"},
+        "validation_identity": {"$ref": "#/$defs/text"},
+        "tool_identity": {"type": "object"},
+        "input_identity": {},
+        "input_manifest": {"$ref": "#/$defs/nullableArtifactReference"},
+        "dataset_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "input_set_sha256": {"$ref": "#/$defs/sha256"},
+        "coverage": {"$ref": "#/$defs/coverageSummary"},
+        "outcomes": {"$ref": "#/$defs/nullableArtifactReference"},
+        "resolving_paths": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/artifactPath"}
+        },
+        "started_at": {"$ref": "#/$defs/text"},
+        "completed_at": {"$ref": "#/$defs/text"}
+      },
+      "allOf": [{
+        "if": {"properties": {"status": {"const": "ACCEPTED"}}},
+        "then": {
+          "properties": {
+            "execution_status": {"enum": ["SUCCEEDED", "SKIPPED"]},
+            "outcomes": {"$ref": "#/$defs/artifactReference"}
+          }
+        }
+      }]
+    }
+  }
+}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Mapping, Sequence
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -120,9 +122,7 @@ def load_accepted_language_build(run_root: Path) -> Mapping[str, Any]:
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _safe_artifact(run_root, {"path": pointer.get("handoff_path"),
                                       "sha256": pointer.get("handoff_sha256")})
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != "job_language_build"):
-        raise ValueError("language-build handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_language_build")
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
     if not isinstance(identity, Mapping):
@@ -846,7 +846,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     family = str(dispatch["family"])
     fingerprint = _fingerprint(dispatch, accepted, unit.job.config.settings,
                                releases=unit.job.review_policy.releases)
-    root = unit.job.run_root / "data" / "build" / family / "units" / build_unit_id
+    root = (unit.job.run_root / "data" / "build" / family / "units" / build_unit_id /
+            "attempts" / unit.job.attempt_id)
     workspace = root / "workspace"
     namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
     cache = unit.job.metadata_root / "language-builds" / namespace / fingerprint / "accepted.json"
@@ -861,16 +862,14 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             prior_workspace = Path(str(prior.get("workspace", "")))
             if (prior.get("fingerprint") == fingerprint and prior.get("terminal_status") == "SUCCEEDED" and
                     prior_workspace.is_dir() and not prior_workspace.is_symlink()):
-                if prior_workspace.resolve() != workspace.resolve():
-                    if root.exists(): shutil.rmtree(root)
-                    shutil.copytree(prior_workspace.parent, root)
                 _validate_checkpoint_artifacts(unit.job.run_root, prior["receipt"])
+                if prior_workspace.resolve() != (unit.job.run_root / prior["receipt"]["workspace"]).resolve():
+                    raise FrameworkIntegrityError("language-build checkpoint workspace identity differs")
                 artifacts = [dict(identity) for identity in prior["receipt"].get("artifacts", ())]
                 # Reuse is not new coverage: a capture-backed receipt keeps the gaps it named.
                 gaps: list[str] = (list(prior["receipt"].get("gaps", ()))
                                    if family in _CAPTURED_FAMILIES else [])
-                receipt = {**prior["receipt"], "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
-                           "artifacts": artifacts, "gaps": gaps, "checkpoint_reused": True,
+                receipt = {**prior["receipt"], "artifacts": artifacts, "gaps": gaps, "checkpoint_reused": True,
                            "completed_at": datetime.now(timezone.utc).isoformat()}
                 unit.job.events.write("LANGUAGE_BUILD_REUSED", unit_id=unit.unit_id,
                                       build_unit_id=build_unit_id, fingerprint=fingerprint,
@@ -968,7 +967,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     cargo_metadata: dict[str, Any] | None = None
     provenance_gaps: list[str] = []
     captures: list[tuple[int, VerifiedCapture]] = []
-    capture_root = root / "attempts" / unit.job.attempt_id / "execution-capture"
+    capture_root = root / "execution-capture"
     if capture_root.exists():
         shutil.rmtree(capture_root)
     operational_recipe = {**recipe, "build_system": dispatch.get("build_system")}

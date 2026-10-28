@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from appsec_review.interchange import HANDOFF_SCHEMA
 from appsec_review.indexing.store import AcceptedHandoff, digest, shard_key, shard_summary
 from appsec_review.runtime.datasets import (
     METADATA_ROUTE, RUNTIME_SHARED_NAMESPACES, DatasetDeclaration, read_dataset_contract,
@@ -87,11 +88,13 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
                 tuple(f"{base}/attempts/*/shared/{name}/*.json" for name in shared_namespaces),
                 "provenance is not accepted evidence", sensitivity="sensitive", disposition="protected")))
         claims.append(Claim(job_id, "lifecycle", "attempt_receipts", _runtime_declaration(
-            "attempt_receipts", "lifecycle", "execution_receipts", "appsec-review/job-handoff/1",
+            "attempt_receipts", "lifecycle", "execution_receipts", HANDOFF_SCHEMA,
             "Attempt claims, status, results, handoffs, event logs and the attempt's pinned retrieval "
             "input manifest.",
             (f"{base}/latest.json", f"{base}/attempts/*/claim.json", f"{base}/attempts/*/status.json",
              f"{base}/attempts/*/result.json", f"{base}/attempts/*/handoff.json", f"{base}/attempts/*/logs/**",
+             f"{base}/attempts/*/outcomes.json",
+             f"{base}/attempts/*/rejected-handoff.json", f"{base}/attempts/*/rejected-outcomes.json",
              # Written by the runner (materialize_attempt_input_manifest) when an attempt inherits
              # more than one upstream index lineage; it merges manifests and adds no shards.
              f"{base}/attempts/*/inputs/retrieval-manifest.json"),

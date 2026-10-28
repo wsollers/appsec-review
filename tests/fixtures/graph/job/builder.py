@@ -277,8 +277,9 @@ def stage_run(tmp_path: Path, *, with_priority: bool = True, legacy_codeql: bool
             artifacts.extend({key: value for key, value in item.items() if key != "query_id"}
                              for item in record["export_files"])
     handoff_path = attempt / "handoff.json"
-    atomic_json(handoff_path, {
-        "schema": "appsec-review/job-handoff/1", "job_id": CODEQL, "attempt_id": attempt.name, "status": "ACCEPTED",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, {
+        "job_id": CODEQL, "attempt_id": attempt.name, "status": "ACCEPTED",
         "completion_status": "COMPLETED_WITH_GAPS", "source_fingerprint": SNAPSHOT,
         "outputs": {export_unit: export_output,
                     "acceptance.publish_handoff": {"index_manifest": manifest, "gaps": []}},

@@ -10,6 +10,10 @@ The repository is mid-rebuild. Repository-agent rules live only in [`AGENTS.md`]
 governs. [`docs/agent-reader.md`](docs/agent-reader.md) is navigation for agents and adds no rules;
 the architecture index is [`docs/architecture/README.md`](docs/architecture/README.md).
 
+The upgraded job JSON contract, native scanner provenance, migration rules, and offline JSON
+Schema are documented in [job interchange](docs/architecture/job-interchange.md).
+Admission, execution, and coverage are separate; scanner observations are not confirmed findings.
+
 ## Contents
 
 - [What you need](#what-you-need)
