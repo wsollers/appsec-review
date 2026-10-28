@@ -995,9 +995,12 @@
             "function",
             "callee",
             "corroboration",
-            "build"
-            ,"control_context"
+            "build",
+            "control_context"
           ]
+        },
+        "control_assessment": {
+          "$ref": "#/$defs/inference_control_assessment"
         }
       }
     },
@@ -1770,8 +1773,75 @@
           "$ref": "#/$defs/inference_identities"
         },
         "control_assessment": {
+          "$ref": "#/$defs/inference_control_assessment"
+        }
+      }
+    },
+    "inference_control_assessment": {
+      "type": "object",
+      "description": "Scoped provisional OWASP interpretation expanded from the hash-pinned workbench authority, never direct proof or component safety. Original typed citations, including custody and independent counterevidence, are preserved without the generic index depth bound.",
+      "required": [
+        "assessment_mode",
+        "control_status",
+        "verification_status",
+        "lead_eligible",
+        "provisional",
+        "evidence",
+        "obligations",
+        "observations",
+        "disagreements",
+        "limitations",
+        "gaps",
+        "accepted_upstream_manifest",
+        "workbench_reference"
+      ],
+      "properties": {
+        "assessment_mode": {
+          "const": "assessment"
+        },
+        "control_status": {
+          "enum": ["satisfied", "not_satisfied", "cannot_verify", "not_applicable"]
+        },
+        "verification_status": {
+          "enum": ["independently_assessed", "dissent", "pending", "unresolved"]
+        },
+        "lead_eligible": {
+          "type": "boolean"
+        },
+        "provisional": {
+          "const": true
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "obligations": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "observations": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "disagreements": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "limitations": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "gaps": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "accepted_upstream_manifest": {
           "type": "object",
-          "description": "Provisional OWASP interpretation with underlying typed evidence, scope, dissent and authoritative publication. Never direct proof."
+          "required": ["path", "sha256"]
+        },
+        "workbench_reference": {
+          "type": "object",
+          "required": ["manifest_path", "manifest_sha256", "path", "sha256", "row_id"]
         }
       }
     },
@@ -2038,7 +2108,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/8"
+          "const": "appsec-review/assemble-review-packages/9"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

@@ -97,13 +97,17 @@ class ContextEntry:
     kind: str
     role: str
     shard_sha256: str | None = None
+    control_assessment: Mapping[str, Any] | None = None
 
-    def record(self) -> dict[str, str]:
-        return {"id": self.id, "kind": self.kind, "role": self.role}
+    def record(self) -> dict[str, Any]:
+        return {"id": self.id, "kind": self.kind, "role": self.role,
+                **({"control_assessment": dict(self.control_assessment)}
+                   if self.control_assessment is not None else {})}
 
 
-def context_entry(identity: str, role: str, shard_sha256: str | None = None) -> ContextEntry:
-    return ContextEntry(identity, LogicalIdentity.parse(identity).kind.value, role, shard_sha256)
+def context_entry(identity: str, role: str, shard_sha256: str | None = None, *,
+                  control_assessment: Mapping[str, Any] | None = None) -> ContextEntry:
+    return ContextEntry(identity, LogicalIdentity.parse(identity).kind.value, role, shard_sha256, control_assessment)
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,11 +204,11 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
     if unit_max_files < 1:
         raise ValueError("unit_max_files must be positive")
 
-    def locate(path: str | None, hint: str | None = None) -> tuple[str, str | None]:
+    def locate(path: str | None, hint: str | None = None, build_hint: str | None = None) -> tuple[str, str | None]:
         component = scope.component_for(path)
         unit = scope.build_unit_for(path)
         return (component.component_id if component else hint or "unassigned",
-                unit.build_unit_id if unit else None)
+                unit.build_unit_id if unit else build_hint)
 
     groups: dict[tuple[str, str | None], set[str]] = defaultdict(set)
     for item in scope.source_files:
@@ -212,7 +216,7 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
     unlocated: dict[tuple[str, str | None], list[Lead]] = defaultdict(list)
     for lead in collection.leads:
         if lead.path is None:
-            unlocated[locate(None, lead.component_hint)].append(lead)
+            unlocated[locate(None, lead.component_hint, lead.build_unit_hint)].append(lead)
         else:
             groups[locate(lead.path, lead.component_hint)].add(lead.path)
 
@@ -266,7 +270,8 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 values = [row["value"] for row in matched if row["value"] is not None]
                 signals.append(Signal(signal, max(values), None) if values else Signal(signal, None, "no_record"))
             if lead_families_available:
-                hints = {severity: sum(1 for lead in leads if lead.reported_severity == severity)
+                hints = {severity: sum(1 for lead in leads if lead.reported_severity == severity
+                                      and lead.duplicate_of is None)
                          for severity in ("medium", "low", "info")}
                 signals.append(Signal("lead_hints", min(weights.lead_hints_max,
                                                         weights.lead_hint_medium * hints["medium"]
