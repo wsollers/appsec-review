@@ -14,11 +14,12 @@ from typing import Any, Iterator
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
 from appsec_review.indexing.store import AcceptedHandoff, accepted_handoff
+from appsec_review.jobs.accepted_review import HANDOFF_SCHEMA, REVIEW_JOB, load_accepted_review, project_score
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,
 )
 from appsec_review.jobs.job_final_publication_gate import classify as classifier
-from appsec_review.jobs.job_final_publication_gate.verify import REVIEW_JOB, load_accepted_review, project_score
+from appsec_review.jobs.job_final_publication_gate.verify import load_accepted_gate
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.retrieval.index import MANIFEST_SCHEMA, load_verified_manifest
 from appsec_review.review.models import IntegrityError
@@ -62,6 +63,18 @@ def _errors(phase: ExportPhase, reason: Reason = Reason.SEMANTIC_INVALID) -> Ite
 
 def _ref(value: Mapping[str, Any]) -> ArtifactRef:
     return ArtifactRef(value["path"], value["sha256"])
+
+
+def _references(value: Any) -> Iterator[ArtifactRef]:
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, Mapping):
+            if {"path", "sha256"} <= item.keys():
+                yield _ref(item)
+            pending.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            pending.extend(item)
 
 
 def _durable_inventory(inventory: tuple[SizedArtifactRef, ...]) -> tuple[SizedArtifactRef, ...]:
@@ -257,6 +270,7 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
                       ) -> tuple[ArtifactRef, dict[str, Any], ArtifactRef, dict[str, Any]]:
     review_ref = _ref(_published(handoff, "publication.publish_handoff")["artifact"])
     review = reader.json(review_ref)
+    _require(review.get("schema") == HANDOFF_SCHEMA, "unsupported review handoff schema", Reason.SCHEMA_INVALID)
     _require(review["run_id"] == reader.root.name, "review belongs to another run", Reason.IDENTITY_CONFLICT)
     _require(len(review["finding_packages"]) <= reader.settings.max_packages,
              "finding package bound exceeded", Reason.BOUND_EXCEEDED)
@@ -273,11 +287,31 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
                      is not None, "unsafe review-package identity", Reason.IDENTITY_CONFLICT)
             name = (PurePosixPath(manifest_ref.path).parent / "packages" / f"{package_id}.json").as_posix()
             reader.json(ArtifactRef(name, entry["sha256"]))
+        for reference in lane_doc["packages"]:
+            reader.json(_ref(reference))
     receipt_ref = _ref(_published(handoff, "publication.publish_claim_ledger")["artifact"])
     receipt = reader.json(receipt_ref)
     directory = PurePosixPath(receipt_ref.path).parent
     reader.read(ArtifactRef((directory / "claim-ledger.jsonl").as_posix(), receipt["ledger_sha256"]))
-    reader.json(ArtifactRef((directory / "projection.json").as_posix(), receipt["projection_file_sha256"]))
+    projection = reader.json(ArtifactRef((directory / "projection.json").as_posix(), receipt["projection_file_sha256"]))
+    chain_manifest = reader.json(_ref(review["attack_chain_manifest"]))
+    for item in chain_manifest["items"]:
+        reader.json(_ref(item["artifact"]))
+    chains = projection.get("attack_chains", {})
+    for reference in _references(chains):
+        reader.json(reference)
+    for view in chains.values():
+        actors = [view["proposal"]["composer"], *(item["actor"] for item in view["challenges"])]
+        for actor in actors:
+            cell_id = actor["conversation_id"]
+            _require(isinstance(cell_id, str) and re.fullmatch(r"[a-zA-Z0-9_-]+", cell_id) is not None,
+                     "unsafe chain cell identity", Reason.IDENTITY_CONFLICT)
+            for record in projection["cells"].get(cell_id, ()):
+                if record["receipt_sha256"] is not None:
+                    _require(type(record["attempts"]) is int and record["attempts"] > 0,
+                             "unsafe chain receipt attempt", Reason.IDENTITY_CONFLICT)
+                    name = f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/attempt-{record['attempts']}.json"
+                    reader.json(ArtifactRef(name, record["receipt_sha256"]))
     reader.json(_ref(review["coverage_matrix"]))
     for shard in review["shards"]:
         reader.read(_ref(shard))
@@ -470,6 +504,9 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
         _require(len(gate["bindings"]) <= settings.max_bindings, "gate binding bound exceeded", Reason.BOUND_EXCEEDED)
         for raw in gate["bindings"]:
             reader.read(_ref(raw))
+        for name in ("inputs", "capabilities", "attachments"):
+            for reference in _references(gate[name]):
+                reader.read(reference)
         review_ref, review, scope_ref, scope = _preflight_review(reader, review_job.handoff)
         with _errors(ExportPhase.LOAD, Reason.SCHEMA_INVALID):
             schemas = SchemaSet(Path(repository_root) / "docs" / "schemas" / "final-report")
@@ -478,12 +515,25 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
         authoritative = load_accepted_review(reader.root, SchemaSet(Path(repository_root) / SCHEMA_DIRECTORY),
                                              max_packages=settings.max_packages)
         reader.check_deadline()
-        expected = classifier.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, authoritative.document,
-                                             classifier.classify(authoritative.document))
+        certified_bindings = {_ref(raw) for raw in gate["bindings"]}
+        _require({_ref(raw) for raw in authoritative.document["bindings"]} | {config_ref} <= certified_bindings,
+                 "accepted gate omits authoritative review/configuration bindings", Reason.INPUT_STALE)
+        # Completion is a pre-gate certified snapshot, never rediscovered from optional latest heads.
+        document = {**authoritative.document, "capabilities": gate["capabilities"],
+                    "attachments": gate["attachments"], "bindings": gate["bindings"]}
+        expected = classifier.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, document, classifier.classify(document))
         _require(canonical_bytes(gate) == canonical_bytes(expected),
                  "accepted gate does not exactly equal its authoritative classifier projection", Reason.INPUT_STALE)
         _require(type(published["item_count"]) is int and published["item_count"] == gate["package_counts"]["total"]
                  == len(gate["packages"]), "published gate item count disagrees")
+        with _errors(ExportPhase.LOAD):
+            certified_job, certified_gate = load_accepted_gate(
+                reader.root, schemas, expected_handoff_sha256=gate_job.sha256)
+        reader.check_deadline()
+        _require((certified_job.path, certified_job.sha256) == (gate_job.path, gate_job.sha256)
+                 and canonical_bytes(certified_job.handoff) == canonical_bytes(gate_job.handoff)
+                 and canonical_bytes(certified_gate) == canonical_bytes(gate),
+                 "accepted gate snapshot changed during verification", Reason.INPUT_STALE)
         _require(gate["review"]["configuration_sha256"] == semantic
                  and gate["review"]["ship_block_policy_sha256"] == policy,
                  "accepted review settings/policy differ from frozen configuration", Reason.IDENTITY_CONFLICT)

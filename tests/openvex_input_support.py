@@ -15,8 +15,10 @@ from typing import Any
 import pytest
 
 from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
+from appsec_review.jobs.accepted_review import VerifiedReview
+from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA
 from appsec_review.jobs.job_final_publication_gate import classify as classifier
-from appsec_review.jobs.job_final_publication_gate.verify import VerifiedReview
+from appsec_review.jobs.job_final_publication_gate.attachments import capability
 from appsec_review.jobs.job_openvex_export import contracts as c, inputs
 from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
 from appsec_review.retrieval.model import canonical_json as index_canonical_json
@@ -80,12 +82,20 @@ class AcceptedInputDisk:
         self.authority["ship_block"]["policy_sha256"] = policy
         self.lane_refs: dict[str, dict[str, str]] = {}
         self.lane_manifest_refs: dict[str, dict[str, str]] = {}
+        self.lane_package_refs: dict[str, dict[str, str]] = {}
         for lane in ("lead", "hunt"):
-            manifest = self.content_hash({"schema": "appsec-review/review-package-manifest/1", "packages": []})
+            package = {"kind": lane, "synthetic": True}
+            package_id = f"{lane}-{c.json_sha256(package)}"
+            package_ref = self.put(f"data/review/{lane}/packages/{package_id}.json",
+                                   {"package_id": package_id, **package})
+            self.lane_package_refs[lane] = package_ref
+            manifest = self.content_hash({"schema": "appsec-review/review-package-manifest/1",
+                                           "packages": [{"package_id": package_id, "sha256": package_ref["sha256"]}]})
             reference = self.put(f"data/review/{lane}/package-manifest.json", manifest)
             self.lane_manifest_refs[lane] = reference
             self.lane_refs[lane] = self.put(f"data/review/{lane}/lane.json", {
                 "package_manifest": reference, "package_manifest_content_sha256": manifest["content_sha256"],
+                "packages": [package_ref],
             })
             self.authority["review"]["lead_package_manifest_sha256" if lane == "lead"
                                      else "package_manifest_sha256"] = manifest["content_sha256"]
@@ -109,6 +119,15 @@ class AcceptedInputDisk:
         })
         self.coverage_ref = self.put("data/review/coverage.json",
                                       {"rows": [], "summary": {}, "statement": "Synthetic coverage"})
+        self.chain_manifest = {
+            "schema": "appsec-review/attack-chain-manifest/1", "run_id": self.root.name,
+            "items": [], "gaps": [],
+            "accounting": {key: 0 for key in ("proposed", "admitted", "assessed", "capped", "rejected",
+                                             "deduplicated", "seeds_received", "seeds_rejected")},
+            "exploration": {"expanded": 0, "limit": 1, "frontier": [], "frontier_truncated": False},
+        }
+        self.chain_manifest_ref = self.put("data/review/chains/manifest.json", self.chain_manifest)
+        self.authority["capabilities"]["attack_chains"]["summary"] = self.chain_manifest_ref
         self.authority["review"].update({
             "ledger_head_sha256": self.projection["ledger_head_sha256"],
             "projection_sha256": self.projection_ref["sha256"],
@@ -128,9 +147,10 @@ class AcceptedInputDisk:
             row.update(reference)
             finding_refs.append({"finding_package_id": row["finding_package_id"], "sha256": reference["sha256"]})
         self.review = {
+            "schema": "appsec-review/inference-review-handoff/3",
             "run_id": self.root.name, "accepted_manifest_sha256": self.manifest_ref["sha256"],
             "finding_packages": finding_refs, "score_packages": score_refs, "shards": [],
-            "coverage_matrix": self.coverage_ref,
+            "coverage_matrix": self.coverage_ref, "attack_chain_manifest": self.chain_manifest_ref,
         }
         self.review_ref = self.put("data/review/review.json", self.review)
         self.review_handoff = self.handoff(inputs.REVIEW_JOB, {
@@ -146,7 +166,9 @@ class AcceptedInputDisk:
             "job_handoff": self.review_job_ref, "review_handoff": self.review_ref,
             "projection": self.projection_ref, "claim_ledger": self.ledger_ref, "coverage_matrix": self.coverage_ref,
         }
-        bound = [*self.authority["inputs"].values(), self.receipt_ref]
+        bound = [*self.authority["inputs"].values(), self.receipt_ref, self.scope_ref, self.config_ref,
+                 *self.lane_refs.values(), *self.lane_manifest_refs.values(), *self.lane_package_refs.values(),
+                 self.chain_manifest_ref]
         for row in self.authority["packages"]:
             bound.append({"path": row["path"], "sha256": row["sha256"]})
         for reference in score_refs:
@@ -161,7 +183,14 @@ class AcceptedInputDisk:
             assert schemas.directory == ROOT / "docs" / "schemas" / "inference-security-review"
             assert max_packages == self.settings.max_packages
             self.calls.append("load_accepted_review")
-            return VerifiedReview(deepcopy(self.authority))
+            document = deepcopy(self.authority)
+            for name in ("capabilities", "attachments", "status", "package_counts", "buckets", "limitations"):
+                document.pop(name)
+            document["bindings"] = [ref for ref in document["bindings"] if ref != self.config_ref]
+            document["packages"] = [{key: value for key, value in row.items()
+                                     if key not in {"bucket", "withheld_reasons"}}
+                                    for row in document["packages"]]
+            return VerifiedReview(document)
 
         monkeypatch.setattr(inputs, "load_accepted_review", verify_review)
         if acquisition is not None:
@@ -191,10 +220,10 @@ class AcceptedInputDisk:
 
     def publish_gate(self, gate: dict[str, Any] | None = None) -> None:
         self.gate = gate if gate is not None else classifier.gate_document(
-            "appsec-review/final-publication-gate/1", self.authority, classifier.classify(self.authority))
+            FINAL_PUBLICATION_GATE_SCHEMA, self.authority, classifier.classify(self.authority))
         self.gate_ref = self.put("data/gate/gate.json", self.gate)
         self.gate_handoff = self.handoff(inputs.GATE_JOB, {"acceptance.publish_handoff": {
-            "schema": "appsec-review/final-publication-gate-handoff/1", "artifact": self.gate_ref,
+            "schema": FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, "artifact": self.gate_ref,
             "item_count": len(self.gate["packages"]),
         }})
         self.gate_handoff["upstream_handoff_sha256"] = {inputs.REVIEW_JOB: self.review_job_ref["sha256"]}
@@ -208,6 +237,33 @@ class AcceptedInputDisk:
         updated = {ref["path"]: ref for ref in self.authority["inputs"].values()}
         self.authority["bindings"] = [updated.get(ref["path"], ref) for ref in self.authority["bindings"]]
         self.publish_gate()
+
+    def add_certified_chain(self) -> dict[str, str]:
+        """Synthetic certificate bytes only; the review-authority double stands in for chain policy."""
+        claims = [row["claim_id"] for row in self.authority["packages"][:2]]
+        if len(claims) != 2:
+            raise ValueError("the synthetic chain needs two findings")
+        chain_id = "chain-" + c.json_sha256(claims)
+        reference = self.put("data/review/chains/chain.json", {"synthetic": "certified chain", "run_id": self.root.name})
+        item = {"chain_id": chain_id, "status": "qualified_supported", "component_claim_ids": claims,
+                "artifact": reference, "limitations": ["Synthetic manual limitation"], "disposition": "assessed"}
+        self.chain_manifest["items"] = [item]
+        self.chain_manifest["accounting"].update({"proposed": 1, "admitted": 1, "assessed": 1})
+        self.chain_manifest_ref = self.put(self.chain_manifest_ref["path"], self.chain_manifest)
+        self.review["attack_chain_manifest"] = self.chain_manifest_ref
+        self.authority["capabilities"]["attack_chains"] = capability(
+            True, summary=self.chain_manifest_ref, count=1, gaps=1)
+        self.authority["attachments"]["attack_chains"] = [
+            {key: value for key, value in item.items() if key != "limitations"} | {"gap_count": 1}]
+        for row in self.authority["packages"][:2]:
+            row["attack_chains"] = [chain_id]
+        self.authority["bindings"] = [
+            self.chain_manifest_ref if ref["path"] == self.chain_manifest_ref["path"] else ref
+            for ref in self.authority["bindings"]]
+        self.authority["bindings"].append(reference)
+        self.authority["bindings"].sort(key=lambda ref: ref["path"])
+        self.refresh_review()
+        return reference
 
     def add_acquisition(self, repository: str, *, tree_matches: bool = True) -> None:
         identity = {"kind": "git", "commit": "b" * 40, "tree": "c" * 40, "object_format": "sha1", "submodules": []}
