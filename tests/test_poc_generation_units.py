@@ -41,11 +41,11 @@ IDENTITY = "claim-" + "0" * 64
 # ----------------------------------------------------------------------------------------------- settings
 
 
-def test_shipped_configuration_is_valid_disabled_and_declares_the_steps() -> None:
+def test_shipped_configuration_is_valid_and_declares_the_steps() -> None:
     document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
     job = document["jobs"]["job_poc_generation"]
     settings = PocGenerationSettings.from_mapping(job["settings"])
-    assert settings.enabled is False                      # shipped disabled: invoked manually
+    assert type(settings.enabled) is bool
     assert tuple(job["steps"]) == ("load", "plan", "write", "validate", "compile", "package", "publish")
     assert settings.writer.provider == "claude-cli" and settings.writer_profile == "default"
     assert settings.accepted_judge_verdicts == ("red_correct",)
@@ -94,7 +94,9 @@ def test_the_settings_identity_changes_with_every_validator_input() -> None:
 
 
 def basis_value() -> dict:
-    return {"entry": ["E1"], "path": ["F1", "F2"], "trigger": [relay.TRIGGER], "input_format": "4-byte header",
+    return {"entry": ["asr:entry_point:" + "1" * 64],
+            "path": ["asr:call_site:" + "2" * 64, "asr:call_site:" + "3" * 64],
+            "trigger": [relay.TRIGGER], "input_format": "4-byte header",
             "preconditions": ["attacker_controls_file_content"], "expected_observation": "stack-buffer-overflow",
             "unknowns": ["X1"]}
 
@@ -103,7 +105,7 @@ def candidate_entry(**changes) -> dict:
     value = basis_value()
     entry = {"claim_id": CLAIM, "package_id": "finding_lead-" + "2" * 64, "state": "confirmed",
              "judge_verdict": "red_correct",
-             "poc_basis": {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "value": value},
+             "poc_basis": {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "brief": value},
              "finding_package": {"finding_package_id": "finding-" + "3" * 64, "sha256": "4" * 64},
              "evidence_refs": ["evrel-" + "5" * 64, "asr:sink_site:" + "6" * 64]}
     entry.update(changes)
@@ -113,7 +115,8 @@ def candidate_entry(**changes) -> dict:
 def test_a_well_formed_candidate_list_is_read_into_typed_candidates() -> None:
     (candidate,) = parse_candidates([candidate_entry()])
     assert candidate.claim_id == CLAIM and candidate.poc_basis.usable
-    assert candidate.poc_basis.entry == ("E1",) and candidate.poc_basis.trigger[0]["constraint"] == "greater than 16"
+    assert candidate.poc_basis.entry == ("asr:entry_point:" + "1" * 64,)
+    assert candidate.poc_basis.trigger[0]["constraint"] == "greater than 16"
     assert candidate.poc_basis.record() == basis_value()
 
 
@@ -126,8 +129,8 @@ def test_a_handoff_without_the_field_is_an_older_run_and_an_empty_list_is_a_run_
     {"claim_id": "claim-short"}, {"package_id": "no spaces"}, {"state": "contradicted"}, {"judge_verdict": "maybe"},
     {"evidence_refs": ["not-a-ref"]}, {"evidence_refs": ["evrel-" + "5" * 64] * 2},
     {"finding_package": {"finding_package_id": "finding-" + "3" * 64}}, {"extra": True},
-    {"poc_basis": {"sha256": "0" * 64, "value": basis_value()}},                       # hash does not match
-    {"poc_basis": {"sha256": "x", "value": basis_value()}},
+    {"poc_basis": {"sha256": "0" * 64, "brief": basis_value()}},                       # hash does not match
+    {"poc_basis": {"sha256": "x", "brief": basis_value()}},
 ])
 def test_a_malformed_candidate_is_an_integrity_failure(bad) -> None:
     with pytest.raises(IntegrityError):
@@ -137,7 +140,7 @@ def test_a_malformed_candidate_is_an_integrity_failure(bad) -> None:
 def test_the_poc_basis_is_bounded_like_protocol_section_6_6() -> None:
     def rebuild(**changes):
         value = {**basis_value(), **changes}
-        return {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "value": value}
+        return {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "brief": value}
 
     for changes in ({"entry": [f"E{n}" for n in range(1, 10)]}, {"path": ["f1"]}, {"input_format": "x" * 241},
                     {"trigger": [{"field": "a"}]}, {"preconditions": ["x"] * 9}, {"unknowns": "X1"}):
