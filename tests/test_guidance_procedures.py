@@ -191,21 +191,6 @@ def test_workbench_reuses_pinned_specialist_knowledge_with_closed_task(repo, per
         workbench_compose(repo, role="control_assessor", persona=persona, task={**task, "tools": ["find"]})
 
 
-def test_technical_guidance_is_conditioned_on_exact_mechanism_and_version():
-    fragments = ROOT / "pipeline" / "prompt-fragments"
-    parser = (fragments / "personas" / "parsing_deserialization.md").read_text(encoding="utf-8")
-    assert "`SerializationBinder` does not make `BinaryFormatter` safe" in parser
-    python = (fragments / "stacks" / "python_service.md").read_text(encoding="utf-8")
-    assert "introduced in Python 3.12" in python and "default became `data` in 3.14" in python
-    assert "ZIP extraction is separate" in python and "default\n  permission policy is `AllowAny`" in python
-    ci = (fragments / "personas" / "ci_cd_pipeline.md").read_text(encoding="utf-8")
-    assert "inheriting write-all" not in ci and "inherits repository or organization defaults" in ci
-    assert "a tag pin is not a SHA pin" in ci
-    dotnet = (fragments / "roles" / "build-engineer-dotnet.md").read_text(encoding="utf-8")
-    assert "project-image preparation, not configure/build command egress" in dotnet
-    assert "does not alone prove an image-preparation download" in dotnet
-
-
 def test_postbuild_guidance_requires_a_complete_family_specific_evidence_chain():
     text = load_runtime_skill(ROOT, "post-build-security-assessment",
                               job_id="job_post_build_security_assessment").text

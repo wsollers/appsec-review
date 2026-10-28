@@ -1,0 +1,15 @@
+root = true
+
+[*]
+end_of_line = lf
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Do not let an editor silently rewrite byte-pinned inputs.
+[{rules,data,tests/fixtures,test/acceptance}/**]
+end_of_line = unset
+
+# These first-party sources and their image lock are pinned in canonical LF form.
+[rules/codeql-graph-export/**]
+end_of_line = lf

@@ -99,7 +99,8 @@ def _post(body: Mapping[str, Any], schema: str, *, key: str, endpoint: str,
     return ModelResult(proposal=proposal, input_tokens=usage.get("input_tokens"),
                        output_tokens=usage.get("output_tokens"),
                        cache_tokens=usage.get("cache_read_input_tokens"),
-                       raw_response=raw.decode("utf-8", "replace"))
+                       raw_response=raw.decode("utf-8", "replace"),
+                       served_model=envelope.get("model"), served_provider="anthropic-api")
 
 
 MODELS_ENDPOINT = "https://api.anthropic.com/v1/models"

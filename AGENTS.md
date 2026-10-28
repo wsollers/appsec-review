@@ -70,8 +70,31 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
   specifically instructs you to merge that pull request.
 
+## Verification
+
+- Verify code changes by running focused unit tests for the area changed and directly affected
+  behavior. Add or update unit tests to cover fixes and prevent regressions.
+- Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
+  default. Apply the same scope after merging changes from another branch.
+- Integration tests, acceptance tests, and live Dagster runs are manual validation owned by the
+  user. Do not run them unless the user explicitly requests them.
+- Record the unit-test commands and results, including failures or coverage gaps. Identify any
+  integration, acceptance, or live Dagster validation still needed; passing unit tests does not
+  establish that those checks passed.
+
 ## Workspace hygiene
 
+- Do development, builds, and tests on Linux or inside WSL. Native Windows work requires the
+  user's explicit permission for that session; Windows support is not permission to use it.
+  In WSL, use a Linux-filesystem checkout and its own Linux virtual environment, not a checkout
+  under `/mnt/c` or another Windows drive. NTFS mounts do not provide the private POSIX path
+  custody required by the native builder tests.
+- When Windows work is approved, preserve line endings and byte identities. Follow
+  `.gitattributes` and `.editorconfig`: portable source, PowerShell, and shell scripts use LF;
+  Windows `.bat` and `.cmd` files check out as CRLF; byte-pinned rule packs, data, and fixtures
+  retain their committed bytes on every platform. Do not rely on `core.autocrlf`, normalize
+  evidence before hashing, or regenerate hashes just to accept an editor's newline conversion.
+  Before committing, inspect `git diff --check` and `git ls-files --eol` for accidental changes.
 - Keep disposable test state under `test/tmp/`. When concurrent or focused pytest sessions need
   isolation, use a unique descendant such as `--basetemp=test/tmp/<session-name>`; never create
   ad hoc scratch directories at the repository root or directly under `test/`.

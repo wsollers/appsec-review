@@ -15,6 +15,7 @@ from appsec_review.applicability import (
     ApplicabilityAction, ProcessingDisposition, decision_from_mapping, finalize_processing,
     resolved_configuration_identity,
 )
+from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql import execution_metrics
 from appsec_review.codeql.runtime import (
@@ -244,19 +245,14 @@ def _copy_clean_target(unit: UnitContext, workspace: Path) -> None:
             copy_file(path, destination)
 
 
-def _make_workspace_accessible(workspace: Path, *, writable_files: bool = False) -> None:
-    # Dagster and the analysis container deliberately use different users. Source inputs stay
-    # immutable; directories must allow the isolated user to create traced build outputs.
-    for path in sorted(workspace.rglob("*")):
-        if path.is_dir():
-            path.chmod(0o777)
-        elif path.is_file():
-            if writable_files:
-                path.chmod(0o666)
-            else:
-                executable = bool(path.stat().st_mode & 0o111)
-                path.chmod(0o555 if executable else 0o444)
-    workspace.chmod(0o777)
+def _make_workspace_accessible(workspace: Path, runtime_user: str, *, writable_files: bool = False) -> None:
+    # Hand the tree to the analysis container's identity, owner-only. Source inputs stay immutable;
+    # directories let that identity create traced build outputs.
+    grant_runtime_user(workspace, runtime_user, recursive=True, writable_files=writable_files)
+
+
+def _runtime_user(unit: UnitContext) -> str:
+    return application_runtime_user(_settings(unit).runtime_user)
 
 
 def _verify_workspace_scope(workspace: Path, scope: CodeQLScope) -> None:
@@ -388,7 +384,7 @@ def _stage_workspace(unit: UnitContext, scope: CodeQLScope,
             raise FrameworkIntegrityError(
                 f"CodeQL scope {scope.scope_id!r} ({scope.root!r}): {exc}") from exc
     _verify_workspace_scope(workspace, scope)
-    _make_workspace_accessible(workspace)
+    _make_workspace_accessible(workspace, _runtime_user(unit))
 
 
 def _checkpoint(path: Path, identity: str, schema: str) -> Mapping[str, Any] | None:
@@ -728,7 +724,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                         scope_id=scope.scope_id, query_profile=query_profile["query_id"],
                         tool_invocation_id=invocation):
         shutil.copytree(scope_root / "database", query_database, copy_function=copy_file)
-        _make_workspace_accessible(query_database, writable_files=True)
+        _make_workspace_accessible(query_database, _runtime_user(unit), writable_files=True)
     if sarif_path.parent.exists():
         shutil.rmtree(sarif_path.parent)
     image_value = _safe_json(unit.job.run_root, database["image"])
@@ -863,9 +859,9 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     repository = unit.job.repository_root
     staging.mkdir(parents=True)
     shutil.copytree(scope_root / "database", staging / "database", copy_function=copy_file)
-    _make_workspace_accessible(staging / "database", writable_files=True)
+    _make_workspace_accessible(staging / "database", _runtime_user(unit), writable_files=True)
     shutil.copytree(repository / str(profile["source_path"]), staging / "pack")
-    _make_workspace_accessible(staging / "pack")
+    _make_workspace_accessible(staging / "pack", _runtime_user(unit))
     shutil.copyfile(repository / str(profile["columns_path"]), staging / "columns.json")
     shutil.copyfile(repository.joinpath(*_ASSET_LOCK), staging / "assets.lock.json")
     (staging / SCOPE_FILE).write_text(seeding.scope_csv(mode, depth), encoding="utf-8")
@@ -874,7 +870,7 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     for path in (staging / "columns.json", staging / "assets.lock.json", staging / SCOPE_FILE,
                  staging / SEEDS_FILE):
         path.chmod(0o444)
-    staging.chmod(0o777)
+    grant_runtime_user(staging, _runtime_user(unit))
 
 
 def _verify_export_manifest(root: Path, scope: CodeQLScope, profile: Mapping[str, Any],
@@ -1159,6 +1155,11 @@ def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
         return {**_export_base(scope, database), "export_status": "FAILED", "gaps": [gap]}
 
 
+def _export_dispositions(exports: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [{"scope_id": item["scope_id"], "language": item["language"],
+             "action": "export", "terminal_status": item["export_status"]} for item in exports]
+
+
 def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mapping[str, Any]:
     """The ``export.scopes`` unit: one bounded graph export per successful exportable database."""
     settings = _settings(unit)
@@ -1187,9 +1188,7 @@ def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mappin
             "export_count": sum(item["export_status"] == "SUCCEEDED" for item in results),
             "export_reused": sum(bool(item.get("export_reused")) for item in results),
             "gaps": gaps,
-            "dispositions": [{"scope_id": item["scope_id"], "language": item["language"],
-                              "action": "export", "terminal_status": item["export_status"]}
-                             for item in results],
+            "dispositions": _export_dispositions(results),
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
 
@@ -1370,15 +1369,18 @@ def _validate_scope_assets(scope: CodeQLScope, settings: CodeQLAnalysisSettings,
 
 
 def publication_status(processing_decisions: Sequence[Mapping[str, Any]],
-                       scopes: Sequence[Mapping[str, Any]]) -> str:
+                       scopes: Sequence[Mapping[str, Any]], *,
+                       exports: Sequence[Mapping[str, Any]] = ()) -> str:
     """CodeQL's terminal status: missing planned coverage is COMPLETED_WITH_GAPS, never SUCCEEDED.
 
     A planned language or project whose processing decision is a GAP (for example no extractor in
-    the pinned runtime) or a scope that did not succeed leaves source unanalyzed, so an empty result
-    must not read as a clean analysis.
+    the pinned runtime), a scope that did not succeed, or an incomplete graph export leaves coverage
+    missing, so an empty result must not read as a clean analysis.
     """
     uncovered = (any(item.get("disposition") == ProcessingDisposition.GAP.value for item in processing_decisions)
-                 or any(item.get("terminal_status") != "SUCCEEDED" for item in scopes))
+                 or any(item.get("terminal_status") != "SUCCEEDED" for item in scopes)
+                 or any(item.get("export_status") not in {"SUCCEEDED", "NOT_APPLICABLE"} or item.get("gaps")
+                        for item in exports))
     return "COMPLETED_WITH_GAPS" if uncovered else "SUCCEEDED"
 
 
@@ -1550,12 +1552,13 @@ def build_job() -> Job:
             unit.job.attempt_root / "artifacts" / "codeql" / "graph-exports.json",
             {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
              "settings": asdict(settings.export_queries), "exports": exports})
+        gaps = list(dict.fromkeys(gap for item in [*normalized, *exports] for gap in item.get("gaps", ())))
         return {"scopes": normalized, "exports": exports, "graph_export_artifact": artifact,
                 "databases": results["database"], "queries": results["query"],
                 **({"predecessor_import": imported} if imported is not None else {}),
                 "observation_count": sum(int(item.get("observation_count", 0)) for item in normalized),
-                "gaps": list(dict.fromkeys(gap for item in [*normalized, *exports]
-                                           for gap in item.get("gaps", ())))}
+                "gaps": gaps, "dispositions": _export_dispositions(exports),
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         plan_value, normalized = _plan_from(unit), unit.output("execution.scopes")
@@ -1625,7 +1628,7 @@ def build_job() -> Job:
             receipt=artifact, scope_count=len(scopes), gap_count=len(gaps),
             metrics_semantics="appsec-review/review-metrics-semantics/1")
         return {"schema": SCHEMA, "artifact": artifact,
-                "terminal_status": publication_status(processing_decisions, scopes),
+                "terminal_status": publication_status(processing_decisions, scopes, exports=graph_exports),
                 "index_manifest": _artifact(unit.job.run_root, destination),
                 "item_count": normalized["observation_count"], "scope_count": len(scopes),
                 "gaps": gaps, "non_applicable": list(plan_value.non_applicable),

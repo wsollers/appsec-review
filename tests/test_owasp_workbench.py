@@ -189,7 +189,10 @@ def test_conflicts_preserved_and_elevated_model_claim_requires_independent_revie
                           "summary": "untrusted model proposal"}]})
     verified = verify_results([result])
     assert verified[0]["status"] == "cannot_verify" and verified[0]["disagreements"]
-    assert verified[0]["observations"][0]["state"] == "awaiting_independent_verification"
+    assert verified[0]["observations"][0]["state"] == "qualification_only"
+    assert verified[0]["assessment_mode"] == "qualification"
+    assert verified[0]["verification_status"] == "qualification_only"
+    assert verified[0]["lead_eligible"] is False
 
 
 def test_join_is_complete_exactly_once_and_rejects_duplicate() -> None:

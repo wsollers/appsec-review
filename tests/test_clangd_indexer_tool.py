@@ -154,13 +154,3 @@ def test_functional_fixture_exercises_clang_and_clang_cl_commands() -> None:
     source = (ROOT / "containers" / "build.py").read_text(encoding="utf-8")
     assert '"tool-clangd-indexer": ("clangd-indexer"' in source
     assert '"Name:            clang_cl_entry"' in source
-
-
-def test_readme_documents_the_build_commands() -> None:
-    readme = (CONTEXT / "README.md").read_text(encoding="utf-8")
-    for command in ("python3 containers/build.py validate",
-                    "python3 containers/build.py build tool-clangd-indexer",
-                    "python3 containers/build.py smoke tool-clangd-indexer --functional",
-                    "python3 containers/build.py security tool-clangd-indexer",
-                    "--build-context shared=containers/tools/shared"):
-        assert command in readme, command

@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
@@ -410,7 +411,10 @@ def configured(tmp_path: Path, *, max_nodes: int | None = None, file_top_count: 
     shutil.copytree(ROOT / "rules" / "semgrep", tmp_path / "rules" / "semgrep")
     base = load_config(tmp_path / "appsec-review.toml")
     return replace(base, runtime=replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
-                                         metadata_dir=tmp_path / "metadata"))
+                                         metadata_dir=tmp_path / "metadata"),
+                   review_policy=replace(base.review_policy, releases=ComponentReleases({
+                       **base.review_policy.releases.values, "platform": "test-platform",
+                       "validation": "test-validation"})))
 
 
 def target_copy(tmp_path: Path) -> Path:

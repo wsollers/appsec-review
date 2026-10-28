@@ -32,6 +32,7 @@ INDEX_NAMES = (
     "inventory",
     "links", "documents",
     "graph",
+    "binary",
 )
 
 
@@ -200,6 +201,12 @@ class IndexBuilder:
                     identity UNINDEXED, name, path, text, tokenize='unicode61'
                 );
             """)
+            if self.name == "analysis":
+                database.execute("""CREATE INDEX syntax_lookup ON entities(
+                    json_extract(payload_json, '$.syntax.source_identity'),
+                    json_extract(payload_json, '$.syntax.category'),
+                    json_extract(payload_json, '$.syntax.written_name')
+                ) WHERE kind='ast_node'""")
             metadata = {
                 "schema": INDEX_SCHEMA, "name": self.name, "fingerprint": self.fingerprint,
                 "target_snapshot": self.target_snapshot, "shard_id": self.shard_id,

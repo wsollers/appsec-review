@@ -87,15 +87,16 @@ Everything below is declared in the file named in the last column; nothing else 
 | Built tool, build-environment and CodeQL images | Live, integration and full-tier tests (skipped, naming the missing image) | `containers/catalog.toml` |
 | `NVD_API_KEY` | Authenticated NVD rate during metadata sync | `docs/operations/third-party-data-sync.md` |
 
-**Tool images.** `containers/catalog.toml` is the authoritative list (30 tool images, four runtime
-bases, ten build environments); [`containers/README.md`](containers/README.md) explains building
+**Tool images.** `containers/catalog.toml` is the authoritative list (32 enabled tool images, four
+runtime bases, ten build environments); [`containers/README.md`](containers/README.md) explains building
 them, and each `containers/tools/<name>/tool.toml` or `Dockerfile` pins its inputs. By purpose:
 C/C++ (`native-cpp` toolchain with Clang 18, `clang-static-analysis` with Clang-Tidy and the Static
-Analyzer, `clangd-indexer`, `cppcheck`, `infer`), code property graph and binaries (`joern`,
+Analyzer, `clangd-indexer`, `cppcheck`, `infer`, `svf`), code property graph and binaries (`joern`,
 `ghidra`, `blint`, `tree-sitter`), SAST (`semgrep`, `opengrep`, `gosec`, `pmd`, `spotbugs`,
 `phpstan`, `phpcs`, `psalm`, `mobsfscan`, `shellcheck`), secrets, IaC and CI (`gitleaks`, `checkov`,
 `hadolint`, `actionlint`, `zizmor`), dependencies and SBOM (`trivy`, `grype`, `syft`,
-`osv-scanner`, `cve-bin-tool`, `sbomasm`, `microsoft-sbom-tool`), and support (`git`, `sqlite-fts`).
+`osv-scanner`), report rendering (`report-latex`), and support (`git`, `sqlite-fts`). The
+`cve-bin-tool` image is deferred for redesign, and `sbomasm` and `microsoft-sbom-tool` are replaced by `syft`.
 Clang 18 comes from those images, not from the host; the host needs `clang++-18` only for the
 opt-in live test above.
 
@@ -125,6 +126,29 @@ Hash-pinned downloads for the images are fetched and checked by `containers/buil
 
 The pipeline is a Linux x86-64 execution vertical: builds, scanners, and CodeQL all run in Linux
 containers. On a Windows machine, WSL 2 is the most direct route.
+
+For repository development and tests, use Linux or WSL with the checkout on the Linux filesystem
+(for example, `~/src/appsec-review`, not `/mnt/c/...`). Windows-mounted checkouts can fail POSIX
+path-custody checks even when Python runs inside WSL. Repository agents need explicit user
+permission to work on native Windows; see [AGENTS.md](AGENTS.md).
+
+### Line endings and hashes
+
+[.gitattributes](.gitattributes) controls line endings independently of a user's `core.autocrlf`.
+Portable text, including Bash and PowerShell, uses LF on both platforms. `.bat` and `.cmd` files
+use CRLF in the working tree and canonical LF in Git. Git blob identities therefore agree across
+platforms, although a raw working-tree SHA-256 changes when line endings change.
+
+Rule packs, reference data, test fixtures and acceptance seeds are marked `-text`: Git checks out
+their exact committed bytes, including any upstream CRLF or mixed endings, without conversion.
+Their raw hashes and byte offsets must stay identical everywhere; do not normalize them before
+verification or refresh a lock merely to hide conversion. [.editorconfig](.editorconfig) supplies
+matching editor defaults without changing those byte-pinned inputs.
+
+Attributes do not rewrite an existing checkout. If it already has converted files, preserve any
+local edits and use a fresh clone on the Linux filesystem. Do not blindly run
+`git add --renormalize .`: changes to byte-pinned content require an intentional source update and
+the corresponding provenance/lock procedure.
 
 ## Setup on Linux
 
@@ -335,6 +359,23 @@ evaluation, keep it outside this repository and point `APPSEC_EVALUATOR_GUIDE` a
 Any other target works the same way: clone it beneath `targets/` and pass its path with `--target`
 (direct CLI) or `APPSEC_REVIEW_TARGET` (Dagster).
 
+To review a pinned **system** instead, configure it under `[[target_acquisition.systems]]`. A
+system has one or more components, because one reviewed system may span several source-control
+systems. Each component is a Git commit (the default kind) with its submodules checked out
+recursively, a submitted Perforce changelist, or a GitLab, Gerrit, or Azure DevOps review revision.
+Then run:
+
+```bash
+appsec-review start --system storefront
+```
+
+The `job_target_acquisition` gate acquires every component in parallel into
+`targets/<system>/<component>/` before intake, and discovery then runs once over the composed
+`targets/<system>/` root. `appsec-review acquire-target --system <id>` does the same outside a run.
+Acquisition writes hash-pinned manifests, records failed components as named gaps, and never
+touches an existing checkout. See
+[`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md).
+
 ## Build the tool container images
 
 [`containers/catalog.toml`](containers/catalog.toml) is the inventory of every image: tool images,
@@ -470,23 +511,34 @@ host fetched the official listing and archive and verified the published SHA-256
 The direct CLI runs this linear graph:
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> source_history_analysis
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
+  -> source_history_analysis
   -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis
   -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
-  -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
+  -> cpg_analysis (deprecated; only when enabled) -> binary_evidence_indexing -> evidence_collection
+  -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> code_graph_index -> review_data_indexing -> review_package_assembly
+  -> code_graph_index -> security_tagging
+  -> owasp_control_assessment (opt-in; only when enabled)
+  -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> final_report_publication
+  -> poc_generation (opt-in; only when enabled) -> final_report_publication
 ```
 
 Start a review from the repository root with the virtual environment active:
 
 ```bash
 appsec-review start --target targets/appsec-multi-vuln
+```
+
+Or name a configured system; `target_acquisition` acquires or re-verifies its components before
+intake and the rest of the graph reviews the composed `targets/<system>/` root:
+
+```bash
+appsec-review start --system storefront
 ```
 
 The command prints a JSON summary that includes the `run_id` (for example `2026-10-08-0001`). Use
@@ -500,7 +552,8 @@ appsec-review plan-tools --run-id <run-id>
 appsec-review metrics --run-id <run-id>
 ```
 
-Explain and then perform a resume. `plan-resume` is read-only apart from its audit event:
+Explain and then perform a resume (pass `--system <id>` instead of `--target` for a system run).
+`plan-resume` is read-only apart from its audit event:
 
 ```bash
 appsec-review plan-resume --run-id <run-id> --target targets/appsec-multi-vuln
@@ -512,7 +565,10 @@ Other options: the global `--config <path-or-file-URI>` (before the subcommand) 
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and
 `--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
 `appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
-optionally into an existing run. Two further subcommands run outside a review graph:
+optionally into an existing run. Three further subcommands run outside a review graph:
+`appsec-review acquire-target [--target <id>] [--verify-only]` (hash-pinned Git, Perforce or
+review-export acquisition into `targets/`; see
+[`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md)),
 `appsec-review binary-decompile` (pre-run Ghidra decompilation; see
 [`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)) and
 `appsec-review update-image-pins [--write]` (re-pins every configured image-ID pin to the image its
@@ -530,12 +586,29 @@ $env:PYTHONPATH = "src"
 python -m appsec_review start --target targets/appsec-multi-vuln
 ```
 
-The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
-control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
-enabled registered review job except the standalone `third_party_data_sync` job, when you need
-those branches. The direct graph is linear, so its
+The direct graph leaves out CI configuration analysis and post-build security assessment,
+including when those jobs are enabled. Use Dagster's `wave1_review` job, which runs every
+enabled registered review job except the standalone
+`third_party_data_sync` job, when you need those branches. The direct graph is linear, so its
 order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
+
+The opt-in [OWASP assessment](docs/architecture/owasp-control-workbench.md) is shipped disabled
+with `mode = "assessment"`. In both direct and Dagster graphs the enabled chain is accepted source/component/
+build/static information → prioritization/code graph → security tagging/tag cloud → OWASP →
+review data indexing (`control_evidence`) → package assembly → hunt and red/blue/independent
+verification. Tags and classifications route work, never prove controls. Full pinned catalogs
+contain 345 ASVS controls, 24 MASVS controls, 292 MASTG supporting tests and two 10-record risk
+catalogs; **only four narrow Python static procedures are implemented**, not full compliance
+coverage. Configured assessment calls a worker and a fresh blinded reviewer. Qualification is an
+explicit synthetic mode, not selected by input-file presence and never production-eligible.
+Downstream OWASP interpretations remain provisional and indirect for every final predicate:
+review roles must retrieve original evidence. See [settings, outputs and limits](docs/operations/owasp-control-assessment.md).
+Direct `start`, `resume` and `plan-resume` select tagging and OWASP in this order when enabled.
+`--force-from` can name either job in `resume`/`plan-resume`, but cannot bypass a disabled-job gate.
+This shared ordering is not full graph parity: CI/post-build remain Dagster additions and
+third-party metadata sync remains standalone.
+
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
 [`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).

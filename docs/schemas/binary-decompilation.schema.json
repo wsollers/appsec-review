@@ -46,7 +46,8 @@
         "authorization": {"type": "string", "minLength": 1},
         "processor": {"type": ["string", "null"]},
         "compiler_spec": {"type": ["string", "null"]},
-        "loader": {"type": ["string", "null"]}
+        "loader": {"type": ["string", "null"]},
+        "debug_symbols_sha256": {"$ref": "#/$defs/sha256"}
       }
     },
     "tool": {

@@ -182,6 +182,20 @@
       ]
     },
     {
+      "name": "query_syntax",
+      "required": [
+        "mode",
+        "subject"
+      ],
+      "properties": [
+        "mode",
+        "subject",
+        "name",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
       "name": "query_code_graph",
       "required": [
         "mode",
@@ -282,6 +296,5 @@
         "cursor"
       ]
     }
-  ],
-  "runtime_source": "appsec_review.mcp.schema:TOOLS"
+  ]
 }

@@ -16,10 +16,11 @@ from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.model import canonical_json
 from appsec_review.retrieval.neighborhood import (
     LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, SUMMARY_KIND)
+from appsec_review.retrieval.syntax import QUERY_SYNTAX, row_in_scope as syntax_row_in_scope
 
 
 _REVIEW_TOOLS = frozenset({"find", "read_excerpt", "query_precomputed", QUERY_CODE_GRAPH,
-                           LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD})
+                           LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, QUERY_SYNTAX})
 # Canonical review roles (code-graph-precomputation.md 5.4) plus the earlier short aliases.
 _ROLE_TOOLS = {
     "hypothesis_hunter": _REVIEW_TOOLS,
@@ -194,6 +195,12 @@ class ScopedRetrievalMcpAdapter:
                 raise ValueError("query is outside review package")
             if args.get("limit", 20) > grant["max_page_size"] or args.get("depth", 1) > grant["max_depth"]:
                 raise ValueError("page or depth exceeds review capability")
+        elif name == QUERY_SYNTAX:
+            if ("analysis" not in grant["indexes"] or args.get("subject") not in entities or
+                set(args) - {"mode", "subject", "name", "limit", "cursor"}):
+                raise ValueError("syntax query is outside review package")
+            if args.get("limit", 20) > grant["max_page_size"]:
+                raise ValueError("page exceeds review capability")
         elif name == LIST_CODEQL_DATABASES:
             if GRAPH_INDEX not in grant["indexes"] or set(args) - _LIST_ARGUMENTS:
                 raise ValueError("query is outside review package")
@@ -230,6 +237,8 @@ class ScopedRetrievalMcpAdapter:
                 granted.add(item["identity"])
                 granted.update(identity for identity in _identities(item.get("payload"))
                                if identity.split(":", 2)[1] in _GRAPH_ROW_KINDS)
+            elif "analysis" in grant["indexes"] and syntax_row_in_scope(item, grant["entity_ids"]):
+                granted.add(item["identity"])
             elif item.get("identity") not in entities:
                 raise ValueError("retrieval result escaped review package")
         self._granted |= granted

@@ -15,6 +15,7 @@ from appsec_review.container_runtime import load_catalog
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection import build_job, plan_applicability
+from appsec_review.jobs.job_evidence_collection.adapters import ADAPTERS
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan, load_accepted_plan
@@ -447,9 +448,7 @@ def test_checkov_runs_every_planned_input_unrestricted_and_unrecognized_inputs_a
 def test_gitleaks_capitalised_location_keys_are_read() -> None:
     import json
 
-    from appsec_review.jobs.job_evidence_collection.adapters import _list_parser
-
     report = [{"RuleID": "generic-api-key", "Description": "Secret-named literal",
                "StartLine": 6, "EndLine": 7, "File": "/target/src/config.cpp", "Secret": "REDACTED"}]
-    (record,) = _list_parser(json.dumps(report).encode())
+    (record,) = ADAPTERS["tool-gitleaks"].parse(json.dumps(report).encode())
     assert (record["path"], record["start_line"], record["end_line"]) == ("/target/src/config.cpp", 6, 7)

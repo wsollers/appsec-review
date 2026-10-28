@@ -36,6 +36,15 @@ exact entities is returned only when its accepted `payload.scope.scope_id` is on
 the session. Any other row fails the call. The package contract and current bounds are in
 [review-package-contract.md](../architecture/review-package-contract.md).
 
+`query_syntax` is the build-independent syntax fallback over accepted Tree-sitter `analysis`
+shards. Its closed modes are `definitions`, `calls`, `imports` and `references` (identifier
+occurrences, not semantic references). It requires an exact source-file or AST identity, accepts
+an optional exact written name, and shares bounded pagination and manifest pinning. An AST
+subject further limits the byte span. A signed package's exact source-file identities authorize
+only returned nodes of those files; no CodeQL graph scope is required. The node identity can
+then be passed to `find` or `read_excerpt`. Names, imports and call targets stay unresolved, and
+every answer names syntax-only limitations rather than claiming semantic flow evidence.
+
 The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes the core tool
 set, while `tests/test_retrieval_artifacts.py` exercises artifact queries through both the core and
 stdio transport.
@@ -63,7 +72,12 @@ shard manifest. It scopes by shard `family` (`standards`, `component-classificat
 `applicability`, `validation-work`, `control-result`, `finding-package`), standard/version/profile,
 control, component, project, evidence mode, validator, batch, disposition, or shard and returns
 explicit pagination, truncation, ambiguity, and coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
-empty-coverage claim.
+empty-coverage claim. Complete pinned catalogs are not full assessment coverage: only four narrow
+Python static procedures are implemented; qualification/unsupported/unresolved rows remain
+explicit. The MCP-only query is not a review-cell tool. Review cells instead receive the accepted
+PRECOMPUTED `control_evidence` projection in provisional lead/hunt packages, then retrieve original
+evidence through scoped in-process tools. Every PRECOMPUTED interpretation is indirect for every
+final predicate; tags, control labels and source identity alone cannot prove a vulnerability.
 
 `query_codeql` reads only accepted `observations` shards whose shard id starts with `codeql-`.
 Exact filters cover CodeQL language, original source language, scope, build unit, rule, level,

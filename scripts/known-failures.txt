@@ -1,5 +1,4 @@
 # Failures that exist without this repository's changes. run-tests.sh recognizes these node ids and
 # reports "N failures, M known". Format: <pytest node id> | <one-line reason>. Remove a line when fixed.
 tests/test_documentation.py::test_current_documentation_local_links_resolve | fails in a git worktree only (a link leaves the checkout)
-tests/review/test_inference_review_schemas.py::test_enums_match_python_contract[entity_kind-EntityKind] | enum drift between the schema and the Python contract
 tests/review/test_inference_review_config.py::test_pool_mapping_is_job_aware | needs dagster, which the development venv does not install

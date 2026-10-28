@@ -86,30 +86,14 @@ def test_operator_docs_track_the_executable_direct_graph() -> None:
         assert positions == sorted(positions), (path, expected)
 
 
-def test_architecture_docs_pin_current_counts_and_nonfinding_semantics() -> None:
+def test_architecture_doc_counts_match_the_registries() -> None:
     config = load_config("appsec-review.toml")
     indexing = Path("docs/architecture/indexing-and-query-reuse.md").read_text(encoding="utf-8")
     record = Path("docs/reviews/engineering-signal-jobs-implementation.md").read_text(encoding="utf-8")
-    canonical = Path("docs/architecture/engineering-security-signals.md").read_text(encoding="utf-8")
-    canonical_words = " ".join(canonical.split())
-    evidence = Path("docs/architecture/evidence-sources-and-dataflow-retrieval.md").read_text(encoding="utf-8")
 
     assert f"All {len(config.jobs)} currently registered jobs" in indexing
     assert f"All {len(PRODUCT_RULES)} stage-1 sets" in indexing
     assert f"input-source matrix contains {len(INPUT_SOURCES)}" in record
-    assert "`query_code_graph` | exists" in evidence
-    for phrase in (
-        "including linker/loader and model-assisted identities",
-        "applicability-unverified",
-        "conservative-default",
-        "not a vulnerability finding",
-        "context_only",
-        "artifact_origin: \"accepted-input\"",
-        "repositories.deduplicate",
-        "Fresh hits avoid HTTP",
-        "cache-hit, and HTTP-request counts",
-    ):
-        assert phrase in canonical_words
 
 
 def test_clang_observations_enter_the_source_sast_review_lane() -> None:

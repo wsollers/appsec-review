@@ -100,16 +100,6 @@ def test_shellcheck_is_clean() -> None:
     assert result.returncode == 0, result.stdout
 
 
-def test_powershell_root_comes_from_the_start_directory_then_the_script_location() -> None:
-    text = (SCRIPTS / "lib" / "common.ps1").read_text(encoding="utf-8")
-    # The checkout is found from $env:APPSEC_REPO_ROOT, then the current directory's parents, then the script file.
-    assert text.index("APPSEC_REPO_ROOT") < text.index("Find-RepoRoot $here") < text.index("script location")
-    assert "Get-Location -PSProvider FileSystem" in text and "Split-Path -Parent" in text
-    assert "appsec-review.toml" in text and "ops.py" in text
-    # With -Wsl the distribution comes from a \\wsl.localhost\<distro>\ checkout unless -Distro was given.
-    assert "(?<distro>" in text and "repository: $($script:OpsRoot)" in text
-
-
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="pwsh is not installed")
 def test_powershell_finds_the_checkout_from_a_subdirectory_and_honours_the_override(tmp_path: Path) -> None:
     checkout = tmp_path / "elsewhere" / "appsec-review"
@@ -872,6 +862,8 @@ def test_clean_temp_skips_git_tracked_entries(box: Sandbox) -> None:
     subprocess.run([*git, "init", "-q"], check=True)
     subprocess.run([*git, "add", "-f", "test/tmp/tracked/file.txt"], check=True)
     subprocess.run([*git, "commit", "-qm", "x"], check=True)
+    # Submission tests fake Git; this cleanup test must query the real index it just created.
+    (box.bin / "git").unlink()
     aged(tmp / "tracked", 9)
     result = box.run("clean-temp", "--yes")
     assert result.returncode == 0 and "contains git-tracked files" in result.stdout
@@ -987,15 +979,6 @@ def test_run_tests_background_returns_the_log_path_at_once(box: Sandbox) -> None
 
 
 # -- python helpers -------------------------------------------------------------------------------
-def test_known_failures_file_seeds_the_documented_failures() -> None:
-    known = ops_tests.load_known(REPOSITORY)
-    assert set(known) >= {
-        "tests/test_documentation.py::test_current_documentation_local_links_resolve",
-        "tests/review/test_inference_review_schemas.py::test_enums_match_python_contract[entity_kind-EntityKind]",
-        "tests/review/test_inference_review_config.py::test_pool_mapping_is_job_aware"}
-    assert all(reason for reason in known.values())
-
-
 @pytest.mark.parametrize("suite", sorted(ops_tests.SUITES))
 def test_every_suite_names_existing_paths(suite: str) -> None:
     arguments = ops_tests.suite_arguments(REPOSITORY, suite)

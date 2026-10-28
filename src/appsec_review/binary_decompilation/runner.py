@@ -76,11 +76,14 @@ def decompilation_identity(*, binary_sha256: str, image_id: str, tool_version: s
         "loader_overrides": {"processor": request.processor, "compiler_spec": request.compiler_spec,
                              "loader": request.loader},
     }
+    if request.debug_symbols_sha256 is not None:
+        # Absent for binaries without debug symbols so their existing identities are unchanged.
+        document["debug_symbols_sha256"] = request.debug_symbols_sha256
     return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def export_argv(executable: str, input_name: str, settings: BinaryDecompilationSettings,
-                request: BinaryRequest) -> tuple[str, ...]:
+                request: BinaryRequest, debug_symbols_name: str | None = None) -> tuple[str, ...]:
     argv = [
         executable, "--input", f"/target/{input_name}", "--output", "/scratch/export",
         "--work", "/scratch/ghidra-work", "--max-heap", settings.max_heap,
@@ -97,7 +100,39 @@ def export_argv(executable: str, input_name: str, settings: BinaryDecompilationS
                           ("--loader", request.loader)):
         if value is not None:
             argv += [option, value]
+    if debug_symbols_name is not None:
+        argv += ["--debug-symbols", f"/target/{debug_symbols_name}"]
     return tuple(argv)
+
+
+def verified_debug_symbols(request: BinaryRequest, settings: BinaryDecompilationSettings) -> Path | None:
+    """Return the resolved debug-symbol file once it matches its configured hash and bounds."""
+    if request.debug_symbols_path is None:
+        return None
+    if request.debug_symbols_path.is_symlink():
+        raise ValueError(f"binary {request.binary_id} debug symbols are a symbolic link")
+    path = request.debug_symbols_path.resolve(strict=True)
+    if not path.is_file():
+        raise ValueError(f"binary {request.binary_id} debug symbols are not a regular file")
+    if not 0 < path.stat().st_size <= settings.max_binary_bytes:
+        raise ValueError(f"binary {request.binary_id} debug symbols are empty or exceed max_binary_bytes")
+    if file_sha256(path) != request.debug_symbols_sha256:
+        raise ValueError(f"binary {request.binary_id} debug symbols do not match debug_symbols_sha256")
+    return path
+
+
+def _staged_name(path: Path, fallback: str) -> str:
+    return _UNSAFE_NAME.sub("_", path.name)[:128].lstrip(".-") or fallback
+
+
+def request_record(request: BinaryRequest) -> dict[str, Any]:
+    """The request fields a publication manifest records (and a review later checks)."""
+    record: dict[str, Any] = {"id": request.binary_id, "authorization": request.authorization,
+                              "processor": request.processor, "compiler_spec": request.compiler_spec,
+                              "loader": request.loader}
+    if request.debug_symbols_sha256 is not None:
+        record["debug_symbols_sha256"] = request.debug_symbols_sha256
+    return record
 
 
 def _elevated_catalog(repository_root: Path, settings: BinaryDecompilationSettings) -> ContainerCatalog:
@@ -203,6 +238,7 @@ def decompile_binary(*, repository_root: Path, data_dir: Path, settings: BinaryD
                      force: bool = False) -> dict[str, Any]:
     """Decompile one configured binary, or reuse its verified publication."""
     binary_path, binary_bytes = verified_binary(request, settings)
+    symbols_path = verified_debug_symbols(request, settings)
     store = store_root(data_dir)
     catalog = _elevated_catalog(repository_root, settings)
     tool = catalog.tool(settings.tool_id)
@@ -218,7 +254,12 @@ def decompile_binary(*, repository_root: Path, data_dir: Path, settings: BinaryD
         _point_current(final, manifest)
         return _summary(manifest, final, reused=True)
 
-    input_name = _UNSAFE_NAME.sub("_", binary_path.name)[:128].lstrip(".-") or "binary"
+    input_name = _staged_name(binary_path, "binary")
+    symbols_name = None
+    if symbols_path is not None:
+        symbols_name = _staged_name(symbols_path, "symbols.pdb")
+        if symbols_name == input_name:
+            symbols_name = f"symbols-{symbols_name}"[:128]
     input_root = staging / "input"
     scratch = staging / "scratch"
     input_root.mkdir(parents=True)
@@ -226,8 +267,12 @@ def decompile_binary(*, repository_root: Path, data_dir: Path, settings: BinaryD
         shutil.copyfile(binary_path, input_root / input_name)
         if file_sha256(input_root / input_name) != request.sha256:
             raise ValueError(f"binary {request.binary_id} changed while it was staged")
+        if symbols_path is not None and symbols_name is not None:
+            shutil.copyfile(symbols_path, input_root / symbols_name)
+            if file_sha256(input_root / symbols_name) != request.debug_symbols_sha256:
+                raise ValueError(f"binary {request.binary_id} debug symbols changed while they were staged")
         result = executor.execute(ExecutionRequest(
-            tool.tool_id, export_argv(tool.executable, input_name, settings, request),
+            tool.tool_id, export_argv(tool.executable, input_name, settings, request, symbols_name),
             input_root, scratch, working_directory="/scratch",
             file_size_limit_bytes=settings.output_file_bytes))
         shutil.rmtree(scratch / "ghidra-work", ignore_errors=True)
@@ -244,9 +289,7 @@ def decompile_binary(*, repository_root: Path, data_dir: Path, settings: BinaryD
             manifest = publish_export(
                 export_root, publication, identity=identity,
                 binary={"sha256": request.sha256, "bytes": binary_bytes, "name": input_name},
-                request={"id": request.binary_id, "authorization": request.authorization,
-                         "processor": request.processor, "compiler_spec": request.compiler_spec,
-                         "loader": request.loader},
+                request=request_record(request),
                 tool={"id": tool.tool_id, "version": tool.version, "image_tag": tool.tag,
                       "image_id": image_id},
                 settings=settings.semantic_view(),

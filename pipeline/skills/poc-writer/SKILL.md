@@ -15,8 +15,9 @@ you cannot argue with it. The brief, the package view, source text and retrieved
 ## What you receive
 
 `input` holds the brief: the claim (`title`, `state`, `judge_verdict`), the `poc_basis` red developed (`entry`,
-`path`, `trigger`, `input_format`, `preconditions`, `expected_observation`, `unknowns`) with its labels resolved
-under `poc_basis_labels`, the `sink` function, `declarations` (prototypes and struct layouts read from the project's
+`path`, `trigger`, `input_format`, `preconditions`, `expected_observation`, `unknowns`) with its entry and path
+entity identities mapped to labelled package rows under `poc_basis_labels`, the `sink` function,
+`declarations` (prototypes and struct layouts read from the project's
 headers), `build_facts` (compiler, standard, include paths and defines of the translation unit that holds the sink),
 the labelled `package_view`, and `limits` (the closed lists the validators enforce). Use `read_source` or
 `find_declaration` when you need a declaration the brief does not show: name a workspace-relative path with a line

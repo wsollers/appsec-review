@@ -10,8 +10,8 @@ end in `tests/integration/test_code_graph_end_to_end.py` against recorded export
 recording is copied from a live export; the per-language synthetic recordings are hand-authored and
 checked by per-language live tests. Export packs exist for C/C++, C#, Go, Java/Kotlin,
 JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this
-repository; Swift's pack is deferred until a macOS executor exists. The Live acceptance record is
-not written. Section 12 is partially implemented: K4 now runs as the independent
+repository; Swift's pack is deferred until a macOS executor exists. The graph index and retrieval
+are language-neutral. The Live acceptance record is not written. Section 12 is partially implemented: K4 now runs as the independent
 `job_clang_static_analysis` producer, while K1, K2, K3, and optional K5 remain planned. The
 implementation record is
 [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
