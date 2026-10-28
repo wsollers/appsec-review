@@ -550,12 +550,30 @@ build. The wrapper also forces `python3` into every build image.
    captures invalidate build checkpoints.
 5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
    after.
-## Build the dataflow, contract, and deployment evidence lanes
+## Prove and extend the dataflow lane; build the contract and deployment lanes
 
-Implement the planned jobs and queries in
-[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
-starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
-calls, unmodeled externals, and path/depth limits must be published as gaps.
+The planned `query_dataflow` tool and `job_dataflow_summary`/`job_reachability_linking` jobs are
+superseded by `query_code_graph`, the `job_codeql_analysis` export step and `job_code_graph_index`
+([`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md)). For
+C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact`, `range_fact` and
+`flow_summary` facts reach packages, admissibility and scoring. Remaining:
+
+1. Run the operator live tier on the review host with the pinned CodeQL image:
+   `python -m pytest -q tests/live/test_codeql_graph_export_live.py tests/live/test_code_graph_live.py`.
+   Refresh `tests/fixtures/graph/codeql_export/native` from the diff (set its provenance `recording`
+   to `live`), and fix the pack, or the expectation if the pack is right, for any failure of the
+   synthetic dataflow expectations (`tests/fixtures/graph/codeql_export/synthetic/expected-facts.json`).
+   The native fixture has no sources or sinks, so only the synthetic test proves the dataflow
+   families.
+2. Export packs/catalog sections and recorded fixtures now exist for Java/Kotlin,
+   JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and deferred Swift. Multilingual normalization,
+   native-only secondary scoping and worker neighborhood retrieval are wired. Finish per-language
+   live image/database/export acceptance with matching pins; Swift remains disabled and PHP has no
+   CodeQL extractor. Keep recorded acceptance distinct from live acceptance (section 8).
+3. Implement the contract and deployment lanes planned in
+   [`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md).
+
+Unresolved indirect calls, unmodeled externals, and path/depth limits must be published as gaps.
 
 ## Acquire dynamic execution evidence
 
@@ -615,8 +633,10 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   changes to snapshot function spans instead of reporting the metric unavailable at function scope.
 - Function attribution only sees surviving lines in the top blamed files; consider bounded
   `log -L` per function for changes whose lines were later rewritten.
-- Native review-export adapters for GitLab, Gerrit, and Azure DevOps (today they must be converted
-  to `appsec-review/review-records/1`), and a deployment-event adapter for common CD systems.
+- A deployment-event adapter for common CD systems. GitLab, Gerrit, and Azure DevOps review
+  exports are produced by target acquisition (see
+  [`operations/target-acquisition.md`](operations/target-acquisition.md)); validate them against
+  live servers.
 - Component relatedness uses nesting and co-change only; add build-graph or ownership-file
   (`CODEOWNERS`) relatedness when the catalog exposes them.
 - Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on
@@ -640,22 +660,30 @@ See [`architecture/review-prioritization.md`](architecture/review-prioritization
 
 Done: the pinned `tool-ghidra` image, the `[binary_decompilation]` configuration, the pre-run
 `appsec-review binary-decompile` command, the verified publication store with its `current.json`
-pointer and `resolve_current` lookup, and the case-083 known-binary efficacy comparison. See
-[`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
+pointer and `resolve_current` lookup, and the case-083 known-binary efficacy comparison. Reviews now
+consume publications: the `binary_evidence.resolve_publications` intake task with per-binary
+`required`, `job_binary_evidence_indexing` (bounded `binary` shards served by the existing
+retrieval and MCP tools, in the CLI graph and Dagster wave-1 topology), the registered
+`binary-evidence` runtime skill with an enforced binary citation rule, PDB inputs with a
+`debug_symbols_not_applied` gap, managed-code routing to a named decompiler, and a designed
+binary-only target kind. See [`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
 
 Outstanding, in order:
 
-1. Add the `binary_evidence.resolve_publications` task to `job_review_intake`. It records each
-   configured binary's identity and manifest hash in `review-intake.json`, or a
-   `binary_decompilation_unavailable` gap, and honors a per-binary `required` key.
-2. Add `job_binary_evidence_indexing` with bounded function, import-caller, call-neighbourhood, and
-   string indices, plus retrieval tools over them.
-3. Register a runtime skill that tells review workers how binary-derived evidence differs from
-   source, and require findings to cite binary hash, function address, and pseudo-C line.
-4. Add a PE fixture (with and without a PDB), optional debug-symbol inputs, and managed-code
-   routing.
-5. Design a target kind for a review whose only input is a binary.
-6. Measure memory, time, and file counts on a large real binary and tune the defaults.
+1. Rebuild `tool-ghidra` (it now ships `AppsecLoadDebugSymbols.java` and the wrapper's
+   `--debug-symbols` option) and run a PE fixture live, with and without its PDB. Today the PE and
+   PDB path is tested only with a fake Ghidra export; confirm Ghidra's PE loader and PDB analyzer
+   accept the staged file and that `program.debug_symbols_loaded` is reported.
+2. Measure peak container memory, wall time, publication file count and size, normalizer memory,
+   and `job_binary_evidence_indexing` time and index size on a large real binary (tens of thousands
+   of functions). Then tune `[binary_decompilation]` (`memory`, `max_heap`, `cpus`,
+   `timeout_seconds`, `analysis_timeout_seconds`, `max_functions`, `max_strings`) and
+   `[jobs.job_binary_evidence_indexing.settings]`, whose current values are provisional. This needs
+   a Docker host and a licensed large binary, so it was not done.
+3. Implement the binary-only target kind designed in the architecture page, including the open
+   decision on the dangerous-import seed list.
+4. Add a managed-code decompiler lane (ILSpy for CIL, jadx or CFR for JVM and Dalvik); today
+   managed binaries are routed to a named gap only.
 
 ## Decide how to assert correctness for large query-set jobs
 

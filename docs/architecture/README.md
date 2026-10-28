@@ -34,6 +34,10 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   scope-sprawl, repeated-repair, test-churn, and ownership signals with a review-priority index.
 - [`../operations/change-context-analysis.md`](../operations/change-context-analysis.md) —
   change-context sources, export pinning, configuration, and retrieval.
+- [`../operations/target-acquisition.md`](../operations/target-acquisition.md) — hash-pinned,
+  parallel acquisition of a review system's components (Git by default with recursive submodules,
+  Perforce, GitLab/Gerrit/Azure DevOps review exports) into `targets/<system>/` by the
+  `job_target_acquisition` gate before intake, and the manifests intake records.
 - [`review-prioritization.md`](review-prioritization.md) — function-level cyclomatic and cognitive
   complexity, import coupling, boundary/privilege/suppression heuristics, CodeQL source-to-sink
   paths, and the LLM Prioritization Score.
@@ -54,8 +58,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
   route and boundary analysis, inference access, and the finding handoff design.
 - [`binary-decompilation.md`](binary-decompilation.md) — pre-run Ghidra decompilation of third-party
-  binaries: inputs, the hash-addressed publication store, gaps, how a review references a
-  publication, and the known-binary efficacy comparison.
+  binaries: inputs, the hash-addressed publication store, gaps, review intake and the
+  `job_binary_evidence_indexing` shards a review cites, and the known-binary efficacy comparison.
 - [`../operations/binary-decompilation.md`](../operations/binary-decompilation.md) — registering a
   binary, starting and verifying a decompilation, failures, and the efficacy command.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.

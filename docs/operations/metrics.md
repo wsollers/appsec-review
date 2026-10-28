@@ -19,6 +19,17 @@ That zero describes avoided producer execution only. Read `resource_spans` and
 Scope/profile, resource lease and tool invocation identifiers correlate concurrent work;
 inclusive process resource samples must not be added across overlapping spans.
 
+The summary schema is `appsec-review/run-metrics/4`. Use the top-level `codeql` section for CodeQL
+execution telemetry: `by_query_pack`, `by_language`, `by_query_pack_language` (pack, then language)
+and `by_source_language` each report `count`, `statuses` (`SUCCEEDED`, `FAILED`, `TIMED_OUT`,
+`SKIPPED`, `REUSED`, zeroes included), `runtime_ms` (`total`, `min`, `max`, `p50`, `p95` over fresh
+executions plus `measured_count`/`unmeasured_count`), `result_count`, `gap_count`,
+`truncated_count`, and a `by_action` breakdown. Database creation is grouped under the pack
+`(database creation)`. `by_query` holds per-query and per-rule rows, `executions` one row per
+action with its `per_query` status, and `gaps` names every missing per-query source or unmeasured
+runtime. Sources and limits are described in
+[CodeQL execution telemetry](codeql-analysis.md#execution-telemetry).
+
 Pipeline appends still validate the bounded tail and contiguous sequence under the process lock.
 Decoded sequence values are cached for at most 256 exact record byte strings (at most 16 MiB of
 record bytes), not by path, timestamp or file size. Changed bytes must be decoded again; tail

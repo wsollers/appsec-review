@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote, urlparse
 
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
+from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ReviewPolicy, parse_review_policy
@@ -547,6 +548,7 @@ class AppConfig:
     overlay_path: Path | None = None
     overlay_sha256: str | None = None
     binary_decompilation: BinaryDecompilationSettings = BinaryDecompilationSettings()
+    target_acquisition: TargetAcquisitionSettings = TargetAcquisitionSettings()
     banned_functions: BannedFunctions = BannedFunctions()
     profile: str = DEFAULT_PROFILE
     profile_path: Path | None = None
@@ -828,6 +830,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
     binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
+    target_acquisition = parse_target_acquisition(document.get("target_acquisition"), repository_root)
     banned_functions = parse_banned_functions(document.get("banned_functions"))
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
@@ -1154,6 +1157,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         profile_path=profile_source,
         profile_sha256=profile_sha256,
         binary_decompilation=binary_decompilation,
+        target_acquisition=target_acquisition,
         banned_functions=banned_functions,
         review_policy=review_policy,
     )

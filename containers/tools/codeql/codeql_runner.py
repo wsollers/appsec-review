@@ -19,6 +19,7 @@ import time
 CODEQL = "/opt/codeql/codeql"
 MANUAL_LANGUAGES = {"cpp", "go", "java", "csharp"}
 NONE_LANGUAGES = {"javascript", "python", "ruby", "rust", "actions"}
+EXPORT_LANGUAGES = ("cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "swift")
 
 
 def _canonical(value: object) -> bytes:
@@ -230,11 +231,74 @@ def query(args: argparse.Namespace) -> None:
         if not all((args.pack, args.pack_version, args.suite)):
             raise ValueError("CodeQL default query pack selection is incomplete")
         suite = f"{args.pack}@{args.pack_version}:{args.suite}"
-    _run([CODEQL, "database", "analyze", str(database_path), suite,
-          "--format", "sarifv2.1.0", "--output", str(output_path), "--no-download",
-          "--threads", str(args.threads), "--ram", str(args.ram), "--max-paths", str(args.max_paths),
-          "--sarif-include-query-help", "never", "--no-sarif-add-file-contents",
-          "--no-sarif-add-snippets"], cwd=scratch, environment=_environment())
+    _run_analyze([CODEQL, "database", "analyze", str(database_path), suite,
+                  "--format", "sarifv2.1.0", "--output", str(output_path), "--no-download",
+                  "--threads", str(args.threads), "--ram", str(args.ram), "--max-paths", str(args.max_paths),
+                  "--sarif-include-query-help", "never", "--no-sarif-add-file-contents",
+                  "--no-sarif-add-snippets"], cwd=scratch, environment=_environment(),
+                 timings=scratch / QUERY_TIMINGS_NAME)
+
+
+QUERY_TIMINGS_SCHEMA = "appsec-review/codeql-query-timings/1"
+QUERY_TIMINGS_NAME = "query-timings.json"
+QUERY_TIMINGS_LIMIT = 5000
+_EVALUATED = re.compile(r"^\[(\d+)/(\d+) eval ([\dhms.]+)\] Evaluation done; writing results to (\S+?)\.?$")
+_CACHED = re.compile(r"^\[(\d+)/(\d+)\] Found in cache: (\S+?)\.?$")
+_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?")
+
+
+def _duration_ms(token: str) -> int | None:
+    if token.endswith("ms") and token[:-2].isdigit():
+        return int(token[:-2])
+    matched = _DURATION.fullmatch(token)
+    if not token or matched is None:
+        return None
+    hours, minutes, seconds = matched.groups()
+    return int(round((int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds or 0)) * 1000))
+
+
+def _query_key(value: str) -> str:
+    return value[:-len(".bqrs")] if value.endswith(".bqrs") else value
+
+
+def _run_analyze(argv: list[str], *, cwd: Path, environment: dict[str, str], timings: Path) -> None:
+    """Run ``database analyze`` echoing its progress; record bounded per-query evaluation times.
+
+    The record is written even when the analysis fails, so partial timings survive; a missing or
+    empty record is reported downstream as a named gap, never as zero queries.
+    """
+    process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
+                               stderr=subprocess.PIPE, text=True, errors="replace")
+    queries: list[dict[str, object]] = []
+    expected: int | None = None
+    truncated = False
+    try:
+        for line in process.stderr:
+            sys.stderr.write(line)
+            text = line.strip()
+            evaluated, cached = _EVALUATED.match(text), _CACHED.match(text)
+            if evaluated:
+                ordinal, total, query = int(evaluated.group(1)), int(evaluated.group(2)), evaluated.group(4)
+                row = {"ordinal": ordinal, "query": _query_key(query),
+                       "eval_ms": _duration_ms(evaluated.group(3)), "cached": False}
+            elif cached:
+                ordinal, total = int(cached.group(1)), int(cached.group(2))
+                row = {"ordinal": ordinal, "query": _query_key(cached.group(3)), "eval_ms": 0, "cached": True}
+            else:
+                continue
+            expected = max(expected or 0, total)
+            if len(queries) < QUERY_TIMINGS_LIMIT:
+                queries.append(row)
+            else:
+                truncated = True
+        code = process.wait()
+    finally:
+        timings.write_text(json.dumps({
+            "schema": QUERY_TIMINGS_SCHEMA, "expected_query_count": expected,
+            "queries": queries, "truncated": truncated,
+        }, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    if code != 0:
+        raise RuntimeError(f"CodeQL child process exited {code}")
 
 
 EXPORT_SCHEMA = "appsec-review/codeql-graph-export/1"
@@ -518,7 +582,7 @@ def parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--pack", required=True)
     compile_parser.add_argument("--columns", required=True)
     compile_parser.add_argument("--asset-lock", required=True)
-    compile_parser.add_argument("--language", choices=("cpp",), required=True)
+    compile_parser.add_argument("--language", choices=EXPORT_LANGUAGES, required=True)
     compile_parser.add_argument("--threads", type=int, required=True)
     compile_parser.add_argument("--ram", type=int, required=True)
     export_parser = sub.add_parser("export")
@@ -526,7 +590,7 @@ def parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--pack", required=True)
     export_parser.add_argument("--columns", required=True)
     export_parser.add_argument("--asset-lock", required=True)
-    export_parser.add_argument("--language", choices=("cpp",), required=True)
+    export_parser.add_argument("--language", choices=EXPORT_LANGUAGES, required=True)
     export_parser.add_argument("--output-dir", required=True)
     export_parser.add_argument("--scope-file", required=True)
     export_parser.add_argument("--seeds-file", required=True)

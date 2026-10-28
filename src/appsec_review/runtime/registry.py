@@ -37,6 +37,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_model_connectivity import build_job as build_model_connectivity
     from appsec_review.container_runtime.build_executor import _run as run_command
     from appsec_review.jobs.job_image_pin_verification import build_job as build_image_pin_verification
+    from appsec_review.jobs.job_target_acquisition import build_job as build_target_acquisition
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
@@ -58,6 +59,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_svf_alias_analysis import build_job as build_svf_alias_analysis
     from appsec_review.jobs.job_sanitizer_build import build_job as build_sanitizer_build
     from appsec_review.jobs.job_cpp_symbol_index import build_job as build_cpp_symbol_index
+    from appsec_review.jobs.job_binary_evidence_indexing import build_job as build_binary_evidence_indexing
     from appsec_review.jobs.job_cpg_analysis import build_job as build_cpg_analysis
     from appsec_review.jobs.job_codeql_analysis.job import build_job as build_codeql_analysis
     from appsec_review.jobs.job_code_graph_index import build_job as build_code_graph_index
@@ -78,6 +80,7 @@ def builtin_registry() -> JobRegistry:
     registry = JobRegistry()
     registry.register("job_model_connectivity", lambda: build_model_connectivity(check_models=check_models))
     registry.register("job_image_pin_verification", lambda: build_image_pin_verification(runner=run_command))
+    registry.register("job_target_acquisition", build_target_acquisition)
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_source_history_analysis", build_source_history)
@@ -101,6 +104,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_svf_alias_analysis", build_svf_alias_analysis)
     registry.register("job_sanitizer_build", build_sanitizer_build)
     registry.register("job_cpp_symbol_index", build_cpp_symbol_index)
+    registry.register("job_binary_evidence_indexing", build_binary_evidence_indexing)
     registry.register("job_cpg_analysis", build_cpg_analysis)
     registry.register("job_codeql_analysis", build_codeql_analysis)
     registry.register("job_code_graph_index", build_code_graph_index)

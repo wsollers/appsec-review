@@ -295,11 +295,13 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
         jobs = {}
         job_ids = (("job_model_connectivity",) if run.get("pipelineName") == "model_connectivity" else
         ("job_image_pin_verification",) if run.get("pipelineName") == "image_pin_verification" else
+        ("job_target_acquisition",) if run.get("pipelineName") == "target_acquisition" else
         ("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
         ("job_artifact_security_analysis",) if run.get("pipelineName") == "artifact_security_analysis" else
         ("job_codeql_analysis",) if run.get("pipelineName") == "codeql_analysis" else (
             "job_model_connectivity",
             "job_image_pin_verification",
+            "job_target_acquisition",
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
@@ -312,17 +314,20 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
             "job_evidence_collection",
             "job_codeql_analysis",
         ) if run.get("pipelineName") == "wave1_review" else ((
-            "job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
+            "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_review_intake",
+            "job_target_catalog",
             "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
-            "job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
+            "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_review_intake",
+            "job_target_catalog",
             "job_target_analysis_plan", "job_project_build",
             "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
         )))
-        # A disabled image-pin verification is transparent to every composite graph.
-        if run.get("pipelineName") != "image_pin_verification" and not _job_enabled(
-                "job_image_pin_verification", document["jobs"].get("job_image_pin_verification", {})):
-            job_ids = tuple(job_id for job_id in job_ids if job_id != "job_image_pin_verification")
+        # A disabled pre-intake gate is transparent to every composite graph.
+        for gate, pipeline in (("job_image_pin_verification", "image_pin_verification"),
+                               ("job_target_acquisition", "target_acquisition")):
+            if run.get("pipelineName") != pipeline and not _job_enabled(gate, document["jobs"].get(gate, {})):
+                job_ids = tuple(job_id for job_id in job_ids if job_id != gate)
         if run.get("pipelineName") == "wave1_review":
             step_keys = {str(item.get("stepKey", "")) for item in run.get("stepStats", [])}
             job_ids = tuple(job_id for job_id in job_ids if any(
@@ -352,6 +357,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
             publication_units = {
                 "job_model_connectivity": "publication.publish_handoff",
                 "job_image_pin_verification": "publication.publish_handoff",
+                "job_target_acquisition": "publication.publish_handoff",
                 "job_review_intake": "publish_intake.publish_handoff",
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",

@@ -242,20 +242,24 @@ Existing jobs are solid boxes; planned jobs are dashed. Edges are simplified; ex
 
 ```mermaid
 flowchart TD
-  M[job_model_connectivity] --> TI[job_image_pin_verification] --> I[job_review_intake] --> C[job_target_catalog]
+  M[job_model_connectivity] --> TI[job_image_pin_verification] --> TA[job_target_acquisition]
+  TA --> I[job_review_intake] --> C[job_target_catalog]
   C --> DOC[documents shard] --> RD
   C --> CI[job_ci_configuration_analysis]
   C --> SH[job_source_history_analysis]
   CI --> P[job_target_analysis_plan]
   SH --> P
-  P --> TS[job_tree_sitter_ast] --> CC[job_change_context_analysis]
   P --> PB[job_project_build] --> LB[job_language_build]
+  LB --> TS[job_tree_sitter_ast] --> CC[job_change_context_analysis]
+  LB --> SAN[job_sanitizer_build] --> RD
+  C --> BEI[job_binary_evidence_indexing] --> RD
   P --> EC[job_evidence_collection]
   LB --> AI[job_artifact_indexing]
   AI --> TC[job_test_coverage]
   AI --> PD[job_profile_data]
   AI --> AS[job_artifact_security_analysis]
   LB --> CPP[job_cpp_compiled_analysis]
+  EC --> CPP
   CPP --> CLANG[job_clang_static_analysis]
   CPP --> PBS[job_post_build_security_assessment]
   CPP --> CSI[job_cpp_symbol_index]
@@ -285,6 +289,8 @@ flowchart TD
   ST --> RD
   RD --> RPA[job_review_package_assembly]
   RPA --> DIA[job_document_issue_analysis]
+  DIA --> ISR[job_inference_security_review] --> FPG[job_final_publication_gate]
+  FPG --> FRP[job_final_report_publication]
 
   C -.-> IC[job_interface_contracts]
   C -.-> TD[job_test_and_doc_indexing]

@@ -31,7 +31,7 @@ COPY --from=jdk /opt/java/openjdk /opt/jdk
 COPY --from=unpack /opt/ghidra /opt/ghidra
 COPY --chmod=0555 ghidra-export ghidra-version /opt/appsec/bin/
 # One mode covers the created directory too, so it must keep the search bit.
-COPY --chmod=0555 scripts/AppsecExportProgram.java /opt/appsec/ghidra-scripts/
+COPY --chmod=0555 scripts/AppsecExportProgram.java scripts/AppsecLoadDebugSymbols.java /opt/appsec/ghidra-scripts/
 ENV JAVA_HOME=/opt/jdk PATH="/opt/jdk/bin:/opt/appsec/bin:${PATH}" HOME=/tmp
 # Compile the export script against the pinned Ghidra classes so an API mismatch fails the image
 # build instead of a decompilation run. The class files are discarded; Ghidra recompiles the
@@ -41,7 +41,8 @@ RUN set -eu; \
     classpath=$(find /opt/ghidra/Ghidra -name '*.jar' -path '*/lib/*' | sort | tr '\n' ':'); \
     mkdir /tmp/script-check; \
     javac -proc:none -cp "$classpath" -d /tmp/script-check \
-        /opt/appsec/ghidra-scripts/AppsecExportProgram.java; \
+        /opt/appsec/ghidra-scripts/AppsecExportProgram.java \
+        /opt/appsec/ghidra-scripts/AppsecLoadDebugSymbols.java; \
     rm -rf /tmp/script-check
 USER 10001:10001
 WORKDIR /scratch

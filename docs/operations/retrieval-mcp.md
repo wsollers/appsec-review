@@ -36,6 +36,15 @@ exact entities is returned only when its accepted `payload.scope.scope_id` is on
 the session. Any other row fails the call. The package contract and current bounds are in
 [review-package-contract.md](../architecture/review-package-contract.md).
 
+`query_syntax` is the build-independent syntax fallback over accepted Tree-sitter `analysis`
+shards. Its closed modes are `definitions`, `calls`, `imports` and `references` (identifier
+occurrences, not semantic references). It requires an exact source-file or AST identity, accepts
+an optional exact written name, and shares bounded pagination and manifest pinning. An AST
+subject further limits the byte span. A signed package's exact source-file identities authorize
+only returned nodes of those files; no CodeQL graph scope is required. The node identity can
+then be passed to `find` or `read_excerpt`. Names, imports and call targets stay unresolved, and
+every answer names syntax-only limitations rather than claiming semantic flow evidence.
+
 The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes the core tool
 set, while `tests/test_retrieval_artifacts.py` exercises artifact queries through both the core and
 stdio transport.

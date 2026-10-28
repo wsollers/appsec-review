@@ -360,12 +360,15 @@ def test_tool_gaps_and_managed_code_are_named_in_the_manifest(tmp_path: Path) ->
 
 
 def test_every_runner_option_is_one_the_wrapper_and_export_script_accept() -> None:
-    request = BinaryRequest("x", ROOT / "x", "ab" * 32, "ok", "x86:LE:64:default", "gcc", "ElfLoader")
-    argv = export_argv("/opt/appsec/bin/ghidra-export", "x", BinaryDecompilationSettings(), request)
+    request = BinaryRequest("x", ROOT / "x", "ab" * 32, "ok", "x86:LE:64:default", "gcc", "ElfLoader",
+                            debug_symbols_path=ROOT / "x.pdb", debug_symbols_sha256="cd" * 32)
+    argv = export_argv("/opt/appsec/bin/ghidra-export", "x", BinaryDecompilationSettings(), request, "x.pdb")
     wrapper = (ROOT / "containers/tools/ghidra/ghidra-export").read_text(encoding="utf-8")
     accepted = set(re.findall(r"^\s+(--[a-z-]+)\) ", wrapper, re.MULTILINE))
-    assert set(argv[1::2]) <= accepted and len(argv) % 2 == 1
-    script = (ROOT / "containers/tools/ghidra/scripts/AppsecExportProgram.java").read_text(encoding="utf-8")
+    assert "--debug-symbols" in argv and set(argv[1::2]) <= accepted and len(argv) % 2 == 1
+    scripts = ROOT / "containers/tools/ghidra/scripts"
+    script = "".join((scripts / name).read_text(encoding="utf-8")
+                     for name in ("AppsecExportProgram.java", "AppsecLoadDebugSymbols.java"))
     passed = set(re.findall(r'"([a-z_]+)=\$', wrapper))
     assert passed == set(re.findall(r'case "([a-z_]+)":', script))
     assert "\r" not in wrapper, "the wrapper must keep LF line endings to run in the image"

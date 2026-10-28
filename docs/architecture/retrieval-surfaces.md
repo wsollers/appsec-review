@@ -8,7 +8,7 @@ them. They are different, and this page is the one place that says which is whic
 | **Retrieval tool** | A typed, bounded read of accepted index shards, for example `search`, `find`, `read_excerpt`, `trace`, `resolve_evidence`, `query_observations`, `query_build_security`, `query_code_graph`. The names and parameter schemas are in `docs/schemas/retrieval-mcp-tools.json` and `src/appsec_review/mcp/schema.py`. | Every consumer below. |
 | **Retrieval core** | `appsec_review.retrieval`: the code that opens the accepted shards read-only and answers a tool call. | Jobs, review cells, and the MCP adapter. |
 | **MCP adapter** | `appsec_review.mcp` and the `appsec-review-mcp` command: a read-only JSON-RPC (MCP) stdio server over the retrieval core, pinned to one accepted run. | External clients and the OWASP workbench. **Not** review cells. |
-| **Runtime skill** | A bounded guidance file under `pipeline/skills/<name>/SKILL.md` sent to a model worker for one job. | The build-repair, dependency-resolution, post-build assessment and target-analysis workers. **Not** review cells. |
+| **Runtime skill** | A bounded guidance file under `pipeline/skills/<name>/SKILL.md`, registered for one job and hash-pinned with its guidance. | Configured model workers, including the review roles' selected evidence-checking procedures and the `binary-evidence` skill (attached to review cells only when the run has a binary shard). It grants no tools. |
 
 ## How each consumer reaches the data
 
@@ -37,7 +37,8 @@ accepted index shards (read-only, hash-verified)
   tool lists in `mcp/capability.py::_ROLE_TOOLS`.
 - **`query_owasp_workbench` is MCP-only.** It reads a separate store, so it is not grantable to a
   review cell.
-- **Runtime skills carry no target facts and no retrieval instructions for review.** The role,
+- **Runtime skills carry no target facts or tool grants.** Selected review procedures explain
+  evidence checks and syntax-only limitations without naming new tools or setting policy. The role,
   persona and governing-rules guidance a review cell receives is assembled from `pipeline/guidance`
   and `pipeline/prompt-fragments`, and is hash-pinned in the run. See
   [`review-protocol-v2.md`](review-protocol-v2.md).
@@ -52,12 +53,26 @@ the MCP transport.
 
 ## What is precomputed, and what a model has to ask for
 
-Producers publish shards ahead of the review: for C and C++, the code graph (call sites with `CALLS`
+Producers publish shards ahead of the review: the multilingual CodeQL code graph (call sites with `CALLS`
 edges, `sink_site`, `range_fact`, `guard_fact`, `dataflow_path`, `flow_summary`, `entry_point`) from the
 seeded CodeQL neighborhood to the configured call depth, plus observations, build provenance, tags and
 history. The code graph is seeded around finding locations, not whole-program. The Joern CPG producer
-is disabled by default. A package carries the identities and, under review protocol v2, the labelled
+is disabled by default. When `[binary_decompilation]` configures binaries, `job_binary_evidence_indexing`
+publishes bounded `binary` shards (`binary_function`, `binary_call_site`, `binary_import`,
+`binary_string`) from the frozen Ghidra publications; they are read with the same `search`, `find`,
+`trace` and `read_excerpt` tools ([`binary-decompilation.md`](binary-decompilation.md)). A package carries the identities and, under review protocol v2, the labelled
 neighborhood facts for its lead; everything else is a retrieval-tool call.
+
+Export packs and language catalogs now exist for C/C++, Java/Kotlin, JavaScript/TypeScript,
+Python, Ruby, Go, C#, Rust and deferred Swift. Actual availability depends on accepted databases,
+configured pins and per-family coverage; only C/C++ has native cross-check producers. Swift
+remains disabled. `list_codeql_databases` and `query_codeql_neighborhood` use the package's exact
+graph-scope grants in both MCP and the in-process loop.
+
+Independently, `query_syntax` reads precomputed Tree-sitter definitions, written calls, imports
+and identifier occurrences from the `analysis` index. It uses exact source-file grants, not
+graph-scope grants, so failed builds/databases do not block source navigation. Its AST results
+remain syntax-only and cannot substitute for semantic paths or resolved call targets.
 
 ## Where to go next
 

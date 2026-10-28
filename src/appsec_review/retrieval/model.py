@@ -75,6 +75,11 @@ class EntityKind(StrEnum):
     POINTS_TO_SET = "points_to_set"
     INDIRECT_CALL_TARGETS = "indirect_call_targets"
     MEMORY_OBJECT = "memory_object"
+    # Binary-derived facts from a verified Ghidra publication (docs/architecture/binary-decompilation.md).
+    BINARY_FUNCTION = "binary_function"
+    BINARY_CALL_SITE = "binary_call_site"
+    BINARY_IMPORT = "binary_import"
+    BINARY_STRING = "binary_string"
 
 
 class RelationKind(StrEnum):

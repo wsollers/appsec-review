@@ -43,7 +43,13 @@ BASIS_API = "catalog-api"
 BASIS_MODEL = "codeql-model"
 
 # CodeQL scope language names that share one catalog language section.
-LANGUAGE_ALIASES: Mapping[str, str] = {"cpp": "cpp", "c": "cpp", "c++": "cpp", "c/c++": "cpp"}
+LANGUAGE_ALIASES: Mapping[str, str] = {
+    "cpp": "cpp", "c": "cpp", "c++": "cpp", "c/c++": "cpp",
+    "java": "java", "kotlin": "java", "java-kotlin": "java",
+    "javascript": "javascript", "typescript": "javascript", "javascript-typescript": "javascript",
+    "python": "python", "ruby": "ruby", "go": "go", "csharp": "csharp", "c#": "csharp",
+    "rust": "rust", "swift": "swift",
+}
 
 
 class CatalogError(ValueError):

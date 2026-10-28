@@ -16,6 +16,11 @@ DATASETS = (
                   "Provider and model availability report for configured model settings.",
                   artifacts=(_A + "/steps/model_preflight/tasks/verify_models/model-preflight.json",),
                   reason="provider status only; enabled lanes are reported through the dataset inventory"),
+    artifact_only("binary_evidence", "binary_evidence", "configuration", "appsec-review/binary-evidence-intake/1",
+                  "Identity and manifest hash of each configured binary's verified decompilation publication, "
+                  "or a binary_decompilation_unavailable gap.",
+                  artifacts=(_A + "/steps/binary_evidence/tasks/resolve_publications/binary-evidence.json",),
+                  reason="run binding record with host paths; job_binary_evidence_indexing indexes the publications"),
     artifact_only("review_intake", "publish_intake", "configuration", "appsec-review/review-intake/1",
                   "Bound configuration, target identity and source fingerprint for the run.",
                   artifacts=(_A + "/steps/publish_intake/tasks/publish_handoff/review-intake.json",),

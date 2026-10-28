@@ -728,7 +728,7 @@ def test_registry_topology_and_terminal_job() -> None:
     from appsec_review.config import load_config as load
 
     config, registry = load(ROOT / "appsec-review.toml"), builtin_registry()
-    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 37
+    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 38
     assert not {"job_remediation_planning", "job_remediation_validation"} & set(registry.job_ids())
     jobs = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
     assert jobs[GATE]["dependencies"] == [JOB] and jobs[REPORT]["dependencies"] == [GATE]

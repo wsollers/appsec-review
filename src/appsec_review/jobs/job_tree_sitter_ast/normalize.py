@@ -13,6 +13,8 @@ from appsec_review.retrieval import (
 from appsec_review.storage import atomic_bytes, file_sha256
 
 from .model import GrammarLock, Scope
+from .projection import DEFINITIONS, project
+from appsec_review.retrieval.syntax_contract import SCHEMA as PROJECTION_SCHEMA
 
 
 NORMALIZER_SCHEMA = "appsec-review/tree-sitter-normalizer/1"
@@ -43,7 +45,9 @@ def node_identity(target_snapshot: str, scope: Scope, grammar: GrammarLock,
 
 def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, grammar: GrammarLock,
                     fingerprint: str, container_output: Mapping[str, Any], producer: Mapping[str, Any],
-                    artifact_path: Path, index_path: Path) -> tuple[Mapping[str, Any], IndexIdentity, Mapping[str, int]]:
+                    artifact_path: Path, index_path: Path,
+                    source_bytes: Mapping[str, bytes] | None = None
+                    ) -> tuple[Mapping[str, Any], IndexIdentity, Mapping[str, int]]:
     if container_output.get("schema") != "appsec-review/tree-sitter-container-output/1":
         raise ValueError("unsupported Tree-sitter container output schema")
     if container_output.get("scope_id") != scope.scope_id or container_output.get("language") != scope.language:
@@ -59,6 +63,8 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
     diagnostics = files_parsed = bytes_parsed = nodes_parsed = 0
     builder = IndexBuilder(index_path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=target_snapshot, shard_id=scope.scope_id)
+    if source_bytes is not None:
+        producer = {**producer, "syntax_projection": PROJECTION_SCHEMA}
     seen_files: set[str] = set()
     for record in container_output.get("records", ()):
         path = str(record.get("path", ""))
@@ -78,14 +84,28 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
         bytes_parsed += int(record.get("bytes", 0))
         nodes = tuple(record.get("nodes", ()))
         nodes_parsed += len(nodes)
-        ids: dict[tuple[int, ...], LogicalIdentity] = {}
+        source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, target_snapshot,
+                                           {"path": path, "sha256": accepted[path]})
+        ids = {tuple(int(value) for value in node["ordinal_path"]):
+               node_identity(target_snapshot, scope, grammar, path, accepted[path], node) for node in nodes}
+        projection = {}
+        projection_limitations: set[str] = set()
+        if source_bytes is not None:
+            data = source_bytes[path]
+            if hashlib.sha256(data).hexdigest() != accepted[path] or len(data) != int(record["bytes"]):
+                raise ValueError("syntax projection source identity differs from accepted parser input")
+            for node in nodes:
+                if not 0 <= int(node["start_byte"]) <= int(node["end_byte"]) <= len(data):
+                    raise ValueError("AST span exceeds accepted source bytes")
+            projection = project(nodes, data, grammar=grammar.grammar, source_identity=source_id.value,
+                                 identities={key: value.value for key, value in ids.items()},
+                                 limitations=projection_limitations)
         for node in nodes:
             if sources[path].get("source_backing") and not (
                     0 <= int(node["start_byte"]) <= int(node["end_byte"]) <= sources[path]["size_bytes"]):
                 raise ValueError("generated AST span exceeds accepted source bytes")
             ordinal = tuple(int(value) for value in node["ordinal_path"])
-            identity = node_identity(target_snapshot, scope, grammar, path, accepted[path], node)
-            ids[ordinal] = identity
+            identity = ids[ordinal]
             start = tuple(int(value) for value in node["start_point"])
             end = tuple(int(value) for value in node["end_point"])
             location = SourceLocation(
@@ -105,8 +125,12 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                        "canonical_artifact_identity": sources[path].get("canonical_artifact_identity"),
                        "build_unit_id": sources[path].get("build_unit_id"),
                        "workspace_path": sources[path].get("workspace_path")}
+            if ordinal in projection:
+                payload["syntax"] = projection[ordinal]
+            searchable = str(node["type"]) + (
+                " " + str(projection[ordinal]["written_name"]) if ordinal in projection else "")
             builder.add_entity(EntityRecord(identity, "/".join(map(str, ordinal)) or "root",
-                                             str(node["type"]), str(node["type"]), payload, location))
+                                             str(node["type"]), searchable, payload, location))
             normalized = {"identity": identity.value, "path": path, "file_sha256": accepted[path],
                           "location": asdict(location), **payload}
             lines.append(json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode() + b"\n")
@@ -117,8 +141,6 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                     ids[ordinal].value, True, 1.0, payload={"field": node.get("field"),
                     "child_index": ordinal[-1], "syntax_relation": True}))
             else:
-                source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, target_snapshot,
-                                                    {"path": path, "sha256": accepted[path]})
                 # Duplicate the source entity in this shard so relation closure is independent.
                 builder.add_entity(EntityRecord(source_id, path, path, path,
                                                  {"language": scope.language, "sha256": accepted[path],
@@ -139,8 +161,15 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             gaps.append(f"{path}: parse diagnostics present")
         if record.get("truncated"):
             gaps.append(f"{path}: node limit reached")
-        builder.add_coverage(path, "partial" if record.get("truncated") else "complete",
-                             f"{path}: node limit reached" if record.get("truncated") else None)
+        file_gaps = ([f"{path}: parse diagnostics present"] if record.get("root_has_error") else []) + (
+            [f"{path}: node limit reached"] if record.get("truncated") else [])
+        builder.add_coverage(path, "partial" if file_gaps else "complete", "; ".join(file_gaps) or None)
+        if source_bytes is not None:
+            builder.add_coverage("syntax-projection:" + source_id.value,
+                "partial" if grammar.grammar in DEFINITIONS else "unavailable",
+                "; ".join(["bounded syntax subset; names, imports and call targets are unresolved",
+                           *sorted(projection_limitations)])
+                if grammar.grammar in DEFINITIONS else "no syntax projection mapping for this locked grammar")
     missing = sorted(set(accepted) - seen_files)
     gaps.extend(f"{path}: container omitted accepted file" for path in missing)
     for path in missing:

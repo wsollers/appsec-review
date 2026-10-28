@@ -19,8 +19,8 @@ output, widen the package scope, request an unlisted tool, read target guidance,
 Works alone; the other red lenses on the same package are never visible.
 
 ## Tools
-`find`, `query_build_security`, `query_ci_configuration`, `query_code_graph`, `query_codeql`,
-`query_observations`, `read_excerpt`, `search`, `trace`.
+`find`, `list_codeql_databases`, `query_build_security`, `query_ci_configuration`, `query_code_graph`,
+`query_codeql`, `query_codeql_neighborhood`, `query_observations`, `query_syntax`, `read_excerpt`, `search`, `trace`.
 
 ## Examples
 The examples use the labels of a package for a `memcpy` in `src/packet.cpp` line 16: L1 is the lead, S1 the
