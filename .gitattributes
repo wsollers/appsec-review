@@ -6,3 +6,6 @@ tests/fixtures/graph/** -text
 rules/codeql-graph-export/** text eol=lf
 # The asset lock is pinned by its exact bytes (asset_lock_sha256 in appsec-review.toml).
 containers/tools/codeql/assets.lock.json text eol=lf
+# Official SPDX resources are hash-pinned and must retain their upstream bytes.
+src/appsec_review/jobs/job_dependency_intelligence/schemas/spdx-2.3.schema.json -text
+src/appsec_review/jobs/job_dependency_intelligence/schemas/SPDX-LICENSE.txt -text
