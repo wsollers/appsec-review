@@ -31,7 +31,8 @@ def _freeze_configuration(run_root: Path, job_id: str) -> tuple[str, str]:
         else:
             config = load_config(Path(__file__).parents[1] / "appsec-review.toml")
             document = json.loads(config.resolved_json)
-            for name in ("fixture", "post", "live", "job_fixture", job_id):
+            for name in ("fixture", "post", "live", "job_fixture", "branch_a", "branch_b",
+                         "retrieval_producer", "specialized_producer", "consumer", job_id):
                 document["jobs"].setdefault(name, {"name": name, "workers": 1, "settings": {}, "steps": {}})
             atomic_bytes(directory / "appsec-review.toml", config.source_path.read_bytes())
             atomic_bytes(resolved_path, canonical_json(document))
