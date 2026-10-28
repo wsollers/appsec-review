@@ -1,0 +1,217 @@
+{
+  "schema": "appsec-review/graph-export-expected-facts/1",
+  "fixture": "swift-synthetic",
+  "description": "Facts the swift-synthetic recording must contain, one or more per provenance case.",
+  "expectations": [
+    {
+      "case": "unresolved_indirect_call",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "notify",
+        "call_start_line": 71,
+        "dispatch": "unresolved_indirect",
+        "callee_name": "<indirect:handler>"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "persist",
+        "call_start_line": 37,
+        "callee_name": "FileStore.save",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "persist",
+        "call_start_line": 37,
+        "callee_name": "MemoryStore.save",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 22,
+        "sink_start_line": 32,
+        "argument_index": 1
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "path_edges",
+      "where": {
+        "source_start_line": 22,
+        "sink_start_line": 32,
+        "edge_kind": "call",
+        "to_function": "buildQuery"
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 32,
+        "model": "SqlInjectionSink",
+        "api": "sqlite3_exec"
+      }
+    },
+    {
+      "case": "argv_to_path",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 36,
+        "sink_start_line": 10,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "argv_to_path",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 36,
+        "model": "api",
+        "api": "arguments",
+        "declared_in": "Swift.CommandLine"
+      }
+    },
+    {
+      "case": "env_to_command",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 41,
+        "sink_start_line": 42,
+        "argument_index": 1
+      }
+    },
+    {
+      "case": "env_to_command",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 41,
+        "api": "environment",
+        "declared_in": "Foundation.ProcessInfo"
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 22,
+        "sink_start_line": 47,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 47,
+        "model": "api",
+        "api": "dataTask"
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 51,
+        "sink_start_line": 52,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 52,
+        "api": "unarchiveTopLevelObjectWithData"
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 57,
+        "model": "PathInjectionSink",
+        "dominating_sanitizer_count": 1
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "path_sanitizers",
+      "where": {
+        "sink_start_line": 57,
+        "api": "resolvingSymlinksInPath"
+      }
+    },
+    {
+      "case": "dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 63,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "comparison_operator": "<",
+        "rhs_value": "64"
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 66,
+        "guard_state": "non_dominating"
+      }
+    },
+    {
+      "case": "unknown_range",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 66,
+        "applicability": "integral",
+        "lower": "unknown",
+        "upper": "unknown"
+      }
+    },
+    {
+      "case": "not_applicable_range",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 32,
+        "applicability": "not_applicable"
+      }
+    },
+    {
+      "case": "unclassified_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 76,
+        "model": "PredicateInjectionSink"
+      }
+    },
+    {
+      "case": "flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "buildQuery",
+        "from_kind": "parameter",
+        "to_kind": "return"
+      }
+    },
+    {
+      "case": "flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "FileStore.save",
+        "to_kind": "sink",
+        "to_name": "createFile"
+      }
+    }
+  ]
+}

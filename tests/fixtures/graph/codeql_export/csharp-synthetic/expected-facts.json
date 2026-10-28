@@ -1,0 +1,329 @@
+{
+  "schema": "appsec-review/graph-export-expected-facts/1",
+  "fixture": "csharp-synthetic",
+  "description": "Semantic floor for the C# graph-export pack over source/Program.cs. Each case in provenance.json is stated here as rows that must exist: every `where` column must equal the given value in at least one row of the named export. Only line numbers and semantic columns are matched; paths and columns are not, so the same file holds for the hand-authored recording and for a live export. tests/graph/test_csharp_export.py holds the recording to it offline; tests/live/test_codeql_graph_export_csharp_live.py holds the pinned-image export to it.",
+  "expectations": [
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "Synthetic.ItemsController.Read",
+        "call_start_line": 90,
+        "callee_name": "Synthetic.FileStore.Load",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "Synthetic.ItemsController.Read",
+        "call_start_line": 90,
+        "callee_name": "Synthetic.MemoryStore.Load",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "delegate_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "Synthetic.Helpers.Apply",
+        "call_start_line": 42,
+        "callee_name": "Synthetic.Program.Normalize",
+        "dispatch": "function_pointer_resolved"
+      }
+    },
+    {
+      "case": "unresolved_dynamic_call",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "Synthetic.Program.Main",
+        "call_start_line": 128,
+        "dispatch": "unresolved_indirect"
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 65,
+        "argument_index": -1,
+        "model": "SqlInjection.Sink"
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 62,
+        "sink_start_line": 65,
+        "argument_index": -1
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "Synthetic.ItemsController.Query",
+        "call_start_line": 65,
+        "callee_name": "Synthetic.Helpers.Wrap",
+        "dispatch": "direct"
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 70,
+        "sink_start_line": 74,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 70,
+        "sink_start_line": 76,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 74,
+        "argument_index": 0,
+        "model": "CommandInjection.Sink",
+        "api": "Start"
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 83,
+        "argument_index": 0,
+        "model": "api",
+        "api": "GetStringAsync"
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 81,
+        "sink_start_line": 83,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 98,
+        "argument_index": 0,
+        "model": "UnsafeDeserialization.Sink",
+        "api": "Deserialize"
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 94,
+        "sink_start_line": 98,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "unsafe_reflection_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 97,
+        "argument_index": 0,
+        "model": "api",
+        "api": "CreateInstance"
+      }
+    },
+    {
+      "case": "argv_env_to_path",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 122,
+        "model": "LocalFlowSource",
+        "source_type": "command line argument"
+      }
+    },
+    {
+      "case": "argv_env_to_path",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 124,
+        "model": "LocalFlowSource",
+        "source_type": "environment variable"
+      }
+    },
+    {
+      "case": "argv_env_to_path",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 122,
+        "sink_start_line": 125,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "argv_env_to_path",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 124,
+        "sink_start_line": 125,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "path_sanitizers",
+      "where": {
+        "source_start_line": 87,
+        "sink_start_line": 89,
+        "sanitizer_start_line": 89,
+        "api": "GetFileName"
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 89,
+        "argument_index": 0,
+        "model": "TaintedPath.Sink"
+      }
+    },
+    {
+      "case": "cross_function_flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "Synthetic.FileStore.Load",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "sink",
+        "to_model": "TaintedPath.Sink"
+      }
+    },
+    {
+      "case": "cross_function_flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "Synthetic.Helpers.Wrap",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "return",
+        "flow_kind": "taint"
+      }
+    },
+    {
+      "case": "cross_function_flow_summary",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 87,
+        "sink_start_line": 20,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 74,
+        "argument_index": 0,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "condition_start_line": 72,
+        "comparison_operator": "<"
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 76,
+        "argument_index": 0,
+        "guard_state": "non_dominating",
+        "condition_start_line": 72
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 76,
+        "argument_index": 0,
+        "guard_state": "none"
+      }
+    },
+    {
+      "case": "allocation_range",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 107,
+        "argument_index": -1,
+        "applicability": "integral",
+        "type_display": "Int32",
+        "lower": "1"
+      }
+    },
+    {
+      "case": "allocation_range",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 107,
+        "argument_index": -1,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "comparison_operator": "<=",
+        "constrains_sink_operand": "true"
+      }
+    },
+    {
+      "case": "narrowing_conversion",
+      "query_id": "range_conversions",
+      "where": {
+        "sink_start_line": 110,
+        "argument_index": -1,
+        "kind": "narrowing",
+        "from_type": "Int64",
+        "to_type": "Int32"
+      }
+    },
+    {
+      "case": "narrowing_conversion",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 110,
+        "argument_index": -1,
+        "lower": "unknown",
+        "upper": "unknown"
+      }
+    },
+    {
+      "case": "non_integral_operand",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 65,
+        "argument_index": -1,
+        "applicability": "not_applicable"
+      }
+    },
+    {
+      "case": "non_integral_operand",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 83,
+        "argument_index": 0,
+        "applicability": "not_applicable"
+      }
+    }
+  ]
+}

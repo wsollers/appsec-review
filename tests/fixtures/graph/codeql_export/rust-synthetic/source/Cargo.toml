@@ -1,0 +1,10 @@
+[package]
+name = "rust-synthetic"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+reqwest = { path = "vendor/reqwest" }
+rusqlite = { path = "vendor/rusqlite" }
+serde_json = { path = "vendor/serde_json" }

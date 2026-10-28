@@ -22,6 +22,16 @@ log. Rerunning a partial attempt reuses hash-verified successful scope shards an
 invalidated scopes. Do not delete locks, edit accepted pointers, or remove successful shards to
 force recovery. An unsupported grammar or bounded parse is a named gap, not clean coverage.
 
+For source-only navigation, call `query_syntax` with an accepted `source_file` identity and mode
+`definitions`, `calls`, `imports` or `references`; optionally filter an exact written `name`.
+Pass a returned AST identity to `read_excerpt`, or as a syntax subject to narrow to that node's
+span. Package source-file grants work even without a CodeQL database. The tool reads accepted
+`analysis` shards only. Projection coverage is separately partial (explicit syntax subsets) or
+unavailable; raw AST parse completeness never means resolved calls or exhaustive symbols.
+The host adds projections using existing pinned grammar output, so no grammar/image rebuild or
+new asset pin is required. Swift stays unavailable; PowerShell and Shell currently expose raw AST
+only. Reusing an old scope fingerprint cannot skip the new projection version.
+
 Live acceptance must verify the cataloged image ID, run with network disabled and the target mounted
 read-only, parse the multi-project/multi-language fixture, publish at least one searchable AST shard,
 and demonstrate that an injected sibling grammar failure produces `COMPLETED_WITH_GAPS` while the

@@ -223,10 +223,13 @@ makes its queries and export eligible, and query/export failures do not invalida
 The job-level topology is planning, ready-scope execution, then acceptance. Resource admission
 still applies; [current conservative limits](performance-assurance.md#scheduling-and-limits)
 do not permit two ordinary actions to overlap. Its design is
-[code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. Only C/C++
-has a pack in this change. Every other language records the export disposition `NOT_APPLICABLE`
-with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This is a named
-disposition, not a failure and not a clean result.
+[code-graph precomputation](../architecture/code-graph-precomputation.md) sections 7 and 8.
+Packs/catalogs exist for C/C++, Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C#, Rust and
+deferred Swift. Execution requires the corresponding configured pins and an accepted database;
+Swift remains policy-disabled. An unconfigured language records `NOT_APPLICABLE` with the reason
+"no hash-pinned CodeQL graph export pack for `<language>`". This is a named disposition, not a
+failure and not a clean result. The generic graph index and retrieval consume every accepted
+language export; native cross-check shards are C/C++-only.
 
 Configuration lives in `appsec-review.toml`:
 
@@ -358,6 +361,38 @@ gap "seeded export skipped". Each export record carries a `seeded` section with 
 and the per-depth histogram. `job_code_graph_index` publishes one database card per scope; models
 list the cards with `list_codeql_databases` and expand one with `query_codeql_neighborhood`.
 
+## Execution telemetry
+
+Every CodeQL action emits a telemetry event with `action` (`database`, `analyze`, `compile`,
+`export`), `language`, `source_languages`, `build_mode`, scope and build unit, and the query pack
+identity (`query_pack`/`query_pack_version`/`query_suite` for analysis, `export_pack`/
+`export_pack_version`/`query_suite` for graph export). Fresh executions emit
+`TOOL_INVOCATION_STARTED`/`COMPLETED` with `disposition`, `duration_ms`, `timed_out`,
+`result_count`, `gap_count`, `truncated`, and the hash identity of the execution receipt. Reused
+checkpoints emit `checkpoint_reused=true` and count as `REUSED`. An analyze or export skipped
+because its database failed (or a seeded export without seeds) emits `CODEQL_ACTION_SKIPPED`; a
+producer exception emits `CODEQL_ACTION_FAILED` with the same identity, so neither is dropped.
+Languages and packs are read from scope and configuration, never enumerated, so new export packs
+are covered automatically. `appsec-review metrics` aggregates these into the `codeql` section of
+the run summary ([review metrics](metrics.md)).
+
+Per-query metrics are written beside each execution receipt as
+`executions/<action>/query-metrics.json` (`appsec-review/codeql-query-metrics/1`) and referenced by
+hash from the event's `query_metrics` field, or a `query_metrics_gap` reason:
+
+| Action | Source | Per-query data | Limits |
+| --- | --- | --- | --- |
+| analyze | Runner `query-timings.json` (`appsec-review/codeql-query-timings/1`), parsed from `database analyze` progress lines (`[N/M eval T] Evaluation done`, `Found in cache`), plus accepted SARIF | evaluation ms per query path (cache hits are `REUSED`); result count per rule id | runtimes are keyed by query path and result counts by rule id, which are not joined; at most 5000 timing rows; a failed or timed-out analyze, or an older runner, yields a named gap |
+| export | Accepted `export-manifest.json` | `evaluate_ms + decode_ms`, row and exported counts, truncation per query id | a manifest row without `evaluate_ms` is a named gap |
+| compile | Runner compile summary on stdout (`appsec-review/codeql-compile/1`) | compile ms per query file | cache hits report no time and are named as a gap |
+| database | — | not applicable | — |
+
+The analyze timing source needs the runner release that writes `query-timings.json`. Until the
+CodeQL image is rebuilt with it and `codeql_runner` is bumped in `appsec-review.toml`, analyze
+rows carry the gap "runner wrote no query-timings.json". If an exception escapes after an action's
+`COMPLETED` event, the isolated wrapper also emits `CODEQL_ACTION_FAILED`, so that action is counted
+twice.
+
 ## Evidence and retrieval
 
 SARIF 2.1 results, rule metadata, severities, fingerprints, suppressions, baseline state, locations,
@@ -388,9 +423,12 @@ For a fresh `appsec-multi-vuln` run, verify:
 7. `query_codeql` returns the same accepted observations; and
 8. deployment verification reports per-language and per-profile execution, SARIF, observation,
    and gap counts; and
-9. every successful C/C++ database has a `SUCCEEDED` graph export whose manifest is bound to the
-   handoff, every other language reports `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py`
-   passes (not yet run).
+9. every successful database with a configured export pack has a separately reported graph export
+   whose manifest is bound to the handoff; unsupported/unconfigured exports have precise
+   `NOT_APPLICABLE` dispositions. Verify each language's seven family coverage rows, including
+   partial/unavailable range capability, separately from database/query success.
+   `tests/live/test_code_graph_live.py` remains the native end-to-end gate; recorded multilingual
+   normalizer fixtures alone do not prove live image or database acceptance.
 
 ## Live acceptance
 
