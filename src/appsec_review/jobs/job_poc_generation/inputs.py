@@ -23,25 +23,9 @@ from appsec_review.jobs.job_final_publication_gate.verify import REVIEW_JOB, Ver
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
 
-from .candidates import FIELD, PocCandidate, check_against_review, read_candidates
+from .candidates import PocCandidate, check_against_review, read_candidates
 
 LANES = ("lead", "hunt")
-
-
-class _ReviewSchemas:
-    """The review's schemas, minus the one property this job reads strictly itself.
-
-    ``poc_candidates`` is produced by the judge work and validated by :mod:`.candidates`; the handoff
-    schema's owner adds the property to the schema, and this wrapper then changes nothing.
-    """
-
-    def __init__(self, inner: SchemaSet) -> None:
-        self.inner = inner
-
-    def errors(self, name: str, value: Any, *, limit: int = 20) -> list[str]:
-        if name == "handoff" and isinstance(value, Mapping) and FIELD in value:
-            value = {key: item for key, item in value.items() if key != FIELD}
-        return self.inner.errors(name, value, limit=limit)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +38,7 @@ class VerifiedInputs:
     review_status: str
     manifest_sha256: str
     manifest_path: str
-    candidates: tuple[PocCandidate, ...] | None
+    candidates: tuple[PocCandidate, ...]
     findings: Mapping[str, Mapping[str, Any]]            # finding_package_id -> projected finding package
     package_records: Mapping[str, Mapping[str, Any]]     # package_id -> {path, sha256, lane}
     language_build_handoff_sha256: str | None = None
@@ -97,7 +81,7 @@ def verify_inputs(run_root: Path, *, review_schemas: SchemaSet, gate_schemas: Sc
     """Re-verify the gate and the review it was built from, and read the PoC candidates."""
     run_root = Path(run_root).resolve()
     gate_handoff, gate_document, gate = verify_gate(run_root, gate_schemas)
-    verified: VerifiedReview = load_accepted_review(run_root, _ReviewSchemas(review_schemas),
+    verified: VerifiedReview = load_accepted_review(run_root, review_schemas,
                                                     max_packages=max_packages)
     document = verified.document
     inputs = document["inputs"]
@@ -114,9 +98,8 @@ def verify_inputs(run_root: Path, *, review_schemas: SchemaSet, gate_schemas: Sc
              "the accepted scope does not name the review's manifest")
     findings = {item["finding_package_id"]: item for item in document["packages"]}
     candidates = read_candidates(review)
-    if candidates is not None:
-        problems = check_against_review(candidates, findings)
-        _require(not problems, "poc_candidates disagree with the verified review: " + "; ".join(problems[:3]))
+    problems = check_against_review(candidates, findings)
+    _require(not problems, "poc_candidates disagree with the verified review: " + "; ".join(problems[:3]))
     records: dict[str, Mapping[str, Any]] = {}
     for lane in LANES:
         lane_document = read_bound_json(run_root, outputs[f"packages.assemble_{lane}_packages"]["artifact"])

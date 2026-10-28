@@ -37,7 +37,7 @@ from .policy import check_ast
 from .settings import PocGenerationSettings
 from .source import WriterAnswer, assemble, check_answer, decline_of, file_violations
 from .statuses import (
-    ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND, GAP_NO_CANDIDATES,
+    ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND,
     INSUFFICIENT_EVIDENCE, NOT_APPLICABLE, POLICY_DENIED, SOURCE_STATUSES, STATUSES,
 )
 from .writer import WorkspaceReader, load_guidance, run_writer
@@ -75,7 +75,7 @@ def _write_json(unit: UnitContext, name: str, document: Any) -> dict[str, str]:
 def _candidate_record(candidate: PocCandidate) -> dict[str, Any]:
     return {"claim_id": candidate.claim_id, "package_id": candidate.package_id, "state": candidate.state,
             "judge_verdict": candidate.judge_verdict,
-            "poc_basis": {"sha256": candidate.poc_basis.sha256, "value": candidate.poc_basis.record()},
+            "poc_basis": {"sha256": candidate.poc_basis.sha256, "brief": candidate.poc_basis.record()},
             "finding_package": {"finding_package_id": candidate.finding_package_id,
                                 "sha256": candidate.finding_package_sha256},
             "evidence_refs": list(candidate.evidence_refs)}
@@ -154,23 +154,19 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
         planned: list[dict[str, Any]] = []
         omitted: list[str] = []
         language_sha = None
-        if verified.candidates is None:
-            gaps.append(f"{GAP_NO_CANDIDATES}: the accepted review handoff has no poc_candidates field "
-                        "(an older run); nothing was generated")
-        else:
-            ordered = _order(verified.candidates)
-            for candidate in ordered[:settings.max_candidates]:
-                finding = verified.findings[candidate.finding_package_id]
-                planned.append({
-                    "candidate": _candidate_record(candidate),
-                    "finding": {key: finding.get(key) for key in (
-                        "finding_package_id", "sha256", "path", "title", "label", "lane", "state",
-                        "missing_predicates")},
-                    "package": dict(verified.package_records.get(candidate.package_id) or {}) or None})
-            omitted = [item.claim_id for item in ordered[settings.max_candidates:]]
-            if omitted:
-                gaps.append(f"{GAP_CANDIDATE_BOUND}: {len(omitted)} candidates were not attempted because "
-                            f"max_candidates is {settings.max_candidates}")
+        ordered = _order(verified.candidates)
+        for candidate in ordered[:settings.max_candidates]:
+            finding = verified.findings[candidate.finding_package_id]
+            planned.append({
+                "candidate": _candidate_record(candidate),
+                "finding": {key: finding.get(key) for key in (
+                    "finding_package_id", "sha256", "path", "title", "label", "lane", "state",
+                    "missing_predicates")},
+                "package": dict(verified.package_records.get(candidate.package_id) or {}) or None})
+        omitted = [item.claim_id for item in ordered[settings.max_candidates:]]
+        if omitted:
+            gaps.append(f"{GAP_CANDIDATE_BOUND}: {len(omitted)} candidates were not attempted because "
+                        f"max_candidates is {settings.max_candidates}")
         try:
             language_sha = services.builds_factory(run_root).handoff_sha256 if planned else None
         except (ValueError, OSError, IntegrityError) as exc:
@@ -182,7 +178,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
                          "manifest": {"path": verified.manifest_path, "sha256": verified.manifest_sha256},
                          "language_build_handoff_sha256": language_sha},
             "review_status": verified.review_status,
-            "candidates_field": "absent" if verified.candidates is None else "present",
+            "candidates_field": "present",
             "planned": planned, "omitted": omitted}
         unit.job.events.write("POC_GENERATION_INPUTS_VERIFIED", planned=len(planned), omitted=len(omitted),
                               candidates_field=document["candidates_field"])

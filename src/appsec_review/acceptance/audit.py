@@ -102,7 +102,8 @@ def audit_tree(
             findings.append(AuditFinding("unreadable", str(path), f"mode={stat_module.filemode(info.st_mode)}"))
         # Inside a copied build workspace, tmp-like names belong to the target's own toolchain
         # (CMake, Gradle); only the capture driver's scratch is the pipeline's to clean up.
-        target_owned = _tool_owned(path) and not path.name.startswith(".appsec-review-build-scratch.")
+        target_owned = _tool_owned(path.relative_to(root)) and not path.name.startswith(
+            ".appsec-review-build-scratch.")
         if not in_scratch and not target_owned and SCRATCH_NAMES.match(path.name) and str(path) not in kept:
             findings.append(AuditFinding("scratch-leftover", str(path), "scratch or temporary entry persisted"))
 

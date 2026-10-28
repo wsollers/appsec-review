@@ -326,13 +326,12 @@ them touches the claim ledger, R5, R6 or the judge. Operating details are in
 [`../operations/poc-generation.md`](../operations/poc-generation.md).
 
 1. **The candidate contract.** The job reads `poc_candidates` from the verified review handoff as an array of
-   `{claim_id, package_id, state, judge_verdict, poc_basis: {sha256, value}, finding_package: {finding_package_id, sha256},
+   `{claim_id, package_id, state, judge_verdict, poc_basis: {sha256, brief}, finding_package: {finding_package_id, sha256},
    evidence_refs}` (schema `docs/schemas/poc-generation/poc-candidate.schema.json`, reader `candidates.py`). `poc_basis.sha256`
-   is `sha256(canonical_json(value))` (`review.identity.sha256_hex`). The reader is strict and cross-checks each entry against
-   the verified finding package (id, digest, claim, state). A handoff without the field is an older run (named gap
-   `no_poc_candidates`, empty valid handoff); a malformed field is an integrity failure. The handoff schema belongs to the judge
-   work, so the job validates the review handoff against the existing schema *without* the property (a thin wrapper around the
-   closed validator) and validates the property itself; nothing changes when the schema learns the property.
+   is `sha256(canonical_json(brief))` (`review.identity.sha256_hex`). Entry and path carry resolved entity identities;
+   the brief builder binds them to rows in the labelled package view. The reader validates the complete review handoff
+   against the producer's schema and cross-checks each entry against the verified finding package (id, digest, claim,
+   state and judge verdict). A missing or malformed field is an integrity failure; an empty array means no candidates.
 2. **Not a target job; manual while disabled.** The job reads no target tree: the source copy is the run's accepted
    `job_language_build` workspace (re-hashed file by file against its manifest), the compile command is the exact captured argv
    of the sink's translation unit from the protected compile database, and the labelled package view comes from the retrieval

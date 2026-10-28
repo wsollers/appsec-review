@@ -131,3 +131,11 @@ def test_tool_owned_tmp_in_cpp_analysis_trees_is_not_a_leftover(tmp_path: Path) 
     findings = audit_tree([run], expected_uid=UID, expected_gid=GID)
     leftovers = {item.path for item in findings if item.kind == "scratch-leftover"}
     assert leftovers == {str(unit / "analysis" / "tmp")}
+
+
+def test_a_workspace_named_ancestor_does_not_hide_pipeline_scratch(tmp_path: Path) -> None:
+    run = tmp_path / "workspace" / RUN_ID
+    scratch = run / "data" / "scratch"
+    scratch.mkdir(parents=True)
+    findings = audit_tree([run], expected_uid=UID, expected_gid=GID)
+    assert {item.path for item in findings if item.kind == "scratch-leftover"} == {str(scratch)}

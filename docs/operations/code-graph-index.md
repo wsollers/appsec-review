@@ -10,7 +10,7 @@ accepted CodeQL plan names, each verified against its accepted SHA-256.
 
 | Input | Where it comes from | How it is verified |
 |---|---|---|
-| Per-scope export records | `outputs["export.scopes"].artifact` of the accepted `job_codeql_analysis` handoff (`appsec-review/codeql-graph-exports/1`) | The artifact, the handoff result and the plan must be bound to the handoff by path and SHA-256 |
+| Per-scope export records | `outputs["execution.scopes"].graph_export_artifact` in the accepted `job_codeql_analysis` result (`appsec-review/codeql-graph-exports/1`), not the compact handoff output projection | The artifact, the result and the plan must be bound to the accepted handoff by path and SHA-256 |
 | Raw exports | `data/codeql/scopes/<scope>/exports/` | `export-manifest.json` must equal the manifest identity bound to the accepted handoff, then `codeql.runtime.load_graph_exports` checks every file. The CodeQL job's own `export-checkpoint.json` is never read |
 | Scope files | The accepted CodeQL plan (`plan.inventory`) | Bytes are read from the target root and must match the planned SHA-256 |
 | clangd, LLVM IR and Clang AST shards | `analysis` shards of `job_cpp_symbol_index` (`clangd-*`) and `job_cpp_compiled_analysis` (`branch` `ir` and `ast`), from the accepted manifest or, when the `job_codeql_analysis` manifest rewrite dropped them, from those jobs' own accepted handoffs (`restored_secondary` in the load output) | Accepted manifest verification; a restored shard's handoff manifest is re-verified and the shard must be produced by that handoff's job |
