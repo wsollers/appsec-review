@@ -47,3 +47,12 @@ def test_compile_only_assurance_requires_the_null_result_field() -> None:
     del record["result_id"]
     with pytest.raises(IntegrityError):
         verify_nonexecution_assurance(record)
+
+
+@pytest.mark.parametrize("record", [
+    None, [], "not an assurance", True,
+    {**nonexecution_assurance(), "executed": True},
+])
+def test_compile_only_assurance_rejects_nonrecords_and_extra_fields(record) -> None:
+    with pytest.raises(IntegrityError):
+        verify_nonexecution_assurance(record)

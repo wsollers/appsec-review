@@ -23,12 +23,14 @@
     "verification",
     "planned_consumers",
     "lead_severity_triage",
-    "poc_candidates"
+    "poc_candidates",
+    "attack_chain_manifest"
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/inference-review-handoff/2"
+      "const": "appsec-review/inference-review-handoff/3"
     },
+    "attack_chain_manifest": {"$ref": "chain-records.schema.json#/$defs/artifact"},
     "run_id": {
       "$ref": "common.schema.json#/$defs/short_text"
     },

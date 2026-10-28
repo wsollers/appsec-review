@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/attack-chain-manifest.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "items", "gaps", "accounting", "exploration"],
+  "properties": {
+    "schema": {"const": "appsec-review/attack-chain-manifest/1"},
+    "run_id": {"$ref": "common.schema.json#/$defs/short_text"},
+    "gaps": {"$ref": "chain-records.schema.json#/$defs/texts"},
+    "items": {
+      "type": "array", "maxItems": 50, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["chain_id", "status", "component_claim_ids", "limitations", "disposition", "artifact"],
+        "properties": {
+          "chain_id": {"$ref": "chain-records.schema.json#/$defs/chain_id"},
+          "status": {"$ref": "chain-records.schema.json#/$defs/status"},
+          "component_claim_ids": {"type": "array", "minItems": 2, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/claim_id"}},
+          "limitations": {"$ref": "chain-records.schema.json#/$defs/texts"},
+          "disposition": {"enum": ["assessed", "capped"]},
+          "artifact": {"$ref": "chain-records.schema.json#/$defs/artifact"}
+        }
+      }
+    },
+    "accounting": {
+      "type": "object", "additionalProperties": false,
+      "required": ["proposed", "admitted", "assessed", "capped", "rejected", "deduplicated", "seeds_received", "seeds_rejected"],
+      "properties": {
+        "proposed": {"type": "integer", "minimum": 0, "maximum": 50},
+        "admitted": {"type": "integer", "minimum": 0, "maximum": 50},
+        "assessed": {"type": "integer", "minimum": 0, "maximum": 50},
+        "capped": {"type": "integer", "minimum": 0, "maximum": 50},
+        "rejected": {"type": "integer", "minimum": 0, "maximum": 50},
+        "deduplicated": {"type": "integer", "minimum": 0, "maximum": 50},
+        "seeds_received": {"type": "integer", "minimum": 0},
+        "seeds_rejected": {"type": "integer", "minimum": 0}
+      }
+    },
+    "exploration": {
+      "type": "object", "additionalProperties": false,
+      "required": ["expanded", "limit", "frontier", "frontier_truncated"],
+      "properties": {
+        "expanded": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "frontier": {
+          "type": "array", "maxItems": 10000,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["from_claim_id", "to_claim_id"],
+            "properties": {
+              "from_claim_id": {"$ref": "common.schema.json#/$defs/claim_id"},
+              "to_claim_id": {"$ref": "common.schema.json#/$defs/claim_id"}
+            }
+          }
+        },
+        "frontier_truncated": {"type": "boolean"}
+      }
+    }
+  }
+}

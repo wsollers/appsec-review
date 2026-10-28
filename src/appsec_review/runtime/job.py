@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, TYPE_CHECKING
 
 from appsec_review.config import JobConfig, ToolCapabilityConfig
@@ -33,6 +34,7 @@ class JobContext:
     review_policy: ReviewPolicy = ReviewPolicy()
     # Authenticated evidence identity, not permission to read a target checkout.
     evidence_target_snapshot: str | None = None
+    upstream_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
 
 class JobHandler(Protocol):

@@ -31,3 +31,11 @@ model = "claude-haiku-5.5"
 [jobs.job_poc_generation.settings.models.default]
 provider = "copilot-sdk"
 model = "claude-haiku-5.5"
+
+[jobs.job_remediation_planning.settings.writer]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_remediation_validation.settings.reviewer]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
