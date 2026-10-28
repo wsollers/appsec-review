@@ -55,7 +55,8 @@ implementation. The existing `metrics` command and summary path remain the opera
 no separate backend is needed. Integration `b702eb7` adds `completion` to `run-metrics/3`, with
 `completion-process-metrics/1` semantics. This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
-parity and nonadditive limits; final producer instrumentation is still being reconciled.
+parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.
+Source support is not proof every candidate or model-usage dimension was measured.
 
 Use `completion.lanes.<lane>.observed` and `.events.<event>` for the seven fixed lane buckets
 listed in [telemetry architecture](../architecture/telemetry.md#evidence-completion-tracking-commissioned).
@@ -80,8 +81,10 @@ counts. Model usage applies only where actually emitted; missing provider tokens
 must remain unavailable, not zero. Remediation follow-up `e769645f` now preserves per-dimension
 unknown totals as null, genuine measured zero and unavailable-turn metadata. An invocation with
 no completed turns has null totals and an unavailable flag even though its unavailable-turn count
-is zero. Generic lifecycle events do not substitute for
-missing candidate/outcome instrumentation in the other pending producers.
+is zero. Generic lifecycle events do not substitute for missing candidate/outcome measurements.
+Checkpoint `0ece65d3` includes chain `not_launched` outcomes and a real `CellStatus`-shaped map
+regression, resolving that aggregate allowlist gap. These remain attempted-work observations,
+not accepted evidence or proof that no challenge was omitted.
 
 Check frozen run settings before interpreting an absent lane. The
 [new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)

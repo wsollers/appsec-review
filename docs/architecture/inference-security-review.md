@@ -15,8 +15,10 @@ CVSS v4/SSVC providers, global round barriers and cross-package variant hunts re
 Compile-only PoC generation exists; `ec9257bf` adds real pre-seal chain composition/challenges,
 and integration `b702eb7` adds remediation/dossier producers, automatic new-configuration defaults,
 pre-gate ordering and completion metrics. Checkpoint `18eae9f` aligns shared `/3` review acceptance
-and extends metric parity. Final PoC/gate/report contracts,
-chain/base isolation and end-to-end/live-PDF acceptance remain pending at this source boundary.
+and extends metric parity. Integration `dd9c9ad` delivers PoC/gate/report `/2` and chain/base
+completeness isolation. The owner-verified
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) does not establish
+full native all-lane acceptance, which remains pending.
 The [completion contract](evidence-completion-and-remediation.md) preserves the user's compile-only,
 never-executed policy; any executor diagrams/sketches below are historical unimplemented design,
 not new runtime authorization. See the [source inventory](dossier-data-inventory.md).
@@ -90,12 +92,12 @@ accepted analysis/index manifest
 ```
 
 Enabled optional producers precede one final gate; new defaults enable all four, but frozen old
-runs are unchanged. Final producer/consumer version alignment is still pending. Downstream
+runs are unchanged. Integration `dd9c9ad` aligns producer/consumer versions. Downstream
 contracts and the implemented slice's limits are:
 
 | Consumer | Packages consumed | Explicitly not consumed |
 |---|---|---|
-| `job_poc_generation` | accepted review candidate/finding/evidence identities and native build custody; final pre-gate contract pending | final gate as an upstream dependency, runtime execution |
+| `job_poc_generation` | shared verified review `/3`, exact candidate/finding/basis/evidence and native build custody; immutable protected `/2` outputs | final gate as an upstream dependency, runtime execution |
 | `job_remediation_planning` | exactly confirmed `remediation_intake`, counted evidence and bounded accepted native source; creates separate safe regression specifications | supported backlog, rejected claims, raw worker narratives, PoC context in this slice (`poc_handoff: null`) |
 | `job_remediation_validation` | accepted confirmed finding/evidence, exact planning handoff/patch, safe regression specification and native build custody | PoC context, generated regression execution, production credentials, offensive tooling |
 | `job_dossier_publication` | accepted findings/projection/source manifest, available PoC and remediation attachments, chain manifest; closed protected projection | raw prompts/transcripts/secrets, unaccepted source, the final gate |
@@ -108,8 +110,8 @@ projects the accepted state and provenance from this job. Central `indexing/inpu
 now names actual remediation/dossier producers and the pre-gate consumer graph. Older
 `datasets.py::PLANNED_CONSUMERS` metadata still records the original four reservations; its
 `planned` status is not a current build-status claim and full metadata reconciliation is pending.
-Likewise the old gate's unconditional absence limitations are pending replacement with verified
-capability accounting, not evidence that the registered producers do not exist. See
+Gate `/2` now replaces unconditional absence text with verified five-capability accounting;
+report `/2` consumes only that certified snapshot. See
 [remediation operations](../operations/remediation.md), [dossier operations](../operations/dossier-publication.md)
 and [final publication](../operations/final-report.md).
 

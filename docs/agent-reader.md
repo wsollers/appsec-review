@@ -21,10 +21,10 @@ Relevant bounded procedures and design references:
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
 - [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository).
-- [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` model turn, the AST validators, the compile check, statuses, outputs under `data/poc/<claim-id>/`, manual invocation and what the job never does.
+- [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, AST/compile checks, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
-  partially delivered completion graph and approved dossier decisions: compile-only PoC before one final gate,
+  delivered completion source and approved dossier decisions: compile-only PoC before one final gate,
   chains before review seal, confirmed-only remediation and nonexecuting validation.
 - [`architecture/dossier-data-inventory.md`](architecture/dossier-data-inventory.md) — source-verified
   effective dossier inputs, bounded queries, indexes/shards, all producer dataset visibility,
