@@ -9,6 +9,9 @@ builders, implicit policies and the rest of the catalog remain unresolved.
 to immutable file content, absolute site spans and run/component/build scope, rather than a
 whole retrieval entity. Different accepted references to the same site can bind the same ID;
 different sites in one reference cannot. Citation authenticity remains the resolver's job.
+An exact cited span can contain a complete site while omitting surrounding accepted lines.
+Such coverage truncation preserves the site identity, but its material coverage gap remains;
+clipping within the rendered span or unexplained truncation cannot define a subject.
 """
 from __future__ import annotations
 
@@ -352,9 +355,22 @@ def _sites(rule: Procedure, evidence: Mapping[str, Any]) -> tuple[list[dict[str,
     if (not isinstance(excerpt, str) or not excerpt or len(excerpt) > 16000
             or len(excerpt.splitlines()) != span[1] - span[0] + 1):
         return [], [f"{path}: excerpt does not resolve its complete bounded line span"]
-    if (evidence.get("truncated") or evidence.get("redaction", {}).get("applied")
-            or any("ambiguous" in str(gap).lower() for gap in evidence.get("limitations", ()))):
-        return [], [f"{path}: truncated, redacted or ambiguous source cannot define a proof subject"]
+    limitations = [str(gap) for gap in evidence.get("limitations", ())]
+    omission_prefix = f"source excerpt bounded to lines {span[0]}-{span[1]}; "
+    omission_suffix = " accepted subject lines omitted"
+
+    def outside_span(gap: str) -> bool:
+        if not gap.startswith(omission_prefix) or not gap.endswith(omission_suffix):
+            return False
+        count = gap[len(omission_prefix):-len(omission_suffix)]
+        return count.isascii() and count.isdecimal() and not count.startswith("0")
+
+    coverage_only = bool(limitations) and all(outside_span(gap) for gap in limitations)
+    if (evidence.get("truncated") and not coverage_only
+            or evidence.get("redaction", {}).get("applied")
+            or any("ambiguous" in gap.lower() for gap in limitations)):
+        return [], [*limitations, f"{path}: clipped, unexplained truncation, redacted or ambiguous "
+                    "source cannot define a proof subject"]
     source = textwrap.dedent(excerpt)
     try:
         tree = ast.parse(source)
@@ -401,7 +417,7 @@ def _sites(rule: Procedure, evidence: Mapping[str, Any]) -> tuple[list[dict[str,
                        "source_identity": ref["source_identity"],
                        **{key: identity[key] for key in ("scope", "locator", "content_sha256")},
                        **({"operation": identity["operation"]} if operation is not None else {})})
-    return result, [str(gap) for gap in evidence.get("limitations", ())]
+    return result, limitations
 
 
 def subjects(rule: Procedure, evidence: Mapping[str, Any]) -> list[str]:
