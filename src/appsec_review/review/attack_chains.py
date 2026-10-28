@@ -6,7 +6,7 @@ contract below. Source prose, seed edges and model stances never satisfy that co
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 import re
 from typing import Any, Iterable, Mapping, Sequence
@@ -41,6 +41,22 @@ def _id(kind: str, body: Mapping[str, Any]) -> str:
     return f"{kind}-{sha256_hex({'kind': kind, 'version': 1, 'body': dict(body)})}"
 
 
+def _texts(values: tuple[str, ...]) -> None:
+    if (not isinstance(values, tuple) or len(values) > 256
+            or any(not isinstance(value, str) or not 1 <= len(value) <= 2000 for value in values)
+            or len(set(values)) != len(values)):
+        raise ValueError("chain text lists must be unique, bounded strings")
+
+
+def _actor_valid(actor: ActorRecord) -> None:
+    if (not isinstance(actor, ActorRecord) or any(
+            not isinstance(getattr(actor, key), str) or not 1 <= len(getattr(actor, key)) <= 200
+            for key in ("actor_id", "provider", "model", "conversation_id"))
+            or actor.prior_response_sha256 is not None and not _SHA.fullmatch(actor.prior_response_sha256)
+            or actor.cache_key is not None and not isinstance(actor.cache_key, str)):
+        raise ValueError("chain actors require bounded, explicit model and conversation identities")
+
+
 @dataclass(frozen=True, slots=True)
 class Artifact:
     path: str
@@ -63,8 +79,12 @@ class Component:
     def __post_init__(self) -> None:
         if self.state not in {ClaimState.SUPPORTED, ClaimState.CONFIRMED}:
             raise ValueError("chain components must be supported or confirmed")
-        if not self.claim_id or not self.adjudication_id:
+        if (not re.fullmatch(r"claim-[0-9a-f]{64}", self.claim_id)
+                or not re.fullmatch(r"adjudication-[0-9a-f]{64}", self.adjudication_id)):
             raise ValueError("chain component identities are required")
+        if type(self.requires_extra_verifier) is not bool:
+            raise ValueError("requires_extra_verifier must be a boolean")
+        _texts(self.missing_predicates)
         if self.state is ClaimState.SUPPORTED and not self.missing_predicates:
             raise ValueError("supported chain components must name their missing confirmation")
 
@@ -84,12 +104,18 @@ class ContinuityEvidence:
                 or not _SHA.fullmatch(self.content_sha256) or not self.index or not self.shard_id
                 or not self.reason or len(self.reason) > 256):
             raise ValueError("invalid accepted continuity evidence identity")
+        if not isinstance(self.outcome, Outcome):
+            raise ValueError("unknown continuity evidence outcome")
 
 
 @dataclass(frozen=True, slots=True)
 class Obligation:
     dimension: Dimension
     evidence: tuple[ContinuityEvidence, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.dimension, Dimension) or not isinstance(self.evidence, tuple) or len(self.evidence) > 32:
+            raise ValueError("continuity obligations require a dimension and bounded immutable evidence")
 
     @property
     def outcome(self) -> Outcome:
@@ -134,8 +160,13 @@ class Proposal:
     composer: ActorRecord
 
     def __post_init__(self) -> None:
-        if not self.objective or len(self.objective) > 1000 or not self.environment:
+        if (not isinstance(self.objective, str) or not 1 <= len(self.objective) <= 1000
+                or not isinstance(self.environment, str) or not 1 <= len(self.environment) <= 2000):
             raise ValueError("bounded chain objective and observed environment identity are required")
+        _texts(self.prerequisites)
+        _actor_valid(self.composer)
+        if not isinstance(self.components, tuple) or not isinstance(self.edges, tuple):
+            raise ValueError("chain paths must be immutable tuples")
         ids = tuple(item.claim_id for item in self.components)
         if not 2 <= len(ids) <= 8 or len(set(ids)) != len(ids) or len(self.edges) != len(ids) - 1:
             raise ValueError("a chain must be a simple ordered path of 2..8 adjudicated components")
@@ -170,6 +201,10 @@ class Challenge:
     gaps: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        _actor_valid(self.actor)
+        _texts(self.gaps)
+        if type(self.independent) is not bool or not isinstance(self.edges, tuple) or not 1 <= len(self.edges) <= 7:
+            raise ValueError("chain challenges require bounded edges and explicit boolean independence")
         if self.kind not in {"refuter", "weakest_link_verifier"}:
             raise ValueError("unknown chain challenge kind")
         if self.status not in {"succeeded", "failed", "timed_out", "invalid", "not_launched", "blocked", "canceled"}:
@@ -191,6 +226,15 @@ class Decision:
     challenge_ids: tuple[str, ...]
     artifact: Artifact
     policy: str = POLICY
+
+    def __post_init__(self) -> None:
+        _texts(self.limitations)
+        if (not re.fullmatch(r"chain-[0-9a-f]{64}", self.chain_id) or not isinstance(self.status, ChainStatus)
+                or not isinstance(self.challenge_ids, tuple)
+                or len(self.challenge_ids) > 2 or len(set(self.challenge_ids)) != len(self.challenge_ids)
+                or any(not re.fullmatch(r"chain_challenge-[0-9a-f]{64}", value) for value in self.challenge_ids)
+                or self.policy != POLICY):
+            raise ValueError("chain decision must use canonical identities, a status and the current policy")
 
 
 def challenge_identity(chain_id: str, kind: str, actor: ActorRecord) -> str:
@@ -274,22 +318,25 @@ def _fact_outcome(dimension: Dimension, values: Mapping[str, Any]) -> tuple[Outc
     if dimension is Dimension.PRIVILEGE:
         provided, required = values["provided"], values["required"]
         if (not isinstance(provided, list) or not isinstance(required, list) or not required
-                or any(not isinstance(value, str) or not value for value in [*provided, *required])
-                or not all(isinstance(values[name], str) and values[name] for name in ("principal_out", "principal_in"))):
+                or len(provided) > 64 or len(required) > 64
+                or any(not isinstance(value, str) or not 1 <= len(value) <= 2000 for value in [*provided, *required])
+                or len(set(provided)) != len(provided) or len(set(required)) != len(required)
+                or not all(isinstance(values[name], str) and 1 <= len(values[name]) <= 2000
+                           for name in ("principal_out", "principal_in"))):
             return Outcome.UNRESOLVED, "native_privilege_values_invalid"
         holds = values["principal_out"] == values["principal_in"] and set(required) <= set(provided)
     elif dimension is Dimension.TEMPORAL:
         times = ("a_start", "a_end", "b_start", "b_end", "output_at", "input_at")
         if any(type(values[name]) is not int for name in times):
             return Outcome.UNRESOLVED, "native_temporal_values_invalid"
-        if not all(isinstance(values[name], str) and values[name] for name in fields - set(times)):
+        if not all(isinstance(values[name], str) and 1 <= len(values[name]) <= 2000 for name in fields - set(times)):
             return Outcome.UNRESOLVED, "native_temporal_identity_missing"
         holds = (values["a_start"] <= values["output_at"] <= values["input_at"] <= values["a_end"]
                  and values["b_start"] <= values["output_at"] <= values["input_at"] <= values["b_end"]
                  and values["version_out"] == values["version_in"]
                  and values["configuration_out"] == values["configuration_in"])
     else:
-        if any(not isinstance(value, str) or not value for value in values.values()):
+        if any(not isinstance(value, str) or not 1 <= len(value) <= 2000 for value in values.values()):
             return Outcome.UNRESOLVED, "native_identity_values_missing"
         pairs = {
             Dimension.IDENTITY: (("output_identity", "input_identity"),),
@@ -374,6 +421,8 @@ def resolve_edge(core: Any, edge: Edge, environment: str, *, producers: Sequence
     shards = {(item["name"], str(item.get("shard_id", "default"))): item for item in core.manifest["indexes"]}
     selected = set(cited_relations) if cited_relations is not None else None
     evidence: dict[Dimension, dict[tuple[str, str, str], ContinuityEvidence]] = {item: {} for item in Dimension}
+    configurations: dict[Dimension, list[tuple[tuple[str, str, str], Mapping[str, Any]]]] = {
+        Dimension.ARTIFACT_DEPLOYMENT: [], Dimension.TEMPORAL: []}
     for row in response["results"]:
         if selected is not None and row.get("relation_id") not in selected:
             continue
@@ -406,11 +455,23 @@ def resolve_edge(core: Any, edge: Edge, environment: str, *, producers: Sequence
             row["relation_id"], row["index"], str(row.get("shard_id", "default")),
             shard["sha256"], sha256_hex({key: row.get(key) for key in (
                 "relation_id", "kind", "source_id", "target_id", "exact", "ambiguity", "payload")}), outcome, reason)
-        evidence[dimension][(item.index, item.shard_id, item.relation_id)] = item
+        key = (item.index, item.shard_id, item.relation_id)
+        evidence[dimension][key] = item
+        if dimension in configurations and outcome is not Outcome.UNRESOLVED:
+            configurations[dimension].append((key, payload["values"]))
+    for artifact_key, artifact in configurations[Dimension.ARTIFACT_DEPLOYMENT]:
+        for temporal_key, temporal in configurations[Dimension.TEMPORAL]:
+            if any(artifact[name] != temporal[name] for name in ("configuration_out", "configuration_in")):
+                for dimension, key in ((Dimension.ARTIFACT_DEPLOYMENT, artifact_key), (Dimension.TEMPORAL, temporal_key)):
+                    evidence[dimension][key] = replace(evidence[dimension][key], outcome=Outcome.CONTRADICTED,
+                                                        reason="artifact_and_temporal_configurations_disagree")
     obligations = []
     for dimension, items in evidence.items():
         if len(items) > evidence_limit:
             gaps.append(f"{dimension.value}:evidence_cap")
+            # A bounded prefix cannot prove that omitted accepted evidence agrees.
+            items = {key: replace(item, outcome=Outcome.UNRESOLVED, reason="continuity_evidence_cap")
+                     for key, item in items.items()}
         obligations.append(Obligation(dimension, tuple(items[key] for key in sorted(items)[:evidence_limit])))
     return Edge(edge.from_claim_id, edge.to_claim_id, edge.output_entity, edge.input_entity, tuple(obligations)), tuple(
         sorted(set(gaps)))
@@ -421,7 +482,7 @@ def edge_from_json(value: Mapping[str, Any]) -> Edge:
                   tuple(Obligation(Dimension(item["dimension"]), tuple(ContinuityEvidence(
                       **{**ref, "outcome": Outcome(ref["outcome"])}) for ref in item["evidence"]))
                         for item in value["obligations"]))
-    if document(result) != value:
+    if canonical_json(document(result)) != canonical_json(value):
         raise ValueError("noncanonical or unknown edge fields")
     return result
 
@@ -433,7 +494,7 @@ def proposal_from_json(value: Mapping[str, Any]) -> Proposal:
                         tuple(item["missing_predicates"]), item["requires_extra_verifier"]) for item in value["components"]),
         tuple(edge_from_json(item) for item in value["edges"]), tuple(value["prerequisites"]),
         ActorRecord(**value["composer"]))
-    if document(result) != value:
+    if canonical_json(document(result)) != canonical_json(value):
         raise ValueError("noncanonical or unknown proposal fields")
     return result
 
@@ -443,7 +504,7 @@ def challenge_from_json(value: Mapping[str, Any]) -> Challenge:
         value["challenge_id"], value["chain_id"], value["kind"], ActorRecord(**value["actor"]), value["status"],
         value["request_sha256"], Artifact(**value["receipt"]) if value["receipt"] is not None else None,
         tuple(edge_from_json(item) for item in value["edges"]), value["independent"], tuple(value["gaps"]))
-    if document(result) != value:
+    if canonical_json(document(result)) != canonical_json(value):
         raise ValueError("noncanonical or unknown challenge fields")
     return result
 
@@ -451,6 +512,6 @@ def challenge_from_json(value: Mapping[str, Any]) -> Challenge:
 def decision_from_json(value: Mapping[str, Any]) -> Decision:
     result = Decision(value["chain_id"], ChainStatus(value["status"]), tuple(value["limitations"]),
                       tuple(value["challenge_ids"]), Artifact(**value["artifact"]), value["policy"])
-    if document(result) != value or result.policy != POLICY:
+    if canonical_json(document(result)) != canonical_json(value) or result.policy != POLICY:
         raise ValueError("noncanonical or unknown chain decision fields")
     return result

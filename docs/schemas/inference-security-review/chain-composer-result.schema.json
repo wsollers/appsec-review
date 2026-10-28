@@ -3,7 +3,7 @@
   "$id": "https://appsec-review.local/schemas/inference-security-review/chain-composer-result.schema.json",
   "type": "object", "additionalProperties": false, "required": ["candidates", "gaps"],
   "properties": {
-    "gaps": {"$ref": "chain-records.schema.json#/$defs/texts"},
+    "gaps": {"$ref": "chain-records.schema.json#/$defs/worker_gaps"},
     "candidates": {
       "type": "array", "maxItems": 50,
       "items": {

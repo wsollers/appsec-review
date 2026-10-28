@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+import re
 from typing import Any, Mapping
 
 
@@ -29,8 +30,11 @@ class AttackChainSettings:
             if type(value) is not int or not low <= value <= high:
                 raise ValueError(f"attack_chains.{name} must be an integer between {low} and {high}")
         values = self.continuity_producers
-        if (not isinstance(values, tuple) or len(values) > 32 or len(set(values)) != len(values)
-                or any(not isinstance(item, str) or not item or len(item) > 200 for item in values)):
+        if (not isinstance(values, tuple) or len(values) > 32
+                or any(not isinstance(item, str) or len(item) > 200
+                       or not re.fullmatch(r"job_[a-z0-9_]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", item)
+                       for item in values)
+                or len(set(values)) != len(values)):
             raise ValueError("attack_chains.continuity_producers must be distinct producer/rule identities")
 
     @classmethod
