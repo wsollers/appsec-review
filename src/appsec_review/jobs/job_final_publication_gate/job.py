@@ -8,11 +8,14 @@ calls no model and never reinterprets a claim state or a ship-block status.
 """
 from __future__ import annotations
 
-import hashlib
+import json
+import time
+from collections import Counter
 from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
+from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,
 )
@@ -24,7 +27,8 @@ from appsec_review.storage import atomic_json
 from . import classify as classifier
 from .datasets import CONSUMES, DATASETS
 from .settings import FinalPublicationGateSettings
-from .verify import load_accepted_review
+from appsec_review.jobs.accepted_review import load_accepted_review
+from .attachments import PRODUCERS, require, reverify_snapshot, verify_attachments
 
 JOB_ID = "job_final_publication_gate"
 SCHEMA_ROOT = Path("docs") / "schemas" / "final-report"
@@ -58,10 +62,51 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         return Path(repository_root or unit.job.repository_root).resolve()
 
     def verify(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
         settings = _settings(unit)
         schemas = SchemaSet(repo(unit) / SCHEMA_DIRECTORY)
         verified = load_accepted_review(unit.job.run_root, schemas, max_packages=settings.max_packages)
         document = verified.document
+        configuration_sha = resolved_configuration_identity(unit.job.run_root)
+        configuration_path = unit.job.run_root / "data" / "configuration" / "resolved.json"
+        configuration = json.loads(configuration_path.read_text(encoding="utf-8"))
+        jobs = configuration["jobs"]
+        enabled = {name: bool(jobs.get(job, {}).get("settings", {}).get("enabled", False))
+                   for name, (job, *_rest) in PRODUCERS.items()}
+        # Chain work is an unconditional bounded stage of the accepted review.
+        enabled["attack_chains"] = True
+        # A manual producer is admitted only by an exact upstream identity, never mere discovery.
+        upstream = unit.job.upstream_handoffs
+        claimed_review = upstream.get("job_inference_security_review")
+        require(claimed_review is None or claimed_review == document["inputs"]["job_handoff"]["sha256"],
+                "accepted review differs from the gate attempt's upstream identity")
+        if "job_poc_generation" in upstream:
+            enabled["poc_generation"] = True
+        document.update(verify_attachments(unit.job.run_root, document, repository_root=repo(unit), enabled=enabled))
+        document["bindings"].append({"path": configuration_path.relative_to(unit.job.run_root).as_posix(),
+                                     "sha256": configuration_sha})
+        poc = document["capabilities"]["poc_generation"]
+        if "job_poc_generation" in upstream:
+            require(poc["handoff"] is not None and poc["handoff"]["sha256"] == upstream["job_poc_generation"],
+                    "manually admitted PoC handoff differs from its explicit upstream identity")
+        for name, (job, *_rest) in PRODUCERS.items():
+            record = document["capabilities"][name]
+            if record["enabled"] and job in upstream:
+                require(record["handoff"] is not None and record["handoff"]["sha256"] == upstream[job],
+                        f"accepted {job} differs from the gate attempt's upstream identity")
+        unit.job.events.write(
+            "FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED",
+            attachment_count=sum(len(rows) for rows in document["attachments"].values()),
+            gap_count=sum(row["gap_count"] for row in document["capabilities"].values()),
+            omitted_count=sum(row["omitted_count"] for row in document["capabilities"].values()),
+            outcomes=dict(Counter(row["disposition"] for row in document["capabilities"].values())),
+            duration_ms=max(0, round((time.monotonic() - started) * 1000)),
+            dispositions={name: row["disposition"] for name, row in sorted(document["capabilities"].items())},
+            attachment_counts={name: len(rows) for name, rows in sorted(document["attachments"].items())},
+            gap_counts={name: row["gap_count"] for name, row in sorted(document["capabilities"].items())},
+            omitted_counts={name: row["omitted_count"] for name, row in sorted(document["capabilities"].items())},
+            enabled={name: row["enabled"] for name, row in sorted(document["capabilities"].items())},
+            explicit_poc_admission="job_poc_generation" in upstream)
         unit.job.events.write("FINAL_PUBLICATION_GATE_REVIEW_VERIFIED", status=document["review"]["status"],
                               package_count=len(document["packages"]), binding_count=len(document["bindings"]))
         return {"artifact": _artifact(unit, "verified-review.json", document),
@@ -80,6 +125,7 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         verified = read_bound_json(run_root, unit.output("load.verify_review")["artifact"])
         classification = read_bound_json(run_root, unit.output("gate.classify")["artifact"])
         document = classifier.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, verified, classification)
+        reverify_snapshot(run_root, verified)
         schemas = SchemaSet(repo(unit) / SCHEMA_ROOT)
         errors = schemas.errors("final-publication-gate", document)
         if errors:
