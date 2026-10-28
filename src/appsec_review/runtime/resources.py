@@ -257,6 +257,35 @@ class ResourceCapacityInfeasible(RuntimeError):
         super().__init__(f"{self.requirement}: {self.reason}; {details}")
 
 
+LEASE_LIMIT_KEYS: tuple[str, ...] = ("cpu", "memory_mb", "io_slots")
+
+
+def budget_conflicts(metadata_root: Path, budget: ResourceBudget) -> list[str]:
+    """Describe every recorded lease whose limits differ from ``budget``.
+
+    Admission clamps to the minimum limits of all recorded leases (active, persistent, finished but
+    quarantined), so a review with another ``review_policy.resources`` budget would silently shrink, or
+    be shrunk by, them. Callers that launch a review refuse while this list is non-empty. Reading is
+    lock-free: the ledger is replaced atomically, and the check is advisory at launch time.
+    """
+    path = metadata_root.resolve() / "resource-admission" / "leases.json"
+    if not path.exists():
+        return []
+    state = json.loads(path.read_text(encoding="utf-8"))
+    if state.get("schema") != "appsec-review/resource-leases/1":
+        raise ValueError("unsupported host resource lease schema")
+    wanted = {name: getattr(budget, name) for name in LEASE_LIMIT_KEYS}
+    conflicts = []
+    for lease_id, entry in sorted(state.get("leases", {}).items()):
+        limits = {name: entry.get("limits", {}).get(name) for name in LEASE_LIMIT_KEYS}
+        if limits != wanted:
+            kind = ("persistent" if "persistent" in entry else
+                    "quarantined" if entry.get("quarantine") else "active")
+            conflicts.append(f"{kind} lease {lease_id} ({entry.get('action', '?')}, pid {entry.get('pid', '?')}) "
+                             f"limits {limits} != requested {wanted}")
+    return conflicts
+
+
 class ResourceAdmission:
     def __init__(self, metadata_root: Path, budget: ResourceBudget, *,
                  require_container_removal: bool = False):

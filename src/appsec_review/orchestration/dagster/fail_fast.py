@@ -10,10 +10,28 @@ from dagster import (
     multiprocess_executor, multiple_process_executor_requirements,
 )
 
+from appsec_review.config.run_selection import configurations
 from appsec_review.runtime import execution_safety as safety
 
 
+def _config_for(config, run):
+    """The run's configuration: launch tags may select another profile or overlay (``run_selection``)."""
+    return config.for_run(run) if hasattr(config, "for_run") else config
+
+
+def _executor_settings(config) -> dict:
+    return {
+        "max_concurrent": config.dagster.max_concurrent,
+        "retries": {"enabled": {}},
+        "tag_concurrency_limits": [
+            {"key": "appsec/pool", "value": pool, "limit": limit}
+            for pool, limit in sorted(config.dagster.pool_limits.items())
+        ],
+    }
+
+
 def _envelope(run, config):
+    config = _config_for(config, run)
     value = run.run_config.get("execution", {}).get("config", {}).get("safety")
     if value is None:
         return None
@@ -55,9 +73,10 @@ def guarded_op(config):
 
 
 class SafetyExecutor(Executor):
-    def __init__(self, delegate, config):
+    def __init__(self, delegate, config, rebuild=None):
         self.delegate = delegate
         self.config = config
+        self.rebuild = rebuild
 
     @property
     def retries(self):
@@ -67,14 +86,23 @@ class SafetyExecutor(Executor):
     def step_dependency_config(self):
         return self.delegate.step_dependency_config
 
+    def _delegate_for(self, config):
+        """Pool limits are per-run executor limits, so a run's own overlay pools apply to it alone."""
+        base = getattr(self.config, "base", self.config)
+        if self.rebuild is None or _executor_settings(config) == _executor_settings(base):
+            return self.delegate
+        return self.rebuild(config)
+
     def execute(self, plan_context, execution_plan):
-        envelope = _envelope(plan_context.dagster_run, self.config)
+        config = _config_for(self.config, plan_context.dagster_run)
+        delegate = self._delegate_for(config)
+        envelope = _envelope(plan_context.dagster_run, config)
         if envelope is None:
-            yield from self.delegate.execute(plan_context, execution_plan)
+            yield from delegate.execute(plan_context, execution_plan)
             return
         with safety.AdmissionGuardian(
-                envelope, self.config.runtime.metadata_dir,
-                resolved_config_sha256=self.config.resolved_sha256) as guardian:
+                envelope, config.runtime.metadata_dir,
+                resolved_config_sha256=config.resolved_sha256) as guardian:
             cancellation_requested = False
             cancellation_lock = threading.Lock()
 
@@ -94,7 +122,7 @@ class SafetyExecutor(Executor):
 
             guardian.on_stop = cancel_once
             try:
-                for event in self.delegate.execute(plan_context, execution_plan):
+                for event in delegate.execute(plan_context, execution_plan):
                     if (event.is_step_failure or event.is_resource_init_failure
                             or (event.is_engine_event and event.engine_event_data.error is not None)):
                         guardian.fail(f"Dagster {event.event_type_value}",
@@ -111,24 +139,22 @@ class SafetyExecutor(Executor):
 
 
 def execution_definition(config):
-    defaults = {
-        "max_concurrent": config.dagster.max_concurrent,
-        "retries": {"enabled": {}},
-        "tag_concurrency_limits": [
-            {"key": "appsec/pool", "value": pool, "limit": limit}
-            for pool, limit in sorted(config.dagster.pool_limits.items())
-        ],
-    }
+    configs = configurations(config)
 
     @executor(name="multiprocess", config_schema={"safety": Field(Permissive(), is_required=False)},
               requirements=multiple_process_executor_requirements())
     def create(context):
-        settings = dict(defaults)
-        if context.executor_config.get("safety") is not None:
+        guarded = context.executor_config.get("safety") is not None
+        if guarded:
             safety.validate(context.executor_config["safety"])
-            settings["retries"] = {"disabled": {}}
-        delegate = multiprocess_executor.executor_creation_fn(InitExecutorContext(
-            context.job, multiprocess_executor, settings, context.instance))
-        return SafetyExecutor(delegate, config)
+
+        def build(selected):
+            settings = _executor_settings(selected)
+            if guarded:
+                settings["retries"] = {"disabled": {}}
+            return multiprocess_executor.executor_creation_fn(InitExecutorContext(
+                context.job, multiprocess_executor, settings, context.instance))
+
+        return SafetyExecutor(build(configs.base), configs, rebuild=build)
 
     return create

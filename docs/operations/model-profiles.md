@@ -4,8 +4,10 @@
 scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` selects the separate
 Copilot subscription transport with development limits. `copilot-prod` uses that transport with
 production settings. Other values are errors. Nothing selects either production profile implicitly.
-The stack's profile is fixed when its containers are created, so switching
-needs a stack restart.
+The stack's profile is the container default, set when its containers are created. `review-start
+--profile` selects another profile of the same provider family for one run without a restart (see
+[per-run profile and overlay](operator-scripts.md#per-run-profile-and-overlay)); switching between the
+Claude and Copilot families needs a stack restart.
 
 ```bash
 # stack: recreate the containers under prod (a plain restart afterwards keeps prod)
@@ -13,7 +15,7 @@ scripts/stack-restart.sh --profile prod
 scripts/stack-start.sh --profile prod              # first start, or after stack-stop
 scripts/stack-rebuild.sh --profile prod            # rebuild the image, then recreate
 
-# review: --profile prod means "I expect prod"; review-start refuses if the running stack differs
+# review: --profile prod runs this review under prod, whatever the stack's default
 scripts/review-start.sh --profile prod --target appsec-multi-vuln
 
 # direct CLI and library
@@ -192,9 +194,11 @@ every red cell's.
 - The active profile is printed as `profile: dev|prod|copilot-dev|copilot-prod` by `stack-start`, `stack-restart`,
   `stack-rebuild` and `review-start`, and shown by `stack-status`. Both production profiles also print a
   notice that prod uses the more capable models and larger token limits.
-- `review-start --profile X` compares X with the running code-location's `APPSEC_REVIEW_PROFILE`
-  (unset means `dev`) and refuses with exit 3, printing the `scripts/stack-restart --profile X` command,
-  when they differ. Without `--profile` it reports what the stack runs.
+- `review-start --profile X` runs that review under X (tag `appsec/profile=X`) when X is in the running
+  code location's provider family. A Claude/Copilot family switch is refused with exit 3, printing the
+  `scripts/stack-restart --profile X` command. Without `--profile` a resumed run keeps its recorded
+  profile, and a new run uses the container's `APPSEC_REVIEW_PROFILE` (unset means `dev`). The choice
+  and its source are printed and recorded in the run's configuration manifest.
 - `stack-restart`, `stack-start` and `stack-rebuild` carry the running stack's profile over, like the
   target and overlay, so a plain restart never changes it.
 - The model preflight (`job_review_intake`) and `job_model_connectivity` probe the models of the

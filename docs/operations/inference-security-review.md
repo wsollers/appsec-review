@@ -105,7 +105,8 @@ editing the checked-in file, supply a capacity overlay:
 review_teams = 1
 ```
 
-Set `APPSEC_REVIEW_CONFIG_OVERLAY=local-capacity.toml`, or pass `overlay=` to `load_config`. The
+Set `APPSEC_REVIEW_CONFIG_OVERLAY=local-capacity.toml`, pass `overlay=` to `load_config`, or choose an
+overlay under `test/acceptance` for one Dagster run with `scripts/review-start --overlay`. The
 overlay may set only `review_teams`, `orchestration.dagster.pools.*` and
 `review_policy.resources.*` (the host resource budget); any other key is rejected.
 It is recorded as its own hashed layer in the run's configuration manifest. Capacity is excluded

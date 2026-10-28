@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 from dagster import DynamicOut, DynamicOutput, In, Nothing, Out, graph, multiprocess_executor, op
 
+from appsec_review.config.run_selection import reject_run_selection
 from appsec_review.orchestration.topology import launch_upstream_handoffs
 from appsec_review.runtime import UnitContext
 from appsec_review.runtime.launch import begin as launch_begin, configured_target, launch_inputs
@@ -24,6 +25,7 @@ def build_dagster_job(config, runner_factory):
         tags={"appsec/pool": "lifecycle"}, pool="lifecycle")
     def begin(context):
         tags = dict(context.dagster_run.tags)
+        reject_run_selection(config, tags, "tree_sitter_ast")
         inputs = launch_inputs(job, target=configured_target(config.runtime.repository_root),
                                upstream_handoffs=launch_upstream_handoffs(
                                    config.runtime.runs_dir, tags, in_graph=False) or {})
