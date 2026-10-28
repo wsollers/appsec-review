@@ -61,6 +61,14 @@ claim/input/dataset identities, result binding, and required outputs. Both are s
 structural decoding. `INVALID_COMPILE_DATABASE` and `BLOCKED_BY_COMPILE` are nonretryable;
 verified `coverage.retry_required` drives producer retry planning.
 
+Publication binds the frozen `data/configuration/manifest.json`, `resolved.json`, and
+`appsec-review.toml` files as run artifacts. Source inventory path/hash fields and exact frozen
+source-layer identities are metadata, not authority to open external paths. Declared run-artifact
+fields and run `data/` references still require safe resolution and exact byte verification.
+Required-index preflight and input-manifest consumption finish before the publication freezes its
+artifact closure. If later publication I/O fails, the runtime attempts to restore both the job
+latest pointer and accepted-index pointer; rollback errors are attached to the original failure.
+
 ## Validation and identity boundaries
 
 JSON Schema checks fields, types, enum values, canonical run-relative artifact path syntax,

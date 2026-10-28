@@ -2,8 +2,8 @@
 
 Status: shared contracts, runtime publication/admission, concrete native provenance, operational
 consumers, and receipt-derived metrics are integrated in source. This record reconciles parent
-checkpoint `4798b33a` plus metrics checkpoint `7820273f`. Final parent hardening and broader
-regression/native end-to-end results remain pending; this is not live deployment acceptance.
+checkpoint `4798b33a`, metrics checkpoint `7820273f`, and runtime hardening `177446e3`.
+Final consolidated parent regression results remain pending; this is not live deployment acceptance.
 
 ## Settled decisions
 
@@ -57,6 +57,13 @@ The accepted envelope remains extensible; shared references, observation metadat
 unit outcomes, and producer gaps are closed. The JSON Schema uses local references only.
 Artifact bytes, input-set equality, unique artifact paths, selector resolution, topology and
 coverage accounting remain application checks, not properties implied by schema validation.
+
+Runtime hardening `177446e3` binds actual frozen configuration files as artifacts, distinguishes
+source identity metadata from declared run-artifact references, and completes required-index and
+input-manifest consumption before freezing publication closure. Publication I/O failures trigger
+restoration attempts for both accepted/latest pointers; a rollback error is an explicit note on
+the original failure, not silently reported success. Mixed successful scopes with unavailable
+subscopes remain partial rather than making the entire successful unit unavailable.
 
 `tests/handoff_fixture.py` now creates actual synthetic task result/status receipts, claim,
 frozen configuration, result publication, and canonically reconstructed outcomes. It does not

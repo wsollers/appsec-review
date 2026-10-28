@@ -103,6 +103,12 @@ producer; never repair accepted JSON or reset its pointer. A count disagreement 
 permission to trust the larger number. If receipt metadata is available but its raw report is
 protected, use authorized run-artifact access, not an inference retrieval bypass.
 
+Publication preflights required indexes and completes reference closure before admission.
+On publication I/O failure, it attempts to restore both latest-job and accepted-index pointers.
+If the original error includes an accepted-pointer rollback failure, preserve the affected run
+and treat it as an integrity/recovery problem; a surviving pointer is not evidence that publication
+succeeded.
+
 For `handoff_schema_changed`, preserve the `/1` attempt and use `plan-resume`/`resume` to produce
 new `/2` publications and dependent indexes. For scanner failure, missing output, parser failure,
 or truncation, fix the named prerequisite or bound and rerun the affected unit; retain unrelated
