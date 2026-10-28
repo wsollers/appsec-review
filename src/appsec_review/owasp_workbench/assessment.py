@@ -160,6 +160,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         else:
             return {"status": "reused", "proposal": proposal, "attempts": [],
                     "guidance": guidance, "receipt": receipt.relative_to(run_root).as_posix(),
+                    "retrieval_requests": 0,
                     "reuse_basis": cached["attempts"]}
     task = {
         "mode": "assessment", "packages": _clean(packages),
@@ -252,9 +253,11 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
             publish_named(run_root, receipt, canonical_json({
                 "schema": "appsec-review/owasp-model-receipt/1", "key": key, "mode": "assessment",
                 "proposal": safe, "attempts": attempts,
+                "retrieval_requests": queries,
             }), namespace="owasp-shard", computation={"key": key})
             return {"status": "succeeded", "proposal": safe, "attempts": attempts,
-                    "guidance": guidance, "receipt": receipt.relative_to(run_root).as_posix()}
+                    "guidance": guidance, "receipt": receipt.relative_to(run_root).as_posix(),
+                    "retrieval_requests": queries}
         requests = proposal.get("requests")
         if set(proposal) != {"schema", "action", "requests"} or not isinstance(requests, list) or not 1 <= len(requests) <= 8:
             terminal = "invalid_retrieval"
@@ -281,7 +284,8 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         if terminal == "retrieval_budget":
             break
         terminal = "turn_limit"
-    return {"status": terminal, "proposal": None, "attempts": attempts, "guidance": guidance}
+    return {"status": terminal, "proposal": None, "attempts": attempts, "guidance": guidance,
+            "retrieval_requests": queries}
 
 
 def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] | None,
@@ -345,6 +349,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
               validation_retrieval: Mapping[str, int] | None = None) -> dict[str, Any]:
     retrieval_before = dict(resolver.metrics)
     ready = [package for package in packages if any(item.get("supported") for item in package["proof_obligations"])]
+    ready_ids = {package["row_id"] for package in ready}
     empty = {"status": "missing_evidence", "proposal": None, "attempts": []}
     worker = dict(worker_result) if worker_result is not None else investigate(repository_root=repository_root, run_root=run_root, batch=batch, packages=ready,
         role="control_assessor", profile=worker_profile, settings=settings, resolver=resolver, infer=infer) if ready else empty
@@ -355,10 +360,12 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
     review_rows = {row["row_id"]: row for row in reviewer["proposal"]["results"]} if reviewer["proposal"] else {}
     results = []
     for package in packages:
+        row_worker = worker if package["row_id"] in ready_ids else empty
+        row_reviewer = reviewer if package["row_id"] in ready_ids else empty
         assessed = accept_obligations(package, worker_rows.get(package["row_id"]), resolver)
-        independent = accept_obligations(package, review_rows.get(package["row_id"]), resolver)
+        reviewed_obligations = accept_obligations(package, review_rows.get(package["row_id"]), resolver)
         states, disagreements, gaps, refs, observations = [], [], [], [], []
-        for first, second in zip(assessed, independent, strict=True):
+        for first, second in zip(assessed, reviewed_obligations, strict=True):
             status = first["outcome"]
             review_status = second["outcome"]
             reviewed = bool(review_rows.get(package["row_id"])) and first["obligation"].get("supported")
@@ -389,26 +396,26 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
                   if states and all(item == "satisfied" for item in states) else "cannot_verify")
         verification = ("dissent" if disagreements else "independently_assessed"
                         if assessed and all(item["disposition"] == "independently_assessed" for item in assessed)
-                        else "pending" if reviewer["proposal"] is None else "unresolved")
+                        else "pending" if row_reviewer["proposal"] is None else "unresolved")
         if status == "cannot_verify":
             gaps.append("material obligations remain unresolved; no safe/unsafe conclusion")
-        for role, result in (("worker", worker), ("reviewer", reviewer)):
+        for role, result in (("worker", row_worker), ("reviewer", row_reviewer)):
             if result["status"] not in {"succeeded", "reused"}:
                 gaps.append(f"{role}: {result['status']}")
         results.append({
             "row_id": package["row_id"], "package_id": package["package_id"],
-            "status": status, "execution_completion": worker["status"],
+            "status": status, "execution_completion": row_worker["status"],
             "verification_status": verification, "coverage_completeness": "partial"
             if any(state == "cannot_verify" for state in states) else "scoped",
             "assessment_mode": "assessment", "obligations": assessed,
             "observations": observations, "disagreements": disagreements,
-            "worker_attempt_count": len(worker["attempts"]),
-            "reviewer_attempt_count": len(reviewer["attempts"]),
+            "worker_attempt_count": len(row_worker["attempts"]),
+            "reviewer_attempt_count": len(row_reviewer["attempts"]),
             "evidence_used": list({digest(ref): ref for ref in refs}.values()),
             "gaps": sorted(set(gaps)),
             "limitations": sorted(set([*package.get("limitations", ()),
                 *(text for item in assessed for text in item["limitations"]),
-                *(text for item in independent for text in item["limitations"])])),
+                *(text for item in reviewed_obligations for text in item["limitations"])])),
             "lead_eligible": bool(observations),
             "interpretation": "analyst_assessed; underlying evidence required for every downstream security predicate",
         })
@@ -423,6 +430,8 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
         if worker["status"] in {"succeeded", "reused"} else "failed",
         "results": results, "worker": worker, "independent_review": reviewer,
         "metrics": {"model_calls": len(attempts), "attempts": attempts,
+                    "model_requested_retrievals": sum(
+                        result.get("retrieval_requests", 0) for result in (worker, reviewer)),
                     "retrieval": retrieval, "cost_usd": None,
                     "reused_model_results": sum(item["status"] == "reused" for item in (worker, reviewer)),
                     "input_tokens_reported": sum(known_input) if attempts and len(known_input) == len(attempts) else None,

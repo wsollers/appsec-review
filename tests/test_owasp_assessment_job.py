@@ -180,6 +180,17 @@ def test_real_job_calls_worker_and_blinded_reviewer_over_accepted_tagged_evidenc
     assert sum(batch["metrics"]["model_calls"] for batch in batches) == len(transport.calls)
     assert all(batch["metrics"]["input_tokens_reported"] is None for batch in batches
                if batch["metrics"]["unknown_usage_attempts"])
+    dispatched = {package["row_id"] for request in transport.calls if request.role == "control_assessor"
+                  for package in request.task_input["packages"]}
+    reviewed = {package["row_id"] for request in transport.calls if request.role == "independent_reviewer"
+                for package in request.task_input["packages"]}
+    assert {item["row_id"] for item in joined["results"] if item["worker_attempt_count"]} == dispatched
+    assert {item["row_id"] for item in joined["results"] if item["reviewer_attempt_count"]} == reviewed
+    report = json.loads((fixture.run_root / outputs["publication.publish_handoff"]["artifact"]["path"]).read_text())
+    assert report["coverage"]["dispatched_rows"] == len(dispatched)
+    assert report["coverage"]["independent_review_attempted_rows"] == len(reviewed)
+    assert sum(batch["metrics"]["model_requested_retrievals"] for batch in batches) == sum(
+        not request.transcript for request in transport.calls)
     from jsonschema import Draft202012Validator
     schema = json.loads((ROOT / "docs" / "schemas" / "owasp-workbench.schema.json").read_text())
     Draft202012Validator(schema).validate(joined)
@@ -563,7 +574,9 @@ def test_runtime_obligations_stay_unresolved_even_when_dynamic_is_authorized(tmp
     rows = outputs["join.deterministic_join"]["joined"]["results"]
     row = next(row for row in rows if row["component_id"] == "component:0002"
                and row["control_identity"] == "MASVS:2.1.0:MASVS-NETWORK-1")
-    assert row["control_status"] == "cannot_verify" and not row["lead_eligible"]
+    assert row["applicability"] == "unsupported_missing_evidence"
+    assert row["control_status"] == "not_assessed" and not row["lead_eligible"]
+    assert row["coverage_completeness"] == "unresolved"
     assert any("runtime" in gap or "adapter" in gap for gap in row["gaps"])
 
 
