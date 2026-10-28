@@ -62,7 +62,10 @@ python -m pytest tests/test_dossier_live.py -q --basetemp=test/tmp/dossier-live
 ```
 
 The live test uses the real local image and renders twice, checking PDF structure, core text,
-retained hashes and byte reproducibility. It skips if Docker/the image is unavailable. The sample
+retained hashes, byte reproducibility, and every contents entry against its actual PDF text page.
+The shared template checksum-checks the contents file so a changed contents page triggers another
+pass even when the last-page label is unchanged. Unit-test executor doubles do not inspect the host
+container's mounts or require Docker. The live test skips if Docker/the image is unavailable. The sample
 contains seeded review/compile dispositions only; it is not evidence of a real-target vulnerability
 or a real-target compile.
 

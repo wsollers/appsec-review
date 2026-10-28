@@ -111,6 +111,10 @@ def test_model_rejects_runtime_or_missing_citations(tmp_path):
 
 
 def executor_factory(argv_seen, *, render_status=1, pdf=None, timed_out=False, wrong_image=False):
+    class FixtureExecutor(ContainerExecutor):
+        def _docker_bind_source(self, path):
+            return path
+
     def factory(catalog, root):
         def runner(argv, timeout):
             argv_seen.append(tuple(argv))
@@ -123,7 +127,7 @@ def executor_factory(argv_seen, *, render_status=1, pdf=None, timed_out=False, w
                 scratch = Path(mount.split("src=", 1)[1].split(",dst=")[0])
                 (scratch / "report.pdf").write_bytes(pdf)
             return CommandOutcome(render_status, b"renderer output", b"renderer diagnostic", timed_out=timed_out)
-        return ContainerExecutor(catalog, root, runner=runner)
+        return FixtureExecutor(catalog, root, runner=runner)
     return factory
 
 
@@ -153,6 +157,19 @@ def test_container_policy_argv_and_failed_render_retention(tmp_path):
     assert receipt["template"]["sha256"]
     assert receipt["tool"]["image_id"] == settings().image_id
     assert receipt["files"]["latex"]["sha256"] == result["files"]["latex"]["sha256"]
+
+
+def test_injected_executor_is_independent_of_host_container_mounts(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOSTNAME", "fixture-code-location")
+    monkeypatch.setattr(ContainerExecutor, "_docker_bind_source",
+                        lambda *args: pytest.fail("a fake runner must not inspect host container mounts"))
+    root = tmp_path / "run"
+    seen = []
+    result = render_dossier(root, root / "data" / "a", make_model(root), settings=settings(),
+                            repository_root=ROOT, executor_factory=executor_factory(
+                                seen, render_status=0, pdf=b"%PDF-1.5\n" + b"fixture " * 8 + b"\n%%EOF\n"))
+    assert result["status"] == "rendered"
+    assert any("run" in argv for argv in seen)
 
 
 @pytest.mark.parametrize("pdf", [b"", b"not a pdf", b"%PDF-1.7\n" + b"x" * 40])
