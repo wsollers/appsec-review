@@ -1,6 +1,7 @@
 # OpenVEX findings export implementation
 
-Status: standalone gate/2 adaptation integrated; final main reconciliation and landing pending.
+Status: standalone gate/2 adaptation verified against exact completed main `c47e3fea`.
+Local-main landing is coordinated separately from the source verification recorded here.
 The user explicitly selected standalone post-gate OpenVEX with gate-only report/2. The original
 /1 verification is retained as historical evidence, not proof of the adapted implementation.
 This record describes feature implementation and
@@ -73,6 +74,8 @@ The [architecture contract](../architecture/openvex-export.md) and
 | Standalone documentation and diagrams | `5edc1d7d2ca6fc1c468f81ce4f5fb33477a24329` |
 | Bounded review/3 and accepted gate/2 input verification | `2f467134a92b0e2ebc95fa3ffc67fe6655e90b83` |
 | Assembled-feature documentation status and packaging qualifications | `03a8d4e54229927442a07bddded975c84e0b5465` |
+| Exact completed-main merge, preserving host pins and SBOM/debug telemetry | `b0d53c457bd2ed871aa99da3b530782173c70550` |
+| Combined 44-job / 145-dataset inventory, including protected export | `870d4789aa3a74c974928e06a7d9cafa86157aa8` |
 
 The review handoff consumer enum additionally permits the exporter, without invalidating existing
 four-consumer handoffs. Finding-package/2 and finding eligibility policy were not changed by
@@ -155,6 +158,7 @@ Recorded focused results before final main reconciliation:
 | `b0540ab6dfcb4aae15a19c09e9c560b7379a7d9c` | Merged documentation/source-matrix consistency: one passed |
 | `2f467134a92b0e2ebc95fa3ffc67fe6655e90b83` | Child-reported input verifier/contracts/settings: 300 passed in 62.74 seconds |
 | `e628041cd734d854e749aa4e373bdc718d9a7363` | Combined coordinator exporter, shared snapshot, publication, topology and directly affected consumer units: 614 passed in 287.36 seconds |
+| `870d4789aa3a74c974928e06a7d9cafa86157aa8` | Final main-reconciled exporter/completion/inventory, native SBOM and debug metrics, review schemas and resume declarations: 734 passed, two Windows symlink-privilege skips in 302.15 seconds |
 
 The combined /2 command on the committed source above was:
 
@@ -176,12 +180,40 @@ The combined /2 command on the committed source above was:
   --basetemp=test\tmp\openvex-gate2-combined
 ```
 
+The final main-reconciled command retained every selector above, added the following files/cases,
+and used `--basetemp=test/tmp/openvex-main-final`:
+
+```text
+tests\test_completion_wiring.py
+tests\test_native_sbom_metrics.py
+tests\test_debug_symbol_metrics.py
+tests\review\test_inference_review_schemas.py::test_handoff_partitions_remediation_intake_from_the_verification_backlog
+tests\review\test_inference_review_schemas.py::test_handoff_accepts_exact_accounting_only
+tests\test_inventory_resume.py::test_registry_exposes_downstream_file_contracts
+```
+
+The two skips are the existing file/directory variants of
+`test_every_metrics_path_symlink_component_is_rejected` in `test_native_sbom_metrics.py`.
+A separate `-rs` run reproduced `WinError 1314` for both. They are named Windows environment
+gaps, not passing Linux custody evidence; no skip or assertion was added or weakened.
+
 At `212f21a83430bb501ebe0ea2130c97d9547280ae`, a rebuilt wheel was force-installed in the
 coordinator's isolated environment. Python `-I` confirmed installed-only module/resource paths,
 all seven offline schema resources plus license/lock, transitive report PoC-item resolution,
 canonical one-statement assembly and semantic validation with serialized synthetic gate/2
 inputs. Exact capabilities replaced `unavailable_inputs` in the checked companion. This is
 packaging/pure-boundary evidence, not real installed-job or whole-chain acceptance.
+
+The installed-only check was repeated successfully on main-reconciled source
+`870d4789aa3a74c974928e06a7d9cafa86157aa8`. In addition to canonical assembly/validation
+and all seven offline resources, the rebuilt wheel's verifier, projector, contracts and shared
+gate-reader module bytes were compared with that exact checkout. No installed whole-job or
+real-run acceptance claim follows from this packaging check.
+
+Completed main `c47e3fea5023011e9e6c6d0dbd4095d0a691561c` is an ancestor through an
+ordinary merge, not a rebase or separate completion landing. Semantic comparison proves its
+entire central configuration is unchanged except for the exporter table and declared release.
+Host catalog pins are semantically identical; the CodeQL asset-lock bytes match exactly.
 
 ## Failures and qualifications
 
@@ -210,6 +242,15 @@ packaging/pure-boundary evidence, not real installed-job or whole-chain acceptan
   approved certified-gate architecture, without weakening certificate verification or restoring
   /1 adapters. An incorrectly named documentation selector selected no tests; the exact existing
   source-matrix selector was then run and passed.
+- The exact-main smoke command first passed 39 units and exposed the newly merged completion
+  inventory's missing exporter row. The authoritative registry was measured at 44 jobs and
+  145 dataset kinds; its table, protected declarations and obsolete contracts-only status were
+  updated without weakening the inventory regression.
+- Preservation probes initially overconstrained the intended delta by omitting the exporter
+  release declaration and requiring raw equality for the unchanged catalog's inherited working
+  CRLF bytes. The corrected probe compares full TOML semantics after removing only the two
+  intended additions and verifies byte-pinned CodeQL lock bytes. No host pin or evidence hash
+  was rewritten to satisfy a probe.
 - A pre-existing final-report implementation-identity assertion expects a source fingerprint
   where the declared-release framework returns `None`. It was not used to change generic runtime
   identity or release semantics. Related registry, CLI, report and reuse boundaries have focused
@@ -236,7 +277,7 @@ units does not establish these checks. The user owns:
    resources, and any external publication/security disclosure process.
 
 No target execution, exploit execution, external publication, push or PR was part of this work.
-Local-main landing is delegated to Merge monitor after the completion landing owner supplies
-the exact completed main SHA. That SHA is merged into the feature branch without rebasing before
-the final clean handoff; there is no separate duplicate completion landing.
+Local-main landing is delegated to Merge monitor. The exact completed main SHA supplied by both
+integration owners is merged into the feature branch without rebasing before the final clean
+handoff; there is no separate duplicate completion landing.
 `docs/docs-sync.json` is intentionally unchanged.

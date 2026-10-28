@@ -18,7 +18,8 @@ from `orchestration.topology.wave1_dependencies`; Dagster executes independent b
 and the CLI executes them linearly. Standalone `job_third_party_data_sync` remains outside reviews.
 Both refuse to start when the registered and configured jobs differ. Both place enabled PoC,
 remediation and dossier jobs between inference review and the single final gate, followed by
-report publication; the report is the single terminal job. Both surfaces use the same semantic
+report publication and independently enabled standalone OpenVEX export. The report consumes only
+the gate; enabled export adds a separate terminal consumer, not report fan-in. Both surfaces use the same semantic
 registry and accepted-handoff format. The operator-visible execution distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
@@ -42,8 +43,10 @@ dataset/input-matrix surfaces that must change together.
 Combined source `6975aef2` retains main's topology-derived CLI `_graph_order` rather than restoring
 a separate hardcoded job list. Both required hunt/lead package-manifest hashes are checked by the
 shared `/3` reader, and PoC briefs resolve entry/path entity identities rather than display labels.
-OpenVEX shared contracts/settings and design documents are present, but no exporter is registered
-or configured; it is not part of the 43-job count or current terminal-report dependencies.
+Standalone OpenVEX is registered and configured disabled by default, bringing the combined
+inventory to 44 jobs. Its bounded review `/3` verifier and the report share accepted gate `/2`
+snapshot authority without optional producer-head discovery. It never becomes a report input;
+see the [export contract](openvex-export.md) and [verification record](../reviews/openvex-export-implementation.md).
 In both graphs, enabled prioritization and code-graph indexing feed security tagging,
 then OWASP consumes accepted tag-cloud/classification context before review data indexing and
 package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is enabled by
