@@ -22,6 +22,7 @@ from appsec_review.review.models import (
     SecurityPredicate,
 )
 from appsec_review.storage.atomic import atomic_bytes, canonical_json
+from appsec_review.review import attack_chains as chains
 
 EVENT_SCHEMA = "appsec-review/ledger-event/1"
 CLAIM_SCHEMA = "appsec-review/claim/1"
@@ -43,6 +44,9 @@ class EventKind(StrEnum):
     GAP_RECORDED = "gap_recorded"
     CELL_TERMINAL = "cell_terminal"
     JUDGE_VERDICT = "judge_verdict"
+    CHAIN_PROPOSED = "chain_proposed"
+    CHAIN_CHALLENGED = "chain_challenged"
+    CHAIN_DECIDED = "chain_decided"
 
 
 class EvidenceRequestOutcome(StrEnum):
@@ -279,6 +283,17 @@ class LedgerWriter:
         return self.append(EventKind.JUDGE_VERDICT, verdict.verdict_id,
                            {"verdict": judge_verdict_json(verdict), "round": round})
 
+    def propose_chain(self, proposal: chains.Proposal, artifact: chains.Artifact) -> dict[str, Any]:
+        return self.append(EventKind.CHAIN_PROPOSED, proposal.chain_id,
+                           {"proposal": chains.document(proposal), "artifact": chains.document(artifact)})
+
+    def challenge_chain(self, challenge: chains.Challenge) -> dict[str, Any]:
+        return self.append(EventKind.CHAIN_CHALLENGED, challenge.challenge_id,
+                           {"challenge": chains.document(challenge)})
+
+    def decide_chain(self, decision: chains.Decision) -> dict[str, Any]:
+        return self.append(EventKind.CHAIN_DECIDED, decision.chain_id, {"decision": chains.document(decision)})
+
     def seal(self) -> ShardReceipt:
         """Write the shard once. Re-sealing identical bytes is idempotent; differing bytes are not."""
         if self._sealed is not None:
@@ -316,6 +331,8 @@ def verify_events(events: Sequence[Mapping[str, Any]], *, expected_head: str | N
             raise IntegrityError(f"ledger event {index} has an unknown kind") from exc
         if not isinstance(event["body"], dict) or not isinstance(event["subject_id"], str):
             raise IntegrityError(f"ledger event {index} has an invalid body or subject")
+        if EventKind(event["kind"]) in _CHAIN_KINDS:
+            _validate_chain_body(EventKind(event["kind"]), event["subject_id"], event["body"])
         if event["event_id"] != _event_id(stream, index, prev, event["kind"], event["subject_id"], event["body"]):
             raise IntegrityError(f"ledger event {index} identity does not match its content")
         prev = event_sha256(event)
@@ -343,6 +360,32 @@ def verify_chain(path: Path, *, expected_head: str | None = None) -> tuple[dict[
 
 # Canonical merge.
 
+_CHAIN_KINDS = frozenset({EventKind.CHAIN_PROPOSED, EventKind.CHAIN_CHALLENGED, EventKind.CHAIN_DECIDED})
+
+
+def _validate_chain_body(kind: EventKind, subject: str, body: Mapping[str, Any]) -> None:
+    try:
+        if kind is EventKind.CHAIN_PROPOSED:
+            if set(body) != {"proposal", "artifact"}:
+                raise ValueError("chain proposal body is not closed")
+            record = chains.proposal_from_json(body["proposal"])
+            chains.Artifact(**body["artifact"])
+            identity = record.chain_id
+        elif kind is EventKind.CHAIN_CHALLENGED:
+            if set(body) != {"challenge"}:
+                raise ValueError("chain challenge body is not closed")
+            record = chains.challenge_from_json(body["challenge"])
+            identity = record.challenge_id
+        else:
+            if set(body) != {"decision"}:
+                raise ValueError("chain decision body is not closed")
+            record = chains.decision_from_json(body["decision"])
+            identity = record.chain_id
+        if identity != subject:
+            raise ValueError("chain event subject does not match record identity")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IntegrityError(f"chain event body is malformed: {exc}") from exc
+
 def event_content(event: Mapping[str, Any]) -> dict[str, Any]:
     """The order-independent part of an event: chain metadata is excluded."""
     return {"stream": event["stream"], "kind": event["kind"], "subject_id": event["subject_id"],
@@ -351,6 +394,8 @@ def event_content(event: Mapping[str, Any]) -> dict[str, Any]:
 
 def _claim_key(event: Mapping[str, Any]) -> str:
     kind, body = EventKind(event["kind"]), event["body"]
+    if kind in _CHAIN_KINDS:
+        return body["challenge"]["chain_id"] if kind is EventKind.CHAIN_CHALLENGED else event["subject_id"]
     if kind in (EventKind.CLAIM_PROPOSED, EventKind.STATE_TRANSITION, EventKind.DUPLICATE_MARKED):
         return event["subject_id"]
     if kind is EventKind.RELATION_ADDED:
@@ -463,12 +508,16 @@ class Projection:
     evidence_requests: Mapping[str, EvidenceRequestView] = field(default_factory=dict)
     # claim id -> its judge verdicts, ordered by verdict id (review-judge-and-poc.md section 3.4).
     judge_verdicts: Mapping[str, tuple[JudgeVerdict, ...]] = field(default_factory=dict)
+    attack_chains: Mapping[str, "ChainView"] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         document = self._base_json()
         if self.judge_verdicts:               # a review without a judge projects exactly as before
             document["judge_verdicts"] = {claim_id: [judge_verdict_json(item) for item in items]
                                           for claim_id, items in sorted(self.judge_verdicts.items())}
+        if self.attack_chains:
+            document["attack_chains"] = {chain_id: view.to_json()
+                                         for chain_id, view in sorted(self.attack_chains.items())}
         return document
 
     def _base_json(self) -> dict[str, Any]:
@@ -499,6 +548,64 @@ class Projection:
 
 _IDENTITY_FIELDS = ("affected_entities", "weakness_cwe", "security_predicate", "preconditions")
 _LANE_ORDER = {lane: index for index, lane in enumerate(Lane)}
+
+
+@dataclass(frozen=True, slots=True)
+class ChainView:
+    proposal: chains.Proposal
+    proposal_artifact: chains.Artifact
+    challenges: tuple[chains.Challenge, ...]
+    decision: chains.Decision | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {"proposal": chains.document(self.proposal), "proposal_artifact": chains.document(self.proposal_artifact),
+                "challenges": [chains.document(item) for item in self.challenges],
+                "decision": chains.document(self.decision) if self.decision else None}
+
+
+def _chain_projection(events: Sequence[Mapping[str, Any]], claims: Mapping[str, ClaimView]) -> dict[str, ChainView]:
+    proposals: dict[str, tuple[chains.Proposal, chains.Artifact]] = {}
+    challenges: dict[str, chains.Challenge] = {}
+    decisions: dict[str, chains.Decision] = {}
+    for event in events:
+        kind = EventKind(event["kind"])
+        if kind not in _CHAIN_KINDS:
+            continue
+        body, subject = event["body"], event["subject_id"]
+        _validate_chain_body(kind, subject, body)
+        if kind is EventKind.CHAIN_PROPOSED:
+            item = (chains.proposal_from_json(body["proposal"]), chains.Artifact(**body["artifact"]))
+            if subject in proposals and proposals[subject] != item:
+                raise IntegrityError(f"conflicting chain proposals: {subject}")
+            proposals[subject] = item
+        elif kind is EventKind.CHAIN_CHALLENGED:
+            item = chains.challenge_from_json(body["challenge"])
+            if subject in challenges and challenges[subject] != item:
+                raise IntegrityError(f"conflicting chain challenges: {subject}")
+            challenges[subject] = item
+        else:
+            item = chains.decision_from_json(body["decision"])
+            if subject in decisions and decisions[subject] != item:
+                raise IntegrityError(f"conflicting chain decisions: {subject}")
+            decisions[subject] = item
+    if set(decisions) - set(proposals) or any(item.chain_id not in proposals for item in challenges.values()):
+        raise IntegrityError("chain challenge or decision names an unknown proposal")
+    result = {}
+    for chain_id, (proposal, artifact) in sorted(proposals.items()):
+        for component in proposal.components:
+            claim = claims.get(component.claim_id)
+            if (claim is None or claim.claim.state is not component.state
+                    or not claim.history or claim.history[-1].adjudication_id != component.adjudication_id):
+                raise IntegrityError("chain component is not bound to the accepted final adjudication")
+        checked = tuple(sorted((item for item in challenges.values() if item.chain_id == chain_id),
+                               key=lambda item: item.challenge_id))
+        decision = decisions.get(chain_id)
+        status, limitations = chains.decide(proposal, checked)
+        if decision and (decision.status is not status or decision.limitations != limitations
+                         or decision.challenge_ids != tuple(item.challenge_id for item in checked)):
+            raise IntegrityError("chain decision does not follow deterministic continuity/challenge policy")
+        result[chain_id] = ChainView(proposal, artifact, checked, decision)
+    return result
 
 
 def _merge_proposals(proposals: list[tuple[Claim, str]]) -> tuple[Claim, tuple[str, ...]]:
@@ -554,7 +661,9 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
         verdicts: dict[str, JudgeVerdict] = {}
         for event in ordered:
             kind, subject, body = EventKind(event["kind"]), event["subject_id"], event["body"]
-            if kind is EventKind.CLAIM_PROPOSED:
+            if kind in _CHAIN_KINDS:
+                _validate_chain_body(kind, subject, body)
+            elif kind is EventKind.CLAIM_PROPOSED:
                 claim = claim_from_json(body["claim"])
                 if claim.claim_id != subject or claim.state is not ClaimState.PROPOSED or claim.duplicate_of:
                     raise IntegrityError(f"claim proposal {subject} is not a proposed claim")
@@ -644,6 +753,7 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
         evidence_requests=requests,
         judge_verdicts={claim_id: tuple(sorted(items, key=lambda item: item.verdict_id))
                         for claim_id, items in sorted(judged.items())},
+        attack_chains=_chain_projection(ordered, claims),
     )
 
 

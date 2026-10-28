@@ -22,6 +22,7 @@ from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLE
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
 from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
 from appsec_review.review.ship_block import ShipBlockSettings
+from appsec_review.config.attack_chains import AttackChainSettings
 
 
 JOB_ID = "job_inference_security_review"
@@ -355,6 +356,7 @@ class InferenceSecurityReviewSettings:
     triage: TriageSettings = TriageSettings()
     # PoC candidates the handoff lists (review-judge-and-poc.md section 4); semantic.
     poc_candidates: PocCandidateSettings = PocCandidateSettings()
+    attack_chains: AttackChainSettings = AttackChainSettings()
 
     @property
     def judge(self) -> JudgeSettings | None:
@@ -622,7 +624,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
                                        "roles", "routing", "scoring", "poc"},
-                      {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates"})
+                      {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates",
+                       "attack_chains"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -756,4 +759,5 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         verification=VerificationSettings.from_mapping(settings.get("verification"), f"{_PREFIX}.verification"),
         triage=triage,
         poc_candidates=PocCandidateSettings.from_mapping(settings.get("poc_candidates"), f"{_PREFIX}.poc_candidates"),
+        attack_chains=AttackChainSettings.from_mapping(settings.get("attack_chains")),
     )
