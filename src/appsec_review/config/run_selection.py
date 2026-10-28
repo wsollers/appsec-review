@@ -87,6 +87,11 @@ class RunConfigurations:
 
     def for_tags(self, tags: Mapping[str, str]) -> AppConfig:
         target = compiler_target(tags.get(COMPILER_TARGET_TAG, self.base.compiler_target.value))
+        if target != self.base.compiler_target:
+            from .native_dagster import native_execution_requested
+            if native_execution_requested():
+                raise ValueError("native execution pins one configuration and resource budget per operator "
+                                 "contract; a per-run compiler target is refused")
         selection = requested_selection(self.base, tags)
         if selection is None and target == self.base.compiler_target:
             return self.base

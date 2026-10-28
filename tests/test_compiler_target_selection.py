@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -74,6 +76,38 @@ def test_a_run_cannot_change_its_compiler_target(tmp_path, monkeypatch) -> None:
         JobRunner(clang)._bind_configuration(tmp_path)
 
 
+def test_native_execution_refuses_compiler_only_tag_changes(monkeypatch) -> None:
+    config = load_config(ROOT / "appsec-review.toml", profile="dev")
+    monkeypatch.setenv("APPSEC_NATIVE_TEST", "1")
+    with pytest.raises(ValueError, match="native execution"):
+        RunConfigurations(config).for_tags({COMPILER_TARGET_TAG: "msvc"})
+    assert RunConfigurations(config).for_tags({COMPILER_TARGET_TAG: "clang"}) is config
+
+
+def test_safety_envelope_refuses_a_compiler_tag_different_from_submission() -> None:
+    from appsec_review.orchestration.dagster.fail_fast import _envelope
+    from appsec_review.runtime import execution_safety
+
+    config = load_config(ROOT / "appsec-review.toml", profile="dev")
+    resolved = json.loads(config.resolved_json)
+    envelope = execution_safety.policy(str(uuid4()), {
+        "source_commit": "a" * 40, "target_commit": "b" * 40,
+        "configuration": {
+            "base_sha256": config.source_sha256, "profile": "dev",
+            "profile_sha256": resolved["configuration_profile"]["sha256"],
+            "overlay_sha256": resolved.get("configuration_overlay", {}).get("sha256"),
+            "compiler_target": "clang",
+        }})
+    run = SimpleNamespace(
+        run_id=envelope["dagster_run_id"],
+        run_config={"execution": {"config": {"safety": envelope}}},
+        tags={"dagster/max_retries": "0", "appsec/safety_identity": execution_safety.identity(envelope)})
+    assert _envelope(run, RunConfigurations(config)) == envelope
+    run.tags[COMPILER_TARGET_TAG] = "msvc"
+    with pytest.raises(ValueError, match="frozen safety envelope"):
+        _envelope(run, RunConfigurations(config))
+
+
 def test_compiler_routes_are_explicit_and_ranges_are_unsigned_half_open() -> None:
     assert selected_path(CompilerTarget.CLANG) == "clang_dwarf"
     assert selected_path(CompilerTarget.MSVC) == "msvc_pdb"
@@ -106,3 +140,32 @@ def test_operator_launch_selection_restores_and_refuses_target_drift(tmp_path, m
     args.compiler_target = "clang"
     with pytest.raises(ops.OpsError, match="cannot change"):
         ops.run_compiler_target(args)
+
+
+def test_cli_resume_restores_frozen_target_before_constructing_the_graph(tmp_path, monkeypatch) -> None:
+    import appsec_review.cli as cli
+
+    configuration = tmp_path / "2026-10-28-0001" / "data" / "configuration"
+    configuration.mkdir(parents=True)
+    (configuration / "manifest.json").write_text(json.dumps({
+        "selection": {"compiler_target": "msvc"}}))
+    real_load = load_config
+    selected = []
+
+    def load(path, **kwargs):
+        config = real_load(path, **kwargs)
+        return replace(config, runtime=replace(config.runtime, runs_dir=tmp_path))
+
+    def graph(config, jobs):
+        selected.append(config.compiler_target)
+        return SimpleNamespace(plan=lambda *_args, **_kwargs: [])
+
+    monkeypatch.setattr(cli, "load_config", load)
+    monkeypatch.setattr(cli, "active_job_ids", lambda *_args: ())
+    monkeypatch.setattr(cli, "builtin_registry", lambda: SimpleNamespace())
+    monkeypatch.setattr(cli, "GraphRunner", graph)
+    monkeypatch.setattr(cli, "source_fingerprint", lambda *_args: "test-source")
+    assert cli.main(["--config", str(ROOT / "appsec-review.toml"),
+                     "plan-resume", "--run-id", "2026-10-28-0001",
+                     "--target", str(tmp_path)]) == 0
+    assert selected == [CompilerTarget.MSVC]

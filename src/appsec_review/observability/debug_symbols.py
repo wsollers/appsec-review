@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Mapping, Sequence
 
-from appsec_review.debug_symbols.contract import QueryMode
+from appsec_review.debug_symbols.contract import JOB_ID, QueryMode
 
 
 def debug_symbol_metrics(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
@@ -12,10 +12,21 @@ def debug_symbol_metrics(records: Sequence[Mapping[str, Any]]) -> Mapping[str, A
     completed = []
     queries = []
     failures = 0
+    attempts: set[tuple[str, str, str]] = set()
+    attempt_identity_unavailable = False
     gaps: list[str] = []
     allowed_modes = {mode.value for mode in QueryMode}
     for record in records:
         event = record.get("event_type")
+        producer_event = (record.get("job_id") == JOB_ID and event == "JOB_STARTED") or event in {
+            "DEBUG_SYMBOL_TARGET_SELECTED", "DEBUG_SYMBOL_INDEX_COMPLETED",
+            "DEBUG_SYMBOL_ARTIFACT_COMPLETED", "DEBUG_SYMBOL_ARTIFACT_FAILED"}
+        if producer_event:
+            identity = tuple(str(record.get(key) or "-") for key in ("run_id", "job_id", "attempt_id"))
+            if "-" in identity:
+                attempt_identity_unavailable = True
+            else:
+                attempts.add(identity)
         if not isinstance(event, str) or not event.startswith("DEBUG_SYMBOL_"):
             continue
         details = record.get("details", {})
@@ -70,11 +81,13 @@ def debug_symbol_metrics(records: Sequence[Mapping[str, Any]]) -> Mapping[str, A
     def total(values: list[int]) -> int | None:
         return sum(values) if len(values) == len(queries) else None
 
+    if attempt_identity_unavailable:
+        gaps.append("debug_symbol_metric_attempt_identity_unavailable")
     return {
         "schema": "appsec-review/debug-symbol-metrics/1",
         "compiler_target": decisions[-1] if decisions else None,
         "decision_count": len(decisions),
-        "index_attempt_count": len(completed),
+        "index_attempt_count": None if attempt_identity_unavailable else len(attempts),
         "artifact_failure_count": failures,
         "index": index,
         "queries": {
