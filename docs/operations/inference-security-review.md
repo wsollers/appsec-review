@@ -157,10 +157,10 @@ from cell fingerprints, so runs with different team counts reuse each other's ce
 identical canonical outputs.
 
 [`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
-raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts, and runs 3 review
-teams; the checked-in default stays at one slot. See [performance assurance](performance-assurance.md)
-for its limits. That explicit overlay overrides production's 7-team default with 3; omit its
-team setting or select a deliberate 7-team capacity overlay when using its scanner/IO settings.
+raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts; the checked-in
+default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
+The overlay leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
+7 review teams.
 Profile defaults are applied before capacity overlays, and the final resolved settings are frozen
 per run. Existing overlays are not silently overwritten.
 
