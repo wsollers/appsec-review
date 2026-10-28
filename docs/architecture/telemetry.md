@@ -20,7 +20,8 @@ Lifecycle families are:
   retry, duration, result/gap counts, truncation, disposition, and error class.
 - `MCP_TOOL_STARTED/COMPLETED` for transport calls and `RETRIEVAL_SUBOP_COMPLETED` for child spans.
 - `MODEL_CALL_STARTED/COMPLETED` around inference calls (currently emitted by target analysis
-  planning, project-build image repair, and post-build security assessment), with
+  planning, project-build image repair, post-build security assessment, OWASP worker/independent
+  assessment, and lead/hunt red/blue/verifier/judge cells), with
   provider/model/reasoning identities, guidance and request hashes, token/cache counts, duration,
   retry, status, and error class.
 - `DAGSTER_QUEUE_DELAY`, written by the Dagster adapter when it claims a job attempt, with the
@@ -44,6 +45,31 @@ Lifecycle families are:
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
 events remain authoritative; the summary is a regenerable operator view.
+
+The additive `owasp` section resolves `OWASP_ASSESSMENT_RECORDED` to the hash-verified workbench
+report. It retains each publication attempt and the latest coverage denominators without summing
+the same rows across retries. A missing, changed, or invalid latest receipt is a named gap, not a
+fallback to older coverage. New dispatch starts and completed calls remain separate, so an
+in-flight request is not zero work or completed coverage. Input-index retrieval, batch
+source/citation resolution, and model-requested expansion are separate counters; worker metrics carried into independent review
+are read once from the final report, not summed again from intermediate worker events.
+`OWASP_MODEL_REUSED` records verified reuse with no new dispatch, and
+`OWASP_RETRIEVAL_COMPLETED` distinguishes succeeded, denied, failed and budget-skipped requests.
+
+The additive `review_flow` section retains control-evidence projection and package/lane publication
+milestones, manifest pins, and the latest cell disposition per attempt/cell. Cell metrics distinguish
+fresh work, verified reuse, and not-launched work. Historical retrieval counts on reused cells are
+not fresh queries. Absent milestones mean unrecorded execution, not successful zero-work stages.
+Generic task/step/operation events supply stage timing and failures across the entire graph.
+`model_invocations` now retains role/persona, cell, batch/package/lane, job-attempt/task correlation,
+transport status, and available served identities. Transport success does not establish valid
+assessment output: the OWASP attempt/cell receipt retains that separate disposition. Provider token
+usage stays nullable; invalid usage is named rather than aggregated as zero. Configured recording
+replay is labelled separately and contributes neither new inference nor historical token usage
+to fresh-call totals. Cell dispatch attempts remain distinct from that fresh-call count.
+Neither model counts nor publication/cell success establish findings or safety, and scripted/recorded transports do not
+establish live-provider efficacy. Raw prompts, responses, source, and exception text are not emitted
+by the shared model-call measurement helper.
 
 Version 4 adds the top-level `codeql` section (`appsec-review/codeql-execution-metrics/1`). Every
 CodeQL action (database, analyze, compile, export) is one row derived from its
