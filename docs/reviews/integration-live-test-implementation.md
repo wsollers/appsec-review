@@ -39,6 +39,21 @@ negative expected identities can be batched in one evaluation.
 This transition has no final latest-main pass at this update. Earlier measurements remain
 revision-scoped; fixture corrections and reduced work alone do not complete public calibration.
 
+W5's interim public W0-supervised attempt exposed a shared guard/source incompatibility after
+`bfe7f38b`: `tests/acceptance_plugin.py` rejects all reads beneath repository `data/`, while
+the real review job's `_taxonomy` reads tracked
+`data/reference/taxonomy/vocabulary.json`. All three new consumer nodes therefore fail at
+`packages.assemble_lead_packages` with `PermissionError`; owned cleanup is confirmed with zero
+remaining processes. This is a shared runner-policy blocker, not evidence that the consumer
+joins passed or that production mutable-data access should be enabled. A policy correction
+must distinguish required pinned read-only application taxonomy from production mutable state;
+copying/substituting the taxonomy or weakening the guard is not an acceptance result.
+
+Direct W5 triage/referral executions were reported passing at approximately 45 seconds, and
+publication reached the real accepted report/render path at approximately 112 seconds before
+final assertion refinement. These are interim direct-test observations, not final public
+verification; exact revision, artifacts and a passing post-correction run remain outstanding.
+
 ## Shared decisions
 
 1. Acceptance state lives only under a unique `test/tmp/acceptance/<invocation>/<lane>/`.
