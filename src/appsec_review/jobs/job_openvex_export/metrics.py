@@ -166,8 +166,12 @@ def aggregate_openvex_metrics(run_root: Path, records: Sequence[Mapping[str, Any
         details = event.get("details", {})
         run_id, attempt_id = str(event["run_id"]), str(event["attempt_id"])
         if event["event_type"] == "JOB_REUSED":
+            reuse_invocation = details.get("invocation_id") or details.get("dagster_run_id")
             key = (run_id, attempt_id, str(details.get("handoff_sha256")),
-                   str(details.get("dagster_run_id")))
+                   str(reuse_invocation))
+            if not reuse_invocation:
+                gap("reuse_invocation_unavailable",
+                    {"run_id": run_id, "job_id": JOB_ID, "attempt_id": attempt_id})
             if key in reuses:
                 duplicate_count += 1
                 if reuses[key].get("details") != details:

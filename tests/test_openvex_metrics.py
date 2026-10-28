@@ -313,6 +313,29 @@ def test_distinct_reuse_dispatches_count_separately_and_never_repeat_fresh_total
     assert report["openvex_export_duration_seconds"]["measured_count"] == 1
 
 
+def test_reuse_invocations_distinguish_same_orchestrator_dispatch(tmp_path, monkeypatch):
+    boundary = AcceptedBoundary(tmp_path, monkeypatch)
+    handoff, _ = boundary.publish()
+    for invocation in ("reuse-1", "reuse-2", "reuse-2"):
+        event(tmp_path, "JOB_REUSED", handoff_sha256=handoff.sha256,
+              invocation_id=invocation, dagster_run_id="same-dispatch")
+    report = section(tmp_path)
+    assert report["openvex_export_reuses_total"] == 2
+    assert report["duplicate_lifecycle_records"] == 1
+    assert not report["gaps"]
+
+
+def test_uncorrelated_manual_reuse_is_a_named_gap_not_silent_exact_accounting(tmp_path, monkeypatch):
+    boundary = AcceptedBoundary(tmp_path, monkeypatch)
+    handoff, _ = boundary.publish()
+    for _ in range(2):
+        event(tmp_path, "JOB_REUSED", handoff_sha256=handoff.sha256)
+    report = section(tmp_path)
+    assert report["openvex_export_reuses_total"] == 1
+    assert "reuse_invocation_unavailable" in gap_reasons(report)
+    assert not report["accounting_complete"]
+
+
 def test_duplicates_across_runtime_domain_and_spans_do_not_double_work(tmp_path, monkeypatch):
     boundary = AcceptedBoundary(tmp_path, monkeypatch)
     handoff, bundle = boundary.publish()
