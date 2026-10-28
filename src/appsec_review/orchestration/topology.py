@@ -167,8 +167,9 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     if "job_owasp_control_assessment" in registered:
         # OWASP consumes classification, the tag cloud's accepted assignments and code-graph
         # context. It precedes data-index projection, hunt assembly and red/blue investigation.
+        original = wave_dependencies.pop("job_owasp_control_assessment")
         wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys((
-            *wave_dependencies["job_owasp_control_assessment"],
+            *original,
             *(job_id for job_id in ("job_review_prioritization", "job_code_graph_index",
                                     "job_security_tagging") if job_id in wave_dependencies),
         )))
