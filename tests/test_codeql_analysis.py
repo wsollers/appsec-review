@@ -828,7 +828,9 @@ def test_normalization_admission_timeout_publishes_successful_sibling(
     monkeypatch.setattr(codeql_job, "_query_one",
                         lambda _, value, profile: {**value, "query_profile": dict(profile)})
     monkeypatch.setattr(codeql_job, "_export_isolated",
-                        lambda _, value, **kwargs: {**value, "export_status": "NOT_APPLICABLE"})
+                        lambda _, value, **kwargs: {
+                            **codeql_job._export_base(codeql_job._scope_from(value["scope"]), value),
+                            "export_status": "NOT_APPLICABLE", "gaps": []})
     monkeypatch.setattr(codeql_job, "resolve_context_manifest",
                         lambda _: (upstream, file_sha256(upstream)))
     reserve = codeql_job.ResourceAdmission.reserve
