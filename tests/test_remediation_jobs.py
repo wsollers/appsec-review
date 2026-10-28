@@ -19,7 +19,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import JobContext
 from appsec_review.storage import file_sha256
 from tests import remediation_support as support
-from tests.final_report_support import run_job
+from tests.final_report_support import job_tables, run_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay, write_scenario
 from tests.fixtures.inference_review.builder import FILES, build_accepted_index_set
 
@@ -34,9 +34,10 @@ def summary(root, job):
 @pytest.fixture(scope="module")
 def chain(tmp_path_factory):
     base = tmp_path_factory.mktemp("rm")
-    fixture = build_accepted_index_set(base)
+    fixture = build_accepted_index_set(base / "data")
     native_ids = support.add_native_graph_facts(fixture)
-    config = write_config(base, fixture.runs_dir, extra=support.toml_tables())
+    config = write_config(base, fixture.runs_dir,
+                          extra=support.toml_tables() + job_tables("job_third_party_data_sync"))
     logs = base / "logs"
     logs.mkdir()
     env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1)), "APPSEC_C7_CONFIG": str(config),
@@ -84,15 +85,24 @@ def test_native_fixture_basis_resolves_in_actual_packaged_view(tmp_path):
     from appsec_review.review.package_view import ViewLimits, build_view
     from appsec_review.review.packages import assemble_packages
     from appsec_review.review.scope import accept_manifest
+    from appsec_review.review.references import load_cwe_reference
+    from appsec_review.review.scoring.evidence_source import AcceptedEvidenceSource
 
     fixture = build_accepted_index_set(tmp_path)
     ids = support.add_native_graph_facts(fixture)
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    scope = accept_manifest(fixture.run_root)
+    assembly = assemble_packages(scope)
     [package] = [item.document() for item in assembly.packages
                  if item.kind == "finding_lead" and item.lead_ids == (fixture.ids["sast_critical"],)]
-    view = build_view(package, RetrievalCore(fixture.runs_dir, fixture.run_id), ViewLimits())
+    core = RetrievalCore(fixture.runs_dir, fixture.run_id)
+    view = build_view(package, core, ViewLimits())
     assert view.document["neighborhood"]["function"]["name"] == "p"
     assert {ids["fix_entry"], ids["fix_call"], ids["fix_function"]} <= set(view.labels.values())
+    tags = AcceptedEvidenceSource(core, scope).tags({fixture.ids["native/src/parse.c"]}, set(), set())
+    assert any(tag.assignment_id == ids["fix_surface"] and tag.basis == "declared" for tag in tags)
+    catalog = load_cwe_reference(fixture.run_root)
+    assert catalog.source == "mitre_catalog", catalog.gap
+    assert catalog.lookup("CWE-120").consequences
 
 
 def test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs(chain):
@@ -120,7 +130,9 @@ def test_native_review_really_emits_confirmed_poc_candidacy_without_injected_can
     review = load_review(chain.root, support.ROOT, support.bounds())
     handoff = read_bound_json(chain.root, review["inputs"]["review_handoff"])
     candidates = handoff["poc_candidates"]
-    assert candidates
+    assert candidates, [(package["title"], package["state"], package["judge_verdict"],
+                         [(score["native"], score["missing_factors"]) for score in package["scores"]])
+                        for package in review["packages"]]
     assert len({candidate["claim_id"] for candidate in candidates}) == len(candidates)
     for candidate in candidates:
         assert candidate["state"] == "confirmed"

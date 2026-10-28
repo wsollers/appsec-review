@@ -167,13 +167,20 @@ def add_native_graph_facts(fixture) -> dict[str, str]:
         Family.CALL_SITE, {**_span(location), "caller_symbol": identity.value, "callee_name": "strcpy"},
         {**results_for(Family.CALL_SITE), "caller": {"symbol": identity.value, "display": "p"}},
         location, snapshot=SNAPSHOT)
+    tag_id = LogicalIdentity.derive(EntityKind.TAG_ASSIGNMENT, SNAPSHOT, {"assignment_id": "native-rpc-surface"})
+    tag = EntityRecord(tag_id, "native-rpc-surface", "surface:entry:rpc", "fixture native RPC input", {
+        "tag": "surface:entry:rpc", "basis": "declared",
+        "subject": {"kind": "file", "path": PARSE, "logical_id": fixture.ids[PARSE]}}, location)
     _publish(fixture, [
         ("graph", "cpp-native-remediation-symbols", {"job": "job_code_graph_index", "build_unit_id": "native-main"},
          [symbol], [], ("graph:native:symbols", "complete", None)),
         ("graph", "cpp-native-remediation-call", {"job": "job_code_graph_index", "family": "call_site",
                                                   "build_unit_id": "native-main"},
-         [call], [], ("graph:native:call_site", "complete", None))])
+         [call], [], ("graph:native:call_site", "complete", None)),
+        ("tags", "native-remediation-surface", {"job": "job_security_tagging", "family": "security_domain"},
+         [tag], [], ("tags:native:surface", "complete", None))])
     return {"fix_call": call.identity.value, "fix_function": identity.value,
+            "fix_surface": tag_id.value,
             **{f"fix_{key}": ids[value] for key, value in {
                 "sink": "sink_strcpy", "entry": "entry_s", "path": "path_broken", "guard": "guard_strcpy"}.items()}}
 
