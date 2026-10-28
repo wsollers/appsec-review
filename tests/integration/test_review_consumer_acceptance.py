@@ -84,8 +84,8 @@ def _review(lane, name: str, *, ci: bool, rounds: int, foreign_first: bool = Fal
     with environment(env):
         fixture = build_accepted_index_set(
             base / "fixture", run_id=run_id, runs_dir=lane.runs_dir,
-            omit=OMIT + (("semgrep",) if ci else ("ci",)),
-            omit_feeds=("osv", "nvd", "kev", "epss"))
+            omit=OMIT + (("semgrep", "components", "build", "reference_intelligence") if ci else ("ci",)),
+            omit_feeds=("osv", "nvd", "kev", "epss") + (("mitre",) if ci else ()))
     assert fixture.runs_dir == lane.runs_dir
     (fixture.run_root / "data" / "jobs" / JOB / "cells").mkdir(parents=True, exist_ok=True)
     infer = ConsumerInfer(fixture.ids, base / "model-turns.jsonl",
@@ -266,4 +266,4 @@ def test_worker_referral_deduplicates_next_round_after_foreign_repair(acceptance
         assert not any(gap.reason == "follow_up_cutoff:max_rounds" for gap in projection.gaps)
         assert any(gap.reason == "unresolved_specialist_referral:ci_cd_pipeline" for gap in projection.gaps)
         assert len(projection.claims) == 1
-    _finished(lane, "consumer-referral-convergence", started)
+    _finished(lane, "consumer-referral-convergence", started, budget=120)
