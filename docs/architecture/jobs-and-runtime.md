@@ -26,8 +26,8 @@ single terminal job. Both surfaces use the same semantic registry and accepted-h
 settings/profiles and dataset/input-matrix wiring. PoC/planning/validation/dossiers default enabled
 for new configurations; old frozen runs are unchanged. Validation without planning is rejected.
 The [completion design](evidence-completion-and-remediation.md) preserves compile-only policy.
-The delivered shared reader still expects review `/2` while the chain writer emits `/3`;
-final reader/PoC/gate/report contracts and chain isolation are pending. Registration therefore does
+Checkpoint `18eae9f` aligns the shared review reader with writer `/3` and verifies nested chain
+and package bindings. Final PoC/gate/report contracts and chain isolation are pending. Registration therefore does
 not yet establish end-to-end acceptance. The
 [dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
 lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and

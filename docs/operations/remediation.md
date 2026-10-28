@@ -1,9 +1,9 @@
 # Remediation planning and bounded validation
 
-Status: producers `6278e580` and central wiring `b702eb7`, 2026-10-28. Planning and validation
+Status: producers `6278e580`, central wiring `b702eb7` and follow-up `e769645f`, 2026-10-28. Planning and validation
 are real registered jobs, enabled in new configurations by the user's rollout decision.
-**End-to-end acceptance is pending**: the chain review writer emits handoff `/3`, while the
-delivered shared reader still expects `/2`; final gate/report consumption is also pending.
+The shared reader now verifies review `/3` and nested chain/package bindings (`18eae9f`).
+**End-to-end acceptance is pending**: final PoC/gate/report contracts and consumption remain pending.
 Existing frozen configurations are not rewritten or silently enabled by new defaults.
 
 These jobs attach proposals/checks to immutable accepted findings. They do not edit the user
@@ -56,7 +56,9 @@ Only `native_syntax` is commissioned initially. It derives allowlisted `-fsyntax
 one exact accepted C/C++ translation unit, and uses the same pinned offline image and arguments
 for baseline and patched source. It does not invoke a build system, linker, generated test or
 PoC. Compiler response files, executable tool-loading/unsupported options, implicit Clang
-configuration, unsafe build changes and escaping paths are refused. Header/new-file/multi-unit
+configuration, unsafe build changes and escaping paths are refused. Accepted facts that cannot
+commission a pinned `BuildProfile` yield `manual_validation_required` with
+`accepted_build_profile_uncommissioned`, not fabricated build coverage. Header/new-file/multi-unit
 changes are outside that adapter's claimed coverage.
 
 | Validation status | Meaning |
@@ -65,7 +67,7 @@ changes are outside that adapter's claimed coverage.
 | `static_checked` | Selected static/semantic checks only; for example no adapter commissioned or safe replay unavailable. |
 | `rejected` | Exact-patch/static policy, semantic contradiction or patched syntax check failed. |
 | `inconclusive` | Semantic assessment unavailable/unresolved or baseline syntax failed. A broken baseline cannot establish patch success. |
-| `manual_validation_required` | No patch/source/build coverage, candidate cap, unsafe replay/build mutation or unsupported change scope. |
+| `manual_validation_required` | No patch/source/build coverage, candidate cap, unsafe replay/build mutation, uncommissioned pinned build profile or unsupported change scope. |
 
 Regression specifications are retained, but generated regression functions are not commissioned;
 `regression_compile` is explicitly not performed. `runtime_regression` is always
@@ -80,6 +82,14 @@ the authoritative tables are [`appsec-review.toml`](../../appsec-review.toml). V
 be enabled when planning is disabled. Provider/model/reasoning/turn/query/time budgets remain
 central; runtime profiles may override only the allowlisted writer/reviewer model fields.
 
+`job_remediation_planning/model.py::guidance` closes role-to-job scope: `remediation_writer` belongs
+only to planning, `remediation_reviewer` only to validation. Each role requires a registered
+bounded responsibility and validated procedure text; governing rules use the shared validated
+loader. The immutable role bundle identity includes job/role, registry version, responsibility
+and exact file hashes, retained with `bundle.json` under `data/guidance/<sha256>/`.
+Receipts pin that digest; host/repository-agent instructions and target guidance are not loaded
+as worker guidance. These are provenance records, not dossier raw-prompt payloads.
+
 | Settings | Current defaults |
 | --- | --- |
 | Both `.settings.enabled` | `true` for new configurations; never retroactively changes frozen runs. |
@@ -89,8 +99,8 @@ central; runtime profiles may override only the allowlisted writer/reviewer mode
 | Validation adapters / execution bounds | `["native_syntax"]` (or `[]` for selected static checks only), 120 seconds/command, 65536 retained diagnostic bytes. |
 
 The registered target-independent `run <job> --run-id <id> --upstream-from-run` surface binds
-accepted upstream job handoffs. Do not treat it as an old-run migration or bypass the version
-incompatibility stated above. For final publication, use the gate-certified snapshot once its
+accepted upstream job handoffs. Do not treat it as an old-run migration or bypass pending
+final consumer integration. For final publication, use the gate-certified snapshot once its
 final contract is integrated, not later mutable `latest.json` discovery.
 
 Summaries are artifact-only/internal; source contexts, patches, model/semantic/compiler receipts
@@ -107,6 +117,9 @@ Validation emits corresponding `REMEDIATION_VALIDATION_*` input/candidate/public
 candidate/stage totals. Counts are attempted work, including retries, not accepted finding counts.
 
 Events carry bounded counts/statuses/error classes and correlation, never patch/source/PoC/prompt
-content. At this delivered source boundary the model emitter converts missing per-turn token usage
-to zero; correction is pending, so these aggregates are not complete measured token costs.
+content. Follow-up `e769645f` preserves each unknown input/output token total as null if any turn's
+corresponding measurement is missing; genuine measured zeros remain zero. `usage_unavailable`
+and `usage_unavailable_count` distinguish unavailable turns. No completed turns produce null
+totals, flag `true`, count `0` and reason `no_completed_turns`; missing provider readings use
+`provider_usage_missing`. This is not a measured zero-token invocation or a complete cost bill.
 See [metrics operations](metrics.md) for unknown-usage and integrity/coverage limits.

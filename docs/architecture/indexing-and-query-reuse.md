@@ -144,10 +144,13 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Final publication gate decisions; `job_final_publication_gate` (decision 8) | Classify every finding package as publishable, verification backlog or withheld from exact accounting, ship-block status and gaps, and name the limitations | Artifact only: re-verifies the accepted review handoff and the artifacts it binds, then publishes a hash-bound gate document; it never reinterprets claim state or ship-block status | None | `coverage`; no skill |
 | Final report publications; `job_final_report_publication` (decision 8) | Publishable findings, verification backlog and limitations | Artifact only: `final-report.json` (`final-report/1`) and a deterministic `final-report.md` from the accepted gate; indexing sanitized findings for retrieval and PDF rendering are later steps | None | `coverage`; no skill |
 
-The completion rows above are source-reconciled through `b702eb7`; final review/PoC/gate/report
-version alignment and certified snapshot consumption remain pending. Pre-review indexing cannot
+The completion rows above are source-reconciled through `b702eb7` and reader/metric checkpoint
+`18eae9f`; review `/3` acceptance is aligned, but final PoC/gate/report contracts and certified
+snapshot consumption remain pending. Pre-review indexing cannot
 already inventory later accepted outputs: downstream manifests/gate certification account for
-them directly. Process metrics are also a separate regenerable operator view, not an eighteenth
+them directly. `3f28d871` extends `DOWNSTREAM_JOBS` to planning/validation/dossiers for active
+pre-review acceptance exclusions, without filtering `registry_providers`' complete file-ownership
+and dataset-declaration contracts needed by resume auditing. Process metrics are also a separate regenerable operator view, not an eighteenth
 index or a new admissibility route. Exact tools, shard owners, 126 declared datasets and current
 gaps are enumerated in the [dossier inventory](dossier-data-inventory.md).
 

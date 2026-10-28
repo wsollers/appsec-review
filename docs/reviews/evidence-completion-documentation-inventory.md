@@ -3,7 +3,8 @@
 Date: 2026-10-28. Phase: source inventory and partial implementation reconciliation.
 Inspected source: `5f5548da3d039f73c7d6858d2b28a4593a264efe`; ancestry verified with
 `git merge-base --is-ancestor`. Delivered source `b702eb7` and assurance fix `7641fa5` are now
-merged into the isolated documentation branch; final contract/acceptance gaps are recorded below.
+merged into the isolated documentation branch, followed by checkpoints `18eae9f`, `e769645f`, `3f28d871`;
+final contract/acceptance gaps are recorded below.
 The controlling delivery decisions are
 [completion design section 11](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions).
 This is a documentation implementation record, not evidence that the full new pipeline runs.
@@ -90,17 +91,23 @@ Important source-verified distinctions for integration:
 | --- | --- |
 | `b702eb7183642bbce9398a736b02d41f7bbf631f` | Includes chain `ec9257bf`, dossier `065f736c`, remediation `6278e580`; registers 40 jobs, 126 dataset outputs, typed central/profile configuration, new-run automatic defaults, pre-gate direct/Dagster ordering, validation/planning constraint, CLI manual-PoC flag and completion metrics. |
 | `7641fa50f91597a6dcdbe9a15147198dc34ac455` | Restores embedded nonexecution-assurance validation for schema-validated full producer rows, with a safe Mapping guard. The earlier exact-key regression is not retained as a current gap. |
-| Shared review acceptance | Extracted to `jobs/accepted_review.py`, but delivered reader `/2` versus chain writer `/3` remains incompatible pending final integration. Real producer registration is not yet a full accepted-run result. |
+| `18eae9fd189c66303cf4e9bdd6a871d1713438ff` | Includes reader `/3` alignment `6f168400` and metric parity: all seven actual PoC statuses/native outcomes, fixed capability counts/dispositions/enabled maps, flags/dimensions, configured-limit ranges, separate null-token measurements and missing-turn counters. |
+| `e769645f4628039cb9aa8fbf4bb7354764b2df52` | Preserves unknown remediation token dimensions and genuine zero, emits unavailable metadata, validates/closed-scopes shared governing fragments and role responsibility with exact bundle pinning, and reports uncommissioned native `BuildProfile` as manual validation. |
+| `3f28d871455707f2c7e27d230d6765c9cc5ae6ba` | Extends active pre-review downstream exclusions to the new completion jobs; preserves **all** `registry_providers` file ownership/declarations for resume auditing. The reported indexing-admission regression is resolved at this source boundary. |
+| Shared review acceptance | Now verifies `/3`, run identity, duplicate identities, canonical PoC-basis digest, individual review-package refs and ledger-bound chain publication/memberships. The reader mismatch is resolved; real producer registration is still not a full accepted-run result. |
 | Remediation operations | Added a focused operating page for exact inert patch bytes, confirmed-only accounting, seven assurance dimensions, native syntax-only coverage, defaults/profiles, protected artifacts, statuses and telemetry. |
 | Dossier operations | Reconciled exact units, source/producer verification, bounds/pin, attempt-owned files, closed projection, render status/receipt and failure-retention behavior from source. |
 | Metrics | Reconciled `run-metrics/3.completion` / `completion-process-metrics/1`, seven fixed lanes, per-event counters/outcomes/durations, explicit-null usage and bounded measurement gaps. These count attempted work/retries, not accepted findings; overlapping stages are not additive. |
 
-Remaining source/acceptance work: final gate/PoC `/2` contracts and shared `/3` reader, final report
+Remaining source/acceptance work: final gate/PoC `/2` contracts, final report
 snapshot-only attachment consumption, authenticated manual admission end to end, chain/base-finding
 coverage isolation, residual consumer metadata, full chain/PoC/gate/report candidate telemetry,
-unknown remediation usage preservation and the actual seeded PDF/sample. The parent reported
+the actual seeded PDF/sample and Linux real-review semantic acceptance. The parent reported
 152 central checks and 42 contract/dossier checks passing on its source commits; those are not
-relabelled as tests run by this documentation session or as end-to-end acceptance.
+relabelled as tests run by this documentation session or as end-to-end acceptance. The parent
+also reports 24 metrics/pipeline-log/review regressions passing at `18eae9f`; the remediation owner
+reports 241 Windows unit passes / one privilege skip for its follow-up. Those results are not
+relabelled as local documentation checks or Linux real-review semantic acceptance.
 
 ## Checks and limitations
 
