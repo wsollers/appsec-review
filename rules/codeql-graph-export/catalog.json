@@ -520,6 +520,194 @@
           ]
         }
       ]
+    },
+    "ruby": {
+      "model_library": "codeql/ruby-all",
+      "export_pack": "appsec-review/graph-export-ruby",
+      "sinks": [
+        {
+          "rule_id": "ruby.sink.model.sqlexecution",
+          "match": {
+            "model": "SqlExecution"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "ruby.sink.model.sqlconstruction",
+          "match": {
+            "model": "SqlConstruction"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "ruby.sink.model.systemcommandexecution",
+          "match": {
+            "model": "SystemCommandExecution"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "ruby.sink.model.codeexecution",
+          "match": {
+            "model": "CodeExecution"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "ruby.sink.model.codeexecution.reflective",
+          "match": {
+            "model": "CodeExecution.reflective"
+          },
+          "sink_class": "unsafe_reflection",
+          "cwe_family": "CWE-470"
+        },
+        {
+          "rule_id": "ruby.sink.model.filesystemaccess",
+          "match": {
+            "model": "FileSystemAccess"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "ruby.sink.model.httpclientrequest",
+          "match": {
+            "model": "HttpClientRequest"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "ruby.sink.model.unsafedeserialization",
+          "match": {
+            "model": "UnsafeDeserialization"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "ruby.sink.model.xmlparsercall",
+          "match": {
+            "model": "XmlParserCall"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "ruby.sink.model.xpathexecution",
+          "match": {
+            "model": "XPathExecution"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "ruby.sink.model.ldapexecution",
+          "match": {
+            "model": "LdapExecution"
+          },
+          "sink_class": "ldap_query",
+          "cwe_family": "CWE-90"
+        },
+        {
+          "rule_id": "ruby.sink.model.templaterendering",
+          "match": {
+            "model": "TemplateRendering"
+          },
+          "sink_class": "template_injection",
+          "cwe_family": "CWE-1336"
+        },
+        {
+          "rule_id": "ruby.sink.model.httpredirectresponse",
+          "match": {
+            "model": "HttpRedirectResponse"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "ruby.sink.model.headerwriteaccess",
+          "match": {
+            "model": "HeaderWriteAccess"
+          },
+          "sink_class": "header_injection",
+          "cwe_family": "CWE-113"
+        },
+        {
+          "rule_id": "ruby.sink.model.regexexecution",
+          "match": {
+            "model": "RegexExecution"
+          },
+          "sink_class": "regex_injection",
+          "cwe_family": "CWE-730"
+        },
+        {
+          "rule_id": "ruby.sink.model.logging",
+          "match": {
+            "model": "Logging"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "ruby.source.model.argv",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "a command-line argument"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "ruby.source.model.environment",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "an environment variable"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "ruby.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "ruby.source.model.local",
+          "match": {
+            "model": "LocalFlowSource"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "ruby.sanitizer.basename",
+          "api": "basename",
+          "declared_in": [
+            "File"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "ruby.sanitizer.shellescape",
+          "api": "shellescape",
+          "declared_in": [
+            "Shellwords"
+          ],
+          "applies_to": [
+            "command_execution"
+          ]
+        }
+      ]
     }
   }
 }
