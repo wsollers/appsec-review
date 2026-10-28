@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from appsec_review.observability.events import PipelineLog
 from appsec_review.storage import atomic_json, canonical_json
 from appsec_review.storage import file_sha256
+from appsec_review.observability.debug_symbols import debug_symbol_metrics
 
 
 SCHEMA = "appsec-review/telemetry-event/1"
@@ -937,6 +938,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "review": _review_metrics(Path(run_root), records),
             "tree_sitter": tree_sitter,
             "codeql": _codeql_metrics(Path(run_root), records),
+            "debug_symbols": debug_symbol_metrics(records),
             "torn_tail_ignored": torn}
 
 

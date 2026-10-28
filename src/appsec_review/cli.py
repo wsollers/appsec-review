@@ -21,7 +21,8 @@ from appsec_review.jobs.cataloging import source_fingerprint
 GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
                  "job_source_history_analysis",
                  "job_target_analysis_plan", "job_tree_sitter_ast",
-                 "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
+                 "job_project_build", "job_language_build", "job_artifact_indexing",
+                 "job_debug_symbol_indexing", "job_test_coverage",
                  "job_profile_data",
                  "job_artifact_security_analysis",
                  "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_svf_alias_analysis",
@@ -59,6 +60,8 @@ def parser() -> argparse.ArgumentParser:
 
     start = commands.add_parser("start", help="start the deterministic review graph")
     start.add_argument("--target", type=Path, required=True)
+    start.add_argument("--compiler-target", choices=("clang", "msvc"), default="clang",
+                       help="native debug-symbol compiler family for this run (default: clang)")
 
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
@@ -104,7 +107,15 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    config = load_config(args.config, profile=args.profile)
+    compiler = getattr(args, "compiler_target", None)
+    if args.command in {"run", "plan-resume", "resume"} and getattr(args, "run_id", None):
+        preliminary = load_config(args.config, profile=args.profile)
+        manifest_path = (preliminary.runtime.runs_dir / args.run_id /
+                         "data" / "configuration" / "manifest.json")
+        if manifest_path.is_file():
+            compiler = json.loads(manifest_path.read_text(encoding="utf-8")).get(
+                "selection", {}).get("compiler_target", "clang")
+    config = load_config(args.config, profile=args.profile, compiler_target=compiler)
     if args.command == "schedules":
         schedules = {
             job_id: {

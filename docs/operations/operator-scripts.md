@@ -142,6 +142,14 @@ under `selection` (`profile`, `overlay`, `source`) in `runs/<run-id>/data/config
 and a resumed run refuses a different selection from the one it was bound to. Runs launched without
 the tags use the container environment, as before.
 
+`review-start --compiler-target clang|msvc` (`-CompilerTarget clang|msvc`) also selects
+the debug-symbol lane for that run, using the `appsec/compiler_target` tag. The default is
+`clang`; a resumed run restores its frozen `selection.compiler_target` and refuses a
+different explicit choice before submission. The compiler target participates in the
+submission identity and resolved configuration hash. It is not a capacity-overlay key,
+does not change the target checkout, and does not provision an MSVC build host.
+See [build-bound debug symbols](../architecture/debug-symbol-indexing.md).
+
 Some values stay fixed per container and are refused instead of silently ignored:
 
 - The provider family. Copilot profiles need the `-copilot` image and compose overlay, so switching between

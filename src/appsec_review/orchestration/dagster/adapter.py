@@ -439,6 +439,9 @@ def build_definitions(
         if "job_artifact_indexing" in registered:
             project_jobs.append(registry.build("job_artifact_indexing"))
             project_dependencies["job_artifact_indexing"] = ("job_language_build",)
+        if "job_debug_symbol_indexing" in registered and "job_artifact_indexing" in registered:
+            project_jobs.append(registry.build("job_debug_symbol_indexing"))
+            project_dependencies["job_debug_symbol_indexing"] = ("job_artifact_indexing",)
         if "job_artifact_security_analysis" in registered:
             project_jobs.append(registry.build("job_artifact_security_analysis"))
             project_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)

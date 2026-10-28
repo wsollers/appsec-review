@@ -1,8 +1,9 @@
-"""Per-run runtime profile and capacity overlay selection from launch tags.
+"""Per-run runtime profile, capacity overlay and compiler target selection from launch tags.
 
 The code location loads one base configuration from its environment (``APPSEC_REVIEW_PROFILE`` and
 ``APPSEC_REVIEW_CONFIG_OVERLAY``). A run launched with ``appsec/profile`` and/or ``appsec/overlay`` tags
-resolves its own configuration from the same base file instead; a run without them keeps the base.
+resolves its own configuration from the same base file instead. ``appsec/compiler_target`` chooses
+the native debug-symbol lane independently; a run without selection tags keeps the base.
 
 What a per-run selection may not change, and is therefore refused rather than ignored:
 
@@ -20,6 +21,7 @@ import threading
 from typing import Any, Mapping
 
 from .loader import AppConfig, PROFILES, load_config
+from .compiler_target import COMPILER_TARGET_TAG, compiler_target
 
 PROFILE_TAG = "appsec/profile"
 OVERLAY_TAG = "appsec/overlay"
@@ -80,20 +82,22 @@ class RunConfigurations:
 
     def __init__(self, base: AppConfig):
         self.base = base
-        self._cache: dict[tuple[str, str], AppConfig] = {}
+        self._cache: dict[tuple[str, str, str], AppConfig] = {}
         self._lock = threading.Lock()
 
     def for_tags(self, tags: Mapping[str, str]) -> AppConfig:
+        target = compiler_target(tags.get(COMPILER_TARGET_TAG, self.base.compiler_target.value))
         selection = requested_selection(self.base, tags)
-        if selection is None:
+        if selection is None and target == self.base.compiler_target:
             return self.base
-        profile, overlay = selection
-        key = (profile, str(overlay) if overlay is not None else "")
+        profile, overlay = selection or (self.base.profile, _base_overlay(self.base))
+        key = (profile, str(overlay) if overlay is not None else "", target.value)
         with self._lock:
             cached = self._cache.get(key)
         if cached is not None:
             return cached
-        resolved = replace(load_config(self.base.source_path, profile=profile, overlay=key[1]),
+        resolved = replace(load_config(self.base.source_path, profile=profile, overlay=key[1],
+                                       compiler_target=target.value),
                            selection_source=SELECTION_SOURCE)
         with self._lock:
             if len(self._cache) >= _CACHE_LIMIT:
@@ -111,6 +115,7 @@ def configurations(config: AppConfig | RunConfigurations) -> RunConfigurations:
 
 def reject_run_selection(config: AppConfig, tags: Mapping[str, str], job_name: str) -> None:
     """For jobs whose executor is fixed at definition time: refuse a tag selecting another configuration."""
-    if requested_selection(config, tags) is not None:
+    target = compiler_target(tags.get(COMPILER_TARGET_TAG, config.compiler_target.value))
+    if requested_selection(config, tags) is not None or target != config.compiler_target:
         raise ValueError(f"{job_name} uses the code location's configuration ({config.profile}); "
-                         f"launch it without {PROFILE_TAG}/{OVERLAY_TAG} tags that select another")
+                         f"launch it without {PROFILE_TAG}/{OVERLAY_TAG}/{COMPILER_TARGET_TAG} tags that select another")

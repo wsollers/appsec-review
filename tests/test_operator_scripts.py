@@ -377,7 +377,8 @@ def test_review_start_launches_wave1_review_through_the_webserver(box: Sandbox, 
     assert argv[argv.index("-w") + 1] == "/opt/dagster/home/workspace.yaml" and argv[argv.index("-l") + 1] == "appsec_review"
     tags = json.loads(argv[argv.index("--tags") + 1])
     assert set(tags) == ({"appsec/submission_identity", "appsec/safety_identity", "dagster/max_retries"}
-                         if stop_policy else {"appsec/submission_identity"}) | {"appsec/profile", "appsec/overlay"}
+                         if stop_policy else {"appsec/submission_identity"}) | {
+                             "appsec/profile", "appsec/overlay", "appsec/compiler_target"}
     assert tags["appsec/profile"] == "dev" and tags["appsec/overlay"] == "none"
     intent = review_run.read_submission(box.repo)
     assert intent["state"] == "SUBMITTED"

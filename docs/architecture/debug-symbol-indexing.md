@@ -50,6 +50,117 @@
     paths as metric labels. Failure and unavailable coverage are not zero-result
     success.
 
+## Workflow and failure semantics
+
+```text
+start / review-start
+    compiler_target + profile + overlay
+                 |
+    frozen resolved configuration
+                 |
+accepted artifact catalog + accepted source identities
+                 |
+          decide.target
+           /          \
+ extract.clang_dwarf   extract.msvc_pdb
+       selected          skipped          (or the reverse)
+           \          /
+       acceptance.publish_handoff
+                 |
+   immutable debug_symbols SQLite shard
+                 |
+   accepted composite manifest + dataset inventory
+                 |
+      shared retrieval core
+         /              \
+ review-cell loop     read-only MCP
+```
+
+Both extraction units are visible in the orchestration graph. A nonselected
+unit does no artifact parsing and invokes no tool. Its explicit skip is not
+an unavailable-coverage gap for the selected target. A selected lane with no
+usable debug information publishes unavailable or partial coverage, including
+the reason; it never substitutes the other compiler lane.
+
+Malformed input, missing tools, unsupported debug variants, and exhausted parser
+bounds are coverage failures. Hash substitution, an escaped run-owned reference,
+or a conflicting frozen selection is an integrity failure and prevents
+publication. The target program is never launched to recover missing facts.
+
+Resume reuses accepted work only when configuration, accepted upstream handoffs,
+artifact hashes, parser/tool identity and parser bounds still match. A changed
+compiler target needs a new application run. Rebuilding with debug flags creates
+a different artifact and is not a substitute for matching the reviewed artifact.
+
+## Normalized records and indexes
+
+The shared contract defines `SymbolRecord`, `SourceSpan`, `AddressRange`,
+`Extraction`, and the closed record/query enums. Each indexed record additionally
+retains the accepted artifact identity and SHA-256, debug-artifact SHA-256,
+selected lane, producer identity, native record key, and resolving evidence.
+Parent keys preserve lexical/inline ownership; they are not call edges.
+
+| Record family | Required meaning | Missing information |
+| --- | --- | --- |
+| Symbol | Function/data/type identity and recorded name; recorded signature when available. | A missing signature or parameter type is unknown, not an inferred prototype. |
+| Source range | Half-open binary range and recorded line/column; exact source identity only after checksum binding. | Path-only source names cannot authorize excerpts or establish a source revision. |
+| Type layout | Recorded byte size, member offsets, array bounds and referenced types where emitted. | Dynamic layout expressions, opaque types and absent private type streams are explicit gaps. |
+| Inline frame | Recorded inline origin and parent/address relationship. | Optimization may omit or merge information; do not manufacture a unique frame. |
+| Compilation unit | Recorded compiler/unit metadata associated with this artifact. | Metadata is not complete build provenance; accepted build receipts remain authoritative. |
+| Graph link | An independently supported link to an existing accepted entity. | Names alone nominate a match; they do not establish an exact cross-build graph link. |
+
+Use the common entity/location/relation and coverage tables, plus indexed
+artifact/family/subject facets and address intervals. Unsigned address ordering
+must preserve the full range including the exclusive `2**64` endpoint; fixed-width
+hex storage is suitable where SQLite signed integers are insufficient.
+Index construction, not a model turn, does parsing and expensive normalization.
+
+Matching source records requires a checksum algorithm actually supplied by the
+debug format and verification against accepted source bytes. An absolute debug
+path is never opened. Unbound private source names are omitted or hash-labelled
+in public index payloads; raw names remain in protected evidence.
+
+## Query and authority contract
+
+`query_debug_symbols` uses the common retrieval response envelope, deterministic
+pagination, accepted-shard verification, coverage rows and resolving identities.
+The eight modes are `symbol`, `address`, `source_ranges`, `type_layout`,
+`inline_frames`, `compilation_units`, `coverage`, and `graph_links`.
+An address is meaningful only with an exact artifact identity. Source-range
+lookups use accepted source identities, not arbitrary source path arguments.
+Row limits are at most 100; common byte, page, depth and timeout policies still
+apply. A cursor is bound to the query and accepted manifest.
+
+Review-cell and MCP capability checks must constrain the requested and returned
+subjects. Adding a tool name to an allowlist is insufficient without query and
+response scope enforcement. An unsupported mode/input combination is rejected,
+not interpreted as an unconstrained enumeration.
+
+Facts read from debug bytes are observed metadata. Their source/graph
+associations are computed mappings whose exactness must be recorded separately.
+Names and signatures never by themselves establish a security property.
+
+No new runtime skill is needed merely to describe this retrieval tool:
+review cells receive the capability-filtered tool schema in their turn catalog.
+Runtime skills are for separately configured model jobs, not symbol parsers or
+review-cell tools. Existing role permissions and the shared catalog must be
+updated rather than copying repository-agent guidance into worker prompts.
+
+## Telemetry contract
+
+Use `DEBUG_SYMBOL_TARGET_SELECTED`, per-artifact completion/failure events,
+`DEBUG_SYMBOL_INDEX_COMPLETED`, and `DEBUG_SYMBOL_QUERY_COMPLETED`, alongside
+existing job/unit/tool lifecycle events. Index completion reports
+`compiler_target`, `artifact_count`, `record_count`, `gap_count`, and
+`duration_ms`. Query completion reports its closed `mode`, `returned_count`,
+`gap_count`, `truncated_count`, and `duration_ms`.
+
+The run-metric `debug_symbols` section exposes the latest index snapshot rather
+than double-counting records across attempts. It counts attempts, failures, and
+observed query work separately. Unknown/missing numeric measurements stay null
+with metric gaps. These are operational quality/coverage metrics, not counts of
+confirmed vulnerabilities.
+
 ## Test-first acceptance matrix
 
 Both compiler targets must exercise the same normalized contract. Tests precede

@@ -492,6 +492,11 @@ appsec-review start --target targets/appsec-multi-vuln
 The command prints a JSON summary that includes the `run_id` (for example `2026-10-08-0001`). Use
 it to inspect or resume the run:
 
+`start --compiler-target clang|msvc` selects the native debug-symbol lane for that run
+(default `clang`); `--target` still names the checkout. The compiler selection is frozen with
+the configuration and restored on resume. This selects DWARF versus native PDB analysis, not a
+Windows build environment. See the [debug-symbol design](docs/architecture/debug-symbol-indexing.md).
+
 ```bash
 appsec-review logs --run-id <run-id>
 appsec-review logs --run-id <run-id> --follow

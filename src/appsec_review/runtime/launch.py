@@ -23,7 +23,8 @@ from appsec_review.runtime.job import Job
 # run's hash-verified native build workspace, not the target).
 TARGET_JOBS = frozenset({
     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-    "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
+    "job_project_build", "job_language_build", "job_artifact_indexing",
+    "job_debug_symbol_indexing", "job_test_coverage",
     "job_profile_data",
     "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
     "job_cpp_compiled_analysis",
