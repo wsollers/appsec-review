@@ -127,8 +127,13 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
         target_snapshot=unit.job.source_fingerprint, scope=scope, grammar=grammar,
         fingerprint=fingerprint, container_output=container_output,
         producer={"job": "job_tree_sitter_ast", "scope_id": scope.scope_id,
-                  "image_id": execution.image_id, "grammar": asdict(grammar)},
-        artifact_path=artifact_path, index_path=index_path)
+                  "language": scope.language, "image_id": execution.image_id, "grammar": asdict(grammar)},
+        artifact_path=artifact_path, index_path=index_path,
+        source_bytes={item["path"]: read_source_bytes(
+            unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
+            path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
+            for item in scope.files if any(record.get("path") == item["path"]
+                and record.get("status") != "TRUNCATED" for record in container_output.get("records", ()))})
     result = {"schema": SCHEMA, "scope_id": scope.scope_id, "project_id": scope.project_id,
               "translation_scope_id": scope.translation_scope_id, "language": scope.language,
               "fingerprint": fingerprint, "grammar": asdict(grammar), "artifact": artifact,
