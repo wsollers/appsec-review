@@ -49,6 +49,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
 
     if not WAVE1_REQUIRED <= registered:
         return None
+    if "job_remediation_validation" in registered and "job_remediation_planning" not in registered:
+        raise ValueError("job_remediation_validation requires enabled job_remediation_planning")
     gates = gate_ids(registered)
     wave_dependencies: dict[str, tuple[str, ...]] = {
         **gate_dependencies(registered),
@@ -182,18 +184,26 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # The near-terminal review reads the accepted manifest, which holds every index shard and the
         # assembled review packages, so it runs after both consumers of the index and is the one terminal job.
         wave_dependencies["job_inference_security_review"] = ("job_document_issue_analysis",)
-    if "job_final_publication_gate" in registered and "job_inference_security_review" in registered:
-        # The gate only projects the accepted review handoff and the artifacts it binds.
-        wave_dependencies["job_final_publication_gate"] = ("job_inference_security_review",)
-    if "job_poc_generation" in registered and "job_final_publication_gate" in registered:
-        # Optional (disabled by default): proof-of-concept functions for the claims the judge agreed with.
-        # It reads the accepted gate and review and the accepted native build, and the report shows its outcome.
-        wave_dependencies["job_poc_generation"] = ("job_final_publication_gate",)
-    if "job_final_report_publication" in registered and "job_final_publication_gate" in registered:
-        # The report reads the accepted gate handoff (and the PoC handoff when the PoC job ran) and is the one
-        # terminal job of the graph. A disabled PoC job is transparent: the report follows the gate.
-        wave_dependencies["job_final_report_publication"] = (
-            ("job_poc_generation",) if "job_poc_generation" in wave_dependencies else ("job_final_publication_gate",))
+    review = "job_inference_security_review"
+    if review in wave_dependencies:
+        if "job_poc_generation" in registered:
+            wave_dependencies["job_poc_generation"] = (review,)
+        if "job_remediation_planning" in registered:
+            wave_dependencies["job_remediation_planning"] = tuple(
+                job_id for job_id in (review, "job_poc_generation") if job_id in wave_dependencies)
+        if "job_remediation_validation" in registered:
+            wave_dependencies["job_remediation_validation"] = ("job_remediation_planning",)
+        if "job_dossier_publication" in registered:
+            wave_dependencies["job_dossier_publication"] = tuple(
+                job_id for job_id in (review, "job_poc_generation", "job_remediation_planning",
+                                     "job_remediation_validation") if job_id in wave_dependencies)
+        if "job_final_publication_gate" in registered:
+            wave_dependencies["job_final_publication_gate"] = tuple(
+                job_id for job_id in (review, "job_poc_generation", "job_remediation_planning",
+                                     "job_remediation_validation", "job_dossier_publication")
+                if job_id in wave_dependencies)
+        if "job_final_report_publication" in registered and "job_final_publication_gate" in wave_dependencies:
+            wave_dependencies["job_final_report_publication"] = ("job_final_publication_gate",)
     return wave_dependencies
 
 
