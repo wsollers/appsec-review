@@ -145,7 +145,7 @@ def validate_declarations(job_id: str, declarations: tuple[DatasetDeclaration, .
 
 
 RUNTIME_SHARED_NAMESPACES = ("index-shard", "owasp-shard", "guidance", "review-package",
-                             "review-cell", "cell-check", "feed-snapshot", "shared-input")
+                             "review-cell", "cell-check", "feed-snapshot", "shared-input", "native-output")
 
 
 def dataset_contract(job_id: str, steps: Sequence[str],
