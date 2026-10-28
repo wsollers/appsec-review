@@ -134,7 +134,7 @@ def test_build_workspace_is_writable_only_while_the_build_container_runs(tmp_pat
                                       timeout_seconds=90, output_bytes=1024, runner=runner)
     executor.resolve()
     executor.execute(("make",), workspace=tmp_path, working_directory="project", environment={})
-    assert seen and seen[0] & 0o007 == 0o007
+    assert seen and seen[0] & 0o700 == 0o700 and seen[0] & 0o077 == 0
     for path in (tmp_path, project, project / "main.c", project / "out"):
         assert path.stat().st_mode & 0o022 == 0, path
 

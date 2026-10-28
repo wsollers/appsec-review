@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -15,7 +15,7 @@ from typing import Any
 import uuid
 
 from appsec_review.container_runtime.catalog import ContainerCatalog, ToolImage
-from appsec_review.container_runtime.identity import application_runtime_user
+from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.container_runtime.measurement import (
     InvocationMeasurement, SUPERVISOR_PATH, TreeSitterInvocation,
 )
@@ -86,6 +86,7 @@ class ExecutionResult:
     receipt_path: str
     file_size_limit_bytes: int | None = None
     file_size_limit_reached: bool = False
+    environment_sha256: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def terminal_status(self) -> str:
@@ -102,6 +103,10 @@ Runner = Callable[[Sequence[str], int], CommandOutcome]
 # ``docker run`` reports a process killed by a signal as 128 + signal number.
 FILE_SIZE_SIGNAL_EXIT = 128 + int(getattr(signal, "SIGXFSZ", 25))
 _MEMORY_LIMIT = re.compile(r"[1-9][0-9]{0,5}[mg]")
+
+
+class ImageUnavailableError(RuntimeError):
+    """The requested immutable image is absent, not a failed scanner invocation."""
 
 
 def _stamp() -> str:
@@ -140,8 +145,8 @@ class ContainerExecutor:
 
     def resolve_image(self, tool: ToolImage) -> str:
         outcome = self._run_control(("docker", "image", "inspect", tool.tag, "--format", "{{.Id}}"))
-        if outcome.exit_code != 0:
-            raise RuntimeError(f"cataloged image is not locally available: {tool.tool_id}")
+        if outcome.exit_code != 0 or outcome.timed_out:
+            raise ImageUnavailableError(f"cataloged image is not locally available: {tool.tool_id}")
         image_id = outcome.stdout.decode("utf-8", "replace").strip()
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
             raise ValueError(f"Docker returned a non-immutable image id for {tool.tool_id}")
@@ -155,9 +160,9 @@ class ContainerExecutor:
         if scratch != self.run_root and self.run_root not in scratch.parents:
             raise ValueError("scanner scratch must be run-owned")
         scratch.mkdir(parents=True, exist_ok=True)
-        # The scanner inherits the application uid/gid. Keep the writable boundary limited to its
-        # run-owned scratch; target, rules, and database mounts remain read-only.
-        scratch.chmod(0o700 if native_execution_requested() else 0o777)
+        # The scanner runs as the application uid/gid (or is handed the scratch when the application is
+        # root). Keep the writable boundary owner-only; target, rules, and database mounts are read-only.
+        grant_runtime_user(scratch, application_runtime_user(tool.user))
         if not request.argv or request.argv[0] not in (tool.executable, *tool.additional_executables):
             raise ValueError(f"argv must begin with the cataloged executable for {tool.tool_id}")
         if any(not isinstance(arg, str) or "\0" in arg for arg in request.argv):
@@ -357,6 +362,8 @@ class ContainerExecutor:
             file_size_limit_bytes=request.file_size_limit_bytes,
             file_size_limit_reached=(request.file_size_limit_bytes is not None
                                      and outcome.exit_code == FILE_SIZE_SIGNAL_EXIT),
+            environment_sha256={key: hashlib.sha256(value.encode("utf-8")).hexdigest()
+                                for key, value in sorted((request.environment or {}).items())},
         )
         receipt = asdict(result)
         receipt["terminal_status"] = result.terminal_status

@@ -612,7 +612,17 @@ def _label_rows(rows: list[Any], labels: LabelTable) -> None:
 
 
 def _grant_graph_row(row: Any, capability: CellCapability, granted: set[str]) -> None:
-    if not isinstance(row, dict) or not capability.graph_row_in_scope(row):
+    if not isinstance(row, dict):
+        return
+    if capability.debug_symbol_row_in_scope(row, granted):
+        granted.add(row["identity"])
+        granted.update(link["graph_identity"] for link in row.get("graph_links", ()))
+        return
+    if capability.syntax_row_in_scope(row):
+        # Grant only the row actually returned, not enclosing identifiers or sibling file nodes.
+        granted.add(row["identity"])
+        return
+    if not capability.graph_row_in_scope(row):
         return
     granted.add(row["identity"])
     granted.update(identity for identity in _identities(row.get("payload"))
@@ -622,6 +632,8 @@ def _grant_graph_row(row: Any, capability: CellCapability, granted: set[str]) ->
 def _scope_row(tool: str, row: Any, capability: CellCapability,
                known: set[str] | frozenset[str] = frozenset()) -> tuple[Any, int]:
     if not isinstance(row, dict):
+        return None, 1
+    if row.get("index") == "debug_symbols" and not capability.debug_symbol_row_in_scope(row, known):
         return None, 1
     if tool == "resolve_evidence":
         dropped = 0

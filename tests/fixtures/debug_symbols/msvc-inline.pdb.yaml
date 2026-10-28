@@ -1,0 +1,345 @@
+---
+MSF:
+  SuperBlock:
+    BlockSize:       4096
+    FreeBlockMap:    1
+    NumBlocks:       25
+    NumDirectoryBytes: 128
+    Unknown1:        0
+    BlockMapAddr:    23
+  NumDirectoryBlocks: 1
+  DirectoryBlocks: [ 22 ]
+  NumStreams:      17
+  FileSize:        102400
+StreamSizes:     [ 48, 136, 248, 652, 258, 0, 0, 55, 592, 580, 556, 344, 
+                   120, 96, 44, 0, 32 ]
+StreamMap:
+  - Stream:          [ 7 ]
+  - Stream:          [ 17 ]
+  - Stream:          [ 16 ]
+  - Stream:          [ 15 ]
+  - Stream:          [ 19 ]
+  - Stream:          [  ]
+  - Stream:          [  ]
+  - Stream:          [ 18 ]
+  - Stream:          [ 14 ]
+  - Stream:          [ 11 ]
+  - Stream:          [ 12 ]
+  - Stream:          [ 9 ]
+  - Stream:          [ 8 ]
+  - Stream:          [ 13 ]
+  - Stream:          [ 20 ]
+  - Stream:          [  ]
+  - Stream:          [ 21 ]
+StringTable:
+  - 'fixture\inline.c'
+PdbStream:
+  Age:             1
+  Guid:            '{5434B0A8-ED47-E8F0-20AA-7EAC8A785A10}'
+  Signature:       2713511265
+  Features:        [ VC140 ]
+  Version:         VC70
+DbiStream:
+  VerHeader:       V70
+  Age:             1
+  BuildNumber:     36403
+  PdbDllVersion:   36260
+  PdbDllRbld:      0
+  Flags:           0
+  MachineType:     Amd64
+  Modules:
+    - Module:          'Y:\inline.obj'
+      ObjFile:         'Y:\inline.obj'
+      SourceFiles:
+        - 'fixture\inline.c'
+      Subsections:
+        - !InlineeLines
+          HasExtraFiles:   false
+          Sites:
+            - FileName:        'fixture\inline.c'
+              LineNum:         3
+              Inlinee:         4100
+        - !FileChecksums
+          Checksums:
+            - FileName:        'fixture\inline.c'
+              Kind:            SHA256
+              Checksum:        964E9579E549329DF7B23FACF1AA99F9A65147387B1B2B1EACA94EF91F6D4AAC
+        - !Lines
+          CodeSize:        16
+          Flags:           [  ]
+          RelocOffset:     0
+          RelocSegment:    1
+          Blocks:
+            - FileName:        'fixture\inline.c'
+              Lines:
+                - Offset:          0
+                  LineStart:       4
+                  IsStatement:     true
+                  EndDelta:        0
+              Columns:         []
+      Modi:
+        Signature:       4
+        Records:
+          - Kind:            S_OBJNAME
+            ObjNameSym:
+              Signature:       0
+              ObjectName:      'fixture\inline.obj'
+          - Kind:            S_COMPILE3
+            Compile3Sym:
+              Flags:           [ HotPatch ]
+              Machine:         X64
+              FrontendMajor:   19
+              FrontendMinor:   51
+              FrontendBuild:   36260
+              FrontendQFE:     0
+              BackendMajor:    19
+              BackendMinor:    51
+              BackendBuild:    36260
+              BackendQFE:      0
+              Version:         'Microsoft (R) Optimizing Compiler'
+          - Kind:            S_BUILDINFO
+            BuildInfoSym:
+              BuildId:         4099
+          - Kind:            S_GPROC32
+            ProcSym:
+              PtrParent:       0
+              PtrEnd:          216
+              PtrNext:         0
+              CodeSize:        16
+              DbgStart:        0
+              DbgEnd:          15
+              FunctionType:    4104
+              Offset:          0
+              Segment:         1
+              Flags:           [ HasOptimizedDebugInfo ]
+              DisplayName:     entry
+          - Kind:            S_INLINESITE
+            InlineSiteSym:
+              PtrParent:       100
+              PtrEnd:          168
+              Inlinee:         4100
+          - Kind:            S_INLINESITE_END
+            ScopeEndSym:     {}
+          - Kind:            S_FRAMEPROC
+            FrameProcSym:
+              TotalFrameBytes: 0
+              PaddingFrameBytes: 0
+              OffsetToPadding: 0
+              BytesOfCalleeSavedRegisters: 0
+              OffsetOfExceptionHandler: 0
+              SectionIdOfExceptionHandler: 0
+              Flags:           [ AsynchronousExceptionHandling, OptimizedForSpeed ]
+          - Kind:            S_INLINEES
+            CallerSym:
+              FuncID:          [ 4100 ]
+          - Kind:            S_END
+            ScopeEndSym:     {}
+    - Module:          '* Linker *'
+      ObjFile:         ''
+      Modi:
+        Signature:       4
+        Records:
+          - Kind:            S_OBJNAME
+            ObjNameSym:
+              Signature:       0
+              ObjectName:      '* Linker *'
+          - Kind:            S_COMPILE3
+            Compile3Sym:
+              Flags:           [  ]
+              Machine:         X64
+              FrontendMajor:   0
+              FrontendMinor:   0
+              FrontendBuild:   0
+              FrontendQFE:     0
+              BackendMajor:    14
+              BackendMinor:    51
+              BackendBuild:    36260
+              BackendQFE:      0
+              Version:         'Microsoft (R) LINK'
+          - Kind:            S_ENVBLOCK
+            EnvBlockSym:
+              Entries:
+                - cwd
+                - 'Y:\'
+                - exe
+                - 'Y:\toolchain\link.exe'
+                - pdb
+                - 'Y:\msvc-inline.pdb'
+                - cmd
+                - ' /NOLOGO /DEBUG:FULL /NODEFAULTLIB /ENTRY:entry /SUBSYSTEM:CONSOLE /PDB:msvc-inline.pdb /PDBALTPATH:fixture\msvc-inline.pdb /OUT:msvc-inline.exe /INCREMENTAL:NO /OPT:REF /Brepro'
+          - Kind:            S_SECTION
+            SectionSym:
+              SectionNumber:   1
+              Alignment:       12
+              Rva:             4096
+              Length:          16
+              Characteristics: 1610612768
+              Name:            .text
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            16
+              Characteristics: 1610612768
+              Offset:          0
+              Segment:         1
+              Name:            '.text$mn'
+          - Kind:            S_SECTION
+            SectionSym:
+              SectionNumber:   2
+              Alignment:       12
+              Rva:             8192
+              Length:          344
+              Characteristics: 1073741888
+              Name:            .rdata
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            112
+              Characteristics: 1073741888
+              Offset:          0
+              Segment:         2
+              Name:            .rdata
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            0
+              Characteristics: 1073741888
+              Offset:          112
+              Segment:         2
+              Name:            .edata
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            24
+              Characteristics: 1073741888
+              Offset:          112
+              Segment:         2
+              Name:            '.rdata$voltmd'
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            208
+              Characteristics: 1073741888
+              Offset:          136
+              Segment:         2
+              Name:            '.rdata$zzzdbg'
+          - Kind:            S_SECTION
+            SectionSym:
+              SectionNumber:   3
+              Alignment:       12
+              Rva:             12288
+              Length:          16
+              Characteristics: 3221225536
+              Name:            .data
+          - Kind:            S_COFFGROUP
+            CoffGroupSym:
+              Size:            16
+              Characteristics: 3221225600
+              Offset:          0
+              Segment:         3
+              Name:            .bss
+TpiStream:
+  Version:         VC80
+  Records:
+    - Kind:            LF_FIELDLIST
+      FieldList:
+        - Kind:            LF_MEMBER
+          DataMember:
+            Attrs:           3
+            Type:            116
+            FieldOffset:     0
+            Name:            left
+        - Kind:            LF_MEMBER
+          DataMember:
+            Attrs:           3
+            Type:            19
+            FieldOffset:     8
+            Name:            right
+    - Kind:            LF_STRUCTURE
+      Class:
+        MemberCount:     2
+        Options:         [ None, HasUniqueName ]
+        FieldList:       4096
+        Name:            Pair
+        UniqueName:      '.?AUPair@@'
+        DerivationList:  0
+        VTableShape:     0
+        Size:            16
+    - Kind:            LF_STRUCTURE
+      Class:
+        MemberCount:     0
+        Options:         [ None, ForwardReference, HasUniqueName ]
+        FieldList:       0
+        Name:            Pair
+        UniqueName:      '.?AUPair@@'
+        DerivationList:  0
+        VTableShape:     0
+        Size:            0
+    - Kind:            LF_MODIFIER
+      Modifier:
+        ModifiedType:    4098
+        Modifiers:       [ None, Volatile ]
+    - Kind:            LF_POINTER
+      Pointer:
+        ReferentType:    4099
+        Attrs:           65548
+    - Kind:            LF_ARGLIST
+      ArgList:
+        ArgIndices:      [ 4100 ]
+    - Kind:            LF_PROCEDURE
+      Procedure:
+        ReturnType:      116
+        CallConv:        NearC
+        Options:         [ None ]
+        ParameterCount:  1
+        ArgumentList:    4101
+    - Kind:            LF_ARGLIST
+      ArgList:
+        ArgIndices:      [  ]
+    - Kind:            LF_PROCEDURE
+      Procedure:
+        ReturnType:      116
+        CallConv:        NearC
+        Options:         [ None ]
+        ParameterCount:  0
+        ArgumentList:    4103
+IpiStream:
+  Version:         VC80
+  Records:
+    - Kind:            LF_UDT_MOD_SRC_LINE
+      UdtModSourceLine:
+        UDT:             4097
+        SourceFile:      1
+        LineNumber:      1
+        Module:          1
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          ''
+    - Kind:            LF_STRING_ID
+      StringId:
+        Id:              0
+        String:          '-nologo -std:c11 -Z7 -ZH:SHA_256 -O2 -Ob3 -Zo -Gy -GS- -c -experimental:deterministic -MT -TC -X'
+    - Kind:            LF_BUILDINFO
+      BuildInfo:
+        ArgIndices:      [ 4097, 4097, 4097, 4097, 4098 ]
+    - Kind:            LF_FUNC_ID
+      FuncId:
+        ParentScope:     0
+        FunctionType:    4102
+        Name:            add
+    - Kind:            LF_FUNC_ID
+      FuncId:
+        ParentScope:     0
+        FunctionType:    4104
+        Name:            entry
+PublicsStream:
+  Records:
+    - Kind:            S_PUB32
+      PublicSym32:
+        Flags:           [ Function ]
+        Offset:          0
+        Segment:         1
+        Name:            entry
+    - Kind:            S_PUB32
+      PublicSym32:
+        Flags:           [  ]
+        Offset:          0
+        Segment:         3
+        Name:            global_pair
+...

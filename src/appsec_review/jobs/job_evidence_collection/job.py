@@ -476,7 +476,8 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                     raw_artifacts: tuple[Path, ...], observations: list[dict[str, Any]],
                     terminal_status: str, gaps: tuple[str, ...],
                     not_applicable: tuple[InputDecision, ...] = (),
-                    include_limitations: bool = True) -> tuple[dict[str, Any], Path]:
+                    include_limitations: bool = True,
+                    source_inventory: Path | None = None) -> tuple[dict[str, Any], Path]:
     destination = unit.unit_root / "evidence.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     envelope = build_envelope(
@@ -491,6 +492,8 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
         source_hashes={str(item["path"]): str(item["sha256"]) for item in catalog.files if item.get("sha256")},
     )
     envelope["not_applicable_inputs"] = not_applicable_summary(not_applicable)
+    if source_inventory is not None:
+        envelope["source_inventory"] = _artifact(unit.job.run_root, source_inventory)
     atomic_json(destination, envelope)
     if envelope["records"]:
         provenance_receipt = validate_observation_provenance(
@@ -1013,6 +1016,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             unit, adapter, catalog, selection, tool_identity=tool_identity,
             raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
             not_applicable=(*not_applicable, *reported_not_applicable),
+            source_inventory=output if adapter.tool_id == "tool-syft" else None,
         )
         output_value = {
             "tool_id": adapter.tool_id, "capability": adapter.capability,

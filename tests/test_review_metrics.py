@@ -18,6 +18,13 @@ def _receipt(root: Path, name: str, value: dict) -> dict[str, object]:
             "size_bytes": path.stat().st_size}
 
 
+def test_run_metrics_preserve_additive_domain_sections(tmp_path: Path) -> None:
+    report = aggregate_run_metrics(tmp_path)
+    assert report["schema"] == "appsec-review/run-metrics/5"
+    assert {"interchange", "native_sbom", "debug_symbols", "owasp", "review_flow",
+            "completion", "review", "codeql"} <= report.keys()
+
+
 def test_review_metrics_resolve_receipts_and_preserve_gaps_reuse_and_deduplication(tmp_path: Path) -> None:
     source = _receipt(tmp_path, "source.json", {
         "source_metrics_semantics": "appsec-review/source-counting/1",

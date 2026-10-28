@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/attack-chain.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "proposal", "challenges", "status", "limitations", "assessment"],
+  "properties": {
+    "schema": {"const": "appsec-review/attack-chain/1"},
+    "run_id": {"$ref": "common.schema.json#/$defs/short_text"},
+    "proposal": {"$ref": "chain-records.schema.json#/$defs/proposal"},
+    "challenges": {"type": "array", "maxItems": 2, "items": {"$ref": "chain-records.schema.json#/$defs/challenge"}},
+    "status": {"$ref": "chain-records.schema.json#/$defs/status"},
+    "limitations": {"$ref": "chain-records.schema.json#/$defs/texts"},
+    "assessment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["objective", "path_confidence", "prerequisites", "boundary_exposure", "remediation_choke_points", "shipment_decision"],
+      "properties": {
+        "objective": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "path_confidence": {"enum": ["evidence_complete", "qualified", "defeated", "unavailable"]},
+        "prerequisites": {"$ref": "chain-records.schema.json#/$defs/texts"},
+        "boundary_exposure": {"enum": ["counted", "unresolved"]},
+        "remediation_choke_points": {"type": "array", "maxItems": 8, "items": {"$ref": "common.schema.json#/$defs/claim_id"}},
+        "shipment_decision": {"const": "not_assessed_by_chain_policy"}
+      }
+    }
+  }
+}

@@ -118,7 +118,7 @@ def _resolve(core: RetrievalCore, entity_id: str, predicate: Predicate = Predica
 @pytest.mark.parametrize("kind", sorted(DIRECT_KINDS))
 def test_every_structured_content_kind_is_direct_for_the_construct_and_never_for_impact(kind: EntityKind) -> None:
     """Deliberately changed from "every DIRECT kind is direct for every predicate": relevance is per
-    (kind, predicate) under ``predicate-admission/1`` (the full table is in test_predicate_admission.py)."""
+    (kind, predicate) under ``predicate-admission/2`` (the full table is in test_predicate_admission.py)."""
     assert classify(kind, Predicate.AFFECTED_CONSTRUCT) is Admissibility.DIRECT
     assert classify(kind, Predicate.SECURITY_IMPACT) is not Admissibility.DIRECT
     assert {classify(kind, predicate) for predicate in Predicate} <= {

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/chain-challenge-result.schema.json",
+  "type": "object", "additionalProperties": false, "required": ["chain_id", "checks", "gaps"],
+  "properties": {
+    "chain_id": {"$ref": "chain-records.schema.json#/$defs/chain_id"},
+    "gaps": {"$ref": "chain-records.schema.json#/$defs/worker_gaps"},
+    "checks": {
+      "type": "array", "minItems": 5, "maxItems": 35, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["edge_index", "dimension", "stance", "cites"],
+        "properties": {
+          "edge_index": {"type": "integer", "minimum": 0, "maximum": 6},
+          "dimension": {"$ref": "chain-records.schema.json#/$defs/dimension"},
+          "stance": {"enum": ["holds", "defeated", "unresolved"]},
+          "cites": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "pattern": "^rel:[0-9a-f]{64}$"}}
+        }
+      }
+    }
+  }
+}

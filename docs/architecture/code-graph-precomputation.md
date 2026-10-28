@@ -2,16 +2,17 @@
 
 Status: implemented through C9 (integration and acceptance) for C/C++, offline-verified, with the
 export pack since compiled and run live on the pinned image against a calibration database
-(`tests/live/test_codeql_pack_shapes.py`). Phase 3 (section 13, seeded neighborhoods) changes how
+(`tests/live/test_codeql_pack_shapes.py`) and the per-language live tiers
+(`tests/live/test_codeql_graph_export*_live.py`; per-language results in section 8). Phase 3 (section 13, seeded neighborhoods) changes how
 the export is scoped: from findings outward to a configured depth instead of whole program. The
 CodeQL export pack, the export step, `job_code_graph_index`, `query_code_graph`, graph
 admissibility, package v4 graph context, the `code_graph` lane and the scoring factors run end to
 end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. The C/C++ native
-recording is copied from a live export; the per-language synthetic recordings are hand-authored and
+and Rust synthetic recordings are copied from live exports; the other per-language synthetic recordings are hand-authored and
 checked by per-language live tests. Export packs exist for C/C++, C#, Go, Java/Kotlin,
 JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this
-repository; Swift's pack is deferred until a macOS executor exists. The Live acceptance record is
-not written. Section 12 is partially implemented: K4 now runs as the independent
+repository; Swift's pack is deferred until a macOS executor exists. The graph index and retrieval
+are language-neutral. The Live acceptance record is not written. Section 12 is partially implemented: K4 now runs as the independent
 `job_clang_static_analysis` producer, while K1, K2, K3, and optional K5 remain planned. The
 implementation record is
 [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
@@ -38,7 +39,7 @@ in the last column establishes each fact.
 
 | Producer | What it publishes | What it cannot give the review | Established by |
 |---|---|---|---|
-| `job_codeql_analysis` | One immutable database per accepted scope and language, one SARIF per query profile, normalized `observations` shards with ordered `code_flow`/`thread_flow` steps. Executor actions are `inventory`, `database`, `query` and, since C1/C2, `export`: the ready coordinator `execution.scopes` runs the declared `rules/codeql-graph-export/<language>` pack as each successful database of a pinned export language becomes eligible, under shared resource admission. Supplied pack/runner payloads are not fingerprinted. Bounded JSON exports plus `export-manifest.json` remain under `data/codeql/scopes/<scope-id>/exports` (dataset `codeql_graph_export`, `artifact_only`). Languages without a configured export pack record `NOT_APPLICABLE`. Its publication writes a manifest of its own shards only and references sibling manifests as verified upstream manifests (it does not compose their shards). Live acceptance before this plan: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1; Go 0/7; C# and Rust planning gaps; PHP `NOT_APPLICABLE`. | Export packs are pinned for C/C++, C#, Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this repository; Swift is deferred (Linux cannot extract it). Synthetic recordings are hand-authored and checked by per-language live tests. | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
+| `job_codeql_analysis` | One immutable database per accepted scope and language, one SARIF per query profile, normalized `observations` shards with ordered `code_flow`/`thread_flow` steps. Executor actions are `inventory`, `database`, `query` and, since C1/C2, `export`: the ready coordinator `execution.scopes` runs the declared `rules/codeql-graph-export/<language>` pack as each successful database of a pinned export language becomes eligible, under shared resource admission. Supplied pack/runner payloads are not fingerprinted. Bounded JSON exports plus `export-manifest.json` remain under `data/codeql/scopes/<scope-id>/exports` (dataset `codeql_graph_export`, `artifact_only`). Languages without a configured export pack record `NOT_APPLICABLE`. Its publication writes a manifest of its own shards only and references sibling manifests as verified upstream manifests (it does not compose their shards). Live acceptance before this plan: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1; Go 0/7; C# and Rust planning gaps; PHP `NOT_APPLICABLE`. | Export packs are pinned for C/C++, C#, Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this repository; Swift is deferred (Linux cannot extract it). The C/C++ native and Rust synthetic recordings are live; the other synthetic recordings are hand-authored and checked by per-language live tests. | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
 | `job_code_graph_index` (new, C5) | One `graph` shard per `(CodeQL scope, family)` with a coverage row each; normalized (C3), cross-checked against clangd/IR/AST (C4) and SARIF-correlated (C4) facts; `unavailable` coverage-only shards for scopes without a usable export. Restores clangd/IR/AST shards the CodeQL manifest rewrite dropped from their producers' accepted handoffs (C9). | Facts for languages without an export pack; anything CodeQL's models do not cover. | `jobs/job_code_graph_index/`, `docs/operations/code-graph-index.md` |
 | `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): it is omitted from execution plans and produces no run artifacts. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_GAP`), `runtime/selection.py`, `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
 | `job_cpp_compiled_analysis` LLVM IR branch | Unchanged: `define` lines as `ir_entity`, uniquely resolvable direct `call @name` as exact `CALLS`; TU-level ambiguous locations. Used as a C4 cross-check input (`ir-name-same-tu`). | CFG, def-use, dominators, guards, ranges, source-exact locations (section 12, K1/K3). | `jobs/job_cpp_compiled_analysis/job.py::_ir_index` |
@@ -773,23 +774,40 @@ code-graph-precomputation.md".
 
 ## 8. Language rollout, scope, fallbacks
 
-Order and the evidence for it:
+The rollout was ordered by producer reality: C/C++ first (the only language with cross-check
+producers, a hash-pinned custom pack path (`cert-cpp`), a native build-capture fixture and the
+`cpp-all` guard and range libraries), then the languages with successful live scopes and mature
+`RemoteFlowSource` models, then Go, C# and Rust, which were blocked when this plan was written
+(Go recipes only downloaded modules, no accepted .NET environment, no Cargo locks). Every
+language now uses the same generic export mechanism; only the pack, the catalog section and the
+range method are language-specific.
 
-1. **C/C++** — the only language with cross-check producers, a hash-pinned custom pack path
-   (`cert-cpp`), a native build-capture fixture (`tests/fixtures/build_toolchains/native`), two
-   successful live scopes, and the `cpp-all` libraries for guards and ranges. Memory-safety sink
-   classes are where guard and range facts matter most.
-2. **Java/Kotlin, JavaScript/TypeScript, Python** — successful live scopes (7/7, 12/12, 8/8),
-   mature `RemoteFlowSource` models; no cross-check producer (facts are `not_covered`); range
-   facts are `not_applicable` for JS/Python and intraprocedural `RangeAnalysis` only for Java.
-   Each is its own export pack and catalog section; a language ships only when its recorded
-   fixture passes the acceptance suite.
-3. **Go, C#, Rust** — blocked by producer reality: Go databases fail because accepted recipes only
-   download modules (and the configured Go `security-extended` profile is not in the lock); C#
-   lacks an accepted .NET environment; Rust lacks Cargo locks in the fixture. They inherit the
-   generic export mechanism once a database succeeds; nothing in this plan is language-specific
-   beyond the pack and catalog.
-4. **Actions** — not a code graph target; excluded.
+Current state per language. A pack is "pinned" when its identity is equal in
+`appsec-review.toml` `[[jobs.job_codeql_analysis.settings.languages.<language>.export_queries]]`,
+`containers/tools/codeql/assets.lock.json` `export_query_packs.<language>` and an enabled
+`rules/registry.toml` entry. The range method is `graph/normalize.py` `RANGE_ANALYSIS_METHODS`;
+it is recorded as the provenance of every `range_fact`. Live status is from
+[`rules/codeql-graph-export/README.md`](../../rules/codeql-graph-export/README.md#live-verification),
+on the pinned CodeQL 2.27.0 image built on a Linux (WSL 2) Docker host.
+
+| Language | Pack | Live export | `range_fact` | Named gaps and limits |
+|---|---|---|---|---|
+| C/C++ | pinned | passes; native recording copied from the live export | `codeql-simple-range-analysis` | the only language with clangd/LLVM IR/Clang AST and SVF cross-check inputs (`job_code_graph_index/scopes.py` `_native_scope`); `RemoteFlowSinkFunction` sinks are unclassified |
+| Java/Kotlin | pinned | passes | `codeql-range-analysis` (intraprocedural) | no cross-check producer, so facts are `not_covered` |
+| JavaScript/TypeScript | pinned | needs the `node` build profile; no live result recorded | `not_applicable` (`not-performed`) | no cross-check producer |
+| Python | pinned | QL fixed from the live run | `not_applicable` (`not-performed`) | `NoSqlExecution` sinks are unclassified |
+| Ruby | pinned | QL fixed from the live run | `not_applicable` (`not-performed`) | `HttpResponse` sinks are unclassified |
+| Go | pinned | expectation fixed from the live run | `codeql-constant-and-dominating-guards` (intraprocedural) | `UnmarshalingFunction` sinks are unclassified |
+| C# | pinned | `dotnet` build profile; no live result recorded | `codeql-constant-and-sign-analysis` | no cross-check producer |
+| Rust | pinned | recorded live (`rust-synthetic`, `rust` profile with `rust-src`) | `not_applicable` (`not-performed`) | `known_gaps` `rust_summarized_body_prunes_remote_flow` (remote-to-SQL, command, SSRF and deserialization paths) and `rust_canonicalize_summary_does_not_propagate`; closure and function-value calls are `unresolved_indirect` |
+| Swift | deferred, no pin | skipped: CodeQL extracts Swift only on macOS | `codeql-literal-only` once enabled | `enable_swift = false`; `PredicateInjectionSink` sinks are unclassified |
+| PHP | none | none | none | no CodeQL extractor; source, Tree-sitter and SAST lanes only |
+| Actions | none | none | none | not a code-graph target |
+
+A language without a pin, and Swift, publishes the export disposition `NOT_APPLICABLE` ("no
+hash-pinned CodeQL graph export pack for `<language>`"). An unclassified sink is exported and
+indexed but is never `direct_eligible`. A recorded or synthetic pass is not live acceptance of a
+real target; the live acceptance record is still unwritten.
 
 Explicitly out of scope: Joern export, LLVM CFG/def-use/dominator extraction, points-to/alias
 facts (`aliases` mode of plan B), `contract_enforcement` (`job_interface_contracts`),

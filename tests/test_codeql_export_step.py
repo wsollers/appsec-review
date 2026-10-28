@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import asdict, replace
+import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
+import stat
 import tomllib
 from types import MappingProxyType, SimpleNamespace
 from typing import Any
@@ -112,8 +115,19 @@ def _database(tmp_path: Path, scope: CodeQLScope, *, identity: str = "d" * 64,
 
 
 @pytest.fixture(autouse=True)
-def _cold_compile_cache():
+def _cold_compile_cache(monkeypatch):
     from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+    if os.name == "nt":
+        stage_export = codeql_job._stage_export
+
+        def stage(*args, **kwargs):
+            stage_export(*args, **kwargs)
+            # Windows read-only attributes also prevent unlinking disposable POSIX staging files.
+            for path in args[2].rglob("*"):
+                if path.is_file():
+                    path.chmod(path.stat().st_mode | stat.S_IWRITE)
+
+        monkeypatch.setattr(codeql_job, "_stage_export", stage)
     codeql_job._PRECOMPILED.clear()
     yield
     codeql_job._PRECOMPILED.clear()
@@ -299,6 +313,78 @@ def test_timeout_or_nonzero_exit_is_a_scope_gap_that_spares_siblings(tmp_path: P
     assert (scopes / good.scope_id / "export-checkpoint.json").is_file()
     failed = [item for item in output["dispositions"] if item["terminal_status"] == "FAILED"]
     assert {item["scope_id"] for item in failed} == {slow.scope_id, broken.scope_id}
+
+
+@pytest.mark.parametrize("exit_code,timed_out", [(0, False), (None, True), (2, False)])
+def test_current_coordinator_preserves_export_status_and_retry_dispositions(
+        tmp_path, monkeypatch, exit_code, timed_out):
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+    from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
+    from appsec_review.runtime import UnitExecutor
+
+    selected, sibling = _scope("cpp", "selected", "a"), _scope("cpp", "sibling", "b")
+    databases = [_database(tmp_path, scope) for scope in (selected, sibling)]
+    unit = _unit(tmp_path, databases)
+    unit.job.metadata_root = tmp_path / "metadata"
+    unit.job.run_id = "fixture"
+    unit.job.attempt_id = "attempt_0001"
+    unit.job.target_root = tmp_path
+    plan = SimpleNamespace(scopes=(selected, sibling), gaps=(), decisions=(),
+                           extractor_inventory=("cpp",), non_applicable=())
+    upstream = unit.job.run_root / "upstream.json"
+    write_manifest(upstream, run_id="fixture", target_snapshot=unit.job.source_fingerprint,
+                   target_root=tmp_path, indexes=[])
+    outputs = {"plan.inventory": {"upstream_manifests": []}}
+    unit.output = outputs.__getitem__
+    unit.unit_id = "execution.scopes"
+    monkeypatch.setattr(codeql_job, "_plan_from", lambda _: plan)
+    monkeypatch.setattr(codeql_job, "_receipt_map", lambda _: {})
+    monkeypatch.setattr(codeql_job, "_database_isolated",
+                        lambda _, scope, receipts: next(value for value in databases
+                                                       if value["scope"]["scope_id"] == scope.scope_id))
+    monkeypatch.setattr(codeql_job, "_query_one",
+                        lambda _, value, profile: {**value, "query_profile": profile})
+    monkeypatch.setattr(codeql_job, "resolve_context_manifest", lambda _: (upstream, file_sha256(upstream)))
+
+    def normalize(unit, value):
+        shard_id = value["scope"]["scope_id"] + "-" + value["query_profile"]["query_id"]
+        fingerprint = hashlib.sha256(shard_id.encode()).hexdigest()
+        path = unit.job.run_root / "data" / "indices" / f"{shard_id}.sqlite"
+        builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
+        builder.add_coverage("codeql", "complete")
+        identity = IndexIdentity("observations", "appsec-review/retrieval-index/2",
+                                 builder.build(), fingerprint, path.relative_to(unit.job.run_root).as_posix(),
+                                 {"job": JOB}, (), shard_id)
+        return {**value, "index_identity": asdict(identity), "observation_count": 0}
+
+    monkeypatch.setattr(codeql_job, "_normalize_one", normalize)
+    executor = FakeExecutor(outcome={selected.scope_id: (exit_code, timed_out)})
+    export_isolated = codeql_job._export_isolated
+    monkeypatch.setattr(codeql_job, "_export_isolated",
+                        lambda unit, value, **kw: export_isolated(
+                            unit, value, executor_factory=executor.factory, **kw))
+    job = build_job()
+    handlers = {item.unit_id: item.handler for item in job.units}
+    executed = handlers["execution.scopes"](unit)
+    outputs["execution.scopes"] = executed
+    unit.unit_id = "acceptance.publish_handoff"
+    published = handlers["acceptance.publish_handoff"](unit)
+    outputs["acceptance.publish_handoff"] = published
+    failed = timed_out or exit_code != 0
+    expected = "COMPLETED_WITH_GAPS" if failed else "SUCCEEDED"
+    assert executed["terminal_status"] == published["terminal_status"] == expected
+    assert all(value["terminal_status"] == "SUCCEEDED" for value in executed["scopes"])
+    assert executed["dispositions"] == [
+        {"scope_id": selected.scope_id, "language": "cpp", "action": "export",
+         "terminal_status": "FAILED" if failed else "SUCCEEDED"},
+        {"scope_id": sibling.scope_id, "language": "cpp", "action": "export", "terminal_status": "SUCCEEDED"},
+    ]
+    assert bool(executed["gaps"]) is failed
+    assert published["gaps"] == executed["gaps"]
+    summary = UnitExecutor.summarize(
+        job.units, {item.unit_id: {"status": "SUCCEEDED"} for item in job.units}, outputs)
+    assert summary["status"] == expected
 
 
 def test_failed_database_skips_export_as_a_named_gap(tmp_path: Path) -> None:

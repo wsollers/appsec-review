@@ -403,8 +403,37 @@ def test_job_level_disabled_setting_is_transparent_to_dagster(tmp_path: Path) ->
     assert "review_prioritization__begin" in wave_nodes
 
 
-def test_wave1_exposes_real_producer_shard_topology() -> None:
-    config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
+def _owasp_config(tmp_path: Path, *, enabled: bool = True) -> Path:
+    source = (Path(__file__).resolve().parents[3] / "appsec-review.toml").read_text(encoding="utf-8")
+    header = '[jobs.job_owasp_control_assessment.settings]\nenabled = true'
+    assert source.count(header) == 1
+    source = source.replace(
+        header, f'[jobs.job_owasp_control_assessment.settings]\nenabled = {str(enabled).lower()}', 1)
+    config = tmp_path / "appsec-review.toml"
+    config.write_text(source, encoding="utf-8")
+    return config
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_owasp_dagster_default_and_explicit_opt_out(tmp_path: Path, enabled: bool) -> None:
+    config = (Path(__file__).resolve().parents[3] / "appsec-review.toml" if enabled else
+              _owasp_config(tmp_path, enabled=False))
+    definitions = build_definitions(config)
+    job_names = {job.name for job in definitions.get_repository_def().get_all_jobs()}
+    graph = definitions.get_job_def("wave1_review").graph
+    names = {node.name for node in graph.node_defs}
+    assert ("owasp_control_assessment" in job_names) is enabled
+    assert ("owasp_control_assessment__begin" in names) is enabled
+    mapping = graph.dependency_structure.input_to_upstream_outputs_for_node("review_data_indexing__begin")
+    upstream = {output.node_name for outputs in mapping.values() for output in outputs}
+    terminal = "owasp_control_assessment__finalize" if enabled else "security_tagging__finalize"
+    assert terminal in upstream
+    assert "review_package_assembly__begin" in names
+    assert "inference_security_review__begin" in names
+
+
+def test_wave1_exposes_real_producer_shard_topology(tmp_path: Path) -> None:
+    config = _owasp_config(tmp_path)
     graph = build_definitions(config).get_job_def("wave1_review").graph
     names = {node.name for node in graph.node_defs}
     assert "dispatch_wave1_review" not in names
@@ -468,6 +497,14 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
         return {output.node_name for outputs in mapping.values() for output in outputs}
 
+    def assert_barrier_waits_for_every_branch(job: str) -> None:
+        # The publish barrier waits for the job's claim plus every terminal branch of that job.
+        barrier = f"{job}__acceptance__publish_handoff"
+        members = {name for name in names if name.startswith(f"{job}__")} - {barrier, f"{job}__finalize"}
+        feeding = set().union(*(upstream(name) for name in members))
+        terminal = {f"{job}__begin"} | {name for name in members if name not in feeding}
+        assert terminal <= upstream(barrier) <= members
+
     assert upstream("image_pin_verification__begin") == {"model_connectivity__finalize"}
     assert upstream("review_intake__begin") == {"image_pin_verification__finalize"}
 
@@ -492,7 +529,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "artifact_indexing__begin", "artifact_indexing__index__catalogs",
         "artifact_indexing__index__members", "artifact_indexing__index__relationships"}
     assert "artifact_indexing__finalize" in upstream("artifact_security_analysis__begin")
-    assert len(upstream("project_build__acceptance__publish_handoff")) == 20
+    assert_barrier_waits_for_every_branch("project_build")
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")
     assert "post_build_security_assessment__finalize" in upstream("owasp_control_assessment__begin")
@@ -503,8 +540,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     assert upstream("cpp_compiled_analysis__infer__projects") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
-    cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
-    assert len(cpp_barrier) == 6  # claim plus five project-batched terminal branches
+    assert_barrier_waits_for_every_branch("cpp_compiled_analysis")
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
     assert len(post_build_barrier) == 2  # claim plus the generic accepted-unit index barrier
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
@@ -513,15 +549,40 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "evidence_collection__vulnerability_matching__grype_index" in barrier
     # Prioritization consumes the accepted Tree-sitter, Semgrep, CodeQL, and history handoffs and
     # publishes a retrieval shard, so it follows the last manifest publishers and precedes tagging.
-    assert {"codeql_analysis__finalize", "owasp_control_assessment__finalize"} <= upstream(
-        "review_prioritization__begin")
+    assert "codeql_analysis__finalize" in upstream("review_prioritization__begin")
+    assert "owasp_control_assessment__finalize" not in upstream("review_prioritization__begin")
     assert "review_prioritization__finalize" in upstream("security_tagging__begin")
-    assert "security_tagging__finalize" in upstream("review_data_indexing__begin")
+    assert {"security_tagging__finalize", "code_graph_index__finalize",
+            "review_prioritization__finalize"} <= upstream("owasp_control_assessment__begin")
+    assert "owasp_control_assessment__finalize" in upstream("review_data_indexing__begin")
     assert "review_data_indexing__finalize" in upstream("review_package_assembly__begin")
     assert upstream("review_package_assembly__publication__publish_packages") == {
         "review_package_assembly__begin"}
     assert upstream("review_prioritization__extract__semantic_evidence") >= {
         "review_prioritization__extract__syntax_metrics"}
+
+
+def test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs(tmp_path: Path) -> None:
+    from appsec_review.config import load_config
+    from appsec_review.orchestration.topology import describe_wave1
+    from appsec_review.runtime.registry import builtin_registry
+
+    path = _owasp_config(tmp_path)
+    graph = build_definitions(path).get_job_def("wave1_review").graph
+    described = describe_wave1(load_config(path), builtin_registry())
+    jobs = {item["job_id"]: item for item in described["jobs"]}
+    selected = ("job_owasp_control_assessment", "job_review_prioritization",
+                "job_security_tagging", "job_review_data_indexing", "job_review_package_assembly",
+                "job_inference_security_review")
+    for job_id in selected:
+        mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(job_id.removeprefix("job_") + "__begin")
+        actual = {output.node_name for outputs in mapping.values() for output in outputs}
+        expected = {item.removeprefix("job_") + "__finalize" for item in jobs[job_id]["dependencies"]}
+        assert actual == expected
+    assert {"job_security_tagging", "job_review_prioritization", "job_code_graph_index"} <= set(
+        jobs["job_owasp_control_assessment"]["dependencies"])
+    assert "job_owasp_control_assessment" in jobs["job_review_package_assembly"]["upstream_handoffs"]
+    assert "job_owasp_control_assessment" in jobs["job_inference_security_review"]["upstream_handoffs"]
 
 
 @pytest.mark.skipif(

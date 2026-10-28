@@ -128,12 +128,6 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
     if any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("wasm build source contains an unsupported symlink")
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(".git", ".hg", ".svn", "build", "target"))
-    try:
-        workspace.chmod(0o777)
-        for path in workspace.rglob("*"):
-            path.chmod(0o777 if path.is_dir() else 0o666)
-    except OSError:
-        pass
 
 
 def _kind(path: Path) -> str | None:

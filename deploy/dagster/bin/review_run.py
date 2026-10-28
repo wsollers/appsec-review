@@ -80,7 +80,9 @@ def write_submission(root: Path, record: dict) -> None:
 
 def submission_identity(root: Path, *, target: str, profile: str, overlay: str,
                         recording: str, image_id: str, project: str, url: str,
-                        application_run_id: str | None) -> dict:
+                        application_run_id: str | None, compiler_target: str = "clang") -> dict:
+    if compiler_target not in ("clang", "msvc"):
+        raise ValueError("compiler_target must be clang or msvc")
     def git_identity(path: Path, *, target_checkout: bool = False) -> str:
         def git(*arguments: str) -> str:
             result = subprocess.run(
@@ -124,7 +126,7 @@ def submission_identity(root: Path, *, target: str, profile: str, overlay: str,
             "base_sha256": digest(root / "appsec-review.toml"), "profile": profile,
             "profile_sha256": digest(profile_path) if profile != "dev" else None,
             "overlay_sha256": digest(overlay_path) if overlay_path else None,
-            "overlay": overlay, "recording": recording,
+            "overlay": overlay, "recording": recording, "compiler_target": compiler_target,
         },
     }
 

@@ -167,7 +167,7 @@ def test_target_to_package_graph_preserves_managed_work_removal(tmp_path, monkey
         if row["job_id"] in {"job_review_intake", "job_target_catalog"}
         and row["output_kind"] == "step_receipts"
     ]
-    assert len(upstream_receipts) == 9
+    assert len(upstream_receipts) == 10
     assert all(row["disposition"] == "protected" and row["coverage"]["state"] == "complete"
                for row in upstream_receipts)
     claim = json.loads((Path(package_outcome["attempt_root"]) / "claim.json").read_text(encoding="utf-8"))

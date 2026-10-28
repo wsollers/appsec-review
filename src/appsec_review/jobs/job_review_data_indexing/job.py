@@ -53,6 +53,7 @@ Providers = Callable[[], tuple[tuple[str, ...], Mapping[str, Sequence[Any]], Map
 DOWNSTREAM_JOBS = frozenset({
     "job_review_package_assembly", "job_document_issue_analysis", "job_inference_security_review",
     "job_final_publication_gate", "job_poc_generation", "job_final_report_publication",
+    "job_remediation_planning", "job_remediation_validation", "job_dossier_publication",
 })
 
 
@@ -166,8 +167,19 @@ def owasp_status(run_root: Path) -> dict[str, Any]:
     if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file() or \
             file_sha256(manifest_path) != pointer.get("manifest_sha256"):
         raise ValueError("accepted OWASP workbench manifest identity changed")
+    from appsec_review.storage.shared import consume_named
+    consume_named(run_root, manifest_path, namespace="owasp-shard", expected_sha256=pointer["manifest_sha256"])
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if (manifest.get("schema") != "appsec-review/owasp-index-manifest/1"
+            or manifest.get("run_id") != run_root.name or pointer.get("run_id") != run_root.name):
+        raise ValueError("accepted OWASP publication belongs to another run")
+    if manifest.get("assessment_mode", "qualification") not in {"assessment", "qualification"}:
+        raise ValueError("accepted OWASP publication has an invalid assessment mode")
     return {"status": "accepted", "manifest_sha256": pointer.get("manifest_sha256"),
+            "manifest_path": manifest_path.relative_to(run_root).as_posix(),
+            "assessment_mode": manifest.get("assessment_mode", "qualification"),
+            "assessment_bounds": manifest.get("assessment_bounds", {}),
+            "accepted_upstream_manifest": manifest.get("accepted_upstream_manifest"),
             "shards": list(manifest.get("shards", ()))}
 
 
@@ -372,7 +384,9 @@ def build_job(*, providers: Providers = registry_providers,
                                         shared=SharedArtifacts.for_job(unit.job))
             status = {"SUCCEEDED": "complete", "UNAVAILABLE": "unavailable"}.get(published["terminal_status"], "partial")
             unit.job.events.write("PRECOMPUTED_PRODUCT_PUBLISHED", query_set=query_set, status=status,
-                                  fact_count=published["counts"].get("entities", 0), reused=published["reused"])
+                                  fact_count=published["counts"].get("entities", 0), reused=published["reused"],
+                                  gap_count=len(published["gaps"]),
+                                  owasp_manifest_sha256=inputs["owasp"], unit_id=unit.unit_id)
             return {"query_set": query_set, "rule_version": version, "status": status,
                     "fact_count": published["counts"].get("entities", 0), "reused": published["reused"],
                     "counts": published["counts"], "gaps": published["gaps"], "index_identity": published["index_identity"],

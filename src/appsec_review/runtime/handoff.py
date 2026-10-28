@@ -43,7 +43,7 @@ _REFERENCE_FIELDS = {
 }
 _SOURCE_DATA_FIELDS = {
     "files", "source_files", "source_metrics", "artifact_candidates", "source_inventory",
-    "sources", "input_files", "source_inputs", "file_inventory", "payload", "records", "findings", "raw",
+    "sources", "input_files", "source_inputs", "native_files", "file_inventory", "payload", "records", "findings", "raw",
 }
 
 

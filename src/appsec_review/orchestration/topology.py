@@ -30,8 +30,10 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def gate_ids(registered: Set[str]) -> tuple[str, ...]:
-    """Pre-intake gates in dispatch order: the live model check, then the image-pin verification."""
-    return tuple(job_id for job_id in ("job_model_connectivity", "job_image_pin_verification")
+    """Pre-intake gates in dispatch order: the live model check, the image-pin verification, then the
+    acquisition of every component of the requested review system (a recorded no-op without one)."""
+    return tuple(job_id for job_id in ("job_model_connectivity", "job_image_pin_verification",
+                                       "job_target_acquisition")
                  if job_id in registered)
 
 
@@ -49,6 +51,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
 
     if not WAVE1_REQUIRED <= registered:
         return None
+    if "job_remediation_validation" in registered and "job_remediation_planning" not in registered:
+        raise ValueError("job_remediation_validation requires enabled job_remediation_planning")
     gates = gate_ids(registered)
     wave_dependencies: dict[str, tuple[str, ...]] = {
         **gate_dependencies(registered),
@@ -80,6 +84,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         wave_dependencies["job_test_coverage"] = ("job_artifact_indexing",)
     if "job_profile_data" in registered and "job_artifact_indexing" in registered:
         wave_dependencies["job_profile_data"] = ("job_artifact_indexing",)
+    if "job_debug_symbol_indexing" in registered and "job_artifact_indexing" in registered:
+        wave_dependencies["job_debug_symbol_indexing"] = ("job_artifact_indexing",)
     if "job_artifact_security_analysis" in registered:
         wave_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
             if "job_artifact_indexing" in registered else ("job_language_build",))
@@ -104,6 +110,9 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     for job_id in ("job_cpp_symbol_index", "job_cpg_analysis", "job_svf_alias_analysis"):
         if job_id in registered and "job_cpp_compiled_analysis" in registered:
             wave_dependencies[job_id] = ("job_cpp_compiled_analysis",)
+    if "job_binary_evidence_indexing" in registered:
+        # Reads only the binary publications intake froze; a leaf that data indexing closes.
+        wave_dependencies["job_binary_evidence_indexing"] = ("job_target_catalog",)
     if "job_post_build_security_assessment" in registered:
         wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
             if "job_cpp_compiled_analysis" in registered else
@@ -114,7 +123,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
             "job_evidence_collection", "job_cpp_compiled_analysis") if job_id in wave_dependencies)
     if "job_codeql_analysis" in registered:
         codeql_dependencies = [job_id for job_id in (
-            "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
+            "job_language_build", "job_artifact_indexing", "job_debug_symbol_indexing",
+            "job_artifact_security_analysis",
             "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
             "job_svf_alias_analysis",
             "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast",
@@ -140,7 +150,7 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # Prioritization reads the accepted Tree-sitter, history, Semgrep, and CodeQL handoffs and
         # publishes a retrieval shard, so it follows the last manifest publisher before tagging.
         wave_dependencies["job_review_prioritization"] = tuple(job_id for job_id in (
-            "job_codeql_analysis", "job_owasp_control_assessment") if job_id in registered) or tuple(
+            "job_codeql_analysis",) if job_id in registered) or tuple(
             job_id for job_id in ("job_evidence_collection", "job_tree_sitter_ast") if job_id in registered)
     if "job_code_graph_index" in registered and "job_codeql_analysis" in registered:
         # The graph index reads the accepted CodeQL exports and observations, the clangd/IR/AST shards
@@ -154,18 +164,25 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # Tagging reads the accepted retrieval manifest, so it follows its last publisher, and it
         # closes the wave so the graph keeps exactly one terminal job.
         tagging_dependencies = ["job_codeql_analysis"] if "job_codeql_analysis" in registered else [
-            job_id for job_id in ("job_language_build", "job_artifact_indexing",
+            job_id for job_id in ("job_language_build", "job_artifact_indexing", "job_debug_symbol_indexing",
                                   "job_artifact_security_analysis", "job_cpp_compiled_analysis",
                                   "job_clang_static_analysis",
                                   "job_post_build_security_assessment", "job_evidence_collection",
                                   "job_tree_sitter_ast", "job_change_context_analysis") if job_id in registered]
-        if "job_owasp_control_assessment" in registered:
-            tagging_dependencies.append("job_owasp_control_assessment")
         if "job_review_prioritization" in wave_dependencies:
             tagging_dependencies.append("job_review_prioritization")
         if "job_code_graph_index" in wave_dependencies:
             tagging_dependencies.append("job_code_graph_index")
         wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
+    if "job_owasp_control_assessment" in registered:
+        # OWASP consumes classification, the tag cloud's accepted assignments and code-graph
+        # context. It precedes data-index projection, hunt assembly and red/blue investigation.
+        original = wave_dependencies.pop("job_owasp_control_assessment")
+        wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys((
+            *original,
+            *(job_id for job_id in ("job_review_prioritization", "job_code_graph_index",
+                                    "job_security_tagging") if job_id in wave_dependencies),
+        )))
     if "job_review_data_indexing" in registered:
         # The dataset inventory audits every accepted publisher, so it closes the wave after the last
         # enabled producer on every branch and keeps exactly one terminal job. Derive the leaves
@@ -182,18 +199,26 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # The near-terminal review reads the accepted manifest, which holds every index shard and the
         # assembled review packages, so it runs after both consumers of the index and is the one terminal job.
         wave_dependencies["job_inference_security_review"] = ("job_document_issue_analysis",)
-    if "job_final_publication_gate" in registered and "job_inference_security_review" in registered:
-        # The gate only projects the accepted review handoff and the artifacts it binds.
-        wave_dependencies["job_final_publication_gate"] = ("job_inference_security_review",)
-    if "job_poc_generation" in registered and "job_final_publication_gate" in registered:
-        # Optional (disabled by default): proof-of-concept functions for the claims the judge agreed with.
-        # It reads the accepted gate and review and the accepted native build, and the report shows its outcome.
-        wave_dependencies["job_poc_generation"] = ("job_final_publication_gate",)
-    if "job_final_report_publication" in registered and "job_final_publication_gate" in registered:
-        # The report reads the accepted gate handoff (and the PoC handoff when the PoC job ran) and is the one
-        # terminal job of the graph. A disabled PoC job is transparent: the report follows the gate.
-        wave_dependencies["job_final_report_publication"] = (
-            ("job_poc_generation",) if "job_poc_generation" in wave_dependencies else ("job_final_publication_gate",))
+    review = "job_inference_security_review"
+    if review in wave_dependencies:
+        if "job_poc_generation" in registered:
+            wave_dependencies["job_poc_generation"] = (review,)
+        if "job_remediation_planning" in registered:
+            wave_dependencies["job_remediation_planning"] = tuple(
+                job_id for job_id in (review, "job_poc_generation") if job_id in wave_dependencies)
+        if "job_remediation_validation" in registered:
+            wave_dependencies["job_remediation_validation"] = ("job_remediation_planning",)
+        if "job_dossier_publication" in registered:
+            wave_dependencies["job_dossier_publication"] = tuple(
+                job_id for job_id in (review, "job_poc_generation", "job_remediation_planning",
+                                     "job_remediation_validation") if job_id in wave_dependencies)
+        if "job_final_publication_gate" in registered:
+            wave_dependencies["job_final_publication_gate"] = tuple(
+                job_id for job_id in (review, "job_poc_generation", "job_remediation_planning",
+                                     "job_remediation_validation", "job_dossier_publication")
+                if job_id in wave_dependencies)
+        if "job_final_report_publication" in registered and "job_final_publication_gate" in wave_dependencies:
+            wave_dependencies["job_final_report_publication"] = ("job_final_publication_gate",)
     return wave_dependencies
 
 

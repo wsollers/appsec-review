@@ -118,12 +118,15 @@ class ResumePlanner:
         reasons, handoff_hash = self._accepted(job, upstream)
         return tuple(reasons), handoff_hash
 
-    def plan(self, *, force_from: str | None = None, emit_event: bool = True) -> tuple[ResumeDecision, ...]:
+    def plan(self, *, force_from: str | None = None, emit_event: bool = True,
+             initial_upstream: Mapping[str, str] | None = None,
+             invalidated: bool = False) -> tuple[ResumeDecision, ...]:
+        """Decide each job; ``initial_upstream`` and ``invalidated`` continue a plan whose leading jobs
+        already ran (a deferred-fingerprint graph plans its target-reading suffix after acquisition)."""
         ids = [job.job_id for job in self.jobs]
         if force_from is not None and force_from not in ids:
             raise ValueError(f"force-from job is not in graph: {force_from}")
-        upstream: dict[str, str] = {}
-        invalidated = False
+        upstream: dict[str, str] = dict(initial_upstream or {})
         decisions: list[ResumeDecision] = []
         for job in self.jobs:
             if force_from == job.job_id:

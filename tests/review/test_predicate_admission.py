@@ -1,4 +1,4 @@
-"""Predicate admission (``predicate-admission/1``): a genuine citation is not evidence for every predicate.
+"""Predicate admission (``predicate-admission/2``): a genuine citation is not evidence for every predicate.
 
 Authenticity (the citation resolves), relevance (this kind of content can bear on this predicate) and
 support (it establishes the proposition) are separate. Every cell of the (kind x predicate) table is
@@ -48,6 +48,8 @@ EXPECTED = {
     "managed_assembly":  (D, I, I, I, I, I),
     "wasm_module":       (D, I, I, I, I, I),
     "evidence_artifact": (D, A, A, A, A, A),
+    "binary_function":   (D, A, A, A, I, I),
+    "binary_call_site":  (D, A, A, A, I, I),
 }
 CELLS = [(kind, predicate, row[index]) for kind, row in sorted(EXPECTED.items())
          for index, predicate in enumerate(ORDER)]
@@ -68,7 +70,7 @@ def test_every_cell_of_the_admission_table(kind: str, predicate: Predicate, expe
 
 def test_no_kind_is_direct_for_security_impact_and_source_content_is_direct_only_for_the_construct() -> None:
     assert all(classify(kind, P.SECURITY_IMPACT) is not D for kind in DIRECT_KINDS)
-    for kind in ("source_span", "symbol", "ast_node", "ir_entity"):
+    for kind in ("source_span", "symbol", "ast_node", "ir_entity", "binary_function", "binary_call_site"):
         assert {p for p in Predicate if classify(kind, p) is D} == {P.AFFECTED_CONSTRUCT}
     for kind in ("package", "archive_member"):       # component presence only
         assert {p for p in Predicate if classify(kind, p) is not I} == {P.AFFECTED_CONSTRUCT}
@@ -81,9 +83,9 @@ def test_configuration_is_direct_only_for_build_configuration_facts() -> None:
 
 def test_the_table_hash_and_version_are_pinned_in_the_obligation_policy() -> None:
     document = obligations._policy_document()
-    assert document["predicate_admission"] == {"version": "predicate-admission/1",
+    assert document["predicate_admission"] == {"version": "predicate-admission/2",
                                                "table_sha256": admission.TABLE_SHA256}
-    assert review_job.EVIDENCE_RULES["predicate_admission"] == "predicate-admission/1"
+    assert review_job.EVIDENCE_RULES["predicate_admission"] == "predicate-admission/2"
     assert review_job.EVIDENCE_RULES["rule_predicates"] == "tool-rule-predicates/2"
     assert obligations.POLICY_SHA256 == obligations.sha256_hex(document)
 

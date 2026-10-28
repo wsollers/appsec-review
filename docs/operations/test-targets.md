@@ -26,6 +26,6 @@ git clone https://github.com/wsollers/appsec-multi-vuln.git targets\appsec-multi
 - The seeded C/C++ defects of the `cpp-multivuln-v1` acceptance set are scored against
   `test/acceptance/cpp-multivuln-v1/expectations.toml` (see [`acceptance-funnel.md`](acceptance-funnel.md)).
 - On a new host, clone the target before the first stack start; the Dagster compose file mounts
-  `targets/` read-only at `/opt/app/targets`.
+  `targets/` writable at `/opt/app/targets`, because acquisition and builds write into it.
 
 The full download steps are in the README section "Download the acceptance target".

@@ -50,7 +50,7 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     settings = _settings(config)
     assert (settings.teams.review_teams, settings.teams.red_per_team, settings.teams.blue_per_team,
-            settings.teams.verifier_per_team) == (5, 3, 2, 1)
+            settings.teams.verifier_per_team) == (3, 3, 2, 1)
     assert settings.lanes.lead_budget_share == 0.5 and settings.lanes.hunt_budget_share == 0.5
     assert settings.lanes.lead_admission == ("critical", "high", "unknown")
     assert (settings.lanes.lead_max_claims_per_package, settings.lanes.hunt_max_units,
@@ -88,9 +88,9 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
     assert set(config.jobs) == set(builtin_registry().job_ids())
     resolved = json.loads(config.resolved_json)
     assert "pending_jobs" not in resolved
-    assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 5
+    assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 3
     assert tuple(config.job(JOB).steps) == ("scope", "triage", "packages", "lead_review", "hunt_review", "merge",
-                                            "adjudicate", "scoring", "completeness", "publication")
+                                            "adjudicate", "scoring", "attack_chains", "completeness", "publication")
     from appsec_review.review.packages import PackageSettings
     packages = PackageSettings.from_review_settings(_settings(config))
     assert packages.admit_severities == ("critical", "high", "unknown")
@@ -130,7 +130,7 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
 @pytest.mark.parametrize("old, new, message", [
     ("lead_budget_share = 0.5", "lead_budget_share = 1.5", "lead_budget_share must be a number between 0 and 1"),
     ("incomplete_gap_ratio = 0.25", "incomplete_gap_ratio = -0.1", "incomplete_gap_ratio must be"),
-    ("review_teams = 5", "review_teams = 0", "review_teams must be an integer"),
+    ("review_teams = 3", "review_teams = 0", "review_teams must be an integer"),
     ("red_per_team = 3", "red_per_team = 0", "red_per_team must be an integer"),
     ("budget_team_packages = 200", "budget_team_packages = 0", "budget_team_packages must be an integer"),
     ("max_model_turns = 12000", "max_model_turns = true", "max_model_turns must be an integer"),
@@ -320,7 +320,7 @@ def test_capacity_keys_are_excluded_from_the_semantic_view(tmp_path: Path) -> No
     assert semantic_settings_sha256(fewer_teams) == semantic_settings_sha256(base)
     assert semantic_settings_sha256(larger_budget) != semantic_settings_sha256(base)
     assert semantic_settings_sha256(other_share) != semantic_settings_sha256(base)
-    assert base.as_document()["teams"]["review_teams"] == 5   # the full view still carries capacity
+    assert base.as_document()["teams"]["review_teams"] == 3   # the full view still carries capacity
 
 
 # ---------------------------------------------------------------- Dagster pools
@@ -332,11 +332,20 @@ def test_pool_mapping_is_job_aware() -> None:
     assert _pool_for("lead_review.teams", JOB) == "inference_teams"
     assert _pool_for("hunt_review.teams", JOB) == "inference_teams"
     assert _pool_for("scoring.score_claims", JOB) == "inference_score"
+    for task in ("compose_candidates", "refute_candidates", "verify_weakest_links"):
+        assert _pool_for(f"attack_chains.{task}", JOB) == "inference_teams"
     assert _pool_for("publication.publish_claim_ledger", JOB) == "lifecycle"
     assert _pool_for("publication.publish_handoff", JOB) == "lifecycle"
     for unit in ("scope.accept_manifest", "packages.assemble_hunt_packages", "merge.claims",
                  "adjudicate.apply_policy", "completeness.audit"):
         assert _pool_for(unit, JOB) == "application"
+    from appsec_review.runtime.registry import builtin_registry
+    for job_id in ("job_remediation_planning", "job_remediation_validation", "job_dossier_publication"):
+        for unit in builtin_registry().build(job_id).units:
+            step = unit.unit_id.split(".", 1)[0]
+            expected = ("lifecycle" if step == "acceptance" else
+                        "inference_teams" if step == "assess" else "application")
+            assert _pool_for(unit.unit_id, job_id) == expected
     # Existing mappings for every other job are unchanged, with or without a job id.
     for job_id in (None, "job_owasp_control_assessment", "job_cpp_compiled_analysis"):
         assert _pool_for("validation.validate", job_id) == "owasp_validator"

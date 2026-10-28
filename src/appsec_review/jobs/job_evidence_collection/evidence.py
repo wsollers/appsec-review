@@ -131,6 +131,13 @@ def build_envelope(
             "advisory": native.get("advisory"),
             "language": native.get("language"),
         }
+        for field in ("version", "purl", "repository_url", "raw_selector"):
+            if native.get(field) is not None:
+                rendered, field_truncated = _text(native[field], bounds.max_field_bytes)
+                if field_truncated:
+                    bounded_gaps.append(f"normalized {field} exceeded its field bound")
+                else:
+                    record[field] = rendered
         rule_mapping = _rule_mapping(native.get("rule_mapping"))
         if rule_mapping is not None:
             record["rule_mapping"] = rule_mapping

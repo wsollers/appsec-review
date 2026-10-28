@@ -15,6 +15,7 @@ from appsec_review.container_runtime import load_catalog
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection import build_job, plan_applicability
+from appsec_review.jobs.job_evidence_collection.adapters import ADAPTERS
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan, load_accepted_plan

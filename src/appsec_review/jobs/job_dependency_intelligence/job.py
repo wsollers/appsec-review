@@ -8,24 +8,29 @@ from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
 import json
-from pathlib import Path, PurePosixPath
-import re
+from pathlib import Path
 import sqlite3
 from typing import Any
 
 from appsec_review.inference import Infer
 from appsec_review.jobs.engineering_contracts import DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.job_artifact_indexing import load_accepted_artifact_index
 from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, IndexIdentity,
                                      LogicalIdentity, RelationKind, RelationRecord, index_fingerprint,
-                                     write_manifest)
+                                     SourceLocation, write_manifest)
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import safe_path, verify_reference
+from appsec_review.observability.spans import operation_span
 
 from .datasets import CONSUMES, DATASETS
 from .inference import resolve_with_inference
-from .native import parse_native_candidates
+from .integration import (
+    Converter, collect_inputs, native_bounds, publish_sbom, read_native_file, sbom_bounds,
+    validate_publication,
+)
 from .resolution import deduplicate_repositories, normalize_dependencies, repository_identity
 from .scorecard import (ScorecardCache, ScorecardCacheError, ScorecardClient, ScorecardError,
                         Transport, https_get)
@@ -37,22 +42,93 @@ TOPOLOGY = {
     "resolution": ("detect_dependencies", "infer_repositories"),
     "repositories": ("deduplicate",),
     "scorecards": ("fetch",),
-    "publication": ("publish_context",),
+    "publication": ("publish_sbom", "publish_context"),
     "acceptance": ("publish_handoff",),
 }
-PARSER_IDENTITY = "dependency-intelligence-parser/1"
-NORMALIZER_IDENTITY = "dependency-intelligence-normalizer/1"
-MAPPING_IDENTITY = "dependency-intelligence-evidence-map/1"
+PARSER_IDENTITY = "dependency-intelligence-parser/2"
+NORMALIZER_IDENTITY = "dependency-intelligence-normalizer/2"
+MAPPING_IDENTITY = "dependency-intelligence-evidence-map/2"
+
+
+def _index_native_evidence(unit: UnitContext, builder: IndexBuilder, identities: Mapping[str, str],
+                           dependencies: list[Mapping[str, Any]], sbom: Mapping[str, Any]) -> None:
+    discovery = unit.output("resolution.detect_dependencies")["native_discovery_document"]
+    snapshot = unit.job.source_fingerprint
+    evidence_entities: dict[str, str] = {}
+    seen_artifacts: set[str] = set()
+    seen_sources: set[str] = set()
+
+    def artifact_entity(artifact: Mapping[str, Any], name: str) -> str:
+        verify_reference(unit.job.run_root, artifact)
+        identity = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, snapshot, dict(artifact))
+        if identity.value not in seen_artifacts:
+            builder.add_entity(EntityRecord(identity, artifact["sha256"], name, name,
+                                            {"artifact": dict(artifact), "tool_id": "native-sbom"}))
+            seen_artifacts.add(identity.value)
+        return identity.value
+
+    for evidence in discovery["evidence"]:
+        identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot,
+                                          {"native_evidence_id": evidence["evidence_id"]})
+        selector, location, source_id = evidence["selector"], None, None
+        if evidence["domain"] == "target" and "start_byte" in selector:
+            location = SourceLocation(
+                target_snapshot=snapshot, path=evidence["path"], file_sha256=evidence["sha256"],
+                start_byte=selector["start_byte"], end_byte=selector["end_byte"],
+                start_line=selector["start_line"], end_line=selector["end_line"],
+                start_column=1, end_column=1, producer_location=selector,
+                mapping_method="native-literal-exact", confidence=1.0,
+            )
+            source_id = LogicalIdentity.derive(EntityKind.SOURCE_SPAN, snapshot, {
+                "native_evidence_id": evidence["evidence_id"],
+                "path": evidence["path"], "sha256": evidence["sha256"],
+            })
+            if source_id.value not in seen_sources:
+                builder.add_entity(EntityRecord(
+                    source_id, evidence["path"], evidence["path"], evidence["path"],
+                    {"path": evidence["path"], "sha256": evidence["sha256"],
+                     "source_fingerprint": snapshot, "coverage": "supporting-native-evidence-span"}, location,
+                ))
+                seen_sources.add(source_id.value)
+        builder.add_entity(EntityRecord(identity, evidence["evidence_id"], evidence["kind"],
+                                       f"{evidence['kind']} {evidence['value']}", evidence, location))
+        evidence_entities[evidence["evidence_id"]] = identity.value
+        backing = evidence.get("backing") or evidence["upstream"]
+        artifact_id = artifact_entity(backing, "Native dependency evidence")
+        builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value, artifact_id, True, 1.0))
+        if source_id is not None:
+            builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, identity.value, source_id.value, True, 1.0))
+    for dependency in dependencies:
+        candidates = dependency.get("native_candidates") or [dependency.get("native_candidate")]
+        evidence_ids = {evidence_id for candidate in candidates if isinstance(candidate, Mapping)
+                        for evidence_id in candidate.get("evidence_ids", ())}
+        for evidence_id in sorted(evidence_ids):
+            if evidence_id in evidence_entities:
+                builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM,
+                    identities[dependency["dependency_id"]], evidence_entities[evidence_id], True, 1.0))
+    provenance_id = artifact_entity(sbom["provenance"], "Native SPDX provenance")
+    if sbom.get("artifact"):
+        spdx_id = artifact_entity(sbom["artifact"], "Enriched SPDX 2.3 inventory")
+        builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, spdx_id, provenance_id, True, 1.0))
+    for area, complete in (
+        ("native-source-discovery", not discovery["gaps"]),
+        ("source-syft-baseline", sbom.get("baseline") is not None),
+        ("native-spdx-publication", sbom["status"] == "SUCCEEDED"),
+    ):
+        builder.add_coverage(area, "complete" if complete else "partial",
+                             None if complete else "inspect native discovery and SPDX publication gaps")
 
 
 def _safe_read(run_root: Path, identity: Mapping[str, Any], *, max_bytes: int | None = None) -> bytes:
-    path = (run_root / str(identity.get("path", ""))).resolve()
-    if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+    path = safe_path(run_root, str(identity.get("path", "")))
+    if not path.is_file():
         raise ValueError("accepted dependency input is missing or outside the run")
     if file_sha256(path) != identity.get("sha256"):
         raise ValueError("accepted dependency input hash changed")
     if max_bytes is not None and path.stat().st_size > max_bytes:
         raise ValueError("accepted dependency input exceeds its byte bound")
+    if identity.get("size_bytes", path.stat().st_size) != path.stat().st_size:
+        raise ValueError("accepted dependency input size changed")
     return path.read_bytes()
 
 
@@ -107,74 +183,6 @@ def _evidence_packages(run_root: Path) -> tuple[list[dict[str, Any]], str]:
     return records, sha
 
 
-def _parse_metadata(path: Path, *, limit: int) -> dict[str, str]:
-    payload = path.read_bytes()
-    if len(payload) > limit:
-        raise ValueError("native package metadata exceeds its byte bound")
-    text = payload.decode("utf-8")
-    fields: dict[str, str] = {}
-    for line in text.splitlines()[:10000]:
-        match = re.match(r"\s*([A-Za-z][A-Za-z0-9_.-]{0,63})\s*[:=]\s*[\"']?([^\"')#]{1,4096})", line)
-        if match and match.group(1).lower() in {"name", "version", "url", "homepage_url", "repository"}:
-            key = "URL" if match.group(1).lower() in {"url", "homepage_url", "repository"} else match.group(1).title()
-            fields.setdefault(key, match.group(2).strip())
-    return fields
-
-
-def _native_inputs(run_root: Path, receipts: list[Mapping[str, Any]], settings: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    invocations: list[dict[str, Any]] = []
-    artifacts: list[dict[str, Any]] = []
-    metadata: list[dict[str, Any]] = []
-    gaps: list[str] = []
-    remaining_metadata = int(settings["metadata_file_limit"])
-    for receipt in receipts:
-        if receipt.get("family") != "native":
-            continue
-        artifacts.extend(dict(item) for item in receipt.get("artifacts", ()) if isinstance(item, Mapping))
-        identity = receipt.get("protected_compile_commands")
-        if isinstance(identity, Mapping):
-            try:
-                document = json.loads(_safe_read(run_root, identity,
-                    max_bytes=int(settings["metadata_bytes_per_file"]) * 16).decode())
-                if document.get("schema") != "appsec-review/protected-compile-commands/1":
-                    raise ValueError("protected native command schema is unsupported")
-                invocations.extend(dict(item) for item in document.get("rows", ()) if isinstance(item, Mapping))
-            except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
-                gaps.append(f"{receipt.get('build_unit_id')}: native compile/link evidence unavailable ({exc})")
-        workspace_identity = receipt.get("workspace_manifest")
-        workspace = (run_root / str(receipt.get("workspace", ""))).resolve()
-        if not isinstance(workspace_identity, Mapping) or run_root.resolve() not in workspace.parents:
-            continue
-        try:
-            manifest = json.loads(_safe_read(run_root, workspace_identity).decode())
-        except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
-            gaps.append(f"{receipt.get('build_unit_id')}: workspace metadata unavailable ({exc})")
-            continue
-        for relative, digest in sorted((manifest.get("files") or {}).items()):
-            lower = str(relative).lower()
-            if not lower.endswith((".pc", "config.cmake", "-config.cmake")):
-                continue
-            if remaining_metadata <= 0:
-                gaps.append(f"native metadata file bound exceeded ({settings['metadata_file_limit']})")
-                break
-            remaining_metadata -= 1
-            path = (workspace / Path(*PurePosixPath(str(relative)).parts)).resolve()
-            try:
-                if workspace != path and workspace not in path.parents:
-                    raise ValueError("metadata path escapes accepted workspace")
-                if not path.is_file() or path.is_symlink() or file_sha256(path) != digest:
-                    raise ValueError("metadata file identity changed")
-                fields = _parse_metadata(path, limit=int(settings["metadata_bytes_per_file"]))
-                metadata.append({"path": str(relative), "sha256": digest, "fields": fields})
-            except (OSError, UnicodeError, ValueError) as exc:
-                gaps.append(f"{relative}: native package metadata unavailable ({exc})")
-    candidates, candidate_gaps = parse_native_candidates(
-        invocations, artifacts=artifacts, metadata_files=metadata,
-        max_candidates=int(settings["native_candidate_limit"]),
-        max_tokens_per_command=int(settings["command_token_limit"]))
-    return candidates, [*gaps, *candidate_gaps]
-
-
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
     return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
             "size_bytes": path.stat().st_size}
@@ -195,6 +203,11 @@ def _validate_config(context, _result) -> None:
                 "metadata_file_limit", "metadata_bytes_per_file", "inference_candidate_bytes")
     if any(type(settings.get(key)) is not int or int(settings[key]) < 1 for key in integers):
         raise ValueError("dependency-intelligence deterministic bounds are invalid")
+    native_bounds(settings)
+    sbom_bounds(settings)
+    if (type(settings.get("sbom_conversion_timeout_seconds")) is not int
+            or settings["sbom_conversion_timeout_seconds"] < 1):
+        raise ValueError("SPDX conversion timeout must be a positive integer")
     hosts = settings.get("repository_hosts")
     if not isinstance(hosts, list) or not hosts or len(hosts) != len(set(hosts)):
         raise ValueError("dependency-intelligence repository host allowlist is invalid")
@@ -227,16 +240,20 @@ def _validate_config(context, _result) -> None:
         raise ValueError("dependency-intelligence Scorecard cache root must be repository-relative")
 
 
-def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = https_get) -> Job:
+def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = https_get,
+              syft_converter: Converter | None = None) -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
         declared, catalog_sha = _target_dependencies(unit.job.run_root)
         language = load_accepted_language_build(unit.job.run_root)
         packages, evidence_sha = _evidence_packages(unit.job.run_root)
-        _artifact_handoff, artifact_sha = _accepted_job(unit.job.run_root, "job_artifact_indexing")
+        artifact_index = load_accepted_artifact_index(unit.job.run_root)
+        artifact_sha = artifact_index["handoff_sha256"]
         if language.get("source_fingerprint") != unit.job.source_fingerprint:
             raise ValueError("dependency-intelligence target differs from accepted language builds")
-        return {"declared": declared, "packages": packages,
-                "receipts": [dict(item) for item in language.get("receipts", ())],
+        receipts = [dict(item) for item in language.get("receipts", ())]
+        native_inputs = collect_inputs(unit, receipts)
+        return {**native_inputs, "declared": declared, "packages": packages,
+                "receipts": receipts,
                 "upstream_handoffs": {"job_target_catalog": catalog_sha,
                                       "job_language_build": language["language_build_handoff_sha256"],
                                       "job_artifact_indexing": artifact_sha,
@@ -244,14 +261,34 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                 "gaps": list(language.get("gaps", ())), "terminal_status": "SUCCEEDED"}
 
     def detect(unit: UnitContext) -> Mapping[str, Any]:
+        from .discovery import discover_native_dependencies
         loaded = unit.output("inputs.load_accepted")
-        native, native_gaps = _native_inputs(unit.job.run_root, loaded["receipts"], unit.job.config.settings)
+        with operation_span(unit.job.events, "native-sbom.discovery", unit_id=unit.unit_id) as span:
+            discovery = discover_native_dependencies(
+                source_fingerprint=unit.job.source_fingerprint, files=loaded["native_files"],
+                invocations=loaded["native_invocations"], artifacts=loaded["native_artifacts"],
+                read_file=lambda record, limit: read_native_file(
+                    unit, record, limit, loaded["native_workspace_roots"]),
+                bounds=native_bounds(unit.job.config.settings),
+            )
+            discovery["gaps"].extend(loaded["native_gaps"])
+            discovery["coverage"]["configured_exclusions"] = loaded["native_exclusions"]
+            discovery["coverage"]["inherited_catalog_gaps"] = loaded["native_catalog_gaps"]
+            discovery["source_fingerprint"] = unit.job.source_fingerprint
+            if discovery["gaps"]:
+                span.status = "COMPLETED_WITH_GAPS"
+        path = unit.unit_root / "native-discovery.json"
+        if len(canonical_json(discovery)) > unit.job.config.settings["sbom_output_bytes"]:
+            raise ValueError("native discovery exceeds its configured publication byte bound")
+        atomic_json(path, discovery)
         dependencies, normalization_gaps = normalize_dependencies(
-            loaded["declared"], loaded["packages"], native,
+            loaded["declared"], loaded["packages"], discovery["candidates"],
             supported_hosts=tuple(unit.job.config.settings["repository_hosts"]),
             max_dependencies=int(unit.job.config.settings["dependency_limit"]))
-        gaps = [*native_gaps, *normalization_gaps]
+        gaps = [*discovery["gaps"], *normalization_gaps]
         return {"dependencies": dependencies, "gaps": gaps,
+                "native_discovery": _artifact(unit.job.run_root, path),
+                "native_discovery_document": discovery,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def infer_repositories(unit: UnitContext) -> Mapping[str, Any]:
@@ -353,12 +390,15 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         resolved = unit.output("resolution.infer_repositories")
         repositories = unit.output("repositories.deduplicate")
         scorecard = unit.output("scorecards.fetch")
+        sbom = unit.output("publication.publish_sbom")
         gaps = [*unit.output("resolution.detect_dependencies")["gaps"], *resolved["gaps"],
-                *repositories["gaps"], *scorecard["gaps"]]
+                *repositories["gaps"], *scorecard["gaps"], *sbom["gaps"]]
         producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
         fingerprint = index_fingerprint(name="inventory", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=producer_artifacts,
-            tool_identity={"scorecard_api": unit.job.config.settings["scorecard"]["base_url"]},
+            tool_identity={"scorecard_api": unit.job.config.settings["scorecard"]["base_url"],
+                           "native_sbom": sbom["input_fingerprint"],
+                           "spdx_sha256": (sbom.get("artifact") or {}).get("sha256")},
             parser_identity=PARSER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
             mapping_identity=MAPPING_IDENTITY)
         path = unit.job.run_root / "data" / "indices" / "inventory" / f"{fingerprint}.sqlite"
@@ -372,7 +412,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                 gaps_by_dependency.setdefault(str(gap["dependency_id"]), []).append(dict(gap))
         for dependency in resolved["dependencies"]:
             identity = LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, unit.job.source_fingerprint,
-                {key: dependency.get(key) for key in ("name", "version", "purl", "repository")})
+                {key: dependency.get(key) for key in ("dependency_id", "name", "version", "purl", "repository")})
             identities[dependency["dependency_id"]] = identity.value
             scoped = gaps_by_dependency.get(dependency["dependency_id"], [])
             builder.add_entity(EntityRecord(identity, dependency["dependency_id"], dependency["name"],
@@ -380,6 +420,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                 {**dependency, "gaps": scoped, "scorecard_context_only": True}))
             builder.add_coverage(dependency["dependency_id"], "partial" if scoped else "complete",
                                  scoped[0]["detail"] if scoped else None)
+        _index_native_evidence(unit, builder, identities, resolved["dependencies"], sbom)
         for record in scorecard["records"]:
             dependency_identity = identities[record["dependency_id"]]
             identity = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, unit.job.source_fingerprint,
@@ -408,6 +449,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         loaded, resolved = unit.output("inputs.load_accepted"), unit.output("resolution.infer_repositories")
         repositories = unit.output("repositories.deduplicate")
         scorecard, context = unit.output("scorecards.fetch"), unit.output("publication.publish_context")
+        sbom = unit.output("publication.publish_sbom")
         document = {"schema": DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA,
                     "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_handoffs": loaded["upstream_handoffs"],
@@ -418,6 +460,8 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                         "cache_hit_count": scorecard["cache_hit_count"]},
                     "gaps": context["gaps"], "index_identity": context["index_identity"],
                     "index_manifest": context["index_manifest"],
+                    "native_discovery": unit.output("resolution.detect_dependencies")["native_discovery"],
+                    "sbom": sbom,
                     "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
         path = unit.unit_root / "dependency-intelligence-handoff.json"
         atomic_json(path, document)
@@ -432,12 +476,14 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         Unit("resolution.infer_repositories", infer_repositories, ("resolution.detect_dependencies",)),
         Unit("repositories.deduplicate", repositories, ("resolution.infer_repositories",)),
         Unit("scorecards.fetch", scorecards, ("repositories.deduplicate",)),
+        Unit("publication.publish_sbom", lambda unit: publish_sbom(unit, syft_converter),
+             ("inputs.load_accepted", "resolution.detect_dependencies")),
         Unit("publication.publish_context", publish_context,
              ("inputs.load_accepted", "resolution.detect_dependencies", "resolution.infer_repositories",
-              "repositories.deduplicate", "scorecards.fetch")),
+              "repositories.deduplicate", "scorecards.fetch", "publication.publish_sbom")),
         Unit("acceptance.publish_handoff", publish_handoff,
              ("inputs.load_accepted", "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch",
-              "publication.publish_context")),
+              "publication.publish_context", "publication.publish_sbom", "resolution.detect_dependencies")),
     )
     implementation = None
     return Job(JOB_ID, "dependency_intelligence", UnitExecutor(units).execute,
@@ -463,6 +509,8 @@ def load_accepted_dependency_intelligence(run_root: Path) -> Mapping[str, Any]:
         raise ValueError("dependency-intelligence index manifest is not bound to its accepted handoff")
     load_verified_manifest(Path(run_root), Path(run_root) / document["index_manifest"]["path"],
                            document["index_manifest"]["sha256"])
+    if "sbom" in document:
+        validate_publication(Path(run_root), handoff, document)
     return {**document, "handoff_sha256": sha}
 
 

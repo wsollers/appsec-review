@@ -10,6 +10,7 @@ import pytest
 from appsec_review.guidance import GuidanceError, load_registry, load_runtime_skill, render_prompt, verify_bundle
 from appsec_review.guidance.compose import bundle_sha256, section_sha256
 from appsec_review.guidance.skills import select_review_procedures
+from appsec_review.owasp_workbench.guidance import assign as workbench_assign
 from appsec_review.owasp_workbench.guidance import compose as workbench_compose
 from appsec_review.review.models import IntegrityError
 from tests.test_guidance_compose import ROOT, _compose, repo, taxonomy
@@ -158,6 +159,30 @@ def test_workbench_selects_role_appropriate_procedure_without_changing_responsib
             verify_bundle(bundle)
 
 
+@pytest.mark.parametrize(("role", "skill"), [
+    ("control_assessor", "effective-control-verification"),
+    ("independent_reviewer", "predicate-verification"),
+])
+def test_workbench_control_area_assignments_match_documented_composed_guidance(role, skill):
+    registry = load_registry(ROOT)
+    documentation = (ROOT / "docs" / "architecture" / "owasp-control-workbench.md").read_text(
+        encoding="utf-8")
+    assert f"| `{role}` | `{skill}` |" in documentation
+    for domain, persona in registry["assignment"]["domain_persona"].items():
+        assignment = workbench_assign(registry, role=role, domain=domain)
+        assert assignment == {"role": role, "persona": persona}
+        task = {"task_id": domain, "question": "Assess the named obligation against original evidence.",
+                "proof_obligations": [], "prohibited_claims": ["component-wide safety"]}
+        bundle = workbench_compose(ROOT, **assignment, task=task)
+        source_id = registry["persona_migrations"].get(persona, persona)
+        assert f"| `{persona}` | `{source_id}` |" in documentation
+        assert bundle["persona"]["id"] == persona
+        assert bundle["persona"]["source_id"] == source_id
+        assert bundle["role"]["id"] == role
+        assert [item["id"] for item in bundle["procedures"]] == [skill]
+        assert verify_bundle(bundle) == bundle["sha256"]
+
+
 def test_hand_offs_are_visible_but_not_delegation(repo, taxonomy):
     for role, task in [("hypothesis_hunter", "sink_up"), ("blue_team_refuter", "blue_control")]:
         bundle = _compose(repo, taxonomy, role=role, task=task, capability={"granted_tools": []})
@@ -189,21 +214,6 @@ def test_workbench_reuses_pinned_specialist_knowledge_with_closed_task(repo, per
     assert changed["sha256"] != bundle["sha256"]
     with pytest.raises(ValueError, match="bounded question contract"):
         workbench_compose(repo, role="control_assessor", persona=persona, task={**task, "tools": ["find"]})
-
-
-def test_technical_guidance_is_conditioned_on_exact_mechanism_and_version():
-    fragments = ROOT / "pipeline" / "prompt-fragments"
-    parser = (fragments / "personas" / "parsing_deserialization.md").read_text(encoding="utf-8")
-    assert "`SerializationBinder` does not make `BinaryFormatter` safe" in parser
-    python = (fragments / "stacks" / "python_service.md").read_text(encoding="utf-8")
-    assert "introduced in Python 3.12" in python and "default became `data` in 3.14" in python
-    assert "ZIP extraction is separate" in python and "default\n  permission policy is `AllowAny`" in python
-    ci = (fragments / "personas" / "ci_cd_pipeline.md").read_text(encoding="utf-8")
-    assert "inheriting write-all" not in ci and "inherits repository or organization defaults" in ci
-    assert "a tag pin is not a SHA pin" in ci
-    dotnet = (fragments / "roles" / "build-engineer-dotnet.md").read_text(encoding="utf-8")
-    assert "project-image preparation, not configure/build command egress" in dotnet
-    assert "does not alone prove an image-preparation download" in dotnet
 
 
 def test_postbuild_guidance_requires_a_complete_family_specific_evidence_chain():

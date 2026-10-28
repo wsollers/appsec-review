@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false, "required": ["schema", "run_id", "upstream", "items", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/remediation-planning/1"},
+    "run_id": {"$ref": "common.schema.json#/$defs/text"},
+    "upstream": {"$ref": "common.schema.json#/$defs/upstream"},
+    "items": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["finding", "status", "plan", "reason", "gap_ids"],
+        "properties": {"finding": {"$ref": "common.schema.json#/$defs/finding"},
+                       "status": {"enum": ["proposal_generated", "manual_design_required", "insufficient_evidence", "capped"]},
+                       "plan": {"$ref": "common.schema.json#/$defs/nullable_ref"},
+                       "reason": {"$ref": "common.schema.json#/$defs/text"},
+                       "gap_ids": {"$ref": "common.schema.json#/$defs/strings"}}
+      }
+    },
+    "gaps": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/text"}}
+  }
+}

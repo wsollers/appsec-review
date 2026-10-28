@@ -37,9 +37,14 @@ class _Response:
         return json.dumps(self.value).encode()
 
 
-def _fixture(tmp_path: Path, *, extra: str = ""):
+def _fixture(tmp_path: Path, *, extra: str = "", owasp_enabled: bool = True):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8") + extra, encoding="utf-8")
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if not owasp_enabled:
+        header = '[jobs.job_owasp_control_assessment.settings]\nenabled = true'
+        assert source.count(header) == 1
+        source = source.replace(header, '[jobs.job_owasp_control_assessment.settings]\nenabled = false', 1)
+    config_path.write_text(source + extra, encoding="utf-8")
     target = tmp_path / "target"
     target.mkdir()
     (target / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
@@ -53,10 +58,11 @@ def _repository_document() -> dict:
 
 
 def _repository_model_jobs() -> set[str]:
-    """Jobs whose central settings declare a ``model`` table or ``models`` tables."""
+    """Jobs whose central settings declare inference, writer or reviewer model tables."""
     jobs = _repository_document()["jobs"]
     return {job_id for job_id, job in jobs.items() if job_id not in PENDING_JOBS and (
         isinstance(job.get("settings", {}).get("model"), dict)
+        or any(isinstance(job.get("settings", {}).get(name), dict) for name in ("writer", "reviewer"))
         or any(isinstance(item, dict) for item in job.get("settings", {}).get("models", {}).values()))}
 
 
@@ -134,7 +140,7 @@ def test_intake_confirms_every_configured_model_before_publishing(tmp_path: Path
 ], ids=["disabled-job-model", "second-provider"])
 def test_one_unavailable_model_blocks_the_review_and_keeps_the_evidence(
         tmp_path: Path, extra: str, expected: str) -> None:
-    config, target = _fixture(tmp_path, extra=extra)
+    config, target = _fixture(tmp_path, extra=extra, owasp_enabled=False)
     check, calls = _serving("claude-haiku-5-5")
     with pytest.raises(RuntimeError, match="job reported partial failure: model_preflight.verify_models"):
         GraphRunner(config, [build_intake(check_models=check)]).run(

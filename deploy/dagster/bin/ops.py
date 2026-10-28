@@ -48,6 +48,7 @@ DEFAULT_PROFILE = "dev"
 PROFILES = ("dev", "prod", "copilot-dev", "copilot-prod")
 PROFILE_TAG = "appsec/profile"
 OVERLAY_TAG = "appsec/overlay"
+COMPILER_TARGET_TAG = "appsec/compiler_target"
 NO_OVERLAY = "none"
 DEPLOY_VARIABLES = (TARGET_VARIABLE, OVERLAY_VARIABLE, RECORDING_VARIABLE, PROFILE_VARIABLE)
 PROFILE_NOTICE = ("profile {profile} uses the more capable models (Sonnet 5.5, Opus 5.5 verifier) and larger token limits; "
@@ -332,6 +333,8 @@ def add_review_options(parser: argparse.ArgumentParser) -> None:
                              "container's); must keep the container's provider: dev/prod or copilot-dev/copilot-prod")
     parser.add_argument("--overlay", help="capacity overlay under test/acceptance for this run only, or 'none' "
                                           "(default: a resumed run's recorded overlay, else the container's)")
+    parser.add_argument("--compiler-target", choices=("clang", "msvc"),
+                        help="debug-symbol compiler family (default: resumed run's recorded choice, else clang)")
 
 
 # -- stack checks ---------------------------------------------------------------------------------
@@ -646,6 +649,26 @@ def run_selection(args: argparse.Namespace, code: Container) -> tuple[tuple[str,
     return profile, overlay
 
 
+def run_compiler_target(args: argparse.Namespace) -> str:
+    requested = getattr(args, "compiler_target", None)
+    if requested is None and args.run_id:
+        manifest = ROOT / "runs" / args.run_id / "data" / "configuration" / "manifest.json"
+        if manifest.is_file():
+            try:
+                requested = json.loads(manifest.read_text(encoding="utf-8")).get(
+                    "selection", {}).get("compiler_target", "clang")
+            except (OSError, ValueError, AttributeError) as error:
+                raise OpsError("cannot read the resumed run's compiler target", REFUSED) from error
+    target = "clang" if requested is None else requested
+    if target not in ("clang", "msvc"):
+        raise OpsError("compiler_target must be clang or msvc", USAGE)
+    if args.run_id and getattr(args, "compiler_target", None) is not None:
+        recorded_args = argparse.Namespace(run_id=args.run_id, compiler_target=None)
+        if target != run_compiler_target(recorded_args):
+            raise OpsError("a resumed run cannot change its compiler target; start a fresh run", REFUSED)
+    return target
+
+
 def host_budget(profile: str, overlay: str):
     """Resolve the run's configuration on the host (container overlay path mapped to test/acceptance)."""
     from appsec_review.config import load_config
@@ -733,6 +756,7 @@ def _review_start(args: argparse.Namespace) -> int:
         if not (ROOT / "runs" / args.run_id).is_dir():
             raise OpsError(f"no application run runs/{args.run_id} to resume", NOT_FOUND)
     (profile, profile_source), (overlay, overlay_source) = run_selection(args, code)
+    compiler_target = run_compiler_target(args)
     active = guard_active_runs(args.url, containers, args.force, "start another review")
     guard_resource_budget(active, code, profile, overlay)
     configuration = ROOT / "appsec-review.toml"
@@ -752,7 +776,8 @@ def _review_start(args: argparse.Namespace) -> int:
         ROOT, target=code.settings.get(TARGET_VARIABLE) or f"{CONTAINER_TARGETS}/appsec-multi-vuln",
         profile=profile, overlay=overlay,
         recording=code.settings.get(RECORDING_VARIABLE, ""), image_id=code.image_id,
-        project=project, url=args.url, application_run_id=args.run_id)
+        project=project, url=args.url, application_run_id=args.run_id,
+        compiler_target=compiler_target)
     safety_policy = None
     if getattr(args, "stop_on_first_error", False):
         if args.run_id:
@@ -765,6 +790,7 @@ def _review_start(args: argparse.Namespace) -> int:
     tags["appsec/submission_identity"] = review_run.submission_identity_sha256(identity)
     tags[PROFILE_TAG] = profile
     tags[OVERLAY_TAG] = overlay or NO_OVERLAY
+    tags[COMPILER_TARGET_TAG] = compiler_target
     if safety_policy is not None:
         tags["appsec/safety_identity"] = execution_safety.identity(safety_policy)
         tags["dagster/max_retries"] = "0"
@@ -779,6 +805,7 @@ def _review_start(args: argparse.Namespace) -> int:
         say(PROFILE_NOTICE.format(profile=profile))
     say(f"target:    {code.settings.get(TARGET_VARIABLE) or '(default)'}")
     say(f"overlay:   {overlay or '(none)'} ({overlay_source})")
+    say(f"compiler:  {compiler_target}")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")
     say("+ docker " + shlex.join(command))
     if args.dry_run:

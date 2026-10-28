@@ -20,12 +20,16 @@ Score**. The score orders LLM review attention: a high score means "review first
 ## Placement and inputs
 
 ```text
-... -> codeql_analysis -> owasp_control_assessment -> review_prioritization -> security_tagging
+... -> codeql_analysis -> review_prioritization -> code_graph_index -> security_tagging
+  -> owasp_control_assessment (when enabled) -> review_data_indexing -> review_package_assembly
 ```
 
-In Dagster's `wave1_review` the job follows the last retrieval-manifest publishers (CodeQL and OWASP)
-and precedes security tagging, which remains the single terminal job. It is also a standalone
-Dagster job. The direct CLI graph also runs Tree-sitter before this job.
+In Dagster's `wave1_review` the job follows CodeQL and precedes code-graph indexing and security
+tagging. OWASP consumes these accepted classification/routing products before downstream indexing,
+hunting and red/blue review; prioritization does not wait for OWASP. The final report remains the
+single terminal job. Prioritization is also a standalone Dagster job. The direct CLI runs it after
+Tree-sitter and CodeQL, then code-graph indexing, security tagging and the default-enabled OWASP assessment
+before review data indexing. Normal enabled-job selection applies on both surfaces.
 
 | Input | Required | Use |
 |---|---|---|

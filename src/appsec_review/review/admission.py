@@ -1,4 +1,4 @@
-"""Predicate admission: which kind of cited content can bear on which predicate (``predicate-admission/1``).
+"""Predicate admission: which kind of cited content can bear on which predicate (``predicate-admission/2``).
 
 Three separate questions decide whether a model citation can satisfy an obligation:
 
@@ -34,7 +34,15 @@ Principles (every cell below follows them; where unsure the cell is the weaker o
    feature property must be read out of them.
 4. No kind is ``DIRECT`` for ``security_impact``: impact follows from the adjudicated claim facts
    (weakness class and the other predicates), not from one cited entity. There is no exception in
-   ``predicate-admission/1``.
+   ``predicate-admission/2``.
+5. Binary-derived content (``binary_function``, ``binary_call_site``: Ghidra pseudo-C bound to a
+   binary hash, a function address and pseudo-C lines) is ``DIRECT`` only for
+   ``affected_construct``: the function or call is in that binary at that address. Decompiled text
+   is a reconstruction, so flow, input control and guards read from it are ``ANALYST_ASSESSED``,
+   and it says nothing about build configuration or impact. Imports and strings name things the
+   binary refers to; they are ``INDIRECT`` (outside the table) for every predicate.
+
+``predicate-admission/2`` added principle 5 and its two rows; every ``/1`` cell is unchanged.
 
 A producer's own observation is not decided here: ``tool_observation`` stays mapped by rule identity
 (``review.tool_rules``) and graph facts by ``graph-fact-predicates/1``.
@@ -48,7 +56,7 @@ from appsec_review.retrieval.model import EntityKind
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import Admissibility, Predicate
 
-VERSION = "predicate-admission/1"
+VERSION = "predicate-admission/2"
 
 _D, _A, _I = Admissibility.DIRECT, Admissibility.ANALYST_ASSESSED, Admissibility.INDIRECT
 _P = Predicate
@@ -80,6 +88,9 @@ _ROWS: dict[EntityKind, tuple[Admissibility, ...]] = {
     EntityKind.WASM_MODULE:      (_D, _I, _I, _I, _I, _I),
     # A run-owned tool artifact (decompilation, trace, SARIF): its content is read, not computed.
     EntityKind.EVIDENCE_ARTIFACT: (_D, _A, _A, _A, _A, _A),
+    # Binary-derived pseudo-C (principle 5): the function or call exists at that address; the rest is read.
+    EntityKind.BINARY_FUNCTION:  (_D, _A, _A, _A, _I, _I),
+    EntityKind.BINARY_CALL_SITE: (_D, _A, _A, _A, _I, _I),
 }
 assert all(len(row) == len(COLUMNS) for row in _ROWS.values())
 assert all(row[COLUMNS.index(_P.SECURITY_IMPACT)] is not _D for row in _ROWS.values())   # principle 4

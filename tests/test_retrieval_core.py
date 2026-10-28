@@ -639,7 +639,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
         "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
         "query_change_context", "query_hotspots", "query_precomputed", "query_observations",
-        "query_dataset_inventory", "query_code_graph", "list_codeql_databases", "query_codeql_neighborhood",
+        "query_dataset_inventory", "query_code_graph", "query_debug_symbols", "list_codeql_databases", "query_codeql_neighborhood",
         "query_owasp_workbench"}
     codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
                                             "build_unit": "native-main", "path": "src/auth.c"})

@@ -1,15 +1,15 @@
-"""An offline review -> gate -> PoC job -> report chain for the job_poc_generation tests.
+"""An offline review -> PoC -> gate -> report chain for the job_poc_generation tests.
 
 The scripted inference review runs over the fixture accepted index set (no model, container or network);
-``poc_candidates`` is then written into the accepted review handoff exactly where the judge work will
-produce it, the gate is run over that handoff, and ``job_poc_generation`` runs with injected edges: a
+``poc_candidates`` can be replaced to exercise candidate contracts, and ``job_poc_generation`` runs with injected edges: a
 scripted writer, a recording fake build executor, an accepted-build lookup over a copy of cpp-multivuln
-and a stub package view. The report then reads the PoC handoff when it exists.
+and a stub package view. The report reads only the gate's certified snapshot.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 import dataclasses
+import gc
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -33,7 +33,8 @@ from tests.fixtures.inference_review.builder import FixtureRun, build_accepted_i
 from tests.fixtures.poc_generation import relay
 
 POC = "job_poc_generation"
-BASIS = {"entry": ["E1"], "path": ["F1", "F2"], "trigger": [relay.TRIGGER],
+BASIS = {"entry": ["asr:entry_point:" + "1" * 64],
+         "path": ["asr:call_site:" + "2" * 64, "asr:call_site:" + "3" * 64], "trigger": [relay.TRIGGER],
          "input_format": "4-byte header, then name bytes", "preconditions": ["attacker_controls_file_content"],
          "expected_observation": "a stack-buffer-overflow write in memcpy under a sanitizer", "unknowns": []}
 
@@ -44,6 +45,7 @@ def poc_tables(**overrides: int) -> str:
     start = text.index("[jobs.job_poc_generation]\n")
     end = text.index("# Final report publication (docs/operations/final-report.md)")
     block = text[start:end]
+    block = block.replace("enabled = false", "enabled = true", 1)
     for key, value in overrides.items():
         assert f"\n{key} = " in block, key
         block = re.sub(rf"(?m)^{key} = .*$", f"{key} = {value}", block, count=1)
@@ -101,7 +103,6 @@ class PocChain:
     snapshot: Path
     findings: list[dict[str, Any]]
     packages: list[str]
-    schema_root: Path | None = None
     built: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -113,6 +114,7 @@ class PocChain:
         return self.base.parent / f"{self.base.name}-accepted-workspace"
 
     def restore(self) -> None:
+        gc.collect()
         shutil.rmtree(self.base)
         shutil.copytree(self.snapshot, self.base)
 
@@ -141,24 +143,20 @@ class PocChain:
         value = deepcopy(dict(basis if basis is not None else BASIS))
         entry = {"claim_id": finding["claim_id"], "package_id": self.packages[index % len(self.packages)],
                  "state": state or finding["state"], "judge_verdict": verdict,
-                 "poc_basis": {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "value": value},
+                 "poc_basis": {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "brief": value},
                  "finding_package": {"finding_package_id": finding["finding_package_id"],
                                      "sha256": finding["sha256"]},
-                 "evidence_refs": ["asr:sink_site:" + f"{index + 1}" * 64]}
+                 "evidence_refs": list(finding["direct_evidence"])}
         entry.update(changes)
         return entry
 
     def prepare(self, candidates: Sequence[Mapping[str, Any]] | None) -> None:
-        """Restore the accepted review, write ``poc_candidates`` into its handoff and run the gate over it."""
+        """Restore the review; optional candidate mutations exercise strict consumer integrity checks."""
         self.restore()
         if candidates is not None:
             self.inject(candidates)
-        from appsec_review.jobs.job_final_publication_gate import build_job as build_gate
 
-        run_job(self.config, build_gate(repository_root=self.schema_root), self.fixture.run_id,
-                self.upstream(JOB), self.env)
-
-    def inject(self, candidates: Sequence[Mapping[str, Any]]) -> None:
+    def inject(self, candidates: Sequence[Mapping[str, Any]] | None) -> None:
         pointer_path = self.run_root / "data" / "jobs" / JOB / "latest.json"
         pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
         handoff_path = self.run_root / pointer["handoff_path"]
@@ -166,7 +164,10 @@ class PocChain:
         artifact = handoff["outputs"]["publication.publish_handoff"]["artifact"]
         review_path = self.run_root / artifact["path"]
         review = json.loads(review_path.read_text(encoding="utf-8"))
-        review["poc_candidates"] = [dict(item) for item in candidates]
+        if candidates is None:
+            review.pop("poc_candidates")
+        else:
+            review["poc_candidates"] = [dict(item) for item in candidates]
         payload = canonical_json(review)
         review_path.write_bytes(payload)
         artifact["sha256"], artifact["size_bytes"] = hashlib.sha256(payload).hexdigest(), len(payload)
@@ -189,36 +190,23 @@ class PocChain:
 
     def run_poc(self, writer, executor=None, *, env: Mapping[str, str] | None = None, **kwargs):
         job = self.job(writer, executor, **kwargs)
-        return run_job(self.config, job, self.fixture.run_id, self.upstream(GATE), {**self.env, **dict(env or {})})
+        return run_job(self.config, job, self.fixture.run_id, self.upstream(JOB), {**self.env, **dict(env or {})})
 
-    def run_report(self):
-        upstream = self.upstream(POC) or self.upstream(GATE)
-        return run_job(self.config, report_job(), self.fixture.run_id, upstream, self.env)
+    def run_gate(self):
+        from appsec_review.jobs.job_final_publication_gate import build_job as build_gate
+        return run_job(self.config, build_gate(repository_root=ROOT), self.fixture.run_id,
+                       {**self.upstream(JOB), **self.upstream(POC)}, self.env)
+
+    def run_report(self, *, refresh_gate=True):
+        if refresh_gate:
+            self.run_gate()
+        return run_job(self.config, report_job(), self.fixture.run_id, self.upstream(GATE), self.env)
 
     def summary(self) -> dict[str, Any]:
         return self.read(POC, "publish.publish_handoff", "poc-generation.json")
 
     def rows(self) -> dict[str, dict[str, Any]]:
         return {row["claim_id"]: row for row in self.summary()["candidates"]}
-
-
-def schema_root_with_candidates(directory: Path, exist_ok: bool = False) -> Path:
-    """A repository root whose review handoff schema already allows ``poc_candidates``.
-
-    The handoff schema belongs to the judge work; until it adds the property the gate would refuse a handoff
-    that carries it, so the tests give the gate a copy of the schemas that has it. The PoC job itself runs
-    against the repository's own schemas and does not need this.
-    """
-    target = directory / "docs" / "schemas"
-    if exist_ok and target.exists():
-        return directory
-    shutil.copytree(ROOT / "docs" / "schemas" / "inference-security-review", target / "inference-security-review")
-    shutil.copytree(ROOT / "docs" / "schemas" / "final-report", target / "final-report")
-    path = target / "inference-security-review" / "handoff.schema.json"
-    schema = json.loads(path.read_text(encoding="utf-8"))
-    schema["properties"]["poc_candidates"] = {"type": "array", "maxItems": 10000}
-    path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
-    return directory
 
 
 def build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
@@ -251,8 +239,7 @@ def load_chain(base: Path, meta: Path) -> PocChain:
     fixture = FixtureRun(**{name: (Path(value) if "Path" in str(types[name]) else value)
                             for name, value in record["fixture"].items()})
     chain = PocChain(base, fixture, Path(record["config"]), record["env"], base.parent / f"{base.name}-snapshot",
-                     record["findings"], record["packages"],
-                     schema_root_with_candidates(base.parent / f"{base.name}-repository", exist_ok=True))
+                     record["findings"], record["packages"])
     chain.restore()
     return chain
 
@@ -267,8 +254,7 @@ def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
            "APPSEC_C7_SCENARIO": str(write_scenario(logs, fixture.ids, calls=str(logs / "calls.jsonl"),
                                                     captures=str(logs / "captures")))}
     run_job(config, review_job(), fixture.run_id, env=env)
-    chain = PocChain(base, fixture, config, env, base.parent / f"{base.name}-snapshot", [], [],
-                     schema_root_with_candidates(base.parent / f"{base.name}-repository"))
+    chain = PocChain(base, fixture, config, env, base.parent / f"{base.name}-snapshot", [], [])
     handoff = chain.handoff(JOB)
     review = json.loads((fixture.run_root / handoff["outputs"]["publication.publish_handoff"]["artifact"]["path"]
                          ).read_text(encoding="utf-8"))
@@ -278,7 +264,8 @@ def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
             "findings" / f"{item['finding_package_id']}.json"
         document = json.loads(path.read_text(encoding="utf-8"))
         findings.append({"finding_package_id": item["finding_package_id"], "sha256": item["sha256"],
-                         "claim_id": document["claim_id"], "state": document["state"]})
+                         "claim_id": document["claim_id"], "state": document["state"],
+                         "direct_evidence": document["direct_evidence"]})
     chain.findings = sorted(findings, key=lambda item: (item["state"] != "confirmed", item["claim_id"]))
     packages = []
     for lane in ("lead", "hunt"):

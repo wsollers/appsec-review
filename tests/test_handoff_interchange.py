@@ -322,11 +322,12 @@ def test_handoff_events_are_hash_bound_closed_metadata_and_not_reemitted_on_reus
     assert sum(event["event"] == "HANDOFF_VALIDATED" for event in after) == 1
 
 
-def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artifact_refs(tmp_path):
+@pytest.mark.parametrize("source_field", ["source_inventory", "native_files"])
+def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artifact_refs(tmp_path, source_field):
     def produce(unit):
         manifest = json.loads((unit.job.run_root / "data/configuration/manifest.json").read_bytes())
-        return {"source_inventory": [{"path": "source.py", "sha256": "a" * 64, "size_bytes": 4},
-                                     {"path": "data/customer.json", "sha256": "a" * 64, "size_bytes": 4}],
+        return {source_field: [{"path": "source.py", "sha256": "a" * 64, "size_bytes": 4},
+                               {"path": "data/customer.json", "sha256": "a" * 64, "size_bytes": 4}],
                 "artifact_candidates": [{"path": "customer.bin", "sha256": "b" * 64, "size_bytes": 4}],
                 "layers": manifest["sources"]}
     _, _, _, outcome, root = publish(tmp_path, produce)
@@ -337,6 +338,18 @@ def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artif
         collect_artifacts(root, {"artifact": {"path": "source.py", "sha256": "a" * 64, "size_bytes": 4}})
     with pytest.raises(ValueError):
         collect_artifacts(root, {"artifact": {"path": str(tmp_path / "not-a-frozen-layer"), "sha256": "a" * 64}})
+
+
+def test_graph_export_artifact_survives_common_handoff_projection(tmp_path):
+    def produce(unit):
+        path = unit.unit_root / "graph-export.json"
+        atomic_json(path, {"schema": "fixture/1", "nodes": []})
+        return {"graph_export_artifact": reference(unit.job.run_root, path)}
+
+    _, _, _, outcome, root = publish(tmp_path, produce)
+    graph = outcome["handoff"]["outputs"]["work.only"]["graph_export_artifact"]
+    assert graph in outcome["handoff"]["artifacts"]
+    verify_handoff_integrity(root, outcome["handoff"])
 
 
 def test_scoped_binary_inventory_binds_explicit_run_path_not_display_path(tmp_path):

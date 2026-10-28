@@ -89,6 +89,7 @@ class JobRunner:
             "sources": [dict(layer) for layer in self.config.layers],
             "selection": {"profile": self.config.profile,
                           "overlay": str(self.config.overlay_path) if self.config.overlay_path else None,
+                          "compiler_target": self.config.compiler_target.value,
                           "source": self.config.selection_source},
             "resolved": {"path": "resolved.json", "sha256": self.config.resolved_sha256},
         })
@@ -160,6 +161,7 @@ class JobRunner:
             tools=self.config.tools,
             review_policy=self.config.review_policy,
             evidence_target_snapshot=claim.get("evidence_target_snapshot"),
+            upstream_handoffs=MappingProxyType(dict(claim.get("upstream_handoffs", {}))),
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
             input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
@@ -560,7 +562,7 @@ class JobRunner:
         for unit_id, output in result.get("outputs", {}).items():
             if isinstance(output, Mapping):
                 handoff_outputs[unit_id] = {key: output[key] for key in (
-                    "schema", "artifact", "identity", "pointer", "metadata_path", "item_count",
+                    "schema", "artifact", "graph_export_artifact", "identity", "pointer", "metadata_path", "item_count",
                     "index_manifest", "index_identity", "terminal_status",
                 ) if key in output}
         attempt = context.attempt_root.relative_to(context.run_root).as_posix()

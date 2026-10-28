@@ -11,12 +11,26 @@ from appsec_review.retrieval.neighborhood import (
     DIRECTIONS, INCLUDES, LANGUAGE_PATTERN, LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, SEED_PATTERN)
 from appsec_review.retrieval.observations import OBSERVATION_CLASSES, REPORTED_SEVERITIES
 from appsec_review.retrieval.precomputed import QUERY_SETS
+from appsec_review.debug_symbols.contract import QUERY_TOOL, QueryMode
+from appsec_review.retrieval.syntax import QUERY_SYNTAX, MODES, MAX_NAME_BYTES
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
 INDEX = {"type": "string", "enum": list(INDEX_NAMES)}
 
 TOOLS: tuple[dict[str, Any], ...] = (
+    {"name": QUERY_TOOL,
+     "description": "Query accepted build-bound DWARF/PDB evidence, not inferred call graphs. "
+                    "Every mode requires an exact subject or artifact identity; address and coverage require "
+                    "artifact_identity. Address is build-relative, unsigned and half-open. Source ranges accept "
+                    "verified source identities; layouts enumerate an artifact or take an exact normalized type identity.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["mode"], "properties": {
+         "mode": {"type": "string", "enum": [mode.value for mode in QueryMode]},
+         "artifact_identity": IDENTITY, "subject": IDENTITY,
+         "address": {"type": "integer", "minimum": 0, "maximum": 2**64 - 1},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
     {"name": "search", "description": "Full-text search accepted immutable evidence indexes.",
      "inputSchema": {"type": "object", "additionalProperties": False, "required": ["query"], "properties": {
          "query": {"type": "string", "minLength": 1, "maxLength": 4096},
@@ -142,6 +156,14 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "query_set": {"type": "string", "enum": list(QUERY_SETS)},
          "subject": IDENTITY,
          "path": {"type": "string", "maxLength": 4096},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": QUERY_SYNTAX, "description": "Query precomputed syntax-only definitions, written calls, imports or identifier occurrences within one exact source-file or AST identity. Names and call targets are unresolved; results never establish semantic references or dataflow. No parsing or source-tree scanning runs during retrieval.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["mode", "subject"], "properties": {
+         "mode": {"type": "string", "enum": list(MODES)},
+         "subject": {"type": "string", "pattern": "^asr:(source_file|ast_node):[0-9a-f]{64}$"},
+         "name": {"type": "string", "minLength": 1, "maxLength": MAX_NAME_BYTES},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},

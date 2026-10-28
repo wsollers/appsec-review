@@ -101,6 +101,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Input source / current producer | Used for | Indexed state / required representation | Precompute | MCP endpoint; skill decision |
 |---|---|---|---|---|
 | Resolved TOML, model/tool/guidance identities, target fingerprint; `job_review_intake` | Bind run, enabled lanes and provenance | Extend: sanitized configuration identity, lane status, hash and gap; raw secrets/guidance protected | `review_package` coverage/basis | `coverage`/dataset catalog; no retrieval skill |
+| System acquisition manifest, component pins and acquisition gaps; `job_target_acquisition` | Bind a multi-component review system to hash-pinned component identities before intake | Artifact only: run-owned copy of the system manifest and acquisition result; component gaps reach coverage | None | `coverage`; no skill |
 | Source snapshot bytes, paths, hashes; `job_target_catalog` | Resolve every cited location | Current `source` identities/excerpts; extend exact links to all representations | `symbol_links`, `hotspot_context` | `core`; no skill |
 | Repository partitions, languages, projects, components and dependencies; `job_target_catalog` | Scope review and language routing | Current `components`, `analysis`, `build`; audit project/build-unit edges | `artifact_inventory`, `review_package` | `core`; existing `target-analysis-planning` skill is for operator planning only |
 | Build recipes, compile database, dependency manifests; catalog/plan | Select tools, units and package identities | Current catalog/build facts; extend normalized manifest and build-target edges | `build_provenance`, `artifact_inventory` | `core`, `query_artifacts`; planning skill only |
@@ -121,10 +122,12 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | LLVM IR, binary symbols, Infer output; `job_cpp_compiled_analysis` | Compiled direct calls, hardening and leads | Current partial IR (TU-level locations) and observations; cross-check input for `call_site` facts | `scanner_correlation`; cross-check of the `graph` index | `core`, `query_build_security`, `QP`; no skill |
 | Clang-Tidy and Clang Static Analyzer diagnostics; `job_clang_static_analysis` | Independent C/C++ source-analysis leads | Current bounded observations with accepted compile-scope and exact source/hash binding; producer gaps remain explicit | `scanner_correlation`, `review_package`, `hotspot_context` | `query_observations`, `QP`, `coverage`; no skill |
 | clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; cross-check input for `call_site` facts and `SAME_AS` symbol links | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
+| Build-bound DWARF/native PDB; `job_debug_symbol_indexing` | Artifact-specific symbols, layouts, inline frames and checksum-verified source mappings | Current `debug_symbols`; raw inputs and reader executions remain protected | none | `query_debug_symbols`, `coverage`; no runtime execution |
 | SVF points-to over linked `-O0` bitcode; `job_svf_alias_analysis` (opt-in) | Bounded points-to sets of dereferenced, compared and passed pointers; indirect-call target sets; per-module closed-world state | Current `analysis` (`points_to_set`, `indirect_call_targets`); cross-check input for indirect `call_site` and pointer `guard_fact` facts ([`svf-alias-producer.md`](svf-alias-producer.md)) | cross-check of the `graph` index | `core`, `query_code_graph`; no skill |
 | ASan/UBSan-instrumented native rebuild; `job_sanitizer_build` | Hash-bound catalog of instrumented outputs with the sanitizer runtime evidence read from each ELF, for a later execution stage | Artifact only: protected workspaces and a sanitized handoff summary; nothing is indexed as text ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)) | none | `coverage`; no skill |
-| Compile-checked proof-of-concept unit-test functions with compile records and provenance; `job_poc_generation` (optional, shipped disabled) | Developer-facing reproducers for findings the judge agreed with, shown in the final report | Artifact only: `data/poc/<claim-id>/` files hash-bound by the handoff; nothing is indexed as text, linked or executed ([`../operations/poc-generation.md`](../operations/poc-generation.md)) | none | `coverage`; no skill |
+| Compile-checked proof-of-concept unit-test functions; `job_poc_generation` (default enabled for new configurations) | Protected developer reproducers; final report receives only certified status/function-name/file refs | Artifact-only `/2` summary; protected writer cells and immutable `package.files` attempt-owned source/compile/README/provenance; never indexed as text, linked or executed ([operations](../operations/poc-generation.md)) | none | `coverage`; no general retrieval grant |
 | Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
+| Ghidra decompilation publications of configured third-party binaries; `job_review_intake` freezes them, `job_binary_evidence_indexing` indexes them | Review code that ships without source: functions, import callers, call neighbourhoods and strings | Current bounded `binary` shards (`binary_function`, `binary_call_site`, `binary_import`, `binary_string`; `CALLS`/`CONTAINS`/`REFERENCES`); pseudo-C detached into the run and cited by binary hash, function address and line ([`binary-decompilation.md`](binary-decompilation.md)) | none | `core`, `coverage`; registered `binary-evidence` runtime skill attached only when a binary shard exists |
 | CodeQL database and SARIF paths; `job_codeql_analysis`, `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; accepted per-scope/per-family `graph` shards via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
@@ -152,10 +155,24 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `review_package`; observed-path facts would join the `graph` index as their own producer | Planned `query_observations`/typed trace query if acquired; no skill |
 | Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
 | Normalized claims, reviews, adjudication, PoC receipts and final finding packages; `job_inference_security_review` (slice 1), future publication | Review decisions and final evidence | Extend: run-owned typed claim ledger, finding/score packages and handoff (slice 1); PoC receipts planned; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
-| Remediation plans for confirmed findings; planned `job_remediation_planning` (decision 8) | Fix proposals and safe regression-test specifications | Planned; reads only the review handoff's `remediation_intake` (confirmed findings, decision 4) | None | None until built; no skill |
-| Remediation validation results; planned `job_remediation_validation` (decision 8) | Whether a proposed fix removes the confirmed condition | Planned; reads `remediation_intake` and the remediation plan | None | None until built; no skill |
-| Final publication gate decisions; `job_final_publication_gate` (decision 8) | Classify every finding package as publishable, verification backlog or withheld from exact accounting, ship-block status and gaps, and name the limitations | Artifact only: re-verifies the accepted review handoff and the artifacts it binds, then publishes a hash-bound gate document; it never reinterprets claim state or ship-block status | None | `coverage`; no skill |
-| Final report publications; `job_final_report_publication` (decision 8) | Publishable findings, verification backlog and limitations | Artifact only: `final-report.json` (`final-report/1`) and a deterministic `final-report.md` from the accepted gate; indexing sanitized findings for retrieval and PDF rendering are later steps | None | `coverage`; no skill |
+| Attack chains; `job_inference_security_review` | Pre-seal continuity/challenge/accounting context | Protected accepted manifest/artifacts in the single ledger; five native continuity dimensions, empty commissioned producer allowlist by default | No new query set | Bounded existing `trace` over accepted native facts; no narrative-to-proof conversion |
+| Remediation plans for confirmed findings; `job_remediation_planning` | Inert exact byte-edit proposals and separate safe regression specifications | Artifact-only summary; protected proposals/source/receipts; exact confirmed-only intake and accepted native custody, no PoC context in this slice | None | Accepted artifact refs, not a new inference corpus or worker skill |
+| Remediation validation results; `job_remediation_validation` | Selected static/semantic/native syntax assurance, never a verified fix | Artifact-only summary; protected exact applicability, baseline/patched syntax and cleanup receipts; runtime regression never performed | None | Accepted artifact refs; `native_syntax` only initially, unsupported scope remains manual |
+| Dossiers; `job_dossier_publication` | One protected confirmed-finding document and separate per-PoC outcome documents | Protected deterministic JSON/LaTeX/PDF/receipts with bounded resolving source and closed redacted projection; rendering failures retain source and gaps | None | Accepted references only; no new public/raw-content retrieval endpoint |
+| Final publication gate decisions; `job_final_publication_gate` (decision 8) | Exact finding buckets plus certified five-capability/attachment accounting | Artifact-only `final-publication-gate/2`; re-verifies review `/3`, nested optional producer/candidate/plan/dossier/chain refs, frozen configuration and accepted pointer stability, without a model | None | `coverage`; no skill |
+| Final report publications; `job_final_report_publication` (decision 8) | Findings, backlog, limitations and sanitized certified enhancement refs | Artifact-only `final-report.json` (`final-report/2`) and deterministic Markdown from the gate snapshot only; no later optional discovery. Consolidated public PDF remains not rendered; protected dossier PDFs are separate | None | `coverage`; no skill |
+
+The completion rows above are source-reconciled through `b702eb7` and reader/metric checkpoint
+`18eae9f`, then final `dd9c9ad`; review `/3`, PoC/gate/report `/2` and certified snapshot
+consumption are implemented. Seeded PDF acceptance is recorded in
+[dossier operations](../operations/dossier-publication.md#verified-seeded-sample); full native
+all-lane acceptance remains separate. Pre-review indexing cannot
+already inventory later accepted outputs: downstream manifests/gate certification account for
+them directly. `3f28d871` extends `DOWNSTREAM_JOBS` to planning/validation/dossiers for active
+pre-review acceptance exclusions, without filtering `registry_providers`' complete file-ownership
+and dataset-declaration contracts needed by resume auditing. Process metrics are also a separate regenerable operator view, not an eighteenth
+index or a new admissibility route. Exact tools, shard owners, 126 declared datasets and current
+gaps are enumerated in the [dossier inventory](dossier-data-inventory.md).
 
 In this document "MCP endpoint" means a typed retrieval tool (see [`retrieval-surfaces.md`](retrieval-surfaces.md)). A
 retrieval tool is justified only when `core`, an existing domain query, and `QP` cannot give a
@@ -312,13 +329,23 @@ admissibility, job topology and implementation plan.
 | `ci_trust` | CI graph, build artifacts, deployment metadata | untrusted trigger→permission/secret/build/deploy paths | dynamic expression or external workflow |
 | `redacted_secret_exposure` | secret scanners and safe build/CI facts | location, sink and redacted fingerprint only | scanner unavailable; never return secret bytes |
 | `history_context` | Git, review/deployment data, SII and change context | bounded change/owner/fix/test context per file or symbol | missing VCS/review metadata or attribution |
-| `control_evidence` | OWASP workbench, findings, validators | control→evidence/disposition links | assessment unavailable or validator gap |
+| `control_evidence` | Accepted OWASP assessment publication and typed original evidence | scoped control→evidence/disposition links with hash-pinned authority, counterevidence and dissent; indirect for every final predicate | assessment unavailable, qualification-only, unsupported procedure, unresolved evidence or validator gap |
 | `reference_intelligence` | pinned MITRE feed (`reference-intelligence/2`) | CWE identities of accepted observations joined to the pinned catalog with name and abstraction | feed freshness or identity mismatch; CAPEC/ATT&CK relationships not normalized |
 | `document_context` | accepted OpenAPI, Postman, unit-test, STRIDE and DFD records | exact method/route and trust-boundary groups with source identities | unsupported formats, unmatched declarations, bounded truncation; intent never proves enforcement |
 | `contract_enforcement` | future API/IDL contracts, handlers, validators | declaration→handler→enforcement chain | contract unavailable or declaration not enforced |
 | `deployment_exposure` | future topology, CI/build/artifact graph | service→image→binary→source and privilege/exposure | environment not captured or image not bound |
 | `test_intent` | accepted document context and future source-symbol links | richer test assertion and negative-case links | tests are not executed; intent is not enforcement |
 | `review_package` | all accepted indices and products | compact evidence bundle for a bounded review question | every missing contributing lane and package truncation |
+
+OWASP runs after accepted tag-cloud/classification/graph context and before this indexing stage
+in the shared enabled direct/Dagster chain. Routing tags are not control proof. The projection
+preserves deep
+obligations/custody in the workbench authority, re-resolving citations under its published source
+cap; later lead/hunt assembly re-expands it with operation-local verified reuse, never a persistent
+trust cache. Qualification cannot yield production leads. Adverse hypotheses remain provisional;
+benign and unresolved rows stay coverage/counterevidence. Every PRECOMPUTED interpretation is
+indirect for every final predicate: final reviewers must retrieve original evidence, and duplicate
+sources do not multiply corroboration. See [the workbench design](owasp-control-workbench.md).
 
 The [inventory and first-stage batch](../tasks/review-data-indexing-prompt.md) enforces dataset
 accounting across enabled jobs, adds safe query routes and cross-domain links, and publishes
@@ -439,7 +466,7 @@ names or inspects raw run directories.
 `job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
 publishes the accepted inventory before `job_review_package_assembly`. Implemented:
 
-- **Inventory and audit.** All 33 currently registered jobs declare datasets in their own
+- **Inventory and audit.** All 38 currently registered jobs declare datasets in their own
   `datasets.py`. The registry/configuration equality check, rather than this prose count, is the
   acceptance authority.
   The audit compares declarations with the resolved configuration, accepted handoffs, every
@@ -477,7 +504,8 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 Remaining gaps after this batch:
 
 - Code-graph production is implemented for the configured C/C++ export pack. Other configured
-  languages publish explicit unavailable family coverage until their export packs exist. The
+  languages publish explicit unavailable family coverage until their export packs (present under
+  `rules/codeql-graph-export/`) are configured and lock-pinned. The
   seven former graph query sets remain retired from `QUERY_SETS`; `query_precomputed` rejects their
   names, and `query_code_graph` is the only graph query surface. The follow-up list
   (`GRAPH_FOLLOW_UP` in `job_review_data_indexing/job.py`) names only `hotspot_context`,

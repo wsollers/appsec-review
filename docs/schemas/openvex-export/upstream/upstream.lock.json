@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/openvex-upstream-lock/1",
+  "repository": "https://github.com/openvex/spec",
+  "commit": "61b5f885d0f481f48683c93345e49ef1a6e9fdff",
+  "version": "0.2.0",
+  "license": "CC0-1.0",
+  "attribution": "OpenVEX specification contributors, https://github.com/openvex/spec",
+  "schema_source": {
+    "url": "https://raw.githubusercontent.com/openvex/spec/61b5f885d0f481f48683c93345e49ef1a6e9fdff/openvex_json_schema.json",
+    "path": "openvex-v0.2.0.schema.json",
+    "sha256": "9373597734ed1d3ea5161a8b46d3866c4a8cfe76fd632fdd16aef01fb34b3238",
+    "size_bytes": 12659
+  },
+  "license_source": {
+    "url": "https://raw.githubusercontent.com/openvex/spec/61b5f885d0f481f48683c93345e49ef1a6e9fdff/LICENSE",
+    "path": "LICENSE",
+    "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+    "size_bytes": 7048
+  },
+  "specification_source": {
+    "url": "https://raw.githubusercontent.com/openvex/spec/61b5f885d0f481f48683c93345e49ef1a6e9fdff/OPENVEX-SPEC.md",
+    "sha256": "9375415ccb351260a998864cbeebbaff1808d1b09a306919b79cc75e5519f884",
+    "size_bytes": 30580,
+    "vendored": false
+  }
+}

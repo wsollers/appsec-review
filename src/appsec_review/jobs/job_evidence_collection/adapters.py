@@ -103,7 +103,7 @@ class ToolAdapter:
 
     @property
     def parser_identity(self) -> str:
-        return "undeclared"
+        return "syft-package-observations/2" if self.tool_id == "tool-syft" else "undeclared"
 
     @property
     def adapter_identity(self) -> str:
@@ -604,12 +604,21 @@ def _trivy_parser(payload: bytes) -> list[dict[str, Any]]:
 
 
 def _syft_parser(payload: bytes) -> list[dict[str, Any]]:
-    return [{"rule_id": "software-component", "message": f"{item.get('name')} {item.get('version')}",
-             "severity": "INFO", "category": "software_inventory", "package": item.get("name"),
-             "component": item.get("id"), "path": next((loc.get("path") for loc in item.get("locations", [])
-                                                          if isinstance(loc, Mapping)), None), "start_line": 1,
-             "_native_selector": json_selector("artifacts", index).as_dict()}
-            for index, item in enumerate(_json(payload).get("artifacts", []))]
+    records = []
+    for index, item in enumerate(_json(payload).get("artifacts", [])):
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), Mapping) else {}
+        records.append({
+            "rule_id": "software-component", "message": f"{item.get('name')} {item.get('version')}",
+            "severity": "INFO", "category": "software_inventory", "package": item.get("name"),
+            "component": item.get("id"), "version": item.get("version"), "purl": item.get("purl"),
+            "repository_url": item.get("repository_url") or metadata.get("repository")
+                              or metadata.get("vcs_url"),
+            "raw_selector": f"/artifacts/{index}",
+            "_native_selector": json_selector("artifacts", index).as_dict(),
+            "path": next((loc.get("path") for loc in item.get("locations", [])
+                          if isinstance(loc, Mapping)), None), "start_line": 1,
+        })
+    return records
 
 
 def _grype_parser(payload: bytes) -> list[dict[str, Any]]:

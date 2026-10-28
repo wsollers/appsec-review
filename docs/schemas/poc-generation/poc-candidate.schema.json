@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/poc-generation/poc-candidate.schema.json",
   "title": "One entry of poc_candidates in the accepted inference-review handoff",
-  "description": "The shape job_poc_generation reads (review-judge-and-poc.md section 4). The array is produced by the judge work of job_inference_security_review; this schema documents what the consumer accepts and is not the producer's schema. poc_basis.sha256 is the SHA-256 of the canonical JSON of poc_basis.value.",
+  "description": "Exact accepted-review candidate contract. poc_basis.sha256 hashes the canonical poc_basis.brief. Entry and path carry resolved entity identities, not worker-local labels.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,13 +32,13 @@
       "additionalProperties": false,
       "required": [
         "sha256",
-        "value"
+        "brief"
       ],
       "properties": {
         "sha256": {
           "$ref": "common.schema.json#/$defs/sha256"
         },
-        "value": {
+        "brief": {
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -54,17 +54,15 @@
             "entry": {
               "type": "array",
               "maxItems": 8,
-              "uniqueItems": true,
               "items": {
-                "$ref": "common.schema.json#/$defs/label"
+                "$ref": "common.schema.json#/$defs/entity_id"
               }
             },
             "path": {
               "type": "array",
               "maxItems": 16,
-              "uniqueItems": true,
               "items": {
-                "$ref": "common.schema.json#/$defs/label"
+                "$ref": "common.schema.json#/$defs/entity_id"
               }
             },
             "trigger": {

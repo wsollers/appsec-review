@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "upstream", "finding", "adjudication_id", "plan", "patch", "status", "reason",
+               "checks", "assurance", "settings_sha256", "cleanup", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/remediation-validation/1"},
+    "run_id": {"$ref": "common.schema.json#/$defs/text"},
+    "upstream": {"$ref": "common.schema.json#/$defs/upstream"},
+    "finding": {"$ref": "common.schema.json#/$defs/finding"},
+    "adjudication_id": {"$ref": "common.schema.json#/$defs/text"},
+    "plan": {"$ref": "common.schema.json#/$defs/ref"},
+    "patch": {"$ref": "common.schema.json#/$defs/nullable_ref"},
+    "status": {"enum": ["build_checked", "static_checked", "rejected", "inconclusive", "manual_validation_required"]},
+    "reason": {"$ref": "common.schema.json#/$defs/text"},
+    "checks": {
+      "type": "object", "additionalProperties": false,
+      "required": ["patch_applicability", "policy", "semantic_review", "static_checks", "build",
+                   "regression_compile", "runtime_regression"],
+      "properties": {"patch_applicability": {"$ref": "common.schema.json#/$defs/check"},
+                     "policy": {"$ref": "common.schema.json#/$defs/check"},
+                     "semantic_review": {"$ref": "common.schema.json#/$defs/check"},
+                     "static_checks": {"$ref": "common.schema.json#/$defs/check"},
+                     "build": {"$ref": "common.schema.json#/$defs/check"},
+                     "regression_compile": {"$ref": "common.schema.json#/$defs/check"},
+                     "runtime_regression": {"$ref": "common.schema.json#/$defs/check"}}
+    },
+    "assurance": {"$ref": "common.schema.json#/$defs/assurance"},
+    "settings_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "cleanup": {"$ref": "common.schema.json#/$defs/nullable_ref"},
+    "gaps": {"$ref": "common.schema.json#/$defs/strings"}
+  }
+}

@@ -335,12 +335,13 @@ def test_settings_validation_rejects_a_missing_switch() -> None:
 def test_direct_graph_places_the_gate_between_the_model_gate_and_intake(tmp_path: Path) -> None:
     order = list(GRAPH_JOB_IDS)
     assert order.index("job_model_connectivity") + 1 == order.index(JOB_ID)
-    assert order.index(JOB_ID) + 1 == order.index("job_review_intake")
+    assert order.index(JOB_ID) + 1 == order.index("job_target_acquisition")
+    assert order.index("job_target_acquisition") + 1 == order.index("job_review_intake")
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text(_settings_source(enabled="false"), encoding="utf-8")
     selected = active_job_ids(load_config(config_path), GRAPH_JOB_IDS)
     assert JOB_ID not in selected
-    assert selected[:2] == ("job_model_connectivity", "job_review_intake")
+    assert selected[:3] == ("job_model_connectivity", "job_target_acquisition", "job_review_intake")
 
 
 COMPOSITES = {"wave1_review": "", "ci_configuration_review": "ci_review__",
@@ -362,7 +363,9 @@ def test_every_composite_graph_runs_the_gate_after_the_model_gate_and_before_int
         graph = definitions.get_job_def(name).graph
         assert _upstream(graph, f"{prefix}image_pin_verification__begin") == {
             f"{prefix}model_connectivity__finalize"}
-        assert _upstream(graph, f"{prefix}review_intake__begin") == {f"{prefix}image_pin_verification__finalize"}
+        assert _upstream(graph, f"{prefix}target_acquisition__begin") == {
+            f"{prefix}image_pin_verification__finalize"}
+        assert _upstream(graph, f"{prefix}review_intake__begin") == {f"{prefix}target_acquisition__finalize"}
         assert f"{prefix}image_pin_verification__verification__inspect_images" in {
             node.name for node in graph.node_defs}
 
@@ -378,4 +381,4 @@ def test_a_disabled_gate_is_transparent_to_every_composite_graph(tmp_path: Path)
     for name, prefix in COMPOSITES.items():
         graph = definitions.get_job_def(name).graph
         assert not any("image_pin_verification__" in node.name for node in graph.node_defs)
-        assert _upstream(graph, f"{prefix}review_intake__begin") == {f"{prefix}model_connectivity__finalize"}
+        assert _upstream(graph, f"{prefix}target_acquisition__begin") == {f"{prefix}model_connectivity__finalize"}
