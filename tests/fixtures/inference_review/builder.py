@@ -168,6 +168,7 @@ def _days(count: int):
 
 
 def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable[str] = (),
+                             runs_dir: Path | None = None,
                              seed: int | None = None, history_change_count: int = 9,
                              omit_feeds: Iterable[str] = (), stale_feeds: Iterable[str] = ("osv",),
                              kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
@@ -179,7 +180,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     if unknown:
         raise ValueError(f"unknown fixture shards: {sorted(unknown)}")
     advisory_extra = dict(advisory_extra or {})
-    runs_dir = Path(base) / "runs"
+    runs_dir = Path(runs_dir) if runs_dir is not None else Path(base) / "runs"
     run_root = runs_dir / run_id
     target = Path(base) / "target"
     files = dict(FILES)

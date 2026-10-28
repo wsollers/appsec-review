@@ -69,14 +69,23 @@ def attach_call_chain(fixture):
         {**results_for(Family.DATAFLOW_PATH, sink=sink.identity.value, entry=entry.identity.value),
          "enclosing_function": {"symbol": p.identity.value, "display": "p"}}, location, snapshot=SNAPSHOT)
     guard = graph_entity(
-        Family.GUARD_FACT, {**_span(location), "sink_identity": sink.identity.value},
+        Family.GUARD_FACT, {"sink_identity": sink.identity.value, "condition_path": PARSE,
+                           "condition_start_byte": location.start_byte,
+                           "condition_end_byte": location.end_byte},
         {**results_for(Family.GUARD_FACT, sink=sink.identity.value),
          "enclosing_function": {"symbol": p.identity.value, "display": "p"}}, location, snapshot=SNAPSHOT)
+    tag = EntityRecord(
+        LogicalIdentity.derive(EntityKind.TAG_ASSIGNMENT, SNAPSHOT, {"assignment": "recorded-public-surface"}),
+        "recorded-public-surface", "surface:entry:http-public", "recorded public entry context",
+        {"tag": "surface:entry:http-public", "basis": "declared",
+         "subject": {"logical_id": fixture.ids[PARSE], "component_id": "component:0002"}}, location)
     _publish(fixture, [
         ("graph", "authentic-symbols", {"job": "job_code_graph_index", "build_unit_id": "native-main"},
          [p], [], ("graph:native:symbols", "complete", None)),
         ("graph", "authentic-facts", {"job": "job_code_graph_index", "build_unit_id": "native-main"},
-         [sink, call, entry, flow, guard], [], ("graph:native:facts", "complete", None))])
+         [sink, call, entry, flow, guard], [], ("graph:native:facts", "complete", None)),
+        ("tags", "authentic-surface-tags", {"job": "job_security_tagging", "family": "surface_data"},
+         [tag], [], ("recorded-public-surface", "complete", None))])
     return entry.identity.value, call.identity.value
 
 
@@ -119,7 +128,8 @@ class BasisInfer(ScriptedInfer):
 def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=False, ci_only=False):
     omit = ("opengrep", "codeql", "osv", "priority", "history", "tags", "scanner_correlation",
             "dependency_advisories", "gitleaks")
-    fixture = build_accepted_index_set(lane.root, omit=omit + (("semgrep",) if ci_only else ("ci",)),
+    fixture = build_accepted_index_set(lane.root / "data", runs_dir=lane.runs_dir,
+                                       omit=omit + (("semgrep",) if ci_only else ("ci",)),
                                        omit_feeds=("osv", "nvd", "kev", "epss"))
     assert fixture.runs_dir == lane.runs_dir
     if not ci_only:
@@ -216,7 +226,7 @@ def test_real_review_gate_and_poc_planning_use_authoritative_contracts(authentic
     job = build_job(infer=forbidden, executor_factory=forbidden, repository_root=ROOT)
     with lane.span("poc-planning"):
         outcome = run_job(chain.config, job, chain.fixture.run_id, chain.upstream(GATE), chain.env)
-    assert outcome["completion_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+    assert outcome["handoff"]["completion_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
     summary = chain.read("job_poc_generation", "publish.publish_handoff", "poc-generation.json")
     assert summary["counts"]["candidates"] == len(inputs.candidates)
     assert all(row["status"] == "not_applicable" for row in summary["candidates"])

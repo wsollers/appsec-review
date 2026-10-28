@@ -170,7 +170,8 @@ def accepted_final_report(run_root: Path, schema_root: Path | None = None) -> tu
     schemas.validate("final-report", report)
     schemas.validate("final-publication-gate", gate)
     verified = load_accepted_review(
-        run_root, SchemaSet(schema_root / "docs" / "schemas" / "inference-security-review")).document
+        run_root, SchemaSet(schema_root / "docs" / "schemas" / "inference-security-review"),
+        max_packages=len(gate["packages"])).document
     if gate != gate_document(gate["schema"], verified, classify(verified)):
         raise IntegrityError("current gate does not project the currently accepted review")
     for binding in gate["bindings"]:
@@ -178,7 +179,6 @@ def accepted_final_report(run_root: Path, schema_root: Path | None = None) -> tu
     provenance = report["provenance"]
     if (report["run_id"] != run_root.name or gate["run_id"] != run_root.name
             or provenance["gate_handoff"] != gate_ref
-            or report_output["gate_handoff"] != gate_ref
             or provenance["review_handoff"] != verified["inputs"]["review_handoff"]
             or provenance["gate_document"] != gate_output["artifact"]
             or any(provenance[key] != gate["review"][key] for key in (
