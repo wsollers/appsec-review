@@ -1,7 +1,8 @@
 # OpenVEX findings export implementation
 
 Status: standalone gate/2 export landed on local main `83e67b23`; the user-directed automatic
-generation follow-up is verified at `74d93127`. Its local-main landing is coordinated separately
+generation follow-up is verified at `74d93127`, with current runtime handoff/2 compatibility
+integrated through `2099e277`. Its local-main landing is coordinated separately
 from the source verification recorded here.
 The user explicitly selected standalone post-gate OpenVEX with gate-only report/2. The original
 /1 verification is retained as historical evidence, not proof of the adapted implementation.
@@ -85,6 +86,9 @@ The [architecture contract](../architecture/openvex-export.md) and
 | Combined 44-job / 145-dataset inventory, including protected export | `870d4789aa3a74c974928e06a7d9cafa86157aa8` |
 | Original standalone feature landed on local main | `83e67b23d94433a002b09d65a2d620673ebe54a5` |
 | User-directed automatic local generation and no-setup defaults | `74d931273a383f2f33bac90d3569a070a0ef612d` |
+| Concurrent common-interchange main merged without rebasing | `3ad1fe270bae24dc126b80e5e37bd5aa8c0c129c` |
+| Bounded common handoff/2 admission and authentic fixtures | `2570db57c23f097ec3525e327965965eda0c944c` |
+| Historical export proof through immutable common runtime accounting | `2099e2777b4897fbaf1499d3f0fca8ae970f6622` |
 
 The review handoff consumer enum additionally permits the exporter, without invalidating existing
 four-consumer handoffs. Finding-package/2 and finding eligibility policy were not changed by
@@ -311,6 +315,104 @@ delta from `74d93127`. On `b9c76f9d`, the following final assembled-source comma
 These are focused unit and packaging results, not a new whole-chain or live validation claim.
 The source/schema bytes tested by the broader 547-case command and installed wheel are identical
 after the documentation fast-forward.
+
+### Concurrent runtime-interchange reconciliation
+
+Before landing the automatic policy, local main advanced to
+`d4cd9737826f87a771a0f5cd72b526c6907ca4fa`, introducing strict common `job-handoff/2`
+envelopes and byte-verified outcome accounting. It was merged without conflicts or rebasing
+at `3ad1fe27`. An initial focused input unit reproduced the now-obsolete exporter fixture's
+`job-handoff/1` rejection by the real common reader; this was a named compatibility failure,
+not an empty-output success.
+
+The bounded input owner adapted admission at `2570db57` to the common decoder and reader.
+Sized artifacts and the claim/result/outcome/task/shared-receipt closure are measured before
+shared authority reads them, then reproved. The same fixture API now uses the shared synthetic
+handoff publisher with frozen configuration, real hash-bound accounting, preserved caller
+timestamps and explicit attempt identities. Only the existing upstream review-ledger authority
+spy remains; the common handoff and certified gate authorities are real.
+
+The parent historical reader at `2099e277` uses the common decoder and immutable runtime
+integrity verifier, including exact claim/upstream, result, task receipts and outcome-accounting
+proof. It bounds the combined export/runtime inventory and checks every declared artifact
+before and after authority verification. It does not substitute current latest pointers for
+historical authority. Legacy or incomplete common envelopes and rehashed claim/accounting
+tamper are rejected. The common runtime's string `"undeclared"` identity replaces the old
+nullable fixture identity; the earlier nullable-identity history above is not a current
+handoff/2 contract. No legacy compatibility adapter or shared-runtime relaxation was added.
+
+The input owner's exact-tip command passed **321 tests in 300.36 seconds** on `2570db57`:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests\test_openvex_inputs.py tests\test_openvex_contracts.py tests\test_openvex_settings.py `
+  --basetemp=test/tmp/openvex-inputs-handoff2
+```
+
+On the merged `3ad1fe27` source with historical-reader edits still pending, automatic-export
+pure/common-runtime checks passed **513 tests,
+one skipped in 97.08 seconds**:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests\test_openvex_contracts.py tests\test_openvex_settings.py `
+  tests\test_openvex_projection.py tests\test_openvex_metrics.py tests\test_openvex_wiring.py `
+  tests\orchestration\test_topology.py tests\test_interchange_contract.py `
+  tests\test_handoff_fixture.py tests\test_handoff_interchange.py `
+  --basetemp=test/tmp/openvex-automatic-interchange-pure
+```
+
+The existing native symlink-reference test was rerun with `-rs`: it skips because the Windows
+host does not grant symlink creation (`WinError 1314`), not because custody validation passed.
+On exact `2099e277`, default settings/wiring/metrics, completion topology, opt-out and docs-sync
+checks passed **229 tests in 19.40 seconds**:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests\test_openvex_settings.py tests\test_openvex_wiring.py tests\test_openvex_metrics.py `
+  tests\test_completion_wiring.py tests\test_docs_sync.py `
+  tests\test_final_report.py::test_registry_topology_and_terminal_job `
+  tests\test_final_report.py::test_disabled_completion_jobs_make_the_review_terminal `
+  tests\test_final_report.py::test_cli_graph_places_the_new_jobs_after_the_review `
+  --basetemp=test/tmp/openvex-handoff2-final-surfaces --tb=short
+```
+
+An actual wheel was rebuilt again on exact `2099e277`, installed with its declared dependencies
+in a fresh isolated environment, and passed `pip check` plus the Python `-I` resource/projection
+probe. It verifies all six exporter module byte identities (including the adapted input and
+historical readers), the unchanged seven-schema/nine-resource closure and profile, transitive
+report PoC definition, and byte-identical affected/empty automatic projections. This remains
+installed-only packaging and pure-projection proof, not a fully installed application/job run.
+
+The combined actual production-handler and shared certified-snapshot consumer command passed
+**45 tests in 602.57 seconds**. It began on `2570db57` with the parent reporting/job-unit
+changes present; those exact source/test bytes were then committed unchanged as `2099e277`.
+It covers fresh default generation, canonical acceptance, current versus historical authority,
+runtime artifact/accounting corruption, metrics authority and gate-snapshot isolation:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -x `
+  tests\test_openvex_job_units.py tests\test_gate_snapshot.py `
+  --basetemp=test/tmp/openvex-automatic-handoff2-consumers --tb=short
+```
+
+An exact committed-tip recheck on `2099e277` passed **five tests in 112.89 seconds**, running
+the default nonempty/empty handlers and fully rehashed common-envelope/claim/outcome negatives:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests\test_openvex_job_units.py::test_checked_in_defaults_generate_verify_and_accept_without_setup `
+  tests\test_openvex_job_units.py::test_historical_reader_requires_authentic_common_envelope_accounting `
+  --basetemp=test/tmp/openvex-handoff2-exact-defaults --tb=short
+```
+
+The merged central configuration was compared semantically with exact main `d4cd9737`: the
+only differences are five intentional automatic-export default values and its release
+declaration. The new parser bound, host/compiler/image pins and all other configuration are
+preserved. Catalog and CodeQL asset-lock files match that main exactly in Git. Documentation,
+test and packaging scratch created by this follow-up is removed before the clean landing
+handoff. Main integration does not add integration, acceptance, live Dagster or Linux custody
+evidence; those manual gaps remain below.
 
 ## Failures and qualifications
 
