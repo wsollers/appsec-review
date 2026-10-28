@@ -150,7 +150,7 @@ def _resolve_selector(path: Path, selector: ResultSelector, cache: dict[Any, Any
         for part in selector.value[1:].split("/"):
             part = part.replace("~1", "/").replace("~0", "~")
             if isinstance(value, list):
-                if not part.isdigit() or (part != "0" and part.startswith("0")):
+                if not part.isascii() or not part.isdigit() or (part != "0" and part.startswith("0")):
                     raise ValueError("native JSON array index is invalid")
                 index = int(part)
                 if index >= len(value):

@@ -139,6 +139,13 @@ def test_rfc6901_dynamic_php_keys_resolve_exactly(tmp_path, owner):
     assert verify_native_reference(tmp_path, selected, resolve=True)["identifier"] == "bad"
 
 
+def test_json_pointer_array_indices_require_rfc6901_ascii_digits(tmp_path, owner):
+    native = retained(tmp_path, b'{"results":[{"id":"one"}]}')
+    with pytest.raises(ValueError, match="array index"):
+        verify_native_reference(
+            tmp_path, select_native(native, json_selector("results", "\u0660")), resolve=True)
+
+
 @pytest.mark.parametrize("tool,payload,expected", [
     ("tool-semgrep", {"results": [{"check_id": "a"}, {"check_id": "b"}]}, "/results/1"),
     ("tool-grype", {"matches": [{"vulnerability": {"id": "a"}}, {"vulnerability": {"id": "b"}}]}, "/matches/1"),
@@ -178,6 +185,12 @@ def test_xml_expanded_tag_and_original_matching_ordinal(tmp_path, owner):
     assert resolved.get("type") == "X"
     static = adapter_registry()["tool-spotbugs"].parse(payload)
     assert static[1]["_native_selector"] == selector
+    _, findings = scan_records({"capability": "spotbugs", "fingerprint": "a" * 64, "artifact": {},
+                               "observation": records, "native_output": native.as_dict(), "gaps": []})
+    finding, = findings
+    assert finding.payload["common"]["observation_class"] == "source_sast"
+    assert finding.payload["common"]["reported_severity"]["value"] == "high"
+    assert finding.payload["common"]["evidence_refs"][0]["selector"] == selector
 
 
 def test_byte_range_selectors_refer_to_actual_plain_output(tmp_path, owner):
@@ -259,6 +272,16 @@ def test_json_and_xml_parser_bounds_are_observable():
     xml = b"<BugCollection>" + b'<BugInstance type="X"/>' * 20_001 + b"</BugCollection>"
     parsed = parse_spotbugs(xml)
     assert parsed["_parser_truncated"] and parsed["finding_count_reported"] == 20_001
+
+
+@pytest.mark.parametrize("packages", [None, "invalid", {}, [None, {"vulnerabilities": None}]])
+def test_native_result_counts_handle_unknown_osv_shapes_without_inventing_findings(packages):
+    observation = parse_json(json.dumps({"results": [{"packages": packages}]}).encode())
+    assert observation["_native_result_count"] == 0
+    summary, findings = scan_records({"capability": "osv", "fingerprint": "a" * 64, "artifact": {},
+                                     "observation": observation, "gaps": []})
+    assert not findings and summary.kind == "scan_summary"
+    assert summary.payload["common"]["observation_class"] == "diagnostic"
 
 
 def test_incomplete_retention_stays_incomplete_in_records_and_receipts(tmp_path, owner):

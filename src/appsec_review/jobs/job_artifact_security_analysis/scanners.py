@@ -76,7 +76,8 @@ def native_result_count(value: Any) -> int:
     if isinstance(results, list):
         return sum(len(package.get("vulnerabilities", []))
                    for result in results if isinstance(result, Mapping)
-                   for package in result.get("packages", []) if isinstance(package, Mapping)
+                   for package in (result["packages"] if isinstance(result.get("packages"), list) else ())
+                   if isinstance(package, Mapping)
                    if isinstance(package.get("vulnerabilities", []), list))
     return 0
 

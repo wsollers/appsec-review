@@ -97,7 +97,16 @@ def fixture(tmp_path: Path):
 
 
 def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints(tmp_path: Path) -> None:
+    import zipfile
+    from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot
+
     config, target = fixture(tmp_path)
+    archive = tmp_path / "osv-npm.zip"
+    with zipfile.ZipFile(archive, "w"):
+        pass
+    publish_snapshot(tmp_path / "data" / "feeds" / "osv", feed_id="osv",
+                     schema="appsec-review/osv-snapshot/1",
+                     files={"sources/npm.zip": archive}, manifest_fields={"source": "unit-fixture"})
     fingerprint = source_fingerprint(target)
     base = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan()]).run(
         target_root=target, source_fingerprint=fingerprint)
