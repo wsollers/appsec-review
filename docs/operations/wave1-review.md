@@ -15,7 +15,8 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> [cpg_analysis only when enabled] -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review -> final_publication_gate
+  -> document_issue_analysis -> inference_security_review -> poc_generation
+  -> remediation_planning -> remediation_validation -> dossier_publication -> final_publication_gate
   -> final_report_publication
 ```
 
@@ -33,11 +34,19 @@ document issue analysis after package assembly. Use Dagster's
 `wave1_review`, which includes every registered job whose job-level `settings.enabled` is not false,
 except the standalone `third_party_data_sync` job, when its additional branches are required.
 `final_report_publication` is its single terminal job; the gate and the report are described in
-[`final-report.md`](final-report.md). `poc_generation` is an optional job between the gate and the report; it is
-shipped disabled, so it is absent from both graphs unless `jobs.job_poc_generation.settings.enabled = true`, and it is
-normally run by hand on a finished run ([`poc-generation.md`](poc-generation.md)). Enabled, it adds the dependency
-`gate -> poc_generation -> report` to `wave1_review` and to the direct graph. Dagster's current dependency graph is assembled from the registered,
+[`final-report.md`](final-report.md). At integration `b702eb7`, enabled completion producers all
+precede one final gate. New configurations enable compile-only PoC, confirmed-only planning,
+bounded nonexecuting validation and protected dossiers; disabled optional jobs are omitted and
+old frozen configurations are not rewritten. Validation requires enabled planning. Dagster lets
+PoC/planning/validation/dossiers depend on their enabled producers before the gate, rather than
+running a second gate or creating a gate-to-PoC cycle. Its dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
+
+**Integration boundary:** the graph is registered, but final review `/3` acceptance, pre-gate
+PoC/gate/report contracts, chain/base-coverage isolation and the real PDF sample are still pending
+source reconciliation. Do not infer end-to-end readiness from graph construction or new defaults.
+See [remediation](remediation.md), [dossier publication](dossier-publication.md) and the
+[implementation record](../reviews/evidence-completion-documentation-inventory.md).
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
 linear for deterministic resume semantics: adjacency does not widen a job's declared inputs. In

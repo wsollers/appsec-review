@@ -6,15 +6,32 @@ This page covers operator settings for `job_inference_security_review` (Dagster 
 `[jobs.job_inference_security_review]`. Each run freezes them into
 `runs/<run-id>/data/configuration/`.
 
-**Pending evidence completion:** [the completion design](../architecture/evidence-completion-and-remediation.md)
-adds bounded chain composition, independent edge refutation and required weakest-link verification
-inside this job, before completeness audit and ledger/publication sealing. At contract commit
-`5f5548d`, chain seeds are hints, not accepted chain manifests; the new chain stages/events are
-not implemented. Downstream confirmed-finding dossiers and remediation must reference the exact
+**Delivered chain stages (`ec9257bf`, integrated by `b702eb7`):** `attack_chains.compose_candidates`,
+`attack_chains.refute_edges`, `attack_chains.verify_weakest_links` run after scoring and before
+completeness/ledger/publication sealing. Typed `chain_proposed`, `chain_challenged`, `chain_decided`
+events remain in the single `ledger-event/1` stream; a protected `attack-chain-manifest/1` binds
+proposals, challenges and terminal artifacts. Publication now emits `inference-review-handoff/3`.
+The shared reader's `/3` alignment and chain/base-coverage isolation remain integration follow-ups.
+Downstream confirmed-finding dossiers and remediation must reference the exact
 accepted findings, adjudications, evidence and scores without changing their state or shipment
 decision. The [dossier data inventory](../architecture/dossier-data-inventory.md) distinguishes
-the available review/graph/document/build evidence from proposed producers and runtime/deployment
+the available review/graph/document/build evidence from missing runtime/deployment
 gaps.
+
+Default `settings.attack_chains` bounds are 4 links, 100 expansions, 8 candidates/composition,
+100 challenge cells, 12 queries, 4 turns, 8 evidence rows/obligation and 65536 response bytes;
+`settings.rounds.max_attack_chains` is 50. Frontiers/caps and unsuccessful challenges retain gaps.
+The five continuity dimensions are identity, privilege, trust boundary, artifact/deployment and
+temporal. Refutation must be independent; a required weakest-link verifier must also be
+model-distinct. Deterministic `attack-chain-continuity/1` evaluates native values, not model stance.
+
+`continuity_producers=[]` by default: no native deployment-continuity exporter is commissioned.
+Source/build facts and seed prose therefore cannot manufacture a confirmed deployed chain.
+Supported components cap the chain at `qualified_supported`; missing challenges/no meaningful
+counted continuity gives `insufficient_evidence`, contradiction gives `refuted`. A chain cannot
+upgrade its component findings or sum their severities. See
+[`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py) and the
+[completion contract](../architecture/evidence-completion-and-remediation.md).
 
 ## Model selection and upgrade
 

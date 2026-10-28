@@ -2,24 +2,25 @@
 
 `python -m appsec_review.reporting` turns a finished review run into a readable report: a LaTeX
 document compiled to PDF by the `tool-report-latex` image, or one self-contained HTML file. It is a
-standalone tool. No pipeline job runs it yet, `job_final_report_publication` does not call it, and
+standalone diagnostic tool; `job_final_report_publication` does not call that full-run loader, and
 `final-report.json` keeps `renderers.pdf.state = "not_rendered"` (see
-[`final-report.md`](final-report.md)). Because no job runs the image, `appsec-review.toml` has no pin
-for it. The image stays an enabled catalog entry so it can be built and smoke-tested, but it is marked
-`manual = true`: `job_image_pin_verification` does not require it, and a host that never renders a report
-need not build it (build it with the command below when you do).
+[`final-report.md`](final-report.md)). The image is still an enabled `manual = true` catalog entry,
+but integration `b702eb7` now pins it in the enabled-by-default dossier job. Its executor verifies
+that immutable configured image identity when rendering; a catalog flag is not permission to
+silently use another image. Build/smoke ownership remains with the image-producing session.
 
-**Dossier boundary (proposed):** [dossier publication](dossier-publication.md) is a new semantic job
+**Dossier boundary (implemented producer):** [dossier publication](dossier-publication.md) is a semantic job
 commissioned by the [completion design](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
-not this standalone diagnostic renderer. It will retain protected per-confirmed-finding and
+not this standalone diagnostic renderer. It retains protected per-confirmed-finding and
 per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate, reuse the hardened image/template,
-and report failed PDF rendering as a gap while keeping source artifacts. Its restricted loader
-must not copy this tool's arbitrary review interchange into developer dossiers or public output.
+and reports failed PDF rendering as a gap while keeping source artifacts. Its closed loader does
+not copy this tool's arbitrary review interchange into developer dossiers or public output.
 Only sanitized summaries/statuses and artifact references belong in public projections.
-At contract commit `5f5548d`, that job, its exact settings/receipts and its real seeded PDF sample
-remain pending; the sample at the end of this page demonstrates the existing standalone renderer
-only. [Dossier data inventory](../architecture/dossier-data-inventory.md) records available inputs
-and their visibility.
+`reporting/dossier_render.py` reuses the commissioned executor/template, retains
+`dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Final
+gate/PoC/read-version integration and the actual seeded dossier PDF remain pending at this source
+boundary; the older sample below is not acceptance of that new path.
+[Dossier data inventory](../architecture/dossier-data-inventory.md) records inputs and visibility.
 
 ## What it renders
 

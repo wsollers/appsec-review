@@ -24,14 +24,17 @@ Relevant bounded procedures and design references:
 - [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` model turn, the AST validators, the compile check, statuses, outputs under `data/poc/<claim-id>/`, manual invocation and what the job never does.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
-  proposed completion graph and approved dossier decisions: compile-only PoC before one final gate,
+  partially delivered completion graph and approved dossier decisions: compile-only PoC before one final gate,
   chains before review seal, confirmed-only remediation and nonexecuting validation.
 - [`architecture/dossier-data-inventory.md`](architecture/dossier-data-inventory.md) — source-verified
   effective dossier inputs, bounded queries, indexes/shards, all producer dataset visibility,
   provenance, evidence ceilings and architectural change map.
-- [`operations/dossier-publication.md`](operations/dossier-publication.md) — proposed protected
+- [`operations/dossier-publication.md`](operations/dossier-publication.md) — implemented protected
   dossier job, one dossier per confirmed finding regardless of origin and per PoC outcome,
   retained deterministic artifacts, render gaps and public-reference boundary.
+- [`operations/remediation.md`](operations/remediation.md) — confirmed-only inert exact patches,
+  bounded nonexecuting static/native syntax validation, manual outcomes, protected receipts and
+  new-run defaults versus frozen historical configurations.
 - [`reviews/evidence-completion-documentation-inventory.md`](reviews/evidence-completion-documentation-inventory.md) —
   documentation inventory/reconciliation record and checks, with implementation gaps kept explicit.
 - [`architecture/graph-alias-slice-layout-modes.md`](architecture/graph-alias-slice-layout-modes.md) — proposed alias, slice, type-layout and buffer-bound `query_code_graph` modes and sink CFG context (design only, not implemented).
