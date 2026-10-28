@@ -20,7 +20,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import JobContext
 from appsec_review.storage import file_sha256
 from tests import remediation_support as support
-from tests.final_report_support import run_job
+from tests.final_report_support import job_tables, run_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay, write_scenario
 from tests.fixtures.inference_review.builder import FILES, build_accepted_index_set
 
@@ -38,7 +38,7 @@ def chain(tmp_path_factory):
     fixture = build_accepted_index_set(base / "data")
     native_ids = support.add_native_graph_facts(fixture)
     config = write_config(base, fixture.runs_dir,
-                          extra=support.toml_tables() + support.reference_sync_tables())
+                          extra=support.toml_tables() + job_tables("job_third_party_data_sync"))
     logs = base / "logs"
     logs.mkdir()
     env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1)), "APPSEC_C7_CONFIG": str(config),
@@ -83,7 +83,7 @@ def direct_summary(result):
 
 def test_reference_sync_fixture_tables_retain_every_actual_feed():
     actual = tomllib.loads((support.ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
-    fixture = tomllib.loads(support.reference_sync_tables())
+    fixture = tomllib.loads(job_tables("job_third_party_data_sync"))
     assert fixture["jobs"]["job_third_party_data_sync"] == actual["jobs"]["job_third_party_data_sync"]
 
 
