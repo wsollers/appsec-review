@@ -39,6 +39,98 @@ state = "enabled"
 description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
 
 [[packs]]
+id = "graph-export-java"
+path = "rules/codeql-graph-export/java"
+engine = "codeql"
+language = "java"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/java-all@9.3.0"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Java and Kotlin code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-javascript"
+path = "rules/codeql-graph-export/javascript"
+engine = "codeql"
+language = "javascript"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/javascript-all@2.10.1"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored JavaScript and TypeScript code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-python"
+path = "rules/codeql-graph-export/python"
+engine = "codeql"
+language = "python"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/python-all@7.2.5"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Python code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-ruby"
+path = "rules/codeql-graph-export/ruby"
+engine = "codeql"
+language = "ruby"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/ruby-all@7.0.0"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Ruby code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-go"
+path = "rules/codeql-graph-export/go"
+engine = "codeql"
+language = "go"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/go-all@7.3.1"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Go code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-rust"
+path = "rules/codeql-graph-export/rust"
+engine = "codeql"
+language = "rust"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/rust-all@0.2.21"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored Rust code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "graph-export-swift"
+path = "rules/codeql-graph-export/swift"
+engine = "codeql"
+language = "swift"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/swift-all@6.8.3"
+verify = "check-only"
+# CodeQL extracts Swift only on macOS; the pinned image is Linux, so this pack waits for a macOS executor.
+warm = false
+state = "deferred"
+description = "Repository-authored Swift code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
 id = "cert-cpp-coding-standards"
 # Verified in the in-image pack (the one the review loads): all 117 queries type-check against
 # codeql/cpp-all@12.1.0 in audit-codeql:custom-2.27.0 with networking disabled. The pack's own
