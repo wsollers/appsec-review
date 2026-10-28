@@ -39,6 +39,7 @@ No broad `docs-sync` reconciliation was performed and `docs/docs-sync.json` is u
 | [Final report operations](../operations/final-report.md) | Distinguish existing post-gate outcome discovery and stale hardcoded PoC limitation from intended single snapshot. Later document certified attachments/capability accounting, schema and public references. |
 | [Inference operations](../operations/inference-security-review.md) | Mark chain producer/ledger stages as pending; preserve single-ledger/nonexecution policy. Later document real composition/challenge bounds, events, manifests and gaps. |
 | [Report rendering](../operations/report-rendering.md) | Distinguish broad standalone diagnostic rendering from the narrower protected dossier/public projections. Later document actual job reuse, receipts, sample and failure behavior. |
+| [Telemetry architecture](../architecture/telemetry.md), [metrics operations](../operations/metrics.md) | Inventory existing correlated event writers, receipt-resolved scope/usage and regenerable summary; require completion stage/candidate/outcome/gap/duration and adapter/render tracking from first implementation. Later reconcile exact events/fields/schema and low-cardinality/redaction coverage. |
 | [Architecture navigation](../architecture/README.md), [agent navigation](../agent-reader.md) | Link inventory, proposed dossier operations and this record without introducing authority. |
 | [Wave1 operations](../operations/wave1-review.md), [inference design](../architecture/inference-security-review.md), [review package contract](../architecture/review-package-contract.md), [red output](../architecture/red-discovery-output.md), [indexing design](../architecture/indexing-and-query-reuse.md) | Integration follow-up: reconcile precise producer placement, package/reference schemas, chain publication, input matrix and availability; do not rewrite unrelated historic design. |
 
@@ -51,6 +52,15 @@ are also intended after implementation acceptance. Existing runs must retain the
 frozen configuration rather than inherit changed checkout defaults. This records the user-directed
 decision, not source verification that these defaults have shipped. Runtime reproduction,
 negative-control execution and `fixed` assurance remain unauthorized and unclaimed.
+
+The user additionally requires telemetry and metrics from the outset. Existing
+`observability/events.py::EventLog` / `PipelineLog` and
+`observability/telemetry.py::aggregate_run_metrics` were inspected for the follow-up inventory.
+Completion-specific observations and summary fields await implementation, not a separate Azure
+or telemetry backend. Track stages/candidates, model usage where emitted, low-cardinality
+outcomes, durations, caps, adapter/render failures and integrity/coverage gaps. Producer allowlists
+must exclude raw source/patch/PoC/prompt/credential content before writing either local or central
+events; central key redaction does not sanitize the earlier local write.
 
 ## Unresolved implementation details
 

@@ -435,3 +435,11 @@ These decisions bind the implementation partitions:
     Existing runs keep their immutable frozen configuration, including disabled capabilities:
     changing checkout defaults must not silently activate them on resume or rewrite old runs.
     Automatic processing grants no runtime execution, reproduction or `fixed` assurance.
+12. Bake telemetry and metrics into the first implementation of every completion lane. Reuse
+    `context.events`, the canonical run stream and `observability.telemetry.aggregate_run_metrics` /
+    `data/telemetry/summary.json`, not a separate service. Track stages/candidates, terminal
+    outcomes, caps, gaps, durations, retries and adapter/render failures, with model usage where
+    emitted. Use low-cardinality aggregates and resolving identities; never log source, patches,
+    PoC/prompt contents or credentials. Missing usage and integrity/coverage gaps remain explicit.
+    The [telemetry architecture](telemetry.md#evidence-completion-tracking-commissioned) records the
+    implementation/reconciliation boundary.

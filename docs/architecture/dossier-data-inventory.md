@@ -67,6 +67,7 @@ against a target for this document. Target-owned guidance is not dossier authori
 | Independence and judge | Actor/provider/model/fresh-conversation facts; separate provider/model distinctness, verifier evidence receipts; shuffled/de-shuffled judge verdicts and per-predicate citations, including disagreement with state. | [`review/independence.py`](../../src/appsec_review/review/independence.py), [`review/judge.py`](../../src/appsec_review/review/judge.py). An independent actor is mandatory for confirmation; distinct-model policy separately affects shipment blocking. Raw actor conversations are not dossier material. |
 | Scores and shipment | Separate technical severity, exploitability confidence, environmental/business impact, remediation priority; provider/native values, missing factors, severity bounds and cited score identities; exact `ship-block-policy/1` result. | [`review/scoring/`](../../src/appsec_review/review/scoring/), [`review/ship_block.py`](../../src/appsec_review/review/ship_block.py), `decide`. Default `application_risk_matrix/3` decides technical severity. Null remediation priority stays null; planner text, CVSS/SSVC context and chain severity sums must not replace it. |
 | Accounting | Expected/terminal cells, lanes, failed/capped/not-launched work, duplicates, coverage matrix, gap classes, incomplete-gap ratio and accepted review outcome. | [`review/accounting.py`](../../src/appsec_review/review/accounting.py); inference stages `audit`, `coverage_matrix`, `completeness_gaps`, `remediation_partition`. Keep review coverage distinct from later enhancement/render coverage. |
+| Process telemetry | Run/job/attempt/step/task and invocation identities, lifecycle/duration/reuse/disposition/gap counters, receipt-resolved review/build/CodeQL scope, resource/work measurements and emitted model usage. | [`observability/events.py`](../../src/appsec_review/observability/events.py), `PipelineLog`, `EventLog`; [`observability/telemetry.py`](../../src/appsec_review/observability/telemetry.py), `aggregate_run_metrics`, `_receipt_json`, `emit_model_event`. Operational context only; missing process coverage or usage is not zero or proof that a target is clean. Completion-lane tracking is commissioned, not implemented at this baseline. |
 | Judge PoC basis | Exact finding/package binding, supported/confirmed state, accepted judge verdict, `poc_basis` value/hash and evidence refs. | Inference stages `poc_candidates`; [`job_poc_generation/candidates.py`](../../src/appsec_review/jobs/job_poc_generation/candidates.py). Basis labels resolve through the accepted package view; a judge's approval is not runtime proof. |
 | Compile-only developer artifact | Inert test/control source, setup/debugger instructions, policy verdict, classified compiler commands, syntax/object/sanitizer-object checks, symbol checks, diagnostics and artifact/provenance hashes. | [`job_poc_generation/brief.py`](../../src/appsec_review/jobs/job_poc_generation/brief.py), `build_brief`; [`buildctx.py`](../../src/appsec_review/jobs/job_poc_generation/buildctx.py), `AcceptedBuilds`; [`buildcheck.py`](../../src/appsec_review/jobs/job_poc_generation/buildcheck.py), [`package.py`](../../src/appsec_review/jobs/job_poc_generation/package.py). Current mutable `data/poc/<claim-id>/` packaging is a known change boundary, not safe immutable retry storage. |
 | Chains / remediation / dossiers | Shared versioned schema ids, exact `FindingBinding`, capability/kind/status enums and `nonexecution_assurance()` exist. Full producer manifests, patches, validations and dossier receipts do not yet exist at this baseline. | [`completion_contracts.py`](../../src/appsec_review/jobs/completion_contracts.py). Chain seeds are untrusted hints, not accepted chains. See [change map](#8-completion-change-map-and-unresolved-integration). |
@@ -341,6 +342,32 @@ with a named reason. Disabled jobs can be excluded from inventory, so the frozen
 must accompany coverage interpretation. `indexed` is a disposition, not a complete-coverage
 claim. See [review-data indexing operations](../operations/review-data-indexing.md).
 
+### Operational telemetry and derived views
+
+The existing canonical stream is `data/logs/pipeline.jsonl` (`telemetry-event/1`), with correlated
+attempt logs under each attempt. `EventLog.write` mirrors local events to `PipelineLog.write`;
+the central writer limits records to 64 KiB, nested depth to 6, collections to 200 entries and
+strings to 8192 characters. Producer allowlists are still required: the local attempt write occurs
+before central redaction, and raw patches/PoCs must never be logged under arbitrary keys.
+
+`aggregate_run_metrics` / `write_run_metrics` in
+[`observability/telemetry.py`](../../src/appsec_review/observability/telemetry.py) produce
+`data/telemetry/summary.json` (`run-metrics/3`) from that stream, not from a target scan.
+Available views include event and deduplicated lifecycle counts/conflicts/gaps, job/task and
+operation timing, queue/reuse/disposition/work/throughput counters, bounded slow-operation
+rankings, resource admissions/spans, emitted model invocations/tokens, authoritative
+`FINDING_TRANSITION` counts and receipt-resolved source/build/artifact/CodeQL review metrics.
+Overlapping spans are not additive resource totals. Missing model usage/cost and absent platform
+measurements retain null/unavailable reasons.
+
+These are regenerable operational views, not another retrieval index or an evidence-admission
+route. Hash-bound metric receipts resolve run-owned artifacts; malformed/changed/escaping receipts
+remain integrity gaps. Dossiers may retain safe scope/status references and omissions, not raw
+logs or prompts. [Telemetry architecture](telemetry.md#evidence-completion-tracking-commissioned)
+and [metrics operations](../operations/metrics.md#completion-rollout-tracking-pending-integration)
+record the required completion-stage/candidate/adapter/render tracking and low-cardinality rollups,
+whose exact events and aggregate fields await implementation reconciliation.
+
 ## 7. Engineering evidence and explicit gaps
 
 | Evidence family | Data that can actually be retained / queried | What must not be inferred |
@@ -392,11 +419,13 @@ Detailed acceptance remains in the [completion design](evidence-completion-and-r
 | Protected vs public | Developer JSON/LaTeX/PDF can carry bounded resolving source and inert PoC function text, never credentials/raw prompts/arbitrary transcripts. Public JSON/Markdown/HTML/PDF show sanitized summaries/statuses and refs only. | [Rendering](../operations/report-rendering.md), final report and dossier operations; renderer-neutral models, loaders, escaping/redaction, public schemas and leak tests. Existing diagnostic full-run rendering is not automatically a safe dossier/public loader. |
 | Rendering outcomes | Retain deterministic JSON and LaTeX even if PDF fails; real PDF only with receipt/hash and an explicit render status. Failed/capped/missing rendering is an accounted named gap, not an empty or fabricated PDF. | Dossier/rendering operations; commissioned LaTeX image/template/palette and hardened execution, cleanup receipts and retry behavior. A live seeded sample and real PDF smoke remain pending. |
 | Versioning / configuration | Shared `/1` completion schema ids are declared, not implemented schema files/producers. Version review/ledger/PoC/gate/report contracts together; strict exact-version dispatch, no rewriting old runs. | Completion design, jobs/runtime and schema links; typed central TOML/loader/profile allowlists, topology validators, target-independent launch, dataset/input matrix/planned consumers. Exact new settings/defaults wait for integration. |
+| Telemetry / metrics | Existing correlated events and regenerable `run-metrics/3` support generic lifecycle/usage/scope accounting; add completion lane/stage/candidate outcomes, caps/gaps, adapter/render failures and durations from the outset. | [Telemetry architecture](telemetry.md), [metrics operations](../operations/metrics.md), dossier operations; producer `context.events`, `observability.telemetry.aggregate_run_metrics`, summary schema and focused coverage/redaction tests. Low-cardinality rollups only; no separate backend, raw payloads or inferred runtime/fixed assurance. |
 | Resume / audit / acceptance | Fingerprint every consumed artifact/settings/schema/implementation/tool; invalidate only dependent closure; enabled missing/failed/capped differs from disabled/empty scope. | Wave1, jobs/runtime, indexing/dossier operations, implementation record; resume/manual dispatch/Dagster parity, exact candidate partitions, tamper tests, deterministic outputs and actual PDF evidence. |
 
 Unresolved at this inventory baseline: final producer/summary shapes beyond the shared constants,
 registered topology and defaults; actual chain manifest/ledger event version; final review/PoC/gate/
 report schema versions; protected dossier dataset declarations and loader allowlist; exact render
 receipt/manifest fields; availability of safe validation adapters; end-to-end accepted-run and
-live PDF evidence. None is substituted with a target scan, an assumed deployment, or a compile
+live PDF evidence; completion-specific telemetry event/aggregate names and coverage. None is
+substituted with a target scan, an assumed deployment, or a compile
 success. A later source-verified reconciliation should name the implementation commits and checks.

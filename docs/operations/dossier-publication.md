@@ -42,6 +42,22 @@ template/palette and deterministic date behavior rather than running arbitrary g
 untrusted model commands on the host. A real seeded PDF sample and render smoke are required
 acceptance evidence; this documentation-only phase has produced neither.
 
+## Process telemetry (commissioned)
+
+Use existing correlated `context.events` and
+[run metrics](metrics.md#completion-rollout-tracking-pending-integration), not a new backend.
+Required observations include stage/candidate progress, eligible/terminal dossier counts,
+source-retention and PDF-render outcomes, duration, caps, timeout/render/adapter failures and
+coverage/integrity/cleanup gaps. Correlate by run/attempt and safe artifact identity, with
+low-cardinality lane/stage/status/error-class rollups; model usage is reported only where emitted.
+Exact events and aggregate fields remain pending source reconciliation at this baseline.
+
+Telemetry must distinguish retained JSON/LaTeX from an actually rendered PDF and must not
+convert a disabled/missing lane into a measured zero. Emit allowlisted counts, statuses and hashes
+only, never raw source, patches, PoC text, prompts or credentials into either attempt or central
+logs. Accepted manifests, not process counters, govern dossier membership and gate certification.
+See the [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned).
+
 ## Visibility and assurance
 
 Dossier JSON, source excerpts, inert PoC source, LaTeX and PDF are **protected developer material**,
