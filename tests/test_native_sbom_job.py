@@ -21,6 +21,7 @@ from appsec_review.runtime import UnitContext
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import reference
+from tests.handoff_fixture import write_fixture_handoff
 
 
 ROOT = Path(__file__).parents[1]
@@ -30,17 +31,19 @@ CREATED = "2026-10-28T00:00:00Z"
 
 
 def _write(root: Path, name: str, document: dict) -> dict:
-    path = root / "seed" / name
+    path = root / "data" / "native-sbom-fixtures" / name
     atomic_json(path, document)
     return reference(root, path)
 
 
 def _framework(root: Path, job: str, outputs: dict, artifacts: list[dict]) -> dict:
-    identity = _write(root, job + ".json", {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": job,
+    path = root / "data" / "native-sbom-fixtures" / (job + ".json")
+    write_fixture_handoff(root, path, {
+        "status": "ACCEPTED", "job_id": job,
         "run_id": RUN_ID, "attempt_id": "attempt_0001", "source_fingerprint": SNAPSHOT,
         "started_at": CREATED, "outputs": outputs, "artifacts": artifacts,
     })
+    identity = reference(root, path)
     atomic_json(root / "data" / "jobs" / job / "latest.json",
                 {"handoff_path": identity["path"], "handoff_sha256": identity["sha256"]})
     return identity
@@ -71,6 +74,7 @@ def seed(tmp_path: Path, *, files: dict[str, bytes] | None = None, source_syft: 
                                             metadata_dir=tmp_path / "metadata"))
     root = config.runtime.runs_dir / RUN_ID
     root.mkdir(parents=True)
+    JobRunner(config)._bind_configuration(root)
     target = tmp_path / "target"
     target.mkdir()
     files = files if files is not None else {
@@ -285,7 +289,7 @@ def test_source_size_change_aborts_native_discovery(tmp_path: Path) -> None:
 
 def test_source_syft_tampering_is_admission_failure_not_native_only_success(tmp_path: Path) -> None:
     config, root, target = seed(tmp_path)
-    (root / "seed" / "syft.json").write_bytes(b"{}")
+    (root / "data" / "native-sbom-fixtures" / "syft.json").write_bytes(b"{}")
     with pytest.raises(RuntimeError, match="integrity mismatch"):
         execute(config, root, target)
     assert not (root / "data" / "jobs" / "job_dependency_intelligence" / "latest.json").is_file()

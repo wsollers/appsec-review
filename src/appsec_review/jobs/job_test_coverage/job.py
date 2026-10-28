@@ -7,6 +7,8 @@ index and target catalog are independently verified before any candidate bytes a
 
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -79,9 +81,10 @@ def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], s
     handoff_path = _safe_file(run_root, {
         "path": pointer.get("handoff_path"), "sha256": pointer.get("handoff_sha256")}, f"{job_id} handoff")
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != job_id):
-        raise CoverageIntegrityError(f"{job_id} handoff is not accepted")
+    try:
+        handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
+    except ValueError as exc:
+        raise CoverageIntegrityError(f"{job_id} handoff is not accepted") from exc
     return handoff, str(pointer["handoff_sha256"])
 
 

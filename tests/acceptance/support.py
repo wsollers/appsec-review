@@ -42,8 +42,9 @@ def make_job(run_root: Path, job_id: str, *, dagster_run_id: str, gaps=(), findi
             "scratch": "/opt/project/.appsec-review-build-scratch.T70GHa",
         }},
     })
-    handoff = write_json(attempt / "handoff.json", {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": job_id,
+    from tests.handoff_fixture import write_fixture_handoff
+    handoff = write_fixture_handoff(run_root, attempt / "handoff.json", {
+        "status": "ACCEPTED", "job_id": job_id,
         "attempt_id": "attempt_0001", "completion_status": status, "schema_identity": f"{job_id}/1",
         "upstream_handoff_sha256": dict(upstream or {}),
         "resolving_paths": {"attempt": relative_attempt, "result": f"{relative_attempt}/result.json"},

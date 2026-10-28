@@ -1376,6 +1376,7 @@ workers = 8
 timeout_seconds = 600
 stream_limit_bytes = 8388608
 diagnostic_tail_bytes = 32768
+parser_input_limit_bytes = 67108864
 archive_member_limit = 10000
 archive_expanded_bytes = 536870912
 archive_member_bytes = 134217728

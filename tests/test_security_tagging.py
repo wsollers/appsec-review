@@ -239,7 +239,8 @@ def _run_fixture(tmp_path: Path):
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target, indexes=identities)
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
     handoff = attempt / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": "fixture",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff, {"source_fingerprint": SNAPSHOT, "status": "ACCEPTED", "job_id": "fixture",
                           "attempt_id": "attempt_0001", "artifacts": [manifest], "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,

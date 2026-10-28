@@ -8,6 +8,7 @@ import pytest
 from appsec_review.container_runtime.measurement import COUNTERS, INVOCATION_SCHEMA, RESOURCE_SCHEMA
 from appsec_review.observability import PipelineLog, aggregate_run_metrics
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage import canonical_json
 
 
 def _receipt(root: Path, name: str, value: dict) -> dict[str, object]:
@@ -15,6 +16,13 @@ def _receipt(root: Path, name: str, value: dict) -> dict[str, object]:
     atomic_json(path, value)
     return {"path": path.relative_to(root).as_posix(), "sha256": file_sha256(path),
             "size_bytes": path.stat().st_size}
+
+
+def test_run_metrics_preserve_additive_domain_sections(tmp_path: Path) -> None:
+    report = aggregate_run_metrics(tmp_path)
+    assert report["schema"] == "appsec-review/run-metrics/5"
+    assert {"interchange", "native_sbom", "debug_symbols", "owasp", "review_flow",
+            "completion", "review", "codeql"} <= report.keys()
 
 
 def test_review_metrics_resolve_receipts_and_preserve_gaps_reuse_and_deduplication(tmp_path: Path) -> None:
@@ -229,3 +237,256 @@ def test_tree_sitter_conflicting_identity_is_not_summed_as_another_execution(tmp
     assert summary["summed_invocation_duration_ms"] is None
     assert summary["measurements"]["memory_peak_bytes"]["value"] is None
     assert summary["gaps"] and summary["incomplete_accounting"]
+
+
+def _scanner_metrics_receipts(root: Path, *, complete=True, truncated=False, attempt="attempt_0001", count=3):
+    from appsec_review.runtime.datasets import dataset_contract, protected
+    from appsec_review.storage.shared import SharedArtifacts, put_bytes, reference
+    import hashlib
+
+    job = "job_evidence_collection"
+    attempt_root = root / "data" / "jobs" / job / "attempts" / attempt
+    actor = {"run_id": root.name, "job_id": job, "attempt_id": attempt, "orchestration": {"system": "fixture"}}
+    declaration = protected(
+        "native", "scan", "execution_receipts", "native/1", "fixture native receipts",
+        artifacts=(f"data/jobs/{job}/attempts/*/shared/native-output/*.json",), reason="protected native data")
+    atomic_json(attempt_root / "claim.json", {
+        **actor, "attempt_path": attempt_root.relative_to(root).as_posix(),
+        "dataset_contract": dataset_contract(job, ("scan",), (declaration,)),
+    })
+    shared = SharedArtifacts(root, attempt_root, {**actor, "claim": reference(root, attempt_root / "claim.json")})
+    artifact = put_bytes(root, b"private-native-report-and-source")
+    retention = {
+        "schema": "appsec-review/native-output-retention/1", "artifact": artifact,
+        "execution_reference": None, "parser_identity": "fixture-parser/1",
+        "complete": complete, "truncated": truncated, "retained_bytes": artifact["size_bytes"],
+        "native_result_count": count,
+    }
+    fingerprint = hashlib.sha256(canonical_json(retention)).hexdigest()
+    retention_receipt = shared.computed("native-output", fingerprint, artifact, computation=retention)
+    provenance = {
+        "schema": "appsec-review/observation-provenance-validation/1",
+        "actor": {key: actor[key] for key in ("run_id", "job_id", "attempt_id")},
+        "parser_identity": "fixture-parser/1", "observation_count": count, "native_reference_count": count,
+        "provenance_gap_count": 0 if complete else count,
+        "complete": complete, "truncated": truncated, "artifacts": [artifact],
+    }
+    provenance_object = put_bytes(root, canonical_json(provenance))
+    fingerprint = hashlib.sha256(canonical_json(provenance)).hexdigest()
+    provenance_receipt = shared.computed("native-output", fingerprint, provenance_object, computation=provenance)
+    log = PipelineLog(root)
+    event_actor = {key: actor[key] for key in ("run_id", "job_id", "attempt_id")}
+    native_details = {**retention, "retention_receipt": retention_receipt, "retained_bytes": 999999}
+    provenance_details = {"provenance_receipt": provenance_receipt, "observation_count": 999999}
+    log.write("NATIVE_OUTPUT_RETAINED", **event_actor, details=native_details)
+    log.write("OBSERVATION_PROVENANCE_VALIDATED", **event_actor, details=provenance_details)
+    return artifact, retention_receipt, provenance_receipt, event_actor, native_details, provenance_details
+
+
+def test_interchange_metrics_receipt_authority_deduplication_reuse_and_redaction(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    artifact, retention, provenance, actor, native_details, provenance_details = _scanner_metrics_receipts(root)
+    log = PipelineLog(root)
+    log.write("NATIVE_OUTPUT_RETAINED", **actor, details=native_details)
+    log.write("OBSERVATION_PROVENANCE_VALIDATED", **actor, details=provenance_details)
+    log.write("TASK_REUSED", **actor, details={"checkpoint_reused": True})
+    report = aggregate_run_metrics(root)
+    interchange = report["interchange"]
+    assert report["schema"] == "appsec-review/run-metrics/5"
+    assert interchange["schema"] == "appsec-review/interchange-metrics/1"
+    assert interchange["native_outputs"] == {
+        "reference_count": 1, "distinct_artifact_count": 1, "distinct_artifact_bytes": artifact["size_bytes"],
+        "complete": 1, "incomplete": 0, "truncated": 0, "native_result_count": 3, "accounting_complete": True,
+    }
+    assert interchange["observations"]["count"] == 3
+    assert interchange["observations"]["native_reference_count"] == 3
+    assert interchange["observations"]["provenance_complete_count"] == 3
+    assert interchange["observations"]["provenance_incomplete_count"] == 0
+    assert interchange["duplicate_events"] == 2
+    assert report["tool_calls"] == {}  # Reuse and retained references are not scanner executions.
+    serialized = json.dumps(interchange)
+    for private in ("private-native-report-and-source", artifact["path"], artifact["sha256"],
+                    retention["path"], provenance["path"], "fixture-parser/1"):
+        assert private not in serialized
+    assert set(interchange["by_job"]) == {"job_evidence_collection"}
+
+
+def test_interchange_distinct_bytes_do_not_double_count_same_artifact_from_different_publications(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    artifact, *_ = _scanner_metrics_receipts(root)
+    _scanner_metrics_receipts(root, attempt="attempt_0002")
+    metrics = aggregate_run_metrics(root)["interchange"]
+    assert metrics["native_outputs"]["reference_count"] == 1
+    assert metrics["native_outputs"]["distinct_artifact_bytes"] == artifact["size_bytes"]
+    assert metrics["observations"]["count"] == 6
+
+
+@pytest.mark.parametrize(("complete", "truncated"), [(False, False), (False, True), (True, False)])
+def test_interchange_provenance_completeness_and_truncation_are_receipt_backed(tmp_path, complete, truncated):
+    root = tmp_path / "2026-10-28-0001"
+    _scanner_metrics_receipts(root, complete=complete, truncated=truncated)
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["native_outputs"]["incomplete"] == int(not complete)
+    assert summary["native_outputs"]["truncated"] == int(truncated)
+    assert summary["observations"]["incomplete_batches"] == int(not complete)
+    assert summary["observations"]["provenance_incomplete_count"] == (0 if complete else 3)
+    assert summary["observations"]["truncated_batches"] == int(truncated)
+
+
+@pytest.mark.parametrize("damage", ["missing", "tampered", "malformed", "escaped", "identity", "unknown-job"])
+def test_interchange_integrity_gaps_are_closed_redacted_and_not_zero_counts(tmp_path, damage):
+    root = tmp_path / "2026-10-28-0001"
+    artifact, retained, _, actor, details, _ = _scanner_metrics_receipts(root)
+    path = root / retained["path"]
+    if damage == "missing":
+        path.unlink()
+    elif damage == "tampered":
+        path.write_bytes(b"tampered-private")
+    elif damage == "malformed":
+        path.write_bytes(b"[]")
+        details["retention_receipt"] = {**retained, "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
+    elif damage == "escaped":
+        details["retention_receipt"] = {**retained, "path": "../customer-secret"}
+    elif damage == "identity":
+        actor["attempt_id"] = "attempt_9999"
+    elif damage == "unknown-job":
+        actor["job_id"] = "customer-specific-rule-or-package"
+    PipelineLog(root).write("NATIVE_OUTPUT_RETAINED", **actor, details=details)
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["native_outputs"]["reference_count"] is None
+    assert summary["native_outputs"]["distinct_artifact_bytes"] is None
+    assert summary["integrity_gap_codes"] and not summary["native_outputs"]["accounting_complete"]
+    serialized = json.dumps(summary)
+    assert "customer-secret" not in serialized and "customer-specific-rule-or-package" not in serialized
+    assert artifact["path"] not in serialized
+
+
+def test_interchange_missing_producers_have_null_metrics_and_named_gaps(tmp_path):
+    summary = aggregate_run_metrics(tmp_path)["interchange"]
+    assert summary["handoffs"]["accepted"] is None
+    assert summary["handoffs"]["coverage_dispositions"]["complete"] is None
+    assert summary["native_outputs"]["reference_count"] is None
+    assert summary["observations"]["count"] is None
+    assert summary["integrity_gap_codes"] == {
+        "handoffs_unavailable": 1, "native_outputs_unavailable": 1, "observations_unavailable": 1}
+
+
+def test_interchange_verified_empty_results_are_zero_not_unavailable(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    _scanner_metrics_receipts(root, count=0)
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["native_outputs"]["native_result_count"] == 0
+    assert summary["observations"]["count"] == summary["observations"]["native_reference_count"] == 0
+    assert summary["observations"]["accounting_complete"]
+
+
+def test_interchange_dimensions_do_not_expand_for_unregistered_jobs_or_claimed_tools(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    log = PipelineLog(root)
+    for number in range(64):
+        log.write("NATIVE_OUTPUT_RETAINED", run_id=root.name, job_id=f"private-customer-{number}", details={
+            "tool_id": f"arbitrary-rule-{number}", "rule_id": f"arbitrary-path-{number}"})
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["by_job"] == {}
+    assert summary["integrity_gap_codes"]["identity_mismatch"] == 64
+    assert "private-customer" not in json.dumps(summary) and "arbitrary-" not in json.dumps(summary)
+
+
+@pytest.mark.parametrize("count", [-1, True, 1.5])
+def test_interchange_hash_bound_but_invalid_counts_are_rejected(tmp_path, count):
+    root = tmp_path / "2026-10-28-0001"
+    _scanner_metrics_receipts(root, count=count)
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["observations"]["count"] is None
+    assert summary["native_outputs"]["native_result_count"] is None
+    assert summary["integrity_gap_codes"]
+
+
+def _handoff_metrics_receipt(root: Path, *, rejected=False):
+    from appsec_review.runtime.handoff import build_outcomes, execution_status
+    from appsec_review.storage.shared import reference
+    from tests.handoff_fixture import write_fixture_handoff
+
+    job, attempt = "job_target_catalog", "attempt_0001"
+    base = root / "data" / "jobs" / job / "attempts" / attempt
+    path = base / "handoff.json"
+    write_fixture_handoff(root, path, {
+        "job_id": job, "outputs": {"scan.publish": {"terminal_status": "FAILED"}},
+        "source_fingerprint": "snapshot",
+    })
+    handoff = json.loads(path.read_bytes())
+    if rejected:
+        status = base / "steps" / "scan" / "tasks" / "publish" / "status.json"
+        atomic_json(status, {"unit_id": "scan.publish", "step_id": "scan", "task_id": "publish", "status": "FAILED"})
+        handoff["artifacts"] = [
+            reference(root, status) if ref["path"] == status.relative_to(root).as_posix() else ref
+            for ref in handoff["artifacts"]]
+        handoff["status"] = "REJECTED"
+    document = build_outcomes(root, run_id=root.name, job_id=job, attempt_id=attempt,
+                              target_snapshot="snapshot", unit_ids=["scan.publish"], diagnostic=rejected)
+    outcomes_path = root / handoff["outcomes"]["path"]
+    atomic_json(outcomes_path, document)
+    outcome_ref = reference(root, outcomes_path)
+    handoff.update(outcomes=outcome_ref, coverage=document["coverage"], execution_status=execution_status(document))
+    handoff["artifacts"] = [outcome_ref if ref["path"] == outcome_ref["path"] else ref
+                            for ref in handoff["artifacts"]]
+    atomic_json(path, handoff)
+    return path, handoff
+
+
+def _handoff_event(root, path, *, kind="HANDOFF_VALIDATED", duration=12.5):
+    from appsec_review.storage.shared import reference
+    PipelineLog(root).write(kind, run_id=root.name, job_id="job_target_catalog", attempt_id="attempt_0001",
+                             details={"handoff_reference": reference(root, path), "duration_ms": duration,
+                                      "unit_count": 999999, "gap_count": 999999, "coverage_disposition": "clean"})
+
+
+def test_interchange_handoff_authority_coverage_retry_duration_and_publication_deduplication(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    path, _ = _handoff_metrics_receipt(root)
+    _handoff_event(root, path)
+    _handoff_event(root, path, kind="HANDOFF_ACCEPTED")
+    _handoff_event(root, path)
+    PipelineLog(root).write("JOB_REUSED", run_id=root.name, job_id="job_target_catalog")
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["handoffs"]["accepted"] == summary["handoffs"]["validated"] == 1
+    assert summary["handoffs"]["rejected"] == 0
+    assert summary["handoffs"]["units"] == summary["handoffs"]["retry_required"] == 1
+    assert summary["handoffs"]["retryable_gaps"] == 1
+    assert summary["handoffs"]["coverage_dispositions"]["unavailable"] == 1
+    assert summary["handoffs"]["execution_statuses"] == {"SUCCEEDED": 1, "FAILED": 0, "SKIPPED": 0}
+    assert summary["handoffs"]["duration_ms"]["sum"] == 12.5
+    assert summary["handoffs"]["duration_ms"]["count"] == 1
+    assert summary["handoffs"]["accounting_complete"]
+    assert summary["duplicate_events"] == 1
+    assert "clean" not in json.dumps(summary) and "999999" not in json.dumps(summary)
+
+
+def test_interchange_rejected_admission_is_distinct_from_failed_execution(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    path, _ = _handoff_metrics_receipt(root, rejected=True)
+    _handoff_event(root, path, kind="HANDOFF_REJECTED")
+    summary = aggregate_run_metrics(root)["interchange"]["handoffs"]
+    assert summary["accepted"] == summary["validated"] == 0
+    assert summary["rejected"] == summary["execution_statuses"]["FAILED"] == 1
+    assert summary["retry_required"] == 1
+
+
+@pytest.mark.parametrize("damage", ["coverage", "missing", "tampered", "old-schema", "nonfinite-duration"])
+def test_interchange_handoff_outcome_integrity_failures_never_look_like_zero_coverage(tmp_path, damage):
+    root = tmp_path / "2026-10-28-0001"
+    path, handoff = _handoff_metrics_receipt(root)
+    if damage == "coverage":
+        handoff["coverage"] = {"disposition": "complete", "gap_count": 0, "retry_required": False}
+        atomic_json(path, handoff)
+    elif damage == "missing":
+        (root / handoff["outcomes"]["path"]).unlink()
+    elif damage == "tampered":
+        (root / handoff["outcomes"]["path"]).write_text("{}", encoding="utf-8")
+    elif damage == "old-schema":
+        atomic_json(path, {**handoff, "schema": "appsec-review/job-handoff/1"})
+    _handoff_event(root, path, duration=float("nan") if damage == "nonfinite-duration" else 10)
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["handoffs"]["accepted"] is None
+    assert summary["handoffs"]["coverage_dispositions"]["complete"] is None
+    assert summary["integrity_gap_codes"] and not summary["handoffs"]["accounting_complete"]

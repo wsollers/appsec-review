@@ -19,13 +19,14 @@ from typing import Any
 
 import pytest
 
+from tests.handoff_fixture import write_fixture_handoff
 from appsec_review.config import load_config
 from appsec_review.graph.contract import GRAPH_INDEX, Family
 from appsec_review.indexing import fts_worker, input_matrix, inventory, matrix, products
 from appsec_review.indexing.store import ShardSet
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.retrieval.precomputed import QUERY_SETS, RETIRED_GRAPH_SETS
-from appsec_review.runtime.datasets import DatasetDeclaration, artifact_only
+from appsec_review.runtime.datasets import DatasetDeclaration, artifact_only, dataset_contract
 from appsec_review.indexing.build_facts import classify_command, classify_environment
 from appsec_review.indexing.store import AcceptedHandoff
 from appsec_review.mcp import RetrievalMcpAdapter
@@ -36,6 +37,7 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.observations import SEVERITY_RULE, normalize_reported_severity
 from appsec_review.jobs.job_review_data_indexing import build_job
 from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as EVIDENCE_DATASETS
+from appsec_review.jobs.job_review_prioritization.datasets import DATASETS as PRIORITY_DATASETS
 from appsec_review.jobs.job_review_package_assembly import build_job as build_package_job
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
@@ -329,7 +331,8 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
         [RelationRecord(RelationKind.OBSERVED_AT, ids["sec"], ids["exe"], True, 1.0)])
 
     ids["priority"] = LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, SNAPSHOT, {"item_id": "file:src/auth.c"}).value
-    shard("priority", "review-prioritization", {"job": "job_review_prioritization"}, [
+    shard("priority", "review-prioritization", {"job": "job_review_prioritization",
+                                              "unit": "publish.index_priority"}, [
         EntityRecord(LogicalIdentity.parse(ids["priority"]), "file:src/auth.c", "src/auth.c", "priority auth",
                      {"item_id": "file:src/auth.c", "scope": "file", "path": "src/auth.c", "language": "C",
                       "rank": 1, "score": 77.0, "features": {"cyclomatic": 7, "cognitive": 9,
@@ -384,7 +387,10 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
     def handoff(job_id: str, artifacts: list[dict[str, str]], outputs: dict[str, Any]) -> tuple[Path, str]:
         attempt = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
         path = attempt / "handoff.json"
-        atomic_json(path, {"schema": "appsec-review/job-handoff/1", "job_id": job_id, "attempt_id": "attempt_0001",
+        if job_id == "job_review_prioritization":
+            atomic_json(attempt / "claim.json", {
+                "dataset_contract": dataset_contract(job_id, ("extract", "publish"), PRIORITY_DATASETS)})
+        write_fixture_handoff(run_root, path, {"job_id": job_id, "attempt_id": "attempt_0001",
                            "status": "ACCEPTED", "completion_status": "SUCCEEDED", "outputs": outputs,
                            "artifacts": artifacts, "source_fingerprint": SNAPSHOT})
         sha = file_sha256(path)
@@ -407,7 +413,9 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
     handoff("job_language_build", [{"path": events_path.relative_to(run_root).as_posix(), "sha256": events_sha}], {})
     priority_handoff, priority_sha = handoff(
         "job_review_prioritization", [manifest, syntax],
-        {"extract.syntax_metrics": {"artifact": syntax}, "publish.index_priority": {"index_manifest": manifest}})
+        {"extract.syntax_metrics": {"artifact": syntax},
+         "publish.index_priority": {"index_manifest": manifest, "index_identity": asdict(next(
+             shard for shard in shards if shard.shard_id == "review-prioritization"))}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,
         "handoff_path": priority_handoff.relative_to(run_root).as_posix(), "handoff_sha256": priority_sha,

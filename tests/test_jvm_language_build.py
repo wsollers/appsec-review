@@ -382,11 +382,20 @@ def test_jvm_failure_isolated_and_success_checkpoint_detects_tampering(tmp_path:
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "maven": "SUCCEEDED", "sibling": "FAILED"}
+    from appsec_review.runtime.handoff import verify_handoff_integrity
+    run_root = config.runtime.runs_dir / run_id
+    latest = json.loads((run_root / "data" / "jobs" / "job_language_build" / "latest.json").read_text())
+    first_handoff = json.loads((run_root / latest["handoff_path"]).read_text())
     GraphRunner(config, [build_language(executor_factory=lambda unit, profile: JvmExecutor([]))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id,
         force_from="job_language_build")
     resumed = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
+    verify_handoff_integrity(run_root, first_handoff)
     assert next(item for item in resumed if item["root"] == "maven")["checkpoint_reused"] is True
+    first_by_root = {item["root"]: item for item in receipts}
+    second_by_root = {item["root"]: item for item in resumed}
+    assert second_by_root["maven"]["workspace"] == first_by_root["maven"]["workspace"]
+    assert second_by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]
     successful = next(item for item in resumed if item["root"] == "maven")
     artifact = config.runtime.runs_dir / run_id / successful["artifacts"][0]["path"]
     artifact.write_bytes(b"tampered")
@@ -410,8 +419,9 @@ def test_jvm_build_index_is_mcp_queryable_without_protected_streams(tmp_path: Pa
                    indexes=(identity,))
     manifest_artifact = {"path": manifest.relative_to(run_root).as_posix(),
         "sha256": file_sha256(manifest), "size_bytes": manifest.stat().st_size}
-    handoff = run_root / "data" / "jobs" / "job_language_build" / "jvm-index-handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    handoff = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "jvm-index" / "handoff.json"
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff, {"source_fingerprint": fingerprint, "status": "ACCEPTED",
         "job_id": "job_language_build", "attempt_id": "jvm-index", "artifacts": [manifest_artifact],
         "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
@@ -492,7 +502,8 @@ def test_jvm_detached_instrumentation_is_not_hashed_on_publication_or_resume(tmp
     from appsec_review.jobs.job_language_build import job as generic, jvm
 
     unit, dispatch, accepted, calls, _events = _isolated_jvm_action(tmp_path, monkeypatch, mode)
-    supplied = unit.job.run_root / "data/build/jvm/units/jvm-fixture/instrumentation"
+    supplied = (unit.job.run_root / "data" / "build" / "jvm" / "units" /
+                dispatch["build_unit_id"] / "attempts" / unit.job.attempt_id / "instrumentation")
     evidence = supplied.with_name("instrumentation-evidence")
     hashed = []
     original = file_sha256

@@ -687,7 +687,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
                     "compiler_artifact_collection_mode", "required")),
         },
     }, releases=releases, policy=unit.job.review_policy.view())
-    root = unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id
+    root = (unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id /
+            "attempts" / unit.job.attempt_id)
     workspace = root / "workspace"
     namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
     cache = unit.job.metadata_root / "language-builds" / namespace / "jvm" / fingerprint / "accepted.json"
@@ -702,10 +703,10 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             prior_workspace = Path(str(prior.get("workspace", "")))
             if not prior_workspace.is_dir() or prior_workspace.is_symlink():
                 raise JvmIntegrityError("JVM checkpoint workspace is unavailable")
-            if prior_workspace.resolve() != workspace.resolve():
-                if root.exists():
-                    shutil.rmtree(root)
-                shutil.copytree(prior_workspace.parent, root)
+            if (unit.job.run_root.resolve() not in prior_workspace.resolve().parents
+                    or prior_workspace.resolve() != (unit.job.run_root / prior["receipt"]["workspace"]).resolve()):
+                raise JvmIntegrityError("JVM checkpoint workspace identity differs")
+            workspace, root = prior_workspace, prior_workspace.parent
             expected = prior.get("workspace_files")
             if not isinstance(expected, Mapping) or _manifest(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10) != expected:
                 raise JvmIntegrityError("JVM checkpoint workspace identity changed")

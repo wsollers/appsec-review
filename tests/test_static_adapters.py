@@ -39,7 +39,9 @@ def test_every_enabled_adapter_has_applicability_argv_exit_parser_and_limitation
         payload = (b"<BugCollection/>" if adapter.tool_id == "tool-spotbugs" else
                    b"<results><errors/></results>" if adapter.tool_id == "tool-cppcheck" else b"{}")
         assert isinstance(adapter.parse(payload), list)
-        assert adapter.parser_identity == adapter.adapter_identity == "undeclared"
+        assert adapter.adapter_identity == "undeclared"
+        assert adapter.parser_identity == (
+            "syft-package-observations/2" if adapter.tool_id == "tool-syft" else "undeclared")
 
 
 def test_functional_fixture_manifest_has_every_enabled_tool() -> None:

@@ -345,7 +345,8 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
     artifact = {"path": published.relative_to(run_root).as_posix(), "sha256": file_sha256(published),
                 "size_bytes": published.stat().st_size}
     framework = run_root / "framework-handoff.json"
-    atomic_json(framework, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, framework, {"source_fingerprint": snapshot, "status": "ACCEPTED",
                             "job_id": "job_dependency_intelligence",
                             "outputs": {"acceptance.publish_handoff": {"artifact": artifact}},
                             "artifacts": [artifact, manifest_identity]})
@@ -361,5 +362,5 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
     assert payload["maximal_exposure"] == "QA"
     assert payload["exposure_evidence"] == exposure["exposure_evidence"]
     index_path.write_bytes(b"changed")
-    with pytest.raises(ValueError, match="index integrity mismatch"):
+    with pytest.raises(ValueError, match="(?:index|target evidence) integrity mismatch"):
         load_accepted_dependency_intelligence(run_root)

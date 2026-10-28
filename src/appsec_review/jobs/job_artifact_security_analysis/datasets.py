@@ -18,7 +18,7 @@ DATASETS = (
             indexes=("observations",), prefixes=("artifact-security",),
             route="query_artifacts scanner/tool; query_precomputed query_set=dependency_advisories"),
     artifact_only("artifact_security_results", "analyze", "sbom", "appsec-review/artifact-security-observation/1",
-                  "Untruncated per-artifact scanner results, including SBOM and vulnerability matches.",
+                  "Per-artifact scanner results with explicit parser bounds and immutable native output references.",
                   artifacts=("data/artifact-security/shards/**", _A + "/artifacts/artifact-security/*.json"),
                   reason="complete scanner documents exceed payload bounds; bounded observations are indexed and "
                          "package/advisory pairs are published as precomputed facts"),

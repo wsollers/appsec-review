@@ -5,6 +5,37 @@ rebuilds `runs/<run-id>/data/telemetry/summary.json` and prints the same documen
 the target repository. All review-scope values resolve through receipt paths and SHA-256 identities
 recorded in the run telemetry stream.
 
+The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
+adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`) in
+`appsec-review/run-metrics/5`. It separates handoff admission, execution, coverage, native retention,
+and observation provenance. Historical `/4` summaries lack this section; absence is not zero
+provenance work. Do not copy claimed event counts into reports:
+retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
+identities must not inflate totals, and reused results must not count as fresh scanner execution.
+
+The new section groups handoff `accepted`, `rejected`, `validated`, unit/retry counts,
+`coverage_dispositions`, `execution_statuses`, `producer_gap_codes`, and publication `duration_ms`
+(`count`, `sum`, `p50`, `p95`, `max`, once per publication).
+`native_outputs` distinguishes reference count from distinct artifact count/bytes, retained
+completeness/truncation, and native result count. `observations` distinguishes observation count,
+native-reference count, and complete/incomplete/truncated batches. Registered job IDs bound
+`by_job`; closed `integrity_gap_codes` classify failures without path/rule/message labels.
+Read each section's `accounting_complete`: a null count with an integrity gap is not a measured zero.
+
+Observation `provenance_complete_count` and `provenance_incomplete_count` partition observation
+counts by receipt completeness; `provenance_gap_count` is the receipt-computed sum of common
+`gap_ids`, not an adjudicated finding count. `interchange.duplicate_events` identifies duplicate event
+identities. Receipt references are `HANDOFF_*.handoff_reference`,
+`NATIVE_OUTPUT_RETAINED.retention_receipt`, and
+`OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt`; metrics verify those artifacts before
+using their computations.
+
+Interchange aggregation handles at most 100,000 relevant events. `accounting_bound_exceeded`
+means affected totals are incomplete; do not interpret a partial duration distribution, `by_job`,
+or known gap-code subtotal as complete when `accounting_complete` is false. An unavailable
+section reports an explicit `<section>_unavailable` integrity code and null affected totals,
+even when another section is measurable.
+
 Use `review.source_by_language`, `review.projects`, `review.build_units`, and `review.artifacts` for
 scope and throughput. Artifact `reference_*` values answer how much work build units reference;
 `deduplicated_*` values answer how many distinct content objects were produced. Do not substitute
@@ -19,7 +50,8 @@ That zero describes avoided producer execution only. Read `resource_spans` and
 Scope/profile, resource lease and tool invocation identifiers correlate concurrent work;
 inclusive process resource samples must not be added across overlapping spans.
 
-The summary schema is `appsec-review/run-metrics/4`. Use the top-level `codeql` section for CodeQL
+The upgraded summary schema is `appsec-review/run-metrics/5` (historical summaries use `/4`).
+Use the top-level `codeql` section for CodeQL
 execution telemetry: `by_query_pack`, `by_language`, `by_query_pack_language` (pack, then language)
 and `by_source_language` each report `count`, `statuses` (`SUCCEEDED`, `FAILED`, `TIMED_OUT`,
 `SKIPPED`, `REUSED`, zeroes included), `runtime_ms` (`total`, `min`, `max`, `p50`, `p95` over fresh
@@ -66,13 +98,39 @@ never evidence that the corresponding scope is clean. `finding_states` counts on
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
 
+## Interchange troubleshooting
+
+For `HANDOFF_REJECTED`, inspect the hash-bound diagnostic handoff and detailed outcomes when
+available. Separate framework `execution_status` from `status` admission and `coverage.disposition`;
+an accepted partial publication is not a failed runtime, and successful execution need not provide
+complete coverage. Read unit status/result references and gap codes before retrying.
+
+A missing, changed, escaped, or malformed handoff, outcomes file, native artifact, retention receipt,
+or provenance receipt is an integrity gap. Preserve it for diagnosis and rerun the affected
+producer; never repair accepted JSON or reset its pointer. A count disagreement is likewise not
+permission to trust the larger number. If receipt metadata is available but its raw report is
+protected, use authorized run-artifact access, not an inference retrieval bypass.
+
+Publication preflights required indexes and completes reference closure before admission.
+On publication I/O failure, it attempts to restore both latest-job and accepted-index pointers.
+If the original error includes an accepted-pointer rollback failure, preserve the affected run
+and treat it as an integrity/recovery problem; a surviving pointer is not evidence that publication
+succeeded.
+
+For `handoff_schema_changed`, preserve the `/1` attempt and use `plan-resume`/`resume` to produce
+new `/2` publications and dependent indexes. For scanner failure, missing output, parser failure,
+or truncation, fix the named prerequisite or bound and rerun the affected unit; retain unrelated
+verified checkpoints. Disabled, not-applicable, empty, failed, and inventory-only coverage never
+establish a security-negative result.
+
 ## Completion rollout tracking
 
 The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
 requires PoC, chain, remediation, dossier and final-publication tracking from their first
 implementation. The existing `metrics` command and summary path remain the operating surface;
 no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
-combined source `6975aef2` retains `completion-process-metrics/1` in the current `run-metrics/4`.
+combined source `6975aef2` retained `completion-process-metrics/1` in `run-metrics/4`;
+the current `run-metrics/5` retains it alongside interchange and the other domain sections.
 This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
 parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.

@@ -26,6 +26,7 @@ import re
 from typing import Any, Mapping
 
 from appsec_review.jobs.cpp_index_scopes import artifact, publish_scope_indexes
+from appsec_review.interchange import decode_handoff
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint,
@@ -76,9 +77,9 @@ def accepted_binary_evidence(run_root: Path) -> tuple[Mapping[str, Any], str]:
     if not pointer_path.is_file():
         raise ValueError("accepted job_review_intake handoff is required")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_verified(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError("job_review_intake handoff is not accepted")
+    handoff = decode_handoff(
+        _read_verified(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]}),
+        run_id=run_root.name, job_id="job_review_intake")
     output = handoff.get("outputs", {}).get("publish_intake.publish_handoff", {})
     intake = _read_verified(run_root, output.get("artifact", {}))
     if intake.get("schema") != "appsec-review/review-intake/1":

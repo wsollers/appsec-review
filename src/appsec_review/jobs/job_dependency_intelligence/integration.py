@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
+from appsec_review.interchange import decode_handoff
 from appsec_review.jobs.job_language_build.native import tool_kind as native_tool_kind
 from appsec_review.observability.spans import operation_span
 from appsec_review.runtime import UnitContext
@@ -90,10 +91,8 @@ def accepted_framework(run_root: Path, job_id: str, limit: int) -> tuple[dict[st
     pointer = json.loads(pointer_path.read_bytes())
     path = safe_path(run_root, str(pointer["handoff_path"]))
     identity = reference(run_root, path, expected_sha256=str(pointer["handoff_sha256"]))
-    framework = read_json(run_root, identity, limit)
-    if (framework.get("schema") != "appsec-review/job-handoff/1"
-            or framework.get("status") != "ACCEPTED" or framework.get("job_id") != job_id):
-        raise ValueError(f"{job_id} handoff is not accepted")
+    framework = decode_handoff(read_json(run_root, identity, limit),
+                                run_id=run_root.name, job_id=job_id)
     return framework, identity
 
 

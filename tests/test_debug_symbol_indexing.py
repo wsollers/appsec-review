@@ -24,6 +24,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import JobContext
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.shared import put_bytes
+from tests.handoff_fixture import write_fixture_handoff
 
 
 SNAPSHOT = "a" * 64
@@ -73,8 +74,8 @@ def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=
                                     "image_tag": "accepted/compiler:receipt", "user": "10001:10001"},
                           "artifacts": artifacts}]})
         language_handoff = language.parent / "handoff.json"
-        atomic_json(language_handoff, {
-            "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": "job_language_build",
+        write_fixture_handoff(root, language_handoff, {
+            "status": "ACCEPTED", "job_id": "job_language_build",
             "outputs": {"acceptance.publish_handoff": {"artifact": _ref(root, language)}},
             "artifacts": [_ref(root, language)]})
         language_sha = file_sha256(language_handoff)
@@ -113,7 +114,7 @@ def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=
                           "language_build_handoff_sha256": language_sha,
                           "index_manifest": _ref(root, manifest)})
     handoff = summary.parent / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(root, handoff, {"status": "ACCEPTED",
                          "job_id": "job_artifact_indexing",
                          "outputs": {"acceptance.publish_handoff": {
                              "artifact": _ref(root, summary), "index_manifest": _ref(root, manifest)}},
@@ -311,8 +312,8 @@ def test_accepted_loader_verifies_handoff_summary_decision_and_manifest(tmp_path
     result = build_job(extractor=_extractor([])).execute(context)
     handoff = context.attempt_root / "handoff.json"
     output = result["outputs"]["acceptance.publish_handoff"]
-    atomic_json(handoff, {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(context.run_root, handoff, {
+        "status": "ACCEPTED",
         "job_id": "job_debug_symbol_indexing",
         "outputs": {"acceptance.publish_handoff": output},
         "artifacts": [output["artifact"], output["index_manifest"]]})

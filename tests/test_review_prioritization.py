@@ -499,10 +499,11 @@ def test_truncated_ast_is_a_named_gap_not_a_clean_file(tmp_path: Path) -> None:
 
 
 def _publish_handoff(run_root: Path, job_id: str, outputs: dict[str, Any]) -> None:
+    from tests.handoff_fixture import write_fixture_handoff
     attempt = run_root / "data" / "jobs" / job_id / "attempts" / "fixture"
     attempt.mkdir(parents=True, exist_ok=True)
     handoff = attempt / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "job_id": job_id,
+    write_fixture_handoff(run_root, handoff, {"status": "ACCEPTED", "job_id": job_id,
                           "outputs": outputs})
     atomic_json(run_root / "data" / "jobs" / job_id / "latest.json",
                 {"handoff_path": handoff.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff)})

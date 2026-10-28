@@ -7,6 +7,10 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review.interchange import (
+    CoverageDisposition, ExecutionStatus, GapCode, INTERCHANGE_METRICS_SCHEMA,
+    artifact_reference_from_mapping, decode_handoff,
+)
 from appsec_review.observability.events import PipelineLog
 from appsec_review.observability.completion import completion_metrics
 from appsec_review.storage import atomic_json, canonical_json
@@ -19,7 +23,7 @@ FINDING_STATES = {"CANDIDATE", "REFUTED", "CONFIRMED"}
 TERMINAL_EVENTS = {"SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED",
                    "BLOCKED", "PARTIAL", "NOT_APPLICABLE"}
 METRICS_SEMANTICS = "appsec-review/review-metrics-semantics/1"
-RUN_METRICS_SCHEMA = "appsec-review/run-metrics/4"
+RUN_METRICS_SCHEMA = "appsec-review/run-metrics/5"
 CODEQL_METRICS_SEMANTICS = "appsec-review/codeql-execution-metrics/1"
 CODEQL_QUERY_METRICS_SCHEMA = "appsec-review/codeql-query-metrics/1"
 CODEQL_TOOLS = {"codeql", "codeql-graph-export", "codeql-graph-export-compile"}
@@ -716,6 +720,280 @@ def _codeql_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
             "gap_count": len(gaps), "gaps": gaps[:_CODEQL_GAP_LIMIT]}
 
 
+class _InterchangeIntegrityError(ValueError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def _interchange_artifact(run_root: Path, raw: Any) -> Path:
+    """Resolve exact bytes without exposing paths or error messages as metric dimensions."""
+    from appsec_review.storage.shared import safe_path
+    try:
+        ref = artifact_reference_from_mapping(raw)
+    except (ValueError, TypeError) as exc:
+        raise _InterchangeIntegrityError("malformed_reference") from exc
+    try:
+        path = safe_path(run_root, ref.path)
+    except ValueError as exc:
+        raise _InterchangeIntegrityError("escaped_reference") from exc
+    if not path.is_file():
+        raise _InterchangeIntegrityError("missing_reference")
+    if path.stat().st_size != ref.size_bytes or file_sha256(path) != ref.sha256:
+        raise _InterchangeIntegrityError("tampered_reference")
+    return path
+
+
+def _interchange_document(run_root: Path, raw: Any) -> Mapping[str, Any]:
+    import json
+    path = _interchange_artifact(run_root, raw)
+    try:
+        value = json.loads(path.read_bytes())
+    except (ValueError, UnicodeError) as exc:
+        raise _InterchangeIntegrityError("malformed_receipt") from exc
+    if not isinstance(value, Mapping):
+        raise _InterchangeIntegrityError("malformed_receipt")
+    return value
+
+
+def _interchange_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """Receipt-authoritative, closed-dimension accounting, separate from scanner executions."""
+    from appsec_review.runtime.registry import builtin_registry
+    from appsec_review.storage.shared import verify_receipt
+
+    kinds = {"HANDOFF_VALIDATED", "HANDOFF_ACCEPTED", "HANDOFF_REJECTED",
+             "NATIVE_OUTPUT_RETAINED", "OBSERVATION_PROVENANCE_VALIDATED"}
+    jobs = frozenset(builtin_registry().job_ids())
+    integrity: Counter[str] = Counter()
+    producer_gaps: Counter[str] = Counter()
+    publications: dict[tuple[str, str], dict[str, Any]] = {}
+    native: dict[str, Mapping[str, Any]] = {}
+    batches: dict[str, Mapping[str, Any]] = {}
+    artifacts: dict[str, int] = {}
+    by_job: dict[str, Counter[str]] = {}
+    invalid = {"handoffs": False, "native_outputs": False, "observations": False}
+    seen: set[tuple[str, ...]] = set()
+    event_bound = 100_000
+    processed = 0
+    duplicates = 0
+
+    def integer(value: Any) -> int:
+        if type(value) is not int or value < 0:
+            raise _InterchangeIntegrityError("malformed_receipt")
+        return value
+
+    def boolean(value: Any) -> bool:
+        if type(value) is not bool:
+            raise _InterchangeIntegrityError("malformed_receipt")
+        return value
+
+    def shared(raw: Any, event: Mapping[str, Any], schema: str
+               ) -> tuple[Mapping[str, Any], str, Mapping[str, Any]]:
+        receipt = _interchange_document(run_root, raw)
+        if (receipt.get("schema") != "appsec-review/shared-receipt/1"
+                or receipt.get("namespace") != "native-output"):
+            raise _InterchangeIntegrityError("malformed_receipt")
+        actor = receipt.get("actor")
+        if not isinstance(actor, Mapping) or any(
+                actor.get(key) != event.get(key) for key in ("run_id", "job_id", "attempt_id")):
+            raise _InterchangeIntegrityError("identity_mismatch")
+        # Verify the original claim, all shared dependencies, and reuse provenance too.
+        verify_receipt(run_root, raw)
+        computation = receipt.get("computation")
+        if not isinstance(computation, Mapping) or computation.get("schema") != schema:
+            raise _InterchangeIntegrityError("malformed_receipt")
+        common_fields = {"schema", "parser_identity", "complete", "truncated"}
+        expected = common_fields | (
+            {"artifact", "execution_reference", "retained_bytes", "native_result_count"}
+            if schema == "appsec-review/native-output-retention/1" else
+            {"actor", "observation_count", "native_reference_count", "provenance_gap_count", "artifacts"})
+        if (set(computation) != expected or not isinstance(computation["parser_identity"], str)
+                or not computation["parser_identity"].strip()):
+            raise _InterchangeIntegrityError("malformed_receipt")
+        if boolean(computation["complete"]) and boolean(computation["truncated"]):
+            raise _InterchangeIntegrityError("malformed_receipt")
+        fingerprint = hashlib.sha256(canonical_json(computation)).hexdigest()
+        if receipt.get("fingerprint") != fingerprint:
+            raise _InterchangeIntegrityError("identity_mismatch")
+        return computation, fingerprint, receipt
+
+    for event in records:
+        kind = event.get("event_type")
+        if kind not in kinds:
+            continue
+        processed += 1
+        section = ("handoffs" if str(kind).startswith("HANDOFF_") else
+                   "native_outputs" if kind == "NATIVE_OUTPUT_RETAINED" else "observations")
+        if processed > event_bound:
+            integrity["accounting_bound_exceeded"] += 1
+            invalid[section] = True
+            continue
+        details = event.get("details", {})
+        try:
+            if event.get("run_id") != run_root.name or event.get("job_id") not in jobs:
+                raise _InterchangeIntegrityError("identity_mismatch")
+            job = str(event["job_id"])
+            if not isinstance(details, Mapping):
+                raise _InterchangeIntegrityError("malformed_receipt")
+            field = ("handoff_reference" if section == "handoffs" else
+                     "retention_receipt" if section == "native_outputs" else "provenance_receipt")
+            reference = artifact_reference_from_mapping(details.get(field))
+            key = (str(kind), str(event["run_id"]), job, str(event.get("attempt_id")),
+                   reference.path, reference.sha256)
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            if section == "handoffs":
+                from appsec_review.runtime.handoff import verify_outcomes
+                handoff = decode_handoff(_interchange_document(run_root, reference.as_dict()),
+                                         run_id=run_root.name, job_id=job, accepted_only=False)
+                if handoff["attempt_id"] != event.get("attempt_id"):
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if (kind == "HANDOFF_REJECTED") != (handoff["status"] == "REJECTED"):
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                outcomes = verify_outcomes(run_root, handoff)
+                identity = (job, str(handoff["attempt_id"]))
+                prior = publications.get(identity)
+                if prior is not None and prior["sha256"] != reference.sha256:
+                    raise _InterchangeIntegrityError("conflicting_publication")
+                duration = details.get("duration_ms")
+                if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+                        or not math.isfinite(duration) or duration < 0):
+                    raise _InterchangeIntegrityError("malformed_duration")
+                row = publications.setdefault(identity, {
+                    "sha256": reference.sha256, "handoff": handoff, "outcomes": outcomes,
+                    "duration_ms": duration, "validated": False})
+                row["validated"] |= kind == "HANDOFF_VALIDATED"
+            elif section == "native_outputs":
+                computation, fingerprint, receipt = shared(
+                    reference.as_dict(), event, "appsec-review/native-output-retention/1")
+                artifact = artifact_reference_from_mapping(computation.get("artifact"))
+                _interchange_artifact(run_root, artifact.as_dict())
+                if artifact.path != f"data/shared/objects/{artifact.sha256}":
+                    raise _InterchangeIntegrityError("malformed_reference")
+                if receipt["object"] != artifact.as_dict():
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if computation.get("execution_reference") is not None:
+                    _interchange_artifact(run_root, computation["execution_reference"])
+                if integer(computation.get("retained_bytes")) != artifact.size_bytes:
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                integer(computation.get("native_result_count"))
+                boolean(computation.get("complete"))
+                boolean(computation.get("truncated"))
+                if fingerprint not in native:
+                    native[fingerprint] = computation
+                    artifacts[artifact.sha256] = artifact.size_bytes
+                    by_job.setdefault(job, Counter())["native_output_references"] += 1
+            else:
+                computation, _, receipt = shared(
+                    reference.as_dict(), event, "appsec-review/observation-provenance-validation/1")
+                integer(computation.get("observation_count"))
+                integer(computation.get("native_reference_count"))
+                integer(computation.get("provenance_gap_count"))
+                if computation["complete"] and computation["provenance_gap_count"]:
+                    raise _InterchangeIntegrityError("malformed_receipt")
+                boolean(computation.get("complete"))
+                boolean(computation.get("truncated"))
+                actor = computation.get("actor")
+                if not isinstance(actor, Mapping) or any(
+                        actor.get(key) != event.get(key) for key in ("run_id", "job_id", "attempt_id")):
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if not isinstance(computation.get("artifacts"), list):
+                    raise _InterchangeIntegrityError("malformed_receipt")
+                for artifact in computation["artifacts"]:
+                    _interchange_artifact(run_root, artifact)
+                if _interchange_document(run_root, receipt["object"]) != computation:
+                    raise _InterchangeIntegrityError("identity_mismatch")
+                if reference.sha256 not in batches:
+                    batches[reference.sha256] = computation
+                    by_job.setdefault(job, Counter())["observation_batches"] += 1
+        except _InterchangeIntegrityError as exc:
+            integrity[exc.code] += 1
+            invalid[section] = True
+        except (ValueError, TypeError, KeyError, OSError, UnicodeError):
+            integrity["malformed_or_unverifiable_receipt"] += 1
+            invalid[section] = True
+
+    coverage = Counter({value.value: 0 for value in CoverageDisposition})
+    execution = Counter({value.value: 0 for value in ExecutionStatus})
+    accepted = rejected = validated = units = retries = retryable_gaps = 0
+    durations = []
+    for (job, _), row in publications.items():
+        handoff, outcomes = row["handoff"], row["outcomes"]
+        accepted += handoff["status"] == "ACCEPTED"
+        rejected += handoff["status"] == "REJECTED"
+        validated += row["validated"]
+        units += len(outcomes["units"])
+        retries += handoff["coverage"]["retry_required"]
+        coverage[handoff["coverage"]["disposition"]] += 1
+        execution[handoff["execution_status"]] += 1
+        durations.append(row["duration_ms"])
+        for gap in outcomes["gaps"]:
+            producer_gaps[GapCode(gap["code"]).value] += 1
+            retryable_gaps += gap["retryable"]
+        by_job.setdefault(job, Counter())["publications"] += 1
+
+    def measured(value: int, section: str, available: bool) -> int | None:
+        return value if available and not invalid[section] else None
+
+    have_handoffs, have_native, have_batches = bool(publications), bool(native), bool(batches)
+    for section, available in (("handoffs", have_handoffs), ("native_outputs", have_native),
+                               ("observations", have_batches)):
+        if not available:
+            integrity[f"{section}_unavailable"] += 1
+    return {
+        "schema": INTERCHANGE_METRICS_SCHEMA,
+        "handoffs": {
+            "accepted": measured(accepted, "handoffs", have_handoffs),
+            "rejected": measured(rejected, "handoffs", have_handoffs),
+            "validated": measured(validated, "handoffs", have_handoffs),
+            "units": measured(units, "handoffs", have_handoffs),
+            "retry_required": measured(retries, "handoffs", have_handoffs),
+            "retryable_gaps": measured(retryable_gaps, "handoffs", have_handoffs),
+            "coverage_dispositions": {key: measured(value, "handoffs", have_handoffs)
+                                      for key, value in coverage.items()},
+            "execution_statuses": {key: measured(value, "handoffs", have_handoffs)
+                                   for key, value in execution.items()},
+            "producer_gap_codes": dict(sorted(producer_gaps.items())),
+            "duration_ms": {"count": len(durations), "sum": sum(durations) if durations else None,
+                            "p50": _percentile(durations, .50), "p95": _percentile(durations, .95),
+                            "max": max(durations) if durations else None},
+            "accounting_complete": have_handoffs and not invalid["handoffs"],
+        },
+        "native_outputs": {
+            "reference_count": measured(len(native), "native_outputs", have_native),
+            "distinct_artifact_count": measured(len(artifacts), "native_outputs", have_native),
+            "distinct_artifact_bytes": measured(sum(artifacts.values()), "native_outputs", have_native),
+            **{name: measured(sum(row[field] == expected for row in native.values()),
+                              "native_outputs", have_native)
+               for name, field, expected in (("complete", "complete", True), ("incomplete", "complete", False),
+                                             ("truncated", "truncated", True))},
+            "native_result_count": measured(sum(row["native_result_count"] for row in native.values()),
+                                             "native_outputs", have_native),
+            "accounting_complete": have_native and not invalid["native_outputs"],
+        },
+        "observations": {
+            **{name: measured(sum(row[field] for row in batches.values()), "observations", have_batches)
+               for name, field in (("count", "observation_count"), ("native_reference_count", "native_reference_count"),
+                                   ("complete_batches", "complete"), ("truncated_batches", "truncated"))},
+            "incomplete_batches": measured(sum(not row["complete"] for row in batches.values()),
+                                           "observations", have_batches),
+            "provenance_complete_count": measured(sum(row["observation_count"] for row in batches.values()
+                                                       if row["complete"]), "observations", have_batches),
+            "provenance_incomplete_count": measured(sum(row["observation_count"] for row in batches.values()
+                                                         if not row["complete"]), "observations", have_batches),
+            "provenance_gap_count": measured(sum(row["provenance_gap_count"] for row in batches.values()),
+                                             "observations", have_batches),
+            "accounting_complete": have_batches and not invalid["observations"],
+        },
+        "by_job": {job: dict(sorted(counts.items())) for job, counts in sorted(by_job.items())},
+        "integrity_gap_codes": dict(sorted(integrity.items())),
+        "duplicate_events": duplicates,
+        "accounting_complete": not integrity,
+    }
+
+
 def _owasp_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
     publications, gaps, seen = [], [], set()
     latest = None
@@ -920,10 +1198,9 @@ def _native_sbom_accepted(run_root: Path, *,
         "path": pointer["handoff_path"], "sha256": pointer.get("handoff_sha256"),
         "size_bytes": safe_path(run_root, pointer["handoff_path"]).stat().st_size,
     })
-    handoff = _native_sbom_json(run_root, handoff_ref["path"])
-    if (handoff.get("schema") != "appsec-review/job-handoff/1"
-            or handoff.get("status") != "ACCEPTED" or handoff.get("job_id") != _NATIVE_SBOM_JOB
-            or handoff.get("attempt_id") != attempt
+    handoff = decode_handoff(_native_sbom_json(run_root, handoff_ref["path"]),
+                             run_id=run_root.name, job_id=_NATIVE_SBOM_JOB)
+    if (handoff.get("attempt_id") != attempt
             or not _native_sbom_hash(handoff.get("source_fingerprint"))):
         raise ValueError("native SBOM framework handoff binding is invalid")
     members = handoff.get("artifacts")
@@ -1240,7 +1517,8 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             tool_calls[str(details.get("tool_id") or details.get("mcp_tool") or "unknown")] += 1
         if record["event_type"] == "FINDING_TRANSITION":
             finding_states[str(details.get("new_state"))] += 1
-        if isinstance(details.get("duration_ms"), (int, float)):
+        if (type(details.get("duration_ms")) in (int, float)
+                and math.isfinite(details["duration_ms"]) and details["duration_ms"] >= 0):
             durations_ms[str(record["event_type"])] += details["duration_ms"]
             identity = _operation_identity(record)
             operation_durations.setdefault(identity, []).append(details["duration_ms"])
@@ -1358,6 +1636,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
+            "interchange": _interchange_metrics(Path(run_root), records),
             "completion": completion_metrics(records),
             "owasp": _owasp_metrics(Path(run_root), records),
             "review_flow": _review_flow_metrics(records),

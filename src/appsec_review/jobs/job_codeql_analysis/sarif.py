@@ -7,9 +7,10 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from appsec_review.retrieval.model import sanitize_producer_data
+from appsec_review.provenance import json_selector
 
 
-NORMALIZER_IDENTITY = "appsec-review/codeql-sarif-normalizer/2"
+NORMALIZER_IDENTITY = "appsec-review/codeql-sarif-normalizer/3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +169,7 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
                 "message": _message(result.get("message"), rule_id), "payload": payload,
                 "location": (mapped_locations[locations.index(primary)] if primary is not None else None),
                 "flows": flows,
+                "_native_selector": json_selector("runs", run_index, "results", result_index).as_dict(),
             })
             if primary is None or primary.path is None:
                 gaps.append(f"CodeQL result {run_index}:{result_index} had no uniquely mapped source location")

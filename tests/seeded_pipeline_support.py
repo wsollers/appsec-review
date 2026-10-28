@@ -153,9 +153,10 @@ def write_codeql_export(exports: Path) -> None:
 
 def _handoff(run_root: Path, job_id: str, outputs: Mapping[str, Any], artifacts: Sequence[Mapping[str, Any]],
              *, completion: str = "SUCCEEDED") -> dict[str, Any]:
+    from tests.handoff_fixture import write_fixture_handoff
     attempt = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
     path = attempt / "handoff.json"
-    atomic_json(path, {"schema": "appsec-review/job-handoff/1", "job_id": job_id, "attempt_id": "attempt_0001",
+    write_fixture_handoff(run_root, path, {"job_id": job_id, "attempt_id": "attempt_0001",
                        "status": "ACCEPTED", "completion_status": completion, "outputs": dict(outputs),
                        "artifacts": list(artifacts), "source_fingerprint": SNAPSHOT,
                        "resolving_paths": {"attempt": attempt.relative_to(run_root).as_posix()}})
