@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -148,62 +149,33 @@ def toml_tables() -> str:
 
 def add_native_graph_facts(fixture) -> dict[str, str]:
     """Commission actual mapped graph facts before review, rather than relabelling a supported claim."""
-    import json
     from appsec_review.graph.contract import Family
-    from appsec_review.retrieval import (
-        IndexBuilder, IndexIdentity, SourceLocation, index_fingerprint, write_manifest,
-    )
-    from appsec_review.storage import atomic_json, file_sha256
-    from tests.review.test_graph_admissibility import graph_entity, results_for
+    from appsec_review.retrieval import EntityKind, EntityRecord, LogicalIdentity
+    from tests.fixtures.inference_review.builder import SNAPSHOT
+    from tests.review.test_graph_admissibility import SCOPE_ID, graph_entity, results_for
+    from tests.review.test_packages_graph_context import PARSE, _location, _span, attach_graph
+    from tests.review.test_packages_memory_context import _publish
 
-    root = fixture.run_root
-    source = fixture.target / "native" / "src" / "parse.c"
-    location = SourceLocation(fixture.snapshot, "native/src/parse.c", file_sha256(source),
-                              0, len(source.read_bytes()), 1, 4, 1, 1, {}, "fixture-exact", 1.0)
-    entities, ids = [], {}
-    span = {"path": "native/src/parse.c", "start_byte": 0, "end_byte": len(source.read_bytes())}
-    for key, family in (("fix_sink", Family.SINK_SITE), ("fix_entry", Family.ENTRY_POINT),
-                        ("fix_path", Family.DATAFLOW_PATH), ("fix_guard", Family.GUARD_FACT)):
-        native = {
-            Family.SINK_SITE: {**span, "sink_class": "memory_write", "argument_index": 0},
-            Family.ENTRY_POINT: {**span, "source_class": "remote"},
-            Family.DATAFLOW_PATH: {"source_identity": ids.get("fix_entry"), "sink_identity": ids.get("fix_sink"),
-                                  "step_locations_sha256": "1" * 64},
-            Family.GUARD_FACT: {"sink_identity": ids.get("fix_sink"), "condition_path": span["path"],
-                               "condition_start_byte": 0, "condition_end_byte": len(source.read_bytes())},
-        }[family]
-        entity = graph_entity(family, native, results_for(family, sink=ids.get("fix_sink"), entry=ids.get("fix_entry")),
-                              location, snapshot=fixture.snapshot)
-        entities.append(entity)
-        ids[key] = entity.identity.value
-    fingerprint = index_fingerprint(name="graph", target_snapshot=fixture.snapshot,
-                                    producer_artifacts=[{"fixture": "remediation-native"}],
-                                    tool_identity={"tool": "codeql-export"}, parser_identity="fixture/1",
-                                    normalizer_identity="fixture/1", mapping_identity="fixture/1")
-    shard = root / "data" / "indices" / "graph" / "remediation" / f"{fingerprint}.sqlite"
-    builder = IndexBuilder(shard, name="graph", fingerprint=fingerprint,
-                           target_snapshot=fixture.snapshot, shard_id="remediation")
-    for entity in entities:
-        builder.add_entity(entity)
-    builder.add_coverage("remediation-native", "complete", None)
-    identity = IndexIdentity("graph", "appsec-review/retrieval-index/2", builder.build(), fingerprint,
-                             shard.relative_to(root).as_posix(), {"job": "job_code_graph_index"}, (), "remediation")
-    manifest_path = root / "data" / "indices" / "manifests" / "fixture.json"
-    old = json.loads(manifest_path.read_text())
-    indexes = [IndexIdentity(**{**row, "gaps": tuple(row.get("gaps", ()))}) for row in old["indexes"]]
-    write_manifest(manifest_path, run_id=fixture.run_id, target_snapshot=fixture.snapshot,
-                   target_root=fixture.target, indexes=[*indexes, identity])
-    pointer_path = root / "data" / "indices" / "accepted.json"
-    pointer = json.loads(pointer_path.read_text())
-    handoff_path = root / pointer["handoff_path"]
-    handoff = json.loads(handoff_path.read_text())
-    for ref in handoff["artifacts"]:
-        if ref["path"] == manifest_path.relative_to(root).as_posix():
-            ref["sha256"] = file_sha256(manifest_path)
-    atomic_json(handoff_path, handoff)
-    pointer.update(handoff_sha256=file_sha256(handoff_path), manifest_sha256=file_sha256(manifest_path))
-    atomic_json(pointer_path, pointer)
-    return ids
+    ids = attach_graph(fixture)
+    identity = LogicalIdentity.derive(EntityKind.SYMBOL, SNAPSHOT, {"qualified_name": "p", "scope_id": SCOPE_ID})
+    symbol = EntityRecord(identity, "p", "p", "function p", {
+        "producer": "codeql-export", "scope": {"scope_id": SCOPE_ID, "build_unit_id": "native-main"},
+        "kind": "function", "qualified_name": "p", "exact": True, "gaps": []},
+        _location(fixture, PARSE, "p(char"))
+    location = _location(fixture, PARSE, "strcpy(b, s)")
+    call = graph_entity(
+        Family.CALL_SITE, {**_span(location), "caller_symbol": identity.value, "callee_name": "strcpy"},
+        {**results_for(Family.CALL_SITE), "caller": {"symbol": identity.value, "display": "p"}},
+        location, snapshot=SNAPSHOT)
+    _publish(fixture, [
+        ("graph", "cpp-native-remediation-symbols", {"job": "job_code_graph_index", "build_unit_id": "native-main"},
+         [symbol], [], ("graph:native:symbols", "complete", None)),
+        ("graph", "cpp-native-remediation-call", {"job": "job_code_graph_index", "family": "call_site",
+                                                  "build_unit_id": "native-main"},
+         [call], [], ("graph:native:call_site", "complete", None))])
+    return {"fix_call": call.identity.value, "fix_function": identity.value,
+            **{f"fix_{key}": ids[value] for key, value in {
+                "sink": "sink_strcpy", "entry": "entry_s", "path": "path_broken", "guard": "guard_strcpy"}.items()}}
 
 
 def native_review_infer(ids):
@@ -214,17 +186,28 @@ def native_review_infer(ids):
         support = [("affected_construct", "fix_sink"), ("attacker_input_control", "fix_path"),
                    ("source_to_sink_reachability", "fix_path"), ("missing_or_ineffective_guard", "fix_guard")]
 
-        def _retrieve_facts(self):
+        def _retrieve_facts(self, *, poc_basis=False):
+            keys = ("fix_sink", "fix_path", "fix_guard")
+            if poc_basis:
+                keys += ("fix_entry", "fix_call")
             return self._retrieve([{"tool": "find", "parameters": {"identity": self.ids[key]}}
-                                   for key in ("fix_sink", "fix_path", "fix_guard")])
+                                   for key in keys])
 
         def _lead_red(self, request, task, payload):
             if self._lead(payload) == "sast_critical" and task in ("lead_red_stack", "lead_red_preconditions"):
                 if not request.transcript:
-                    return self._retrieve_facts()
-                return self._red(request, [self._proposal(
+                    return self._retrieve_facts(poc_basis=True)
+                proposal = self._proposal(
                     "c1", "native/src/parse.c", "CWE-120", "memory_corruption",
-                    ["attacker_controls_request_field"], "C1-lead", self.support, lead="sast_critical")])
+                    ["attacker_controls_request_field"], "C1-lead", self.support, lead="sast_critical")
+                basis = {"entry": [self.ids["fix_entry"]], "path": [self.ids["fix_call"]],
+                         "trigger": [{"field": "s", "where": "p(char *s)", "constraint": "strlen(s) >= 8",
+                                      "why": "the destination b has eight bytes including the terminator"}],
+                         "input_format": "synthetic null-terminated character input",
+                         "preconditions": ["attacker_controls_request_field"],
+                         "expected_observation": "the input exceeds the destination; runtime is not performed",
+                         "unknowns": []}
+                return self._red(request, [replace(proposal, poc_basis=basis)])
             return super()._lead_red(request, task, payload)
 
         def _verifier(self, request, payload):
