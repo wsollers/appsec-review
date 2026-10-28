@@ -94,6 +94,7 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
             (f"{base}/latest.json", f"{base}/attempts/*/claim.json", f"{base}/attempts/*/status.json",
              f"{base}/attempts/*/result.json", f"{base}/attempts/*/handoff.json", f"{base}/attempts/*/logs/**",
              f"{base}/attempts/*/outcomes.json",
+             f"{base}/attempts/*/rejected-handoff.json", f"{base}/attempts/*/rejected-outcomes.json",
              # Written by the runner (materialize_attempt_input_manifest) when an attempt inherits
              # more than one upstream index lineage; it merges manifests and adds no shards.
              f"{base}/attempts/*/inputs/retrieval-manifest.json"),

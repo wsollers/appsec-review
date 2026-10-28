@@ -459,11 +459,8 @@ class RetrievalCore:
         from appsec_review.interchange import observation_metadata_from_mapping
         common = observation_metadata_from_mapping(value).as_dict()
         # Only the closed common-reference fields may retain canonical artifact paths.
-        references = common.pop("evidence_refs")
-        result = RetrievalCore._safe_payload(common, depth=1)
-        projected = []
+        references = common["evidence_refs"]
         for reference in references:
-            safe = RetrievalCore._safe_payload(reference, depth=1)
             for field in ("artifact", "execution_reference", "retention_receipt"):
                 artifact = reference[field]
                 if artifact is None:
@@ -476,17 +473,18 @@ class RetrievalCore:
                         r"shared/native-output/[0-9a-f]{64}\.json"),
                     "execution_reference": (
                         r"data/(?:codeql/scopes/[^/]+/queries/.+/executions/query|"
-                        r"jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/.+)/receipt\.json"),
+                        r"jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/.+)/receipt\.json|"
+                        r"data/jobs/job_evidence_collection/attempts/attempt_[0-9]+/steps/[^/]+/tasks/[^/]+/"
+                        r"scratch/(?:invocation_[0-9]+/)?attempt_[0-9]+/execution\.json|"
+                        r"data/jobs/job_artifact_security_analysis/attempts/attempt_[0-9]+/steps/analyze/tasks/"
+                        r"[^/]+/containers/[^/]+/execution\.json"),
                 }[field]
                 if not re.fullmatch(pattern, path):
                     raise RetrievalIntegrityError("common observation artifact path is outside its allowed namespace")
                 if field == "artifact" and path != f"data/shared/objects/{artifact['sha256']}":
                     raise RetrievalIntegrityError("common native artifact identity mismatch")
-                safe[field]["path"] = path
-            projected.append(safe)
-        result["evidence_refs"] = projected
         count_work("observation_references", len(references))
-        return result
+        return common
 
     @staticmethod
     def _safe_payload(value: Any, *, depth: int = 0) -> Any:

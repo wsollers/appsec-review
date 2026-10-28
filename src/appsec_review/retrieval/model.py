@@ -235,6 +235,10 @@ def sanitize_producer_data(value: Any, *, depth: int = 0) -> Any:
         result = {}
         for key, child in list(value.items())[:200]:
             name = str(key)[:128]
+            if depth == 0 and name == "common":
+                from appsec_review.interchange import observation_metadata_from_mapping
+                result[name] = observation_metadata_from_mapping(child).as_dict()
+                continue
             # Key names are matched by whole segments so a structural key such as ``ordered_tokens``
             # survives while ``GITHUB_TOKEN`` or ``api_key`` still redacts its value.
             segments = {part.lower() for part in re.split(r"[^A-Za-z0-9]+", name) if part}
