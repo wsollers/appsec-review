@@ -1,5 +1,5 @@
 dagster==1.13.21
 dagster-postgres==0.29.21
 dagster-webserver==1.13.21
-setuptools==83.0.0
+setuptools==84.1.0
 jsonschema==4.26.0
