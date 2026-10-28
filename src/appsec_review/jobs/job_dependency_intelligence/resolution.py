@@ -210,15 +210,25 @@ def normalize_dependencies(
     for source, raw in observations:
         name = str(raw.get("name") or raw.get("package") or raw.get("native_name") or "").strip()
         purl = str(raw.get("purl") or "").strip() or None
-        version = str(raw.get("version") or raw.get("constraint") or "").strip() or None
         metadata = raw.get("metadata") if isinstance(raw.get("metadata"), Mapping) else {}
+        release = raw.get("release")
+        scoped_native = source == "native" and "package_root" in raw and "root_id" in raw
+        if source == "native" and isinstance(release, Mapping):
+            version = (str(release["value"]) if release.get("status") == "corroborated"
+                       and release.get("value") else None)
+        else:
+            version = str(raw.get("version") or raw.get("constraint") or
+                          (metadata.get("version") if source == "native" else "") or "").strip() or None
         repository_record = raw.get("repository")
         repo_value = (raw.get("repository_url") or
                       (repository_record.get("url") if isinstance(repository_record, Mapping) else repository_record) or
                       metadata.get("repository_url"))
         repo = repository_identity(repo_value, supported_hosts=supported_hosts)
-        key = ("purl:" + purl.casefold() if purl else
+        key = ("purl:" + purl if purl else
                f"name:{name.casefold()}@{(version or '').casefold()}")
+        if scoped_native:
+            key = "native:" + hashlib.sha256(canonical_json(
+                (raw["root_id"], raw["package_root"], key))).hexdigest()
         if not name or key == "name:@":
             gaps.append(f"{source} dependency observation has no usable identity")
             continue
@@ -251,7 +261,11 @@ def normalize_dependencies(
         if observation not in entry["observations"]:
             entry["observations"].append(observation)
         if source == "native":
-            entry["native_candidate"] = dict(raw)
+            candidates = entry.setdefault("native_candidates", [])
+            if dict(raw) not in candidates:
+                candidates.append(dict(raw))
+            candidates.sort(key=canonical_json)
+            entry["native_candidate"] = candidates[0]
     values = []
     for key, item in sorted(grouped.items()):
         unique_exposure = {canonical_json(value): value for value in item["_exposure_evidence"]}
