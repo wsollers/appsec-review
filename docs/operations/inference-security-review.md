@@ -6,6 +6,16 @@ This page covers operator settings for `job_inference_security_review` (Dagster 
 `[jobs.job_inference_security_review]`. Each run freezes them into
 `runs/<run-id>/data/configuration/`.
 
+**Pending evidence completion:** [the completion design](../architecture/evidence-completion-and-remediation.md)
+adds bounded chain composition, independent edge refutation and required weakest-link verification
+inside this job, before completeness audit and ledger/publication sealing. At contract commit
+`5f5548d`, chain seeds are hints, not accepted chain manifests; the new chain stages/events are
+not implemented. Downstream confirmed-finding dossiers and remediation must reference the exact
+accepted findings, adjudications, evidence and scores without changing their state or shipment
+decision. The [dossier data inventory](../architecture/dossier-data-inventory.md) distinguishes
+the available review/graph/document/build evidence from proposed producers and runtime/deployment
+gaps.
+
 ## Model selection and upgrade
 
 The checked-in models are the `dev` profile. Real reviews select the `prod` profile, which uses more

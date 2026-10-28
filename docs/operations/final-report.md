@@ -1,6 +1,16 @@
 # Operating the final publication gate and the final report
 
-`job_final_publication_gate` and `job_final_report_publication` are the last two jobs of
+**Completion transition (proposed):** at contract commit `5f5548d`, the optional PoC producer
+still follows the gate and the report discovers its outcome separately. The gate's hardcoded
+PoC/chain/remediation limitations are not evidence that the compile-only PoC producer is absent.
+The [completion design](../architecture/evidence-completion-and-remediation.md) replaces this with
+one gate-certified snapshot after every enabled producer, including protected
+[dossiers](dossier-publication.md). Its exact inputs, visibility and unresolved integration
+surfaces are cataloged in the [dossier inventory](../architecture/dossier-data-inventory.md).
+The operational behavior and schema versions below remain the implemented baseline, not that
+new graph.
+
+`job_final_publication_gate` and `job_final_report_publication` are the terminal publication jobs of
 `wave1_review`. They turn the accepted `job_inference_security_review` handoff into the pipeline's
 final, human-readable report. Neither calls a model, neither reads the target, and neither
 reinterprets anything: a claim state and a `ship-block-policy/1` status are projected exactly as the
@@ -87,11 +97,17 @@ pipeline stage that does not exist yet and never change either.
 | `remediation_planning_not_run` | not_run | `job_remediation_planning` does not exist yet. |
 | `remediation_validation_not_run` | not_run | `job_remediation_validation` does not exist yet. |
 | `attack_chain_composition_not_run` | not_run | No attack-chain manifest exists (design slice 3). |
-| `poc_lane_not_run` | not_run | No proof-of-trigger status manifest exists; the PoC lane is plan-only (decision 3). |
+| `poc_lane_not_run` | not_run | Unconditionally emitted by the current gate; its retained text still calls PoC plan-only even though a downstream compile-only producer exists. |
 
 The two manifests the design lists as gate inputs, the attack-chain manifest and the sanitized PoC
 status manifest, are recorded under `unavailable_inputs`. When the remediation jobs are built, the
 gate gains their handoffs as inputs and the two `*_not_run` limitations are retired.
+
+The planned replacement derives all capability limitations from accepted producer dispositions,
+candidate accounting and frozen configuration instead of unconditional absence text. It preserves
+the explicit nonexecution notice and does not let missing optional enhancements hide an otherwise
+valid finding. This requires actual upstream verification; changing the limitation text alone
+would not certify PoC, chain, remediation or dossier outcomes.
 
 ## The report
 
