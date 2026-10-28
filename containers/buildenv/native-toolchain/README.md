@@ -21,9 +21,17 @@ apt-get install -y --no-install-recommends $(grep -v '^#' packages.lock)
 ```
 
 The pinned toolchain is gcc/g++ 13.3.0 (`gcc-13`/`g++-13` pinned explicitly because the `gcc`
-metapackage only selects the major version), clang and wasm-ld 18.1.3, GNU Make 4.3,
+metapackage only selects the major version), clang, wasm-ld and LLVM symbol readers 18.1.3, GNU Make 4.3,
 pkg-config 1.8.1, Python 3.12.3 (node-gyp's gyp and the capture wrapper), and strace 6.8 (execution
 capture). `check-toolchain.sh` fails the image build when any of these identities differ.
+
+`llvm-18=1:18.1.3-1ubuntu1` supplies both `/usr/bin/llvm-dwarfdump-18` and
+`/usr/bin/llvm-pdbutil-18`. Every inheriting family image therefore has the readers alongside its
+compiler, and the build-time identity check verifies both reader versions. A package-owned bounded
+Python exporter can be mounted read-only and invoked with `/usr/bin/python3` in a fresh restricted
+container; it does not need to be copied into the image or installed from a target.
+For prebuilt artifacts or legacy build environments without the readers, the provisioned
+[`tool-native-cpp`](../../tools/native-cpp/README.md) analysis image is the approved fallback.
 
 ## Why a base image
 
@@ -34,5 +42,5 @@ image inherits exactly the same compiler files. The manifest exists for an image
 different `FROM` (for example an upstream language image on Ubuntu 24.04); it still installs the
 same pins and runs the same check.
 
-The base contains no language runtime and no analysis tooling. Analysis images (clang-tidy,
-CodeQL, Joern, Infer, LSPs) stay separate.
+The base contains no language-specific runtime or analysis framework. LLVM symbol readers are
+toolchain utilities; analysis images (clang-tidy, CodeQL, Joern, Infer, LSPs) stay separate.

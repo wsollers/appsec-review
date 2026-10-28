@@ -24,6 +24,9 @@ RUN groupadd -g 10001 worker \
 COPY native.py /opt/appsec/native.py
 RUN chmod 0555 /opt/appsec/native.py \
     && clang-18 --version | grep -F 'clang version 18' \
+    && /usr/bin/llvm-dwarfdump-18 --version | grep -F '18.1.3' \
+    && /usr/bin/llvm-pdbutil-18 --version | grep -F '18.1.3' \
+    && /usr/bin/python3 --version | grep -F 'Python 3.12.3' \
     && cmake --version | grep -F '3.28' \
     && bear --version | grep -F '3.1.3' \
     && test -f /usr/include/php/20230831/main/php.h \

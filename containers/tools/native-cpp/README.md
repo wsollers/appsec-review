@@ -22,6 +22,21 @@ the image, then record the new tar size and SHA-256 in `assets.lock.json` and co
 `downloads/packages.manifest` as `packages.manifest`. The launcher verifies the tar and stops if it
 is missing or does not match the lock.
 
+## Debug-symbol reader fallback
+
+This image is the approved analysis-image fallback for prebuilt artifacts or legacy compiler images
+without LLVM readers. The existing locked closure already includes
+`llvm-18=1:18.1.3-1ubuntu1`, which supplies `/usr/bin/llvm-dwarfdump-18` and
+`/usr/bin/llvm-pdbutil-18`, and `python3=3.12.3-0ubuntu2.1`. No additional acquisition or lock
+refresh is needed for these utilities. The Dockerfile checks both reader versions and Python at
+build time.
+
+`tool.toml` permits `/usr/bin/python3` as an additional entrypoint, preserving the main
+`/opt/appsec/native.py` entrypoint. A package-owned bounded Python exporter is mounted read-only
+and invoked with that interpreter in a fresh container under the existing restricted runtime
+policy; target-provided scripts are not the exporter. New compiler images inherit the same LLVM
+readers from the shared native toolchain instead.
+
 ## Extension headers
 
 `job_cpp_compiled_analysis` replays here the C compiles captured inside other build environments:
