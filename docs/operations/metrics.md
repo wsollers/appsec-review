@@ -77,6 +77,8 @@ Each event reports `count`, allowlisted `counters`/`outcomes`, fixed `flags`/`di
 Configured dossier/source/evidence limits are observed `{min,max}` ranges, **never sums**.
 Capability attachment/gap/omission counts, enabled/disposition maps, explicit manual admission,
 render/adapter-attempt flags and fixed kind/role/adapter dimensions are retained where emitted.
+Enabled/disposition capability maps belong to `FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED`.
+Generic step lifecycle disposition lists are not capability maps or measurement failures.
 `FINAL_REPORT_ASSEMBLED.counters.certified_outcome_counts.<capability>` counts the gate-certified
 attachment rows reported for each fixed capability. These are counts, not dispositions or unique
 findings, and do not establish reproduction or a fixed finding.

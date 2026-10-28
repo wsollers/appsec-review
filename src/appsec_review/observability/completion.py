@@ -130,6 +130,8 @@ def completion_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             if isinstance(value, str) and value in permitted:
                 bucket["dimensions"][f"{field}.{value}"] += 1
         for field in ("dispositions", "enabled"):
+            if lane != "publication_gate" or event != "FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED":
+                continue
             values = details.get(field)
             if values is None:
                 continue

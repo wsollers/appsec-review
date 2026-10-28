@@ -165,6 +165,52 @@ def test_configured_limits_are_ranges_not_additive_retry_work() -> None:
     assert event["limits"] == {"max_dossiers": {"min": 10, "max": 10}}
 
 
+@pytest.mark.parametrize("job_id,step_id", [
+    ("job_inference_security_review", "attack_chains"),
+    ("job_poc_generation", "compile"),
+    ("job_remediation_planning", "assess"),
+    ("job_remediation_validation", "assess"),
+    ("job_dossier_publication", "render"),
+    ("job_final_publication_gate", "load"),
+    ("job_final_report_publication", "report"),
+])
+def test_lifecycle_disposition_lists_are_not_gate_capability_maps(
+        tmp_path: Path, job_id: str, step_id: str) -> None:
+    log = PipelineLog(tmp_path)
+    for event in ("STEP_SUCCEEDED", "STEP_COMPLETED_WITH_GAPS"):
+        log.write(event, run_id=tmp_path.name, job_id=job_id, step_id=step_id,
+                  details={"dispositions": ["SUCCEEDED", "COMPLETED_WITH_GAPS"], "enabled": True})
+    authoritative = log.path.read_bytes()
+    report = write_run_metrics(tmp_path)
+    completion = report["completion"]
+    assert completion["measurement_gaps"] == []
+    assert completion["measurement_gap_count"] == 0
+    (lane,) = [item for item in completion["lanes"].values() if item["observed"]]
+    for event in lane["events"].values():
+        assert event["count"] == 1
+        assert event["outcomes"] == {} and event["flags"] == {}
+    assert write_run_metrics(tmp_path) == report
+    assert log.path.read_bytes() == authoritative
+
+
+@pytest.mark.parametrize("field,value", [
+    ("dispositions", ["GAP"]),
+    ("dispositions", {"dossiers": "untrusted-disposition"}),
+    ("dispositions", {"untrusted-capability": "GAP"}),
+    ("enabled", True),
+    ("enabled", {"dossiers": "true"}),
+    ("enabled", {"untrusted-capability": True}),
+])
+def test_malformed_gate_capability_maps_still_create_measurement_gaps(field, value) -> None:
+    report = completion_metrics([{
+        "job_id": "job_final_publication_gate",
+        "event_type": "FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED",
+        "details": {field: value},
+    }])
+    assert report["measurement_gap_count"] == 1
+    assert "untrusted-" not in json.dumps(report)
+
+
 def test_chain_challenge_supports_every_real_cell_status_including_not_launched() -> None:
     from appsec_review.review.models import CellStatus
 
