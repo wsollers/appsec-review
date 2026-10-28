@@ -908,7 +908,7 @@ image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:9b358785819745f557cb08dcbd4691f7aba00c0fe6aa7ed38653dfc8812fece1"
+image_id = "sha256:ad6df7a22dac7cef91f7a44249c7cbacbe823aa8e7ef731822d763c375994b2e"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.go]
 tag = "audit-buildenv-go:local"
@@ -943,7 +943,7 @@ image_id = "sha256:d5df139bd741352cf6dcddb154ce6607dbba4b0f5525c4de36b9953fa720a
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:9b358785819745f557cb08dcbd4691f7aba00c0fe6aa7ed38653dfc8812fece1"
+image_id = "sha256:ad6df7a22dac7cef91f7a44249c7cbacbe823aa8e7ef731822d763c375994b2e"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
@@ -1464,7 +1464,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "edb0781de3f823aec3603ab402f96a86ceb9bad0506c53d94e7f87803632995d"
+asset_lock_sha256 = "bba15ec8f3feff25771e73cab2679f1b76c2ae1371d446559c854b5785f2f52c"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1527,8 +1527,8 @@ seed_depth = 3
 max_seed_depth = 8
 seed_limit = 200
 # The precompile action fills the query compile cache before evaluation. The cache is shared across
-# runs and keyed by the declared CodeQL and runner releases, so a pack compiles cold only after a
-# release or pack change. A cold compile
+# runs and keyed by the declared CodeQL release, so a pack compiles cold only after a CodeQL
+# release or pack change (`containers/build.py query-packs --warm` pre-fills it). A cold compile
 # is minutes of CPU, so it has its own timeout and resources, separate from timeout_seconds.
 compile_timeout_seconds = 3600
 compile_threads = 8
@@ -1575,7 +1575,7 @@ query_pack_version = "1.0.0"
 query_suite = "graph-export.qls"
 query_suite_sha256 = "c0120cc191ba3f7378f8e759c08b21e85c7cf32cf40426b1e15256775f8040e6"
 query_pack_sha256 = "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e348bde"
-tree_sha256 = "730b59ec4ad5bf02315545ce61cd4156f9899aad9078241d25e92795b3c3403b"
+tree_sha256 = "93b9a8bf0e4b634035b49b4888344bd6abaf772615635b7452471e4ed8b77656"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
 columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
