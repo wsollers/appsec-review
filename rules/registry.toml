@@ -102,6 +102,18 @@ verify = "check-only"
 warm = true
 state = "enabled"
 description = "Repository-authored Go code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+[[packs]]
+id = "graph-export-csharp"
+path = "rules/codeql-graph-export/csharp"
+engine = "codeql"
+language = "csharp"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/csharp-all@7.3.0"
+verify = "check-only"
+warm = true
+state = "enabled"
+description = "Repository-authored C# code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
 
 [[packs]]
 id = "graph-export-rust"
