@@ -11,6 +11,8 @@ from typing import Any, Mapping, Sequence
 from appsec_review.config import AppConfig
 from appsec_review.observability import PipelineLog
 from appsec_review.runtime.job import Job
+from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
+from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.storage import canonical_json, file_sha256
 
 
@@ -67,22 +69,24 @@ class ResumePlanner:
             return ["no accepted handoff"], None
         try:
             pointer = json.loads(latest.read_text(encoding="utf-8"))
-            handoff_path = (self.run_root / pointer["handoff_path"]).resolve()
-            if self.run_root.resolve() not in handoff_path.parents:
-                return ["handoff path escapes run"], None
+            from appsec_review.storage.shared import safe_path
+            handoff_path = safe_path(self.run_root, pointer["handoff_path"])
             if not handoff_path.is_file():
                 return ["accepted handoff is missing"], None
             handoff_hash = file_sha256(handoff_path)
             if handoff_hash != pointer["handoff_sha256"]:
                 return ["accepted handoff hash changed"], None
             handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+            if handoff.get("schema") != HANDOFF_SCHEMA:
+                return ["handoff_schema_changed"], handoff_hash
+            handoff = decode_handoff(handoff, run_id=self.run_root.name, job_id=job.job_id)
         except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
             return [f"accepted handoff is corrupt: {type(exc).__name__}"], None
         expected = job.identities(self.config.runtime.repository_root, self.config.review_policy.releases)
         if "undeclared" in expected.values():
             return ["missing_release_identity"], handoff_hash
         checks = {
-            "handoff schema": (handoff.get("schema"), "appsec-review/job-handoff/1"),
+            "handoff schema": (handoff.get("schema"), HANDOFF_SCHEMA),
             "status": (handoff.get("status"), "ACCEPTED"),
             "resolved configuration": (handoff.get("resolved_config_sha256"), self.config.resolved_sha256),
             "job configuration": (handoff.get("job_config_sha256"), job_config_sha256(self.config, job.job_id)),
@@ -92,30 +96,20 @@ class ResumePlanner:
             "validator": (handoff.get("validation_identity"), expected["validation"]),
             "upstream handoffs": (handoff.get("upstream_handoff_sha256", {}), dict(upstream)),
             "tool": (handoff.get("tool_identity"), {"python": os.sys.version.split()[0]}),
+            "dataset contract": (handoff["dataset_contract_sha256"], dataset_contract(
+                job.job_id, sorted(set(self.config.job(job.job_id).steps)
+                                   | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets)["sha256"]),
         }
         if job.input_identity is not None:
             checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
-        dispositions = [item for output in handoff.get("outputs", {}).values()
-                        if isinstance(output, Mapping)
-                        for item in output.get("dispositions", ()) if isinstance(item, Mapping)]
-        if any(item.get("terminal_status") == "FAILED" or item.get("disposition") == "GAP"
-               for item in dispositions):
-            reasons.append("accepted job contains a retriable failed producer")
         if not handoff.get("artifacts"):
             reasons.append("accepted handoff has no artifact identities")
-        for artifact in handoff.get("artifacts", []):
-            try:
-                path = (self.run_root / artifact["path"]).resolve()
-                if self.run_root.resolve() not in path.parents or not path.is_file():
-                    reasons.append(f"artifact missing: {artifact.get('path')}")
-                elif file_sha256(path) != artifact["sha256"]:
-                    reasons.append(f"artifact changed: {artifact.get('path')}")
-            except (KeyError, OSError):
-                reasons.append("artifact identity is corrupt")
         try:
             from appsec_review.storage.shared import verify_handoff
             verify_handoff(self.run_root, handoff)
+            if handoff["coverage"]["retry_required"]:
+                reasons.append("accepted job contains a retriable failed producer")
         except (OSError, ValueError, KeyError, TypeError) as exc:
             reasons.append(f"shared provenance integrity failed: {exc}")
         return reasons, handoff_hash
