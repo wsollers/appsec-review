@@ -2,12 +2,13 @@
 
 These are tiny, self-generated artifacts from `tiny.c` and `inline.c`, not
 third-party or proprietary binaries. They are **never executed** by the tests.
-The PDBs use the native MSF 7.0/CodeView format produced by Clang and LLD; they
-exercise the MSVC debug-format lane, not the MSVC compiler or DIA.
+The unprefixed PDBs use the native MSF 7.0/CodeView format produced by Clang and
+LLD. The `msvc-*` fixtures below were compiled and linked by genuine Microsoft
+MSVC tools. Neither set requires DIA.
 
 ## Provenance and reproduction
 
-Generated offline with Ubuntu Clang/LLD **18.1.3** in the existing
+Unprefixed artifacts were generated offline with Ubuntu Clang/LLD **18.1.3** in the existing
 `appsec-review/buildenv-native-toolchain:noble-gcc13.3-clang18.1` image.
 Exports were captured using `llvm-dwarfdump-18` and `llvm-pdbutil-18`
 **18.1.3** in the existing `appsec-review/tool-native-cpp:1.0.0` image.
@@ -46,6 +47,71 @@ llvm-pdbutil-18 pdb2yaml --all tests/fixtures/debug_symbols/tiny.pdb \
 `optimized.dwarf.txt`. `inline.elf` uses `inline.c` with `-O2`.
 `inline.exe`/`inline.pdb` use `inline.c`, `test/tmp/inline.obj`, and `-O2`.
 Their exports use the same dump commands with the corresponding filenames.
+
+## Genuine MSVC fixtures
+
+`msvc-tiny.exe`/`msvc-tiny.pdb` and `msvc-inline.exe`/`msvc-inline.pdb` were
+compiled from the same unmodified `tiny.c` and `inline.c` bytes using installed
+Visual Studio 18 Community tools:
+
+- Compiler **19.51.36260.0** (`cl /Bv`).
+- Linker **14.51.36260.0**, VC tools installation version **14.51.36231**.
+- No downloaded packages, Windows headers, runtime libraries, third-party code,
+  binary execution, source-server retrieval or DIA were involved.
+- `vcvars64.bat` setup, compilation and linking ran in the **same `cmd.exe`
+  process**. Compiler state and outputs stayed in the checkout's
+  `test/tmp/msvc-fixture/`.
+
+The scratch directory was temporarily addressed by an unused synthetic `Y:`
+drive. A temporary `toolchain` directory junction inside it pointed to the
+installed x64 tools, allowing invocation as `Y:\toolchain\cl.exe` and
+`Y:\toolchain\link.exe`. Both aliases were removed in `finally` cleanup.
+`INCLUDE`, `LIB` and `LIBPATH` were cleared: the owned C sources need no headers
+or libraries, and recording unused installed include paths would leak host
+installation locations. PDBs were deleted before the final clean build so no
+stale stream blocks from earlier experiments remain.
+
+After assigning the temporary aliases and copying the two source files, the
+equivalent single-process commands are:
+
+```bat
+set TEMP=Y:\temp
+set TMP=Y:\temp
+call "<VS-install>\VC\Auxiliary\Build\vcvars64.bat" >nul
+cd /d Y:\
+set INCLUDE=
+set LIB=
+set LIBPATH=
+Y:\toolchain\cl.exe /nologo /std:c11 /Z7 /ZH:SHA_256 /O2 /Ob3 /Zo /Gy /GS- /c /experimental:deterministic /pathmap:Y:\=fixture\ /Fotiny.obj tiny.c
+Y:\toolchain\link.exe /NOLOGO /DEBUG:FULL /NODEFAULTLIB /ENTRY:entry /SUBSYSTEM:CONSOLE /PDB:msvc-tiny.pdb /PDBALTPATH:fixture\msvc-tiny.pdb /OUT:msvc-tiny.exe /INCREMENTAL:NO /OPT:REF /Brepro tiny.obj
+Y:\toolchain\cl.exe /nologo /std:c11 /Z7 /ZH:SHA_256 /O2 /Ob3 /Zo /Gy /GS- /c /experimental:deterministic /pathmap:Y:\=fixture\ /Foinline.obj inline.c
+Y:\toolchain\link.exe /NOLOGO /DEBUG:FULL /NODEFAULTLIB /ENTRY:entry /SUBSYSTEM:CONSOLE /PDB:msvc-inline.pdb /PDBALTPATH:fixture\msvc-inline.pdb /OUT:msvc-inline.exe /INCREMENTAL:NO /OPT:REF /Brepro inline.obj
+```
+
+This compiler requires `/experimental:deterministic` for `/pathmap` to take
+effect. Source names are `fixture\tiny.c`/`fixture\inline.c`, PE CodeView paths
+are synthetic relative `fixture\msvc-*.pdb`, and PDB internal object/linker names
+use only synthetic `Y:` paths. Before publication, every PE, PDB and YAML was
+scanned in both ASCII and UTF-16LE for the actual account, machine, user-profile
+and checkout paths, common private-directory markers and installed tool/SDK
+paths; **zero matches** remained. Tests retain portable forbidden-path guards.
+The artifacts are unmodified compiler/linker output, not patched or rebuilt
+from sanitized YAML.
+
+The existing offline LLVM 18.1.3 tool image exported each PDB with
+`llvm-pdbutil-18 pdb2yaml --all`, networking disabled and core dumps disabled.
+Tests validate MSVC functions/signatures, `Pair` size/member offsets, SHA-256
+source checksums, compilation-unit producer identity and genuine optimized
+inline ranges. For `msvc-inline`, `add` covers `[0x1000, 0x100f)`, excluding
+`entry`'s final return byte at `0x100f`.
+
+**Tool limitation discovered:** LLVM 18.1.3 `pdb2yaml --all` crashes while
+exporting retained MSVC `S_REGREL32` variable records. The documented `/Gy`
+and linker `/OPT:REF` options remove the unused out-of-line copy of `add`
+from these optimized fixtures, retaining the fully typed layout and real
+inline records without those register-relative variable records. Unoptimized
+MSVC PDBs containing that exporter-triggering record remain explicit tool
+failures; these fixtures do not claim that broader coverage.
 
 ## Public reader contract
 
@@ -132,5 +198,5 @@ Compilation-unit display names are basenames, not absolute paths.
 - The tests inject genuine captured tool output for portability and also
   exercise the real bounded subprocess runner. Live smoke validation on the
   generating host additionally ran both hash-pinned LLVM exporters against
-  the binaries with networking disabled. No Windows DIA or proprietary
-  MSVC-built fixture is claimed.
+  the binaries with networking disabled, including both genuine MSVC-produced
+  fixtures. No Windows DIA or proprietary third-party fixture is required.

@@ -582,3 +582,58 @@ def test_native_inline_damaged_parent_pointer_is_not_followed(tmp_path):
                             runner=fixture_runner("inline.pdb.yaml"))
     frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
     assert not frame.ranges and "inline_native_parent_invalid" in result.gaps
+
+
+def test_genuine_msvc_produced_pdb_types_functions_and_source_checksum(tmp_path):
+    result = extract_symbols(
+        FIXTURES / "msvc-tiny.exe", FIXTURES / "msvc-tiny.pdb",
+        target=CompilerTarget.MSVC, settings=settings(tmp_path, "llvm_pdbutil"),
+        runner=fixture_runner("msvc-tiny.pdb.yaml"),
+    )
+    kinds = {record.kind for record in result.records}
+    assert {RecordKind.SYMBOL, RecordKind.TYPE_LAYOUT, RecordKind.SOURCE_RANGE,
+            RecordKind.COMPILATION_UNIT} <= kinds
+    pair = next(record for record in result.records if record.kind is RecordKind.TYPE_LAYOUT and record.name == "Pair")
+    assert pair.data["byte_size"] == 16
+    assert [(member["name"], member["offset"]) for member in pair.data["members"]] == [("left", 0), ("right", 8)]
+    entry = next(record for record in result.records if record.kind is RecordKind.SYMBOL and record.name == "entry")
+    assert entry.ranges and entry.data["signature"]["return_type"] == "int"
+    assert any("Microsoft" in record.data.get("producer", "") for record in result.records
+               if record.kind is RecordKind.COMPILATION_UNIT)
+    rows = [record for record in result.records if record.kind is RecordKind.SOURCE_RANGE]
+    assert rows and all(record.source is not None and record.source.checksum for record in rows)
+    for row in rows:
+        assert row.source.checksum == hashlib.new(row.source.checksum_kind, (FIXTURES / "tiny.c").read_bytes()).hexdigest()
+        assert row.data["source_binding"] == "path_only"
+
+
+def test_genuine_msvc_optimized_inline_ranges(tmp_path):
+    result = extract_symbols(
+        FIXTURES / "msvc-inline.exe", FIXTURES / "msvc-inline.pdb",
+        target=CompilerTarget.MSVC, settings=settings(tmp_path, "llvm_pdbutil"),
+        runner=fixture_runner("msvc-inline.pdb.yaml"),
+    )
+    frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
+    assert frame.name == "add"
+    assert [(interval.start, interval.end) for interval in frame.ranges] == [(0x1000, 0x100f)]
+    assert frame.source.checksum_kind == "sha256"
+    assert frame.source.checksum == hashlib.sha256((FIXTURES / "inline.c").read_bytes()).hexdigest()
+    parent = next(record for record in result.records if record.key == frame.parent_key)
+    assert parent.name == "entry" and parent.ranges[0].end == 0x1010
+    assert "inline_ranges_unavailable" not in result.gaps
+    assert "optimized_debug_information" in result.gaps
+    assert any(interval.start <= 0x100e < interval.end for interval in frame.ranges)
+    assert not any(interval.start <= 0x100f < interval.end for interval in frame.ranges)
+
+
+@pytest.mark.parametrize("filename", ["msvc-tiny.exe", "msvc-tiny.pdb", "msvc-tiny.pdb.yaml",
+                                      "msvc-inline.exe", "msvc-inline.pdb", "msvc-inline.pdb.yaml"])
+def test_msvc_fixtures_contain_no_private_or_installed_host_paths(filename):
+    data = (FIXTURES / filename).read_bytes().lower()
+    for token in ("c:\\users\\", "c:/users/", ".copilot", "copilot-worktrees",
+                  "c:\\program files", "c:/program files", "windows kits", "/home/", "/users/"):
+        assert token.encode("utf-8") not in data
+        assert token.encode("utf-16le") not in data
+    if filename.endswith(".exe"):
+        pdb = filename.removesuffix(".exe") + ".pdb"
+        assert ("fixture\\" + pdb).encode() in data
