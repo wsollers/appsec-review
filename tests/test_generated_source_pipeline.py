@@ -168,7 +168,7 @@ def _execute_units(config, run, target, job, *, initial=None):
         config=config.job(job.job_id), run_root=run, run_id=run.name, target_root=target,
         source_fingerprint=SNAPSHOT, repository_root=config.runtime.repository_root, attempt_id="fixture",
         tools=config.tools, events=SimpleNamespace(write=lambda *args, **kwargs: None),
-        review_policy=config.review_policy,
+        review_policy=config.review_policy, metadata_root=run.parent / "metadata",
     )
     for task in job.units:
         root = run / f"data/jobs/{job.job_id}/attempts/fixture/units/{task.unit_id}"

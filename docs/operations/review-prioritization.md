@@ -42,9 +42,20 @@ All settings live under `[jobs.job_review_prioritization.settings]` in `appsec-r
 | `[…settings.priority_weights]` | see design | non-negative weight per feature; at least one positive; unknown names are rejected |
 | `[…settings.index]` | 25% of files, 10% of functions, cap 5000 | `*_top_count > 0` selects an exact count instead of the fraction; `max_evidence_links_per_item` bounds evidence links and `max_graph_neighbors` bounds one-hop import context (default 5000) |
 | `[…settings.sources]` | all `true` | `false` skips consuming history, Semgrep, or CodeQL by policy (a named gap) |
+| `[…settings.syntax_metrics_reservation]` | `cpu = 1`, `memory_mb = 2048`, `io_slots = 0`, `admission_timeout_seconds = 3600` | resource admission lease held by `extract.syntax_metrics` for its whole extent, counted against `[review_policy.resources]` alongside scanner containers; a reservation larger than that budget fails the step before any work |
 
 Validation rejects out-of-range bounds, unsorted or duplicate thresholds, a `scored_threshold` that
-is not listed, unknown features, negative weights, and a configuration without a positive weight.
+is not listed, unknown features, negative weights, a configuration without a positive weight, and a
+reservation that is missing a key, has an extra key, or holds a non-integer or out-of-range value.
+
+`extract.syntax_metrics` streams: it indexes the byte spans of accepted Tree-sitter rows in a scratch
+SQLite file under the unit directory, loads one file's rows and bytes at a time, and writes
+`syntax-facts.json` record by record. Its memory follows the largest scored file, not the target
+tree. Files are pre-filtered from catalog metadata before any row or byte is read, and the step output
+and `REVIEW_PRIORITIZATION_SYNTAX_EXTRACTED` event count them under `skipped`: `not_source` (no
+catalog language, such as binary or media files), `out_of_delivery_scope`, and `file_byte_bound`
+(larger than `max_file_bytes`; also a `file_byte_bound_reached` gap). A skipped file is unscored
+coverage, never evidence that it is clean.
 
 ## Outputs
 

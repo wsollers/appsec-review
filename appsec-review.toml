@@ -757,6 +757,15 @@ history = true
 semgrep = true
 codeql = true
 
+# Resource admission lease for the in-process extract.syntax_metrics step, counted against
+# review_policy.resources alongside scanner containers.  The step streams Tree-sitter rows one file
+# at a time, so its peak is bounded by the largest file rather than the target tree.
+[jobs.job_review_prioritization.settings.syntax_metrics_reservation]
+cpu = 1
+memory_mb = 2048
+io_slots = 0
+admission_timeout_seconds = 3600
+
 [jobs.job_review_prioritization.steps.load]
 workers = 1
 [jobs.job_review_prioritization.steps.load.tasks.accepted_inputs]
