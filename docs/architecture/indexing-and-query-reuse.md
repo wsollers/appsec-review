@@ -463,7 +463,8 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 Remaining gaps after this batch:
 
 - Code-graph production is implemented for the configured C/C++ export pack. Other configured
-  languages publish explicit unavailable family coverage until their export packs exist. The
+  languages publish explicit unavailable family coverage until their export packs (present under
+  `rules/codeql-graph-export/`) are configured and lock-pinned. The
   seven former graph query sets remain retired from `QUERY_SETS`; `query_precomputed` rejects their
   names, and `query_code_graph` is the only graph query surface. The follow-up list
   (`GRAPH_FOLLOW_UP` in `job_review_data_indexing/job.py`) names only `hotspot_context`,

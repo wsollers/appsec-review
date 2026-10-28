@@ -2304,8 +2304,9 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per
-  unit from its accepted graph families. Remaining gaps: export packs exist only for C/C++, so every
-  other language's units fall back to `persona_sweep` with `required_source_unavailable`; the
+  unit from its accepted graph families.   Remaining gaps: only the C/C++ export pack is configured and
+    lock-pinned (packs for other languages exist under `rules/codeql-graph-export/` but are not
+    enabled), so every other language's units fall back to `persona_sweep` with `required_source_unavailable`; the
   export queries have only run against hand-authored recordings, never the pinned CodeQL image;
   no graph family can satisfy `security_impact`, and static absence of a fact is never a relation.
 - Post-build assessment must publish build-security shards with protected command references,
