@@ -979,6 +979,20 @@ def _select_control_evidence(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
     return shards.select(index="components")
 
 
+class _ControlResolver:
+    """Reuse only successfully verified full citations during one pinned-publication operation."""
+
+    def __init__(self, resolver: Any):
+        self.resolver = resolver
+        self.verified: dict[str, Any] = {}
+
+    def resolve(self, citation: Mapping[str, Any], *, component_id: str) -> Mapping[str, Any]:
+        key = digest({"component_id": component_id, "citation": citation})
+        if key not in self.verified:
+            self.verified[key] = self.resolver.resolve(citation, component_id=component_id)
+        return self.verified[key]
+
+
 def _control_resolver(run_root: Path, snapshot: str, publication: Mapping[str, Any]) -> Any:
     if publication.get("assessment_mode") != "assessment":
         return None
@@ -993,9 +1007,9 @@ def _control_resolver(run_root: Path, snapshot: str, publication: Mapping[str, A
                          manifest_sha256=upstream["sha256"])
     if core.manifest["target_snapshot"] != snapshot:
         raise ValueError("OWASP publication concerns a different target snapshot")
-    return EvidenceResolver(core, accept_manifest(run_root, manifest_path=path,
+    return _ControlResolver(EvidenceResolver(core, accept_manifest(run_root, manifest_path=path,
                                                   manifest_sha256=upstream["sha256"]),
-                            max_source_lines=publication.get("assessment_bounds", {}).get("max_source_lines", 120))
+                            max_source_lines=publication.get("assessment_bounds", {}).get("max_source_lines", 120)))
 
 
 def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any],
@@ -1106,36 +1120,54 @@ def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any
 
 def load_control_assessment(run_root: Path, snapshot: str, result: Mapping[str, Any], *,
                             cache: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Expand a compact projection from its immutable authority, not depth-bounded index payloads."""
+    """Expand the immutable authority, not depth-bounded index payloads.
+
+    A caller-owned cache lasts one collection/assembly operation. Publication, shard-row and full
+    citation verification is shared across its controls, scoped by run root, snapshot and exact pins.
+    """
     from appsec_review.storage.shared import consume_named, safe_path
 
     reference = result["workbench_reference"]
     cache = {} if cache is None else cache
-    key = digest(reference)
+    publication_key = "publication:" + digest({
+        "run_root": str(run_root.resolve()), "snapshot": snapshot,
+        "path": reference["manifest_path"], "sha256": reference["manifest_sha256"]})
+    key = "assessment:" + digest({"publication": publication_key, "reference": reference})
     if key in cache:
         return cache[key]
-    manifest_path = safe_path(run_root, reference["manifest_path"])
-    if file_sha256(manifest_path) != reference["manifest_sha256"]:
-        raise ValueError("accepted OWASP workbench manifest identity changed")
-    consume_named(run_root, manifest_path, namespace="owasp-shard",
-                  expected_sha256=reference["manifest_sha256"])
-    publication = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if (publication.get("schema") != "appsec-review/owasp-index-manifest/1"
-            or publication.get("run_id") != run_root.name):
-        raise ValueError("accepted OWASP publication belongs to another run")
+    if publication_key not in cache:
+        manifest_path = safe_path(run_root, reference["manifest_path"])
+        if file_sha256(manifest_path) != reference["manifest_sha256"]:
+            raise ValueError("accepted OWASP workbench manifest identity changed")
+        consume_named(run_root, manifest_path, namespace="owasp-shard",
+                      expected_sha256=reference["manifest_sha256"])
+        publication = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (publication.get("schema") != "appsec-review/owasp-index-manifest/1"
+                or publication.get("run_id") != run_root.name):
+            raise ValueError("accepted OWASP publication belongs to another run")
+        cache[publication_key] = publication
+    publication = cache[publication_key]
     matches = [shard for shard in publication.get("shards", ()) if shard.get("family") == "control-result"
                and all(shard.get(key) == reference.get(key) for key in ("shard_id", "path", "sha256"))]
     if len(matches) != 1:
         raise ValueError("control evidence is not a member of its accepted OWASP manifest")
-    path = safe_path(run_root, reference["path"])
-    if file_sha256(path) != reference["sha256"]:
-        raise ValueError("accepted OWASP control-result shard changed")
-    consume_named(run_root, path, namespace="owasp-shard", expected_sha256=reference["sha256"])
-    rows = [row for row in json.loads(path.read_text(encoding="utf-8")).get("records", ())
-            if row.get("row_id") == reference["row_id"]]
+    shard_key = "rows:" + digest({"publication": publication_key,
+        "shard": {key: reference[key] for key in ("shard_id", "path", "sha256")}})
+    if shard_key not in cache:
+        path = safe_path(run_root, reference["path"])
+        if file_sha256(path) != reference["sha256"]:
+            raise ValueError("accepted OWASP control-result shard changed")
+        consume_named(run_root, path, namespace="owasp-shard", expected_sha256=reference["sha256"])
+        indexed: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for row in json.loads(path.read_text(encoding="utf-8")).get("records", ()):
+            if not isinstance(row.get("row_id"), str):
+                raise ValueError("OWASP control-result row identity is invalid")
+            indexed[row["row_id"]].append(row)
+        cache[shard_key] = indexed
+    rows = cache[shard_key].get(reference["row_id"], ())
     if len(rows) != 1:
         raise ValueError("OWASP control-result identity is missing or ambiguous")
-    resolver_key = "resolver:" + reference["manifest_sha256"]
+    resolver_key = "resolver:" + publication_key
     if resolver_key not in cache:
         cache[resolver_key] = _control_resolver(run_root, snapshot, publication)
     cache[key] = _control_assessment(rows[0], publication, reference, cache[resolver_key])

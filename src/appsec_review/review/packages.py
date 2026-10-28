@@ -950,17 +950,26 @@ class _Assembler:
         return (component.component_id if component else lead.component_hint or "unassigned",
                 unit.build_unit_id if unit else None, component, unit)
 
+    @staticmethod
+    def _context_order(entry: ContextEntry) -> tuple[str, int, str, str]:
+        assessment = entry.control_assessment or {}
+        assessed = assessment.get("control_status") in {"satisfied", "not_satisfied"} or any(
+            item.get("resolved") is True and item.get("locator", {}).get("kind") == "source"
+            for item in assessment.get("evidence", ()))
+        return (entry.role, int(bool(assessment) and not assessed),
+                str(assessment.get("control_identity", "")), entry.id)
+
     def _cap(self, context: Iterable[ContextEntry], subject: str, producer: str
              ) -> tuple[list[ContextEntry], int, list[ScopeGap]]:
         unique = {(item.role, item.id): item for item in context}
-        ordered = [unique[key] for key in sorted(unique)]
+        ordered = sorted(unique.values(), key=self._context_order)
         bound = self.settings.max_context_entries
         if len(ordered) <= bound:
             return ordered, 0, []
         # Preserve representation from every context role under pressure. In particular, a large
         # dependency inventory must not consume the whole budget before its Scorecard seeds are
-        # admitted. This remains deterministic because both roles and identities are sorted.
-        buckets = {role: [unique[key] for key in sorted(unique) if key[0] == role]
+        # admitted. Within the control role, assessed/source-backed evidence precedes declarations.
+        buckets = {role: [entry for entry in ordered if entry.role == role]
                    for role in sorted({key[0] for key in unique})}
         balanced: list[ContextEntry] = []
         depth = 0
@@ -1181,6 +1190,13 @@ class _Assembler:
                         "artifact_ids": sorted({identity for lead in unit.leads for identity, role in lead.related
                                                 if role == "artifact"})}
         rank = ranked.rank_record()
+        byte_omitted_controls = 0
+
+        def control_gaps() -> list[ScopeGap]:
+            return ([ScopeGap("owasp_control", unit.key, "truncated",
+                f"{byte_omitted_controls} control context entries exceeded max_package_bytes="
+                f"{self.settings.max_package_bytes}; all control rows remain in the pinned OWASP workbench")]
+                if byte_omitted_controls else [])
 
         def render(chunk: list, number: int, count: int) -> tuple[str, bytes]:
             key = f"{unit.key}#{number:05d}"
@@ -1191,16 +1207,29 @@ class _Assembler:
                     "artifact_ids": sorted({identity for lead, *_ in chunk for identity, role in lead.related
                                             if role == "artifact"})},
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
-                gaps=[*gaps, *graph_gaps, *missing], truncation={"omitted_leads": 0, "omitted_context": omitted,
-                                                                 "next_partition": following},
+                gaps=[*gaps, *graph_gaps, *missing, *control_gaps()],
+                truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": following},
                 graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
                 neighborhood=neighborhood)
 
         def split(chunk: list) -> list[list]:
+            nonlocal omitted, byte_omitted_controls
             _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
             if len(body) <= self.settings.max_package_bytes:
                 return [chunk]
             if len(chunk) <= 1:
+                # Splitting leads cannot reduce component-wide control context. Apply the same
+                # explicit byte-bound qualification as lane A, without removing authoritative rows.
+                while len(body) > self.settings.max_package_bytes:
+                    candidates = [i for i, entry in enumerate(context) if entry.control_assessment is not None]
+                    if not candidates:
+                        break
+                    context.pop(max(candidates, key=lambda i: self._context_order(context[i])))
+                    omitted += 1
+                    byte_omitted_controls += 1
+                    _identity, body = render(chunk, 99_997, 99_999)
+                if len(body) <= self.settings.max_package_bytes:
+                    return [chunk]
                 raise IntegrityError(f"hunt partition of {unit.key} exceeds max_package_bytes with a single lead; "
                                      "the membership gate is blocked")
             middle = len(chunk) // 2
@@ -1209,7 +1238,7 @@ class _Assembler:
         size = self.settings.hunt_menu_partition_size
         chunks = [chunk for offset in range(0, max(1, len(menu)), size)
                   for chunk in split(menu[offset:offset + size])]
-        self.extra_gaps.extend(gaps)
+        self.extra_gaps.extend((*gaps, *control_gaps()))
         packages = []
         for number, chunk in enumerate(chunks):
             package_id, body = render(chunk, number, len(chunks))
