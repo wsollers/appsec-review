@@ -1,20 +1,23 @@
 # Operating the final publication gate and the final report
 
-`job_final_publication_gate` and `job_final_report_publication` are the last two jobs of
-`wave1_review`. They turn the accepted `job_inference_security_review` handoff into the pipeline's
+`job_final_publication_gate` and `job_final_report_publication` bound the final publication tail of
+`wave1_review`, with optional OpenVEX export and PoC generation between them.
+They turn the accepted `job_inference_security_review` handoff into the pipeline's
 final, human-readable report. Neither calls a model, neither reads the target, and neither
 reinterprets anything: a claim state and a `ship-block-policy/1` status are projected exactly as the
 review accepted them (design: [`../architecture/inference-security-review.md`](../architecture/inference-security-review.md),
 "Placement and consumers").
 
 ```text
-job_inference_security_review -> job_final_publication_gate -> job_final_report_publication
+job_inference_security_review -> job_final_publication_gate
+  -> optional OpenVEX / optional PoC (siblings) -> job_final_report_publication
 ```
 
 The report is the one terminal job of the graph. Both jobs are shipped enabled. Setting
 `jobs.job_final_publication_gate.settings.enabled = false` also makes the report transparent
-(there is nothing for it to read), which leaves the inference review as the terminal job; setting
-only `jobs.job_final_report_publication.settings.enabled = false` leaves the gate as the terminal job.
+(there is nothing for it to read). Enabled OpenVEX requires an enabled gate and review; disable
+export before disabling its prerequisites. With the optional tails disabled, disabling the gate
+leaves inference review terminal, and disabling only the report leaves the gate terminal.
 
 ## The gate
 
@@ -160,34 +163,48 @@ shipped disabled and run by hand. `load.accepted_gate` looks for the run's accep
 A PoC status never changes a claim state, a ship-block status or a score, and `compile_failed` does not contradict a
 finding.
 
-### Planned OpenVEX export projection
+### OpenVEX export projection
 
-**Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**
-The [OpenVEX design](../architecture/openvex-export.md) adds an optional model-free
-`job_openvex_export` after the accepted gate, as a sibling of optional PoC generation, with
-both enabled tails feeding the one final report terminal. The current topology above does
-not yet include it. Normal graph execution must stop on enabled-export failure rather
-than publish a refreshed report. The [draft operator guide](openvex-export.md) covers
-immutable issuer/action setup, source identity, outputs, privacy and flow diagrams.
+Implemented at `5d2d1a44eaae5cc5939d36fa463036185d3ece13`. The optional model-free
+`job_openvex_export` follows the accepted gate as a sibling of optional PoC generation;
+every enabled tail feeds the one final report terminal. See the
+[design](../architecture/openvex-export.md). Normal graph execution stops on enabled-export
+failure rather than publishing a refreshed report. The [operator guide](openvex-export.md)
+covers immutable issuer/action setup, source identity, outputs, privacy and flow diagrams.
+Direct CLI execution is sequential; the shared topology exposes independent siblings to Dagster.
 
-The planned optional `openvex_export` block is additive to `final-report/1`; historical reports
+The optional `openvex_export` block is additive to `final-report/1`; historical reports
 without it remain valid. It links only accepted, reverified run-local artifacts and never
-changes claim state, gate buckets, score dimensions or ship-block decisions.
+changes claim state, gate buckets, score dimensions or ship-block decisions. A frozen
+configuration without the exporter job omits the block. The JSON block has `state`, `reason`,
+nullable `handoff`, `result`, `manifest`, `document` path/SHA-256 references and nullable
+`statement_count`, `included_findings`, `excluded_findings`. Markdown renders the state/reason,
+known counts and non-null local paths/hashes; it does not inline the OpenVEX document or advice.
 
-| Planned report state | Projection |
+| Report state | Projection |
 | --- | --- |
 | `disabled` | Frozen setting is false; no file lookup/link and no new export gap. Manual exporter dispatch is refused while disabled. |
-| `not_run` | Enabled but no accepted export, for example a standalone report dispatched early; explicit missing-export limitation, no document link. |
+| `not_run` | Enabled but no accepted export, for example a standalone report dispatched early; `openvex_export_not_run` gap, all references/counts null. |
 | `available` | Current nonempty accepted export; verify handoff, result, companion, document and gate/review/full-configuration/release pins before showing counts, local references and hashes. |
-| `no_statements` | Accepted empty export; explicit zero/reasons and companion link, no document link. Not a clean verdict. |
-| `stale` | Valid export belongs to another gate/review/configuration/release; explain that export must rerun, without linking the stale document. |
+| `no_statements` | Accepted empty export; explicit zero statements/included findings, exact excluded count and handoff/result/companion references, no document; `openvex_export_no_statements` gap. Not a clean verdict. |
+| `stale` | Valid export belongs to another gate/review/configuration/release; `openvex_export_stale` gap, all references/counts null; rerun export before linking it. |
 
 Corrupt output must fail report verification, not masquerade as `not_run` or `stale`.
 `exported`, `exported_with_gaps` and `no_statements` are accepted exporter outcomes;
 `available` is a report-consumer state, and only `affected` is a vulnerability status.
 PoC compilation or its absence/failure is not an exporter prerequisite or vulnerability
 reassessment. A previous accepted export is usable only while every current pin and byte
-still matches; a failed attempt does not create a new accepted export.
+still matches; a failed attempt does not create a new accepted export. Historical accepted
+output verification rehashes immutable inputs and every runtime-declared artifact and checks
+canonical reassembly, release and identities. Reporting additionally re-proves current upstream
+authority before exposing references and repeats its view at load, assemble and acceptance.
+
+Mutable gate/review/intake latest pointers and the exact accepted-index pointer are checked
+internally, not retained as durable evidence hashes. Legitimate newer pointers make a valid old
+export stale instead of corrupting historical bytes. Actual corrupt immutable output still fails.
+Missing, empty and stale export states add publication limitations and make completion gapped;
+they are not vulnerability statuses or changed gate decisions. Integration, acceptance and live
+Dagster execution remain manual validation, not established by this source reconciliation.
 
 ### What the report never contains
 

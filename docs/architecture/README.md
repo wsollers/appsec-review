@@ -78,11 +78,12 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   answers, and how stances become ledger states.
 - [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
   `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
-- [`openvex-export.md`](openvex-export.md) — planned affected-only deterministic OpenVEX export,
+- [`openvex-export.md`](openvex-export.md) — affected-only deterministic OpenVEX export design,
   immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
-  optional-tail report fan-in and telemetry (design only, not implemented).
-- [`../operations/openvex-export.md`](../operations/openvex-export.md) — draft operator setup,
-  trust/dataflow and report-state diagrams, output/accounting semantics, privacy and recovery.
+  optional-tail report fan-in and telemetry.
+- [`../operations/openvex-export.md`](../operations/openvex-export.md) — implemented operator setup,
+  trust/dataflow and report-state diagrams, output/accounting semantics, privacy, accepted metrics
+  and recovery; integration, acceptance and live Dagster remain manually unverified.
 - [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
