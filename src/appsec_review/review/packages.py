@@ -69,7 +69,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/8"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/9"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -248,7 +248,9 @@ def lead_record(lead: Lead, component_id: str, build_unit_id: str | None, *,
         LogicalIdentity.parse(duplicate)
     lane_a: dict[str, Any] = {} if admission is None else {"admission_reasons": list(admission),
                                                             "advisory_context": lead.advisory}
-    return {**lane_a, "weaknesses": list(weaknesses or ()),
+    return {**lane_a, **({"control_assessment": dict(lead.control_assessment)}
+                        if lead.control_assessment is not None else {}),
+        "weaknesses": list(weaknesses or ()),
             "advisory_summary": advisory_reference.summary_of(lead.advisory),
         "observation_id": lead.observation_id, "lead_family": lead.family, "scanner": lead.scanner,
         "rule_id": lead.rule_id, "message": lead.message, "rule_cwe": list(lead.rule_cwe),
@@ -844,6 +846,18 @@ class _Assembler:
         self.graph = GraphContext(scope)
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
         self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
+        self.control_context: dict[str, list[ContextEntry]] = defaultdict(list)
+        for shard in scope.producer("control_evidence").shards:
+            for row in scope.store.entities((shard,), kinds=("precomputed_fact",)):
+                result = row["payload"].get("result", {})
+                if result.get("assessment_mode") != "assessment":
+                    continue
+                cid = str(result.get("component_id"))
+                self.control_context[cid].append(context_entry(row["identity"], "control_context",
+                                                                scope.shard_sha256(shard)))
+                for evidence in result.get("evidence", ()):
+                    if evidence.get("resolved") and evidence.get("source_identity"):
+                        self.control_context[cid].append(context_entry(evidence["source_identity"], "source"))
         for shard in scope.producer("security_tagging").shards:
             for row in scope.store.entities((shard,), kinds=("tag_assignment",)):
                 subject = row["payload"].get("subject") or {}
@@ -1040,6 +1054,7 @@ class _Assembler:
         if unit is not None:
             context.append(context_entry(unit.identity, "build_unit"))
         context.extend(self.scoped_tags(component_id, sources, (lead.path,) if lead.path else ()))
+        context.extend(self.control_context.get(component_id, ()))
         if lead.duplicate_of:
             context.append(context_entry(lead.duplicate_of, "duplicate_of"))
         context.extend(context_entry(identity, "flow") for identity in lead.flow_ids)

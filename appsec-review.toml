@@ -2109,6 +2109,15 @@ name = "owasp_control_assessment"
 workers = 8
 
 [jobs.job_owasp_control_assessment.settings]
+enabled = false
+mode = "assessment"
+reviewer_profile = "reviewer"
+max_evidence_per_component = 60
+max_source_lines = 120
+max_subjects_per_control = 8
+max_batches = 200
+max_turns = 4
+max_queries = 12
 asvs_level = 2
 masvs_profile = "L2"
 max_batch_size = 12
@@ -2117,7 +2126,17 @@ max_components = 128
 dynamic_authorized = false
 
 [jobs.job_owasp_control_assessment.settings.model]
-enabled = false
+enabled = true
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "medium"
+max_input_tokens = 24000
+max_output_tokens = 6000
+timeout_seconds = 120
+retries = 1
+
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+enabled = true
 provider = "claude-cli"
 model = "claude-haiku-5-5"
 reasoning = "medium"
@@ -2133,8 +2152,8 @@ batching_rules = "1"
 result_validator = "1"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
-catalog_path = "data/reference/owasp/fixtures/asvs-5.0.0.json"
-catalog_sha256 = "841724424177d187f85a1128f30b432e2598316d215e99314cf8f87a5771b4e9"
+catalog_path = "data/reference/owasp/catalogs/asvs-5.0.0.json"
+catalog_sha256 = "f4d237a894ad86ac3849b5e9ae8faadb9d922e5b219d9822b065d13584c21742"
 version = "5.0.0"
 repository = "https://github.com/OWASP/ASVS"
 ref = "v5.0.0_release"
@@ -2142,8 +2161,8 @@ commit = "5cf9b032440be53ce345ab3c130fda46ba1ce7a2"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.MASVS]
-catalog_path = "data/reference/owasp/fixtures/masvs-2.1.0.json"
-catalog_sha256 = "845f6e57f5f61094d059cdcc8882c3fb9a1808c025bb5cf3b0b536969dd416d4"
+catalog_path = "data/reference/owasp/catalogs/masvs-2.1.0.json"
+catalog_sha256 = "45d3c4b53ea5178fcc7eda98edb0e2aa09ed299d718405b3ec1f280d03ed1adb"
 version = "2.1.0"
 repository = "https://github.com/OWASP/owasp-masvs"
 ref = "v2.1.0"
@@ -2151,8 +2170,8 @@ commit = "8e133d09f4140518ed04cc254b18be9ff4990ffc"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.MASTG]
-catalog_path = "data/reference/owasp/fixtures/mastg-2.0.0.json"
-catalog_sha256 = "664e962d762cbdaa34e486f6dfa48a94663d44c080db596d241325ec344a08f6"
+catalog_path = "data/reference/owasp/catalogs/mastg-2.0.0.json"
+catalog_sha256 = "7d7412a8cf74f703843af95257c3be8d56198aa4fafbe15b31db9ab3533888e1"
 version = "2.0.0"
 repository = "https://github.com/OWASP/owasp-mastg"
 ref = "v2.0.0"
@@ -2160,8 +2179,8 @@ commit = "990472dbcffe126f5556045d60270c4ffdfdde72"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.OWASP_API_TOP_10]
-catalog_path = "data/reference/owasp/fixtures/api-top10-2023.json"
-catalog_sha256 = "58291b235d5238272b406ed7779918cbeaf82333110d3d9bd8733585b814ef4c"
+catalog_path = "data/reference/owasp/catalogs/api-top10-2023.json"
+catalog_sha256 = "8962e8b85f82cf490f7c00492bfb242048b45afea07c968c0dbb207f52201ffd"
 version = "2023"
 repository = "https://github.com/OWASP/API-Security"
 ref = "2023"
@@ -2169,8 +2188,8 @@ commit = "e85ddfa5a936d4656840ac250c039c7057e66b0d"
 license = "CC-BY-SA-4.0"
 
 [jobs.job_owasp_control_assessment.settings.standards.OWASP_TOP_10]
-catalog_path = "data/reference/owasp/fixtures/top10-2025.json"
-catalog_sha256 = "10760a8e21296f94b07a8b14a081b19574ad964b680b6429771ac7a34c7c735c"
+catalog_path = "data/reference/owasp/catalogs/top10-2025.json"
+catalog_sha256 = "3361038c50640e224bcc30ebb9ad8f41e3f701fa7b60511c4a1f14781862f5a9"
 version = "2025"
 repository = "https://github.com/OWASP/Top10"
 ref = "2025"

@@ -43,6 +43,7 @@ class StandardCatalog:
     source: Mapping[str, Any]
     catalog_sha256: str
     fixture: bool
+    coverage: Mapping[str, Any]
 
     @property
     def snapshot_id(self) -> str:
@@ -95,6 +96,32 @@ def load_catalog(repository_root: Path, family: str, settings: Mapping[str, Any]
             raise ValueError(f"{family} record identity/text is invalid or duplicated")
         ids.add(native_id)
         normalized.append(dict(record))
+    acquisition = document.get("acquisition", {})
+    if not document.get("fixture", False):
+        from .acquisition import NORMALIZER, PINS
+        if (not isinstance(acquisition, Mapping) or acquisition.get("normalizer") != NORMALIZER
+                or acquisition.get("tree_commit") != upstream["commit"]
+                or upstream["commit"] != PINS[family][1]
+                or acquisition.get("path_pattern") != PINS[family][5]
+                or acquisition.get("completeness") != "complete"
+                or acquisition.get("exclusions") != []):
+            raise ValueError(f"{family} complete catalog lacks a supported pinned acquisition")
+        declared = acquisition.get("declared_ids")
+        if (not isinstance(declared, list) or sorted(ids) != declared
+                or digest(declared) != acquisition.get("declared_ids_sha256")
+                or digest(normalized) != acquisition.get("normalized_records_sha256")):
+            raise ValueError(f"{family} catalog differs from the declared upstream inventory")
+        inventory = acquisition.get("sources", {})
+        used = set()
+        for record in normalized:
+            source = record.get("source", {})
+            path = source.get("path")
+            if (path not in inventory or not re.fullmatch(PINS[family][5], str(path))
+                    or inventory[path] != {key: source.get(key) for key in ("git_blob", "sha256")}):
+                raise ValueError(f"{family} record lacks resolving acquisition provenance")
+            used.add(path)
+        if used != set(inventory) or not document.get("distribution", {}).get("license_text"):
+            raise ValueError(f"{family} catalog inventory or distribution attribution is incomplete")
     return StandardCatalog(
         family=family,
         version=version,
@@ -103,6 +130,10 @@ def load_catalog(repository_root: Path, family: str, settings: Mapping[str, Any]
         source={key: str(upstream[key]) for key in sorted(required)},
         catalog_sha256=actual,
         fixture=bool(document.get("fixture", False)),
+        coverage=(dict(acquisition) if acquisition else {
+            "completeness": "abridged_fixture", "declared_ids": sorted(ids),
+            "exclusions": ["all upstream records not explicitly included in this fixture"],
+        }),
     )
 
 
@@ -132,6 +163,9 @@ def standards_manifest(catalogs: Mapping[str, StandardCatalog]) -> dict[str, Any
             "record_count": len(catalog.records),
             "upstream": dict(catalog.source),
             "fixture": catalog.fixture,
+            "completeness": catalog.coverage["completeness"],
+            "declared_record_count": len(catalog.coverage["declared_ids"]),
+            "exclusions": catalog.coverage["exclusions"],
         })
         if catalog.fixture:
             gaps.append(f"{family} uses a pinned abridged fixture; live upstream refresh is unverified")
@@ -158,7 +192,7 @@ def control_records(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int,
             record = dict(raw)
             record.update({"family": family, "version": catalog.version,
                            "control_identity": catalog.identity(str(raw["id"])),
-                           "catalog_sha256": catalog.catalog_sha256})
+                           "catalog_sha256": catalog.catalog_sha256, "fixture": catalog.fixture})
             if family == "MASVS":
                 record["supporting_tests"] = sorted(
                     catalogs["MASTG"].identity(str(test["id"]))

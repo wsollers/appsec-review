@@ -189,6 +189,8 @@ class _Builder:
                 row["advisory"] = lead.get("advisory_summary")
             if lead.get("artifacts"):
                 row["artifacts"] = lead["artifacts"]
+            if lead.get("control_assessment"):
+                row["control_assessment"] = lead["control_assessment"]
             rows.append(row)
         return rows
 
@@ -201,7 +203,12 @@ class _Builder:
             return [], []
         gaps: list[str] = []
         function = self.neighborhood.get("function")
-        located, reason = self.source(lead["ref"])
+        source_ref = lead["ref"]
+        if lead.get("control_assessment"):
+            source_ref = next((item["source_identity"] for item in lead["control_assessment"].get("evidence", ())
+                               if item.get("resolved") and item.get("locator", {}).get("kind") == "source"),
+                              source_ref)
+        located, reason = self.source(source_ref)
         if located is None:
             return [], [f"no source text for the lead: {reason}"]
         location, lines = located["location"], located["lines"]

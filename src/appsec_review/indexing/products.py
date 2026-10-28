@@ -986,7 +986,19 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
                        + str(context.owasp.get("reason", "the OWASP workbench has no accepted index in this run")))
     components = {row["native_id"]: row["identity"]
                   for row in shards.entities(shards.select(index="components"), kinds=("component",))}
-    known = shards.entity_ids()
+    resolver = None
+    if context.owasp.get("assessment_mode") == "assessment":
+        from appsec_review.owasp_workbench.evidence import EvidenceResolver
+        from appsec_review.retrieval.core import RetrievalCore
+        from appsec_review.review.scope import accept_manifest
+        upstream = context.owasp["accepted_upstream_manifest"]
+        path = context.run_root / upstream["path"]
+        core = RetrievalCore(context.run_root.parent, context.run_root.name, manifest_path=path,
+                             manifest_sha256=upstream["sha256"])
+        if core.manifest["target_snapshot"] != context.snapshot:
+            raise ValueError("OWASP publication concerns a different target snapshot")
+        resolver = EvidenceResolver(core, accept_manifest(context.run_root, manifest_path=path,
+                                                           manifest_sha256=upstream["sha256"]))
     results: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     for shard in context.owasp["shards"]:
         if shard.get("family") != "control-result":
@@ -1001,10 +1013,15 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
     for shard, record in results[:context.max_facts]:
         citations = [item for item in record.get("evidence_used") or () if isinstance(item, Mapping)]
         evidence = []
-        for citation in citations[:10]:
-            source = str(citation.get("source_identity", ""))[:256]
-            evidence.append({"source_identity": source, "resolved": source in known,
-                             "artifact_sha256": citation.get("artifact_sha256"), "lines": citation.get("lines")})
+        for citation in citations:
+            resolved, reason = False, "qualification or legacy citation is not accepted target evidence"
+            if resolver is not None:
+                try:
+                    resolver.resolve(citation, component_id=str(record["component_id"]))
+                    resolved, reason = True, None
+                except (ValueError, OSError, UnicodeError) as exc:
+                    reason = f"{type(exc).__name__}: {exc}"
+            evidence.append({**citation, "resolved": resolved, "resolution_gap": reason})
         unresolved = sum(1 for item in evidence if not item["resolved"])
         unresolved_total += unresolved
         gaps = [str(gap)[:240] for gap in record.get("gaps") or ()][:5]
@@ -1013,6 +1030,26 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
         if unresolved:
             gaps.append(f"validator_gap: {unresolved} citation(s) do not resolve to an accepted retrieval identity")
         component = str(record.get("component_id"))
+        mode = record.get("assessment_mode", "qualification")
+        eligible = bool(mode == context.owasp.get("assessment_mode") == "assessment"
+                        and record.get("lead_eligible") and evidence and not unresolved
+                        and record.get("applicability") in {"applicable", "conditional"}
+                        and record.get("control_status") == "not_satisfied")
+        obligations = []
+        for item in record.get("obligations", ()):
+            obligation = item["obligation"]
+            obligations.append({
+                "obligation_id": obligation["obligation_id"], "rule_version": obligation["rule_version"],
+                "subject_id": obligation["subject_id"], "scope": obligation["scope"],
+                "invariant": obligation.get("invariant"), "outcome": item["final_outcome"],
+                "disposition": item["disposition"], "rationale": item.get("rationale"),
+                "assumptions": item["assumptions"], "evidence_requests": item["evidence_requests"],
+                "limitations": item["limitations"], "gaps": item["gaps"],
+                "independent_outcome": item["independent_assessment"]["outcome"],
+                "independent_rationale": item["independent_assessment"].get("rationale"),
+            })
+        observations = [{key: value for key, value in item.items() if key != "evidence"}
+                        for item in record.get("observations", ())]
         record_fact = fact(
             context.snapshot, name, context.rule_version,
             {"row": record.get("row_id"), "control": record.get("control_identity"), "component": component},
@@ -1026,8 +1063,20 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
             result={"control_identity": record.get("control_identity"), "component_id": component,
                     "applicability": record.get("applicability"), "control_status": record.get("control_status"),
                     "verification_status": record.get("verification_status"), "evidence": evidence,
-                    "evidence_truncated": max(0, len(citations) - 10), "unresolved_evidence": unresolved,
+                    "assessment_mode": mode, "production_eligible": eligible,
+                    "execution_completion": record.get("execution_completion"),
+                    "coverage_completeness": record.get("coverage_completeness"),
+                    "obligations": obligations, "observations": observations,
+                    "disagreements": record.get("disagreements", []), "limitations": record.get("gaps", []),
+                    "message": "; ".join(str(item.get("mechanism", "")) for item in observations)[:1024],
+                    "interpretation": "analyst-assessed context, never direct vulnerability or safety proof",
+                    "rule_cwe": {"V1.2.4": ["CWE-89"], "V6.2.1": ["CWE-521"],
+                                 "V8.2.1": ["CWE-862"]}.get(str(record.get("control_identity", "")).split(":")[-1], []),
+                    "evidence_truncated": 0, "unresolved_evidence": unresolved,
                     "workbench_reference": {"family": "control-result", "shard_id": shard.get("shard_id"),
+                                            "manifest_path": context.owasp.get("manifest_path"),
+                                            "manifest_sha256": context.owasp.get("manifest_sha256"),
+                                            "path": shard["path"], "sha256": shard["sha256"],
                                             "row_id": record.get("row_id"),
                                             "query": "query_owasp_workbench family=control-result"}})
         derived.entities.append(record_fact)
@@ -1211,7 +1260,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("ci_trust", "ci-trust/1", _select_ci_trust, _build_ci_trust),
     ProductRule("history_context", "history-context/1", _select_history_context, _build_history_context,
                 links=("history_code",)),
-    ProductRule("control_evidence", "control-evidence/1", _select_control_evidence, _build_control_evidence,
+    ProductRule("control_evidence", "control-evidence/2", _select_control_evidence, _build_control_evidence,
                 owasp=True),
     ProductRule("reference_intelligence", "reference-intelligence/2", _select_reference,
                 _build_reference_intelligence, feeds=("mitre",)),

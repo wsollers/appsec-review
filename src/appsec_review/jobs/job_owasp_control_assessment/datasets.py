@@ -10,7 +10,9 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_owasp_control_assessment/attempts/*"
-CONSUMES = ('job_target_analysis_plan',)
+from appsec_review.owasp_workbench.evidence import UPSTREAM_JOBS
+
+CONSUMES = UPSTREAM_JOBS
 DATASETS = (
     indexed("owasp_workbench", "publication", "owasp", "appsec-review/owasp-index-shard/1",
             "Standards, component classifications, applicability, validation work, finding packages and "

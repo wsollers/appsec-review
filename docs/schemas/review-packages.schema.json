@@ -996,6 +996,7 @@
             "callee",
             "corroboration",
             "build"
+            ,"control_context"
           ]
         }
       }
@@ -1767,6 +1768,10 @@
         },
         "flow_ids": {
           "$ref": "#/$defs/inference_identities"
+        },
+        "control_assessment": {
+          "type": "object",
+          "description": "Provisional OWASP interpretation with underlying typed evidence, scope, dissent and authoritative publication. Never direct proof."
         }
       }
     },

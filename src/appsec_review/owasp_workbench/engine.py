@@ -94,6 +94,7 @@ def characterize_components(
     components: Sequence[Mapping[str, Any]], *,
     inference: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
     max_components: int = 128,
+    assessment_mode: str = "qualification",
 ) -> tuple[dict[str, Any], ...]:
     """Classify coherent accepted components without reading a target tree.
 
@@ -110,9 +111,21 @@ def characterize_components(
             raise ValueError("component/project identities must be present and unique")
         seen.add(component_id)
         citations = [dict(value) for value in raw.get("evidence", ()) if isinstance(value, Mapping)]
-        if not citations or any(not _citation_valid(value) for value in citations):
+        if not citations or any(not (
+                value.get("schema") == "appsec-review/owasp-evidence-reference/1"
+                if assessment_mode == "assessment" else _citation_valid(value)) for value in citations):
             raise ValueError(f"component {component_id} lacks resolving evidence citations")
         roles, reasons = _deterministic_roles(raw)
+        routing = list(raw.get("routing_context", ()))
+        tag_roles = {
+            "func:data:sql-query": "storage", "func:auth:authentication": "authentication_identity",
+            "func:crypto:encryption": "cryptography_data_protection",
+        }
+        for tag in routing:
+            mapped = tag_roles.get(tag.get("tag"))
+            if mapped:
+                roles.add(mapped)
+                reasons.append(f"accepted tag {tag['tag']} routes context; it is not control proof")
         inference_record = {"status": "not_needed", "proposal_sha256": None}
         ambiguity = []
         if not roles:
@@ -150,6 +163,10 @@ def characterize_components(
             "confidence": confidence,
             "reasons": reasons,
             "evidence": citations,
+            "assessment_mode": assessment_mode,
+            "routing_context": routing,
+            "evidence_fingerprint": raw.get("evidence_fingerprint"),
+            "limitations": list(raw.get("limitations", ())),
             "ambiguity": ambiguity,
             "negative_evidence_limits": [
                 "absence from accepted bounded indexes is not evidence that a role is absent"
@@ -158,7 +175,12 @@ def characterize_components(
             "inference": inference_record,
             "input_fingerprint": _hash(raw),
         }
-        result["classification_fingerprint"] = _hash(result)
+        if assessment_mode == "assessment":
+            from .assessment import _semantic
+            result["input_fingerprint"] = _hash(_semantic(raw))
+            result["classification_fingerprint"] = _hash(_semantic(result))
+        else:
+            result["classification_fingerprint"] = _hash(result)
         results.append(result)
     return tuple(sorted(results, key=lambda item: (item["project_id"], item["component_id"])))
 
@@ -186,7 +208,8 @@ def select_profiles(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int 
 def build_applicability(catalogs: Mapping[str, StandardCatalog],
                         classifications: Sequence[Mapping[str, Any]],
                         selection: Mapping[str, Any], *,
-                        dynamic_authorized: bool = False) -> tuple[dict[str, Any], ...]:
+                        dynamic_authorized: bool = False,
+                        assessment_mode: str = "qualification") -> tuple[dict[str, Any], ...]:
     policy = selection.get("policy", {})
     controls = control_records(catalogs, asvs_level=int(policy.get("asvs_level", 0)),
                                masvs_profile=str(policy.get("masvs_profile", "")))
@@ -223,6 +246,25 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
                 outcome = "applicable"
                 reason = "component roles and selected control routing rules intersect"
                 gaps = []
+            if assessment_mode == "assessment":
+                from .obligations import procedure_for
+                rule = procedure_for(control)
+                # Routing uncertainty is not positive N/A evidence. A concrete accepted source
+                # subject can still be assessed conditionally without inventing a component role.
+                if outcome == "not_applicable" and not family_match and family == "MASVS" and roles & APPLICATION_ROLES:
+                    pass
+                elif rule is None:
+                    outcome = "unsupported_missing_evidence"
+                    reason = "no reviewed versioned proof procedure for this selected control"
+                    gaps = [reason]
+                elif rule.evidence_mode in {"dynamic_runtime", "manual_observation"}:
+                    outcome = "unsupported_missing_evidence"
+                    reason = "no accepted environment-bound runtime/manual evidence adapter is available"
+                    gaps = [reason]
+                else:
+                    outcome = "applicable" if roles else "conditional"
+                    reason = "assess only named accepted source subjects; classification is routing context"
+                    gaps = []
             if outcome == "not_applicable" and (not citations or not reason):
                 raise ValueError("not_applicable requires positive resolving evidence and a reason")
             row = {
@@ -237,6 +279,7 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
                 "required_tools": list(control.get("required_tools", ())),
                 "outcome": outcome, "reason": reason, "evidence": citations,
                 "confidence": component["confidence"], "gaps": gaps,
+                "assessment_mode": assessment_mode,
                 "rule_version": "applicability-rules/1",
             }
             if outcome not in APPLICABILITY_OUTCOMES:
@@ -306,7 +349,9 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
                            controls: Sequence[Mapping[str, Any]],
                            classifications: Sequence[Mapping[str, Any]],
                            evidence: Sequence[Mapping[str, Any]], *,
-                           retrieval_manifest: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+                           retrieval_manifest: Mapping[str, Any],
+                           assessment_mode: str = "qualification",
+                           max_subjects: int = 8) -> tuple[dict[str, Any], ...]:
     row_by_id = {row["row_id"]: row for row in rows}
     control_by_id = {control["control_identity"]: control for control in controls}
     component_by_id = {item["component_id"]: item for item in classifications}
@@ -323,6 +368,7 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
             "row_id": row_id, "batch_id": batch["batch_id"],
             "standard": row["standard"], "version": row["version"], "profile": row["profile"],
             "control": {"identity": row["control_identity"], "id": row["control_id"],
+                        "family": row["standard"], "version": row["version"],
                         "title": control["title"], "text": control["text"]},
             "component": {"target_id": row["target_id"], "project_id": row["project_id"],
                           "component_id": row["component_id"], "roles": component["roles"],
@@ -331,12 +377,21 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
             "allowed_retrieval_tools": sorted(set(batch["required_tools"]) |
                                               {"find", "read_excerpt", "resolve_evidence"}),
             "retrieval_manifest": dict(retrieval_manifest),
+            "assessment_mode": assessment_mode,
+            "routing_context": component.get("routing_context", []),
             "proof_obligations": [{"obligation_id": f"{row_id}:primary",
                                    "evidence_mode": row["evidence_mode"],
                                    "required_tools": row["required_tools"]}],
             "prohibited_claims": ["compliance certification", "uncited vulnerability",
                                   "severity without independent validation", "runtime state from static evidence"],
         }
+        if assessment_mode == "assessment":
+            from .obligations import instantiate
+            package["proof_obligations"] = instantiate(control, row, observations, max_subjects=max_subjects)
+            package["limitations"] = [
+                *component.get("limitations", []),
+                "Assessment covers named source subjects, not the entire component or deployed system.",
+            ]
         package["package_id"] = f"package-{_hash(package)[:24]}"
         packages.append(package)
     return tuple(packages)
@@ -344,16 +399,25 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
 
 def assess_batch(batch: Mapping[str, Any], packages: Sequence[Mapping[str, Any]], *,
                  worker: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
-                 fail: bool = False) -> dict[str, Any]:
+                 fail: bool = False, assessment_mode: str = "qualification") -> dict[str, Any]:
+    if assessment_mode == "assessment" and not fail:
+        if worker is None:
+            raise ValueError("assessment mode requires a wired inference worker")
+        return dict(worker({"batch": batch, "packages": packages}))
+    if assessment_mode not in {"assessment", "qualification"}:
+        raise ValueError("unknown OWASP assessment mode")
     if fail:
         return {"schema": "appsec-review/validator-batch-result/1", "batch_id": batch["batch_id"],
                 "fingerprint": batch["fingerprint"], "terminal_state": "failed",
                 "results": [{"row_id": package["row_id"], "status": "not_assessed",
                              "observations": [], "evidence_used": [],
                              "gaps": ["validator worker failed; successful sibling batches remain valid"],
+                             "assessment_mode": assessment_mode, "lead_eligible": False,
+                             "execution_completion": "failed", "verification_status": "pending",
+                             "coverage_completeness": "unresolved",
                              "disagreements": []} for package in packages],
-                "metrics": {"model_calls": 0, "retrieval_calls": 0, "input_tokens": 0,
-                            "output_tokens": 0, "cost_usd": None, "duration_ms": 0, "retries": 0}}
+                "metrics": {"model_calls": 0, "retrieval_calls": 0, "input_tokens": None,
+                            "output_tokens": None, "cost_usd": None, "duration_ms": 0, "retries": 0}}
     results = []
     retrieval_calls = 0
     for package in packages:
@@ -364,7 +428,6 @@ def assess_batch(batch: Mapping[str, Any], packages: Sequence[Mapping[str, Any]]
             citation = evidence.get("citation")
             if not isinstance(citation, Mapping) or not _citation_valid(citation):
                 continue
-            retrieval_calls += 1
             if evidence.get("disposition") == "supports":
                 admissible.append(dict(evidence))
             elif evidence.get("disposition") == "refutes":
@@ -397,6 +460,9 @@ def assess_batch(batch: Mapping[str, Any], packages: Sequence[Mapping[str, Any]]
             gaps = ["no admissible resolving evidence was supplied"]
         results.append({
             "row_id": package["row_id"], "package_id": package["package_id"], "status": status,
+            "assessment_mode": "qualification", "lead_eligible": False,
+            "execution_completion": "qualification_completed",
+            "coverage_completeness": "fixture_only", "verification_status": "qualification_only",
             "observations": observations, "evidence_used": [item["citation"] for item in admissible + contradictions],
             "gaps": gaps, "disagreements": ([{"kind": "evidence_conflict",
                 "support_count": len(admissible), "refute_count": len(contradictions)}]
@@ -404,14 +470,21 @@ def assess_batch(batch: Mapping[str, Any], packages: Sequence[Mapping[str, Any]]
         })
     return {"schema": "appsec-review/validator-batch-result/1", "batch_id": batch["batch_id"],
             "fingerprint": batch["fingerprint"], "terminal_state": "succeeded", "results": results,
-            "metrics": {"model_calls": int(worker is not None), "retrieval_calls": retrieval_calls,
-                        "input_tokens": sum(item["metrics"]["input_tokens"] for item in results),
-                        "output_tokens": sum(item["metrics"]["output_tokens"] for item in results),
+            "metrics": {"model_calls": 0, "retrieval_calls": retrieval_calls,
+                        "input_tokens": None, "output_tokens": None,
                         "cost_usd": None, "duration_ms": 0, "retries": 0}}
 
 
 def verify_results(batch_results: Sequence[Mapping[str, Any]], *,
-                   independent_reviews: Mapping[str, Mapping[str, Any]] | None = None) -> tuple[dict[str, Any], ...]:
+                   independent_reviews: Mapping[str, Mapping[str, Any]] | None = None,
+                   assessment_mode: str = "qualification",
+                   reviewer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None) -> tuple[dict[str, Any], ...]:
+    if assessment_mode == "assessment":
+        if reviewer is None:
+            raise ValueError("assessment mode requires a wired independent reviewer")
+        reviewed = [dict(reviewer(batch)) for batch in batch_results]
+        return tuple(sorted((dict(result) for batch in reviewed for result in batch["results"]),
+                            key=lambda item: item["row_id"]))
     reviews = independent_reviews or {}
     verified = []
     for batch in batch_results:
@@ -443,7 +516,10 @@ def verify_results(batch_results: Sequence[Mapping[str, Any]], *,
             if result["status"] not in RESULT_STATUSES:
                 raise ValueError("validator returned an unsupported control status")
             result["verification_status"] = (
-                "verified" if not result.get("gaps") else "verified_with_gaps")
+                "qualification_only")
+            result["assessment_mode"] = "qualification"
+            result["lead_eligible"] = False
+            result["observations"] = [{**item, "state": "qualification_only"} for item in accepted_observations]
             verified.append(result)
     return tuple(sorted(verified, key=lambda item: item["row_id"]))
 
@@ -467,10 +543,19 @@ def deterministic_join(rows: Sequence[Mapping[str, Any]], verified_results: Sequ
         joined.append({
             "row_id": row_id, "control_identity": row["control_identity"],
             "component_id": row["component_id"], "applicability": row["outcome"],
+            "target_snapshot": row["target_id"], "project_id": row["project_id"],
+            "standard": row["standard"], "version": row["version"], "profile": row["profile"],
+            "assessment_mode": row.get("assessment_mode", "qualification"),
+            "execution_completion": result.get("execution_completion", "completed") if result else "not_dispatched",
+            "coverage_completeness": result.get("coverage_completeness", "unresolved") if result else
+                                     "not_applicable" if row["outcome"] == "not_applicable" else "unresolved",
             "control_status": result["status"] if result else "not_assessed",
             "verification_status": result.get("verification_status") if result else "not_required",
             "evidence_used": result.get("evidence_used", []) if result else row["evidence"],
             "observations": result.get("observations", []) if result else [],
+            "obligations": result.get("obligations", []) if result else [],
+            "lead_eligible": bool(result and result.get("lead_eligible")
+                                  and row.get("assessment_mode") == "assessment"),
             "disagreements": result.get("disagreements", []) if result else [],
             "gaps": list(row.get("gaps", ())) + (list(result.get("gaps", ())) if result else []),
         })

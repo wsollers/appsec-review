@@ -56,6 +56,7 @@ FAMILY_RULES["source_sast"] = "appsec-review/lead-family/source_sast/3"
 # vulnerability), at its own native severity; scan-run summaries and inventory rows are deliberate non-leads.
 # (/2 admitted one lead per artifact scan, nested findings collapsed to ``unknown``.)
 FAMILY_RULES["artifact_scanner"] = "appsec-review/lead-family/artifact_scanner/3"
+FAMILY_RULES["owasp_control"] = "appsec-review/lead-family/owasp_control/2"
 ADVISORY_FAMILIES = frozenset({"artifact_scanner", "dependency_advisory"})
 # Producer whose accepted shard must exist for the family to have coverage.
 FAMILY_PRODUCERS = {
@@ -233,6 +234,7 @@ class Lead:
     triage_reason: str | None = None
     severity_references: tuple[Mapping[str, Any], ...] = field(default=(), compare=False, hash=False)
     coverage_gaps: tuple[ScopeGap, ...] = ()
+    control_assessment: Mapping[str, Any] | None = field(default=None, compare=False, hash=False)
 
     @property
     def effective_severity(self) -> str:
@@ -628,16 +630,29 @@ def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None 
             if status == "cannot_verify":
                 gaps.append(ScopeGap("owasp_control", f"{result.get('control_identity')}:{result.get('component_id')}",
                                      "partial", "OWASP control could not be verified"))
-            if status != "not_satisfied":
+            if (status != "not_satisfied" or result.get("assessment_mode") != "assessment"
+                    or result.get("production_eligible") is not True):
                 continue
             reported, native, basis = severity_for("owasp_control", result)
             path, line, exact = _location(row)
             subject = row["payload"].get("subject_identity")
+            references = [item for item in result.get("evidence", ()) if item.get("resolved") is True]
+            related = [(item["source_identity"], "source") for item in references
+                       if item.get("locator", {}).get("kind") == "source"]
+            if isinstance(subject, str):
+                related.append((subject, "component"))
+            duplicates = sorted(lead.observation_id for lead in leads.values()
+                if lead.family != "owasp_control" and set(lead.rule_cwe) & set(_cwes(result))
+                and lead.path and lead.start_line and any(
+                    item.get("locator", {}).get("path") == lead.path
+                    and item["locator"]["lines"][0] <= lead.start_line <= item["locator"]["lines"][1]
+                    for item in references if item.get("locator", {}).get("kind") == "source"))
             add(Lead(row["identity"], "owasp_control", "owasp-workbench", str(result.get("control_identity") or "unknown"),
-                     native, reported, basis, _message(result), _cwes(result), path, line, exact,
+                     native, reported, basis, _message(result), _cwes(result), None, None, False,
                      str(shard["name"]), str(shard.get("shard_id", "default")), scope.shard_sha256(shard),
-                     related=((subject, "component"),) if isinstance(subject, str) else (),
-                     component_hint=str(result["component_id"]) if result.get("component_id") else None))
+                     duplicate_of=duplicates[0] if duplicates else None, related=tuple(sorted(set(related))),
+                     component_hint=str(result["component_id"]) if result.get("component_id") else None,
+                     control_assessment=dict(result)))
 
     for (shard_label, scanner), count in sorted(unmapped.items()):
         gaps.append(ScopeGap("unmapped_observations", f"{shard_label}:{scanner}", "partial",
