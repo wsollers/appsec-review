@@ -299,13 +299,23 @@ admissibility, job topology and implementation plan.
 | `ci_trust` | CI graph, build artifacts, deployment metadata | untrusted trigger→permission/secret/build/deploy paths | dynamic expression or external workflow |
 | `redacted_secret_exposure` | secret scanners and safe build/CI facts | location, sink and redacted fingerprint only | scanner unavailable; never return secret bytes |
 | `history_context` | Git, review/deployment data, SII and change context | bounded change/owner/fix/test context per file or symbol | missing VCS/review metadata or attribution |
-| `control_evidence` | OWASP workbench, findings, validators | control→evidence/disposition links | assessment unavailable or validator gap |
+| `control_evidence` | Accepted OWASP assessment publication and typed original evidence | scoped control→evidence/disposition links with hash-pinned authority, counterevidence and dissent; indirect for every final predicate | assessment unavailable, qualification-only, unsupported procedure, unresolved evidence or validator gap |
 | `reference_intelligence` | pinned MITRE feed (`reference-intelligence/2`) | CWE identities of accepted observations joined to the pinned catalog with name and abstraction | feed freshness or identity mismatch; CAPEC/ATT&CK relationships not normalized |
 | `document_context` | accepted OpenAPI, Postman, unit-test, STRIDE and DFD records | exact method/route and trust-boundary groups with source identities | unsupported formats, unmatched declarations, bounded truncation; intent never proves enforcement |
 | `contract_enforcement` | future API/IDL contracts, handlers, validators | declaration→handler→enforcement chain | contract unavailable or declaration not enforced |
 | `deployment_exposure` | future topology, CI/build/artifact graph | service→image→binary→source and privilege/exposure | environment not captured or image not bound |
 | `test_intent` | accepted document context and future source-symbol links | richer test assertion and negative-case links | tests are not executed; intent is not enforcement |
 | `review_package` | all accepted indices and products | compact evidence bundle for a bounded review question | every missing contributing lane and package truncation |
+
+OWASP runs after accepted tag-cloud/classification/graph context and before this indexing stage
+in the shared enabled direct/Dagster chain. Routing tags are not control proof. The projection
+preserves deep
+obligations/custody in the workbench authority, re-resolving citations under its published source
+cap; later lead/hunt assembly re-expands it with operation-local verified reuse, never a persistent
+trust cache. Qualification cannot yield production leads. Adverse hypotheses remain provisional;
+benign and unresolved rows stay coverage/counterevidence. Every PRECOMPUTED interpretation is
+indirect for every final predicate: final reviewers must retrieve original evidence, and duplicate
+sources do not multiply corroboration. See [the workbench design](owasp-control-workbench.md).
 
 The [inventory and first-stage batch](../tasks/review-data-indexing-prompt.md) enforces dataset
 accounting across enabled jobs, adds safe query routes and cross-domain links, and publishes

@@ -35,6 +35,14 @@ max_input_tokens = 200000
 max_output_tokens = 32000
 timeout_seconds = 600
 
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+provider = "claude-cli"
+model = "claude-opus-5-5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+timeout_seconds = 600
+
 [jobs.job_project_build.settings.model]
 model = "claude-sonnet-5-5"
 reasoning = "medium"

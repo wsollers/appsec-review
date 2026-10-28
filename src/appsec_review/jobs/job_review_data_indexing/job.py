@@ -166,8 +166,19 @@ def owasp_status(run_root: Path) -> dict[str, Any]:
     if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file() or \
             file_sha256(manifest_path) != pointer.get("manifest_sha256"):
         raise ValueError("accepted OWASP workbench manifest identity changed")
+    from appsec_review.storage.shared import consume_named
+    consume_named(run_root, manifest_path, namespace="owasp-shard", expected_sha256=pointer["manifest_sha256"])
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if (manifest.get("schema") != "appsec-review/owasp-index-manifest/1"
+            or manifest.get("run_id") != run_root.name or pointer.get("run_id") != run_root.name):
+        raise ValueError("accepted OWASP publication belongs to another run")
+    if manifest.get("assessment_mode", "qualification") not in {"assessment", "qualification"}:
+        raise ValueError("accepted OWASP publication has an invalid assessment mode")
     return {"status": "accepted", "manifest_sha256": pointer.get("manifest_sha256"),
+            "manifest_path": manifest_path.relative_to(run_root).as_posix(),
+            "assessment_mode": manifest.get("assessment_mode", "qualification"),
+            "assessment_bounds": manifest.get("assessment_bounds", {}),
+            "accepted_upstream_manifest": manifest.get("accepted_upstream_manifest"),
             "shards": list(manifest.get("shards", ()))}
 
 

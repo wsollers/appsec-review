@@ -189,6 +189,8 @@ class _Builder:
                 row["advisory"] = lead.get("advisory_summary")
             if lead.get("artifacts"):
                 row["artifacts"] = lead["artifacts"]
+            if lead.get("control_assessment"):
+                row["control_assessment"] = lead["control_assessment"]
             rows.append(row)
         return rows
 
@@ -197,6 +199,8 @@ class _Builder:
         if self.package.get("kind") != "finding_lead" or len(leads) != 1:
             return [], []
         lead = leads[0]
+        if lead.get("control_assessment"):
+            return self.control_source_rows(lead["control_assessment"])
         if lead.get("artifacts") and not lead["where"].get("path"):
             return [], []
         gaps: list[str] = []
@@ -230,6 +234,43 @@ class _Builder:
                 rows.append(row)
             if gap:
                 gaps.append(gap)
+        return rows, gaps
+
+    def control_source_rows(self, assessment: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+        """Cited source is context for an OWASP interpretation, never a location of the conclusion."""
+        from appsec_review.owasp_workbench.evidence import redact
+
+        rows, gaps, seen = [], [], set()
+        remaining = self.limits.max_source_lines
+        for evidence in assessment.get("evidence", ()):
+            locator = evidence.get("locator") or {}
+            if evidence.get("resolved") is not True or locator.get("kind") != "source":
+                continue
+            ref, span = evidence["source_identity"], locator["lines"]
+            key = ref, tuple(span)
+            if key in seen:
+                continue
+            seen.add(key)
+            located, reason = self.source(ref)
+            if located is None:
+                gaps.append(f"no source text for OWASP underlying evidence: {reason}")
+                continue
+            location, lines = located["location"], located["lines"]
+            if (location["path"] != locator["path"] or location["file_sha256"] != locator["file_sha256"]
+                    or not 1 <= span[0] <= span[1] <= len(lines)):
+                gaps.append("OWASP underlying citation differs from accepted source; no excerpt is shown")
+                continue
+            if remaining <= 0:
+                gaps.append("OWASP source evidence exceeds the view line budget; expand the underlying references")
+                break
+            last = min(span[1], span[0] + remaining - 1)
+            safe_lines = redact("\n".join(lines) + "\n")[0].splitlines()
+            rows.append(self._span(ref, locator["path"], locator["file_sha256"], safe_lines,
+                                   span[0], last, "cited_source", last < span[1]))
+            self.locator_paths.add(locator["path"])
+            remaining -= last - span[0] + 1
+            if last < span[1]:
+                gaps.append("OWASP cited source span was cut by the view line budget")
         return rows, gaps
 
     def _line(self, path: str, number: int, text: str) -> str:
@@ -313,7 +354,9 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         elif role in {"points_to", "indirect_call", "memory_object"}:
             memory.append({"ref": ref, "role": role, "kind": entry["kind"]})
         else:
-            other.append({"ref": ref, "role": role, "kind": entry["kind"]})
+            other.append({"ref": ref, "role": role, "kind": entry["kind"],
+                          **({"control_assessment": entry["control_assessment"]}
+                             if entry.get("control_assessment") is not None else {})})
 
     rows: dict[str, list[dict[str, Any]]] = {
         "sinks": [dict(item) for item in nb.get("sinks", ())], "ranges": [dict(item) for item in nb.get("ranges", ())],

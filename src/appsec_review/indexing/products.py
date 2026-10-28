@@ -979,14 +979,211 @@ def _select_control_evidence(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
     return shards.select(index="components")
 
 
+class _ControlResolver:
+    """Reuse only successfully verified full citations during one pinned-publication operation."""
+
+    def __init__(self, resolver: Any):
+        self.resolver = resolver
+        self.verified: dict[str, Any] = {}
+
+    def resolve(self, citation: Mapping[str, Any], *, component_id: str) -> Mapping[str, Any]:
+        key = digest({"component_id": component_id, "citation": citation})
+        if key not in self.verified:
+            self.verified[key] = self.resolver.resolve(citation, component_id=component_id)
+        return self.verified[key]
+
+
+def _control_resolver(run_root: Path, snapshot: str, publication: Mapping[str, Any]) -> Any:
+    if publication.get("assessment_mode") != "assessment":
+        return None
+    from appsec_review.owasp_workbench.evidence import EvidenceResolver
+    from appsec_review.retrieval.core import RetrievalCore
+    from appsec_review.review.scope import accept_manifest
+    from appsec_review.storage.shared import safe_path
+
+    upstream = publication["accepted_upstream_manifest"]
+    path = safe_path(run_root, upstream["path"])
+    core = RetrievalCore(run_root.parent, run_root.name, manifest_path=path,
+                         manifest_sha256=upstream["sha256"])
+    if core.manifest["target_snapshot"] != snapshot:
+        raise ValueError("OWASP publication concerns a different target snapshot")
+    return _ControlResolver(EvidenceResolver(core, accept_manifest(run_root, manifest_path=path,
+                                                  manifest_sha256=upstream["sha256"]),
+                            max_source_lines=publication.get("assessment_bounds", {}).get("max_source_lines", 120)))
+
+
+def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any],
+                        reference: Mapping[str, Any], resolver: Any) -> dict[str, Any]:
+    """Re-resolve the original references, including the independent review and counterevidence."""
+    from appsec_review.owasp_workbench.evidence import redact
+
+    def clean(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {key: clean(child) for key, child in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [clean(child) for child in value]
+        return redact(value)[0] if isinstance(value, str) else value
+
+    citations = list(record.get("evidence_used") or ())
+    for item in record.get("obligations") or ():
+        for assessment in (item, item.get("independent_assessment") or {}):
+            citations.extend(assessment.get("supporting") or ())
+            citations.extend(assessment.get("contradictory") or ())
+    for observation in record.get("observations") or ():
+        citations.extend(observation.get("evidence") or ())
+    evidence, categories = [], {}
+    seen = set()
+    for citation in citations:
+        key = digest(citation)
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved, reason = False, "qualification citation is not accepted target evidence"
+        if resolver is not None and isinstance(citation, Mapping):
+            try:
+                material = resolver.resolve(citation, component_id=str(record["component_id"]))
+                categories[key] = material["category"]
+                resolved, reason = True, None
+            except (ValueError, OSError, UnicodeError) as exc:
+                reason = f"{type(exc).__name__}: {exc}"
+        if not isinstance(citation, Mapping):
+            reason = "citation is not a typed evidence reference"
+        evidence.append({**(dict(citation) if resolved else clean(citation)
+                            if isinstance(citation, Mapping) else {}),
+                         "resolved": resolved, "resolution_gap": reason})
+    unresolved = sum(not item["resolved"] for item in evidence)
+    obligations = clean(record.get("obligations") or [])
+    observations = clean(record.get("observations") or [])
+    # Validated custody is copied verbatim, not passed through free-text redaction or depth truncation.
+    for original, copied in zip(record.get("obligations") or (), obligations, strict=True):
+        for assessment, target in ((original, copied),
+                (original.get("independent_assessment") or {}, copied.get("independent_assessment") or {})):
+            for role in ("supporting", "contradictory"):
+                if role in assessment:
+                    target[role] = [dict(item) if digest(item) in categories else clean(item)
+                                    for item in assessment[role]]
+            for original_check, copied_check in zip(assessment.get("citation_checks") or (),
+                                                     target.get("citation_checks") or (), strict=True):
+                citation = original_check.get("reference")
+                if isinstance(citation, Mapping) and digest(citation) in categories:
+                    copied_check["reference"] = dict(citation)
+    for original, copied in zip(record.get("observations") or (), observations, strict=True):
+        copied["evidence"] = [dict(item) if digest(item) in categories else clean(item)
+                              for item in original.get("evidence") or ()]
+    adverse = {item["obligation"]["obligation_id"]: item for item in obligations
+               if item.get("final_outcome") == "not_satisfied"}
+    anchored = []
+    for observation in observations:
+        obligation = adverse.get(observation.get("obligation_id"))
+        contradictions = {digest(item) for item in (obligation or {}).get("contradictory", ())}
+        if (isinstance(observation.get("mechanism"), str) and observation["mechanism"].strip()
+                and any(digest(item) in contradictions and categories.get(digest(item)) in {
+                    "source", "scanner_observation", "static_fact"}
+                        for item in observation.get("evidence", ()))):
+            anchored.append(observation)
+    mode = (record.get("assessment_mode", "qualification")
+            if publication.get("assessment_mode") == "assessment" else "qualification")
+    eligible = bool(mode == publication.get("assessment_mode") == "assessment"
+                    and record.get("lead_eligible") is True and evidence and not unresolved and anchored
+                    and record.get("applicability") in {"applicable", "conditional"}
+                    and record.get("control_status") == "not_satisfied"
+                    and record.get("verification_status") in {
+                        "independently_assessed", "dissent", "pending", "unresolved"})
+    gaps = clean(list(record.get("gaps") or ()))
+    if not evidence:
+        gaps.append("assessment_unavailable: no resolving evidence was supplied for this control")
+    if unresolved:
+        gaps.append(f"validator_gap: {unresolved} citation(s) do not resolve to accepted upstream evidence")
+    return {
+        "control_identity": record.get("control_identity"), "component_id": record.get("component_id"),
+        "applicability": record.get("applicability"), "control_status": record.get("control_status"),
+        "verification_status": record.get("verification_status"), "assessment_mode": mode,
+        "lead_eligible": eligible, "production_eligible": eligible, "provisional": True,
+        "execution_completion": record.get("execution_completion"),
+        "worker_attempt_count": record.get("worker_attempt_count"),
+        "reviewer_attempt_count": record.get("reviewer_attempt_count"),
+        "coverage_completeness": record.get("coverage_completeness"),
+        "evidence": evidence, "obligations": obligations, "observations": observations,
+        "disagreements": clean(record.get("disagreements") or []),
+        "limitations": clean(record.get("limitations") or []), "gaps": gaps,
+        "message": "; ".join(item["mechanism"] for item in anchored)[:1024],
+        "interpretation": "analyst-assessed context, never direct vulnerability or component-safety proof",
+        "rule_cwe": {"V1.2.4": ["CWE-89"], "V6.2.1": ["CWE-521"],
+                     "V8.2.1": ["CWE-862"], "V8.3.1": ["CWE-862"]}.get(
+                         str(record.get("control_identity", "")).split(":")[-1], []),
+        "evidence_truncated": 0, "unresolved_evidence": unresolved,
+        "assessment_bounds": dict(publication.get("assessment_bounds") or {}),
+        "accepted_upstream_manifest": dict(publication.get("accepted_upstream_manifest") or {}),
+        "workbench_reference": dict(reference),
+    }
+
+
+def load_control_assessment(run_root: Path, snapshot: str, result: Mapping[str, Any], *,
+                            cache: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Expand the immutable authority, not depth-bounded index payloads.
+
+    A caller-owned cache lasts one collection/assembly operation. Publication, shard-row and full
+    citation verification is shared across its controls, scoped by run root, snapshot and exact pins.
+    """
+    from appsec_review.storage.shared import consume_named, safe_path
+
+    reference = result["workbench_reference"]
+    cache = {} if cache is None else cache
+    publication_key = "publication:" + digest({
+        "run_root": str(run_root.resolve()), "snapshot": snapshot,
+        "path": reference["manifest_path"], "sha256": reference["manifest_sha256"]})
+    key = "assessment:" + digest({"publication": publication_key, "reference": reference})
+    if key in cache:
+        return cache[key]
+    if publication_key not in cache:
+        manifest_path = safe_path(run_root, reference["manifest_path"])
+        if file_sha256(manifest_path) != reference["manifest_sha256"]:
+            raise ValueError("accepted OWASP workbench manifest identity changed")
+        consume_named(run_root, manifest_path, namespace="owasp-shard",
+                      expected_sha256=reference["manifest_sha256"])
+        publication = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (publication.get("schema") != "appsec-review/owasp-index-manifest/1"
+                or publication.get("run_id") != run_root.name):
+            raise ValueError("accepted OWASP publication belongs to another run")
+        cache[publication_key] = publication
+    publication = cache[publication_key]
+    matches = [shard for shard in publication.get("shards", ()) if shard.get("family") == "control-result"
+               and all(shard.get(key) == reference.get(key) for key in ("shard_id", "path", "sha256"))]
+    if len(matches) != 1:
+        raise ValueError("control evidence is not a member of its accepted OWASP manifest")
+    shard_key = "rows:" + digest({"publication": publication_key,
+        "shard": {key: reference[key] for key in ("shard_id", "path", "sha256")}})
+    if shard_key not in cache:
+        path = safe_path(run_root, reference["path"])
+        if file_sha256(path) != reference["sha256"]:
+            raise ValueError("accepted OWASP control-result shard changed")
+        consume_named(run_root, path, namespace="owasp-shard", expected_sha256=reference["sha256"])
+        indexed: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for row in json.loads(path.read_text(encoding="utf-8")).get("records", ()):
+            if not isinstance(row.get("row_id"), str):
+                raise ValueError("OWASP control-result row identity is invalid")
+            indexed[row["row_id"]].append(row)
+        cache[shard_key] = indexed
+    rows = cache[shard_key].get(reference["row_id"], ())
+    if len(rows) != 1:
+        raise ValueError("OWASP control-result identity is missing or ambiguous")
+    resolver_key = "resolver:" + publication_key
+    if resolver_key not in cache:
+        cache[resolver_key] = _control_resolver(run_root, snapshot, publication)
+    cache[key] = _control_assessment(rows[0], publication, reference, cache[resolver_key])
+    return cache[key]
+
+
 def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
     derived, shards, name = Derived(), context.shards, "control_evidence"
     if context.owasp.get("status") != "accepted":
         return _finish(derived, name, unavailable="control evidence is unavailable: "
                        + str(context.owasp.get("reason", "the OWASP workbench has no accepted index in this run")))
+    if context.owasp.get("assessment_mode") != "assessment":
+        derived.gap("assessment_unavailable: accepted OWASP publication is qualification-only, not target assessment")
     components = {row["native_id"]: row["identity"]
                   for row in shards.entities(shards.select(index="components"), kinds=("component",))}
-    known = shards.entity_ids()
+    resolver = _control_resolver(context.run_root, context.snapshot, context.owasp)
     results: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     for shard in context.owasp["shards"]:
         if shard.get("family") != "control-result":
@@ -994,25 +1191,29 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
         path = (context.run_root / str(shard["path"])).resolve()
         if context.run_root.resolve() not in path.parents or file_sha256(path) != shard.get("sha256"):
             raise ValueError("accepted OWASP control-result shard changed")
+        from appsec_review.storage.shared import consume_named
+        consume_named(context.run_root, path, namespace="owasp-shard", expected_sha256=shard["sha256"])
         for record in json.loads(path.read_text(encoding="utf-8")).get("records", ()):
             results.append((shard, record))
     results.sort(key=lambda pair: (str(pair[1].get("component_id")), str(pair[1].get("control_identity"))))
     unresolved_total = 0
     for shard, record in results[:context.max_facts]:
-        citations = [item for item in record.get("evidence_used") or () if isinstance(item, Mapping)]
-        evidence = []
-        for citation in citations[:10]:
-            source = str(citation.get("source_identity", ""))[:256]
-            evidence.append({"source_identity": source, "resolved": source in known,
-                             "artifact_sha256": citation.get("artifact_sha256"), "lines": citation.get("lines")})
-        unresolved = sum(1 for item in evidence if not item["resolved"])
-        unresolved_total += unresolved
-        gaps = [str(gap)[:240] for gap in record.get("gaps") or ()][:5]
-        if not citations:
-            gaps.append("assessment_unavailable: no resolving evidence was supplied for this control")
-        if unresolved:
-            gaps.append(f"validator_gap: {unresolved} citation(s) do not resolve to an accepted retrieval identity")
         component = str(record.get("component_id"))
+        reference = {"family": "control-result", "shard_id": shard.get("shard_id"),
+                     "manifest_path": context.owasp.get("manifest_path"),
+                     "manifest_sha256": context.owasp.get("manifest_sha256"),
+                     "path": shard["path"], "sha256": shard["sha256"], "row_id": record.get("row_id"),
+                     "query": "query_owasp_workbench family=control-result"}
+        assessment = _control_assessment(record, context.owasp, reference, resolver)
+        evidence, gaps = assessment["evidence"], [*assessment["gaps"], *assessment["limitations"]]
+        unresolved_total += assessment["unresolved_evidence"]
+        # Deep custody and obligation trees stay losslessly in the hash-pinned authority. Copying them
+        # through sanitize_producer_data's depth limit would silently corrupt typed citations.
+        result = {key: value for key, value in assessment.items()
+                  if key not in {"evidence", "obligations", "observations", "disagreements"}}
+        result["metadata_storage"] = "authoritative_workbench_reference"
+        result["evidence"] = [{"source_identity": item.get("source_identity"), "resolved": item["resolved"],
+                               "resolution_gap": item["resolution_gap"]} for item in evidence]
         record_fact = fact(
             context.snapshot, name, context.rule_version,
             {"row": record.get("row_id"), "control": record.get("control_identity"), "component": component},
@@ -1023,13 +1224,7 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
                   "referenced, not copied", upstream=[{"name": "owasp/control-result",
                                                        "shard_id": str(shard.get("shard_id")),
                                                        "sha256": str(shard.get("sha256"))}],
-            result={"control_identity": record.get("control_identity"), "component_id": component,
-                    "applicability": record.get("applicability"), "control_status": record.get("control_status"),
-                    "verification_status": record.get("verification_status"), "evidence": evidence,
-                    "evidence_truncated": max(0, len(citations) - 10), "unresolved_evidence": unresolved,
-                    "workbench_reference": {"family": "control-result", "shard_id": shard.get("shard_id"),
-                                            "row_id": record.get("row_id"),
-                                            "query": "query_owasp_workbench family=control-result"}})
+            result=result)
         derived.entities.append(record_fact)
         for item in evidence:
             if item["resolved"]:
@@ -1211,7 +1406,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("ci_trust", "ci-trust/1", _select_ci_trust, _build_ci_trust),
     ProductRule("history_context", "history-context/1", _select_history_context, _build_history_context,
                 links=("history_code",)),
-    ProductRule("control_evidence", "control-evidence/1", _select_control_evidence, _build_control_evidence,
+    ProductRule("control_evidence", "control-evidence/3", _select_control_evidence, _build_control_evidence,
                 owasp=True),
     ProductRule("reference_intelligence", "reference-intelligence/2", _select_reference,
                 _build_reference_intelligence, feeds=("mitre",)),
