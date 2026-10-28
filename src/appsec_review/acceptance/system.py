@@ -91,17 +91,42 @@ def final_artifact_problems(run_root: Path, schema_root: Path) -> list[Differenc
                 if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item.get("sha256"):
                     problems.append(_problem(PACKAGE_JOB, f"artifact {item.get('path')}", "the recorded bytes",
                                              "<absent or changed>"))
-    attempt, _handoff = latest_attempt(run_root, LEDGER_JOB)
-    result = _json(attempt / "result.json") if attempt else None
-    published = ((result or {}).get("outputs") or {}).get("analysis.map_and_adjudicate")
+    from appsec_review.indexing.store import accepted_handoff
+
+    published = None
+    try:
+        accepted = accepted_handoff(run_root, LEDGER_JOB)
+        if (accepted is not None and accepted.handoff.get("job_id") == LEDGER_JOB
+                and accepted.handoff.get("completion_status") in ACCEPTED):
+            published = accepted.handoff.get("outputs", {}).get("analysis.map_and_adjudicate")
+            artifact = published.get("artifact") if isinstance(published, dict) else None
+            if artifact not in accepted.handoff.get("artifacts", ()):
+                raise ValueError("ledger object is not bound to its accepted handoff")
+    except (OSError, ValueError, KeyError) as error:
+        problems.append(_problem(LEDGER_JOB, "ledger.receipt", "an accepted ledger receipt", str(error)))
+        published = None
     artifact = (published or {}).get("artifact") if isinstance(published, dict) else None
     ledger = _json(run_root / str(artifact["path"])) if isinstance(artifact, dict) else None
     if not isinstance(ledger, dict):
         problems.append(_problem(LEDGER_JOB, "ledger.json", "a document-issue ledger", "<absent>"))
     else:
-        if Path(artifact["path"]).parent.name != ledger.get("content_sha256"):
-            problems.append(_problem(LEDGER_JOB, "ledger.content_sha256", Path(artifact["path"]).parent.name,
-                                     str(ledger.get("content_sha256"))))
+        from appsec_review.retrieval.model import canonical_json as content_json
+        from appsec_review.storage import canonical_json
+        from appsec_review.storage.shared import verify_reference, verify_receipt
+
+        try:
+            path = verify_reference(run_root, artifact)
+            body = {key: value for key, value in ledger.items() if key != "content_sha256"}
+            if hashlib.sha256(content_json(body)).hexdigest() != ledger.get("content_sha256"):
+                raise ValueError("ledger content identity does not match its body")
+            receipt = published.get("shared_receipt")
+            if receipt is not None and verify_receipt(run_root, receipt)["object"] != artifact:
+                raise ValueError("ledger shared receipt names another object")
+            if path.read_bytes() != canonical_json(ledger):
+                raise ValueError("ledger bytes are not canonical")
+        except (OSError, ValueError, KeyError) as error:
+            problems.append(_problem(LEDGER_JOB, "ledger.content_sha256", "verified object and receipt references",
+                                     str(error)))
         schema = _json(schema_root / LEDGER_SCHEMA)
         if isinstance(schema, dict):
             from jsonschema import Draft202012Validator
@@ -110,3 +135,64 @@ def final_artifact_problems(run_root: Path, schema_root: Path) -> list[Differenc
                 problems.append(_problem(LEDGER_JOB, "ledger." + ".".join(str(part) for part in error.path),
                                          "valid against the ledger schema", error.message[:120]))
     return problems
+
+
+def accepted_final_report(run_root: Path, schema_root: Path | None = None) -> tuple[dict, Any, dict]:
+    """Resolve the current report, gate, review, projection and accepted evidence.
+
+    Directory scans and historical attempts are deliberately not fallback sources. The report
+    must still project the currently accepted review and index set, not just some intact old run.
+    """
+    from appsec_review.indexing.store import accepted_handoff
+    from appsec_review.jobs.bound_artifacts import read_bound_json, resolve_bound
+    from appsec_review.jobs.job_final_publication_gate.classify import classify, gate_document
+    from appsec_review.jobs.job_final_publication_gate.verify import load_accepted_review
+    from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+    from appsec_review.retrieval.core import RetrievalCore
+    from appsec_review.review.models import IntegrityError
+
+    run_root = Path(run_root).resolve()
+    schema_root = Path(schema_root or Path(__file__).resolve().parents[3])
+
+    def published(job_id: str) -> tuple[dict, dict]:
+        accepted = accepted_handoff(run_root, job_id)
+        if (accepted is None or accepted.handoff.get("job_id") != job_id
+                or accepted.handoff.get("completion_status") not in ACCEPTED):
+            raise IntegrityError(f"current accepted {job_id} is unavailable")
+        output = accepted.handoff["outputs"]["acceptance.publish_handoff"]
+        return {"path": accepted.path, "sha256": accepted.sha256}, output
+
+    _report_ref, report_output = published("job_final_report_publication")
+    gate_ref, gate_output = published("job_final_publication_gate")
+    report = read_bound_json(run_root, report_output["artifact"])
+    gate = read_bound_json(run_root, gate_output["artifact"])
+    schemas = SchemaSet(schema_root / "docs" / "schemas" / "final-report")
+    schemas.validate("final-report", report)
+    schemas.validate("final-publication-gate", gate)
+    verified = load_accepted_review(
+        run_root, SchemaSet(schema_root / "docs" / "schemas" / "inference-security-review")).document
+    if gate != gate_document(gate["schema"], verified, classify(verified)):
+        raise IntegrityError("current gate does not project the currently accepted review")
+    for binding in gate["bindings"]:
+        resolve_bound(run_root, binding)
+    provenance = report["provenance"]
+    if (report["run_id"] != run_root.name or gate["run_id"] != run_root.name
+            or provenance["gate_handoff"] != gate_ref
+            or report_output["gate_handoff"] != gate_ref
+            or provenance["review_handoff"] != verified["inputs"]["review_handoff"]
+            or provenance["gate_document"] != gate_output["artifact"]
+            or any(provenance[key] != gate["review"][key] for key in (
+                "accepted_manifest_sha256", "configuration_sha256", "ledger_head_sha256", "ship_block_policy_sha256"))):
+        raise IntegrityError("report provenance is not the currently accepted review and gate")
+    for name, bucket in (("findings", "publishable"), ("verification_backlog", "verification_backlog"),
+                         ("withheld", "withheld")):
+        expected = [item for item in gate["packages"] if item["bucket"] == bucket]
+        if report[name] != expected:
+            raise IntegrityError(f"current report {name} differs from its accepted gate bucket")
+    if report["summary"]["package_counts"] != gate["package_counts"]:
+        raise IntegrityError("current report package accounting differs from its accepted gate")
+    core = RetrievalCore(run_root.parent, run_root.name)
+    if core.manifest_sha256 != provenance["accepted_manifest_sha256"]:
+        raise IntegrityError("current report does not bind the currently accepted index manifest")
+    projection = read_bound_json(run_root, verified["inputs"]["projection"])
+    return report, core, projection

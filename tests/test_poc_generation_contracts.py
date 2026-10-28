@@ -49,6 +49,32 @@ def jsonschema_errors(name: str, value) -> list:
     return list(Draft202012Validator(DOCUMENTS[f"{name}.schema.json"], registry=REGISTRY).iter_errors(value))
 
 
+def test_candidate_consumer_uses_resolved_review_basis_and_checks_its_digest() -> None:
+    import hashlib
+
+    from appsec_review.jobs.job_poc_generation.candidates import parse_candidates
+    from appsec_review.review.models import IntegrityError
+    from appsec_review.storage import canonical_json
+    from tests.test_poc_generation_units import candidate_entry
+
+    good = candidate_entry()
+    documents = SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review").documents
+    registry = Registry().with_resources((schema["$id"], Resource.from_contents(schema))
+                                         for schema in documents.values())
+    validator = Draft202012Validator(
+        {"$ref": documents["common.schema.json"]["$id"] + "#/$defs/poc_candidate"}, registry=registry)
+    assert not list(validator.iter_errors(good))
+    assert parse_candidates([good])[0].poc_basis.record() == good["poc_basis"]["brief"]
+    for edit in ({"entry": ["E1"]}, {"path": ["F1"]},
+                 {"entry": ["asr:source_file:" + "1" * 64]}, {"entry": [{}]}, {"input_format": ""}):
+        body = {**good["poc_basis"]["brief"], **edit}
+        broken = {**good, "poc_basis": {"brief": body, "sha256": hashlib.sha256(canonical_json(body)).hexdigest()}}
+        with pytest.raises(IntegrityError):
+            parse_candidates([broken])
+    with pytest.raises(IntegrityError, match="SHA-256"):
+        parse_candidates([{**good, "poc_basis": {**good["poc_basis"], "sha256": "0" * 64}}])
+
+
 # ------------------------------------------------------------------------------------------------ schemas
 
 
