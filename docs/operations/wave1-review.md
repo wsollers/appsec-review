@@ -7,17 +7,17 @@ The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
 ```text
 model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
-  -> source_history_analysis
+  -> ci_configuration_analysis -> source_history_analysis
   -> target_analysis_plan
-  -> tree_sitter_ast -> project_build -> language_build
+  -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
-  -> cpp_compiled_analysis -> clang_static_analysis
-  -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
-  -> [cpg_analysis only when enabled] -> binary_evidence_indexing -> evidence_collection
-  -> dependency_intelligence
-  -> change_context_analysis -> codeql_analysis -> review_prioritization
+  -> evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
+  -> sanitizer_build -> cpp_symbol_index -> [cpg_analysis only when enabled]
+  -> svf_alias_analysis (opt-in; only when enabled) -> binary_evidence_indexing
+  -> post_build_security_assessment -> dependency_intelligence
+  -> codeql_analysis -> review_prioritization
   -> code_graph_index -> security_tagging
-  -> owasp_control_assessment (opt-in; only when enabled)
+  -> owasp_control_assessment (enabled by default)
   -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
   -> poc_generation (opt-in; only when enabled) -> final_report_publication
@@ -52,14 +52,15 @@ The shared enabled direct/Dagster OWASP chain is **prioritization → code graph
 OWASP → review data indexing → package assembly → hunt and red/blue/independent verification**,
 with accepted source/component/build/static evidence also feeding OWASP. Tagging and prioritization
 do not wait for OWASP; their accepted products are bounded routing/context, never control proof.
-OWASP is shipped disabled with `mode = "assessment"`. Enabling assessment uses configured worker
+OWASP is enabled by default with `mode = "assessment"` in all shipped profiles. Assessment uses configured worker
 inference plus a fresh blinded reviewer; qualification must be explicitly selected with both
 profiles disabled and is never production-eligible. See
 [`owasp-control-assessment.md`](owasp-control-assessment.md).
 
 Direct `start`, `resume` and `plan-resume` select this chain through the normal enabled-job filter.
 `resume`/`plan-resume --force-from` accept either tagging or OWASP when enabled and reject either
-when disabled. OWASP therefore remains absent under the shipped disabled default. Shared chain
+when disabled. Set `jobs.job_owasp_control_assessment.settings.enabled = false` before freezing
+a run to opt out. Shared chain
 ordering does not add CI/post-build jobs or standalone third-party sync to the direct graph.
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is

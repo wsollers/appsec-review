@@ -23,10 +23,11 @@ single terminal job. Both surfaces use the same semantic registry and accepted-h
 
 In both graphs, enabled prioritization and code-graph indexing feed security tagging,
 then OWASP consumes accepted tag-cloud/classification context before review data indexing and
-package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is shipped
-disabled with assessment mode configured; enabling it selects the same chain in direct
+package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is enabled by
+default in assessment mode across shipped profiles; it selects the same chain in direct
 `start`/`resume`/`plan-resume` and Dagster. Direct `--force-from` accepts tagging/OWASP only when
-enabled. CI/post-build and standalone metadata-sync differences remain; this is not full graph
+enabled, and `jobs.job_owasp_control_assessment.settings.enabled = false` explicitly opts out.
+CI/post-build and standalone metadata-sync differences remain; this is not full graph
 parity. The [workbench design](owasp-control-workbench.md) describes the four supported
 Python static procedures, separate blinded reviewer, provisional result boundary and named
 unresolved coverage.

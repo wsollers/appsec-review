@@ -2370,7 +2370,7 @@ name = "owasp_control_assessment"
 workers = 8
 
 [jobs.job_owasp_control_assessment.settings]
-enabled = false
+enabled = true
 mode = "assessment"
 reviewer_profile = "reviewer"
 max_evidence_per_component = 60

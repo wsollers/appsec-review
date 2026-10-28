@@ -403,18 +403,37 @@ def test_job_level_disabled_setting_is_transparent_to_dagster(tmp_path: Path) ->
     assert "review_prioritization__begin" in wave_nodes
 
 
-def _enabled_owasp_config(tmp_path: Path) -> Path:
+def _owasp_config(tmp_path: Path, *, enabled: bool = True) -> Path:
     source = (Path(__file__).resolve().parents[3] / "appsec-review.toml").read_text(encoding="utf-8")
+    header = '[jobs.job_owasp_control_assessment.settings]\nenabled = true'
+    assert source.count(header) == 1
     source = source.replace(
-        '[jobs.job_owasp_control_assessment.settings]\nenabled = false',
-        '[jobs.job_owasp_control_assessment.settings]\nenabled = true', 1)
+        header, f'[jobs.job_owasp_control_assessment.settings]\nenabled = {str(enabled).lower()}', 1)
     config = tmp_path / "appsec-review.toml"
     config.write_text(source, encoding="utf-8")
     return config
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_owasp_dagster_default_and_explicit_opt_out(tmp_path: Path, enabled: bool) -> None:
+    config = (Path(__file__).resolve().parents[3] / "appsec-review.toml" if enabled else
+              _owasp_config(tmp_path, enabled=False))
+    definitions = build_definitions(config)
+    job_names = {job.name for job in definitions.get_repository_def().get_all_jobs()}
+    graph = definitions.get_job_def("wave1_review").graph
+    names = {node.name for node in graph.node_defs}
+    assert ("owasp_control_assessment" in job_names) is enabled
+    assert ("owasp_control_assessment__begin" in names) is enabled
+    mapping = graph.dependency_structure.input_to_upstream_outputs_for_node("review_data_indexing__begin")
+    upstream = {output.node_name for outputs in mapping.values() for output in outputs}
+    terminal = "owasp_control_assessment__finalize" if enabled else "security_tagging__finalize"
+    assert terminal in upstream
+    assert "review_package_assembly__begin" in names
+    assert "inference_security_review__begin" in names
+
+
 def test_wave1_exposes_real_producer_shard_topology(tmp_path: Path) -> None:
-    config = _enabled_owasp_config(tmp_path)
+    config = _owasp_config(tmp_path)
     graph = build_definitions(config).get_job_def("wave1_review").graph
     names = {node.name for node in graph.node_defs}
     assert "dispatch_wave1_review" not in names
@@ -548,7 +567,7 @@ def test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs(tmp_path: Path
     from appsec_review.orchestration.topology import describe_wave1
     from appsec_review.runtime.registry import builtin_registry
 
-    path = _enabled_owasp_config(tmp_path)
+    path = _owasp_config(tmp_path)
     graph = build_definitions(path).get_job_def("wave1_review").graph
     described = describe_wave1(load_config(path), builtin_registry())
     jobs = {item["job_id"]: item for item in described["jobs"]}
