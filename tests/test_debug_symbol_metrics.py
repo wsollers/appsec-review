@@ -59,3 +59,28 @@ def test_failed_symbol_attempts_are_counted_without_a_completion_snapshot(tmp_pa
     metrics = aggregate_run_metrics(tmp_path)["debug_symbols"]
     assert metrics["index_attempt_count"] == 1
     assert metrics["index"]["available"] is False
+
+
+def test_reader_environment_attempts_failures_fallback_and_work_are_measured(tmp_path) -> None:
+    log = PipelineLog(tmp_path)
+    for environment, outcome, duration, output in (
+            ("build", "tool_unavailable", 3, 0), ("catalog", "succeeded", 7, 8192)):
+        log.write("DEBUG_SYMBOL_READER_COMPLETED", run_id="run", details={
+            "compiler_target": "msvc", "environment": environment, "outcome": outcome,
+            "duration_ms": duration, "output_bytes": output})
+    log.write("DEBUG_SYMBOL_READER_FALLBACK", run_id="run", details={"compiler_target": "msvc"})
+    assert aggregate_run_metrics(tmp_path)["debug_symbols"]["readers"] == {
+        "attempt_count": 2, "fallback_count": 1,
+        "by_environment": {"build": 1, "catalog": 1},
+        "by_outcome": {"succeeded": 1, "tool_unavailable": 1},
+        "duration_ms": 10, "output_bytes": 8192}
+
+
+def test_missing_reader_measurements_remain_unknown(tmp_path) -> None:
+    log = PipelineLog(tmp_path)
+    log.write("DEBUG_SYMBOL_READER_COMPLETED", run_id="run", details={
+        "compiler_target": "clang", "environment": "build", "outcome": "succeeded"})
+    metrics = aggregate_run_metrics(tmp_path)["debug_symbols"]
+    assert metrics["readers"]["duration_ms"] is None
+    assert metrics["readers"]["output_bytes"] is None
+    assert "debug_symbol_metric_missing_or_invalid_output_bytes" in metrics["metric_gaps"]

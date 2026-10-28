@@ -1,9 +1,7 @@
 """Offline, bounded DWARF/native-PDB extraction.
 
-``settings`` is the central job's flat reader settings mapping. ``tools`` maps
-``llvm_dwarfdump``/``llvm_pdbutil`` to an absolute ``path`` and lowercase ``sha256``.
-The optional trusted runner accepts argv plus timeout_seconds/max_output_bytes
-and returns stdout bytes (or UTF-8 text); it must not evaluate a shell.
+Production uses a receipt-bound container exporter. The host runner and explicit
+executable pins remain a bounded seam for isolated reader tests and tooling.
 """
 from __future__ import annotations
 
@@ -16,10 +14,10 @@ import queue
 import subprocess
 import threading
 import time
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol, Sequence
 
 from appsec_review.config.compiler_target import CompilerTarget
-from appsec_review.debug_symbols.contract import Extraction, selected_path
+from appsec_review.debug_symbols.contract import Extraction, SymbolIntegrityError, selected_path
 from appsec_review.debug_symbols._reader_binary import ReaderFailure, pdb_identity, pe, verify_elf
 
 
@@ -30,6 +28,13 @@ _DEFAULTS = {
     "max_depth": 128,
     "timeout_seconds": 120,
 }
+
+
+class SymbolExporter(Protocol):
+    identity: str
+
+    def __call__(self, name: str, arguments: Sequence[str], source: Path, *,
+                 timeout_seconds: float, max_output_bytes: int) -> bytes: ...
 
 
 def _limits(settings: Mapping[str, Any]) -> dict[str, int | float]:
@@ -147,7 +152,7 @@ def _run(argv: list[str], *, timeout_seconds: float, max_output_bytes: int) -> b
 
 def extract_symbols(
     binary: Path, debug_file: Path | None, *, target: CompilerTarget,
-    settings: Mapping[str, Any], runner=None,
+    settings: Mapping[str, Any], runner=None, exporter: SymbolExporter | None = None,
 ) -> Extraction:
     """Verify content and pairing before extracting; failures never publish partial records."""
     selected_path(target)
@@ -172,12 +177,17 @@ def extract_symbols(
                 raise ReaderFailure("pdb_identity_mismatch")
             exporter_input = Path(debug_file)
             args = ["pdb2yaml", "--all"]
-        executable = _tool(settings, name)
-        output = (runner or _run)(
-            [str(executable), *args, str(exporter_input.resolve())],
-            timeout_seconds=limits["timeout_seconds"],
-            max_output_bytes=limits["max_output_bytes"],
-        )
+        if exporter is not None:
+            output = exporter(name, args, exporter_input.resolve(),
+                              timeout_seconds=limits["timeout_seconds"],
+                              max_output_bytes=limits["max_output_bytes"])
+        else:
+            executable = _tool(settings, name)
+            output = (runner or _run)(
+                [str(executable), *args, str(exporter_input.resolve())],
+                timeout_seconds=limits["timeout_seconds"],
+                max_output_bytes=limits["max_output_bytes"],
+            )
         if isinstance(output, str):
             output = output.encode("utf-8")
         if not isinstance(output, bytes):
@@ -209,10 +219,14 @@ def extract_symbols(
             raise ReaderFailure("input_identity_changed")
         if debug_file is not None and _read(Path(debug_file), limits["max_input_bytes"]) != debug:
             raise ReaderFailure("input_identity_changed")
-        _tool(settings, name)
+        if exporter is None:
+            _tool(settings, name)
         if time.monotonic() - started > limits["timeout_seconds"]:
             raise ReaderFailure("tool_timeout")
-        return Extraction(tuple(records), tuple(sorted(set(gaps))), name)
+        return Extraction(tuple(records), tuple(sorted(set(gaps))),
+                          exporter.identity if exporter is not None else name)
+    except SymbolIntegrityError:
+        raise
     except ReaderFailure as error:
         return Extraction((), (error.gap,), name)
     except (UnicodeError, ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError):

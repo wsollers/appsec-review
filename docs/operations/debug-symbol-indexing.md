@@ -17,32 +17,40 @@ appsec-review start --target targets\customer --compiler-target clang
 frozen choice. The selector chooses the symbol reader, not the build-host OS or
 an MSVC installation.
 
-## Reader prerequisites
+## Managed reader environments
 
-Configure approved, host-local LLVM executables in the central TOML. Both lanes
-can use LLVM's offline readers; reading native PDBs does not require executing
-the target or using DIA. The runtime never discovers tools on PATH, downloads
-them, follows source-server instructions, or fetches symbols.
+No host-local LLVM installation or executable-path configuration is required.
+For build-produced artifacts, extraction starts a fresh instance of the exact
+immutable image recorded in that artifact's accepted language-build receipt.
+It does not resolve a mutable compiler tag, reuse the dirty build container,
+rerun build scripts, or execute the target. Missing or invalid image provenance
+in an accepted build receipt is an integrity failure.
 
-```toml
-[jobs.job_debug_symbol_indexing.settings.reader.tools.llvm_dwarfdump]
-path = 'C:\ApprovedTools\LLVM\bin\llvm-dwarfdump.exe'
-sha256 = '<the executable SHA-256, 64 lowercase hexadecimal characters>'
+The shared native compiler image provisions the exact pinned `llvm-18` package,
+including `/usr/bin/llvm-dwarfdump-18` and `/usr/bin/llvm-pdbutil-18`, and checks
+both versions at image-build time. Consumer compiler images inherit those tools.
+The package-owned, hash-bound Python export driver is staged into run-owned
+storage so sibling-container execution also works from the Dagster image.
+Its isolated interpreter disables environment/user imports and site startup hooks.
+Only the selected accepted input file and this driver are mounted read-only;
+run-owned scratch is the only writable bind. Network, root filesystem writes,
+capabilities and privilege escalation remain disabled.
 
-[jobs.job_debug_symbol_indexing.settings.reader.tools.llvm_pdbutil]
-path = 'C:\ApprovedTools\LLVM\bin\llvm-pdbutil.exe'
-sha256 = '<the executable SHA-256, 64 lowercase hexadecimal characters>'
-```
+Prebuilt artifacts use the already provisioned, catalog-pinned `tool-native-cpp`
+image. The same approved image is an explicit compatibility fallback when a
+recorded compiler image is unavailable, cannot run on the execution platform,
+or predates the readers. The attempted image, outcome and fallback reason are
+retained and measured; this never changes the selected DWARF/PDB lane. Parser
+failures, timeouts, output bounds and image-identity mismatches do not trigger
+another-reader retries. Missing fallback infrastructure remains an explicit
+failure, never a successful empty index.
 
-Replace the placeholder pins before loading the configuration. Paths must be
-absolute on the execution host. Use the approved tool environment and its
-dependency/isolation policy; this feature does not provision that environment.
-The checked-in configuration deliberately does not invent machine-specific tool
-paths or pins. An absent, unpinned, or changed tool produces explicit unavailable
-coverage rather than disabling the job silently or claiming an empty result.
-
-The initial reader contract is exercised against LLVM 18.1.3 output. Tools are
-identified by executable content, not a version string alone.
+Both lanes use LLVM's offline readers; native PDB parsing needs neither DIA nor
+a Windows reader host. The runtime never discovers host tools on PATH, downloads
+readers, follows source-server instructions, or fetches symbols. The former
+`reader.tools` host-path settings are rejected rather than silently ignored.
+Tool identity binds the immutable image, platform launcher and accepted output
+receipts, not a version string alone. The format contract uses LLVM 18.1.3.
 Fixtures include both Clang/LLD-produced and genuine MSVC 19.51-produced PDBs.
 LLVM 18.1.3 has a known `pdb2yaml --all` crash on retained MSVC `S_REGREL32`
 records; these artifacts report tool-failure coverage, not empty successful
@@ -72,11 +80,15 @@ ranges, layouts, inline frames, compilation units, coverage and existing graph
 links. The same core serves capability-scoped review cells and MCP clients.
 There is no SQL, shell, arbitrary path or debugger-expression surface.
 
-Telemetry is unconditional in the default path: target decisions, artifact
-outcomes, index completion and retrieval all emit structured events. Run
+Telemetry is unconditional in the default path: target decisions, reader
+executions and compatibility fallbacks, artifact outcomes, index completion
+and retrieval all emit structured events. Run
 `appsec-review metrics --run-id <id>` and inspect `debug_symbols` for the
-selected target, attempt/failure counts, latest index counts/duration, query
-work and metric gaps. Source paths and symbol names are not metric labels.
+selected target, attempt/failure counts, reader environment/outcome counts,
+fallback counts, export bytes/duration, latest index counts/duration, query
+work and metric gaps. Execution receipts, bounded raw exports and diagnostics
+remain protected, hash-bound evidence. Image and launcher changes invalidate
+resume input identity. Source paths and symbol names are not metric labels.
 Read coverage before interpreting an empty query.
 
 For contracts, authority limits, routing and the unit-test matrix, see

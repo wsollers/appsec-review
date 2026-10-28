@@ -1286,9 +1286,8 @@ max_output_bytes = 16777216
 max_records = 100000
 max_depth = 128
 timeout_seconds = 120
-# Configure approved host-local LLVM tools with explicit path and sha256 pins in
-# reader.tools.llvm_dwarfdump / reader.tools.llvm_pdbutil. Missing tools are gaps.
-[jobs.job_debug_symbol_indexing.settings.reader.tools]
+# Readers run in the accepted compiler image, with the pinned native analysis image
+# as the offline compatibility environment. Host executable paths are not settings.
 
 [jobs.job_debug_symbol_indexing.steps.decide]
 workers = 1

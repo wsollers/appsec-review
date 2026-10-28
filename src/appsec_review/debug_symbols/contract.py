@@ -19,6 +19,10 @@ QUERY_TOOL = "query_debug_symbols"
 MAX_LIMIT = 100
 
 
+class SymbolIntegrityError(ValueError):
+    """Accepted symbol inputs, execution identity, or retained evidence changed."""
+
+
 class QueryMode(str, Enum):
     SYMBOL = "symbol"
     ADDRESS = "address"

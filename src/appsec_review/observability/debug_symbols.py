@@ -11,6 +11,8 @@ def debug_symbol_metrics(records: Sequence[Mapping[str, Any]]) -> Mapping[str, A
     decisions = []
     completed = []
     queries = []
+    readers = []
+    fallbacks = 0
     failures = 0
     attempts: set[tuple[str, str, str]] = set()
     attempt_identity_unavailable = False
@@ -40,6 +42,17 @@ def debug_symbol_metrics(records: Sequence[Mapping[str, Any]]) -> Mapping[str, A
             completed.append(details)
         elif event == "DEBUG_SYMBOL_ARTIFACT_FAILED":
             failures += 1
+        elif event == "DEBUG_SYMBOL_READER_COMPLETED":
+            if (details.get("environment") not in {"build", "catalog"}
+                    or details.get("outcome") not in {
+                        "succeeded", "tool_unavailable", "image_unavailable", "image_incompatible",
+                        "tool_failed", "tool_timeout", "tool_oom", "output_limit",
+                        "export_configuration_invalid", "identity_rejected", "execution_failed"}):
+                gaps.append("debug_symbol_metric_invalid_reader_outcome")
+                continue
+            readers.append(details)
+        elif event == "DEBUG_SYMBOL_READER_FALLBACK":
+            fallbacks += 1
         elif event == "DEBUG_SYMBOL_QUERY_COMPLETED":
             if details.get("mode") not in allowed_modes:
                 gaps.append("debug_symbol_metric_invalid_mode")
@@ -83,12 +96,24 @@ def debug_symbol_metrics(records: Sequence[Mapping[str, Any]]) -> Mapping[str, A
 
     if attempt_identity_unavailable:
         gaps.append("debug_symbol_metric_attempt_identity_unavailable")
+    reader_durations = [count(reader, "duration_ms") for reader in readers]
+    reader_bytes = [count(reader, "output_bytes") for reader in readers]
     return {
         "schema": "appsec-review/debug-symbol-metrics/1",
         "compiler_target": decisions[-1] if decisions else None,
         "decision_count": len(decisions),
         "index_attempt_count": None if attempt_identity_unavailable else len(attempts),
         "artifact_failure_count": failures,
+        "readers": {
+            "attempt_count": len(readers), "fallback_count": fallbacks,
+            "by_environment": dict(sorted(Counter(
+                reader["environment"] for reader in readers).items())),
+            "by_outcome": dict(sorted(Counter(reader["outcome"] for reader in readers).items())),
+            "duration_ms": (sum(value for value in reader_durations if value is not None)
+                            if None not in reader_durations else None),
+            "output_bytes": (sum(value for value in reader_bytes if value is not None)
+                             if None not in reader_bytes else None),
+        },
         "index": index,
         "queries": {
             "count": len(queries), "by_mode": dict(sorted(modes.items())),

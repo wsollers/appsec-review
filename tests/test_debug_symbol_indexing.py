@@ -69,6 +69,8 @@ def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=
         atomic_json(language, {
             "schema": "appsec-review/language-build-handoff/1", "source_fingerprint": SNAPSHOT,
             "receipts": [{"build_unit_id": "build-unit-1", "terminal_status": "SUCCEEDED",
+                          "image": {"image_id": "sha256:" + "d" * 64,
+                                    "image_tag": "accepted/compiler:receipt", "user": "10001:10001"},
                           "artifacts": artifacts}]})
         language_handoff = language.parent / "handoff.json"
         atomic_json(language_handoff, {

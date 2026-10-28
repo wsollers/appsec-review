@@ -48,6 +48,14 @@
    expression evaluation, embedded source-server execution, automatic symbol
    download, or external upload is permitted. Raw private symbols/tool output
    remain protected evidence; only normalized approved fields enter retrieval.
+   The production exporter reuses the exact immutable compiler image from the
+   accepted build receipt, in a fresh restricted container, with only the
+   accepted input and package-owned launcher mounted read-only. Managed compiler
+   images provision both LLVM readers. A pinned managed LLVM compatibility image
+   handles prebuilt artifacts, unavailable/incompatible build environments, and
+   older images missing readers. This is measured environment selection, not a
+   change of format lane or a retry after parser failure. Host executable paths
+   are not production configuration.
 10. Producer and query telemetry uses existing structured events and operational
     metric aggregation. Events carry target, lane, counts, duration, coverage,
     gaps, limits, and tool identity; never raw source, symbol names, or private
@@ -95,6 +103,13 @@ Resume reuses accepted work only when configuration, accepted upstream handoffs,
 artifact hashes, parser/tool identity and parser bounds still match. A changed
 compiler target needs a new application run. Rebuilding with debug flags creates
 a different artifact and is not a substitute for matching the reviewed artifact.
+The producer's input-identity probe additionally binds reader implementation,
+launcher bytes, managed image pin, tool manifest and runtime policy. Artifact
+decisions bind build-image provenance through the accepted language-build handoff.
+Exports use file-backed streams with a kernel file-size bound, a subprocess
+deadline and container resource limits; host stdout capture never buffers the
+LLVM metadata stream. Each normalized fact retains its execution-receipt
+references, and accepted loading revalidates the protected export/receipt hashes.
 
 ## Normalized records and indexes
 
@@ -162,12 +177,18 @@ existing job/unit/tool lifecycle events. Index completion reports
 `compiler_target`, `artifact_count`, `record_count`, `gap_count`, and
 `duration_ms`. Query completion reports its closed `mode`, `returned_count`,
 `gap_count`, `truncated_count`, and `duration_ms`.
+`DEBUG_SYMBOL_READER_COMPLETED` reports closed reader/environment/outcome labels,
+duration and output bytes; `DEBUG_SYMBOL_READER_FALLBACK` records the bounded
+compatibility reason. Image identities are retained as provenance, not private
+symbol/path labels.
 
 The run-metric `debug_symbols` section exposes the latest index snapshot rather
 than double-counting records across attempts. It counts attempts, failures, and
 observed query work separately. Unknown/missing numeric measurements stay null
 with metric gaps. These are operational quality/coverage metrics, not counts of
 confirmed vulnerabilities.
+The `readers` section separately counts environment attempts, fallbacks and
+outcomes, and sums observed export bytes and durations.
 
 ## Test-first acceptance matrix
 
@@ -180,6 +201,7 @@ tool-produced fixtures where the required tools are available.
 | Run admission | Closed enum; CLI and launch tags; default; profile/overlay composition; immutable selection; changed-target resume refusal; submission identity separation. |
 | Decision node | Persisted route; exactly one reader invoked; unselected lane skipped; both lanes rejoin publication. |
 | Pairing | Correct embedded/separate match; binary and symbol hash drift; wrong PDB GUID/age; wrong build ID; ambiguous companion; unsupported input; no name-only trust. |
+| Reader environment | Exact accepted image rather than mutable tag or host PATH; provisioned readers; pinned prebuilt/legacy compatibility image; read-only input/launcher; no network; kernel output bound; receipt hash verification and resume invalidation. |
 | Normalization | Functions/signatures, layouts/member offsets, ranges, inline ancestry and compilation units from DWARF and PDB; deterministic identities; unsupported records named. |
 | Source authority | Path-only mapping stays non-exact; checksums verified against accepted bytes; external paths never opened; missing source remains binary-resolving evidence. |
 | Index publication | Shard integrity, deterministic fingerprint, preserved upstream shards, declared datasets, protected raw artifacts, coverage inventory, resume invalidation. |
@@ -196,7 +218,7 @@ integration, each with its own focused tests. Shared contract changes are
 reconciled by the manager. No image pin is changed without a live build on its
 owning host, and no feature branch is pushed without user authorization.
 
-See [operations](../operations/debug-symbol-indexing.md) for approved reader
-configuration, supported formats and normal launch commands. Implementation
+See [operations](../operations/debug-symbol-indexing.md) for managed reader
+environments, supported formats and normal launch commands. Implementation
 status and host-dependent validation limitations are recorded in the
 [implementation report](../reviews/debug-symbol-indexing-implementation.md).

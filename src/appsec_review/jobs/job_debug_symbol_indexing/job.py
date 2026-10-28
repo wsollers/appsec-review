@@ -13,11 +13,15 @@ import sqlite3
 import time
 from typing import Any
 
+from appsec_review.application_paths import application_root
 from appsec_review.config.compiler_target import CompilerTarget
 from appsec_review.config.debug_symbols import parse_debug_symbol_settings
 from appsec_review.debug_symbols.contract import (
     DECISION_SCHEMA, INDEX_NAME, JOB_ID, RECORD_SCHEMA, Extraction, RecordKind,
-    record_fingerprint, selected_path,
+    SymbolIntegrityError, record_fingerprint, selected_path,
+)
+from appsec_review.debug_symbols.execution import (
+    ContainerExporter, build_image_identity, execution_plan, reader_implementation_identity,
 )
 from appsec_review.jobs.job_artifact_indexing import (
     canonical_artifact_identity, load_accepted_artifact_index,
@@ -37,7 +41,7 @@ from .datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/debug-symbol-indexing/1"
-READER_IDENTITY = "appsec-review/offline-debug-symbol-readers/1"
+READER_IDENTITY = "appsec-review/offline-debug-symbol-readers/2"
 _TOPOLOGY = {"decide": ("target",), "extract": ("clang_dwarf", "msvc_pdb"),
              "acceptance": ("publish_handoff",)}
 _ARTIFACT_KINDS = {EntityKind.EXECUTABLE, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
@@ -53,7 +57,7 @@ _RECORD_KINDS = {
 }
 
 
-class FrameworkIntegrityError(ValueError):
+class FrameworkIntegrityError(SymbolIntegrityError):
     """Accepted run-owned evidence or its resolving reference changed."""
 
 
@@ -87,7 +91,7 @@ def _artifact(unit: UnitContext, name: str, document: Mapping[str, Any]) -> dict
 
 def _reader_identity(extractor) -> str:
     if extractor is None:
-        return READER_IDENTITY
+        return _digest({"contract": READER_IDENTITY, "implementation": reader_implementation_identity()})
     try:
         implementation = inspect.getsource(extractor)
     except (OSError, TypeError):
@@ -119,6 +123,7 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
     refs = {item["canonical_identity"]: dict(item) for item in accepted.get("target_artifacts", ())
             if isinstance(item, Mapping) and "canonical_identity" in item}
     language_sha = None
+    build_images = {}
     language_pointer = unit.job.run_root / "data" / "jobs" / "job_language_build" / "latest.json"
     if language_pointer.is_file():
         language = load_accepted_language_build(unit.job.run_root)
@@ -129,9 +134,13 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
         for receipt in language.get("receipts", ()):
             if not isinstance(receipt, Mapping) or receipt.get("terminal_status") != "SUCCEEDED":
                 continue
+            image = (build_image_identity(receipt.get("image")) if receipt.get("artifacts") else None)
             for item in receipt.get("artifacts", ()):
                 logical = canonical_artifact_identity(
                     unit.job.source_fingerprint, str(receipt["build_unit_id"]), item)
+                if logical.value in build_images and build_images[logical.value] != image:
+                    raise FrameworkIntegrityError("accepted artifact has conflicting build image identities")
+                build_images[logical.value] = image
                 refs[logical.value] = {**item, "canonical_identity": logical.value}
     artifacts = []
     seen_artifacts = set()
@@ -162,7 +171,7 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
                     or ref.get("size_bytes") != payload.get("size_bytes")):
                 raise ValueError("accepted artifact reference does not match catalog identity")
             artifacts.append({"artifact_identity": logical_id, "kind": payload.get("kind"),
-                              "reference": ref})
+                              "reference": ref, "build_image": build_images.get(logical_id)})
             seen_artifacts.add(logical_id)
     artifacts.sort(key=lambda item: item["artifact_identity"])
     if not artifacts:
@@ -173,14 +182,15 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
             "language_build_handoff_sha256": language_sha}
 
 
-def _decision(unit: UnitContext, reader_identity: str) -> Mapping[str, Any]:
+def _decision(unit: UnitContext, reader_identity: str, *, production: bool) -> Mapping[str, Any]:
     started = time.monotonic()
     settings = parse_debug_symbol_settings(unit.job.config.settings)
     inputs = _accepted_inputs(unit, settings)
     target = CompilerTarget(settings["compiler_target"])
     document = {"schema": DECISION_SCHEMA, "compiler_target": target.value,
                 "selected_lane": selected_path(target), "source_fingerprint": unit.job.source_fingerprint,
-                "reader_identity": reader_identity, "settings": settings, **inputs}
+                "reader_identity": reader_identity, "settings": settings,
+                "execution": execution_plan(unit.job.repository_root) if production else None, **inputs}
     document["input_fingerprint"] = _digest(document)
     identity = _artifact(unit, "decision.json", document)
     _emit(unit, "DEBUG_SYMBOL_TARGET_SELECTED", target=target.value, lane=selected_path(target),
@@ -202,6 +212,9 @@ def _read_decision(unit: UnitContext, reader_identity: str) -> dict[str, Any]:
             or decision["source_fingerprint"] != unit.job.source_fingerprint
             or decision["selected_lane"] != selected_path(CompilerTarget(settings["compiler_target"]))):
         raise ValueError("debug-symbol decision does not match immutable inputs")
+    if (decision.get("execution") is not None
+            and decision["execution"] != execution_plan(unit.job.repository_root)):
+        raise FrameworkIntegrityError("debug-symbol execution plan differs from frozen decision")
     return decision
 
 
@@ -389,7 +402,8 @@ class _Sources:
 
 
 def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mapping[str, Any] | None,
-               extraction: Extraction, unit: UnitContext, target: str, sources: _Sources) -> list[str]:
+               extraction: Extraction, unit: UnitContext, target: str, sources: _Sources,
+               reader_executions=()) -> list[str]:
     ref = artifact["reference"]
     debug_ref = debug["reference"] if debug else ref
     identities = {}
@@ -421,6 +435,8 @@ def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mappin
                    "native_key": _private_text(record.key),
                    "parent_key": _private_text(record.parent_key) if record.parent_key else None,
                    "evidence": dict(ref), "debug_evidence": dict(debug_ref),
+                   "reader_executions": [item["execution"] for item in reader_executions
+                                         if "execution" in item],
                    "reader_identity": _private_text(extraction.producer or READER_IDENTITY)}
         binding = source_bindings[record.key]
         location = None
@@ -462,7 +478,8 @@ def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mappin
     return sorted(set(gaps))
 
 
-def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> Mapping[str, Any]:
+def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
+             executor_factory=None) -> Mapping[str, Any]:
     started = time.monotonic()
     decision = _read_decision(unit, reader_identity)
     target = CompilerTarget(decision["compiler_target"])
@@ -503,6 +520,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
         gaps = []
         extracted = None
         debug = None
+        reader_executions = []
         if artifact.get("gap"):
             gaps.append(artifact["gap"])
         elif not settings["enabled"]:
@@ -518,12 +536,20 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
                 if candidate is not None and candidate.get("gap"):
                     gaps.append(candidate["gap"])
                     continue
+                exporter = None
                 try:
                     binary_path = _verify(unit.job.run_root, artifact["reference"],
                                           "binary artifact", settings["reader"]["max_input_bytes"])
                     debug_path = (_verify(unit.job.run_root, candidate["reference"], "debug artifact",
                                           settings["reader"]["max_input_bytes"]) if candidate else None)
-                    result = reader(binary_path, debug_path, target=target, settings=settings["reader"])
+                    exporter = (ContainerExporter(
+                        unit, decision["execution"], artifact.get("build_image"),
+                        _digest([artifact["artifact_identity"],
+                                 candidate["artifact_identity"] if candidate else None]),
+                        executor_factory=executor_factory) if extractor is None else None)
+                    result = reader(binary_path, debug_path, target=target, settings=settings["reader"],
+                                    **({"exporter": exporter} if exporter is not None else {}))
+                    executions = exporter.attempts if exporter is not None else []
                     _verify(unit.job.run_root, artifact["reference"], "binary artifact",
                             settings["reader"]["max_input_bytes"])
                     if candidate:
@@ -542,25 +568,29 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
                         gaps.append("max_output_bytes")
                         continue
                     if result.records:
-                        matches.append((result, candidate))
+                        matches.append((result, candidate, executions))
                         if candidate is None:
                             break
                     else:
                         gaps.extend(_private_text(gap) for gap in result.gaps or ("debug_symbols_unavailable",))
-                except FrameworkIntegrityError:
+                except SymbolIntegrityError:
                     raise
                 except Exception as exc:
                     gaps.append(f"reader_failed: {type(exc).__name__}")
+                finally:
+                    if exporter is not None:
+                        reader_executions.extend(exporter.attempts)
             distinct = {(candidate["reference"]["sha256"] if candidate else artifact["reference"]["sha256"])
-                        for _, candidate in matches}
+                        for _, candidate, _ in matches}
             if len(distinct) > 1:
                 gaps.append("ambiguous_debug_artifact")
             elif matches:
-                extracted, debug = matches[0]
+                extracted, debug, selected_executions = matches[0]
                 # Failed candidate pairing is not a coverage gap after exactly one match is proved.
                 gaps = list(extracted.gaps)
                 try:
-                    gaps = _normalize(builder, artifact, debug, extracted, unit, target.value, sources)
+                    gaps = _normalize(builder, artifact, debug, extracted, unit, target.value, sources,
+                                      selected_executions)
                     output_bytes += len(canonical_json(asdict(extracted)))
                 except (ValueError, KeyError, TypeError):
                     raise ValueError("invalid normalized debug-symbol records") from None
@@ -572,6 +602,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
         raw_refs.append({"artifact_identity": artifact["artifact_identity"],
                          "binary": artifact.get("reference"),
                          "debug": debug.get("reference") if debug else None,
+                         "reader_executions": reader_executions,
                          "reader_records": [asdict(record) for record in extracted.records] if extracted else [],
                          "status": coverage})
         _emit(unit, "DEBUG_SYMBOL_ARTIFACT_COMPLETED" if extracted else "DEBUG_SYMBOL_ARTIFACT_FAILED",
@@ -581,6 +612,13 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor) -> M
         all_gaps.append("native_binary_unavailable")
         builder.add_coverage("native-artifacts", "unavailable", "native_binary_unavailable")
     all_gaps = sorted(set(all_gaps))
+    if extractor is None:
+        # Execution receipts are normalization inputs; distinct attempts must not alias a shard
+        # whose rows still resolve to an earlier attempt's evidence.
+        fingerprint = _digest({"inputs": fingerprint, "reader_executions": [
+            item["reader_executions"] for item in raw_refs]})
+        path = path.with_name(f"{fingerprint}.sqlite")
+        builder.path, builder.fingerprint = path, fingerprint
     digest = builder.build()
     identity = IndexIdentity(INDEX_NAME, INDEX_SCHEMA, digest, fingerprint,
                              path.relative_to(unit.job.run_root).as_posix(),
@@ -623,6 +661,7 @@ def _publish(unit: UnitContext, reader_identity: str) -> Mapping[str, Any]:
     summary = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                "compiler_target": decision["compiler_target"], "selected_lane": lane,
                "decision": dict(unit.output("decide.target")["artifact"]),
+               "reader_evidence": selected["artifact"],
                "input_fingerprint": selected["input_fingerprint"],
                "artifact_handoff_sha256": decision["artifact_handoff_sha256"],
                "record_count": selected["record_count"], "artifact_count": selected["artifact_count"],
@@ -665,6 +704,14 @@ def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
     document = json.loads(_verify(run_root, artifact, "accepted debug-symbol summary").read_text())
     if document.get("schema") != SCHEMA:
         raise ValueError("unsupported accepted debug-symbol schema")
+    if "reader_evidence" in document:
+        evidence = json.loads(_verify(
+            run_root, document["reader_evidence"], "debug-symbol reader evidence").read_text())
+        for item in evidence["artifacts"]:
+            for attempt in item.get("reader_executions", ()):
+                for field in ("execution", "output", "diagnostics", "launcher"):
+                    if field in attempt:
+                        _verify(run_root, attempt[field], "debug-symbol " + field)
     decision = json.loads(_verify(run_root, document["decision"], "accepted debug-symbol decision").read_text())
     body = {key: value for key, value in decision.items() if key != "input_fingerprint"}
     if (decision.get("schema") != DECISION_SCHEMA
@@ -682,7 +729,7 @@ def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
     return {**document, "handoff_sha256": pointer["handoff_sha256"]}
 
 
-def build_job(*, extractor=None) -> Job:
+def build_job(*, extractor=None, executor_factory=None) -> Job:
     """Build the four-unit decision/extraction/publication DAG.
 
     An injected extractor implements ``extract_symbols`` from ``debug_symbols.readers`` and
@@ -692,14 +739,20 @@ def build_job(*, extractor=None) -> Job:
     """
     reader_identity = _reader_identity(extractor)
     units = (
-        Unit("decide.target", lambda unit: _decision(unit, reader_identity)),
-        Unit("extract.clang_dwarf", lambda unit: _extract(unit, "clang_dwarf", reader_identity, extractor),
+        Unit("decide.target", lambda unit: _decision(unit, reader_identity, production=extractor is None)),
+        Unit("extract.clang_dwarf", lambda unit: _extract(
+            unit, "clang_dwarf", reader_identity, extractor, executor_factory),
              ("decide.target",)),
-        Unit("extract.msvc_pdb", lambda unit: _extract(unit, "msvc_pdb", reader_identity, extractor),
+        Unit("extract.msvc_pdb", lambda unit: _extract(
+            unit, "msvc_pdb", reader_identity, extractor, executor_factory),
              ("decide.target",)),
         Unit("acceptance.publish_handoff", lambda unit: _publish(unit, reader_identity),
              ("extract.clang_dwarf", "extract.msvc_pdb")),
     )
     return Job(JOB_ID, "debug_symbol_indexing", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, units=units,
+               input_identity=(lambda _: _digest({
+                   "reader": reader_identity,
+                   "execution": execution_plan(application_root("containers/catalog.toml")),
+               })) if extractor is None else None,
                datasets=DATASETS, consumes=CONSUMES)

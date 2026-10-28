@@ -13,14 +13,16 @@ other records a semantic skip, and publication joins both.
 The normal CLI, Dagster wave and project-build graph include the job without a
 separate opt-in. The selector chooses the reader lane, not a build-host OS or an
 MSVC installation. Existing Windows build-execution approval gates are unchanged.
-Operators must configure approved host-local LLVM executable paths and SHA-256
-pins as described in [operations](../operations/debug-symbol-indexing.md).
-The central configuration intentionally does not invent machine-specific pins.
-Missing tools and unsupported formats produce named unavailable coverage.
+Production extraction reuses each accepted build receipt's immutable compiler
+image, with the catalog-pinned native analysis image for prebuilt artifacts and
+explicit legacy/platform compatibility. Both managed images provision the LLVM
+readers; host-local executable paths are no longer production configuration.
+Missing infrastructure and unsupported formats produce named unavailable coverage.
 
 No target program is executed, debugger expression evaluated, source-server
 instruction followed, symbol downloaded or evidence uploaded. The feature does
-not provision an isolated parser host. Raw private records stay protected;
+uses fresh, restricted parser containers rather than a manually provisioned
+parser host. Raw private records stay protected;
 public records use accepted artifact identities and separately verified source
 bindings. Symbols do not establish complete call graphs, runtime values, taint,
 exploitability or clean coverage.
@@ -138,10 +140,12 @@ deployed target or all repository tests are clean.
 
 ## Remaining operational and format limits
 
-Approved executable identities must be configured on the execution host before
-real extraction. No tools, images, compiler host or production deployment were
-provisioned by this change. A full live review still needs its normal approved
-tool/model environment.
+The normal approved container/tool/model environment remains necessary, as for
+other review jobs. Compiler-image definitions now install and verify both LLVM
+readers; the already locked native analysis image provides compatibility until
+the owning review host rebuilds compiler images. No shared image pin is invented
+or changed from this Windows checkout. Live image rebuilding and deployed
+review validation were not performed here.
 
 LLVM 18.1.3 `pdb2yaml --all` crashes on retained MSVC `S_REGREL32` variable
 records. The genuine optimized MSVC fixtures retain layouts and real inline
@@ -190,10 +194,42 @@ No live review, integration or acceptance run was performed for this merge.
 The published tool-catalog parity and the additive capability/scoping behavior
 passed their unit checks.
 
-The user subsequently questioned the host-local executable prerequisite.
-Reusing the exact approved compiler image recorded in each accepted build
-receipt, through fresh restricted execution with read-only accepted artifacts,
-is the proposed correction; it is **not implemented in this revision**.
-Reader availability and an approved fallback for prebuilt artifacts still need
-an explicit execution contract. The merge monitor was asked to hold landing
-rather than treat conflict resolution as completion of that operational work.
+The host-local prerequisite was a required execution gap, not optional scope.
+The subsequent compiler-image execution correction implements receipt-to-image
+binding, fresh restricted execution, managed reader provisioning, a pinned
+prebuilt/legacy/platform compatibility environment, protected execution/export
+evidence, resume invalidation, and reader/fallback metrics. Ordinary parser
+failures do not switch environments, and identity/isolation drift is fatal.
+The bounded platform launcher is staged into run-owned storage, avoiding an
+unmountable installed-code path when Dagster launches sibling containers.
+
+The image-tooling chunk was independently unit-tested and integrated in
+`caded2b3`; it changes package/probe definitions, not host-owned image pins.
+Runtime units use genuine captured Clang/LLD and MSVC exports through the real
+production adapter and container-policy command construction, with only the
+Docker transport injected. The standalone driver is separately exercised for
+success, missing readers, nonzero exits, deadlines and output overflow. No live
+integration, acceptance, Docker image build or Dagster review is claimed for
+this correction.
+
+The final focused unit selection passed **333 tests**. It covers the production
+image adapter, standalone bounded driver, genuine-format fixtures, reader/image
+contracts, indexing and retrieval, source bounds, compiler selection, metrics,
+container policy, declared datasets, job selection and topology. Three unrelated
+POSIX supervisor tests were outside this Windows selection. Two container-mode
+tests also failed on the unchanged `91e34607` baseline because Windows reports
+directory permissions as `0777` instead of POSIX `0700`/`0755`; their assertions
+and security policy were not weakened. The portable selection was:
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q `
+  tests\test_debug_symbol_execution.py tests\test_debug_symbol_image_tools.py `
+  tests\test_debug_symbol_readers.py tests\test_debug_symbol_indexing.py `
+  tests\test_debug_symbol_metrics.py tests\test_debug_symbol_source_bounds.py `
+  tests\test_debug_symbol_workflow.py tests\test_debug_symbol_retrieval.py `
+  tests\test_compiler_target_selection.py tests\test_container_runtime.py `
+  tests\test_inventory_resume.py::test_registry_exposes_downstream_file_contracts `
+  tests\test_job_selection.py tests\orchestration\test_topology.py `
+  -k "not supervisor and not test_executor_records_timeout_and_failure_state and not test_scratch_is_writable_only_while_the_scanner_runs" `
+  --basetemp=test\tmp\symbol-image-final-unit
+```
