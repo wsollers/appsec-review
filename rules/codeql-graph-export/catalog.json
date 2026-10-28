@@ -1923,6 +1923,614 @@
           ]
         }
       ]
+    },
+    "python": {
+      "model_library": "codeql/python-all",
+      "export_pack": "appsec-review/graph-export-python",
+      "sinks": [
+        {
+          "rule_id": "python.sink.api.system",
+          "match": {
+            "api": "system",
+            "declared_in": [
+              "os"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "python.sink.api.popen",
+          "match": {
+            "api": "popen",
+            "declared_in": [
+              "os"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "python.sink.api.remove",
+          "match": {
+            "api": "remove",
+            "declared_in": [
+              "os"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "python.sink.api.loads",
+          "match": {
+            "api": "loads",
+            "declared_in": [
+              "pickle"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "python.sink.api.get",
+          "match": {
+            "api": "get",
+            "declared_in": [
+              "requests"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "python.sink.api.urlopen",
+          "match": {
+            "api": "urlopen",
+            "declared_in": [
+              "urllib.request"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "python.sink.api.open",
+          "match": {
+            "api": "open",
+            "declared_in": [
+              "builtins"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "python.sink.api.eval",
+          "match": {
+            "api": "eval",
+            "declared_in": [
+              "builtins"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "python.sink.api.exec",
+          "match": {
+            "api": "exec",
+            "declared_in": [
+              "builtins"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "python.sink.model.sqlexecution",
+          "match": {
+            "model": "SqlExecution"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "python.sink.model.systemcommandexecution",
+          "match": {
+            "model": "SystemCommandExecution"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "python.sink.model.filesystemaccess",
+          "match": {
+            "model": "FileSystemAccess"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "python.sink.model.httpclientrequest",
+          "match": {
+            "model": "HttpClientRequest"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "python.sink.model.decoding.mayexecuteinput",
+          "match": {
+            "model": "Decoding.mayExecuteInput"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "python.sink.model.codeexecution",
+          "match": {
+            "model": "CodeExecution"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "python.sink.model.ldapexecution",
+          "match": {
+            "model": "LdapExecution"
+          },
+          "sink_class": "ldap_query",
+          "cwe_family": "CWE-90"
+        },
+        {
+          "rule_id": "python.sink.model.xpathexecution",
+          "match": {
+            "model": "XPathExecution"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "python.sink.model.xmlparsing",
+          "match": {
+            "model": "XmlParsing"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "python.sink.model.templateconstruction",
+          "match": {
+            "model": "TemplateConstruction"
+          },
+          "sink_class": "template_injection",
+          "cwe_family": "CWE-1336"
+        },
+        {
+          "rule_id": "python.sink.model.httpredirectresponse",
+          "match": {
+            "model": "HttpRedirectResponse"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "python.sink.model.responseheaderwrite",
+          "match": {
+            "model": "ResponseHeaderWrite"
+          },
+          "sink_class": "header_injection",
+          "cwe_family": "CWE-113"
+        },
+        {
+          "rule_id": "python.sink.model.regexexecution",
+          "match": {
+            "model": "RegexExecution"
+          },
+          "sink_class": "regex_injection",
+          "cwe_family": "CWE-730"
+        },
+        {
+          "rule_id": "python.sink.model.logging",
+          "match": {
+            "model": "Logging"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "python.sink.model.httpresponse",
+          "match": {
+            "model": "HttpResponse"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "python.source.api.getpass",
+          "match": {
+            "api": "getpass",
+            "declared_in": [
+              "getpass"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "python.source.api.input",
+          "match": {
+            "api": "input",
+            "declared_in": [
+              "builtins"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "python.source.model.commandargs",
+          "match": {
+            "model": "ThreatModelSource",
+            "source_type": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "python.source.model.environment",
+          "match": {
+            "model": "ThreatModelSource",
+            "source_type": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "python.source.model.stdin",
+          "match": {
+            "model": "ThreatModelSource",
+            "source_type": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "python.source.model.file",
+          "match": {
+            "model": "ThreatModelSource",
+            "source_type": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "python.source.model.database",
+          "match": {
+            "model": "ThreatModelSource",
+            "source_type": "database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "python.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "python.sanitizer.realpath",
+          "api": "realpath",
+          "declared_in": [
+            "os.path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "python.sanitizer.quote",
+          "api": "quote",
+          "declared_in": [
+            "shlex"
+          ],
+          "applies_to": [
+            "command_execution"
+          ]
+        },
+        {
+          "rule_id": "python.sanitizer.secure_filename",
+          "api": "secure_filename",
+          "declared_in": [
+            "werkzeug.utils"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "python.sanitizer.escape",
+          "api": "escape",
+          "declared_in": [
+            "html"
+          ],
+          "applies_to": [
+            "html_output"
+          ]
+        }
+      ]
+    },
+    "rust": {
+      "model_library": "codeql/rust-all",
+      "export_pack": "appsec-review/graph-export-rust",
+      "sinks": [
+        {
+          "rule_id": "rust.sink.api.from_str",
+          "match": {
+            "api": "from_str",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.api.from_slice",
+          "match": {
+            "api": "from_slice",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.api.from_reader",
+          "match": {
+            "api": "from_reader",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.api.deserialize",
+          "match": {
+            "api": "deserialize",
+            "declared_in": [
+              "serde_json",
+              "serde_json::de",
+              "serde_yaml",
+              "serde_yaml::de",
+              "bincode"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "rust.sink.model.sql-injection",
+          "match": {
+            "model": "sql-injection"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "rust.sink.model.command-injection",
+          "match": {
+            "model": "command-injection"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "rust.sink.model.path-injection",
+          "match": {
+            "model": "path-injection"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "rust.sink.model.request-url",
+          "match": {
+            "model": "request-url"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "rust.sink.model.log-injection",
+          "match": {
+            "model": "log-injection"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "rust.sink.model.html-injection",
+          "match": {
+            "model": "html-injection"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "rust.sink.model.alloc-size",
+          "match": {
+            "model": "alloc-size"
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-770"
+        },
+        {
+          "rule_id": "rust.sink.model.alloc-layout",
+          "match": {
+            "model": "alloc-layout"
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-770"
+        },
+        {
+          "rule_id": "rust.sink.model.pointer-access",
+          "match": {
+            "model": "pointer-access"
+          },
+          "sink_class": "memory_read",
+          "cwe_family": "CWE-825"
+        },
+        {
+          "rule_id": "rust.sink.model.disable-certificate",
+          "match": {
+            "model": "disable-certificate"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-295"
+        },
+        {
+          "rule_id": "rust.sink.model.hasher-input",
+          "match": {
+            "model": "hasher-input"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-328"
+        },
+        {
+          "rule_id": "rust.sink.model.credentials-key",
+          "match": {
+            "model": "credentials-key"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-798"
+        },
+        {
+          "rule_id": "rust.sink.model.credentials-iv",
+          "match": {
+            "model": "credentials-iv"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-798"
+        },
+        {
+          "rule_id": "rust.sink.model.credentials-nonce",
+          "match": {
+            "model": "credentials-nonce"
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-798"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "rust.source.api.accept",
+          "match": {
+            "api": "accept",
+            "declared_in": [
+              "std::net::tcp::TcpListener"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "rust.source.api.recv_from",
+          "match": {
+            "api": "recv_from",
+            "declared_in": [
+              "std::net::udp::UdpSocket"
+            ],
+            "index": -1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "rust.source.model.remote",
+          "match": {
+            "model": "remote"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "rust.source.model.commandargs",
+          "match": {
+            "model": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "rust.source.model.environment",
+          "match": {
+            "model": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "rust.source.model.file",
+          "match": {
+            "model": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "rust.source.model.stdin",
+          "match": {
+            "model": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "rust.source.model.database",
+          "match": {
+            "model": "database"
+          },
+          "source_class": "database"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "rust.sanitizer.canonicalize",
+          "api": "canonicalize",
+          "declared_in": [
+            "std::fs",
+            "std::path::Path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        }
+      ]
     }
   }
 }
