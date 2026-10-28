@@ -204,6 +204,7 @@ def assert_adverse_downstream(fixture, row):
     from tests.test_owasp_downstream import project_and_assemble
 
     downstream = project_and_assemble(fixture)
+    published_row = json.loads(json.dumps(row))
     leads = [lead for lead in downstream.collection.leads if lead.family == "owasp_control"]
     assert leads
     for lead in leads:
@@ -211,10 +212,10 @@ def assert_adverse_downstream(fixture, row):
         assessment = lead.control_assessment
         assert assessment["production_eligible"] and assessment["provisional"]
         assert assessment["control_status"] == "not_satisfied"
-        assert assessment["obligations"] == row["obligations"]
-        assert assessment["observations"] == row["observations"]
-        assert assessment["limitations"] == row["limitations"]
-        assert assessment["disagreements"] == row["disagreements"]
+        assert assessment["obligations"] == published_row["obligations"]
+        assert assessment["observations"] == published_row["observations"]
+        assert assessment["limitations"] == published_row["limitations"]
+        assert assessment["disagreements"] == published_row["disagreements"]
         assert all(item["resolved"] for item in assessment["evidence"])
         package = next(package for package in downstream.assembly.packages
                        if package.kind == "finding_lead" and package.lead_ids == (lead.observation_id,))
@@ -232,8 +233,26 @@ def assert_adverse_downstream(fixture, row):
             assert classify(EntityKind.PRECOMPUTED_FACT, predicate, tuple(Predicate),
                             fact_payload=record["payload"]) is Admissibility.INDIRECT
     assert classify(EntityKind.SOURCE_FILE, Predicate.AFFECTED_CONSTRUCT,
-                    tuple(Predicate)) is Admissibility.DIRECT
+                    tuple(Predicate)) is Admissibility.INDIRECT
+    assert_roles_receive_control_context(fixture, downstream, package.package_id, row["control_identity"])
     return downstream
+
+
+def assert_roles_receive_control_context(fixture, downstream, package_id, control_identity):
+    from tests.test_owasp_downstream import run_review_roles
+
+    delivered = run_review_roles(fixture, downstream, package_id=package_id)
+    expected_roles = {"red_team_analyst", "blue_team_refuter", "independent_verifier"}
+    assert expected_roles <= {request.role for request in delivered.requests}
+    for request in delivered.requests:
+        if request.role in expected_roles:
+            serialized = json.dumps(request.task_input)
+            assert control_identity in serialized
+            assert "control_assessment" in serialized
+            assert delivered.source_identity in serialized
+    assert any(request.role == "independent_verifier" and request.transcript and
+               delivered.source_identity in json.dumps(request.transcript)
+               for request in delivered.requests)
 
 
 def test_benign_source_is_scoped_counterevidence_not_component_safety(tmp_path):
@@ -257,10 +276,13 @@ def test_benign_source_is_scoped_counterevidence_not_component_safety(tmp_path):
         if entry["role"] == "control_context" and entry["control_assessment"]["control_status"] == "satisfied"
     ]
     assert effective and all(not assessment["lead_eligible"] for assessment in effective)
-    assert any(assessment["obligations"] == row["obligations"] for assessment in effective)
+    assert any(assessment["obligations"] == json.loads(json.dumps(row["obligations"])) for assessment in effective)
     assert any(entry["control_assessment"]["control_status"] == "satisfied"
                for view in downstream.views.values() for entry in view.document["other_context"]
                if entry.get("role") == "control_context")
+    package = next(package for package in downstream.assembly.packages
+                   if fixture.ids["sast_high"] in package.lead_ids and package.kind == "finding_lead")
+    assert_roles_receive_control_context(fixture, downstream, package.package_id, row["control_identity"])
 
 
 def test_independent_disagreement_stays_visible_and_provisional(tmp_path):
@@ -271,6 +293,7 @@ def test_independent_disagreement_stays_visible_and_provisional(tmp_path):
     assert row["disagreements"]
     assert row["observations"][0]["state"] == "awaiting_independent_verification"
     assert row["observations"][0]["state"] != "confirmed"
+    assert_adverse_downstream(fixture, row)
 
 
 @pytest.mark.parametrize("field,value", [
@@ -428,6 +451,9 @@ def test_qualification_is_explicit_and_never_eligible(tmp_path):
     query = WorkbenchIndex(fixture.runs_dir, fixture.run_id).query(family="control-result")
     assert query["assessment_mode"] == "qualification"
     assert all(not item["record"]["lead_eligible"] for item in query["results"])
+    from tests.test_owasp_downstream import project_and_assemble
+    downstream = project_and_assemble(fixture)
+    assert not any(lead.family == "owasp_control" for lead in downstream.collection.leads)
 
 
 def test_assumed_material_prerequisites_cannot_create_adverse_control_result(tmp_path):
