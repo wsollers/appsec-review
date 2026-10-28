@@ -631,8 +631,10 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   changes to snapshot function spans instead of reporting the metric unavailable at function scope.
 - Function attribution only sees surviving lines in the top blamed files; consider bounded
   `log -L` per function for changes whose lines were later rewritten.
-- Native review-export adapters for GitLab, Gerrit, and Azure DevOps (today they must be converted
-  to `appsec-review/review-records/1`), and a deployment-event adapter for common CD systems.
+- A deployment-event adapter for common CD systems. GitLab, Gerrit, and Azure DevOps review
+  exports are produced by `acquire-target` (see
+  [`operations/target-acquisition.md`](operations/target-acquisition.md)); validate them against
+  live servers.
 - Component relatedness uses nesting and co-change only; add build-graph or ownership-file
   (`CODEOWNERS`) relatedness when the catalog exposes them.
 - Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on

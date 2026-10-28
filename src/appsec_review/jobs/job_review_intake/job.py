@@ -30,6 +30,23 @@ def _target(unit: UnitContext) -> Path:
     return unit.job.target_root.resolve(strict=True)
 
 
+def _acquisition(unit: UnitContext, tree_sha256: str) -> Mapping[str, Any] | None:
+    """The ``acquire-target`` manifest for this target, copied into the run, or ``None``."""
+    from appsec_review.target_acquisition.acquire import intake_record
+    try:
+        settings = resolved_configuration(unit.job.run_root).get("target_acquisition") or {}
+    except (OSError, ValueError):
+        settings = {}
+    records_dir = settings.get("records_dir", "data/target-acquisitions") if isinstance(settings, Mapping) \
+        else "data/target-acquisitions"
+    record = intake_record(repository_root=unit.job.repository_root, records_dir=str(records_dir),
+                           target_root=_target(unit), tree_sha256=tree_sha256,
+                           destination=unit.unit_root / "target-acquisition.json")
+    if record is not None:
+        record["manifest"] = (unit.unit_root / record["manifest"]).relative_to(unit.job.run_root).as_posix()
+    return record
+
+
 def _validate(context, result) -> None:
     if tuple(context.config.steps) != tuple(TOPOLOGY):
         raise ValueError("review intake topology does not match configuration")
@@ -192,7 +209,8 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         if actual != unit.job.source_fingerprint:
             raise ValueError("target changed after resume planning")
         return {"algorithm": "sha256-bounded-tree-v1", "sha256": actual,
-                "coverage": unit.output("prepare_target.validate_target")}
+                "coverage": unit.output("prepare_target.validate_target"),
+                "acquisition": _acquisition(unit, actual)}
 
     def publish_handoff(unit: UnitContext) -> Mapping[str, Any]:
         document = {"schema": "appsec-review/review-intake/1",
@@ -205,7 +223,8 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         identity = write_json(path, document)
         identity["path"] = path.relative_to(unit.job.run_root).as_posix()
         return {"schema": document["schema"], "artifact": identity,
-                "gaps": document["fingerprint"]["coverage"]["gaps"]}
+                "gaps": [*document["fingerprint"]["coverage"]["gaps"],
+                         *((document["fingerprint"].get("acquisition") or {}).get("gaps") or [])]}
 
     units = (
         Unit("model_preflight.resolve_models", resolve_models),

@@ -96,6 +96,58 @@ output_file_bytes = 2147483648      # RLIMIT_FSIZE for every file the container 
 # sha256 = "<64 lowercase hex characters>"
 # authorization = "Vendor agreement 2026-014 section 7 permits security analysis"
 
+[target_acquisition]
+# User-invoked checkout of pinned review targets into new directories under `targets_dir`
+# (`appsec-review acquire-target`). It never pulls, edits, or replaces an existing checkout. Each
+# acquisition writes `records_dir/<id>/manifest.json` with the pinned identity, tree fingerprint,
+# gaps, and artifact hashes; job_review_intake copies that manifest into the run. Credentials never
+# appear here: Git uses the operator's credential helper or ssh agent, and Perforce and review APIs
+# read the environment variables a target names. See docs/operations/target-acquisition.md.
+targets_dir = "targets"
+records_dir = "data/target-acquisitions"
+git_executable = "git"
+p4_executable = "p4"
+command_timeout_seconds = 3600
+http_timeout_seconds = 60
+max_http_response_bytes = 33554432
+max_review_commits = 10000
+max_files = 500000
+max_total_bytes = 8589934592
+max_file_bytes = 536870912
+max_path_bytes = 4096
+max_submodule_depth = 8              # deeper gitlinks are named gaps
+max_diff_bytes = 67108864            # larger review patches are named gaps
+allow_local_sources = false          # file:// Git sources and loopback http review APIs; tests only
+#
+# [[target_acquisition.targets]]
+# id = "service-git"
+# kind = "git"
+# url = "https://git.example.com/team/service.git"
+# commit = "<40 or 64 lowercase hex characters>"
+# submodules = "recursive"           # or "none" (each gitlink is then a named gap)
+#
+# [[target_acquisition.targets]]
+# id = "engine-p4"
+# kind = "perforce"
+# port = "ssl:perforce.example.com:1666"
+# trust_fingerprint = "<colon-separated SHA fingerprint; required for ssl ports>"
+# depot_path = "//depot/engine/main/..."
+# changelist = 123456
+# user_env = "P4USER"
+# ticket_env = "P4_TICKET"
+#
+# [[target_acquisition.targets]]
+# id = "service-mr-42"
+# kind = "review_export"
+# provider = "gitlab"                # gitlab, gerrit (needs patchset), azure_devops (needs repository, iteration)
+# source = "api"                     # or "bundle" with bundle_path and bundle_sha256
+# api_url = "https://gitlab.example.com"
+# project = "team/service"
+# change = 42
+# revision = "<reviewed head commit>"
+# clone_url = "https://gitlab.example.com/team/service.git"
+# token_env = "GITLAB_TOKEN"
+
 [orchestration.dagster]
 executor = "multiprocess"
 max_concurrent = 8

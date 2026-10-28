@@ -52,6 +52,9 @@ GitHub only adds review-process facts on top of it.
 - A runtime input-identity probe lets resume planning detect changes to history alone.
 - Scanning history for leaked secrets is out of scope.
 - Following submodules is a TODO. For now each gitlink is a `submodule_history_not_followed` gap.
+  `acquire-target` already checks submodules out at their gitlink commits and pins those commits in
+  its manifest ([`../operations/target-acquisition.md`](../operations/target-acquisition.md)). It
+  does the same for Perforce changelists, but that is acquisition only, not history analysis.
 
 ## Placement in the graph
 
