@@ -23,10 +23,13 @@ review (chains before seal) -> enabled PoC / planning / validation / dossiers
                            -> one final gate -> final report
 ```
 
-The report is the one terminal job of the graph. Both jobs are shipped enabled. Setting
-`jobs.job_final_publication_gate.settings.enabled = false` also makes the report transparent
-(there is nothing for it to read), which leaves the inference review as the terminal job; setting
-only `jobs.job_final_report_publication.settings.enabled = false` leaves the gate as the terminal job.
+The report closes the completion publication path. The disabled-by-default standalone
+OpenVEX exporter is an independent post-gate peer when enabled, not a report dependency.
+Gate and report are shipped enabled. Disabling the gate also makes the report transparent
+(there is no certified input); enabled pre-gate completion producers remain, rather than
+moving after the gate or disappearing. Enabling export requires gate and review enabled.
+Disabling only report publication leaves the gate's certified snapshot available to other
+consumers, including separately enabled export.
 
 ## The gate
 
@@ -193,39 +196,27 @@ the exact PoC upstream digest without changing frozen settings. A report-only re
 discover or admit later producer output; stale/mixed optional-producer identities fail the gate.
 PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it or alter scores.
 
-### Planned OpenVEX export projection
+### Standalone OpenVEX is not a report input
 
-**Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**
-Shared settings/contracts are present at combined source `6975aef2`, but no exporter job,
-dataset, configuration entry or runtime report integration is registered.
-The [OpenVEX design](../architecture/openvex-export.md) proposes optional model-free
-`job_openvex_export` after the accepted gate. Its baseline post-gate PoC sibling diagram and
-`final-report/1` projection predate the current completion graph: PoC now precedes the gate
-and report `/2` reads only certified bindings. Future exporter implementation must reconcile
-that boundary explicitly, not restore a gate-to-PoC dependency or claim the design is active.
-The current topology above does not yet include it. The design requires normal graph execution
-to stop on enabled-export failure rather
-than publish a refreshed report. The [draft operator guide](openvex-export.md) covers
-immutable issuer/action setup, source identity, outputs, privacy and flow diagrams.
+The user selected standalone post-gate export while preserving gate-only reporting.
+At `ede3c107b16aedebc97c2659372ac9ae80fde348`, report dependencies and `CONSUMES` are exactly
+`job_final_publication_gate`; report `/2` has no `openvex_export` block, output links or
+live optional attachment discovery. This supersedes the earlier OpenVEX report-link/fan-in
+proposal, not the pre-gate completion design.
 
-The original planned optional `openvex_export` block targeted `final-report/1`; there is no such
-implemented block in the current `/2` report. The design links only accepted, reverified run-local artifacts and never
-changes claim state, gate buckets, score dimensions or ship-block decisions.
+Enabled PoC, planning, validation and dossiers remain before the gate. The gate certifies their
+capabilities, sanitized attachments and immutable bindings once. Report publication reads that
+snapshot; it neither searches producer latest pointers nor discovers OpenVEX files. Exporter
+status (`disabled`, `not_run`, `available`, `no_statements`, `stale`) belongs only to its
+protected operator reader/metrics, not report fields or new publication limitations.
+An exporter failure is not a report-input integrity failure. A sequential direct run can stop
+on a failed export before reaching report dispatch, but that ordering does not add a report
+dependency; standalone report publication still requires only its valid certified gate.
 
-| Planned report state | Projection |
-| --- | --- |
-| `disabled` | Frozen setting is false; no file lookup/link and no new export gap. Manual exporter dispatch is refused while disabled. |
-| `not_run` | Enabled but no accepted export, for example a standalone report dispatched early; explicit missing-export limitation, no document link. |
-| `available` | Current nonempty accepted export; verify handoff, result, companion, document and gate/review/full-configuration/release pins before showing counts, local references and hashes. |
-| `no_statements` | Accepted empty export; explicit zero/reasons and companion link, no document link. Not a clean verdict. |
-| `stale` | Valid export belongs to another gate/review/configuration/release; explain that export must rerun, without linking the stale document. |
-
-Corrupt output must fail report verification, not masquerade as `not_run` or `stale`.
-`exported`, `exported_with_gaps` and `no_statements` are accepted exporter outcomes;
-`available` is a report-consumer state, and only `affected` is a vulnerability status.
-PoC compilation or its absence/failure is not an exporter prerequisite or vulnerability
-reassessment. A previous accepted export is usable only while every current pin and byte
-still matches; a failed attempt does not create a new accepted export.
+The [OpenVEX operator guide](openvex-export.md) covers the issuer/action configuration,
+source identity, standalone outputs, privacy and status recovery. Its certified-gate verifier
+and projector adaptation is still in progress at this source boundary; no final `/2` export
+execution, integration, acceptance or live Dagster result is claimed here.
 
 ### What the report never contains
 
