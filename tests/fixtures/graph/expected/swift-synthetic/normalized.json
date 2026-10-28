@@ -5938,7 +5938,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6031,7 +6031,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "integral",
      "conversions": [],
      "interval": {
@@ -6131,7 +6131,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6228,7 +6228,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6325,7 +6325,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6418,7 +6418,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "integral",
      "conversions": [],
      "interval": {
@@ -6518,7 +6518,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6615,7 +6615,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6712,7 +6712,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-literal-only",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
