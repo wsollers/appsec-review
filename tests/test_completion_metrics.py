@@ -39,6 +39,34 @@ def test_completion_metrics_track_stages_retries_outcomes_and_latency_without_co
     assert json.loads((tmp_path / "data" / "telemetry" / "summary.json").read_text())["completion"] == report
 
 
+def test_metrics_regeneration_replaces_stale_cache_without_mutating_or_recounting_events(tmp_path: Path) -> None:
+    log = PipelineLog(tmp_path)
+    log.write("POC_GENERATION_PUBLISHED", run_id=tmp_path.name,
+              job_id="job_poc_generation", attempt_id="attempt_0001",
+              details={"candidate_count": 2, "by_status": {"compile_verified": 1, "policy_denied": 1}})
+    first = write_run_metrics(tmp_path)
+    authoritative = log.path.read_bytes()
+    summary = tmp_path / "data" / "telemetry" / "summary.json"
+    summary.write_text('{"stale":true}', encoding="utf-8")
+    assert write_run_metrics(tmp_path) == first
+    assert json.loads(summary.read_text(encoding="utf-8")) == first
+    assert log.path.read_bytes() == authoritative
+
+    log.write("DOSSIER_PUBLICATION_PUBLISHED", run_id=tmp_path.name,
+              job_id="job_dossier_publication", attempt_id="attempt_0001",
+              details={"rendered_count": 1, "gap_count": 0})
+    authoritative = log.path.read_bytes()
+    latest = write_run_metrics(tmp_path)
+    lanes = latest["completion"]["lanes"]
+    assert lanes["poc_generation"]["events"]["POC_GENERATION_PUBLISHED"]["count"] == 1
+    assert lanes["dossiers"]["events"]["DOSSIER_PUBLICATION_PUBLISHED"]["counters"] == {
+        "gap_count": 0, "rendered_count": 1}
+    assert latest["completion"]["measurement_gaps"] == []
+    assert json.loads(summary.read_text(encoding="utf-8")) == latest
+    assert write_run_metrics(tmp_path) == latest
+    assert log.path.read_bytes() == authoritative
+
+
 def test_chain_metrics_exclude_other_inference_work_and_preserve_unobserved_lanes() -> None:
     records = [
         {"job_id": "job_inference_security_review", "event_type": "INFERENCE_REVIEW_ATTACK_CHAINS_PUBLISHED",
