@@ -2547,7 +2547,7 @@ max_active_claims = 500
 max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
-review_teams = 5
+review_teams = 3
 red_per_team = 3
 blue_per_team = 2
 verifier_per_team = 1

@@ -581,7 +581,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
     A profile may set only: the ``model`` table of the five model-calling jobs
     (``PROFILE_JOB_MODEL_KEYS``), model profiles of the inference review
     (``PROFILE_REVIEW_MODEL_KEYS``), ``model_profile`` of its roles, and its ``budgets``
-    (``PROFILE_BUDGET_KEYS``), plus the two explicit lane exploration settings. Every other key,
+    (``PROFILE_BUDGET_KEYS``), the two lane exploration settings, team capacity and active-claim cap. Every other key,
     wrong type and empty table is rejected by name.
     """
     from .inference_review import JOB_ID, parse_team_package_budget
@@ -629,7 +629,10 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                     raise ValueError(f"configuration profile model profile name is invalid: {name}")
                 keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
             continue
-        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes"})
+        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes", "teams", "rounds"})
+        for section, key in (("teams", "review_teams"), ("rounds", "max_active_claims")):
+            if section in settings:
+                keys += typed(settings[section], f"{field}.settings.{section}", {key: int})
         if "lanes" in settings:
             keys += typed(settings["lanes"], f"{field}.settings.lanes",
                           {"exploration_enabled": bool, "exploration_reserve": int})
@@ -683,8 +686,9 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
                 base_table((*named, name)).update(values)
             continue
         review = ("jobs", job_id, "settings")
-        if "lanes" in settings:
-            base_table((*review, "lanes")).update(settings["lanes"])
+        for section in ("lanes", "teams", "rounds"):
+            if section in settings:
+                base_table((*review, section)).update(settings[section])
         for name, values in settings.get("models", {}).items():
             models = base_table((*review, "models"))
             models.setdefault(name, {}).update(values)

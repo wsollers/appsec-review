@@ -27,6 +27,7 @@ from collections import defaultdict
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 import json
+from itertools import zip_longest
 from pathlib import Path
 import threading
 import time
@@ -58,6 +59,7 @@ from appsec_review.review.judge import (
     side_assignment,
 )
 from appsec_review.review.ledger import EvidenceRequestOutcome, LedgerWriter, gap_json
+from appsec_review.review.lead_triage import menu_effective_severity
 from appsec_review.review.models import (
     BlueTask, CellRecord, CellStatus, Claim, ClaimState, EvidenceRelation, Gap, GapClass, HuntStrategy, IntegrityError,
     JudgePredicateVerdict, JudgeVerdict, JudgeVerdictValue, Lane, Predicate, RelationKind, Role, make_gap,
@@ -1420,11 +1422,14 @@ def _consume_check(path: Path) -> None:
 def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *, other_lane_count: int,
              ledger_path: Path, stream: str, signal_dir: Path) -> dict[str, Any]:
     """Run every package of ``lane`` and seal the lane's ledger shard; returns the lane document."""
-    ordered = sorted(packages, key=lambda item: (not _exploratory(item), item.rank, item.package_id))
+    ordered = _ordered_packages(packages)
     counts = {Lane.LEAD: len(ordered), Lane.HUNT: other_lane_count} if lane is Lane.LEAD else {
         Lane.LEAD: other_lane_count, Lane.HUNT: len(ordered)}
-    allocation = lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share,
-                                 ctx.settings.budgets.budget_team_packages)
+    package_allocation = lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share,
+                                         ctx.settings.budgets.budget_team_packages)
+    claim_cap = ctx.settings.rounds.max_active_claims
+    allocation = (lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share, claim_cap)
+                  if sum(package_allocation.values()) > claim_cap else package_allocation)
     _signal(signal_dir, lane, ordered, allocation, queue_empty=False)
     other = Lane.HUNT if lane is Lane.LEAD else Lane.LEAD
     declared = _read_signal(signal_dir, other)
@@ -1433,15 +1438,15 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
     launches = allocation[lane]
     total = sum(allocation.values())
     lane_offset = 0 if lane is Lane.LEAD else allocation[Lane.LEAD]
-    claim_cap = ctx.settings.rounds.max_active_claims
     ordered = [replace(work, active_claim_limit=(claim_cap // total +
                        (index + lane_offset < claim_cap % total)) if index < launches and total else 0)
                for index, work in enumerate(ordered)]
     with ThreadPoolExecutor(max_workers=max(1, ctx.settings.teams.review_teams), thread_name_prefix=lane.value) as pool:
-        futures = [pool.submit(run_team, ctx, work, launch=index < launches,
-                               not_launched_reason=(f"lane {lane.value} team-package allocation of {launches} "
-                                                    f"exhausted (budget_team_packages)"))
-                   for index, work in enumerate(ordered)]
+        futures = []
+        for index, work in enumerate(ordered):
+            limit = "max_active_claims" if index < package_allocation[lane] else "budget_team_packages"
+            futures.append(pool.submit(run_team, ctx, work, launch=index < launches,
+                                       not_launched_reason=f"lane {lane.value} allocation of {launches} exhausted ({limit})"))
         teams = [future.result() for future in futures]
     _signal(signal_dir, lane, ordered, allocation, queue_empty=True)
     return _seal(ctx, lane, teams, allocation, ledger_path, stream)
@@ -1450,6 +1455,22 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
 def _exploratory(work: PackageWork) -> bool:
     return work.lane is Lane.LEAD and any(lead.get("admission_reasons") == ["exploration_reserve"]
                                          for lead in work.document.get("lead_menu", ()))
+
+
+def _ordered_packages(packages: Sequence[PackageWork]) -> list[PackageWork]:
+    """Reserve discovery capacity for both severities before the ordinary ranked queue."""
+    populations: dict[str, list[PackageWork]] = {"medium": [], "low": []}
+    ordinary = []
+    for work in sorted(packages, key=lambda item: (item.rank, item.package_id)):
+        if not _exploratory(work):
+            ordinary.append(work)
+            continue
+        severity = menu_effective_severity(work.document["lead_menu"][0])
+        if severity not in populations:
+            raise IntegrityError(f"exploratory package has invalid severity: {work.package_id}")
+        populations[severity].append(work)
+    return [work for pair in zip_longest(populations["medium"], populations["low"])
+            for work in pair if work is not None] + ordinary
 
 
 def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledger_path: Path, stream: str) -> dict[str, Any]:

@@ -113,7 +113,7 @@ def test_medium_low_exploration_is_opt_in_and_bounded(tmp_path):
     explored = [item for item in enabled.packages if item.kind == "finding_lead"
                 and item.document()["lead_menu"][0]["admission_reasons"] == ["exploration_reserve"]]
     assert len(explored) == 2
-    assert all(item.document()["lead_menu"][0]["reported_severity"] == "medium" for item in explored)
+    assert {item.document()["lead_menu"][0]["reported_severity"] for item in explored} == {"medium", "low"}
     assert initial
     excluded = [item for item in enabled.manifest["admission"] if item["status"] == "not_admitted"]
     assert any(item["residual_coverage"] == "exploration_reserve_cutoff" for item in excluded)
@@ -133,7 +133,7 @@ def test_resolved_profiles_admit_bounded_exploration(tmp_path, profile, severity
     settings = config.job(JOB).typed_settings
     enabled = profile in {"prod", "copilot-prod"}
     assert settings.lanes.exploration_enabled is enabled
-    assert settings.lanes.exploration_reserve == 1
+    assert settings.lanes.exploration_reserve == (20 if enabled else 1)
     assert "info" not in settings.lanes.lead_admission
     assert json.loads(config.resolved_json)["jobs"][JOB]["settings"]["lanes"]["exploration_enabled"] is enabled
     scope = accept_manifest(builder.build_accepted_index_set(tmp_path).run_root)
@@ -145,7 +145,9 @@ def test_resolved_profiles_admit_bounded_exploration(tmp_path, profile, severity
     assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings), collection=collection)
     explored = [item for item in assembly.manifest["admission"]
                 if item["status"] == "admitted" and item["reasons"] == ["exploration_reserve"]]
-    assert len(explored) == int(enabled)
+    eligible = sum(admission_reasons(lead, PackageSettings.from_review_settings(settings)) == ["exploration_reserve"]
+                   for lead in collection.leads)
+    assert len(explored) == min(eligible, settings.lanes.exploration_reserve)
     assert all(item["effective_severity"] == severity for item in explored)
     assert all(item["status"] == "not_admitted" for item in assembly.manifest["admission"]
                if item["effective_severity"] == "info")
@@ -260,9 +262,8 @@ def test_production_all_packages_keeps_the_shared_active_claim_bound(tmp_path, m
                           ledger_path=tmp_path / lane.value / "ledger.jsonl",
                           stream=f"{lane.value}_review.teams", signal_dir=tmp_path / "signals")
         assert len(result["launched"]) == count
-    assert sum(assigned.values()) == settings.rounds.max_active_claims == 500
-    assert sum(value == 0 for value in assigned.values()) == 99
-    assert assigned["hunt-0014"] == 1 and assigned["hunt-0015"] == 0
+    assert sum(assigned.values()) == settings.rounds.max_active_claims == 1000
+    assert all(value >= 1 for value in assigned.values())
 
 
 @pytest.mark.parametrize(("old", "new"), [
@@ -388,7 +389,8 @@ def test_expected_specialists_are_not_satisfied_by_one_selected_persona(prepared
 def test_scheduler_reserves_exploration_without_expanding_package_budget(prepared):
     work = prepared.work("lead", "sast_critical")
     exploratory = replace(work, package_id="exploratory", document={**work.document, "lead_menu": [
-        {**work.document["lead_menu"][0], "admission_reasons": ["exploration_reserve"]}]})
+        {**work.document["lead_menu"][0], "admission_reasons": ["exploration_reserve"],
+         "reported_severity": "medium", "severity_record": None}]})
     settings = prepared.settings
     ctx = prepared.context(prepared.infer, budgets=replace(settings.budgets, budget_team_packages=1),
                            rounds=replace(settings.rounds, max_active_claims=1, max_rounds=1))
