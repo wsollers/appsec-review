@@ -1,8 +1,20 @@
+from multiprocessing import get_context
 from pathlib import Path
+import time
 
 import pytest
 
 from appsec_review.acceptance.lanes import LaneSpec, LaneTier, LaneWorkspace
+from appsec_review.observability.events import PipelineLog
+
+
+def _review_heartbeat(root, ready, stop) -> None:
+    pipeline = PipelineLog(Path(root))
+    deadline = time.monotonic() + 20
+    while not stop.is_set() and time.monotonic() < deadline:
+        pipeline.write("REVIEW_HEARTBEAT", run_id="simulated-running-review")
+        ready.set()
+        stop.wait(0.01)
 
 
 def test_lane_contract_bounds_selection_and_workers() -> None:
@@ -56,3 +68,34 @@ def test_redirected_scratch_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="redirected"):
         LaneWorkspace.create(tmp_path, "signals")
     assert not list(target.iterdir())
+
+
+def test_acceptance_metrics_remain_separate_while_an_owned_review_process_runs(tmp_path: Path) -> None:
+    context = get_context("spawn")
+    ready, stop = context.Event(), context.Event()
+    review_root = tmp_path / "simulated-review"
+    process = context.Process(target=_review_heartbeat, args=(str(review_root), ready, stop))
+    process.start()
+    try:
+        assert ready.wait(10), "owned simulated review did not start"
+        assert process.is_alive()
+        workspace = LaneWorkspace.create(tmp_path, "concurrent-review")
+        with workspace.span("acceptance.concurrent"):
+            for ordinal in range(10):
+                workspace.emit("ACCEPTANCE_SAMPLE", ordinal=ordinal)
+        assert process.is_alive(), "acceptance interrupted the owned review process"
+    finally:
+        stop.set()
+        process.join(10)
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+        assert not process.is_alive(), "owned simulated review process was not cleaned up"
+    assert process.exitcode == 0
+    acceptance, torn = workspace.pipeline.read()
+    review, review_torn = PipelineLog(review_root).read()
+    assert not torn and not review_torn and len(review) >= 1
+    assert all(row["run_id"] == workspace.invocation_id for row in acceptance)
+    assert all(row["run_id"] == "simulated-running-review" for row in review)
+    assert all(row["event_type"] == "REVIEW_HEARTBEAT" for row in review)
+    assert acceptance[-1]["details"]["resources"]["measurement_scope"] == "process_inclusive_not_additive"
