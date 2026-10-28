@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from tests.handoff_fixture import write_fixture_handoff
 from appsec_review.config import load_config
 from appsec_review.graph.contract import GRAPH_INDEX, Family
 from appsec_review.indexing import fts_worker, input_matrix, inventory, matrix, products
@@ -384,7 +385,7 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
     def handoff(job_id: str, artifacts: list[dict[str, str]], outputs: dict[str, Any]) -> tuple[Path, str]:
         attempt = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
         path = attempt / "handoff.json"
-        atomic_json(path, {"schema": "appsec-review/job-handoff/1", "job_id": job_id, "attempt_id": "attempt_0001",
+        write_fixture_handoff(run_root, path, {"job_id": job_id, "attempt_id": "attempt_0001",
                            "status": "ACCEPTED", "completion_status": "SUCCEEDED", "outputs": outputs,
                            "artifacts": artifacts, "source_fingerprint": SNAPSHOT})
         sha = file_sha256(path)
