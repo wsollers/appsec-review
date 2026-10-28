@@ -345,8 +345,16 @@ def test_budgets_end_cells_not_launched_or_timed_out_and_are_never_retried(prepa
     tiny = replace(prepared.settings.budgets, max_model_turns=1)
     result = run_team(prepared.context(prepared.infer, attempt="turns", budgets=tiny), prepared.work("lead", "sast_high"),
                       launch=True)
+    # Red cells run concurrently, so which of them pass the launch check before the first turn is charged
+    # is timing; only the bound and the terminal statuses are deterministic.
     launched = [item for item in result.cells if item.status is not CellStatus.NOT_LAUNCHED]
-    assert len(launched) <= 3 and any(item.status is CellStatus.NOT_LAUNCHED for item in result.cells)
+    assert len(launched) <= 3 and all(item.attempts <= 1 for item in result.cells)
+    assert {item.status for item in launched} <= {CellStatus.SUCCEEDED, CellStatus.TIMED_OUT}
+    # Exhaustion is sticky for the attempt: every later cell is not launched.
+    again = run_team(prepared.context(prepared.infer, attempt="turns", budgets=tiny),
+                     prepared.work("lead", "ci_high"), launch=True)
+    assert {item.status for item in again.cells} == {CellStatus.NOT_LAUNCHED}
+    assert any(gap.gap_class is GapClass.BUDGET_GAP for gap in again.gaps)
 
     profile = prepared.settings.models["default"]
     capped = MappingProxyType({"default": replace(profile, max_input_tokens=50)})
