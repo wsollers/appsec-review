@@ -28,8 +28,9 @@ CLAIM_ID = re.compile(r"^claim-[0-9a-f]{64}$")
 FINDING_ID = re.compile(r"^finding-[0-9a-f]{64}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 PACKAGE_ID = re.compile(r"^[a-z][a-z0-9_]*-[0-9a-f]{64}$")
-EVIDENCE_REF = re.compile(r"^(?:asr:[a-z][a-z0-9_]*:[0-9a-f]{64}|evrel-[0-9a-f]{64})$")
-LABEL = re.compile(r"^[A-Z][0-9]{1,3}$")
+EVIDENCE_REF = re.compile(r"^evrel-[0-9a-f]{64}$")
+ENTRY_REF = re.compile(r"^asr:entry_point:[0-9a-f]{64}$")
+PATH_REF = re.compile(r"^asr:call_site:[0-9a-f]{64}$")
 TEXT_LIMIT = 240
 LIST_LIMITS = {"entry": 8, "path": 16, "trigger": 8, "preconditions": 8, "unknowns": 8}
 BASIS_KEYS = frozenset({"entry", "path", "trigger", "input_format", "preconditions", "expected_observation",
@@ -79,29 +80,30 @@ def _fail(index: int, message: str) -> IntegrityError:
     return IntegrityError(f"poc_candidates[{index}] {message}")
 
 
-def _text(value: Any, index: int, name: str, *, empty: bool = True) -> str:
+def _text(value: Any, index: int, name: str, *, empty: bool = False) -> str:
     if not isinstance(value, str) or len(value) > TEXT_LIMIT or (not empty and not value.strip()):
         raise _fail(index, f"{name} must be text of at most {TEXT_LIMIT} characters")
     return value
 
 
-def _labels(value: Any, index: int, name: str, limit: int) -> tuple[str, ...]:
-    if (not isinstance(value, list) or len(value) > limit or len(set(value)) != len(value)
-            or any(not isinstance(item, str) or not LABEL.match(item) for item in value)):
-        raise _fail(index, f"{name} must be at most {limit} unique labels")
+def _identities(value: Any, index: int, name: str, limit: int, pattern: re.Pattern[str]) -> tuple[str, ...]:
+    if (not isinstance(value, list) or len(value) > limit
+            or any(not isinstance(item, str) or not pattern.fullmatch(item) for item in value)
+            or len(set(value)) != len(value)):
+        raise _fail(index, f"{name} must be at most {limit} unique resolved evidence identities")
     return tuple(value)
 
 
 def parse_basis(value: Any, index: int) -> PocBasis:
-    if not isinstance(value, Mapping) or set(value) != {"sha256", "value"}:
-        raise _fail(index, "poc_basis must hold exactly sha256 and value")
-    body = value["value"]
+    if not isinstance(value, Mapping) or set(value) != {"sha256", "brief"}:
+        raise _fail(index, "poc_basis must hold exactly sha256 and brief")
+    body = value["brief"]
     if not isinstance(body, Mapping) or set(body) != BASIS_KEYS:
-        raise _fail(index, f"poc_basis.value must define exactly {sorted(BASIS_KEYS)}")
-    if not isinstance(value["sha256"], str) or not SHA256.match(value["sha256"]):
+        raise _fail(index, f"poc_basis.brief must define exactly {sorted(BASIS_KEYS)}")
+    if not isinstance(value["sha256"], str) or not SHA256.fullmatch(value["sha256"]):
         raise _fail(index, "poc_basis.sha256 must be a SHA-256")
     if hashlib.sha256(canonical_json(body)).hexdigest() != value["sha256"]:
-        raise _fail(index, "poc_basis.sha256 is not the SHA-256 of the canonical poc_basis.value")
+        raise _fail(index, "poc_basis.sha256 is not the SHA-256 of the canonical poc_basis.brief")
     triggers = body["trigger"]
     if not isinstance(triggers, list) or len(triggers) > LIST_LIMITS["trigger"]:
         raise _fail(index, "poc_basis.trigger must be at most 8 rows")
@@ -116,8 +118,8 @@ def parse_basis(value: Any, index: int) -> PocBasis:
         if not isinstance(items, list) or len(items) > LIST_LIMITS[key]:
             raise _fail(index, f"poc_basis.{key} must be at most {LIST_LIMITS[key]} items")
         texts[key] = tuple(_text(item, index, key) for item in items)
-    return PocBasis(_labels(body["entry"], index, "entry", LIST_LIMITS["entry"]),
-                    _labels(body["path"], index, "path", LIST_LIMITS["path"]), tuple(rows),
+    return PocBasis(_identities(body["entry"], index, "entry", LIST_LIMITS["entry"], ENTRY_REF),
+                    _identities(body["path"], index, "path", LIST_LIMITS["path"], PATH_REF), tuple(rows),
                     _text(body["input_format"], index, "input_format"), texts["preconditions"],
                     _text(body["expected_observation"], index, "expected_observation"), texts["unknowns"],
                     value["sha256"])
@@ -131,9 +133,9 @@ def parse_candidates(value: Any) -> tuple[PocCandidate, ...]:
     for index, entry in enumerate(value):
         if not isinstance(entry, Mapping) or set(entry) != ENTRY_KEYS:
             raise _fail(index, f"must define exactly {sorted(ENTRY_KEYS)}")
-        if not isinstance(entry["claim_id"], str) or not CLAIM_ID.match(entry["claim_id"]):
+        if not isinstance(entry["claim_id"], str) or not CLAIM_ID.fullmatch(entry["claim_id"]):
             raise _fail(index, "claim_id is malformed")
-        if not isinstance(entry["package_id"], str) or not PACKAGE_ID.match(entry["package_id"]):
+        if not isinstance(entry["package_id"], str) or not PACKAGE_ID.fullmatch(entry["package_id"]):
             raise _fail(index, "package_id is malformed")
         if entry["state"] not in CLAIM_STATES:
             raise _fail(index, f"state must be one of {list(CLAIM_STATES)}")
@@ -141,12 +143,14 @@ def parse_candidates(value: Any) -> tuple[PocCandidate, ...]:
             raise _fail(index, f"judge_verdict must be one of {list(JUDGE_VERDICTS)}")
         package = entry["finding_package"]
         if (not isinstance(package, Mapping) or set(package) != {"finding_package_id", "sha256"}
-                or not isinstance(package["finding_package_id"], str) or not FINDING_ID.match(package["finding_package_id"])
-                or not isinstance(package["sha256"], str) or not SHA256.match(package["sha256"])):
+                or not isinstance(package["finding_package_id"], str)
+                or not FINDING_ID.fullmatch(package["finding_package_id"])
+                or not isinstance(package["sha256"], str) or not SHA256.fullmatch(package["sha256"])):
             raise _fail(index, "finding_package must be {finding_package_id, sha256}")
         refs = entry["evidence_refs"]
-        if (not isinstance(refs, list) or len(refs) > 256 or len(set(refs)) != len(refs)
-                or any(not isinstance(item, str) or not EVIDENCE_REF.match(item) for item in refs)):
+        if (not isinstance(refs, list) or len(refs) > 256
+                or any(not isinstance(item, str) or not EVIDENCE_REF.fullmatch(item) for item in refs)
+                or len(set(refs)) != len(refs)):
             raise _fail(index, "evidence_refs must be at most 256 unique evidence identities")
         parsed.append(PocCandidate(entry["claim_id"], entry["package_id"], entry["state"], entry["judge_verdict"],
                                    parse_basis(entry["poc_basis"], index), package["finding_package_id"],
@@ -175,4 +179,6 @@ def check_against_review(candidates: Sequence[PocCandidate], findings: Mapping[s
             errors.append(f"{item.claim_id}: finding package digest differs from the review handoff")
         elif package["claim_id"] != item.claim_id or package["state"] != item.state:
             errors.append(f"{item.claim_id}: claim or state differs from its finding package")
+        elif set(item.evidence_refs) != set(package["direct_evidence"]):
+            errors.append(f"{item.claim_id}: evidence differs from its finding package")
     return errors

@@ -75,7 +75,7 @@ def _write_json(unit: UnitContext, name: str, document: Any) -> dict[str, str]:
 def _candidate_record(candidate: PocCandidate) -> dict[str, Any]:
     return {"claim_id": candidate.claim_id, "package_id": candidate.package_id, "state": candidate.state,
             "judge_verdict": candidate.judge_verdict,
-            "poc_basis": {"sha256": candidate.poc_basis.sha256, "value": candidate.poc_basis.record()},
+            "poc_basis": {"sha256": candidate.poc_basis.sha256, "brief": candidate.poc_basis.record()},
             "finding_package": {"finding_package_id": candidate.finding_package_id,
                                 "sha256": candidate.finding_package_sha256},
             "evidence_refs": list(candidate.evidence_refs)}
