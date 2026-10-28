@@ -37,6 +37,7 @@ job's output in a scanner-shaped document or replace existing index manifests.
 An accepted publication can have partial, unavailable, not-applicable, or policy-skipped coverage.
 `complete` requires zero gaps and no retry. A failed framework execution cannot be accepted.
 Diagnostic publications remain `REJECTED` and must not update accepted/latest pointers.
+They must also preserve any already-published accepted handoff and outcomes bytes.
 Acceptance verifies a publication contract; it does not certify complete analysis or a clean target.
 
 The detailed `appsec-review/job-outcomes/1` artifact accounts for `UnitOutcome` and `ProducerGap`
