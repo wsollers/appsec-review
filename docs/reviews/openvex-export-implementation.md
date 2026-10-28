@@ -1,7 +1,8 @@
 # OpenVEX findings export implementation
 
-Status: standalone gate/2 adaptation verified against exact completed main `c47e3fea`.
-Local-main landing is coordinated separately from the source verification recorded here.
+Status: standalone gate/2 export landed on local main `83e67b23`; the user-directed automatic
+generation follow-up is verified at `74d93127`. Its local-main landing is coordinated separately
+from the source verification recorded here.
 The user explicitly selected standalone post-gate OpenVEX with gate-only report/2. The original
 /1 verification is retained as historical evidence, not proof of the adapted implementation.
 This record describes feature implementation and
@@ -22,10 +23,15 @@ The [architecture contract](../architecture/openvex-export.md) and
   Certified capabilities and attachments, including qualified chains, compile-failed PoCs,
   manual remediation and dossiers, retain their exact context without changing eligibility.
   Capability notices are not invented review gaps.
-- Immutable pre-run configuration names the issuer, accurate common action and stable repository
-  IRI. Products identify the reviewed source snapshot and full resolved configuration, not a
-  guessed release, distribution or purl. Accepted acquisition provenance does not automatically
-  prove the operator's repository IRI for multi-component or Perforce systems.
+- New runs generate and verify protected local files automatically. Frozen defaults identify the
+  generating tool, provide conservative investigation/remediation text, and derive a local
+  repository namespace from the accepted source snapshot. No issuer or repository setup is
+  required. Explicit individual/organization, action and repository overrides remain available.
+  Products identify the reviewed source snapshot and full resolved configuration, not a guessed
+  release, distribution or purl. Accepted acquisition provenance does not automatically prove an
+  operator's repository IRI for multi-component or Perforce systems. Default tool authorship is
+  a local schema-validated projection, not a claim of supplier issuance or compliance with the
+  specification's individual/organization author requirement.
 - Protected attempt-local outputs include verified inputs, nine pinned schema/license/lock
   snapshots, manifest, result and a VEX document only when nonempty. Zero eligible findings
   produce `no_statements`, a null document reference and a named non-clean gap, not an empty
@@ -39,7 +45,8 @@ The [architecture contract](../architecture/openvex-export.md) and
   current upstream authority. Historical accepted semantic totals are independently verified and
   deduplicated by accepted handoff digest; they do not depend on remaining the current export.
   Corrupt output is an integrity failure, not a missing/stale fallback.
-- Disabled manual dispatch is refused. PoC generation, remediation planning, validation and
+- Explicit opt-out is respected and disabled manual dispatch is refused. Frozen historical
+  disabled runs are not rebound to new defaults. PoC generation, remediation planning, validation and
   dossier publication remain before the single certified gate. Enabled OpenVEX and the final
   report are independent post-gate consumers. The report consumes only the gate: there are no
   OpenVEX report fields, links or fan-in dependencies.
@@ -76,6 +83,8 @@ The [architecture contract](../architecture/openvex-export.md) and
 | Assembled-feature documentation status and packaging qualifications | `03a8d4e54229927442a07bddded975c84e0b5465` |
 | Exact completed-main merge, preserving host pins and SBOM/debug telemetry | `b0d53c457bd2ed871aa99da3b530782173c70550` |
 | Combined 44-job / 145-dataset inventory, including protected export | `870d4789aa3a74c974928e06a7d9cafa86157aa8` |
+| Original standalone feature landed on local main | `83e67b23d94433a002b09d65a2d620673ebe54a5` |
+| User-directed automatic local generation and no-setup defaults | `74d931273a383f2f33bac90d3569a070a0ef612d` |
 
 The review handoff consumer enum additionally permits the exporter, without invalidating existing
 four-consumer handoffs. Finding-package/2 and finding eligibility policy were not changed by
@@ -214,6 +223,94 @@ Completed main `c47e3fea5023011e9e6c6d0dbd4095d0a691561c` is an ancestor through
 ordinary merge, not a rebase or separate completion landing. Semantic comparison proves its
 entire central configuration is unchanged except for the exporter table and declared release.
 Host catalog pins are semantically identical; the CodeQL asset-lock bytes match exactly.
+
+## Automatic-generation follow-up
+
+The user explicitly replaced opt-in generation with automatic post-run generation and
+verification. At `74d931273a383f2f33bac90d3569a070a0ef612d`, both checked-in TOML and immutable
+typed defaults enable the exporter without setup. The issuer is truthfully labelled as the
+`AppSec Review` tool with an automated-local-review role, rather than inventing a human or
+supplier. The pinned upstream schema accepts that author string, but the OpenVEX specification
+requires an individual or organization author: automatic files are qualified local projections,
+not an authenticated supplier advisory or a claim of full issuer-specification conformance.
+Operators can explicitly configure their issuer before a new run without blocking local
+generation by default.
+
+An empty configured `repository_iri` resolves to
+`urn:appsec-review:source:<accepted_source_snapshot_sha256>` with basis `source_snapshot`.
+The verifier still authenticates and binds accepted acquisition evidence when present; it does
+not copy an external acquisition URL into this local namespace. Explicit repository overrides
+retain strict acquisition matching. All product identities still include the full frozen
+configuration. The default action calls for reviewing/remediating the confirmed findings and
+validating fixes; it does not assert that a remediation or release exists.
+
+This deliberately extends the local common-schema identity enum, not its line endings. Its
+raw-byte pin is now `a90bbf40647f6652d2439885b9e446471aadbc6c534d342881ea34f85f737f29`;
+the validation profile is
+`9ff5d5446567181831922d9d8ca3de7d36be55328fb30a92133c5e3d4565cd2e`.
+Other schema/license/lock pins are unchanged. The declared exporter release is
+`openvex-export-2`; historical evidence above remains attributed to its original release and
+pin set. Frozen historical configuration is not rewritten or retroactively enabled.
+
+On the exact committed source, the requirement-focused smoke command passed **325 tests in
+43.01 seconds**. It covers the four shipped profiles, no-setup source identity with and without
+accepted acquisition (including a non-public Git spelling), identity substitution refusal,
+canonical schema validation, and actual production handlers generating, verifying and accepting
+both affected output and empty `no_statements` output. An initial run exposed a synthetic
+organization fixture inheriting the new tool role; its original explicit empty role was
+restored rather than weakening the production assertion.
+
+The broader directly affected unit command passed **547 tests in 310.92 seconds** on
+`74d93127`:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests\test_openvex_contracts.py tests\test_openvex_settings.py `
+  tests\test_openvex_inputs.py tests\test_openvex_projection.py `
+  tests\test_openvex_metrics.py tests\test_openvex_job_units.py `
+  tests\test_openvex_wiring.py tests\orchestration\test_topology.py `
+  tests\test_gate_snapshot.py `
+  tests\test_final_report.py::test_registry_topology_and_terminal_job `
+  tests\test_final_report.py::test_cli_graph_places_the_new_jobs_after_the_review `
+  --basetemp=test/tmp/openvex-automatic-focused
+```
+
+An actual wheel was rebuilt with the existing backend, installed in its own scratch virtual
+environment, and checked under Python `-I`. Installed-only module/resource paths, all seven
+offline schemas plus license/lock, transitive report PoC-item resolution, the new profile,
+and exact verifier/settings/contracts/projector/validator module bytes were verified.
+Serialized synthetic gate/2 inputs produced byte-identical affected and `no_statements`
+outputs under automatic defaults. Missing declared validator dependencies were first exposed
+by the isolated import; installing them inside that environment resolved it, and `pip check`
+then reported no broken requirements. An exploratory probe incorrectly assumed the report
+item used `$defs`; the actual pinned `properties/poc_outcomes/properties/items/items` pointer
+was resolved successfully. None of this is a full installed job, genuine accepted review,
+integration, acceptance, live Dagster or POSIX-custody result.
+
+Generation remains model-free and local/protected. Eligibility, acceptance authority, metrics
+semantics, pre-gate completion, and independent post-gate export/gate-only reporting are
+unchanged. No host pins, targets, signature infrastructure, disclosure or external publication
+were changed.
+
+Documentation commit `b9c76f9dcb683ec46e5c41d9f89aec2200464030` reconciles eleven operative
+pages and diagrams with this policy. Its targeted default-policy/handler/documentation command
+passed 148 cases and reproduced only the known untouched missing-target-link failure described
+below. The documentation agent checked 557 local links/anchors, five Mermaid blocks, LF,
+both full TOML examples, the complete architecture job table, all nine raw pins and the new
+profile. The parent fast-forwarded that exact tip and confirmed no production/config/test/schema
+delta from `74d93127`. On `b9c76f9d`, the following final assembled-source command passed
+**320 tests in 18.23 seconds**:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests\test_openvex_contracts.py tests\test_openvex_settings.py `
+  tests\test_openvex_projection.py tests\test_openvex_wiring.py `
+  --basetemp=test/tmp/openvex-automatic-final-pure
+```
+
+These are focused unit and packaging results, not a new whole-chain or live validation claim.
+The source/schema bytes tested by the broader 547-case command and installed wheel are identical
+after the documentation fast-forward.
 
 ## Failures and qualifications
 
