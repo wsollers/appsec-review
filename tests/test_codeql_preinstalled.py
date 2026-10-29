@@ -1,5 +1,5 @@
 """Explicit installed runtimes are declarations, never synthetic build/cache receipts."""
-from dataclasses import FrozenInstanceError, asdict
+from dataclasses import FrozenInstanceError, asdict, replace
 import hashlib
 import json
 from pathlib import Path
@@ -30,6 +30,7 @@ SOURCE = "sha256:" + "1" * 64
 BASE = "sha256:" + "2" * 64
 INSTALLED_SOURCE = "sha256:" + "3" * 64
 INSTALLED_BUILD = "sha256:" + "4" * 64
+OTHER = "sha256:" + "6" * 64
 USER = application_runtime_user("10001:10001")
 NOMINAL_USER = "10001:10001"
 RELEASES = {"codeql": "codeql-fixture-1", "codeql_runner": "runner-fixture-1"}
@@ -210,6 +211,98 @@ def test_missing_or_conflicting_binding_never_falls_back(tmp_path, mutation):
                          build_image_id="sha256:" + "9" * 64 if mutation == "missing_environment" else SOURCE,
                          runtime_user=USER)
     assert not docker.calls
+
+
+class DerivedBuildReached(Exception):
+    pass
+
+
+def test_undeclared_environment_derives_under_derive_policy(tmp_path, monkeypatch):
+    value = settings_value()
+    value["preinstalled_undeclared"] = "derive"
+    docker = FakeDocker()
+    docker.images.update({"other:fixture": OTHER, OTHER: OTHER})
+    selected = resolver(tmp_path, value=value, docker=docker)
+    underived = settings_value()
+    underived["preinstalled_runtimes"] = []
+    derived = resolver(tmp_path, value=underived)
+    assert selected.declared_identity(build_image_id=OTHER, runtime_user=USER) == (
+        derived.declared_identity(build_image_id=OTHER, runtime_user=USER))
+    failing = resolver(tmp_path)
+    for build in (SOURCE, BASE):
+        declared = selected.declared_identity(build_image_id=build, runtime_user=USER)
+        assert declared == failing.declared_identity(build_image_id=build, runtime_user=USER)
+        assert declared != derived.declared_identity(build_image_id=build, runtime_user=USER)
+    image = selected.resolve(build_image_tag="build:fixture", build_image_id=BASE, runtime_user=USER)[0]
+    assert image.schema == runtime.PREINSTALLED_IMAGE_SCHEMA and image.image_id == INSTALLED_BUILD
+    assert image.identity == selected.declared_identity(build_image_id=BASE, runtime_user=USER)
+
+    def reached():
+        raise DerivedBuildReached
+    monkeypatch.setattr(resources, "require_bounded_image_builder", reached)
+    docker.calls.clear()
+    with pytest.raises(DerivedBuildReached):
+        selected.resolve(build_image_tag="other:fixture", build_image_id=OTHER, runtime_user=USER)
+    assert all(call[:3] == ("docker", "image", "inspect") for call in docker.calls)
+    inspected = {call[3] for call in docker.calls}
+    assert "other:fixture" in inspected and not inspected & {INSTALLED_SOURCE, INSTALLED_BUILD}
+
+
+@pytest.mark.parametrize("conflict", ["user", "codeql", "runner", "source"])
+def test_conflicting_declaration_never_derives(tmp_path, conflict):
+    docker = FakeDocker()
+    releases = dict(RELEASES)
+    value = settings_value()
+    value["preinstalled_undeclared"] = "derive"
+    if conflict == "user":
+        value["preinstalled_runtimes"][0]["runtime_user"] = "12345:12345"
+    elif conflict in {"codeql", "runner"}:
+        releases["codeql" if conflict == "codeql" else "codeql_runner"] = "different-release"
+    else:
+        value["preinstalled_runtimes"][0]["source_image_id"] = "sha256:" + "9" * 64
+    with pytest.raises(ValueError, match="preinstalled runtime"):
+        selected = resolver(tmp_path, docker=docker, releases=releases, value=value)
+        selected.resolve(build_image_tag="source:fixture", build_image_id=SOURCE, runtime_user=USER)
+    assert not docker.calls
+
+
+def test_missing_environment_error_names_environment_and_user(tmp_path):
+    docker = FakeDocker()
+    selected = resolver(tmp_path, docker=docker)
+    assert selected.settings.preinstalled_undeclared == "fail"
+    with pytest.raises(ValueError, match="environment/user declaration") as raised:
+        selected.resolve(build_image_tag="other:fixture", build_image_id=OTHER, runtime_user=NOMINAL_USER)
+    message = str(raised.value)
+    assert f"build_image_id={OTHER}" in message
+    assert f"effective_user={runtime.application_runtime_user(NOMINAL_USER)}" in message
+    assert not docker.calls
+
+
+@pytest.mark.parametrize("policy", ["fail", "derive"])
+def test_preinstalled_undeclared_policy_accepts_closed_values(policy):
+    value = settings_value()
+    assert parse_codeql_settings(value).preinstalled_undeclared == "fail"
+    value["preinstalled_undeclared"] = policy
+    assert parse_codeql_settings(value).preinstalled_undeclared == policy
+
+
+@pytest.mark.parametrize("key,invalid", [
+    ("preinstalled_undeclared", "Derive"), ("preinstalled_undeclared", "warn"),
+    ("preinstalled_undeclared", ""), ("preinstalled_undeclared", True),
+    ("preinstalled_undeclared", 1), ("preinstalled_undeclared", None),
+    ("preinstalled_undeclared", ["derive"]), ("preinstalled_undeclare", "derive"),
+])
+def test_preinstalled_undeclared_policy_is_closed_and_typed(key, invalid):
+    value = settings_value()
+    value[key] = invalid
+    with pytest.raises(ValueError):
+        parse_codeql_settings(value)
+
+
+@pytest.mark.parametrize("invalid", ["warn", "", True, 1, None])
+def test_preinstalled_undeclared_direct_construction_is_validated(invalid):
+    with pytest.raises(ValueError, match="preinstalled_undeclared"):
+        replace(parse_codeql_settings(settings_value()), preinstalled_undeclared=invalid)
 
 
 @pytest.mark.parametrize("reference", ["source:fixture", "build:fixture", INSTALLED_BUILD])
