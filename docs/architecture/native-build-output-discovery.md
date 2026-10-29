@@ -476,3 +476,73 @@ Recorded by the implementation where the code refined or deviated from the desig
   load.
 - **Unused hook.** `node.catalog` and `php.catalog` accept the `dispositions=` keyword and
   ignore it until the installer-record classifiers use it.
+
+### Chunks B and C (layout readers, capture attribution)
+
+- `native_layout.py` reads the CMake cache, the codemodel-v2 reply to the stateless
+  `client-appsec-review` query, Meson `meson-info`, static `build.ninja` edges, vcpkg
+  `status`, MSBuild project properties and Conan generator output. Each source read is recorded in
+  `layout_sources` as `{kind, path, sha256}`. The kinds are `cmake-cache`, `cmake-file-api-index`,
+  `cmake-file-api-codemodel`, `meson-info`, `meson-intro-projects`, `meson-intro-targets`, `ninja`,
+  `vcpkg-status`, `msbuild-project` and `conan-generator`.
+- **MSBuild output directories are read but not consumed.** `read_msbuild_dirs` resolves
+  `OutDir` and `IntDir` into `LayoutFacts.output_directories` and names unresolved values
+  `build-output-msbuild-directory-unresolved`. No caller passes `msbuild_properties` yet, because
+  the Linux language build never runs MSBuild. The directories classify nothing until a Windows
+  native lane exists.
+- Static Ninja edges and capture attribution (`output_attribution.py`) add a root only where no
+  fact root already covers it. Linked outputs a dependency produces into a mixed directory are
+  tagged per file as `dependency-sourced-output`, not rooted.
+
+### Chunk D (language-build integration)
+
+- **`native_outputs.py`** holds the integration: `register` (discover, attribute, apply the
+  heuristic and classify), `tag_and_promote` and `gaps`. It keeps `_execute_one` small.
+- **Order.** For native units, `reconcile_captured_build` and `_apply_native_link_metadata` now
+  run before cataloguing, so attribution sees reconciled rows. Their results are reused
+  afterwards instead of being recomputed.
+- **`prepared_inputs`.** The file API query that the job writes before configure is recorded on
+  the receipt as `prepared_inputs: [{path, sha256, purpose: "cmake-file-api-query"}]`. It is excluded from the "pre-existing"
+  set, so the build tree does not look target-owned.
+- **Configured exclusions take precedence.** `register` skips a discovered root that a
+  configured `[build_outputs]` directory rule already names (`configured_directory`). The
+  FetchContent sub-build therefore appears once, as a configured exclusion, never as a gap.
+- **`BUILD_OUTPUT_CLASSIFIED`** is written for every unit of every family, not only native ones.
+  Its keys are `supply_chain_trees`, `excluded_trees`, `excluded_files`, `kept_rows`,
+  `heuristic_dispositions`, `conflicts`, `layout_sources_read`, `target_rows` and `duration_ms`.
+  `target_rows` counts catalogue rows in the `target` analysis lane, so objects, which take the
+  evidence lane, are not counted. The same counts are added to `LANGUAGE_BUILD_COMPLETED`. None of
+  the keys is summed by `aggregate_run_metrics`.
+- **Follow-up: `operation_phase("build.output_classify")`.** The span telemetry change
+  (7dcc7b20) is not on main, so the classification is not yet wrapped in that phase and `_PHASES`
+  is unchanged. A `FOLLOW-UP(7dcc7b20)` comment in `job_language_build/job.py` marks the place.
+- **Follow-up: `ScopeRole.RUNTIME_DEPENDENCY`.** This role is owned by the dependency output
+  filtering work (e9ae8d09), which is not on main. `native_outputs` resolves it with `getattr`.
+  Until it lands, a dependency shared library that a target ELF loads stays `build_dependency`,
+  which routes to the same `supply_chain` lane. The promotion activates automatically once the
+  role exists. A `FOLLOW-UP(runtime_dependency)` comment marks the place.
+
+### Chunk E (other catalogers)
+
+- **Sanitizer build.** `job_sanitizer_build` does not rediscover layout. It replays the accepted
+  language receipt's `build_output_dispositions.roots` (all except `per_file` roots) with
+  `classify_tree`, then walks with the current `[build_outputs]` policy. It adds
+  `build_output_dispositions` to each unit result and `build_outputs_policy` to the summary.
+  `excluded_bookkeeping` is the dispositions' bookkeeping projection.
+- **Project build.** `job_project_build` `_outputs` walks the dispositions. Native probes call
+  `native_outputs.register` with no captures and no file API query, so a probe classifies from
+  the cache, Meson introspection and static Ninja alone. The probe receipt gains
+  `build_output_dispositions` and `build_output_gaps`. Classification gaps go into
+  `build_output_gaps`, not `gaps`, so probe acceptance and repair are unchanged. The
+  `[build_outputs]` policy identity joins the probe checkpoint identity. The project
+  `EXECUTOR_IDENTITY` is unchanged.
+
+### Chunk G (integration tests)
+
+- `tests/integration/test_native_build_output_layout.py` runs real CMake FetchContent and a real
+  Meson wrap through intake, catalog, plan, project build and language build. The pinned native
+  image ships neither `git` nor `meson`. FetchContent is therefore parametrised over a local
+  tarball `URL`, which runs in the pinned image, and a `file://` `GIT_REPOSITORY` inside the
+  target. The git case and the Meson case skip until the image provides those tools.
+- No acceptance test is added. The acceptance suite evaluates review findings against answer
+  keys and trace parity. Build-output classification has no answer-key defect to score.
