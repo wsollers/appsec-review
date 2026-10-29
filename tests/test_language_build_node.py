@@ -292,7 +292,11 @@ def test_node_catalog_retains_ambiguous_runtime_outputs_with_named_gaps(
 
     artifacts, gaps = node.catalog(tmp_path, workspace, {}, 100, "node-unit")
 
-    assert gaps and all("delivery status is unknown" in gap for gap in gaps)
+    # node_modules without npm's installer record stays per-file, with its named gap.
+    missing = ("node_modules: npm installer record unavailable (missing); "
+               "dependency files cataloged per-file in the target lane")
+    assert missing in gaps
+    assert all("delivery status is unknown" in gap for gap in gaps if gap != missing)
     by_path = {row["workspace_path"]: row for row in artifacts}
     assert set(by_path) == set(retained)
     assert by_path["build/Release/helper.dll"]["scope_role"] == "unknown"
