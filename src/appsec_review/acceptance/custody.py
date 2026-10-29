@@ -25,6 +25,7 @@ MAX_ENTRIES = 20_000
 MAX_BYTES = 256 * 1024 * 1024
 MAX_DEPTH = 64
 MAX_RECORD_BYTES = 8 * 1024 * 1024
+SEED_SCHEMA = "appsec-review/acceptance-invocation-seed/1"
 _DEADLINE: ContextVar[float | None] = ContextVar("acceptance_custody_deadline", default=None)
 
 
@@ -273,7 +274,7 @@ def seal_seed(context: StageContext, manifest_path: Path) -> str:
     inputs = capture_inputs(context)
     tree = snapshot_tree(context.work_root)
     return _write_record(manifest_path, {
-        "schema": "appsec-review/acceptance-seed/1", **_binding(context, context.work_root),
+        "schema": SEED_SCHEMA, **_binding(context, context.work_root),
         "producer_obligation": context.obligation_id, "immutable_inputs": inputs, "tree": tree})
 
 
@@ -289,7 +290,7 @@ def verify_seed(context: StageContext) -> dict[str, Any]:
     manifest = _read_record(context.manifest_path)
     expected_keys = {"schema", "invocation_id", "variant", "tested_commit", "source_identities",
                      "seed_root", "producer_obligation", "immutable_inputs", "tree"}
-    if (set(manifest) != expected_keys or manifest["schema"] != "appsec-review/acceptance-seed/1"
+    if (set(manifest) != expected_keys or manifest["schema"] != SEED_SCHEMA
             or any(manifest.get(key) != value
                    for key, value in _binding(context, context.seed_root).items())):
         raise CustodyError("custody_manifest_binding_mismatch")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -42,6 +43,7 @@ def seed(tmp_path: Path) -> tuple[StageContext, StageContext]:
 def test_fresh_copy_preserves_every_byte_empty_directory_and_original_absolute_references(tmp_path: Path) -> None:
     producer, consumer = seed(tmp_path)
     verified = custody.verify_seed(consumer)
+    assert verified["schema"] == custody.SEED_SCHEMA == "appsec-review/acceptance-invocation-seed/1"
     copied = custody.materialize_seed(consumer)
     assert copied == consumer.work_root
     assert custody.snapshot_tree(copied) == verified["tree"]
@@ -55,6 +57,17 @@ def test_fresh_copy_preserves_every_byte_empty_directory_and_original_absolute_r
     assert record["manifest_sha256"] == consumer.manifest_sha256
     with pytest.raises(custody.CustodyError, match="destination_exists"):
         custody.materialize_seed(consumer)
+
+
+def test_operator_seed_schema_is_not_an_invocation_seed(tmp_path: Path) -> None:
+    _producer, consumer = seed(tmp_path)
+    manifest = json.loads(consumer.manifest_path.read_bytes())
+    manifest["schema"] = "appsec-review/acceptance-seed/1"
+    payload = json.dumps(manifest).encode("utf-8")
+    consumer.manifest_path.write_bytes(payload)
+    consumer = replace(consumer, manifest_sha256=hashlib.sha256(payload).hexdigest())
+    with pytest.raises(custody.CustodyError, match="manifest_binding_mismatch"):
+        custody.verify_seed(consumer)
 
 
 def test_each_tamper_vector_starts_from_an_independently_verified_private_copy(tmp_path: Path) -> None:

@@ -314,7 +314,13 @@ def test_cleanup_and_source_identity_must_hold_even_with_successful_pytest(monke
         assert "cleanup_unconfirmed" in result["failures"] and result["cleanup"]["confirmed"] is False
     else:
         assert result["cleanup"]["confirmed"]
-        assert all(case["reason"] == "static_reference_changed_during_suite" for case in result["cases"])
+        executed = [case for case in result["cases"] if case["outcome"] != "blocked"]
+        assert executed
+        assert all(case["reason"] == "static_reference_changed_during_suite" for case in executed)
+        for case in result["cases"]:
+            if case["outcome"] == "blocked":
+                assert case["dependency"] in result["failed_obligations"]
+                assert case["reason"] == f"prerequisite_failed_or_incomplete:{case['dependency']}"
     assert result["failed_obligations"]
 
 
@@ -638,7 +644,10 @@ def test_zero_execution_budget_does_not_open_a_gate_and_keeps_a_receipt(tmp_path
     assert not (workspace.root / "processes/no-execution/gate.json").exists()
 
 
-def test_source_identities_include_transitive_fixture_helpers_and_dynamic_core(tmp_path: Path) -> None:
+@pytest.mark.parametrize("changed", [
+    "tests/final_report_support.py", "docs/schemas/fixture.json", "pipeline/prompt-fragments/fixture.md",
+])
+def test_source_identities_include_transitive_fixture_helpers_and_dynamic_core(tmp_path: Path, changed: str) -> None:
     root = tmp_path / "source-manifest-fixture"
     sources = {
         "appsec-review.toml": "",
@@ -647,6 +656,8 @@ def test_source_identities_include_transitive_fixture_helpers_and_dynamic_core(t
         "deploy/dagster/bin/ops_tests.py": "",
         "src/appsec_review/acceptance/custody.py": "",
         "src/appsec_review/jobs/dynamic_handler.py": "",
+        "docs/schemas/fixture.json": "{}\n",
+        "pipeline/prompt-fragments/fixture.md": "fixture guidance\n",
         "tests/test_selected.py": "from tests.acceptance_review_stages import helper\n",
         "tests/acceptance_review_stages.py": "from tests.final_report_support import helper\n",
         "tests/final_report_support.py": "helper = 1\n",
@@ -658,7 +669,7 @@ def test_source_identities_include_transitive_fixture_helpers_and_dynamic_core(t
         path.write_text(content, encoding="utf-8")
     identities = ops_tests._source_identities(root, ("tests/test_selected.py::test_case",), {}, staged=True)
     assert set(identities) == set(sources) - {"tests/unrelated.py"}
-    path = root / "tests/final_report_support.py"
-    path.write_text("helper = 2\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="acceptance_source_changed:tests/final_report_support.py"):
+    path = root / changed
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="acceptance_source_changed:" + changed):
         ops_tests._verify_sources(root, identities)

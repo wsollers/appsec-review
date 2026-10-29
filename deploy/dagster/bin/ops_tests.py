@@ -644,6 +644,9 @@ def _source_identities(root: Path, nodes: tuple[str, ...], static_inputs: dict, 
         # JobRunner loads handlers dynamically. Pin its complete code, not just imports
         # visible in the selected fixture. Test helpers use an explicit local import closure.
         paths.update(path.relative_to(root).as_posix() for path in (root / "src").rglob("*.py"))
+        for directory in ("docs/schemas", "pipeline"):
+            paths.update(path.relative_to(root).as_posix()
+                         for path in (root / directory).rglob("*") if path.is_file())
     pending = [name for name in paths if name.endswith(".py")]
     inspected = set()
     while pending:
