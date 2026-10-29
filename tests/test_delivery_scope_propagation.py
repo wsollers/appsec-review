@@ -170,7 +170,13 @@ def test_accepted_package_members_retain_copied_sdk_and_addon_companion(tmp_path
         assert rows["web/" + relative]["scope_role"] == "deliverable"
     unknown = rows["web/node_modules/build-helper/index.js"]
     assert unknown["scope_role"] == "unknown"
-    assert gaps == [delivery_gap(unknown)]
+    assert sorted(gaps) == sorted([
+        delivery_gap(unknown),
+        "web/node_modules: npm installer record unavailable (missing); "
+        "dependency files cataloged per-file in the target lane",
+        "web/dist/node_modules: npm installer record unavailable (missing); "
+        "dependency files cataloged per-file in the target lane",
+    ])
 
 
 @pytest.mark.parametrize("mutation", ["no_fact", "digest_changed", "member_changed", "script_not_pack"])

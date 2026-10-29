@@ -7,11 +7,15 @@ import json
 from pathlib import Path
 import tarfile
 import time
+import tomllib
 
+from appsec_review.config.build_outputs import BuildOutputDiscovery, BuildOutputPolicy, parse_build_outputs
+from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.job_language_build import node
 from appsec_review.storage import file_sha256
 
 
+REPOSITORY = Path(__file__).resolve().parents[1]
 SUMMARY = "dependency-content-summarized: "
 MISSING = ("node_modules: npm installer record unavailable (missing); "
            "dependency files cataloged per-file in the target lane")
@@ -181,47 +185,80 @@ def test_accepted_npm_pack_member_stays_shipped_inside_verified_package(tmp_path
     assert summary.startswith(f"{SUMMARY}38 packages (948 files, {summarized_bytes} bytes) ")
 
 
-class _Recorder:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, dict]] = []
-
-    def classify_tree(self, root, **fields) -> None:
-        self.calls.append((root, fields))
-
-
 def test_dispositions_record_verified_trees_and_nested_unverified_carve_out(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    _package(workspace, "node_modules/a", "a", "1.0.0", addon=True)
+    a_bytes = _package(workspace, "node_modules/a", "a", "1.0.0", addon=True)
     _package(workspace, "node_modules/a/node_modules/c", "c", "1.0.0")
     (workspace / "node_modules/a/node_modules/c/package.json").unlink()
     _write(workspace / "node_modules/.package-lock.json", json.dumps({"lockfileVersion": 3, "packages": {
         "node_modules/a": {"version": "1.0.0"},
         "node_modules/a/node_modules/c": {"version": "1.0.0", "dev": True},
     }}).encode())
-    recorder = _Recorder()
+    dispositions = BuildOutputDispositions(family="node")
 
-    rows, gaps = node.catalog(tmp_path, workspace, {}, 1_000, "node-unit", dispositions=recorder)
+    rows, gaps = node.catalog(tmp_path, workspace, {}, 1_000, "node-unit", dispositions=dispositions)
 
     record = file_sha256(workspace / "node_modules/.package-lock.json")
-    assert recorder.calls == [
-        ("node_modules/a", {
-            "disposition": "supply_chain", "basis": "installer-record", "name": "npm-installed-package",
-            "reason": "verified against installed manifest",
-            "evidence_ref": "node_modules/.package-lock.json#node_modules/a",
-            "confidence": "fact", "scope_role": "runtime_dependency",
-            "keep": ("node_modules/a/package.json", "node_modules/a/build/Release/addon.node")}),
-        ("node_modules/a/node_modules/c", {
-            "disposition": "per_file", "basis": "installer-record", "name": "npm-unverified-package",
-            "reason": "manifest-missing", "confidence": "fact"}),
-    ]
+    roots = {root["root"]: root for root in dispositions.document()["roots"]}
+    assert set(roots) == {"node_modules/a", "node_modules/a/node_modules/c"}
+    verified = roots["node_modules/a"]
+    assert {key: verified[key] for key in (
+        "disposition", "basis", "confidence", "name", "reason", "evidence_ref", "scope_role",
+        "files", "bytes", "kept")} == {
+        "disposition": "supply_chain", "basis": "installer-record", "confidence": "fact",
+        "name": "npm-installed-package", "reason": "verified against installed manifest",
+        "evidence_ref": "node_modules/.package-lock.json#node_modules/a", "scope_role": "runtime_dependency",
+        "files": 25, "bytes": a_bytes,
+        "kept": ["node_modules/a/build/Release/addon.node", "node_modules/a/package.json"]}
+    carve_out = roots["node_modules/a/node_modules/c"]
+    assert (carve_out["disposition"], carve_out["name"], carve_out["reason"]) == (
+        "per_file", "npm-unverified-package", "manifest-missing")
     carved = sorted(row["workspace_path"] for row in rows
                     if row["workspace_path"].startswith("node_modules/a/node_modules/c/"))
     assert len(carved) == 24 and all(path.endswith(".js") for path in carved)
     assert not any(row["workspace_path"].startswith("node_modules/a/lib/") for row in rows)
     anchor, = (row for row in rows if row["workspace_path"] == "node_modules/a/package.json")
     assert anchor["delivery_evidence"]["sha256"] == record
+    assert anchor["package_metadata"]["files"] == 25 and anchor["package_metadata"]["retained_files"] == 1
     assert ("node_modules/a/node_modules/c: installed package does not match npm installer record "
             "(manifest-missing); cataloged per-file") in gaps
+    assert not any(gap.startswith("build-output-") for gap in gaps)
+
+
+def test_shipped_bundler_cache_rule_excludes_cache_by_name_not_as_uncovered(tmp_path: Path) -> None:
+    workspace, _ = _workspace(tmp_path)
+    shipped = tomllib.loads((REPOSITORY / "appsec-review.toml").read_text(encoding="utf-8"))["build_outputs"]
+    dispositions = BuildOutputDispositions(parse_build_outputs(shipped), family="node")
+
+    rows, gaps = node.catalog(tmp_path, workspace, {}, 10_000, "node-unit", dispositions=dispositions)
+
+    assert "node_modules/.cache/loader/x.js" not in {row["workspace_path"] for row in rows}
+    [summary] = [gap for gap in gaps if gap.startswith(SUMMARY)]
+    assert summary.endswith("; 25 files under node_modules not covered by the installer record remain per-file")
+    document = dispositions.document()
+    assert [(item["path"], item["name"], item["files"]) for item in document["configured_exclusions"]] == [
+        ("node_modules/.cache", "node-bundler-cache", 1)]
+    assert len([root for root in document["roots"] if root["disposition"] == "supply_chain"]) == 38
+
+
+def test_root_bound_leaves_unregistered_packages_per_file_with_the_named_gap(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    for name in ("a", "b", "c"):
+        _package(workspace, f"node_modules/{name}", name, "1.0.0")
+    _write(workspace / "node_modules/.package-lock.json", json.dumps({"lockfileVersion": 3, "packages": {
+        f"node_modules/{name}": {"version": "1.0.0"} for name in ("a", "b", "c")}}).encode())
+    policy = BuildOutputPolicy(discovery=BuildOutputDiscovery(max_layout_roots=2))
+
+    rows, gaps = node.catalog(tmp_path, workspace, {}, 1_000, "node-unit",
+                              dispositions=BuildOutputDispositions(policy, family="node"))
+
+    per_file = sorted(row["workspace_path"] for row in rows if row["workspace_path"].startswith("node_modules/c/"))
+    assert len(per_file) == 25
+    assert not any(row["workspace_path"].startswith(("node_modules/a/lib/", "node_modules/b/lib/")) for row in rows)
+    [summary] = [gap for gap in gaps if gap.startswith(SUMMARY)]
+    assert summary.startswith(f"{SUMMARY}2 packages (50 files, ")
+    assert "not covered by the installer record" not in summary
+    assert "build-output-root-bound-exceeded: 1 roots beyond max_layout_roots stay per-file target content" in gaps
 
 
 def test_nested_prefix_described_by_parent_record_has_no_missing_gap(tmp_path: Path) -> None:
