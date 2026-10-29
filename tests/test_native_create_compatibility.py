@@ -347,3 +347,297 @@ def test_prior_engine_reconcile_refuses_policy_change_and_always_releases_servic
     with pytest.raises(engine.EnforcementUnavailable, match="not reserved"):
         services.reconcile_prior_engine(native.config, native.config)
     assert closed == [True]
+
+
+class _CreateReached(Exception):
+    pass
+
+
+@pytest.fixture
+def mount_create(native, tmp_path, monkeypatch):
+    parent = tmp_path / "fake-cgroups"
+    parent.mkdir()
+    policy = SimpleNamespace(**vars(native.config.native_engine))
+    policy.execution_cgroup_parent = str(parent)
+    config = SimpleNamespace(**{**vars(native.config), "native_engine": policy})
+    gate = tmp_path / "static-gate"
+    gate.write_bytes(b"fixture only, never executed")
+    monkeypatch.setattr(engine, "static_gate", lambda config: gate)
+    monkeypatch.setattr(engine, "private_path", lambda *args, **kwargs: None)
+    driver = engine.NativeExecutionDriver(config, proof=SimpleNamespace(limits=lambda *args: {}))
+    monkeypatch.setattr(driver, "_begin", lambda record: None)
+    monkeypatch.setattr(driver, "inventory", lambda *args: None)
+    monkeypatch.setattr(driver, "image", lambda image: {"Config": {"Env": []}})
+    seen = []
+
+    def command(argv):
+        seen.append(argv)
+        raise _CreateReached()
+
+    monkeypatch.setattr(driver, "_run", command)
+    root = tmp_path / "mount-root"
+    root.mkdir()
+    payload, _ = create_payload(native)
+
+    def build(relative):
+        return {
+            "directory": str(tmp_path / "private-control"), "execution_id": payload["execution_id"],
+            "execution_token": "a" * 32, "payload": payload, "binding": native.client.contract.binding,
+            "driver": {}, "command_policy": asdict(config.native_engine.commands[0]),
+            "image_policy": asdict(config.native_engine.images[0]), "peer": {"uid": os.getuid()},
+            "mount_policies": [{"mount_id": "scratch", "source_root": str(root), "destination": "/scratch",
+                                "kind": "run", "read_only": False, "relative_path": relative}],
+        }
+
+    yield SimpleNamespace(driver=driver, seen=seen, root=root, build=build)
+    for descriptors in driver.handles.values():
+        for descriptor in descriptors:
+            os.close(descriptor)
+
+
+def _bind_options(argv):
+    return [argv[index + 1] for index, value in enumerate(argv) if value == "--mount"]
+
+
+@pytest.mark.parametrize("relative", [".", "work", "work/nested"])
+def test_native_create_binds_real_host_path_never_proc_descriptor(mount_create, relative):
+    (mount_create.root / "work/nested").mkdir(parents=True)
+    record = mount_create.build(relative)
+    with pytest.raises(_CreateReached):
+        mount_create.driver.create(record, lambda: None)
+    expected = str(mount_create.root) if relative == "." else str(mount_create.root / relative)
+    info = os.stat(expected)
+    pinned = record["driver"]["mounts"][1]
+    assert pinned["source"] == expected
+    assert pinned["identity"] == [info.st_dev, info.st_ino]
+    options = _bind_options(mount_create.seen[0])
+    assert f"type=bind,source={expected},target=/scratch" in options
+    assert not any("/proc/" in option for option in options)
+
+
+def test_native_create_binds_single_link_regular_file_by_real_path(mount_create):
+    source = mount_create.root / "input.bin"
+    source.write_bytes(b"fixture")
+    record = mount_create.build("input.bin")
+    with pytest.raises(_CreateReached):
+        mount_create.driver.create(record, lambda: None)
+    info = source.stat()
+    assert info.st_nlink == 1
+    assert record["driver"]["mounts"][1]["source"] == str(source)
+    assert record["driver"]["mounts"][1]["identity"] == [info.st_dev, info.st_ino]
+    assert f"type=bind,source={source},target=/scratch" in _bind_options(mount_create.seen[0])
+
+
+@pytest.mark.parametrize("relative", ["link/inner", "final"])
+def test_native_create_rejects_intermediate_or_final_symlink(mount_create, relative):
+    (mount_create.root / "real/inner").mkdir(parents=True)
+    (mount_create.root / "link").symlink_to(mount_create.root / "real")
+    (mount_create.root / "final").symlink_to(mount_create.root / "real")
+    with pytest.raises((OSError, engine.EnforcementUnavailable)):
+        mount_create.driver.create(mount_create.build(relative), lambda: None)
+    assert mount_create.seen == []
+
+
+def test_native_create_aborts_when_source_is_swapped_before_create(mount_create, monkeypatch):
+    work = mount_create.root / "work"
+    work.mkdir()
+    original = mount_create.driver._pin_mount
+    calls = []
+
+    def swapped(policy, relative, uid):
+        calls.append(relative)
+        if len(calls) == 2:
+            work.rename(mount_create.root / "moved")
+            work.mkdir()
+        return original(policy, relative, uid)
+
+    monkeypatch.setattr(mount_create.driver, "_pin_mount", swapped)
+    record = mount_create.build("work")
+    with pytest.raises(engine.EnforcementUnavailable, match="changed before create"):
+        mount_create.driver.create(record, lambda: None)
+    assert calls == ["work", "work"]
+    assert mount_create.seen == []
+    assert len(mount_create.driver.handles[record["execution_id"]]) == 1
+
+
+def test_native_create_rejects_unsafe_mount_option_characters_after_policy(mount_create):
+    unsafe = mount_create.root / "a,readonly=false"
+    unsafe.mkdir()
+    with pytest.raises(engine.EnforcementUnavailable, match="unsafe"):
+        mount_create.driver.create(mount_create.build(unsafe.name), lambda: None)
+    assert mount_create.seen == []
+
+
+@pytest.mark.parametrize("relative", ["a,b", "a=b", "a\nb", 'a"b', "a\x7fb", "a\tb"])
+def test_broker_rejects_mount_subpath_unsafe_for_bind_options(native, relative):
+    payload, _ = create_payload(native)
+    payload["mounts"] = [{"mount_id": "scratch", "relative_path": relative}]
+    with lease(native):
+        resources.track_container(payload["name"])
+        with pytest.raises(PermissionError, match="not normalized"):
+            request(native, "execution.create", payload)
+        assert "create" not in native.engine.calls
+        resources.container_stopped(payload["name"])
+
+
+def test_native_inspection_compares_bind_against_recorded_real_path(created_record, tmp_path):
+    record = created_record.record
+    real = tmp_path / "run-root/work"
+    record["driver"]["mounts"].append(
+        {"source": str(real), "destination": "/scratch", "read_only": False, "identity": [1, 2]})
+    inspection = _inspected(record, ["no-new-privileges:true", "seccomp=" + json.dumps(created_record.profile)])
+    bind = {"Type": "bind", "Source": str(real), "Destination": "/scratch", "Mode": "", "RW": True,
+            "Propagation": "rprivate"}
+    inspection[0]["Mounts"].append(bind)
+    created_record.inspection["value"] = inspection
+    assert created_record.driver._inspect_native(record)["Id"] == "c" * 64
+    bind["Source"] = str(tmp_path / "substituted")
+    with pytest.raises(engine.EnforcementUnavailable):
+        created_record.driver._inspect_native(record)
+
+
+def _identity(path):
+    value = os.stat(path, follow_symlinks=False)
+    return [value.st_dev, value.st_ino]
+
+
+@pytest.fixture
+def fake_proc_root(tmp_path):
+    root = tmp_path / "proc-root"
+    (root / "run/appsec-gate").mkdir(parents=True)
+    (root / "work/input.txt").parent.mkdir(parents=True)
+    (root / "work/input.txt").write_text("fixture")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "file").write_text("host")
+    return SimpleNamespace(root=root, outside=outside)
+
+
+@pytest.mark.parametrize("destination", ["/run/appsec-gate", "/work/input.txt"])
+def test_contained_identity_matches_directory_and_file_destinations(fake_proc_root, destination):
+    expected = _identity(fake_proc_root.root / destination[1:])
+    assert engine.contained_identity(str(fake_proc_root.root), destination) == expected
+    descriptor = os.open(fake_proc_root.root, os.O_PATH | os.O_DIRECTORY)
+    try:
+        assert engine.contained_identity(descriptor, destination) == expected
+        os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+@pytest.mark.parametrize("link, target, destination", [
+    ("final", "outside/file", "/final"), ("middle", "outside", "/middle/file"),
+    ("relative", "run/appsec-gate", "/relative"), ("absolute", "/", "/absolute/etc")])
+def test_contained_identity_never_follows_image_symlinks(fake_proc_root, link, target, destination):
+    if not target.startswith("/"):
+        target = str(fake_proc_root.root.parent / target) if target.startswith("outside") else target
+    os.symlink(target, fake_proc_root.root / link)
+    with pytest.raises(engine.EnforcementUnavailable):
+        engine.contained_identity(str(fake_proc_root.root), destination)
+
+
+@pytest.mark.parametrize("destination", ["/run/../work", "/run//appsec-gate", "/run/", "run", "/./run"])
+def test_contained_identity_rejects_unnormalized_destinations(fake_proc_root, destination):
+    with pytest.raises(engine.EnforcementUnavailable):
+        engine.contained_identity(str(fake_proc_root.root), destination)
+
+
+def test_contained_identity_reports_mismatch_against_pinned_identity(fake_proc_root):
+    observed = engine.contained_identity(str(fake_proc_root.root), "/work/input.txt")
+    assert observed != _identity(fake_proc_root.outside / "file")
+
+
+def test_mount_points_decode_escaped_fields():
+    mountinfo = (
+        "1 0 8:1 / / ro,relatime - overlay overlay rw\n"
+        "2 1 8:1 /host/run\\040dir /run/appsec\\040gate ro,nosuid - ext4 /dev/sda1 rw\n"
+        "3 1 0:5 / /scratch rw - tmpfs tmpfs rw\n")
+    points = engine.mount_points(mountinfo)
+    assert "/run/appsec gate" in points and "/scratch" in points
+    assert "/run/appsec\\040gate" not in points and "/absent" not in points
+
+
+@pytest.fixture
+def gated_start(native, tmp_path, monkeypatch):
+    directory = tmp_path / "private-control"
+    (directory / "gate").mkdir(parents=True)
+    commands, events = [], []
+    command = SimpleNamespace(finished=True)
+    runner = SimpleNamespace(
+        start=lambda argv, capture_limit: events.append(("start", argv)) or command,
+        launcher=lambda command: {"pid": 2**31 - 1, "start_token": "boot:1"},
+        stop=lambda command: events.append("stop"))
+    proof = SimpleNamespace(execution=lambda inspection, record: {"proved": True},
+                            stop_launcher=lambda launcher, timeout: True)
+    driver = engine.NativeExecutionDriver(native.config, runner=runner, proof=proof)
+    present = {"value": True}
+    inspection = {"Id": "c" * 64, "State": {"Running": True, "StartedAt": "2026-10-29T00:00:00Z"}}
+    monkeypatch.setattr(driver, "_begin", lambda record: None)
+    monkeypatch.setattr(driver, "inventory", lambda *args: None)
+    monkeypatch.setattr(driver, "check_host", lambda: None)
+    monkeypatch.setattr(driver, "_drain", lambda record, save: None)
+    monkeypatch.setattr(driver, "_network", lambda record=None: None)
+    monkeypatch.setattr(driver, "_empty_group", lambda record: True)
+    monkeypatch.setattr(driver, "_inspect_native", lambda record: inspection if present["value"] else None)
+
+    def run(argv):
+        commands.append(argv[3:])
+        if argv[3:5] == ["container", "rm"]:
+            present["value"] = False
+        return b""
+
+    monkeypatch.setattr(driver, "_run", run)
+    record = {"directory": str(directory), "execution_id": "e" * 32, "execution_token": "a" * 32,
+              "payload": {"network": "none"}, "driver": {"container_id": "c" * 64}}
+    return SimpleNamespace(driver=driver, record=record, commands=commands, proof=proof,
+                           release=directory / "gate/release.token", directory=directory)
+
+
+def test_native_start_releases_gate_only_after_verified_execution(gated_start):
+    gated_start.driver.start(gated_start.record, lambda: None)
+    assert gated_start.release.read_text() == "a" * 32
+    assert gated_start.record["driver"]["released"] is True
+    assert gated_start.record["enforcement"] == {"proved": True}
+    assert not any(argv[1] in {"kill", "rm"} for argv in gated_start.commands)
+
+
+def test_native_start_kills_gated_container_when_verification_fails(gated_start):
+    def unproved(inspection, record):
+        raise engine.EnforcementUnavailable("native bind mount identity changed")
+
+    gated_start.proof.execution = unproved
+    descriptor = os.open(gated_start.directory, os.O_RDONLY | os.O_DIRECTORY)
+    gated_start.driver.handles[gated_start.record["execution_id"]] = [descriptor]
+    with pytest.raises(engine.EnforcementUnavailable):
+        gated_start.driver.start(gated_start.record, lambda: None)
+    assert gated_start.commands == [["container", "kill", "--signal", "KILL", "c" * 64],
+                                    ["container", "rm", "--force", "c" * 64]]
+    assert not gated_start.release.exists()
+    assert not gated_start.release.with_suffix(".pending").exists()
+    assert not gated_start.record["driver"].get("released")
+    os.fstat(descriptor)
+    assert gated_start.driver.remove(gated_start.record, lambda: None) is True
+    with pytest.raises(OSError):
+        os.fstat(descriptor)
+    assert gated_start.driver.remove(gated_start.record, lambda: None) is True
+    assert not any(argv[1] == "rm" for argv in gated_start.commands[2:])
+
+
+def test_native_start_abort_is_best_effort_when_kill_fails(gated_start, monkeypatch):
+    def unproved(inspection, record):
+        raise engine.OutcomeUnknown("native gate has no resolving PID")
+
+    gated_start.proof.execution = unproved
+    original = gated_start.driver._run
+
+    def failing(argv):
+        original(argv)
+        if argv[3:5] == ["container", "kill"]:
+            raise RuntimeError("bounded worker command failed: not running")
+        return b""
+
+    monkeypatch.setattr(gated_start.driver, "_run", failing)
+    with pytest.raises(engine.OutcomeUnknown):
+        gated_start.driver.start(gated_start.record, lambda: None)
+    assert [argv[1] for argv in gated_start.commands] == ["kill", "rm"]
+    assert not gated_start.release.exists()
