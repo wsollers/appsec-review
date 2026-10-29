@@ -61,7 +61,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     """Keep implicit discovery on the fast paths; explicit selections remain on demand."""
-    if config.args_source is not pytest.Config.ArgsSource.TESTPATHS:
+    if config.args_source is pytest.Config.ArgsSource.ARGS:
         return None
     try:
         relative = collection_path.relative_to(_REPOSITORY_ROOT / "tests")

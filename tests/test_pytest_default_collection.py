@@ -10,6 +10,7 @@ import pytest
 
 @pytest.mark.parametrize(("arguments", "imported", "passed"), [
     ((), (), 1),
+    (("-o", "testpaths="), (), 1),
     (("-k", "unit"), (), 1),
     (("tests/test_unit.py",), (), 1),
     (("tests/integration",), ("integration/test_integration_selected.py",), 1),
@@ -19,7 +20,7 @@ import pytest
      ("integration/test_integration_selected.py",), 2),
     (("tests/live", "tests/test_live_selected.py", "tests/integration"),
      ("integration/test_integration_selected.py", "live/test_provider_selected.py", "test_live_selected.py"), 3),
-], ids=["default", "keyword", "unit-file", "integration-dir", "live-file", "live-node", "offline", "live-suite"])
+], ids=["default", "fallback", "keyword", "unit-file", "integration-dir", "live-file", "live-node", "offline", "live-suite"])
 def test_collection_scope(tmp_path: Path, arguments, imported, passed):
     root = tmp_path / "p"
     tests = root / "tests"
