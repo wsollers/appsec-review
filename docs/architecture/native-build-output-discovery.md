@@ -272,12 +272,27 @@ name = "cmake-fetchcontent-subbuild"
 reason = "FetchContent download sub-builds are CMake bookkeeping, not dependency or target output"
 patterns = ["*-subbuild/"]
 families = ["native"]                 # optional; omitted means every family
+
+[[build_outputs.exclusions]]
+name = "node-bundler-cache"
+reason = "Bundler and loader caches (babel-loader, terser, webpack, Vite dependency pre-bundling) are build bookkeeping, not target output or installer-recorded dependency content"
+patterns = ["node_modules/.cache/", "*/node_modules/.cache/",
+            "node_modules/.vite/", "*/node_modules/.vite/"]
+families = ["node"]
 ```
 
 - `name` is unique, `[a-z0-9-]+`, and appears in every record and in the policy identity.
 - `families` is optional and restricts a rule to the listed build families.
-- The shipped default is the single `cmake-fetchcontent-subbuild` rule shown. Operators add
-  rules such as `third_party/prebuilt/` here, never in prompts.
+- The shipped defaults are the two rules shown: `cmake-fetchcontent-subbuild` and
+  `node-bundler-cache`. The second was added at the user's direction, relayed from the
+  dependency output filtering design.
+  - A pattern containing `/` is anchored at the workspace root, so each cache needs a root form
+    and a `*/` form (`fnmatch`'s `*` crosses `/`) to cover nested workspace packages.
+  - `.vite` is matched only under `node_modules`, Vite's default `cacheDir`, so a committed
+    top-level `.vite` folder is not excluded by default.
+  - A configured exclusion outranks an installer-record root, so these caches are recorded as
+    named exclusions even inside a classified `node_modules` tree.
+- Operators add rules such as `third_party/prebuilt/` here, never in prompts.
 - `job_exclusions` and `JOB_LEVEL_SUPPORT` are unchanged. `[jobs.job_language_build.exclusions]`
   still fails at load, and build-output rules live only under `[build_outputs]`.
 - `BuildOutputPolicy.identity` is the SHA-256 of the canonical policy. It enters the
@@ -351,7 +366,7 @@ C can start in parallel with A against the interface signatures above.
 
 | Chunk | Depends on | Files | Focused unit tests |
 |---|---|---|---|
-| **A. Mechanism** | none | new `config/build_outputs.py`; `config/exclusions.py` (`validate_patterns`); `config/loader.py` (policy on the three job configs); `appsec-review.toml` (`[build_outputs]`); new `jobs/build_output_scope.py`; `job_language_build/job.py` (`_catalog` walk, receipt field, `_fingerprint`, `EXECUTOR_IDENTITY`, `dispositions=` dispatch to `node`/`php`) | new `tests/test_build_output_config.py`: valid table, unknown key, duplicate name, bad pattern, `families` filter, identity stability. New `tests/test_build_output_scope.py`: deepest root wins, `per_file` carve-out, `keep` rows hashed and in the manifest, pruned files stat-counted and not hashed (counted `file_sha256` calls), configured exclusion recorded once with name, pattern and scope and no gap, bookkeeping projection unchanged, conflict raises a gap and keeps rows. Update `tests/test_language_build.py` and `tests/test_build_output_mapping.py` expectations for the new field and identity. |
+| **A. Mechanism** (the npm design calls it chunk N; once committed, send the ready SHA to the npm implementation session) | none | new `config/build_outputs.py`; `config/exclusions.py` (`validate_patterns`); `config/loader.py` (policy on the three job configs); `appsec-review.toml` (`[build_outputs]`); new `jobs/build_output_scope.py`; `job_language_build/job.py` (`_catalog` walk, receipt field, `_fingerprint`, `EXECUTOR_IDENTITY`, `dispositions=` dispatch to `node`/`php`) | new `tests/test_build_output_config.py`: shipped defaults load, and `node-bundler-cache` matches `node_modules/.cache/x`, `packages/a/node_modules/.vite/x` and not `.vite/x`; valid table, unknown key, duplicate name, bad pattern, `families` filter, identity stability. New `tests/test_build_output_scope.py`: deepest root wins, `per_file` carve-out, `keep` rows hashed and in the manifest, pruned files stat-counted and not hashed (counted `file_sha256` calls), configured exclusion recorded once with name, pattern and scope and no gap, bookkeeping projection unchanged, conflict raises a gap and keeps rows. Update `tests/test_language_build.py` and `tests/test_build_output_mapping.py` expectations for the new field and identity. |
 | **B. Native layout readers** | A's interface only | new `job_language_build/native_layout.py`: `read_cmake_cache`, `write_cmake_file_api_query`, `read_cmake_file_api`, `read_meson_info`, `read_ninja` (static, bounded), `read_vcpkg_installed`, `read_msbuild_dirs` (phase 3), `read_conan_generators` (phase 3) | new `tests/test_native_layout.py`, with synthetic files under `tmp_path`: a cache holding `FETCHCONTENT_BASE_DIR`, `fmt_SOURCE_DIR` and `_IS_TOP_LEVEL`; a minimal codemodel-v2 reply with a target and a `_deps` directory; Meson intro JSON with one subproject; a Ninja file with `subninja`; vcpkg `info/*.list`; bound overruns and malformed JSON as gaps |
 | **C. Capture attribution** | A's interface only | new `job_language_build/output_attribution.py`: writer classification from resolved file events, and dependency-output directories from compile rows | new `tests/test_output_attribution.py`: a `git`/`cmake -E tar` writer gives a fetched root; a compiler output from a dependency source gives a dependency output root; mixed directories are not reclassified; incomplete capture disables classification with a gap |
 | **D. Native classification integration** | A, B, C, `RUNTIME_DEPENDENCY` | `job_language_build/job.py` `_execute_one`: write the file API query before configure, run discovery and conflict resolution after the commands, `classify_tree` before `_catalog`, gaps, the event, and `operation_phase` once available | new `tests/test_native_build_output_classification.py` (below) |
