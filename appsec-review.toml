@@ -322,6 +322,10 @@ image = "appsec-review/cve-bin-tool:3.4"
 # Optional exact pin: image_id = "sha256:<64 hex>". When set, `image` must resolve to it, the step
 # never builds the image, and `appsec-review signing sign-image --all-pinned` signs it. Unset, the
 # step verifies whatever `image` resolves to, or builds it unverified when the tag is missing.
+# The pin is unset pending its owner, the review-host session that builds the image (never invent
+# one): build and smoke the image on the review host, read
+# `docker image inspect --format '{{.Id}}' appsec-review/cve-bin-tool:3.4`, set
+# `image_id = "sha256:..."` here, then run `appsec-review signing sign-image --all-pinned ...`.
 tool_version = "3.4"
 build_context = "tools/cve-bin-tool"
 build_timeout_seconds = 1800
