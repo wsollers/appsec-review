@@ -855,8 +855,9 @@ production-format telemetry stay beneath a unique `test/tmp/acceptance/` root, n
 `runs/`, `data/` or `targets/`. This supports process/storage isolation beside a review, not
 zero shared CPU/I/O contention. `quick` targets under ten minutes with a twelve-minute hard cap;
 current acceptance is **not green**. Review now uses dependency-ready producer stages and
-invocation-specific seals before private readers, but the latest public run fails during
-prepare on a hardlink/custody conflict; no complete staged chain is proved.
+invocation-specific seals before private readers. OUTPUT-only post-cleanup detachment is
+implemented and the full CI chain reaches its private oracle reader, but the latest review
+profile fails the native-positive PoC stage deadline and blocks two consumers.
 Signals passed with two opted-in workers, not the serial default. Historical process/consumers
 passes are not current-source proof. No final quick, three-warm or exhaustive calibration is
 complete. Optional real-tool, deployed,

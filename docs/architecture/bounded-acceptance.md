@@ -37,11 +37,11 @@ measurement into evidence for newly added cases.
 
 ## Integrated staging and custody
 
-The documentation branch incorporates parent `f4a04b29` and frozen main `f6f0fbbd`, retaining
-staged chunks `938a9117` / `f21aff31` plus `9a80453b` and coordinator corrections `58387690`.
-The measured public results remain bound to `58387690`, not this later source merge.
-The staged path is implemented, not merely the
-earlier planner proposal, but a full authentic staged chain has not passed.
+The documentation branch incorporates exact parent `d6042ab9`, including implemented
+detachment `1d7d621a`, staged chunks and the inherited frozen main. The complete CI producer
+chain and private current-report consumer now have actual public proof. The core review
+profile is still not green: native-positive PoC exceeded its total stage deadline and left
+candidate/corruption consumers blocked.
 
 Variant-specific producers run prepare -> review -> PoC for native-positive, prepare ->
 review for native-empty, and prepare -> review -> gate -> report for CI variants. Each
@@ -76,15 +76,28 @@ and special files fail. Failed or incomplete producers invalidate seal availabil
 leave descendants explicitly blocked/unexecuted. Blocked requirements fail adequacy even
 when cleanup succeeds; they cannot become skipped passes or executed coverage.
 
-**Current blocker:** real `IndexBuilder` atomic `os.link` publication is denied by the staged
-guard. Legitimate persistent named/content-addressed aliases also violate single-link
-custody, so enabling `os.link` alone cannot fix it. Bounded fully-contained producer
-**OUTPUT-only** post-cleanup detachment before checkpoints, preserving bytes/paths/hashes/
-modes and every ordinary-file seal/copy check, is now **user-approved and assigned/in progress,
-but not implemented**. The coordinator added an explicit Windows verification completion todo
-and assigned implementation to harness owner `ad52f90d`. Real Windows publisher and public
-staged-review proof remain required, not demonstrated. Ordinary checkpoint/seal/private-copy
-policy stays strict; approval is not permission to relax it or waive budgets.
+`custody.detach_producer_outputs` now handles real publisher aliases before checkpoint/seal.
+It requires successful kernel-owned cleanup, accounts every device/inode/link-count group
+entirely within one run's registered named/content-addressed outputs and freshly verifies
+production bindings. External/unaccounted, unclassified, cross-run or immutable groups fail.
+Exclusive copies are hashed, fsynced, mode-preserved and replaced; strict ordinary-tree and
+frozen-input verification still run before publication. Its sidecar is
+`appsec-review/acceptance-producer-detachment/1`, with
+`acceptance.stage.producer_publication` spans. Failed/partial/deadline operations leave no
+usable checkpoint/seal and are not retried.
+
+The guard permits links only in mutable producer locations, not sealed/private reader or
+immutable input paths. Verified anonymous stdio PIPE wrapping is distinct from filesystem
+descriptor mutation: unresolved, off-root or immutable file-descriptor writes remain denied.
+The actual Windows review detached 38 files in each of native-positive, native-empty and CI
+review (114 total), preserving bytes/modes/bindings. Native-empty and the full CI sealed
+reader chain passed. The Windows completion todo remains **open** because the complete timed
+review still fails, not because detachment remains unimplemented.
+
+Current remaining cost is repeated immutable verification hashing the entire mutable tree.
+Equivalent fresh immutable-subtree-only verification is assigned for optimization; it is
+not integrated in `d6042ab9` and does not authorize caps, cross-call caching or skipping
+whole checkpoint/seal/detachment checks.
 
 ## Authentic joins and explicit substitutions
 
@@ -219,7 +232,8 @@ An exact-node dependency pass at `1ff86556` likewise does not establish a whole 
 pass. Planner `81ada94f`'s read-only
 `staged-authentic-producer/private-verified-materialization` proposal is historical: its
 staged implementation now exists as described above. Output detachment is now separately
-approved but still unimplemented and Windows-unverified. Neither grants a budget or validation waiver.
+implemented and has actual Windows detachment/CI-reader evidence, but the timed Windows
+completion gate remains open. Neither grants a budget or validation waiver.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.

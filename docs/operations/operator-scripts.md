@@ -364,8 +364,10 @@ required coverage as failure, and writes its result/logs/fixture runs only under
 Staged review selects dependency-ready producer phases, frozen-input checkpoints and supervisor
 seals before fresh private consumers. Failed producers leave descendants explicitly blocked,
 not executed or successfully skipped. `review` has 13 core cases; `review-exhaustive` has 24
-uncalibrated cases. Current staged review is blocked by hardlink/custody incompatibility;
-the measured two-worker signals pass is not serial or overall acceptance proof.
+uncalibrated cases. Producer OUTPUT detachment is implemented after successful owned cleanup;
+strict checkpoints/seals/copies remain. Latest review has a real CI chain/private-reader pass,
+but a native-positive PoC stage deadline failure blocks two consumers. The measured two-worker
+signals pass is not serial or overall acceptance proof.
 `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` only lower profile caps.
 Legacy suites, arbitrary pytest arguments, `--parallel` and `--background` cannot be combined
 with acceptance; the known-failure exemption below does not apply.
