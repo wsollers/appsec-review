@@ -6,8 +6,9 @@ For revision-specific measurements and remaining work, see the
 [implementation record](../reviews/integration-live-test-implementation.md).
 These profiles are separate from the existing stepwise corpus and deployed-review acceptance tools.
 
-**Current status: not green.** Staged review fails during prepare on hardlink/custody
-incompatibility; signals passed only with two opted-in workers. See
+**Current status: not green.** Producer detachment is implemented and the complete CI chain
+reaches a passing private oracle consumer, but review still has one stage deadline failure
+and two blocked consumers; signals passed only with two opted-in workers. See
 [current measured status](#current-staged-status-not-green), not historical profile passes,
 before assessing coverage or budgets.
 
@@ -137,16 +138,20 @@ sidecar (`appsec-review/acceptance-consumer-telemetry/1`). It names current even
 and labels retained copied producer telemetry `execution_evidence: false`. Retained producer
 history must not be counted as freshly executed consumer work.
 
-Custody still requires bounded ordinary files with `st_nlink == 1`; links/redirects and
-special files fail. Real `IndexBuilder` atomic `os.link` publication is currently denied,
-and persistent legitimate named/content-addressed aliases would also fail single-link
-custody. **Do not just enable hardlinks.** Bounded fully-contained producer OUTPUT-only
-post-cleanup detachment before checkpoints, preserving bytes/paths/hashes/modes and all
-ordinary-file seal/copy checks, is now user-approved and assigned/in progress, **not yet
-implemented**. The coordinator recorded a Windows verification completion todo and assigned
-harness owner `ad52f90d`. Real Windows publisher and named public staged-review proof remain
-required, not demonstrated. Keep ordinary checkpoint/seal/private-copy checks strict; approval
-does not authorize a policy relaxation, operator workaround or production service/build access.
+Custody still requires bounded ordinary files with `st_nlink == 1` for checkpoints, seals and
+private copies. Implemented `detach_producer_outputs` requires successful kernel-owned cleanup,
+accounts every device/inode/link-count group within one run's registered named/content-addressed
+OUTPUTS, and verifies exact production bindings. External/unaccounted, unclassified, cross-run
+and immutable groups fail. Exclusive copies are hashed, fsynced, mode-preserved and replaced;
+strict ordinary snapshot and frozen-input checks then precede checkpoint/seal. There are no
+retries or usable checkpoints/seals after failed, partial or deadline operations.
+
+The receipt schema is `appsec-review/acceptance-producer-detachment/1`, with
+`acceptance.stage.producer_publication` spans. The guard permits real mutable producer links,
+not sealed/private-reader or immutable-input links. Only verified anonymous stdio PIPE
+wrapping is distinguished from filesystem descriptor mutations: unresolved/off-root/immutable
+filesystem writes still fail. The Windows completion todo remains open until the complete
+timed review passes; partial Windows detachment/CI-reader proof is not that completion gate.
 
 ## Artifacts and telemetry
 
@@ -164,6 +169,7 @@ Each invocation creates only a unique
 | `source-identities.json` | Exact staged Python/helper, schema, pipeline, selected/static/configuration byte identities |
 | `stages/<variant>/` | Invocation-owned authentic producer chain and frozen inputs |
 | `custody/<variant>/` | Immutable-input receipts, predecessor checkpoints and terminal invocation seal |
+| `custody/<variant>/case-<ordinal>.publication.json` | Verified producer OUTPUT detachment accounting, outcome and copy/replacement counts |
 | `consumers/case-<ordinal>/` and sibling `.custody.json` | Fresh verified reader copy and materialization receipt |
 | `consumers/.../consumer-telemetry/<uuid>/` | Current consumer streams and `telemetry-origin.json`; copied producer history stays separate |
 | `home/`, `temporary/`, `dagster/` | Private HOME/profile, TEMP/TMP/TMPDIR and DAGSTER_HOME |
@@ -278,39 +284,48 @@ passing named public profile.
 
 Pre-staging candidate/oracle follow-up `b72e79a9` passed the minimal native candidate case but
 timed out the exhaustive current-report oracle before its fixture returned. No oracle
-assertion was reached. This is a material remaining 120-second adequacy gap, not accepted
-report proof or a green `review`/`quick` profile; intermediate validated/completed job events
-cannot substitute for accepted final output.
+assertion was reached. This historical failure was not accepted report proof; intermediate
+validated/completed job events cannot substitute for accepted final output.
 A separate direct matrix check without the audit plugin also timed out after the report
 fixture completed and oracle evaluation began. This is not merely guard overhead.
-Separating representative/exhaustive work requires separately budgeted authenticated producer
-prerequisites or publication/harness performance work; splitting assertions alone is not
-evidence that fresh public fixtures fit.
+The current staged core CI oracle now passes with separately budgeted authentic producers.
+That does not establish the full `review-exhaustive` matrix or a green `review`/`quick`;
+splitting assertions alone is not evidence that every fresh public fixture fits.
 
 ## Current staged status: not green
 
-The documentation branch now incorporates parent
-`f4a04b298c0f472f8350f17004b2c42ace1c3620` and frozen main
-`f6f0fbbd674080552d607b773bc30e140c443ceb`. This is a local source integration, not a shared
-main landing, deployment, restart or newly measured acceptance pass.
+At exact parent `d6042ab9c13e86c8045560bdebc09a68544d272a`:
 
-At exact parent `5838769042418b12378d0850aa0ded20a8b0c057` (containing main `84108306`):
-
-- Actual public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **failed** 13 selected
-  cases in **24.4064413 seconds**: three prepares failed on real `IndexBuilder` atomic
-  `os.link` denied by the staged guard; ten descendants were correctly blocked, not executed.
-  Owned cleanup confirmed zero survivors and `production_services_touched` was false.
-  Result: `test/tmp/acceptance/acceptance-88a0d85707f7442f80d2765174e3f3c2/review/result.json`.
-- Actual public `scripts\run-tests.ps1 -Acceptance signals -Workers 2` **passed 3/3 in
-  145.353 seconds** under its unchanged 240-second ceiling.
-  Result: `test/tmp/acceptance/acceptance-cb32192d91924fdbb4d3bc5d6e8259e1/signals/result.json`.
-  This resolves the measured two-worker timing concern, not default-serial feasibility.
-- No complete staged authentic chain, final quick, three-warm or exhaustive proof exists.
-  Historical process/consumers passes below are not current-source proofs.
-- Integrated runner/custody validation reported 79 passed, one skip and two failures in
-  344.73 seconds. Both failures were corrected by `58387690`; the affected/core/fixture/
-  inventory rerun passed 72 with one host skip in 56.53 seconds. This is not a new single
-  full-suite green result.
+- Public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **failed** in 530.257 seconds
+  under the 600-second suite cap: 10/13 passed, native-positive PoC timed out, candidate and
+  corruption consumers were correctly blocked. Pytest passed that producer's assertions in
+  54.28 seconds, but its total stage took 120.023 seconds and expired during final sealed-input
+  postcheck; its seal was invalidated. Root:
+  `test/tmp/acceptance/acceptance-a59d77fffc7447658af064fbb8ff67c9/review/`.
+- Native-positive, native-empty and CI review detached 38 files each (114 total) with bytes,
+  modes and bindings preserved. Native-empty's sealed private consumer passed in 56.403
+  seconds. The actual CI prepare -> review -> gate -> report -> sealed private current-report
+  oracle chain completed; its consumer passed in 101.245 seconds with reader-only relocation,
+  fresh telemetry and no accepted hash/path/configuration rewrite.
+- Public `process-windows` passed 1/1 in 17.898 seconds (60-second cap), one worker, at
+  `acceptance-fd7907ac0051437987dbd4a07fc0987c/process-windows/` below `test/tmp/acceptance/`.
+  This is actual PowerShell with a compiled owned WSL shim, **not actual WSL**. Earlier
+  `992058ae` failed in 8.905 seconds on stdin PIPE classification; the source fix is disclosed,
+  not a retry-to-green claim. Combined native Windows validation: 89 passed, one host skip,
+  141.73 seconds.
+- Other named public passes remain revision-scoped: graphs 22/22 in 57.756 seconds and
+  controls 8/8 in 70.770 seconds at `f4a04b29`; consumers 3/3 in 111.330 seconds at `992058ae`;
+  signals 3/3 in 145.353 seconds at `58387690`. These used two workers, met case caps and
+  confirmed cleanup zero / no production services touched; they are not final-source warm
+  proofs or serial-default signals proof.
+- Repeated immutable verification currently hashes the entire mutable tree. Equivalent fresh
+  immutable-subtree-only verification is assigned for optimization, not integrated in `d6042ab9`:
+  no cap change, cross-call cache or omission of whole checkpoint/seal/detachment checks.
+- Windows completion remains open; no full quick, exhaustive or three-warm proof exists.
+  Incoming Linux commissioning units cannot collect on native Windows (`fcntl` absent);
+  this is a separate host gap with no workaround. Parent docs/inventory validation had
+  6 passes and one failure in 7.18 seconds: two pre-existing missing target README/project-
+  matrix links in unchanged `build-environments-and-execution-capture.md`, not repaired here.
 - Windows `WinError 5` remains unexplained: a bounded ten-transaction probe (4.055 seconds)
   did not explain it. Genuine assessment/source-bound review, Linux guardian, actual WSL,
   tool/provider/CodeQL/native compatibility, specialist/renderer-selection/saturation/cross-lane
@@ -318,8 +333,8 @@ At exact parent `5838769042418b12378d0850aa0ded20a8b0c057` (containing main `841
 
 No production runs/services were inspected or mutated. Path/process/metrics isolation is not
 zero CPU/I/O contention. Default workers remain one, maximum two; all existing caps are
-unchanged. Output detachment is approved and assigned, but remains unimplemented; its explicit
-Windows completion todo and real publisher/public review proof are still open.
+unchanged. Detachment is implemented with real Windows publication and CI-reader proof, but
+the explicit Windows full-review completion todo remains open.
 
 ## Historical non-staged profile results
 
@@ -362,7 +377,7 @@ still scoped to each tested revision, not retrospectively to every later merge.
 
 At that historical checkpoint, planner `81ada94f` had produced only a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
-The producer/reader machinery is now integrated as described above; its current custody
-failure is not fixed by that historical proposal or by treating it as a validation-cache
-shortcut or cap waiver. Output detachment is separately approved, still unimplemented and
-Windows-unverified; the final gate remains not green.
+The producer/reader machinery is now integrated as described above; its remaining stage
+deadline failure is not fixed by that historical proposal or by treating it as a validation-cache
+shortcut or cap waiver. Output detachment is now implemented and partially Windows-proven;
+the final timed review gate remains not green.
