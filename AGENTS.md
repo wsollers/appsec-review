@@ -12,6 +12,22 @@ agents that inspect or change the repository. It is not a prompt for review work
 3. A security claim requires resolving source lines or a run-owned tool artifact. Missing, skipped,
    or failed coverage is a named gap, never evidence that a target is clean.
 
+## Primary goal and iteration loop
+
+- The primary goal is meaningful review results that we can verify, not accumulating passing
+  infrastructure checks. First get a review all the way through a run; then assess the findings,
+  supporting evidence, coverage gaps, and usefulness of the results.
+- The working lifecycle is: launch a user-requested review, observe breakage, fix its root cause,
+  add a quick focused regression test, run the affected unit tests, integrate the fix, and repeat
+  the requested review cycle until the run completes. Minimize the fix-test-restart interval;
+  a long review does not justify a long repair loop.
+- Keep recovery scoped to observed breakage and prerequisites that actually block the next
+  review. Do not turn a repair into general infrastructure redesign or speculative security
+  hardening. Required compiler tracing, including strace/ptrace capture, is tooling functionality
+  to support within the job's isolation, not a reason to invent a blanket tracing prohibition.
+- A completed run is a milestone, not proof of useful or correct findings. Verify meaningful
+  results against source and run evidence; passing tests alone does not establish review quality.
+
 ## Rebuild boundary
 
 - `old/` is an ignored local archive of the pre-refactor repository. Do not edit it, execute it,
@@ -61,7 +77,20 @@ agents that inspect or change the repository. It is not a prompt for review work
   inference. Every retrieved result retains source identity and resolving evidence.
 - Add tests for behavior that survives the refactor. Do not restore archived tests merely to retain
   old coverage counts.
-- Preserve unrelated new work. Commit coherent changes to `main`; do not push unless the user asks.
+- Preserve unrelated new work. Commit coherent changes on the assigned branch and integrate
+  completed work into local `main` through its designated owner; do not push unless the user asks.
+- Do not leave completed work stranded in a worktree. Immediately hand the integration owner
+  the exact ready commit, focused unit-test results, and any remaining blocker. Prefer
+  completion-triggered, serialized local integration over periodic merge polling. Conflicts,
+  dirty integration checkouts, and active-run source freezes require explicit resolution, not
+  blind merges or automatic conflict resolution.
+- For job/task-script changes, reuse supported script mounts and reload only the affected
+  application processes. The intended mount holds job/task scripts, not the entire application
+  source/package; do not describe that deployment as implemented without verifying it. Rebuild
+  only images whose baked-in files, dependencies, or binaries changed; do not rebuild unrelated
+  tooling. Keep mounted scripts fixed for an active review and record their source identity
+  separately from the binary image identity. If the deployment still bakes in the changed scripts,
+  report that coupling rather than claiming a mount has updated the running code.
 - Other agent sessions work on this repository at the same time. Follow
   `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
   testing on a shared host, and when handing work to another session.
@@ -75,15 +104,35 @@ agents that inspect or change the repository. It is not a prompt for review work
 
 ## Verification
 
-- Verify code changes by running focused unit tests for the area changed and directly affected
-  behavior. Add or update unit tests to cover fixes and prevent regressions.
+- Verify code changes with fast, accurate, efficient unit regressions for the changed area and
+  directly affected behavior. Exercise the real behavior and root cause; fake external boundaries
+  only where appropriate, never the behavior under test. Preserve meaningful assertions.
+- Prefer seconds-scale focused checks suitable for the repair loop, not a hard universal timeout.
+  Do not weaken correctness or assertions, silently skip coverage, enlarge timeouts, or relabel
+  heavyweight integration tests as unit tests merely to meet a timing goal. Report slow checks
+  and genuine coverage gaps honestly.
 - Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
   default. Apply the same scope after merging changes from another branch.
-- Integration tests, acceptance tests, and live Dagster runs are manual validation owned by the
-  user. Do not run them unless the user explicitly requests them.
-- Record the unit-test commands and results, including failures or coverage gaps. Identify any
-  integration, acceptance, or live Dagster validation still needed; passing unit tests does not
-  establish that those checks passed.
+- Required collection behavior: exclude known integration/live paths from implicit default
+  collection (`pytest` or pathless `pytest -k ...`), while preserving explicit on-demand paths.
+  Focused unit selectors remain preferred; explicit selection does not authorize heavyweight
+  execution.
+- Documentation-only changes need documentation checks, not automatic test execution.
+- Integration tests, acceptance tests, and live tests/review runs (including Dagster) are manual
+  validation owned by the user and execute only at the user's explicit request. Do not run them
+  as automatic repair, merge, or completion gates. A request to fix code, add tests, merge work, or
+  proceed is not by itself permission to execute these validations. An explicitly requested
+  review/restart cycle authorizes that cycle, not unrelated integration or acceptance suites.
+- Record each focused unit-test command, elapsed time, and result, including failures and coverage
+  gaps. Identify any integration, acceptance, or live Dagster validation still needed; passing
+  unit tests does not establish that those checks passed.
+
+## Deferred work
+
+- TODO (deferred): design container-image signing and eventual Python distribution/artifact
+  signing. Signature format, verification/trust model, and key ownership remain future design
+  decisions. This is not a restart, merge, or test gate and does not authorize implementation or
+  provisioning.
 
 ## Workspace hygiene
 
