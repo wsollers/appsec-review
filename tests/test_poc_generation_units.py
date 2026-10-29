@@ -107,7 +107,7 @@ def candidate_entry(**changes) -> dict:
              "judge_verdict": "red_correct",
              "poc_basis": {"sha256": hashlib.sha256(canonical_json(value)).hexdigest(), "brief": value},
              "finding_package": {"finding_package_id": "finding-" + "3" * 64, "sha256": "4" * 64},
-             "evidence_refs": ["evrel-" + "5" * 64, "asr:sink_site:" + "6" * 64]}
+             "evidence_refs": ["evrel-" + "5" * 64, "evrel-" + "6" * 64]}
     entry.update(changes)
     return entry
 
@@ -161,7 +161,8 @@ def test_duplicate_claims_and_a_non_list_are_refused() -> None:
 
 def test_candidates_are_checked_against_the_verified_finding_packages() -> None:
     candidates = parse_candidates([candidate_entry()])
-    finding = {"finding-" + "3" * 64: {"sha256": "4" * 64, "claim_id": CLAIM, "state": "confirmed"}}
+    finding = {"finding-" + "3" * 64: {"sha256": "4" * 64, "claim_id": CLAIM, "state": "confirmed",
+                                    "direct_evidence": candidate_entry()["evidence_refs"]}}
     assert check_against_review(candidates, finding) == []
     assert "not in the review handoff" in check_against_review(candidates, {})[0]
     assert "digest" in check_against_review(candidates, {k: {**v, "sha256": "9" * 64} for k, v in finding.items()})[0]

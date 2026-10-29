@@ -84,6 +84,9 @@ services:
     environment:
       <<: *dagster-environment
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Source-history GitHub enrichment only. lifecycle.py fills it from the creating shell's `gh`
+      # login when unset; never stored in .env, and model workers never see it.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       HOME: /tmp
     depends_on:
       postgres:

@@ -68,12 +68,16 @@ def test_claude_cli_transport_grants_no_tools_and_never_uses_api_credentials(tmp
         "#!/usr/bin/env python3\n"
         "import json, os, sys\n"
         f"json.dump({{'argv': sys.argv[1:], 'stdin': json.load(sys.stdin),"
-        f" 'key': os.environ.get('ANTHROPIC_API_KEY')}}, open({str(record)!r}, 'w'))\n"
+        f" 'key': os.environ.get('ANTHROPIC_API_KEY'),"
+        f" 'github': [name for name in ('GH_TOKEN', 'GITHUB_TOKEN', 'COPILOT_GITHUB_TOKEN') if name in os.environ]}},"
+        f" open({str(record)!r}, 'w'))\n"
         f"print(json.dumps({{'result': json.dumps({VALUE!r}), 'usage': {{'input_tokens': 5, 'output_tokens': 3}}}}))\n",
         encoding="utf-8")
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-reach-the-subscription-cli")
+    for name in ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN"):
+        monkeypatch.setenv(name, "must-not-reach-a-model-worker")
     result = infer(_request("claude-cli"), timeout_seconds=30)
     assert result.proposal == VALUE and (result.input_tokens, result.output_tokens) == (5, 3)
     invocation = json.loads(record.read_text(encoding="utf-8"))
@@ -81,7 +85,7 @@ def test_claude_cli_transport_grants_no_tools_and_never_uses_api_credentials(tmp
     assert argv[argv.index("--model") + 1] == MODEL_NAME
     assert argv[argv.index("--effort") + 1] == REASONING
     assert argv[argv.index("--allowedTools") + 1] == ""
-    assert invocation["key"] is None
+    assert invocation["key"] is None and invocation["github"] == []
     assert invocation["stdin"]["response_schema"] == PROPOSAL_SCHEMA
     assert claude_cli.send.__module__ == "appsec_review.inference.claude_cli"
 

@@ -124,12 +124,21 @@ def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
     return prompt
 
 
-def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str, reasoning: str,
-         timeout_seconds: int, auth_mode: str) -> ModelResult:
-    environment = dict(os.environ)
+_GITHUB_TOKEN_NAMES = ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN")
+
+
+def _worker_environment(auth_mode: str) -> dict[str, str]:
+    """The CLI's environment: never the application's GitHub credentials, nor API keys in subscription mode."""
+    environment = {key: value for key, value in os.environ.items() if key not in _GITHUB_TOKEN_NAMES}
     if auth_mode == "subscription":
         environment.pop("ANTHROPIC_API_KEY", None)
         environment.pop("ANTHROPIC_AUTH_TOKEN", None)
+    return environment
+
+
+def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str, reasoning: str,
+         timeout_seconds: int, auth_mode: str) -> ModelResult:
+    environment = _worker_environment(auth_mode)
     argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
             "--safe-mode", "--tools", "", "--allowedTools", "",
             "--model", model, "--effort", reasoning]
@@ -177,10 +186,7 @@ def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude"
     executable = shutil.which(binary)
     if executable is None:
         raise FileNotFoundError(f"configured Claude CLI is unavailable: {binary}")
-    environment = dict(os.environ)
-    if auth_mode == "subscription":
-        environment.pop("ANTHROPIC_API_KEY", None)
-        environment.pop("ANTHROPIC_AUTH_TOKEN", None)
+    environment = _worker_environment(auth_mode)
     result: dict[str, Any] = {}
     for name in names:
         argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",

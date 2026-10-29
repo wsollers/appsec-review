@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import (actual_platform, deployment_profile, project_name, provider_overlay,
+from host import (actual_platform, compose_environment, deployment_profile, project_name, provider_overlay,
                   reject_other_deployments, validate_deployment)
 
 
@@ -33,9 +33,10 @@ def compose(platform: str) -> list[str]:
             "-f", str(DEPLOYMENT / "compose.yaml"), "-f", str(DEPLOYMENT / overlay)]
 
 
-def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
+def run(command: list[str], *, capture: bool = False,
+        env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=ROOT, check=True, text=True,
-                          capture_output=capture)
+                          capture_output=capture, env=env)
 
 
 def check_config(platform: str) -> dict:
@@ -150,7 +151,7 @@ def live_stack(platform: str, url: str) -> None:
     reject_other_deployments(platform)
     reject_contention(url, platform)
     run(compose(platform) + ["build", "code-location"])
-    run(compose(platform) + ["up", "-d", "--wait"])
+    run(compose(platform) + ["up", "-d", "--wait"], env=compose_environment())
     reject_contention(url, platform)
     check_cli(platform)
     run([sys.executable, str(DEPLOYMENT / "bin" / "verify.py"), "--url", url], capture=True)

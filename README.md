@@ -276,6 +276,38 @@ visible to Linux processes or to the Dagster containers):
 claude --version
 ```
 
+Install GitHub CLI 2.17 or later inside the WSL distribution and sign in with the account whose
+access source-history GitHub enrichment should use. Whoever starts or restarts the stack,
+`deploy/dagster/bin/lifecycle.py` passes that login's `gh auth token` into the code location as
+`GITHUB_TOKEN` (see [source-history operations](docs/operations/source-history-analysis.md#github-identity-credentials-and-network-access)).
+Ubuntu 22.04's packaged `gh` 2.4 lacks `gh auth token`, so install it from GitHub's repository,
+following <https://github.com/cli/cli/blob/trunk/docs/install_linux.md> and checking the keyring's
+published SHA256:
+
+```bash
+(
+  set -euo pipefail
+  out=$(mktemp)
+  wget -nv -O "$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+  echo "6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b  $out" | sha256sum -c -
+  sudo mkdir -p -m 755 /etc/apt/keyrings /etc/apt/sources.list.d
+  sudo install -m 644 "$out" /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  rm -f "$out"
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+  sudo apt update
+  sudo apt install -y gh
+)
+hash -r
+gh --version
+gh auth status || gh auth login --hostname github.com
+gh auth token --hostname github.com >/dev/null && echo "gh auth token works"
+```
+
+If GitHub rotates its signing key, the checksum check fails; take the new value from the install
+page rather than skipping the check. Without a usable login, stack starts print why and runs record
+`github_credentials_missing`.
+
 Then follow the same clone and virtual-environment steps as Linux:
 
 ```bash
@@ -830,6 +862,55 @@ Use a named base directory beneath `test/tmp/` for focused or concurrent session
 ```bash
 python -m pytest -q tests/test_static_adapters.py --basetemp=test/tmp/static-adapters
 ```
+
+### Bounded integration acceptance
+
+The public acceptance driver selects exact producer/consumer obligations from
+[`tests/acceptance_inventory.json`](tests/acceptance_inventory.json), runs real application
+jobs with declared scripted external boundaries, and requires complete collection, passing
+cases and confirmed owned-process cleanup. It is always strict: skips and known failures do
+not establish acceptance.
+
+```powershell
+.\scripts\run-tests.ps1 -Acceptance quick -Workers 1 -DryRun
+.\scripts\run-tests.ps1 -Acceptance signals -Workers 1
+```
+
+```bash
+scripts/run-tests.sh --acceptance quick --workers 1 --dry-run
+scripts/run-tests.sh --acceptance signals --workers 1
+```
+
+Use the checkout's own virtual environment; process selections also need the Dagster host
+dependencies. Serial is the default, with at most two workers. All state, fixture runs and
+production-format telemetry stay beneath a unique `test/tmp/acceptance/` root, never production
+`runs/`, `data/` or `targets/`. This supports process/storage isolation beside a review, not
+zero shared CPU/I/O contention. Review uses dependency-ready producers, strict OUTPUT-only
+post-cleanup detachment and invocation-specific seals before fresh private readers.
+The approved bounded exhaustive series is **qualified at `856300ca`**, including main
+`a31d4249`: integrity 12/12, outcomes 10/10 and review 13/13, sequentially with two workers
+and distinct fresh invocations. Its 35 executions / 31 unique cases took **1138.249 seconds
+(18 minutes 58.249 seconds)** wrapper wall time, within every member's 600-second cap and
+all individual 60/120-second caps, with owned cleanup zero and no production services touched.
+This is not a monolithic `review-exhaustive` pass; that 31-case selection stays unqualified.
+
+`quick` targets under ten minutes with a twelve-minute hard cap. At historical frozen source
+`a4ce5459`, all three two-worker quick warm runs
+passed 38/38 in 559.626, 551.899 and 567.917 seconds, genuinely demonstrating the runtime goal
+of under ten minutes for two workers, not the serial default.
+The named portable process profile passed 13/13 in 351.471 seconds with one worker at that
+same historical source; no new warm/portable or platform/provider proof is claimed at
+`856300ca`. Prior monolithic and `086ded0a` integrity failures remain recorded.
+Optional real-tool, deployed,
+provider, guidance, warm-CodeQL and native profiles currently fail as unimplemented rather
+than silently passing.
+
+See the [acceptance operator guide](docs/operations/bounded-acceptance.md) for exact profiles,
+deadlines, prerequisites, result artifacts and limitations; the
+[architecture](docs/architecture/bounded-acceptance.md) for authentic joins and final-report
+authority; and the [implementation record](docs/reviews/integration-live-test-implementation.md)
+for revision-specific results. These commands do not run the broader live/deployed acceptance
+tools described below or authorize external services.
 
 ### End-to-end review of a target with nothing to find
 

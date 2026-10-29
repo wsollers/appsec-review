@@ -139,6 +139,28 @@ Without that credential, enrichment records `github_credentials_missing` and mak
 request; local Git history can still be analyzed. Explicit `github.enabled = false` denies
 enrichment even when a source and token exist.
 
+In the Dagster deployment, jobs run in the `code-location` container, which receives
+`GITHUB_TOKEN` when it is created. `deploy/dagster/bin/lifecycle.py` (behind `stack-start`,
+`stack-restart`, and `stack-rebuild`, whoever runs them) supplies it automatically: when the
+creating shell has no `GITHUB_TOKEN`, it takes `gh auth token --hostname github.com` from the `gh`
+login stored where the lifecycle runs (inside WSL for a WSL stack), ignoring ambient `GH_TOKEN`
+overrides. Sign in once there, with `gh` 2.17 or later (Ubuntu 22.04's packaged 2.4 lacks
+`gh auth token`; install from GitHub's apt repository), using the account whose access the
+enrichment should use:
+
+```bash
+gh auth login --hostname github.com   # in the WSL distribution that runs the stack
+```
+
+The lifecycle prints which case applied but never the token. An exported `GITHUB_TOKEN` takes
+precedence, for example a fine-grained personal access token with read-only *Contents*,
+*Metadata*, and *Pull requests* access; `GITHUB_TOKEN=` (empty) opts out. Never write the token
+to `deploy/dagster/.env` or any other file. The value is fixed when Compose creates the
+container, so a changed login takes effect at the next restart; a `stack-start` on a running
+stack whose token changed recreates the `code-location`. Anyone who can run `docker inspect` on
+the host can read it. Only the application process uses it; model workers (Claude CLI and
+Copilot SDK) and tool containers never receive it.
+
 Discovery does not authorize credentialed access by itself. Requests use the configured API
 endpoint and existing request, pagination, and timeout bounds; redirects are refused. The
 token is never written to argv, logs, artifacts, or retrieval shards. Enrichment runs in the

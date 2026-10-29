@@ -3326,6 +3326,18 @@ workers = 1
 workers = 1
 [jobs.job_final_report_publication.steps.acceptance.tasks.publish_handoff]
 
+# End-of-review telemetry report: one LaTeX/PDF rollup of a run's telemetry, runtimes and metrics, written
+# under runs/<id>/data/telemetry/report/ through the pinned tool-report-latex image (the dossier pin).
+# It reads the run's telemetry read-only; a rendering failure is a receipt gap, never a run failure.
+[reporting.telemetry_report]
+enabled = true
+render_pdf = true
+image_tag = "appsec-review/tool-report-latex:1.0.0"
+image_id = "sha256:1dd77c969bba00168bc3128e5ee8290328dd06c09ecd4d845618c3c6336530e4"
+timeout_seconds = 600
+max_tex_bytes = 8388608
+max_pdf_bytes = 16777216
+
 # ---------------------------------------------------------------------------------------------------------
 # Banned and unsafe C/C++ functions. A call to a listed name in C or C++ source is reported by Semgrep and
 # Opengrep as a review lead: `high` at ERROR (reported as high severity), `warning` at WARNING. A match is

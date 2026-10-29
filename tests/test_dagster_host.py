@@ -23,6 +23,19 @@ def test_application_codeql_runner_has_exact_readonly_host_backing():
     assert (root / asset).is_file() and not (root / asset).is_symlink()
 
 
+def test_github_token_reaches_only_the_code_location_from_the_operator_shell():
+    root = Path(__file__).resolve().parents[1]
+    compose = yaml.safe_load((root / "deploy/dagster/compose.yaml").read_text())
+    config = tomllib.loads((root / "appsec-review.toml").read_text())
+    token_env = config["jobs"]["job_source_history_analysis"]["settings"]["github"]["token_env"]
+    services = compose["services"]
+    assert services["code-location"]["environment"][token_env] == f"${{{token_env}:-}}"
+    assert all(token_env not in (services[name].get("environment") or {})
+               for name in services if name != "code-location")
+    example = (root / "deploy/dagster/.env.example").read_text()
+    assert not any(line.lstrip("# ").startswith(f"{token_env}=") for line in example.splitlines())
+
+
 def test_review_host_preinstalled_runtime_bindings_use_declared_application_runner():
     root = Path(__file__).resolve().parents[1]
     config = tomllib.loads((root / "appsec-review.toml").read_text())
@@ -55,6 +68,62 @@ def test_copilot_overlay_and_environment_precedence(tmp_path, monkeypatch, profi
     monkeypatch.setenv("APPSEC_REVIEW_PROFILE", "invalid")
     with pytest.raises(RuntimeError, match="unknown runtime profile"):
         deployment_profile(environment)
+
+
+def test_compose_environment_takes_github_token_from_the_stored_gh_login(monkeypatch, capsys):
+    import host
+
+    calls = []
+
+    def fake_gh(argv, *, env, **_kwargs):
+        calls.append((argv, env))
+        return subprocess.CompletedProcess(argv, 0, "gho_stored-login\n", "")
+
+    monkeypatch.setattr(host.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
+    monkeypatch.setattr(host.subprocess, "run", fake_gh)
+    environment = host.compose_environment({"PATH": "/usr/bin", "GH_TOKEN": "work-account"})
+    assert environment["GITHUB_TOKEN"] == "gho_stored-login" and environment["GH_TOKEN"] == "work-account"
+    [(argv, lookup)] = calls
+    assert argv == ["/usr/bin/gh", "auth", "token", "--hostname", "github.com"] and "GH_TOKEN" not in lookup
+    assert "gho_stored-login" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("explicit", ["operator-token", ""])
+def test_compose_environment_keeps_an_explicit_github_token_or_opt_out(monkeypatch, explicit):
+    import host
+
+    monkeypatch.setattr(host.subprocess, "run", lambda *_a, **_k: pytest.fail("gh consulted despite GITHUB_TOKEN"))
+    assert host.compose_environment({"GITHUB_TOKEN": explicit})["GITHUB_TOKEN"] == explicit
+
+
+def test_compose_environment_without_gh_login_leaves_github_token_unset(monkeypatch, capsys):
+    import host
+
+    monkeypatch.setattr(host.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(host.subprocess, "run",
+                        lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "not logged in"))
+    assert "GITHUB_TOKEN" not in host.compose_environment({"PATH": "/usr/bin"})
+    assert "no github.com login" in capsys.readouterr().err
+    monkeypatch.setattr(host.subprocess, "run",
+                        lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "unknown flag: --hostname"))
+    assert "GITHUB_TOKEN" not in host.compose_environment({"PATH": "/usr/bin"})
+    assert "2.17 or later" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("action", "supplied"), [("start", True), ("reload", True), ("stop", False), ("build", False)])
+def test_lifecycle_supplies_github_token_only_when_creating_containers(monkeypatch, action, supplied):
+    import lifecycle
+
+    seen = {}
+    monkeypatch.delenv("APPSEC_NATIVE_DEPLOYMENT_ID", raising=False)
+    monkeypatch.setattr(lifecycle, "validate_deployment", lambda *_a: None)
+    monkeypatch.setattr(lifecycle, "reject_other_deployments", lambda *_a: None)
+    monkeypatch.setattr(lifecycle, "compose_environment", lambda: {"GITHUB_TOKEN": "from-gh"})
+    monkeypatch.setattr(lifecycle.subprocess, "run",
+                        lambda argv, **kwargs: seen.update(kwargs) or subprocess.CompletedProcess(argv, 0))
+    monkeypatch.setattr(sys, "argv", ["lifecycle.py", action])
+    assert lifecycle.main() == 0
+    assert seen["env"] == ({"GITHUB_TOKEN": "from-gh"} if supplied else None)
 
 
 def test_projects_have_separate_names() -> None:

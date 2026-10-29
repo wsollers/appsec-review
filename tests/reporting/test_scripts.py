@@ -86,9 +86,43 @@ def test_pdf_without_docker_or_image_says_how_to_build(tmp_path: Path) -> None:
 
 def test_powershell_script_declares_the_same_parameters() -> None:
     text = PS_SCRIPT.read_text(encoding="utf-8")
-    for name in ("$Run", "$Format", "$RunsDir", "$OutputDir", "$Limit", "$Package", "$MaxCells", "$Image", "$KeepWork", "$Help"):
+    for name in ("$Run", "$Kind", "$Format", "$RunsDir", "$OutputDir", "$Config", "$Limit", "$Package", "$MaxCells",
+                 "$Image", "$KeepWork", "$Help"):
         assert name in text
-    assert "ValidateSet('pdf', 'html')" in text and "--network" in text and "tool-report-latex" in text
+    assert "ValidateSet('pdf', 'html', 'tex')" in text and "--network" in text and "tool-report-latex" in text
+    assert "ValidateSet('review', 'telemetry')" in text and "'appsec_review.reporting', 'telemetry'" in text
+
+
+@needs_bash
+def test_help_documents_the_telemetry_kind() -> None:
+    done = run_script("--help")
+    assert done.returncode == 0
+    for word in ("--kind review|telemetry", "--kind telemetry", "pdf|tex", "--config <toml>"):
+        assert word in done.stdout
+
+
+@needs_bash
+@pytest.mark.parametrize("args, message", [
+    (["--run", "x", "--kind", "dossier"], "--kind must be review or telemetry"),
+    (["--run", "x", "--kind", "telemetry", "--format", "html"], "--format must be pdf or tex for --kind telemetry"),
+    (["--run", "x", "--kind", "telemetry", "--limit", "2"], "apply only to --kind review"),
+    (["--run", "x", "--format", "tex"], "--format must be pdf or html"),
+    (["--run", "x", "--config", "a.toml"], "--config applies only to --kind telemetry"),
+])
+def test_kind_argument_errors_exit_2(args: list[str], message: str) -> None:
+    done = run_script(*args)
+    assert done.returncode == 2 and message in done.stderr
+
+
+@needs_bash
+def test_telemetry_tex_delegates_to_the_python_cli(tmp_path: Path) -> None:
+    from .telemetry_fixture import RUN_ID as TELEMETRY_RUN_ID, build_telemetry_run
+    build_telemetry_run(tmp_path / "runs")
+    out = tmp_path / "out dir"
+    done = run_script("--kind=telemetry", "--run", TELEMETRY_RUN_ID, "--runs-dir", str(tmp_path / "runs"),
+                      "--format", "tex", "--output-dir", str(out))
+    assert done.returncode == 0, done.stderr
+    assert TELEMETRY_RUN_ID in (out / "telemetry-report.tex").read_text(encoding="utf-8")
 
 
 @pytest.mark.skipif(pwsh is None, reason="pwsh is not installed")

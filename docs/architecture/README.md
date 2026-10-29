@@ -2,6 +2,10 @@
 
 Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is navigation only.
 
+- [`bounded-acceptance.md`](bounded-acceptance.md) - dependency-ready authentic producer stages,
+  strict post-cleanup publication detachment, invocation-specific custody, private readers,
+  telemetry origin, qualified bounded exhaustive series, revision-bound warm evidence and explicit gaps;
+  [operator guide](../operations/bounded-acceptance.md).
 - [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
 - [`job-interchange.md`](job-interchange.md) — versioned job envelopes, outcomes, native-result
@@ -22,6 +26,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`native-sbom.md`](native-sbom.md) — bounded vendored/header-only discovery, evidence-backed identity claims, SPDX 2.3 enrichment, and metric correctness.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
+- [`../operations/telemetry-report.md`](../operations/telemetry-report.md) — the end-of-review telemetry LaTeX/PDF rollup, one per run.
 - [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.
 - [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
   runtime skills: which consumer reaches the data how.

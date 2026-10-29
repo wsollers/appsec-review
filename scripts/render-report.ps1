@@ -1,20 +1,28 @@
 <#
 .SYNOPSIS
-Render the report of a finished review run to PDF or to a single-page HTML file.
+Render the report of a finished review run to PDF or to a single-page HTML file, or (-Kind telemetry)
+the run's end-of-review telemetry report.
 
 .DESCRIPTION
 html  runs only the Python renderer (stdlib, no Docker).
 pdf   renders report.tex with the Python renderer, then compiles it in the tool-report-latex image
       under the standard runtime boundary (no network, read-only root, all capabilities dropped,
       non-root, template and input mounted read-only, one writable scratch directory).
+-Kind telemetry delegates to `python -m appsec_review.reporting telemetry` (-Format pdf or tex).
 
 Works from any current directory, in PowerShell 7 and Windows PowerShell 5.1. The run directory is
-only read. Exit status: 0 success, 1 render failure, 2 usage error or a missing prerequisite.
+only read (-Kind telemetry -Format pdf writes only <run>\data\telemetry\report\). Exit status:
+0 success, 1 render failure, 2 usage error or a missing prerequisite.
 
 .PARAMETER Run
 Run id (looked up in -RunsDir) or a run directory.
+.PARAMETER Kind
+review (default) or telemetry.
 .PARAMETER Format
-pdf (default) or html.
+pdf (default) or html; with -Kind telemetry pdf (default) or tex.
+.PARAMETER Config
+Telemetry only: appsec-review.toml to take [reporting.telemetry_report] from (default: the run's
+resolved configuration).
 .PARAMETER RunsDir
 Directory holding run directories (default: <repo>\runs).
 .PARAMETER OutputDir
@@ -36,16 +44,21 @@ Show this help.
 scripts\render-report.ps1 -Run 2026-10-21-0007 -Format html
 .EXAMPLE
 scripts\render-report.ps1 -Run 2026-10-21-0007 -Format pdf -Limit 3 -OutputDir C:\Temp\reports
+.EXAMPLE
+scripts\render-report.ps1 -Kind telemetry -Run 2026-10-21-0007
 
 The pdf format needs the image: containers\build-all.ps1 build tool-report-latex
 #>
 [CmdletBinding()]
 param(
     [string]$Run,
-    [ValidateSet('pdf', 'html')]
+    [ValidateSet('review', 'telemetry')]
+    [string]$Kind = 'review',
+    [ValidateSet('pdf', 'html', 'tex')]
     [string]$Format = 'pdf',
     [string]$RunsDir,
     [string]$OutputDir,
+    [string]$Config,
     [int]$Limit = 0,
     [string[]]$Package = @(),
     [int]$MaxCells = 0,
@@ -60,18 +73,25 @@ $ErrorActionPreference = 'Stop'
 function Show-Usage {
     @"
 Usage: scripts\render-report.ps1 -Run <run-id|run-dir> [-Format pdf|html] [options]
+       scripts\render-report.ps1 -Kind telemetry -Run <run-id|run-dir> [-Format pdf|tex] [options]
 
-Render the report of a review run to PDF or single-page HTML.
+Render the report of a review run to PDF or single-page HTML, or its end-of-review telemetry report.
 
   -Run <id|dir>        run id (looked up in -RunsDir) or a run directory   (required)
-  -Format pdf|html     output format (default: pdf)
+  -Kind review|telemetry
+                       which report (default: review)
+  -Format pdf|html     output format (default: pdf); with -Kind telemetry: pdf|tex
   -RunsDir <dir>       directory holding run directories (default: <repo>\runs)
   -OutputDir <dir>     where <run-id>.pdf / <run-id>.html is written
                        (default: <repo>\runs\reports, which git ignores)
-  -Limit <n>           render only the first n packages (a bounded sample)
-  -Package <id>[,..]   render only packages whose id starts with or contains the value
-  -MaxCells <n>        interchanges drawn per package (default: 6)
-  -Image <tag>         report image for pdf (default: appsec-review/tool-report-latex:1.0.0)
+                       telemetry pdf: written to <run>\data\telemetry\report\ and also copied here
+                       when given; telemetry tex: telemetry-report.tex is written here
+                       (default: <repo>\runs\reports\<run-id>-telemetry)
+  -Config <toml>       telemetry only: appsec-review.toml with [reporting.telemetry_report]
+  -Limit <n>           render only the first n packages (a bounded sample; review only)
+  -Package <id>[,..]   render only packages whose id starts with or contains the value (review only)
+  -MaxCells <n>        interchanges drawn per package (default: 6; review only)
+  -Image <tag>         report image for pdf (default: appsec-review/tool-report-latex:1.0.0; review only)
   -KeepWork            keep the staging directory (report.tex, build log) next to the output
   -Help                show this help
 
@@ -87,6 +107,16 @@ function Stop-Render([string]$Message, [int]$Code = 2) {
 
 if ($Help) { Show-Usage; exit 0 }
 if (-not $Run) { Show-Usage | ForEach-Object { [Console]::Error.WriteLine($_) }; Stop-Render '-Run is required' }
+if ($Kind -eq 'telemetry') {
+    if ($Format -eq 'html') { Stop-Render "-Format must be pdf or tex for -Kind telemetry, not '$Format'" }
+    foreach ($name in @('Limit', 'Package', 'MaxCells', 'Image')) {
+        if ($PSBoundParameters.ContainsKey($name)) { Stop-Render '-Limit, -Package, -MaxCells and -Image apply only to -Kind review' }
+    }
+} else {
+    if ($Format -eq 'tex') { Stop-Render "-Format must be pdf or html, not '$Format'" }
+    if ($Config) { Stop-Render '-Config applies only to -Kind telemetry' }
+}
+$OutputDirGiven = [bool]$OutputDir
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Repo = (Resolve-Path -LiteralPath (Join-Path $ScriptDir '..')).ProviderPath
@@ -125,6 +155,18 @@ if (Test-Path -LiteralPath (Join-Path $Run 'data') -PathType Container) {
     Stop-Render "run '$Run' not found: neither '$Run\data' nor '$RunsDir\$Run\data' is a directory"
 }
 $RunId = Split-Path -Leaf $RunDir.TrimEnd('\', '/')
+
+# -- Telemetry --------------------------------------------------------------------------------------
+if ($Kind -eq 'telemetry') {
+    $TelemetryArgs = @($PythonPrefix) + @('-m', 'appsec_review.reporting', 'telemetry', '--run', $RunDir, '--format', $Format)
+    if (-not $OutputDirGiven -and $Format -eq 'tex') { $OutputDir = Join-Path (Join-Path (Join-Path $Repo 'runs') 'reports') "$RunId-telemetry" }
+    if ($OutputDirGiven -or $Format -eq 'tex') { $TelemetryArgs += @('--out', $OutputDir) }
+    if ($Config) { $TelemetryArgs += @('--config', $Config) }
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $PythonExe @TelemetryArgs; exit $LASTEXITCODE } finally { $ErrorActionPreference = $previous }
+}
+
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $OutputDir = (Resolve-Path -LiteralPath $OutputDir).ProviderPath
 
