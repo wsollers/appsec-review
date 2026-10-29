@@ -7,6 +7,11 @@ outputs. Every analyzed object must have an accepted run-relative path, SHA-256,
 producer identity. Build outputs additionally bind a build unit; prebuilt target artifacts instead
 bind their target-intake catalog handoff and exact target-relative path, without claiming a build
 occurred. Unknown delivery status remains a coverage gap, not exclusion from conservative analysis.
+Before any payload access, each capability applies the artifact's
+[delivery scope lane](performance-assurance.md#delivery-scope-roles) and records a per-artifact
+scope disposition. Target-lane rows reach every capability. Supply-chain rows, including installed
+npm packages with role `runtime_dependency` or `build_dependency`, reach only `inventory`,
+`packages`, `syft`, `grype` and `osv`. Evidence-lane rows reach only `inventory`.
 A changed path, file, handoff, or index manifest is a framework-integrity
 failure and stops publication.
 

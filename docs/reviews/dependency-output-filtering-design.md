@@ -1,6 +1,9 @@
 # Dependency output filtering: design
 
-Status: design, ready for implementation. No production code is in this change.
+Status: chunks A, B, C and D are implemented on branch
+`william-sollers-xbox-dependency-output-filtering-implementati` (ready commit `3080cf4b`). Chunk N,
+the native build-output disposition mechanism, is not implemented yet; see
+[section 7](#7-implementation-status).
 
 Branch: `william-sollers-xbox-dependency-output-filtering-design`, based on `38c934d9`.
 
@@ -407,3 +410,70 @@ These questions were open in the first draft. The user's answers are now binding
    `delivery-propagation/2`) is accepted. The bumps land with chunk A and are not deferred.
 
 There are no open questions.
+
+## 7. Implementation status
+
+The current behavior is documented in
+[installed npm dependencies](../operations/language-build.md),
+[delivery scope roles](../operations/performance-assurance.md#delivery-scope-roles) and the
+[Node retention policy](../operations/artifact-indexing.md#node-retention-policy).
+
+| Decision | Status |
+|---|---|
+| D1 (npm only) | Implemented. The other ecosystems are deferred in [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems). |
+| D2 (parser) | Implemented in `node_installed.py`, with the deviations below. |
+| D3 (package and record rows) | Implemented. |
+| D4 (roles and lanes) | Implemented: `runtime_dependency` and `build_dependency` in the supply_chain lane. |
+| D5 (shared disposition recording) | Partly implemented. `node.catalog` makes the D5 `classify_tree` calls on an optional `dispositions` recorder. `job_language_build/job.py` does not pass a recorder yet, and `build_output_scope.py`, the receipt's `build_output_dispositions` and `[build_outputs]` arrive with chunk N. |
+| D6 (gaps) | Implemented with the exact texts in D6. |
+| D7 (configurable exclusions) | Pending with chunk N. |
+| D8 (downstream consumers) | Implemented as designed; the D8 tests were added. |
+| D9 (version bumps) | Implemented: `delivered-scope/2`, `delivery-propagation/2`, `node-build-capture/3`. The receipt schema and executor identity bumps belong to chunk N. |
+| D10 (bounds) | Implemented. |
+
+**Deviations from this design.**
+
+- The parser signature is `parse_installed_record(workspace, prefix)`, and it returns record
+  paths relative to the workspace.
+- A prefix is a directory that holds a real (non-symlink) `node_modules` directory, found by a
+  separate bounded walk that does not descend into `node_modules`. The record may be absent, so a
+  missing record yields the D6(b) `missing` gap.
+- Lock keys with no `node_modules` segment are workspace folders. They are skipped and stay
+  target source.
+- The key grammar is strict. A key with an empty, `.` or `..` segment, or a `node_modules` segment
+  that is not followed by exactly one package name, makes the whole record unavailable
+  (`entry-invalid:<key>`).
+- The count regression has 2 target-lane `frontend/dist` rows (`app.js` and `index.html`), not 3.
+  `app.js.map` is a `source-map` row in the evidence lane.
+- The D6(b) `missing` gap is suppressed for a nested prefix whose `node_modules` a parent record
+  describes.
+- If an anchor `package.json` digest differs from the parsed manifest digest, the catalog raises
+  `ValueError("installed npm package manifest changed during cataloging")` instead of reporting a
+  gap.
+- npm-pack precedence is bounded: at most 256 pack facts and 4,096 members per archive.
+- The catalog computes coverage from the parser itself. The `dispositions` recorder is optional and
+  only receives the D5 calls. Its `evidence_ref` is the string `<record path>#<entry>`, and the
+  row's `delivery_evidence` keeps the record SHA-256.
+
+**Tests.** The unit tests below were run by the implementation session. The docs session ran only
+documentation checks.
+
+- `tests/test_node_installed_dependencies.py`: 11 tests.
+- `tests/test_node_dependency_output_filtering.py`: 5 tests. They cover the count regression, the
+  removed record, npm-pack precedence, D5 calls on a fake recorder, and a nested prefix with no
+  `missing` gap. The count regression yields 38 package rows (30 `build_dependency` and
+  8 `runtime_dependency`), 1 record row, 1 retained `native-addon` row and a
+  `dependency-content-summarized` gap of 949 files.
+- `tests/test_delivery_scope_propagation.py`: 2 new tests.
+- `tests/test_artifact_security_analysis.py`: 1 new test.
+- `tests/test_generated_source_pipeline.py`: 1 new test.
+- `tests/test_language_build_node.py`: fixture updates.
+
+These tests are written but **not run**:
+
+- `_assert_installed_dependency_rows` in `tests/integration/test_node_project_builds.py`.
+- `tests/acceptance/test_dependency_output_bounds.py`, 3 tests.
+
+Both read `build_output_dispositions` (schema `appsec-review/build-output-dispositions/1`), so they
+cannot pass until chunk N lands and `job.py` passes the recorder. The integration, acceptance and
+live review validations remain the user's to run.

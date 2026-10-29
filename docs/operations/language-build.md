@@ -358,6 +358,88 @@ declarations, bundles and assets, source maps with bounded source relationships,
 addons, and native intermediates. Complex shell-composed scripts or tools that do not emit nested
 invocations produce explicit provenance gaps; they are never inferred as observed.
 
+**Installed npm dependencies.** A recipe that runs its own `npm install` writes a real
+`node_modules` tree into the workspace, and the catalog walks it. Scope for that tree comes only
+from npm's own installer record, never from directory names
+(`src/appsec_review/jobs/job_language_build/node_installed.py`). The catalog finds at most 32
+install prefixes, which are directories holding a real (non-symlink) `node_modules`. It does not
+descend into dependency trees. For each prefix it parses `node_modules/.package-lock.json`:
+
+- The record must be a regular file of at most 64 MiB holding a JSON object with
+  `lockfileVersion` 2 or 3 and at most 50,000 `packages` entries.
+- Every key must be a canonical relative path with no empty, `.` or `..` segment. The root entry
+  (`""`), `"link": true` entries, and keys with no `node_modules` segment (workspace folders, which
+  stay target source) are skipped.
+- In every other key, each `node_modules` segment must be followed by exactly one package name
+  (`name` or `@scope/name`). The entry needs a non-empty `version`, an optional valid `name`
+  (aliased installs), string `resolved` and `integrity` when present, and Boolean `dev`,
+  `optional` and `devOptional` when present. One invalid entry makes the whole record
+  unavailable; a partially trusted record is never used.
+- An entry is verified only when its install path is a real directory (not a symlink) whose regular
+  `package.json`, at most 4 MiB, parses to an object with the expected name and version.
+- The project `package-lock.json` describes intent rather than what was installed and is never
+  used for coverage.
+
+Each verified package becomes one `package-metadata` row anchored on its installed `package.json`.
+`package_metadata` has `role` `installed-dependency-package`, `ecosystem` and `manager` `npm`, the
+entry's `name`, `version`, `resolved`, `integrity`, `dev`, `optional` and `dev_optional`, its
+`install_path`, and `files`, `bytes` and `retained_files` counts (a nested install path with its own
+entry is counted by that entry). `delivery_evidence` is
+`{"kind": "npm-installed-record", "workspace_path": "<prefix>/node_modules/.package-lock.json",
+"sha256": "<record sha256>", "entry": "<key>"}`. Packages with `dev` or `devOptional` get scope role
+`build_dependency`; all others get `runtime_dependency`. Both are in the supply_chain lane with
+delivery `not_established`: being in npm's production tree does not prove that a package ships
+(see [delivery scope roles](performance-assurance.md#delivery-scope-roles)). The record itself is a
+`resolved-dependency-metadata` row whose `dependency_metadata` is
+`{"format": ".package-lock.json", "manager": "npm", "role": "installed-dependency-record"}`, in the
+supply_chain lane. If an installed manifest's digest changes between parsing and cataloging, the
+catalog fails with `installed npm package manifest changed during cataloging`.
+
+Under a verified install path, `native-addon`, `shared-library`, `native-symbols` and `package`
+files keep their own rows with the package's role and evidence, so install-time native code (for
+example `node-gyp` output) stays visible to supply-chain scanners. Members of an accepted `npm pack`
+archive (at most 256 pack facts and 4,096 members per archive) are never summarized and keep their
+`shipped_dependency` or `deliverable` upgrade. Every other file under a verified install path gets
+no row, so summarized files do not use up the `artifact_count_limit` row bound. They still count
+toward the workspace discovery walk, which stops at ten times that limit with
+`Node workspace discovery bound reached; delivery coverage incomplete`. The catalog reports:
+
+- one gap per available record with at least one verified package:
+  `dependency-content-summarized: <N> packages (<F> files, <B> bytes) recorded by <prefix>/node_modules/.package-lock.json routed to supply_chain review; per-file target review not performed`.
+  `F` and `B` cover every file under the verified install paths, anchors included, minus retained
+  per-file rows. When files under that `node_modules` are not covered by a verified entry, it
+  appends `; <U> files under node_modules not covered by the installer record remain per-file`;
+- one gap per prefix whose record is unavailable:
+  `<prefix>/node_modules: npm installer record unavailable (<reason>); dependency files cataloged per-file in the target lane`,
+  where `<reason>` is `missing`, `unreadable`, `invalid-json`, `unsupported-lockfile-version:<v>`,
+  `bound-exceeded:record-bytes`, `bound-exceeded:packages` or `entry-invalid:<key>` (target text
+  bounded to 200 characters). A nested prefix with no record of its own whose `node_modules` a
+  parent record describes gets no `missing` gap;
+- for the first 50 unverified packages,
+  `<install_path>: installed package does not match npm installer record (<reason>); cataloged per-file`,
+  where `<reason>` is `install-path-missing`, `manifest-missing`, `manifest-invalid`,
+  `name-mismatch` or `version-mismatch`, then `<n> further unverified npm packages cataloged per-file`
+  for the rest; and
+- `npm installer record discovery bound reached; remaining prefixes cataloged per-file` past 32
+  prefixes.
+
+Files that no verified entry covers keep per-file rows by artifact kind, as before. This includes
+files under unavailable records, files of unverified packages, and caches such as
+`node_modules/.cache`. Files under `node_modules` are kept even when the build did not change them.
+These rows get the default roles: most kinds are `unknown` in the target lane with a
+`delivery_fact_unavailable` gap, while manifests and lockfiles default to `build_chain`. The Node
+capture identity is `appsec-review/node-build-capture/3`. Only npm is covered; pnpm, Yarn and
+other ecosystems' installed trees stay per-file (see
+[the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems)).
+
+Pending: the shared build-output disposition record (the receipt's `build_output_dispositions` and
+the `[build_outputs]` exclusion table) is designed but not implemented. `node.catalog` already
+accepts an optional recorder and, once the language build passes one, records each verified tree
+as `supply_chain` with basis `installer-record`, name `npm-installed-package` and `evidence_ref`
+`<record path>#<entry>`, and each unverified package nested in a verified one as `per_file`
+(`npm-unverified-package`). Until then the receipt accounts for summarized files only through the
+package rows' counts and the summary gap.
+
 The Python adapter accepts package builds rooted by `pyproject.toml`, `setup.py`, or `setup.cfg`.
 Poetry, Pipfile, and requirements inputs may bind dependency resolution in the derived image;
 real builds may download declared dependencies and PEP 517 build-isolation dependencies.
