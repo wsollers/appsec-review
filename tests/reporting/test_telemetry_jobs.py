@@ -80,7 +80,7 @@ def test_attempt_stats_tasks_tools_and_subsystems(tmp_path: Path) -> None:
     tools = _table(build, "Tool invocations")
     assert [c.text for c in _row(tools, "t-cppcheck")] == ["cppcheck", "t-cppcheck", "45.0 s", "SUCCEEDED", "3"]
     hostile = _row(tools, "t-hostile")
-    assert hostile[3].badge == "failed" and hostile[3].text == "FAILED"
+    assert (hostile[3].badge, hostile[3].badge_label, hostile[3].text) == ("contradicted", "FAILED", "FAILED")
     images = _table(build, "Project image builds")
     assert [c.text for c in images.rows[0]] == ["unit-cpp", "cpp", "BUILT", "2m 00s"]
     review = _job(blocks, JOBS[2])
@@ -95,7 +95,7 @@ def _check_model_calls(blocks) -> None:
     assert [c.text for c in _row(calls, "m-blue-1")[3:8]] == ["8.0 s", "5,400", "900", "4,096", "SUCCEEDED"]
     assert [c.text for c in _row(calls, "m-verify-1")[4:7]] == ["unavailable"] * 3
     failed = _row(calls, "m-red-2")
-    assert failed[7].badge == "failed" and failed[7].text == "FAILED"
+    assert (failed[7].badge, failed[7].badge_label, failed[7].text) == ("contradicted", "FAILED", "FAILED")
     assert failed[8].text.startswith("\\input{/etc/passwd}") and len(failed[8].text) <= 120
     assert len(failed[2].text) <= 60
     stats = {s.label: s.value for s in next(b for b in review if isinstance(b, Stats)).items}

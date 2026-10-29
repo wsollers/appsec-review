@@ -33,6 +33,14 @@ def count(value: Any) -> str:
     return UNAVAILABLE if number is None else f"{int(number):,}"
 
 
+def plural(value: Any, singular: str, many: str | None = None) -> str:
+    """``1 gap``, ``3 gaps``, ``1,204 steps``; ``unavailable`` for a missing value."""
+    number = _number(value)
+    if number is None:
+        return UNAVAILABLE
+    return f"{count(number)} {singular if int(number) == 1 else (many or singular + 's')}"
+
+
 def compact(value: Any) -> str:
     """``950``, ``7.8k``, ``1.2M``; ``unavailable`` for a missing value."""
     number = _number(value)

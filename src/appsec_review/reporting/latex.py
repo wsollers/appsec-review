@@ -48,7 +48,7 @@ def _inline_cut(cut: Truncation) -> str:
 
 def _field(row: Field) -> str:
     if row.badge:
-        value = badge(row.badge)
+        value = badge(row.badge, row.badge_label)
     elif row.mono:
         value = rf"\mono{{{tex_mono(row.value)}}}"
     else:
@@ -68,7 +68,8 @@ def _table(item: Table) -> list[str]:
     for row in item.rows:
         cells = []
         for cell in row:
-            cells.append(badge(cell.badge) if cell.badge else (tex_mono(cell.text) if cell.mono else tex(cell.text)))
+            cells.append(badge(cell.badge, cell.badge_label) if cell.badge
+                         else (tex_mono(cell.text) if cell.mono else tex(cell.text)))
         lines.append(" & ".join(cells) + r" \\")
     lines.append(r"\end{tabular}\par")
     if item.omitted:

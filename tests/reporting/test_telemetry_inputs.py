@@ -67,3 +67,6 @@ def test_format_helpers() -> None:
         "850 ms", "4.2 s", "16m 52s", "2h 05m", "unavailable", "unavailable"]
     assert (fmt.count(7810), fmt.compact(7810), fmt.compact(950), fmt.percent(0.825889), fmt.count(True)) == (
         "7,810", "7.8k", "950", "82.6%", "unavailable")
+    assert (fmt.plural(1, "gap"), fmt.plural(0, "gap"), fmt.plural(1204, "step"), fmt.plural(None, "gap"),
+            fmt.plural(1, "step or task", "steps and tasks"), fmt.plural(2, "step or task", "steps and tasks")) == (
+        "1 gap", "0 gaps", "1,204 steps", "unavailable", "1 step or task", "2 steps and tasks")

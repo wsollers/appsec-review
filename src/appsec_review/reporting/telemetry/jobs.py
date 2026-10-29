@@ -15,7 +15,7 @@ from typing import Any, Iterable, Mapping
 from ..model import Block, Box, Bullets, Cell, Field, Fields, Heading, Note, Stat, Stats, Table, Truncation
 from ..text import anchor, bound, sha256_value, token
 from ..tokens import BoxKind
-from .format import UNAVAILABLE, compact, count, duration
+from .format import UNAVAILABLE, compact, count, duration, plural
 from .inputs import STATUS_TONE, JobSpan, TelemetryInputs
 
 MAX_JOBS = 40
@@ -52,7 +52,13 @@ def _status(value: Any) -> str:
 
 
 def _status_cell(status: str) -> Cell:
-    return Cell(status) if status in _SUCCESS else Cell(status, badge=token(status.lower()))
+    if status in _SUCCESS:
+        return Cell(status)
+    return Cell(status, badge=STATUS_TONE.get(status, "unresolved"), badge_label=_status_words(status))
+
+
+def _status_words(status: str) -> str:
+    return _label(status.replace("_", " "), 40)
 
 
 def _rows_table(headers: tuple[str, ...], widths: tuple[float, ...], rows: list[tuple[Cell, ...]]) -> Table:
@@ -174,11 +180,11 @@ def _subsystems(events: list[Event]) -> list[Box]:
                  Cell(duration(state["duration"]) if state["status"] != "RUNNING" else STILL_RUNNING))
                 for unit, state in builds.items()]
         boxes.append(Box(kind=BoxKind.RESULT, chip="BUILDS", title="Project image builds",
-                         meta=f"{count(len(rows))} build units",
+                         meta=plural(len(rows), "build unit"),
                          items=(_rows_table(("Build unit", "Family", "Outcome", "Duration"), (.4, .2, .2, .2), rows),)))
     if transitions:
         boxes.append(Box(kind=BoxKind.RESULT, chip="LIFECYCLE", title="Finding transitions",
-                         meta=f"{count(len(transitions))} transitions; process state, not security evidence",
+                         meta=f"{plural(len(transitions), 'transition')}; process state, not security evidence",
                          items=(_rows_table(("Package", "From", "To", "At"), (.4, .17, .17, .26), transitions),)))
     return boxes
 
@@ -231,7 +237,7 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
         Stat("Tool calls", count(len(tools))))))
     blocks.append(Box(kind=BoxKind.PROVENANCE, chip="ATTEMPT", title="Attempt", items=(Fields(rows=(
         Field("Attempt id", _label(span.attempt_id), mono=True),
-        Field("Status", span.status, badge=tone),
+        Field("Status", span.status, badge=tone, badge_label=_status_words(span.status)),
         Field("Started at", _label(span.started_at, 40), mono=True),
         Field("Ended at", _label(span.ended_at, 40) if span.ended_at else STILL_RUNNING,
               mono=span.ended_at is not None),
@@ -239,18 +245,18 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
     steps = _steps(events)
     if steps:
         blocks.append(Box(kind=BoxKind.PROVENANCE, chip="TASKS", title="Steps and tasks",
-                          meta=f"{count(len(steps))} steps and tasks",
+                          meta=plural(len(steps), "step or task", "steps and tasks"),
                           items=(_rows_table(("Task", "Step", "Status", "Duration"), (.4, .2, .2, .2), steps),)))
     if calls:
         failed = sum(1 for call in calls if _status(call.get("terminal_status") or "UNKNOWN") not in _SUCCESS)
         blocks.append(Box(kind=BoxKind.RESPONSE, chip="MODEL", title="Model calls",
-                          meta=f"{count(len(calls))} calls, {count(failed)} not succeeded",
+                          meta=f"{plural(len(calls), 'call')}, {count(failed)} not succeeded",
                           items=(_rows_table(
                               ("Invocation", "Role", "Model", "Duration", "In", "Out", "Cache", "Status", "Error"),
                               (.13, .08, .15, .09, .08, .08, .08, .11, .2), _model_rows(calls)),)))
     if tools:
         blocks.append(Box(kind=BoxKind.RESULT, chip="TOOLS", title="Tool invocations",
-                          meta=f"{count(len(tools))} invocations",
+                          meta=plural(len(tools), "invocation"),
                           items=(_rows_table(("Tool", "Invocation", "Duration", "Status", "Results"),
                                              (.32, .24, .15, .15, .14), _tool_rows(tools)),)))
     blocks.extend(_subsystems(events))
@@ -259,7 +265,7 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
         omitted = None
         if len(gaps) > MAX_GAPS:
             omitted = Truncation(omitted=len(gaps) - MAX_GAPS, unit="gaps", sha256=sha256_value(gaps))
-        blocks.append(Box(kind=BoxKind.GAP, title="Job gaps", meta=f"{count(len(gaps))} gaps",
+        blocks.append(Box(kind=BoxKind.GAP, title="Job gaps", meta=plural(len(gaps), "gap"),
                           items=(Bullets(items=tuple(gaps[:MAX_GAPS]), omitted=omitted),)))
     return blocks
 

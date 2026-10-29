@@ -10,6 +10,7 @@ from appsec_review.reporting.model import BarChart, Box, Heading, Stats, Table, 
 from appsec_review.reporting.telemetry import RENDERER, load_inputs
 from appsec_review.reporting.telemetry.overview import (CELL_CHARS, VALUE_CHARS, appendix_sections,
                                                         overview_sections)
+from appsec_review.reporting.tokens import BoxKind
 
 from .fixture import HOSTILE, MODEL
 from .telemetry_fixture import JOBS, RUN_ID, build_telemetry_run
@@ -52,6 +53,8 @@ def test_overview_structure_stats_and_timeline(tmp_path: Path) -> None:
     assert stats["Model calls"][0] == "5" and stats["Tool calls"][0] == "2"
     assert stats["Tokens (in + out)"] == ("9.3k", "insufficient_evidence")  # one call recorded no usage
     assert stats["Named gaps"] == ("0", "neutral")
+    clean = _box(blocks, "Data quality")
+    assert (clean.kind, clean.meta) == (BoxKind.PROVENANCE, "0 gaps")  # no gap styling without a gap
 
     timeline = next(block for block in blocks if isinstance(block, Timeline))
     assert timeline.total_ms == 1_012_000 and timeline.omitted is None
@@ -114,6 +117,7 @@ def test_empty_summary_and_missing_log_degrade_to_unavailable(tmp_path: Path) ->
     assert stats["Named gaps"] == ("2", "coverage_gap")
     assert not any(isinstance(block, (Timeline, BarChart)) for block in blocks)
     quality = _box(blocks, "Data quality")
+    assert (quality.kind, quality.meta) == (BoxKind.GAP, "2 gaps")
     text = " ".join(_strings(quality))
     assert "metrics_summary_schema_mismatch" in text and "pipeline_event_log_missing" in text
     assert "not zero work" in text

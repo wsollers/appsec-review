@@ -133,3 +133,19 @@ def test_chart_output_is_deterministic_and_fixed_precision() -> None:
     assert first == second
     for x, y in COORD.findall(first):
         assert re.fullmatch(r"-?\d+\.\d{3}", x) and re.fullmatch(r"-?\d+\.\d{3}", y) and not x.startswith("-")
+
+
+def test_badge_label_overrides_the_tone_words_in_both_renderers() -> None:
+    from appsec_review.reporting import render_html
+    from appsec_review.reporting.model import Box, Cell, Field, Fields, Table
+    from appsec_review.reporting.tokens import BoxKind
+
+    document = _doc(Box(BoxKind.PROVENANCE, "Attempt", items=(
+        Fields((Field("Status", "FAILED", badge="contradicted", badge_label="TIMED OUT"),)),
+        Table(("Task",), ((Cell("x", badge="contradicted", badge_label="FAILED"),),), (1.0,)))))
+    body = _body(document)
+    assert r"\badge{contradicted}{TIMED OUT}" in body and r"\badge{contradicted}{FAILED}" in body
+    assert "CONTRADICTED" not in body
+    html = render_html(document)
+    assert '<span class="badge" data-state="contradicted">TIMED OUT</span>' in html
+    assert '<span class="badge" data-state="contradicted">FAILED</span>' in html

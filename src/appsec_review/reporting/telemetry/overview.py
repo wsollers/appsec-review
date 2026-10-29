@@ -132,7 +132,7 @@ def _summary_blocks(inputs: TelemetryInputs) -> tuple[Block, ...]:
         Stat("Named gaps", fmt.count(gap_count), "coverage_gap" if gap_count else "neutral"),
     ))
     if counts["attempts"]:
-        jobs_line = (f"{fmt.count(counts['attempts'])} attempts of {fmt.count(counts['jobs'])} jobs: "
+        jobs_line = (f"{fmt.plural(counts['attempts'], 'attempt')} of {fmt.plural(counts['jobs'], 'job')}: "
                      f"{fmt.count(counts['succeeded'])} succeeded, {fmt.count(counts['gaps'])} completed with gaps, "
                      f"{fmt.count(counts['failed'])} failed, {fmt.count(counts['cancelled'])} cancelled, "
                      f"{fmt.count(counts['running'])} still running.")
@@ -140,7 +140,7 @@ def _summary_blocks(inputs: TelemetryInputs) -> tuple[Block, ...]:
         jobs_line = "No job attempts were recorded; job counts are unavailable."
     notes: list[Block] = [stats, Note(jobs_line)]
     if missing_usage:
-        notes.append(Note(f"{fmt.count(missing_usage)} model call(s) recorded no token usage; the token total "
+        notes.append(Note(f"{fmt.plural(missing_usage, 'model call')} recorded no token usage; the token total "
                           "covers only the calls that did and is a lower bound."))
     return tuple(notes)
 
@@ -361,8 +361,10 @@ def _quality(inputs: TelemetryInputs) -> Box:
         shown, omitted = _cap(entries, GAP_LIMIT, "entries")
         if shown:
             items.append(Bullets(tuple(f"{label}: {entry}" for entry in shown), omitted))
-    return Box(BoxKind.GAP, "Data quality", meta=f"{fmt.count(len(named) + len(lifecycle))} gap(s)",
-               items=tuple(items))
+    gap_total = len(named) + len(lifecycle)
+    # Only an observed gap gets gap styling; a clean data-quality record reads as provenance.
+    return Box(BoxKind.GAP if gap_total or running else BoxKind.PROVENANCE, "Data quality",
+               meta=fmt.plural(gap_total, "gap"), items=tuple(items))
 
 
 def overview_sections(inputs: TelemetryInputs) -> tuple[Block, ...]:

@@ -34,6 +34,7 @@ class Field:
     value: str
     mono: bool = False
     badge: str | None = None          # a verdict/state token shown as a badge instead of text
+    badge_label: str | None = None    # words on that badge when they differ from the token's own text
     truncation: Truncation | None = None
 
 
@@ -54,6 +55,7 @@ class Cell:
     text: str
     mono: bool = False
     badge: str | None = None
+    badge_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
