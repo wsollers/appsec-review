@@ -287,7 +287,8 @@ class KernelProof:
         if any(group.is_relative_to(root) for root in roots):
             return True
         parent, arguments = self._process(pid)
-        flags = {"containerd": ("--config", "-c", "--state", "--root"),
+        flags = {"dockerd": ("--data-root", "--exec-root"),
+                 "containerd": ("--config", "-c", "--state", "--root"),
                  "containerd-shim-runc-v2": ("-address", "--address"),
                  "runc": ("--root",)}.get(executable, ())
         for flag in flags:
@@ -314,6 +315,22 @@ class KernelProof:
                         Path(value).is_relative_to(root) for root in (scope.exec_root, scope.data_root)):
                     return True
         raise EnforcementUnavailable("engine helper ancestry exceeds its custody bound")
+
+    def owned_helper_groups(self, daemon: int = -1):
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                executable = Path(os.readlink(entry / "exe")).name
+                if executable not in {"dockerd", "containerd", "containerd-shim-runc-v2", "runc"}:
+                    continue
+                pid = int(entry.name)
+                group = self.process_cgroup(pid)
+                owned = self._owned_helper(executable, pid, daemon, group)
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            if owned:
+                yield executable, group
 
     def host(self) -> dict:
         config = self.config
@@ -363,20 +380,8 @@ class KernelProof:
                 continue
         # Dedicated-engine scope excludes unrelated infrastructure, not escaped
         # descendants or reparented helpers with this engine's private roots.
-        for entry in Path("/proc").iterdir():
-            if not entry.name.isdecimal():
-                continue
-            try:
-                executable = Path(os.readlink(entry / "exe")).name
-                if executable not in {"dockerd", "containerd", "containerd-shim-runc-v2", "runc"}:
-                    continue
-                helper_pid = int(entry.name)
-                group = self.process_cgroup(helper_pid)
-                owned = self._owned_helper(executable, helper_pid, pid, group)
-            except (FileNotFoundError, ProcessLookupError):
-                continue
-            if owned:
-                self._helper_group(executable, group)
+        for executable, group in self.owned_helper_groups(pid):
+            self._helper_group(executable, group)
         if process_token(pid) != generation:
             raise EnforcementUnavailable("Docker daemon generation changed during helper inventory")
         result = {f"host_{key}": value for key, value in limits.items()}
