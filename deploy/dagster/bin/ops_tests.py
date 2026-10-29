@@ -686,18 +686,21 @@ def _source_identities(root: Path, nodes: tuple[str, ...], static_inputs: dict, 
 
 
 def _verify_sources(root: Path, identities: dict[str, str]) -> None:
+    from appsec_review.acceptance.custody import _check_deadline
     from appsec_review.storage import file_sha256
 
     for relative, expected in identities.items():
+        _check_deadline()
         path = root / relative
         if path.resolve() != path or not path.is_file() or file_sha256(path) != expected:
             raise ValueError(f"acceptance_source_changed:{relative}")
+        _check_deadline()
 
 
 def _execute_acceptance_cases(python, workspace, collected, owners, entries, stages, result,
                               *, suite_end, per_case, workers):
     from appsec_review.acceptance.custody import (
-        capture_inputs, checkpoint_seed, copy_receipt_path, custody_deadline, materialize_seed,
+        capture_inputs, checkpoint_seed, copy_receipt_path, custody_deadline, detach_producer_outputs, materialize_seed,
         seal_seed, verify_checkpoint, verify_inputs,
     )
     from appsec_review.acceptance.staging import StageContext, StageKind
@@ -802,6 +805,14 @@ def _execute_acceptance_cases(python, workspace, collected, owners, entries, sta
                     operation("sources_postcheck", lambda: _verify_sources(
                         workspace.repository, result["source_identities"]))
                 if stage is not None and record["passed"] and stage.kind is StageKind.PRODUCER:
+                    detachment_path = workspace.root / "custody" / stage.variant / (key + ".publication.json")
+                    record["producer_publication"] = {"path": str(detachment_path)}
+                    detachment = operation("producer_publication", lambda: detach_producer_outputs(
+                        context, detachment_path, producer_result=outcome, frozen_inputs=frozen))
+                    record["producer_publication"].update(
+                        sha256=file_sha256(detachment_path), outcome=detachment["outcome"],
+                        replaced_files=detachment["replaced_files"],
+                        verified_copy_bytes=detachment["verified_copy_bytes"])
                     if frozen is None:
                         frozen = operation("capture_inputs", lambda: capture_inputs(context))
                         inputs_path = workspace.root / "custody" / stage.variant / "immutable-inputs.json"
