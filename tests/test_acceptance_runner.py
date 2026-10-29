@@ -7,6 +7,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -326,3 +327,338 @@ def test_deferred_profiles_fail_instead_of_claiming_optional_coverage(monkeypatc
     assert "profile_not_implemented" in result["failures"]
     assert not result["cases"] and result["coverage_status"] == "incomplete"
     assert result["cleanup"]["confirmed"]
+
+
+_STAGED_MICRO = '''
+import os
+from pathlib import Path
+import pytest
+from appsec_review.acceptance.staging import SeedInputs, stage_context
+from appsec_review.acceptance.custody import materialize_seed, verify_seed
+
+@pytest.mark.parametrize("variant", ["micro"])
+def test_prepare(variant):
+    context = stage_context()
+    assert context.variant == variant and context.seed_root is None
+    root = context.work_root
+    for name in ("target", "runs/micro-run/data/configuration"):
+        (root / name).mkdir(parents=True)
+    for name in ("target/source.py", "appsec-review.toml", "overlay.toml",
+                 "fixture-state.json", "runs/micro-run/data/configuration/frozen.json"):
+        (root / name).write_bytes(b"immutable micro bytes")
+    (root / "custody-input.json").write_text(__import__("json").dumps(SeedInputs(variant, (
+        "target", "appsec-review.toml", "overlay.toml", "fixture-state.json",
+        "runs/micro-run/data/configuration")).record()), encoding="utf-8")
+    (root / "progress.txt").write_text("prepare", encoding="utf-8")
+
+@pytest.mark.parametrize("variant", ["micro"])
+def test_review(variant):
+    context = stage_context()
+    root = context.work_root
+    assert (root / "progress.txt").read_text(encoding="utf-8") == "prepare"
+    with pytest.raises(PermissionError):
+        (root / "target/source.py").write_bytes(b"changed")
+    with pytest.raises(PermissionError):
+        (root / "target").rename(root / "relocated-target")
+    with pytest.raises(PermissionError):
+        (root / "custody-input.json").unlink()
+    with pytest.raises(PermissionError):
+        Path(os.environ["APPSEC_ACCEPTANCE_FROZEN_INPUTS"]).write_bytes(b"changed receipt")
+    (root / "progress.txt").write_text("review", encoding="utf-8")
+
+@pytest.mark.parametrize("variant", ["micro"])
+def test_report(variant):
+    context = stage_context()
+    root = context.work_root
+    assert (root / "progress.txt").read_text(encoding="utf-8") == "review"
+    (root / "progress.txt").write_text("report", encoding="utf-8")
+    (root / "runs/micro-run/evidence.txt").write_bytes(b"micro evidence, not an accepted artifact")
+
+@pytest.mark.parametrize("vector", ["first", "second"])
+def test_consume(vector):
+    context = stage_context()
+    manifest = verify_seed(context)
+    root = context.work_root
+    assert (root / "progress.txt").read_text(encoding="utf-8") == "report"
+    assert manifest["tree"]["files"]["runs/micro-run/evidence.txt"]
+    source = context.seed_root / "target/source.py"
+    for path in (source, context.seed_root / "progress.txt", context.manifest_path):
+        with pytest.raises(PermissionError):
+            path.write_bytes(b"changed")
+        with pytest.raises(PermissionError):
+            os.open(path, os.O_RDONLY | os.O_TRUNC)
+        with pytest.raises(PermissionError):
+            path.chmod(0o600)
+        with pytest.raises(PermissionError):
+            path.unlink()
+        with pytest.raises(PermissionError):
+            path.rename(root / "stolen")
+    descriptor = os.open(source, os.O_RDONLY)
+    try:
+        with pytest.raises(PermissionError):
+            os.ftruncate(descriptor, 0)
+    finally:
+        os.close(descriptor)
+    with pytest.raises(PermissionError):
+        os.link(source, root / "shared")
+    with pytest.raises(PermissionError):
+        os.symlink(source, root / "redirect")
+    with pytest.raises(PermissionError):
+        (context.workspace_root / "not-this-consumer.txt").write_bytes(b"changed")
+    with pytest.raises(PermissionError):
+        (context.workspace_root / "stages/other").mkdir()
+    with pytest.raises(PermissionError):
+        root.with_name(root.name + ".custody.json").write_bytes(b"changed receipt")
+    private = materialize_seed(context, root / ("vector-" + vector))
+    path = private / "target/source.py"
+    path.write_bytes(b"intentional private tamper")
+    descriptor = os.open(path, os.O_RDWR)
+    try:
+        os.ftruncate(descriptor, 4)
+    finally:
+        os.close(descriptor)
+    assert path.read_bytes() == b"inte"
+    assert source.read_bytes() == b"immutable micro bytes"
+'''
+
+
+def staged_inventory(tmp_path: Path, monkeypatch, *, source: str = _STAGED_MICRO):
+    path = tmp_path / "test_staged_micro.py"
+    path.write_text(source, encoding="utf-8")
+    relative = path.relative_to(ROOT).as_posix()
+    entries = []
+    predecessor = None
+    for phase in ("prepare", "review", "report"):
+        name = "micro-" + phase
+        entries.append({
+            "id": name, "nodes": [f"{relative}::test_{phase}[micro]"],
+            "stage": {"kind": "producer", "variant": "micro",
+                      "depends_on": [predecessor] if predecessor else [], "seals": phase == "report"}})
+        predecessor = name
+    entries.append({
+        "id": "micro-consumer", "nodes": [f"{relative}::test_consume"],
+        "stage": {"kind": "consumer", "variant": "micro", "depends_on": ["micro-report"]}})
+    inventory = tmp_path / "micro-inventory.json"
+    payload = {
+        "profiles": {"quick": {"tier": "hermetic", "deadline_seconds": 100,
+                                "case_deadline_seconds": 20,
+                                "obligations": [entry["id"] for entry in entries]}},
+        "obligations": entries,
+    }
+    inventory.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(ops_tests, "INVENTORY", inventory)
+    monkeypatch.delenv("APPSEC_PYTHON", raising=False)
+    return path, inventory, payload
+
+
+def acceptance_result(capsys) -> dict:
+    output = capsys.readouterr().out
+    return json.loads(Path(output.split("result: ", 1)[1].strip()).read_bytes())
+
+
+def test_real_stages_run_ordered_predecessors_and_isolated_parameterized_consumers(
+        tmp_path: Path, monkeypatch, capsys) -> None:
+    staged_inventory(tmp_path, monkeypatch)
+    assert ops_tests.run_acceptance(arguments(workers=2), ROOT) == 0
+    result = acceptance_result(capsys)
+    assert len(result["cases"]) == 5
+    assert result["budget"]["workers"] == 2 and result["cleanup"]["confirmed"]
+    assert result["executed_obligations"] == result["selected_obligations"]
+    assert not result["failed_obligations"] and not result["blocked_obligations"]
+    cases = {case["obligation_id"]: case for case in result["cases"]}
+    producer_roots = {case["stage"]["work_root"] for case in result["cases"]
+                      if case["stage"]["kind"] == "producer"}
+    assert len(producer_roots) == 1
+    consumer_roots = {case["stage"]["work_root"] for case in result["cases"]
+                      if case["stage"]["kind"] == "consumer"}
+    assert len(consumer_roots) == 2 and consumer_roots.isdisjoint(producer_roots)
+    for phase in ("prepare", "review", "report"):
+        assert cases["micro-" + phase]["checkpoint"]["sha256"]
+    assert cases["micro-report"]["seal"]["sha256"]
+    assert "APPSEC_ACCEPTANCE_STAGE" not in result["collection"]["command"]
+    assert all(case["duration_seconds"] <= case["budget_seconds"] for case in result["cases"])
+    assert all(case["staging"] for case in result["cases"])
+    assert "src/appsec_review/acceptance/custody.py" in result["source_identities"]
+
+
+@pytest.mark.parametrize("failure", ["assertion", "leaked-descendant", "timeout", "seal-deadline"])
+def test_real_failed_prerequisite_never_executes_or_seals_descendants(
+        tmp_path: Path, monkeypatch, capsys, failure: str) -> None:
+    if failure == "assertion":
+        source = _STAGED_MICRO.replace(
+            '(root / "progress.txt").write_text("review", encoding="utf-8")',
+            "assert False, 'deliberate micro producer failure'")
+    elif failure == "leaked-descendant":
+        source = _STAGED_MICRO.replace(
+            '(root / "progress.txt").write_text("report", encoding="utf-8")',
+            "__import__('subprocess').Popen([__import__('sys').executable, '-c', "
+            "'import time; time.sleep(60)'], cwd=root)")
+    elif failure == "timeout":
+        source = _STAGED_MICRO.replace(
+            '(root / "progress.txt").write_text("report", encoding="utf-8")',
+            "__import__('time').sleep(60)")
+    else:
+        from appsec_review.acceptance import custody
+
+        source = _STAGED_MICRO
+        seal = custody.seal_seed
+
+        def late_seal(context, path):
+            seal(context, path)
+            raise custody.CustodyError("custody_deadline_exceeded")
+
+        monkeypatch.setattr(custody, "seal_seed", late_seal)
+    _path, inventory, payload = staged_inventory(tmp_path, monkeypatch, source=source)
+    if failure == "timeout":
+        payload["obligations"][2]["case_deadline_seconds"] = 8
+        inventory.write_text(json.dumps(payload), encoding="utf-8")
+    assert ops_tests.run_acceptance(arguments(workers=2), ROOT) == 1
+    result = acceptance_result(capsys)
+    failed = "micro-review" if failure == "assertion" else "micro-report"
+    assert failed in result["failed_obligations"]
+    blocked = [case for case in result["cases"] if case["outcome"] == "blocked"]
+    assert blocked and all(case["pytest"] is None and not case["passed"] for case in blocked)
+    assert all(case["dependency"] and "prerequisite_failed_or_incomplete" in case["reason"] for case in blocked)
+    assert "micro-consumer" not in result["executed_obligations"]
+    assert not (Path(result["artifacts_root"]) / "custody/micro/sealed.json").exists()
+    assert result["cleanup"]["confirmed"]
+    if failure == "seal-deadline":
+        report = next(case for case in result["cases"] if case["obligation_id"] == "micro-report")
+        assert report["pytest"]["cases"][0]["outcome"] == "passed" and not report["passed"]
+        assert "deadline_exceeded" in report["reason"]
+
+
+@pytest.mark.parametrize("change", ["source", "config", "target", "copy"])
+def test_real_stage_source_configuration_and_target_drift_blocks_consumers(
+        tmp_path: Path, monkeypatch, capsys, change: str) -> None:
+    path, _inventory, _payload = staged_inventory(tmp_path, monkeypatch)
+    original = ops_tests.supervised_pytest
+
+    def drift(python, arguments, workspace, key, **options):
+        context = options.get("stage")
+        if context is not None and context.obligation_id == "micro-review":
+            if change != "copy":
+                changed = {"source": path, "config": context.work_root / "appsec-review.toml",
+                           "target": context.work_root / "target/source.py"}[change]
+                changed.write_bytes(changed.read_bytes() + b"\n# changed after predecessor capture\n")
+        elif context is not None and context.obligation_id == "micro-consumer" and change == "copy":
+            changed = context.work_root / "target/source.py"
+            changed.write_bytes(changed.read_bytes() + b"\n# changed after materialization\n")
+        return original(python, arguments, workspace, key, **options)
+
+    monkeypatch.setattr(ops_tests, "supervised_pytest", drift)
+    assert ops_tests.run_acceptance(arguments(), ROOT) == 1
+    result = acceptance_result(capsys)
+    if change == "copy":
+        assert result["failed_obligations"] == ["micro-consumer"]
+        assert not result["blocked_obligations"]
+        assert all(case["passed"] for case in result["cases"][:3])
+        assert all("copy_changed_before_execution" in case["reason"] for case in result["cases"][3:])
+    else:
+        assert "micro-review" in result["failed_obligations"]
+        assert result["blocked_obligations"] == ["micro-report", "micro-consumer"]
+        assert all(not case["passed"] for case in result["cases"][1:])
+        assert not (Path(result["artifacts_root"]) / "custody/micro/sealed.json").exists()
+
+
+@pytest.mark.parametrize("change", [
+    "cycle", "missing-selection", "unknown", "incompatible", "branch", "nonliteral", "overlap",
+])
+def test_stage_graph_errors_fail_before_dispatch(tmp_path: Path, monkeypatch, change: str) -> None:
+    _path, inventory, payload = staged_inventory(tmp_path, monkeypatch)
+    entries = payload["obligations"]
+    if change == "cycle":
+        entries[0]["stage"]["depends_on"] = ["micro-review"]
+    elif change == "missing-selection":
+        payload["profiles"]["quick"]["obligations"].remove("micro-prepare")
+    elif change == "unknown":
+        entries[1]["stage"]["depends_on"] = ["unknown-prepare"]
+    elif change == "incompatible":
+        entries[1]["stage"]["variant"] = "other"
+    elif change == "branch":
+        entries[2]["stage"]["depends_on"] = ["micro-prepare"]
+    elif change == "nonliteral":
+        entries[0]["nodes"][0] = entries[0]["nodes"][0].replace("[micro]", "")
+    else:
+        entries[1]["nodes"] = entries[0]["nodes"]
+    inventory.write_text(json.dumps(payload), encoding="utf-8")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid graph dispatched a process")
+
+    monkeypatch.setattr(ops_tests, "supervised_pytest", forbidden)
+    assert ops_tests.run_acceptance(arguments(), ROOT) == 2
+
+
+@pytest.mark.parametrize("workers,expected", [(None, 1), (2, 2)])
+def test_real_worker_default_and_explicit_maximum(tmp_path: Path, monkeypatch, capsys, workers, expected) -> None:
+    path, inventory, payload = staged_inventory(tmp_path, monkeypatch, source=(
+        'import pytest\n@pytest.mark.parametrize("value", [1, 2])\n'
+        'def test_worker(value):\n    assert value in (1, 2)\n'))
+    payload["obligations"] = [{
+        "id": "workers", "nodes": [path.relative_to(ROOT).as_posix() + "::test_worker"]}]
+    payload["profiles"]["quick"]["obligations"] = ["workers"]
+    inventory.write_text(json.dumps(payload), encoding="utf-8")
+    original = ops_tests.supervised_pytest
+    lock = threading.Lock()
+    barrier = threading.Barrier(2) if expected == 2 else None
+    active = maximum = 0
+
+    def supervised(python, arguments, workspace, key, **options):
+        nonlocal active, maximum
+        if "--collect-only" in arguments:
+            return original(python, arguments, workspace, key, **options)
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        try:
+            if barrier:
+                barrier.wait(timeout=5)
+            return original(python, arguments, workspace, key, **options)
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(ops_tests, "supervised_pytest", supervised)
+    assert ops_tests.run_acceptance(arguments(workers=workers), ROOT) == 0
+    result = acceptance_result(capsys)
+    assert result["budget"]["workers"] == maximum == expected
+    assert len(result["cases"]) == 2 and result["cleanup"]["confirmed"]
+
+
+def test_zero_execution_budget_does_not_open_a_gate_and_keeps_a_receipt(tmp_path: Path) -> None:
+    workspace = owned_workspace(tmp_path)
+    outcome = ops_tests.supervised_pytest(
+        sys.executable, ["test_must_not_exist.py"], workspace, "no-execution",
+        deadline=time.monotonic() + ops_tests._CLEANUP_SECONDS)
+    assert outcome["outcome"] == "not_executed"
+    assert outcome["reason"] == "deadline_has_no_execution_budget"
+    assert outcome["cleanup"] == {"confirmed": True, "started": False}
+    assert (workspace.root / "processes/no-execution/supervisor.json").is_file()
+    assert not (workspace.root / "processes/no-execution/gate.json").exists()
+
+
+def test_source_identities_include_transitive_fixture_helpers_and_dynamic_core(tmp_path: Path) -> None:
+    root = tmp_path / "source-manifest-fixture"
+    sources = {
+        "appsec-review.toml": "",
+        "tests/conftest.py": "",
+        "tests/acceptance_plugin.py": "",
+        "deploy/dagster/bin/ops_tests.py": "",
+        "src/appsec_review/acceptance/custody.py": "",
+        "src/appsec_review/jobs/dynamic_handler.py": "",
+        "tests/test_selected.py": "from tests.acceptance_review_stages import helper\n",
+        "tests/acceptance_review_stages.py": "from tests.final_report_support import helper\n",
+        "tests/final_report_support.py": "helper = 1\n",
+        "tests/unrelated.py": "",
+    }
+    for relative, content in sources.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    identities = ops_tests._source_identities(root, ("tests/test_selected.py::test_case",), {}, staged=True)
+    assert set(identities) == set(sources) - {"tests/unrelated.py"}
+    path = root / "tests/final_report_support.py"
+    path.write_text("helper = 2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="acceptance_source_changed:tests/final_report_support.py"):
+        ops_tests._verify_sources(root, identities)

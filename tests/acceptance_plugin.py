@@ -14,6 +14,7 @@ import time
 import pytest
 
 from appsec_review.acceptance.lanes import STATIC_REFERENCE_INPUTS, LaneWorkspace
+from appsec_review.acceptance.staging import StageKind, stage_context
 from appsec_review.storage import atomic_json, file_sha256
 
 
@@ -24,6 +25,7 @@ _collection_errors: list[str] = []
 _cases: list[dict] = []
 _reports: dict[str, list] = {}
 _prerequisites: list[dict] = []
+_preflight: dict | None = None
 
 
 def _guard(workspace: LaneWorkspace) -> None:
@@ -46,14 +48,89 @@ def _guard(workspace: LaneWorkspace) -> None:
             raise pytest.UsageError(f"acceptance static reference identity changed: {relative}")
         read_only.add(path)
 
+    context = stage_context()
+    writable = [root]
+    immutable = []
+    if context is not None:
+        from appsec_review.acceptance.custody import CustodyError, ordinary_path, snapshot_tree, verify_inputs, verify_seed
+
+        ordinary_path(context.work_root)
+        reporting = Path(os.environ["APPSEC_ACCEPTANCE_OUTCOME"]).parent
+        ordinary_path(reporting)
+        if reporting.parent not in {root / "processes", root / "p"}:
+            raise pytest.UsageError("acceptance stage reporting is not process-owned")
+        writable = [context.work_root, reporting, workspace.driver_root]
+        if context.kind is StageKind.CONSUMER:
+            manifest = verify_seed(context)
+            if snapshot_tree(context.work_root) != manifest["tree"]:
+                raise CustodyError("custody_consumer_copy_changed_before_execution")
+            immutable = [context.seed_root, context.manifest_path]
+        else:
+            frozen_path = os.environ.get("APPSEC_ACCEPTANCE_FROZEN_INPUTS")
+            if frozen_path is not None:
+                path = Path(frozen_path)
+                ordinary_path(path)
+                if (path.parent != reporting
+                        or file_sha256(path) != os.environ["APPSEC_ACCEPTANCE_FROZEN_INPUTS_SHA256"]):
+                    raise pytest.UsageError("acceptance immutable input receipt changed")
+                frozen = json.loads(path.read_text(encoding="utf-8"))
+                verify_inputs(context, frozen)
+                immutable = [path, *(context.work_root / value for value in frozen["read_only_paths"])]
+
+    def descriptor_path(descriptor):
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+            import msvcrt
+
+            api = ctypes.WinDLL("kernel32", use_last_error=True)
+            api.GetFinalPathNameByHandleW.argtypes = [
+                wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+            api.GetFinalPathNameByHandleW.restype = wintypes.DWORD
+            buffer = ctypes.create_unicode_buffer(32768)
+            try:
+                count = api.GetFinalPathNameByHandleW(
+                    msvcrt.get_osfhandle(descriptor), buffer, len(buffer), 0)
+            except OSError:
+                return None
+            if not count or count >= len(buffer):
+                return None
+            value = buffer.value
+            if value.startswith("\\\\?\\UNC\\"):
+                value = "\\\\" + value[8:]
+            elif value.startswith("\\\\?\\"):
+                value = value[4:]
+            return Path(value).resolve()
+        try:
+            return Path(os.readlink(f"/proc/self/fd/{descriptor}")).resolve()
+        except OSError:
+            return None
+
     def path_of(value):
+        if isinstance(value, int):
+            return descriptor_path(value)
         if isinstance(value, (str, bytes, os.PathLike)):
             return Path(os.fsdecode(value)).resolve()
         return None
 
     def owned(value) -> bool:
         path = path_of(value)
-        return path is None or path.is_relative_to(root)
+        return path is not None and path.is_relative_to(root)
+
+    def mutation(value, *, directory_fd=None, structural=False):
+        if directory_fd not in (None, -1):
+            parent = path_of(directory_fd)
+            if parent is None:
+                raise PermissionError("acceptance cannot resolve mutation directory descriptor")
+            value = parent / os.fsdecode(value)
+        path = path_of(value)
+        if path == null_device:
+            return
+        if path is None or not any(path.is_relative_to(item) for item in writable):
+            raise PermissionError("acceptance writes must stay in the stage-owned workspace")
+        if any(path.is_relative_to(item) or (structural and item.is_relative_to(path))
+               for item in immutable):
+            raise PermissionError("acceptance sealed and prepared inputs are read-only")
 
     def audit(event, args):
         if event == "open":
@@ -67,14 +144,23 @@ def _guard(workspace: LaneWorkspace) -> None:
             if (path is not None and any(path.is_relative_to(item) for item in protected)
                     and (writing or path not in read_only)):
                 raise PermissionError("acceptance forbids production and target access")
-            if writing and not owned(args[0]):
-                raise PermissionError("acceptance writes must stay in the invocation workspace")
-        elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod", "os.truncate", "os.utime"}:
-            if not owned(args[0]):
-                raise PermissionError("acceptance mutation outside invocation workspace")
+            if writing:
+                mutation(args[0])
+        elif event in {"os.mkdir", "os.remove", "os.rmdir", "os.chmod", "os.chown",
+                       "os.truncate", "os.utime", "os.setxattr", "os.removexattr"}:
+            directory_fd = None
+            if event in {"os.remove", "os.rmdir"}:
+                directory_fd = args[1]
+            elif event in {"os.mkdir", "os.chmod"}:
+                directory_fd = args[2]
+            elif event in {"os.chown", "os.utime"}:
+                directory_fd = args[3]
+            mutation(args[0], directory_fd=directory_fd, structural=event != "os.mkdir")
         elif event in {"os.rename", "os.link", "os.symlink"}:
-            if not owned(args[0]) or not owned(args[1]):
-                raise PermissionError("acceptance link or rename outside invocation workspace")
+            if context is not None and event in {"os.link", "os.symlink"}:
+                raise PermissionError("acceptance staged fixtures require ordinary independent files")
+            mutation(args[0], directory_fd=args[2] if event == "os.rename" else None, structural=True)
+            mutation(args[1], directory_fd=args[3] if event == "os.rename" else None, structural=True)
         elif event in {"os.listdir", "os.scandir", "os.chdir"}:
             path = path_of(args[0])
             if path and any(path.is_relative_to(item) for item in protected):
@@ -109,14 +195,22 @@ def _guard(workspace: LaneWorkspace) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    global _workspace, _outcome
+    global _workspace, _outcome, _preflight
     root = Path(os.environ["APPSEC_ACCEPTANCE_ROOT"]).resolve()
     owner = json.loads((root / "owner.json").read_text(encoding="utf-8"))
     _workspace = LaneWorkspace(Path(owner["repository"]), root, owner["lane"], owner["invocation_id"])
     if str(_workspace.runs_dir) != os.environ["APPSEC_ACCEPTANCE_RUNS_DIR"]:
         raise pytest.UsageError("acceptance fixture runs directory is not invocation-owned")
     _outcome = _workspace.require_owned_path(Path(os.environ["APPSEC_ACCEPTANCE_OUTCOME"]))
-    _guard(_workspace)
+    began = time.monotonic()
+    try:
+        with _workspace.span("acceptance.preflight") as span:
+            _guard(_workspace)
+        _preflight = {"span_id": span.span_id, "duration_seconds": time.monotonic() - began}
+    except (ValueError, OSError, pytest.UsageError) as error:
+        _collection_errors.append(f"acceptance_preflight:{type(error).__name__}:{error}")
+        atomic_json(_outcome, _payload(4, []))
+        raise pytest.UsageError(f"acceptance preflight failed: {error}") from error
     for requirement in json.loads(os.environ.get("APPSEC_ACCEPTANCE_PREREQUISITES", "[]")):
         if requirement in {"platform:linux", "platform:windows"}:
             available = sys.platform == "linux" if requirement == "platform:linux" else os.name == "nt"
@@ -157,6 +251,7 @@ def _payload(exit_code: int | None, cases: list[dict]) -> dict:
     return {"schema": "appsec-review/acceptance-pytest/1",
             "collected": _collected, "collection_errors": _collection_errors,
             "prerequisites": _prerequisites, "cases": cases, "exit_code": exit_code,
+            "preflight": _preflight,
             "versions": {"python": platform.python_version(), "pytest": pytest.__version__}}
 
 
