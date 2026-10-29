@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+import ast
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -388,13 +389,14 @@ def acceptance_environment(workspace) -> dict[str, str]:
 
 def supervised_pytest(python: str, arguments: list[str], workspace, key: str,
                       *, deadline: float, prerequisites: tuple[str, ...] = (),
-                      tested_commit: str | None = None) -> dict:
+                      tested_commit: str | None = None, stage=None,
+                      frozen_inputs: dict | None = None) -> dict:
     """Run collection or exactly one case under a hard wall-clock budget with owned cleanup."""
     from appsec_review.storage import atomic_json
     from appsec_review.runtime.resources import process_identity
 
     started = time.monotonic()
-    directory = workspace.require_owned_path(workspace.root / "processes" / key)
+    directory = workspace.require_owned_path(workspace.root / ("p" if stage is not None else "processes") / key)
     directory.mkdir(parents=True, exist_ok=False)
     outcome_path = directory / "pytest.json"
     exit_path = directory / "exit.json"
@@ -403,6 +405,27 @@ def supervised_pytest(python: str, arguments: list[str], workspace, key: str,
         environment["APPSEC_ACCEPTANCE_TESTED_COMMIT"] = tested_commit
     environment["APPSEC_ACCEPTANCE_OUTCOME"] = str(outcome_path)
     environment["APPSEC_ACCEPTANCE_PREREQUISITES"] = json.dumps(prerequisites)
+    if stage is not None:
+        from appsec_review.acceptance.staging import STAGE_ENVIRONMENT
+
+        if "--collect-only" in arguments:
+            raise ValueError("stage context is execution-only")
+        environment[STAGE_ENVIRONMENT] = json.dumps(stage.record(), sort_keys=True)
+        if frozen_inputs is not None:
+            from appsec_review.storage import file_sha256
+
+            frozen_path = directory / "frozen-inputs.json"
+            atomic_json(frozen_path, frozen_inputs)
+            environment["APPSEC_ACCEPTANCE_FROZEN_INPUTS"] = str(frozen_path)
+            environment["APPSEC_ACCEPTANCE_FROZEN_INPUTS_SHA256"] = file_sha256(frozen_path)
+        # A staged child cannot write another phase's HOME, TEMP, cache, or Dagster state.
+        for name, keys in (
+                ("h", ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA")),
+                ("t", ("TEMP", "TMP", "TMPDIR")),
+                ("d", ("DAGSTER_HOME",))):
+            path = directory / name
+            path.mkdir()
+            environment.update({key: str(path) for key in keys})
     # Windows venv launchers can spawn their real interpreter before assignment. Bootstrap
     # with the base executable (stdlib only), then open the owned venv worker inside the job.
     bootstrap = sys._base_executable if os.name == "nt" else python
@@ -419,6 +442,8 @@ def supervised_pytest(python: str, arguments: list[str], workspace, key: str,
     if time.monotonic() >= execution_end:
         result["outcome"] = "not_executed"
         result["reason"] = "deadline_has_no_execution_budget"
+        result["duration_seconds"] = time.monotonic() - started
+        atomic_json(directory / "supervisor.json", result)
         return result
     process = job = None
     assigned = False
@@ -523,6 +548,337 @@ def _matches(selection: str, node: str) -> bool:
     return node == selection or node.startswith(selection + "::") or node.startswith(selection + "[")
 
 
+def _stage_graph(entries: dict, selected: list[str]) -> dict:
+    """Validate the explicitly selected chain without adding or skipping prerequisites."""
+    from appsec_review.acceptance.staging import StageDeclaration, StageKind
+
+    stages = {}
+    if not isinstance(selected, list) or not selected or len(selected) != len(set(selected)):
+        raise ValueError("obligations must be a unique explicit list")
+    for obligation in selected:
+        entry = entries[obligation]
+        nodes = entry["nodes"]
+        if not isinstance(nodes, list) or not nodes or any(
+                not isinstance(node, str) or not node.strip() for node in nodes):
+            raise ValueError(f"obligation requires explicit nodes: {obligation}")
+        if "stage" in entry:
+            if not isinstance(entry["stage"], dict):
+                raise ValueError(f"stage must be a declaration: {obligation}")
+            stage = StageDeclaration.from_mapping(entry["stage"])
+            if stage.kind is StageKind.PRODUCER and (
+                    len(nodes) != 1 or "::" not in nodes[0]
+                    or not nodes[0].endswith(f"[{stage.variant}]")):
+                raise ValueError(f"producer requires one literal variant node: {obligation}")
+            stages[obligation] = stage
+    for obligation, stage in stages.items():
+        for dependency in stage.depends_on:
+            if dependency not in entries:
+                raise ValueError(f"unknown stage prerequisite: {obligation}:{dependency}")
+            if dependency not in selected:
+                raise ValueError(f"unselected stage prerequisite: {obligation}:{dependency}")
+            predecessor = stages.get(dependency)
+            if (predecessor is None or predecessor.kind is not StageKind.PRODUCER
+                    or predecessor.variant != stage.variant
+                    or (stage.kind is StageKind.PRODUCER and predecessor.seals)
+                    or (stage.kind is StageKind.CONSUMER and not predecessor.seals)):
+                raise ValueError(f"incompatible stage prerequisite: {obligation}:{dependency}")
+    visited, active = set(), set()
+
+    def visit(obligation):
+        if obligation in active:
+            raise ValueError(f"cyclic stage prerequisites: {obligation}")
+        if obligation in visited:
+            return
+        active.add(obligation)
+        for dependency in stages[obligation].depends_on:
+            visit(dependency)
+        active.remove(obligation)
+        visited.add(obligation)
+
+    for obligation in stages:
+        visit(obligation)
+    for variant in {stage.variant for stage in stages.values()}:
+        producers = {name: stage for name, stage in stages.items()
+                     if stage.variant == variant and stage.kind is StageKind.PRODUCER}
+        roots = [name for name, stage in producers.items() if not stage.depends_on]
+        children = {name: [child for child, stage in producers.items() if name in stage.depends_on]
+                    for name in producers}
+        terminals = [name for name, successors in children.items() if not successors]
+        if (len(roots) != 1 or len(terminals) != 1
+                or any(len(successors) > 1 for successors in children.values())
+                or [name for name, stage in producers.items() if stage.seals] != terminals):
+            raise ValueError(f"ambiguous or unsealed producer chain: {variant}")
+    return stages
+
+
+def _collected_owners(entries: dict, selected: list[str], collected: list[str], stages: dict) -> dict[str, str]:
+    owners = {}
+    for node in collected:
+        matches = [obligation for obligation in selected
+                   if any(_matches(selection, node) for selection in entries[obligation]["nodes"])]
+        if len(matches) != 1:
+            raise ValueError(f"ambiguous collected obligation: {node}")
+        owners[node] = matches[0]
+    for obligation in stages:
+        from appsec_review.acceptance.staging import StageKind
+
+        if stages[obligation].kind is StageKind.PRODUCER:
+            expected = entries[obligation]["nodes"]
+            actual = [node for node, owner in owners.items() if owner == obligation]
+            if actual != expected:
+                raise ValueError(f"producer did not collect its exact literal node: {obligation}")
+    return owners
+
+
+def _source_identities(root: Path, nodes: tuple[str, ...], static_inputs: dict, *, staged=False) -> dict[str, str]:
+    from appsec_review.storage import file_sha256
+
+    paths = {
+        "appsec-review.toml", "tests/conftest.py", "tests/acceptance_plugin.py",
+        "deploy/dagster/bin/ops_tests.py", *static_inputs,
+        *(node.split("::", 1)[0] for node in nodes),
+        *(path.relative_to(root).as_posix()
+          for path in (root / "src" / "appsec_review" / "acceptance").glob("*.py")),
+    }
+    if staged:
+        # JobRunner loads handlers dynamically. Pin its complete code, not just imports
+        # visible in the selected fixture. Test helpers use an explicit local import closure.
+        paths.update(path.relative_to(root).as_posix() for path in (root / "src").rglob("*.py"))
+    pending = [name for name in paths if name.endswith(".py")]
+    inspected = set()
+    while pending:
+        relative = pending.pop()
+        if relative in inspected:
+            continue
+        inspected.add(relative)
+        path = root / relative
+        if not path.is_file():
+            raise ValueError(f"missing acceptance source: {relative}")
+        module = relative.removesuffix(".py").replace("/", ".")
+        if module.endswith(".__init__"):
+            module = module.removesuffix(".__init__") + ".__package__"
+        for item in ast.walk(ast.parse(path.read_bytes(), filename=relative)):
+            imports = []
+            if isinstance(item, ast.Import):
+                imports = [alias.name for alias in item.names]
+            elif isinstance(item, ast.ImportFrom):
+                prefix = ".".join(module.split(".")[:-item.level]) if item.level else ""
+                base = ".".join(part for part in (prefix, item.module) if part)
+                imports = [base, *(base + "." + alias.name for alias in item.names)]
+            for name in imports:
+                if not name.startswith("tests."):
+                    continue
+                logical = name.replace(".", "/")
+                for candidate in (logical + ".py", logical + "/__init__.py"):
+                    if (root / candidate).is_file() and candidate not in paths:
+                        paths.add(candidate)
+                        pending.append(candidate)
+    identities = {}
+    for relative in sorted(paths):
+        path = root / relative
+        if path.resolve() != path or not path.is_file():
+            raise ValueError(f"missing or redirected acceptance source: {relative}")
+        identities[relative] = file_sha256(path)
+    return identities
+
+
+def _verify_sources(root: Path, identities: dict[str, str]) -> None:
+    from appsec_review.storage import file_sha256
+
+    for relative, expected in identities.items():
+        path = root / relative
+        if path.resolve() != path or not path.is_file() or file_sha256(path) != expected:
+            raise ValueError(f"acceptance_source_changed:{relative}")
+
+
+def _execute_acceptance_cases(python, workspace, collected, owners, entries, stages, result,
+                              *, suite_end, per_case, workers):
+    from appsec_review.acceptance.custody import (
+        capture_inputs, checkpoint_seed, copy_receipt_path, custody_deadline, materialize_seed,
+        seal_seed, verify_checkpoint, verify_inputs,
+    )
+    from appsec_review.acceptance.staging import StageContext, StageKind
+    from appsec_review.storage import atomic_json, file_sha256
+
+    states: dict[str, dict] = {}
+    records: dict[str, dict] = {}
+    by_obligation = {name: [node for node in collected if owners[node] == name]
+                     for name in result["selected_obligations"]}
+    pending = list(collected)
+    running = {}
+
+    def blocked(node, reason, dependency=None):
+        return {
+            "node": node, "obligation_id": owners[node], "outcome": "blocked" if dependency else "not_executed",
+            "reason": reason, "dependency": dependency, "passed": False, "pytest": None,
+            "exit_code": None, "duration_seconds": 0.0, "cleanup": {"confirmed": True, "started": False},
+        }
+
+    def execute(node):
+        obligation = owners[node]
+        stage = stages.get(obligation)
+        # Invocation-local ordinals are unique without long helper HOME/TEMP paths.
+        key = f"case-{collected.index(node):04d}"
+        case_seconds = min(per_case, entries[obligation].get("case_deadline_seconds", 60))
+        started = time.monotonic()
+        deadline = min(suite_end, started + case_seconds)
+        record = {"node": node, "obligation_id": obligation, "budget_seconds": case_seconds,
+                  "pytest": None, "exit_code": None, "outcome": "error", "passed": False,
+                  "cleanup": {"confirmed": True, "started": False}, "staging": []}
+        manifest_path = None
+
+        def operation(name, function):
+            began = time.monotonic()
+            span = None
+            try:
+                with workspace.span("acceptance.stage." + name) as span:
+                    return function()
+            finally:
+                record["staging"].append({
+                    "operation": name, "span_id": span.span_id if span is not None else None,
+                    "duration_seconds": time.monotonic() - began,
+                    "status": span.status if span is not None else "FAILED"})
+
+        try:
+            with custody_deadline(deadline):
+                if stage is not None:
+                    operation("sources_precheck", lambda: _verify_sources(
+                        workspace.repository, result["source_identities"]))
+                context = None
+                frozen = None
+                state = None
+                if stage is not None:
+                    state = states.setdefault(stage.variant, {})
+                    work_root = workspace.root / "stages" / stage.variant
+                    common = {
+                        "kind": stage.kind, "variant": stage.variant, "obligation_id": obligation,
+                        "invocation_id": workspace.invocation_id, "tested_commit": result["commit"],
+                        "source_identities": result["stage_source_identities"], "workspace_root": workspace.root,
+                        "work_root": work_root,
+                    }
+                    if stage.kind is StageKind.PRODUCER:
+                        context = StageContext(**common)
+                        if stage.depends_on:
+                            frozen = state["inputs"]
+                            if file_sha256(state["inputs_path"]) != state["inputs_sha256"]:
+                                raise ValueError("prepared_input_receipt_changed")
+                            operation("predecessor_precheck", lambda: verify_checkpoint(
+                                context, state["checkpoint_path"], state["checkpoint_sha256"]))
+                            operation("inputs_precheck", lambda: verify_inputs(context, frozen))
+                        else:
+                            operation("prepare_directory", lambda: work_root.mkdir(parents=True, exist_ok=False))
+                    else:
+                        manifest_path = state["manifest_path"]
+                        context = StageContext(**{
+                            **common, "work_root": workspace.root / "consumers" / key,
+                            "seed_root": work_root, "manifest_path": manifest_path,
+                            "manifest_sha256": state["manifest_sha256"],
+                        })
+                        operation("copy", lambda: materialize_seed(context))
+                        copy_receipt = copy_receipt_path(context.work_root)
+                        record["materialization_receipt"] = {
+                            "path": str(copy_receipt), "sha256": file_sha256(copy_receipt)}
+                    record["stage"] = context.record()
+                outcome = supervised_pytest(
+                    python, [node], workspace, key, deadline=deadline, tested_commit=result["commit"],
+                    **({"stage": context, "frozen_inputs": frozen} if context is not None else {}))
+                record.update(outcome)
+                payload = outcome["pytest"] or {}
+                cases = payload.get("cases", [])
+                record["passed"] = (
+                    outcome["outcome"] == "completed" and outcome["exit_code"] == 0
+                    and outcome["cleanup"]["confirmed"] and payload.get("collected") == [node]
+                    and not payload.get("collection_errors") and len(cases) == 1
+                    and cases[0]["node"] == node and cases[0]["outcome"] == "passed")
+                if payload.get("collection_errors"):
+                    record["reason"] = ";".join(payload["collection_errors"])
+                if any(result["source_identities"].get(path) != expected
+                       for path, expected in outcome["static_input_identities"].items()):
+                    record.update(passed=False, reason="static_reference_changed_during_suite")
+                if stage is not None:
+                    operation("sources_postcheck", lambda: _verify_sources(
+                        workspace.repository, result["source_identities"]))
+                if stage is not None and record["passed"] and stage.kind is StageKind.PRODUCER:
+                    if frozen is None:
+                        frozen = operation("capture_inputs", lambda: capture_inputs(context))
+                        inputs_path = workspace.root / "custody" / stage.variant / "immutable-inputs.json"
+                        operation("pin_inputs", lambda: atomic_json(inputs_path, frozen))
+                        state.update(inputs_path=inputs_path, inputs_sha256=file_sha256(inputs_path))
+                    else:
+                        operation("inputs_postcheck", lambda: verify_inputs(context, frozen))
+                    record["immutable_inputs"] = {
+                        "path": str(state["inputs_path"]), "sha256": state["inputs_sha256"]}
+                    checkpoint_path = workspace.root / "custody" / stage.variant / (key + ".checkpoint.json")
+                    digest = operation("checkpoint", lambda: checkpoint_seed(context, checkpoint_path))
+                    update = {"inputs": frozen, "checkpoint_path": checkpoint_path,
+                              "checkpoint_sha256": digest}
+                    record["checkpoint"] = {"path": str(checkpoint_path), "sha256": digest}
+                    if stage.seals:
+                        manifest_path = workspace.root / "custody" / stage.variant / "sealed.json"
+                        seal_hash = operation("seal", lambda: seal_seed(context, manifest_path))
+                        operation("sealed_inputs_postcheck", lambda: verify_inputs(context, frozen))
+                        update.update(manifest_path=manifest_path, manifest_sha256=seal_hash)
+                        record["seal"] = {"path": str(manifest_path), "sha256": seal_hash}
+                    state.update(update)
+        except Exception as error:
+            record.update(passed=False, reason=f"stage_{type(error).__name__}:{error}", outcome="error")
+        record["duration_seconds"] = time.monotonic() - started
+        if time.monotonic() > deadline:
+            record.update(passed=False, outcome="timeout", reason="deadline_including_staging_exceeded")
+        if not record["passed"] and stage is not None and stage.kind is StageKind.PRODUCER:
+            state = states.get(stage.variant, {})
+            invalid = state.pop("manifest_path", None)
+            state.pop("manifest_sha256", None)
+            if stage.seals:
+                invalid = invalid or (workspace.root / "custody" / stage.variant / "sealed.json")
+                if invalid.exists():
+                    invalid.unlink()
+            record.pop("seal", None)
+        return record
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        while pending or running:
+            changed = True
+            while changed:
+                changed = False
+                for node in pending[:]:
+                    stage = stages.get(owners[node])
+                    for dependency in stage.depends_on if stage is not None else ():
+                        dependencies = by_obligation[dependency]
+                        if all(item in records for item in dependencies) and any(
+                                not records[item]["passed"] for item in dependencies):
+                            records[node] = blocked(node, f"prerequisite_failed_or_incomplete:{dependency}", dependency)
+                            pending.remove(node)
+                            changed = True
+                            break
+            for node in pending[:]:
+                if len(running) >= workers:
+                    break
+                stage = stages.get(owners[node])
+                dependencies = stage.depends_on if stage is not None else ()
+                if not all(all(item in records and records[item]["passed"] for item in by_obligation[dependency])
+                           for dependency in dependencies):
+                    continue
+                if time.monotonic() >= suite_end - _CLEANUP_SECONDS:
+                    records[node] = blocked(node, "suite_deadline_has_no_execution_budget")
+                else:
+                    running[executor.submit(execute, node)] = node
+                pending.remove(node)
+            if running:
+                finished, _ = wait(running, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    node = running.pop(future)
+                    try:
+                        records[node] = future.result()
+                    except Exception as error:
+                        records[node] = blocked(node, f"case_dispatch_{type(error).__name__}:{error}")
+            elif pending:
+                for node in pending:
+                    records[node] = blocked(node, "prerequisite_incomplete", stages[owners[node]].depends_on[0])
+                pending.clear()
+    return [records[node] for node in collected]
+
+
 def run_acceptance(args: argparse.Namespace, root: Path) -> int:
     from appsec_review.acceptance.lanes import LaneSpec, LaneTier, LaneWorkspace
     from appsec_review.storage import atomic_json, file_sha256
@@ -539,9 +895,15 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
         print(f"error: unknown or invalid acceptance profile {args.acceptance!r}", file=sys.stderr)
         return 2
     selected = profile.get("obligations", [])
-    entries = {entry["id"]: entry for entry in inventory["obligations"]}
     try:
+        entries = {entry["id"]: entry for entry in inventory["obligations"]}
+        if len(entries) != len(inventory["obligations"]):
+            raise ValueError("duplicate acceptance obligation identity")
+        # Empty deferred profiles remain explicit failures at execution, not malformed chains.
+        stages = _stage_graph(entries, selected) if selected else {}
         nodes = tuple(node for obligation in selected for node in entries[obligation]["nodes"])
+        if len(nodes) != len(set(nodes)):
+            raise ValueError("duplicate acceptance node selection")
         maximum = profile["deadline_seconds"]
         case_maximum = profile["case_deadline_seconds"]
         total = args.deadline if args.deadline is not None else maximum
@@ -593,13 +955,25 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
                 capture_output=True, text=True, timeout=min(5, max(0.1, suite_end - time.monotonic())),
                 check=True, env=acceptance_environment(workspace))
             result["working_tree_dirty"] = bool(status.stdout.strip())
-            for relative in {
-                    "appsec-review.toml", "tests/acceptance_plugin.py", "deploy/dagster/bin/ops_tests.py",
-                    *json.loads(acceptance_environment(workspace)["APPSEC_ACCEPTANCE_STATIC_INPUTS"]),
-                    *(node.split("::", 1)[0] for node in nodes)}:
-                path = root / relative
-                if path.is_file():
-                    result["source_identities"][relative] = file_sha256(path)
+            result["source_identities"] = _source_identities(
+                root, nodes, json.loads(acceptance_environment(workspace)["APPSEC_ACCEPTANCE_STATIC_INPUTS"]),
+                staged=bool(stages))
+            source_manifest = workspace.root / "source-identities.json"
+            atomic_json(source_manifest, result["source_identities"])
+            result["source_manifest"] = {"path": str(source_manifest), "sha256": file_sha256(source_manifest)}
+            # Keep the environment bounded on Windows. The exact manifest binds every helper
+            # and core module; expose the boundary modules individually as well.
+            boundary_sources = {
+                "appsec-review.toml", "tests/conftest.py", "tests/acceptance_plugin.py",
+                "deploy/dagster/bin/ops_tests.py",
+                *(node.split("::", 1)[0] for node in nodes),
+                *(path.relative_to(root).as_posix()
+                  for path in (root / "src" / "appsec_review" / "acceptance").glob("*.py")),
+            }
+            result["stage_source_identities"] = {
+                "source-manifest": result["source_manifest"]["sha256"],
+                **{name: result["source_identities"][name] for name in sorted(boundary_sources)},
+            }
             python, _ = find_python(root)
             # Acceptance must not silently borrow another checkout's editable environment.
             if not Path(python).parent.resolve().is_relative_to((root / ".venv").resolve()):
@@ -627,34 +1001,20 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
                         or any(not any(_matches(node, item) for node in nodes) for item in collected)):
                     result["failures"].append("collection_incomplete_or_unexpected")
                 else:
-                    def execute(node: str) -> dict:
-                        key = "case-" + hashlib.sha256(node.encode()).hexdigest()[:16]
-                        limits = [entries[obligation].get("case_deadline_seconds", 60)
-                                  for obligation in selected if any(
-                                      _matches(selection, node) for selection in entries[obligation]["nodes"])]
-                        case_seconds = min(per_case, *limits)
-                        outcome = supervised_pytest(python, [node], workspace, key,
-                                                   deadline=min(suite_end, time.monotonic() + case_seconds),
-                                                   tested_commit=result["commit"])
-                        record = {"node": node, "budget_seconds": case_seconds, **outcome}
-                        payload = outcome["pytest"] or {}
-                        cases = payload.get("cases", [])
-                        record["passed"] = (outcome["outcome"] == "completed" and outcome["exit_code"] == 0
-                                            and outcome["cleanup"]["confirmed"] and len(cases) == 1
-                                            and cases[0]["node"] == node and cases[0]["outcome"] == "passed")
-                        if any(result["source_identities"].get(path) != expected
-                               for path, expected in outcome["static_input_identities"].items()):
-                            record.update(passed=False, reason="static_reference_changed_during_suite")
-                        return record
-
-                    with ThreadPoolExecutor(max_workers=spec.workers) as executor:
-                        result["cases"] = list(executor.map(execute, collected))
+                    owners = _collected_owners(entries, selected, collected, stages)
+                    result["cases"] = _execute_acceptance_cases(
+                        python, workspace, collected, owners, entries, stages, result,
+                        suite_end=suite_end, per_case=per_case, workers=spec.workers)
             for obligation in selected:
                 required = entries[obligation]["nodes"]
                 cases = [case for case in result["cases"] if any(_matches(node, case["node"]) for node in required)]
                 executed = cases and all(
                     any(_matches(node, case["node"]) and (case["pytest"] or {}).get("cases")
                         for case in cases) for node in required)
+                if obligation in stages:
+                    executed = bool(cases) and all(
+                    any(item["node"] == case["node"] for item in (case["pytest"] or {}).get("cases", []))
+                    for case in cases)
                 if executed:
                     result["executed_obligations"].append(obligation)
                 if not executed or not all(case["passed"] for case in cases):
@@ -666,10 +1026,24 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
                 obligation for obligation in selected if not any(
                     any(_matches(node, case["node"]) for node in entries[obligation]["nodes"])
                     and (case["pytest"] or {}).get("cases") for case in result["cases"])]
+            _verify_sources(root, result["source_identities"])
             if result["failed_obligations"]:
                 result["failures"].append("required_obligations_failed")
         except Exception as error:
             result["failures"].append(f"harness_{type(error).__name__}")
+            result["failure_details"] = str(error)
+        for obligation in selected:
+            if obligation not in result["executed_obligations"] and obligation not in result["failed_obligations"]:
+                result["failed_obligations"].append(obligation)
+        result["blocked_obligations"] = [
+            obligation for obligation in selected if any(
+                case.get("obligation_id") == obligation and case["outcome"] == "blocked"
+                for case in result["cases"])]
+        result["executed_nodes"] = [
+            case["node"] for case in result["cases"]
+            if any(item["node"] == case["node"] for item in (case["pytest"] or {}).get("cases", []))]
+        result["unexecuted_nodes"] = [
+            node for node in result["collected_nodes"] if node not in result["executed_nodes"]]
         all_processes = [result.get("collection", {}), *result["cases"]]
         result["cleanup"] = {"confirmed": all(
             item.get("cleanup", {}).get("confirmed", True) for item in all_processes),
