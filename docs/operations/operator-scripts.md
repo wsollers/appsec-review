@@ -33,7 +33,8 @@ required inputs, per-run options, stack settings and TOML-only feature gates.
   id, target or file you named.
 - Environment: `APPSEC_PYTHON` picks the interpreter (default: the checkout's `.venv`, then the main
   checkout's `.venv` when this is a git worktree, then `python3`); `APPSEC_DAGSTER_URL` or `--url`
-  sets the GraphQL endpoint (default `http://127.0.0.1:3000/graphql`).
+  sets the GraphQL endpoint (default `http://127.0.0.1:<port>/graphql`, where the port is
+  `APPSEC_DAGSTER_WEB_PORT` from the environment or `deploy/dagster/.env`, default `3000`).
 - PowerShell: options are `-PascalCase` (`--no-probe` is `-NoProbe`). Every twin also takes `-Wsl`
   and `-Distro` (default `Ubuntu-24.04`): with `-Wsl` the twin re-runs the bash script inside that
   WSL distribution, translating the repository path and any Windows path option. Use it when the

@@ -1,6 +1,8 @@
 """Keep local Dagster deployments bound to one native host workspace."""
 
 from __future__ import annotations
+import argparse
+from collections.abc import Mapping
 import os
 from pathlib import Path
 import subprocess
@@ -15,6 +17,9 @@ IMAGE_VARIABLE = "APPSEC_REVIEW_DAGSTER_IMAGE"
 IMAGE_SERVICES = ("code-location", "webserver", "daemon")
 # Fills the variable for Compose actions that never create containers (config, ps, logs, stop).
 UNVERIFIED_IMAGE = "sha256:" + "0" * 64
+# The webserver's loopback host port; compose.yaml publishes ${APPSEC_DAGSTER_WEB_PORT:-3000}.
+WEB_PORT_VARIABLE = "APPSEC_DAGSTER_WEB_PORT"
+DEFAULT_WEB_PORT = 3000
 
 
 def reject_native_environment() -> None:
@@ -60,6 +65,35 @@ def deployment_profile(environment: Path) -> str:
     return profile
 
 
+def web_port(environment: Path | None = None, environ: Mapping[str, str] | None = None) -> int:
+    """The webserver host port with Compose's precedence: process environment, then ``.env``, then 3000."""
+    values = os.environ if environ is None else environ
+    raw = values.get(WEB_PORT_VARIABLE)
+    if not raw and environment is not None and environment.is_file():
+        raw = read_environment(environment).get(WEB_PORT_VARIABLE)
+    text = (raw or "").strip()
+    if not text:
+        return DEFAULT_WEB_PORT
+    if not (text.isascii() and text.isdigit()) or not 1 <= int(text) <= 65535:
+        raise RuntimeError(f"{WEB_PORT_VARIABLE} must be an integer from 1 to 65535, not {raw!r}")
+    return int(text)
+
+
+def dagster_url(path: str = "", environment: Path | None = None, environ: Mapping[str, str] | None = None) -> str:
+    """The local Dagster webserver URL on its configured host port, e.g. ``dagster_url("/graphql")``."""
+    return f"http://127.0.0.1:{web_port(environment, environ)}{path}"
+
+
+def url_or_default(parser: argparse.ArgumentParser, url: str | None, path: str = "") -> str:
+    """An explicit ``--url``, otherwise this deployment's webserver URL; an invalid port is a usage error."""
+    if url:
+        return url
+    try:
+        return dagster_url(path, Path(__file__).resolve().parents[1] / ".env")
+    except RuntimeError as error:
+        parser.error(str(error))
+
+
 def provider_overlay(platform: str, profile: str) -> str:
     if profile in COPILOT_PROFILES:
         return "compose.copilot.yaml"
@@ -99,6 +133,7 @@ def validate_deployment(repository: Path, environment: Path, platform: str) -> N
     values = read_environment(environment)
     if values.get("APPSEC_DEPLOYMENT_PLATFORM") != platform or values.get("APPSEC_COMPOSE_PROJECT") != project_name(platform):
         raise RuntimeError("deployment identity does not match this host; run bootstrap.py here")
+    web_port(environment)
 
 
 def reject_other_deployments(platform: str) -> None:

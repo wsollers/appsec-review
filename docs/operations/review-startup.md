@@ -90,7 +90,7 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | `-DryRun` | `--dry-run` | Prints choices and the launch command without submitting or writing an intent. Still checks preconditions and can refuse. |
 | `-RunId 2026-10-21-0007` | `--run-id 2026-10-21-0007` | Resume an **existing application run**, not set the id of a fresh run. The run must exist under `runs/`; its recorded profile/overlay are the defaults and cannot be changed on resume. Cannot combine with first-error mode. |
 | `-IdWait 60` | `--id-wait 60` | Wait up to 60 seconds for the application run id. `pending` means it has not been allocated yet, not that submission failed. Keep the printed Dagster UUID. |
-| `-Url URL` | `--url URL` | GraphQL endpoint; defaults to `APPSEC_DAGSTER_URL`, otherwise `http://127.0.0.1:3000/graphql`. |
+| `-Url URL` | `--url URL` | GraphQL endpoint; defaults to `APPSEC_DAGSTER_URL`, otherwise `http://127.0.0.1:<port>/graphql`, where the port is `APPSEC_DAGSTER_WEB_PORT` (default `3000`). |
 | `-Force` | `--force` | Overrides the active-run guard only. Not needed for normal launches; it cannot bypass stack ownership, submission identity, image pins, or conflicting active resource budgets. |
 | `-Wsl`, `-Distro NAME` | Not applicable | PowerShell routing to the WSL stack; default distribution is `Ubuntu-24.04` unless inferred from the chosen WSL checkout path. |
 | `-Help` | `--help` | Show the script's current option list. |

@@ -8,7 +8,8 @@ methods still allocate application attempts, validate unit receipts and artifact
 accepted handoffs and manifests.
 
 The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
-the web console is published, on `127.0.0.1:3000`. The repository's `runs/` and `data/` directories
+the web console is published, on `127.0.0.1:3000` by default (see `APPSEC_DAGSTER_WEB_PORT` below).
+The repository's `runs/` and `data/` directories
 are mounted into the Dagster containers, and `targets/` and `rules/` (the checked-in rule packs) are
 mounted read-only; PostgreSQL and Dagster compute logs use named volumes.
 The code location alone receives the host Docker socket. Every containerized step uses it: scanner
@@ -151,6 +152,14 @@ python deploy/dagster/bin/verify.py
 The console is then available at <http://localhost:3000>. The verification command checks the live
 HTTP endpoint and GraphQL workspace, then compares the connected jobs and schedules with
 `appsec-review.toml`, including cron, time zone, and enabled state.
+
+The published host port is `APPSEC_DAGSTER_WEB_PORT` (default `3000`; an integer from 1 to 65535),
+read like Compose does: the process environment, then `deploy/dagster/.env`. `ops.py` and the
+`scripts/` wrappers, `smoke.py`, `verify.py`, `run_report.py`, `recover_runs.py`, `review_run.py`, and
+`stepwise.py` derive their default URL from it unless `--url` (or, for `ops.py`, `APPSEC_DAGSTER_URL`)
+is given, and refuse an invalid value. On Windows, WSL forwards a WSL stack's `localhost:3000` to the
+Windows host, so to run a Windows stack alongside a WSL stack set `APPSEC_DAGSTER_WEB_PORT=3001` (for
+example) in the Windows checkout's `deploy/dagster/.env` and open <http://localhost:3001>.
 
 ### Signed image
 

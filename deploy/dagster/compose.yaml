@@ -140,7 +140,7 @@ services:
     pids_limit: 512
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APPSEC_DAGSTER_WEB_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy

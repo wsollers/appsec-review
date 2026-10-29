@@ -27,14 +27,14 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import (actual_platform, deployment_profile, image_tag as host_image_tag, project_name, provider_overlay,
-                  read_environment, reject_native_environment)
+from host import (actual_platform, dagster_url, deployment_profile, image_tag as host_image_tag, project_name,
+                  provider_overlay, read_environment, reject_native_environment)
 
 
 DEPLOYMENT = Path(__file__).resolve().parents[1]
 ROOT = DEPLOYMENT.parents[1]
 BIN = Path(__file__).resolve().parent
-DEFAULT_URL = os.environ.get("APPSEC_DAGSTER_URL", "http://127.0.0.1:3000/graphql")
+URL_VARIABLE = "APPSEC_DAGSTER_URL"
 SERVICES = ("postgres", "code-location", "daemon", "webserver")
 TERMINAL = frozenset({"SUCCESS", "FAILURE", "CANCELED"})
 FAILED_FINAL = frozenset({"FAILURE", "CANCELED"})
@@ -1016,7 +1016,8 @@ def build_parser() -> argparse.ArgumentParser:
         if dry_run:
             sub.add_argument("--dry-run", action="store_true", help="print what would happen; change nothing")
         if url:
-            sub.add_argument("--url", default=DEFAULT_URL, help="Dagster GraphQL endpoint (default %(default)s)")
+            sub.add_argument("--url", help=f"Dagster GraphQL endpoint (default: {URL_VARIABLE}, otherwise "
+                             "http://127.0.0.1:<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
         if force:
             sub.add_argument("--force", action="store_true", help="proceed although a run is active")
         return sub
@@ -1078,6 +1079,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def default_url() -> str:
+    """``APPSEC_DAGSTER_URL``, otherwise the GraphQL endpoint on the stack's configured web port."""
+    return os.environ.get(URL_VARIABLE) or dagster_url("/graphql", DEPLOYMENT / ".env")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     extra: list[str] = []
@@ -1090,6 +1096,12 @@ def main(argv: list[str] | None = None) -> int:
             print("error: arguments after -- are only accepted by run-tests", file=sys.stderr, flush=True)
             return USAGE
         args.extra = extra
+    if hasattr(args, "url") and not args.url:
+        try:
+            args.url = default_url()
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr, flush=True)
+            return USAGE
     try:
         try:
             reject_native_environment()

@@ -17,7 +17,7 @@ from uuid import uuid4
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
 from host import (IMAGE_SERVICES, IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile,
-                  project_name, provider_overlay, reject_other_deployments, validate_deployment)
+                  project_name, provider_overlay, reject_other_deployments, url_or_default, validate_deployment)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -208,9 +208,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--platform", choices=("windows", "linux", "wsl"), required=True)
     parser.add_argument("--mode", choices=("config", "live", "feeds"), default="config")
-    parser.add_argument("--url", default="http://127.0.0.1:3000")
+    parser.add_argument("--url", help="Dagster webserver URL (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>)")
     parser.add_argument("--timeout-seconds", type=int, default=14400)
     args = parser.parse_args()
+    args.url = url_or_default(parser, args.url)
     if args.timeout_seconds < 1:
         parser.error("--timeout-seconds must be positive")
     result = check_config(args.platform)
