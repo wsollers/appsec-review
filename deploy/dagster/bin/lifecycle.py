@@ -8,7 +8,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-from host import actual_platform, deployment_profile, provider_overlay, reject_native_environment, reject_other_deployments, validate_deployment
+from host import (actual_platform, compose_environment, deployment_profile, provider_overlay, reject_native_environment,
+                  reject_other_deployments, validate_deployment)
 
 
 deployment = Path(__file__).resolve().parents[1]
@@ -43,7 +44,9 @@ def main() -> int:
     validate_deployment(repository, deployment / ".env", platform)
     if args.action in {"build", "start", "reload"}:
         reject_other_deployments(platform)
-    return subprocess.run(base + commands[args.action], cwd=repository, check=False).returncode
+    # Only actions that create containers fix the code-location's environment.
+    environment = compose_environment() if args.action in {"start", "reload"} else None
+    return subprocess.run(base + commands[args.action], cwd=repository, check=False, env=environment).returncode
 
 
 if __name__ == "__main__":

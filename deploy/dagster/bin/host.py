@@ -3,11 +3,45 @@
 from __future__ import annotations
 import os
 from pathlib import Path
+import shutil
 import subprocess
+import sys
 
 
 PROJECT_PREFIX = "appsec-review-dagster"
 PLATFORMS = {"windows", "wsl", "linux"}
+GITHUB_TOKEN = "GITHUB_TOKEN"
+# Ambient overrides that would make `gh auth token` echo another identity instead of the stored login.
+GH_OVERRIDES = ("GH_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", GITHUB_TOKEN)
+
+
+def compose_environment(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Compose's environment, carrying GITHUB_TOKEN from this shell's `gh` login when it is unset.
+
+    Whichever shell or agent creates the code-location, source-history enrichment gets the same
+    login. An explicitly set GITHUB_TOKEN (even empty, to opt out) is used as is. The token is
+    never printed.
+    """
+    environment = dict(os.environ if environ is None else environ)
+    if GITHUB_TOKEN in environment:
+        return environment
+    gh = shutil.which("gh")
+    token = ""
+    if gh is not None:
+        lookup = {key: value for key, value in environment.items() if key not in GH_OVERRIDES}
+        try:
+            completed = subprocess.run([gh, "auth", "token", "--hostname", "github.com"], env=lookup,
+                                       capture_output=True, text=True, timeout=30, check=False)
+            token = completed.stdout.strip() if completed.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            token = ""
+    if token:
+        environment[GITHUB_TOKEN] = token
+        print("GITHUB_TOKEN: using this shell's gh login for source-history GitHub enrichment", file=sys.stderr)
+    else:
+        print("GITHUB_TOKEN: unset and no gh login; source-history GitHub enrichment will record "
+              "github_credentials_missing", file=sys.stderr)
+    return environment
 
 
 def reject_native_environment() -> None:
