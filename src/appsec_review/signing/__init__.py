@@ -15,9 +15,29 @@ from .core import (
     verify_envelope,
     write_envelope,
 )
+from .images import (
+    IMAGE_ID_KIND,
+    IMAGE_KIND,
+    DisabledImageVerifier,
+    EnvelopeImageVerifier,
+    ImageSignatureVerifier,
+    image_envelope_path,
+    image_statement,
+    inspect_image_id,
+    sign_image,
+)
 
 __all__ = [
     "ALGORITHM",
+    "IMAGE_ID_KIND",
+    "IMAGE_KIND",
+    "DisabledImageVerifier",
+    "EnvelopeImageVerifier",
+    "ImageSignatureVerifier",
+    "image_envelope_path",
+    "image_statement",
+    "inspect_image_id",
+    "sign_image",
     "STATEMENT_SCHEMA",
     "OpenSSL",
     "SignatureVerificationError",
