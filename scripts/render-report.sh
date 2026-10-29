@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# Render the report of a finished review run to PDF or to a single-page HTML file.
+# Render the report of a finished review run to PDF or to a single-page HTML file, or (--kind
+# telemetry) the run's end-of-review telemetry report.
 #
 #   scripts/render-report.sh --run <run-id|run-dir> [--format pdf|html] [options]
+#   scripts/render-report.sh --kind telemetry --run <run-id|run-dir> [--format pdf|tex] [options]
 #
 # html  runs only the Python renderer (stdlib, no Docker).
 # pdf   renders report.tex with the Python renderer, then compiles it in the tool-report-latex image
 #       under the standard runtime boundary (no network, read-only root, all capabilities dropped,
 #       non-root, template and input mounted read-only, one writable scratch directory).
+# --kind telemetry delegates to `python -m appsec_review.reporting telemetry`.
 #
-# Works from any current directory. The run directory is only read. Exit status: 0 success,
-# 1 render failure, 2 usage error or a missing prerequisite (Python, Docker, the image).
+# Works from any current directory. The run directory is only read (--kind telemetry --format pdf
+# writes only <run>/data/telemetry/report/). Exit status: 0 success, 1 render failure, 2 usage error
+# or a missing prerequisite (Python, Docker, the image).
 set -euo pipefail
 
 readonly DEFAULT_IMAGE="appsec-review/tool-report-latex:1.0.0"
@@ -19,21 +23,29 @@ repo="$(cd "$script_dir/.." && pwd)"
 usage() {
   cat <<EOF
 Usage: scripts/render-report.sh --run <run-id|run-dir> [options]
+       scripts/render-report.sh --kind telemetry --run <run-id|run-dir> [--format pdf|tex] [options]
 
-Render the report of a review run to PDF or single-page HTML.
+Render the report of a review run to PDF or single-page HTML, or its end-of-review telemetry report.
 
 Required:
   --run <id|dir>         run id (looked up in --runs-dir) or a run directory
 
 Options:
-  --format pdf|html      output format (default: pdf)
+  --kind review|telemetry
+                         which report (default: review)
+  --format pdf|html      output format (default: pdf); with --kind telemetry: pdf|tex
   --runs-dir <dir>       directory holding run directories (default: <repo>/runs)
   --output-dir <dir>     where <run-id>.pdf / <run-id>.html is written
                          (default: <repo>/runs/reports, which git ignores)
-  --limit <n>            render only the first n packages (a bounded sample)
-  --package <id>         render only packages whose id starts with or contains <id> (repeatable)
-  --max-cells <n>        interchanges drawn per package (default: 6)
-  --image <tag>          report image for pdf (default: $DEFAULT_IMAGE)
+                         telemetry pdf: the report is written to <run>/data/telemetry/report/ and
+                         also copied here when given; telemetry tex: telemetry-report.tex is written
+                         here (default: <repo>/runs/reports/<run-id>-telemetry)
+  --config <toml>        telemetry only: appsec-review.toml to take [reporting.telemetry_report] from
+                         (default: the run's resolved configuration)
+  --limit <n>            render only the first n packages (a bounded sample; review only)
+  --package <id>         render only packages whose id starts with or contains <id> (repeatable; review only)
+  --max-cells <n>        interchanges drawn per package (default: 6; review only)
+  --image <tag>          report image for pdf (default: $DEFAULT_IMAGE; review only)
   --keep-work            keep the staging directory (report.tex, build log) next to the output
   -h, --help             show this help
 
@@ -44,6 +56,8 @@ Environment:
 Examples:
   scripts/render-report.sh --run 2026-10-21-0007 --format html
   scripts/render-report.sh --run 2026-10-21-0007 --format pdf --limit 3 --output-dir /tmp/reports
+  scripts/render-report.sh --kind telemetry --run 2026-10-21-0007
+  scripts/render-report.sh --kind telemetry --run 2026-10-21-0007 --format tex --output-dir out
 
 The pdf format needs the image: containers/build-all.sh build tool-report-latex
 EOF
@@ -51,7 +65,7 @@ EOF
 
 die() { echo "render-report: $*" >&2; exit "${2:-2}"; }
 
-run="" format="pdf" runs_dir="$repo/runs" output_dir="" limit="" max_cells="" image="$DEFAULT_IMAGE" keep_work=0
+run="" kind="review" format="pdf" runs_dir="$repo/runs" output_dir="" limit="" max_cells="" image="" config="" keep_work=0
 packages=()
 
 need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "option $1 needs a value"; }
@@ -59,20 +73,22 @@ need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "option $1 needs a value"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
-    --run|--format|--runs-dir|--output-dir|--limit|--package|--max-cells|--image)
+    --run|--kind|--format|--runs-dir|--output-dir|--config|--limit|--package|--max-cells|--image)
       need_value "$@"
       case "$1" in
         --run) run="$2" ;;
+        --kind) kind="$2" ;;
         --format) format="$2" ;;
         --runs-dir) runs_dir="$2" ;;
         --output-dir) output_dir="$2" ;;
+        --config) config="$2" ;;
         --limit) limit="$2" ;;
         --package) packages+=("$2") ;;
         --max-cells) max_cells="$2" ;;
         --image) image="$2" ;;
       esac
       shift 2 ;;
-    --run=*|--format=*|--runs-dir=*|--output-dir=*|--limit=*|--package=*|--max-cells=*|--image=*)
+    --run=*|--kind=*|--format=*|--runs-dir=*|--output-dir=*|--config=*|--limit=*|--package=*|--max-cells=*|--image=*)
       set -- "${1%%=*}" "${1#*=}" "${@:2}" ;;
     --keep-work) keep_work=1; shift ;;
     *) usage >&2; die "unknown argument: $1" ;;
@@ -80,10 +96,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$run" ]] || { usage >&2; die "--run is required"; }
-case "$format" in pdf|html) ;; *) die "--format must be pdf or html, not '$format'" ;; esac
+case "$kind" in review|telemetry) ;; *) die "--kind must be review or telemetry, not '$kind'" ;; esac
+if [[ "$kind" == telemetry ]]; then
+  case "$format" in pdf|tex) ;; *) die "--format must be pdf or tex for --kind telemetry, not '$format'" ;; esac
+  [[ -z "$limit$max_cells$image" && ${#packages[@]} -eq 0 ]] \
+    || die "--limit, --package, --max-cells and --image apply only to --kind review"
+else
+  [[ -z "$config" ]] || die "--config applies only to --kind telemetry"
+  case "$format" in pdf|html) ;; *) die "--format must be pdf or html, not '$format'" ;; esac
+fi
+[[ -n "$image" ]] || image="$DEFAULT_IMAGE"
 [[ -z "$limit" || "$limit" =~ ^[1-9][0-9]*$ ]] || die "--limit must be a positive integer"
 [[ -z "$max_cells" || "$max_cells" =~ ^[1-9][0-9]*$ ]] || die "--max-cells must be a positive integer"
-[[ -n "$output_dir" ]] || output_dir="$repo/runs/reports"
+[[ -n "$output_dir" || "$kind" == telemetry ]] || output_dir="$repo/runs/reports"
 
 # -- Python -----------------------------------------------------------------------------------------
 python_bin="${APPSEC_PYTHON:-}"
@@ -105,6 +130,16 @@ else
   die "run '$run' not found: neither '$run/data' nor '$runs_dir/$run/data' is a directory"
 fi
 run_id="$(basename "$run_dir")"
+
+# -- Telemetry --------------------------------------------------------------------------------------
+if [[ "$kind" == telemetry ]]; then
+  telemetry_args=(--run "$run_dir" --format "$format")
+  [[ -n "$output_dir" || "$format" == pdf ]] || output_dir="$repo/runs/reports/$run_id-telemetry"
+  [[ -z "$output_dir" ]] || telemetry_args+=(--out "$output_dir")
+  [[ -z "$config" ]] || telemetry_args+=(--config "$config")
+  exec "$python_bin" -m appsec_review.reporting telemetry "${telemetry_args[@]}"
+fi
+
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
 
