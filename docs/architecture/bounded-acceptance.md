@@ -37,8 +37,10 @@ measurement into evidence for newly added cases.
 
 ## Integrated staging and custody
 
-Parent `58387690` contains main `84108306`, staged chunks `938a9117` / `f21aff31` plus
-`9a80453b`, and coordinator corrections. The staged path is implemented, not merely the
+The documentation branch incorporates parent `f4a04b29` and frozen main `f6f0fbbd`, retaining
+staged chunks `938a9117` / `f21aff31` plus `9a80453b` and coordinator corrections `58387690`.
+The measured public results remain bound to `58387690`, not this later source merge.
+The staged path is implemented, not merely the
 earlier planner proposal, but a full authentic staged chain has not passed.
 
 Variant-specific producers run prepare -> review -> PoC for native-positive, prepare ->
@@ -78,8 +80,11 @@ when cleanup succeeds; they cannot become skipped passes or executed coverage.
 guard. Legitimate persistent named/content-addressed aliases also violate single-link
 custody, so enabling `os.link` alone cannot fix it. Bounded fully-contained producer
 **OUTPUT-only** post-cleanup detachment before checkpoints, preserving bytes/paths/hashes/
-modes and every ordinary-file seal/copy check, is a **new proposal awaiting user approval**.
-It is not implemented or permission to relax the current guard/custody policy.
+modes and every ordinary-file seal/copy check, is now **user-approved and assigned/in progress,
+but not implemented**. The coordinator added an explicit Windows verification completion todo
+and assigned implementation to harness owner `ad52f90d`. Real Windows publisher and public
+staged-review proof remain required, not demonstrated. Ordinary checkpoint/seal/private-copy
+policy stays strict; approval is not permission to relax it or waive budgets.
 
 ## Authentic joins and explicit substitutions
 
@@ -213,8 +218,8 @@ The named `process` profile has a revision-bound 13/13 public CLI pass at `16a52
 An exact-node dependency pass at `1ff86556` likewise does not establish a whole signals/quick
 pass. Planner `81ada94f`'s read-only
 `staged-authentic-producer/private-verified-materialization` proposal is historical: its
-staged implementation now exists as described above. The separate output-detachment proposal
-remains unapproved. Neither grants a budget or validation waiver.
+staged implementation now exists as described above. Output detachment is now separately
+approved but still unimplemented and Windows-unverified. Neither grants a budget or validation waiver.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.

@@ -10,10 +10,12 @@ all inventory members or optional live profiles have executed.
 
 ## Current reconciliation checkpoint
 
-The current documentation branch contains exact source parent
-`5838769042418b12378d0850aa0ded20a8b0c057`, including main `84108306` (the native-inventory
-patch landed separately), staged chunks `938a9117` / `f21aff31` plus `9a80453b`, and coordinator
-corrections `58387690`. Staged execution is now implemented. **Overall acceptance remains
+The current documentation branch incorporates exact parent
+`f4a04b298c0f472f8350f17004b2c42ace1c3620` and frozen main
+`f6f0fbbd674080552d607b773bc30e140c443ceb`. It preserves staged chunks `938a9117` /
+`f21aff31` plus `9a80453b` and coordinator corrections `58387690`; the earlier native-inventory
+patch landed separately. Public measurements below remain bound to `58387690`, not the later
+source merge. Staged execution is now implemented. **Overall acceptance remains
 not green:** no complete staged chain, final quick, three-warm or exhaustive proof exists.
 Historical process/consumers passes below are not current-source proofs.
 
@@ -65,7 +67,7 @@ CodeQL/native validation, genuine assessment/source-bound review, specialist/ren
 saturation/cross-lane consumer cases and unselected record/replay/sensor variant matrices
 remain named gaps.
 
-### Current custody blocker and separate unapproved proposal
+### Current custody blocker and approved, unimplemented detachment
 
 Legitimate persistent named/content-addressed aliases also conflict with the current strict
 ordinary-file `st_nlink == 1` contract. Merely allowing `os.link` would not produce a valid
@@ -73,9 +75,16 @@ checkpoint or seal. Current bounded path/link/type/byte/mode checks must not be 
 
 The new proposed correction is bounded, fully-contained producer **OUTPUT-only** detachment
 after cleanup and before checkpoints, preserving bytes, paths, hashes and modes while
-retaining every ordinary-file seal/copy check. This is **not implemented and awaits user
-approval**, separate from the now-integrated staging implementation and earlier planner
-proposal. No permission is inferred from this documentation.
+retaining every ordinary-file seal/copy check. The user has now approved this bounded
+correction and requested a todo to ensure Windows support. The coordinator added that explicit
+Windows verification completion todo and assigned harness owner `ad52f90d`; work is
+approved/assigned in progress, **not implemented yet**.
+
+Real Windows publisher behavior and public staged-review proof are required and not
+demonstrated. The ordinary checkpoint/seal/private-copy policy remains strict. This approval
+is separate from the now-integrated staging implementation and earlier planner proposal;
+it supplies no budget waiver, shared main landing, restart, push or production service/build
+authorization. The final gate remains not green.
 
 Windows `WinError 5` remains uncertain: a bounded ten-transaction probe completed in 4.055
 seconds without explaining it. No production runs/services were inspected or mutated.
@@ -395,7 +404,8 @@ At that historical checkpoint, planner `81ada94f` had produced a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
 It was not yet implemented and could not be cited as accepted prerequisite reuse, timing
 proof or permission to share validation caches. The staged machinery has since been integrated,
-as recorded at the top; output detachment remains a separate unapproved proposal.
+as recorded at the top; output detachment is separately approved but remains unimplemented
+and Windows-unverified.
 The historical named consumers pass does not clear the current staged custody blocker.
 
 ## Shared decisions

@@ -142,8 +142,11 @@ special files fail. Real `IndexBuilder` atomic `os.link` publication is currentl
 and persistent legitimate named/content-addressed aliases would also fail single-link
 custody. **Do not just enable hardlinks.** Bounded fully-contained producer OUTPUT-only
 post-cleanup detachment before checkpoints, preserving bytes/paths/hashes/modes and all
-ordinary-file seal/copy checks, is a new proposal awaiting user approval, not implemented
-policy or an operator workaround.
+ordinary-file seal/copy checks, is now user-approved and assigned/in progress, **not yet
+implemented**. The coordinator recorded a Windows verification completion todo and assigned
+harness owner `ad52f90d`. Real Windows publisher and named public staged-review proof remain
+required, not demonstrated. Keep ordinary checkpoint/seal/private-copy checks strict; approval
+does not authorize a policy relaxation, operator workaround or production service/build access.
 
 ## Artifacts and telemetry
 
@@ -286,6 +289,11 @@ evidence that fresh public fixtures fit.
 
 ## Current staged status: not green
 
+The documentation branch now incorporates parent
+`f4a04b298c0f472f8350f17004b2c42ace1c3620` and frozen main
+`f6f0fbbd674080552d607b773bc30e140c443ceb`. This is a local source integration, not a shared
+main landing, deployment, restart or newly measured acceptance pass.
+
 At exact parent `5838769042418b12378d0850aa0ded20a8b0c057` (containing main `84108306`):
 
 - Actual public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **failed** 13 selected
@@ -310,7 +318,8 @@ At exact parent `5838769042418b12378d0850aa0ded20a8b0c057` (containing main `841
 
 No production runs/services were inspected or mutated. Path/process/metrics isolation is not
 zero CPU/I/O contention. Default workers remain one, maximum two; all existing caps are
-unchanged. The separate output-detachment proposal above still needs user approval.
+unchanged. Output detachment is approved and assigned, but remains unimplemented; its explicit
+Windows completion todo and real publisher/public review proof are still open.
 
 ## Historical non-staged profile results
 
@@ -355,4 +364,5 @@ At that historical checkpoint, planner `81ada94f` had produced only a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
 The producer/reader machinery is now integrated as described above; its current custody
 failure is not fixed by that historical proposal or by treating it as a validation-cache
-shortcut or cap waiver. Output detachment is a separate, still-unapproved proposal.
+shortcut or cap waiver. Output detachment is separately approved, still unimplemented and
+Windows-unverified; the final gate remains not green.
