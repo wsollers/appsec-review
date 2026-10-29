@@ -301,3 +301,31 @@ Real worker/tool availability, native cgroup enforcement, root daemon/helper acc
 UID access, approved egress, stopped-container cleanup and storage/scheduler ownership remain
 commissioning prerequisites. Observed host capacity is not a dedicated reservation. Fake tests
 and prepared configuration do not establish those operational properties.
+
+## Integration and acceptance tests
+
+`tests/integration/test_native_broker_mounts.py` (run-root subdirectory bind mount; broker
+rejection of a `,` subpath and of a symlinked subpath) and `tests/acceptance/test_native_tiny_build.py`
+(the frozen `tiny-build` command compiles and runs `hello.c` under strace process-tree capture)
+drive a real commissioned broker through the public `NativeClient`. They never commission, start
+or reconfigure anything, and skip with the unmet precondition named unless:
+
+- `APPSEC_NATIVE_INTEGRATION=1` (integration) or `APPSEC_NATIVE_ACCEPTANCE=1` (acceptance) is set;
+- the published contract (`APPSEC_NATIVE_CLIENT_CONTRACT`, default
+  `/run/appsec-review-f370/client-v8/contracts/grant-0.json`) loads and its `native.sock` exists;
+- the process runs as the contract's uid/gid (1000) inside its host cgroup, i.e. the
+  `appsecreview-services-appsecf370.slice`;
+- the worktree's client modules equal the installed release copies (`APPSEC_NATIVE_RELEASE`,
+  default `/opt/appsec-review/releases/460682bf-native18`);
+- for acceptance, `build-driver.sh`, `capture/` and `wrappers/` are staged in the granted run root.
+
+Root launches them as uid 1000 in the services slice (only while no Dagster run is nonterminal):
+
+```
+systemd-run --wait --pipe --collect --slice=appsecreview-services-appsecf370.slice \
+  --property=User=wsollers --property=Group=wsollers --property=MemorySwapMax=0 \
+  --property=WorkingDirectory=/home/wsollers/projects/appsec-review-native-broker \
+  --setenv=APPSEC_NATIVE_INTEGRATION=1 --setenv=APPSEC_NATIVE_ACCEPTANCE=1 -- \
+  /home/wsollers/projects/appsec-review-native-broker/.venv/bin/python -m pytest -q -p no:cacheprovider -rs --basetemp=test/tmp/native-live \
+  tests/integration/test_native_broker_mounts.py tests/acceptance/test_native_tiny_build.py
+```
