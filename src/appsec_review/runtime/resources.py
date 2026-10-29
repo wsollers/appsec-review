@@ -386,6 +386,26 @@ class ResourceAdmission:
             atomic_json(path, state)
             self._sync_persistent_directory()
 
+    def _release_sole_persistent(self, lease_id: str, assess) -> dict | None:
+        """Drop ``lease_id`` only while it is the ledger's sole lease and ``assess`` returns a receipt."""
+        with bounded_file_lock(self.root / "admission.lock", 30):
+            path = self.root / "leases.json"
+            if not path.exists():
+                return None
+            state = json.loads(path.read_text())
+            leases = state.get("leases")
+            if (state.get("schema") != "appsec-review/resource-leases/1" or not isinstance(leases, dict)
+                    or set(leases) != {lease_id}):
+                return None
+            receipt = assess(json.loads(json.dumps(leases[lease_id])))
+            if receipt is None:
+                return None
+            del leases[lease_id]
+            state["dropped_persistent"] = [*state.get("dropped_persistent", []), receipt][-32:]
+            atomic_json(path, state)
+            self._sync_persistent_directory()
+            return receipt
+
     def _container(self, lease_id: str, name: str, *, stopped: bool) -> None:
         with bounded_file_lock(self.root / "admission.lock", 30):
             path = self.root / "leases.json"

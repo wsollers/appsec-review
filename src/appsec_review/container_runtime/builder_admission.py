@@ -476,7 +476,8 @@ class BuilderAdmission:
         self.engine_admission = None
         if config.engine_domain is not None:
             from appsec_review.container_runtime.engine_admission import EngineDomainAdmission
-            self.engine_admission = EngineDomainAdmission(config, self.binding, self.request)
+            self.engine_admission = EngineDomainAdmission(config, self.binding, self.request,
+                                                          boot_id=boot_id)
 
     def _write_anchor(self, anchor: dict):
         atomic_json(self.path, anchor)
@@ -563,6 +564,8 @@ class BuilderAdmission:
             if self.engine_admission is not None:
                 anchor["action_ledger_identity"] = ledger_identity
                 anchor["ledger_identity"] = self.engine_admission.reserve()
+                if self.engine_admission.baseline_receipt is not None:
+                    anchor["engine_baseline_release"] = self.engine_admission.baseline_receipt
             self._write_anchor(anchor)
             return self.config.admission.lease_id
 
@@ -801,7 +804,9 @@ class BuilderAdmission:
                 _as_client(self.config, release)
             else:
                 # The shared baseline lease binds live cgroup inodes, recreated by a reboot.
-                self.engine_admission.release(anchor["ledger_identity"],
-                                              verify_baseline=previous_boot is None)
+                baseline = self.engine_admission.release(anchor["ledger_identity"],
+                                                         previous_boot=previous_boot is not None)
+                if baseline is not None:
+                    anchor["release"]["engine_baseline"] = baseline
             anchor["state"] = "RELEASED"
             self._write_anchor(anchor)

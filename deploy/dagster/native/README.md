@@ -285,9 +285,17 @@ release a lifetime whose every recorded member start token carries a boot ID tha
 `/proc/sys/kernel/random/boot_id`. A missing or unparseable boot ID, a member from the current
 boot, or any configuration difference keeps the strict check. The journal, client-context,
 stopped-scope (a not-yet-recreated cgroup counts as empty) and engine-retirement proofs still
-apply, and the shared engine baseline lease is left unverified and retained. The `RELEASED`
-anchor records `release.basis = "previous_boot"` with the recorded and current boot IDs and the
-recorded groups. Serving and reconciliation operations remain strict.
+apply, and the shared engine baseline lease is left unverified. The `RELEASED` anchor records
+`release.basis = "previous_boot"` with the recorded and current boot IDs and the recorded groups.
+Serving and reconciliation operations remain strict.
+The baseline lease (`existing-engine-services`) binds the pre-restart engine cgroup inodes too.
+It is dropped only while it is the shared engine ledger's sole lease and an otherwise exact
+baseline whose creator boot ID (from the lease's recorded `process_identity`) differs from the
+current boot: by that previous-boot release (`release.engine_baseline`), or by the next lifetime's
+`reserve-lifetime` (`engine_baseline_release` in its anchor), which then records a fresh baseline.
+A legacy baseline without a recorded creator is dropped only by a previous-boot release. A
+same-boot baseline, an unparseable creator, or any remaining lifetime lease keeps the strict
+check; the ledger keeps the last 32 drop receipts under `dropped_persistent`.
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.
 A separate shared-journal/lease sequence covers builder -> derived-image tool -> removal -> next

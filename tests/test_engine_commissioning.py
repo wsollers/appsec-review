@@ -2,6 +2,7 @@
 from dataclasses import replace
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -232,11 +233,25 @@ def test_real_private_containerd_proof_requires_socket_peer_store_and_generation
 
 CURRENT_BOOT = "11111111-1111-4111-8111-111111111111"
 OLD_BOOT = "22222222-2222-4222-8222-222222222222"
+REAL_BOOT = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
 
 
 class RebootedDomainProof(DomainProof):
     def groups(self):
         return {"engine": {"path": "/sys/fs/cgroup/engine-private", "device": 1, "inode": 999}}
+
+
+def successor(owner, *, boot=CURRENT_BOOT, name="operator-next"):
+    """A new lifetime sharing the engine ledger, reserved after the host restart."""
+    state = Path(owner.config.state_root).parent / name
+    state.mkdir(mode=0o700)
+    lease_id = uuid4().hex
+    config = replace(
+        owner.config, state_root=str(state), admission=replace(owner.config.admission, lease_id=lease_id),
+        engine_domain=replace(owner.config.engine_domain, control_lifetime_id=lease_id))
+    result = BuilderAdmission(config, proof=CommissioningProof(config), boot_id=lambda: boot)
+    result.engine_admission.proof = RebootedDomainProof()
+    return result
 
 
 def rebooted(owner, members):
@@ -264,12 +279,111 @@ def test_previous_boot_lifetime_releases_despite_recreated_cgroups(provisional):
     assert anchor["release"]["recorded_boot_ids"] == [OLD_BOOT]
     assert anchor["release"]["current_boot_id"] == CURRENT_BOOT
     assert anchor["release"]["recorded_groups"] == recorded_groups
-    assert list(json.loads(bank(owner).read_text())["leases"]) == ["existing-engine-services"]
+    baseline = anchor["release"]["engine_baseline"]
+    assert baseline["basis"] == "previous_boot" and baseline["lease_id"] == "existing-engine-services"
+    assert (baseline["recorded_boot_id"], baseline["current_boot_id"]) == (REAL_BOOT, CURRENT_BOOT)
+    assert baseline["recorded_groups"] == DomainProof().groups()
+    ledger = json.loads(bank(owner).read_text())
+    assert ledger["leases"] == {} and ledger["dropped_persistent"] == [baseline]
     before = owner.path.read_bytes(), bank(owner).read_bytes()
     owner.release()
     assert (owner.path.read_bytes(), bank(owner).read_bytes()) == before
     with pytest.raises(EnforcementUnavailable):
         owner.reserve()
+    following = successor(owner)
+    following.reserve()
+    leases = json.loads(bank(owner).read_text())["leases"]
+    assert set(leases) == {"existing-engine-services", following.config.admission.lease_id}
+    assert leases["existing-engine-services"]["persistent"]["groups"] == RebootedDomainProof().groups()
+    assert "engine_baseline_release" not in json.loads(following.path.read_text())
+
+
+def test_reserve_drops_sole_baseline_retained_from_a_previous_boot(provisional):
+    provisional.release()
+    assert list(json.loads(bank(provisional).read_text())["leases"]) == ["existing-engine-services"]
+    following = successor(provisional)
+    following.reserve()
+    receipt = json.loads(following.path.read_text())["engine_baseline_release"]
+    assert (receipt["recorded_boot_id"], receipt["current_boot_id"]) == (REAL_BOOT, CURRENT_BOOT)
+    leases = json.loads(bank(following).read_text())["leases"]
+    assert leases["existing-engine-services"]["persistent"]["groups"] == RebootedDomainProof().groups()
+
+
+def test_same_boot_baseline_with_changed_cgroups_is_still_refused(provisional):
+    provisional.release()
+    following = successor(provisional, boot=REAL_BOOT)
+    before = bank(provisional).read_bytes()
+    with pytest.raises(ValueError, match="rebound or changed"):
+        following.reserve()
+    assert bank(provisional).read_bytes() == before
+    assert not following.path.exists()
+
+
+def test_previous_boot_baseline_is_kept_while_another_lease_remains(provisional):
+    path = bank(provisional)
+    state = json.loads(path.read_text())
+    other = dict(state["leases"]["existing-engine-services"], persistent={"kind": "other-lifetime"},
+                 reservation={"cpu": 0, "memory_mb": 0, "io_slots": 0})
+    state["leases"]["other-lifetime"] = other
+    path.write_text(json.dumps(state))
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    owner.release()
+    anchor = json.loads(owner.path.read_text())
+    assert anchor["state"] == "RELEASED" and "engine_baseline" not in anchor["release"]
+    assert set(json.loads(path.read_text())["leases"]) == {"existing-engine-services", "other-lifetime"}
+    following = successor(owner)
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="rebound or changed"):
+        following.reserve()
+    assert path.read_bytes() == before
+    state = json.loads(path.read_text())
+    del state["leases"]["other-lifetime"]
+    path.write_text(json.dumps(state))
+    following.reserve()
+    assert json.loads(following.path.read_text())["engine_baseline_release"]["recorded_boot_id"] == REAL_BOOT
+
+
+def legacy_baseline(owner, creator):
+    path = bank(owner)
+    state = json.loads(path.read_text())
+    if creator == "missing":
+        del state["leases"]["existing-engine-services"]["process_identity"]
+    else:
+        state["leases"]["existing-engine-services"]["process_identity"] = creator
+    path.write_text(json.dumps(state))
+    return path
+
+
+@pytest.mark.parametrize("creator", [None, "missing"])
+def test_legacy_baseline_without_creator_drops_on_previous_boot_release(provisional, creator):
+    path = legacy_baseline(provisional, creator)
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    owner.release()
+    baseline = json.loads(owner.path.read_text())["release"]["engine_baseline"]
+    assert (baseline["recorded_boot_id"], baseline["current_boot_id"]) == (None, CURRENT_BOOT)
+    assert json.loads(path.read_text())["leases"] == {}
+    successor(owner).reserve()
+
+
+@pytest.mark.parametrize("creator", [None, "missing"])
+def test_legacy_baseline_without_creator_is_not_dropped_by_reserve(provisional, creator):
+    provisional.release()
+    path = legacy_baseline(provisional, creator)
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="rebound or changed"):
+        successor(provisional).reserve()
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("creator", ["boot:123", f"{OLD_BOOT}"])
+def test_unparseable_baseline_creator_is_never_dropped(provisional, creator):
+    path = legacy_baseline(provisional, creator)
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    owner.release()
+    assert "engine_baseline" not in json.loads(owner.path.read_text())["release"]
+    assert list(json.loads(path.read_text())["leases"]) == ["existing-engine-services"]
+    with pytest.raises(ValueError, match="rebound or changed"):
+        successor(owner).reserve()
 
 
 @pytest.mark.parametrize("members", [
