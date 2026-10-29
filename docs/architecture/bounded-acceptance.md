@@ -41,9 +41,10 @@ The documentation branch incorporates exact parent `a4ce5459`, including detachm
 `1d7d621a`, immutable-check optimization `881b8709` and helper-budget consistency `85d39172`.
 Optimized public Windows review passed all 13 core cases, including native candidate,
 fresh corruption/empty readers and the CI review/gate/report/oracle private consumer chain.
-Two two-worker quick warm runs at that frozen source passed 38/38; the third result,
-exhaustive selection and full portable process profile after its helper correction remain
-pending. Overall acceptance is not yet finally green.
+All three two-worker quick warm runs at that frozen source passed 38/38, demonstrating the
+runtime target for that concurrency only. Corrected named portable process passed 13/13 with
+one worker in 351.471 seconds at the same frozen source. The first exhaustive profile failed on individual/
+suite deadlines, so overall acceptance is not finally green.
 
 Variant-specific producers run prepare -> review -> PoC for native-positive, prepare ->
 review for native-empty, and prepare -> review -> gate -> report for CI variants. Each
@@ -238,8 +239,11 @@ pass. Planner `81ada94f`'s read-only
 `staged-authentic-producer/private-verified-materialization` proposal is historical: its
 staged implementation now exists as described above. Output detachment is now separately
 implemented and has a complete timed Windows core-review pass. Its scoped verification todo
-is done, but third-warm/exhaustive/post-fix portable-process gates remain. Neither grants a
-budget or validation waiver.
+and three-warm two-worker quick calibration are done; corrected named portable process also
+passes. The exhaustive gate remains: its failure includes an own-deadline integrity timeout
+and a gate stopped by remaining suite budget; its blocked report/consumer are unexecuted coverage, not
+semantic gate failures. A narrow per-vector/subprofile proposal awaits approval and is not
+implemented. No prior approval grants a budget or validation waiver for that new proposal.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.

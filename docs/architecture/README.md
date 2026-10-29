@@ -4,7 +4,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 
 - [`bounded-acceptance.md`](bounded-acceptance.md) - dependency-ready authentic producer stages,
   strict post-cleanup publication detachment, invocation-specific custody, private readers,
-  telemetry origin and revision-bound Windows/warm-run evidence with remaining gates;
+  telemetry origin, completed Windows/two-worker warm-run evidence and remaining exhaustive gates;
   [operator guide](../operations/bounded-acceptance.md).
 - [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.

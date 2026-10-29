@@ -7,9 +7,10 @@ For revision-specific measurements and remaining work, see the
 These profiles are separate from the existing stepwise corpus and deployed-review acceptance tools.
 
 **Current status: not finally green.** Windows core review passed 13/13 and completes its
-scoped Windows verification todo. Two two-worker quick warm runs passed 38/38; warm 3,
-exhaustive selection and full portable process verification after its helper-budget fix
-remain pending. See
+scoped Windows verification todo. All three two-worker quick warm runs passed 38/38 under ten
+minutes, and corrected named portable process passed 13/13. The first exhaustive profile
+failed on deadlines; a new split proposal is not approved/implemented, so full handoff remains
+blocked. See
 [current measured status](#current-staged-status-not-green), not historical profile passes,
 before assessing coverage or budgets.
 
@@ -67,7 +68,7 @@ Remove `-DryRun` / `--dry-run` to execute the inspected selection. Dry run print
 | `process-windows` | Actual PowerShell dispatch with an invocation-owned compiled transport | 60 s |
 | `controls` | Explicit OWASP qualification with document/catalog context and accepted Workbench retrieval; loopback HTTPS, including negative matrix | 240 s |
 | `review` | 13 core staged cases: native prepare/review/PoC and empty/corrupt consumers; CI prepare/review/gate/report and representative current-report reader | 600 s |
-| `review-exhaustive` | 24 staged cases retaining full current-report integrity, same-length tampering, benign/blocked and core vectors; uncalibrated | 600 s |
+| `review-exhaustive` | 24 staged cases retaining full current-report integrity, same-length tampering, benign/blocked and core vectors; first public run failed on individual/suite deadlines | 600 s |
 | `consumers` | Real triage/admission, next-round referral repair/deduplication/convergence and accepted report HTML/LaTeX rendering | 360 s |
 
 This table summarizes the inventory, not a promise that every profile has passed. `quick` is
@@ -101,9 +102,10 @@ provider, discover credentials or authorize deployment/native access.
   explicit 60/120-second budgets: tagged workers use 120, other helper cases retain 60.
   Its five-second internal reserve/receipt now reflect the selected cap; the outer existing
   exception and 480-second process aggregate are unchanged, not globally increased.
-- `quick` targets less than ten minutes, with a hard twelve-minute suite ceiling. Two measured
-  two-worker warm runs meet the target; warm 3 and final calibration remain pending, and this
-  is not default-serial proof.
+- `quick` targets less than ten minutes, with a hard twelve-minute suite ceiling. All three
+  frozen-source two-worker warm runs meet the target: 559.626 / 551.899 / 567.917 seconds.
+  That runtime goal is demonstrated for two workers, not the serial default or exhaustive
+  coverage.
 - `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` can only lower declared
   ceilings. Three seconds are reserved **inside** a supervised process deadline for cleanup.
   Interpreter/plugin startup, fixtures, custody prechecks/copy/checkpoint/seal, case execution
@@ -294,8 +296,9 @@ validated/completed job events cannot substitute for accepted final output.
 A separate direct matrix check without the audit plugin also timed out after the report
 fixture completed and oracle evaluation began. This is not merely guard overhead.
 The current staged core review now passes with separately budgeted authentic producers.
-That does not establish the full `review-exhaustive` matrix or final quick calibration;
-splitting assertions alone is not evidence that every fresh public fixture fits.
+The separate three-warm quick results below establish that bounded two-worker runtime goal,
+not the full `review-exhaustive` matrix. Splitting assertions alone is not evidence that every
+fresh public fixture fits.
 
 ## Current staged status: not green
 
@@ -314,15 +317,31 @@ custody optimization `881b8709` and helper-budget correction `85d39172`.
   warm 1 **passed 38/38 in 559.626 seconds**, root
   `test/tmp/acceptance/acceptance-59628deb115e419e8edbca858eb536a8/quick/`;
   warm 2 **passed 38/38 in 551.899 seconds**, root
-  `test/tmp/acceptance/acceptance-8206b2c4d27b4e1990a7dba1cb10ed17/quick/`.
-  Warm 3 was still running at this checkpoint; no third result or final handoff is claimed.
+  `test/tmp/acceptance/acceptance-8206b2c4d27b4e1990a7dba1cb10ed17/quick/`;
+  warm 3 **passed 38/38 in 567.917 seconds**, root
+  `test/tmp/acceptance/acceptance-adc9cf098cca48b28ae2780803973906/quick/`.
+  All three have identical full source-identity closure, distinct invocation IDs, every case
+  cap satisfied, owned cleanup zero and no production services touched. This completes
+  three-warm quick runtime calibration for two workers, not default-serial timing.
+- First public `review-exhaustive -Workers 2` at the same `a4ce5459` **failed** 24 selected
+  cases in **599.621 seconds**: 20 passed, `current-report-integrity` hit its own deadline
+  (118.444-second receipt, below 120 total), `ci-blocked-gate` had only 9.059 seconds before
+  the 600-second suite end, and `ci-blocked-report` / `review-blocked` were correctly blocked.
+  All native, CI-positive oracle and CI-benign full paths passed; CI-blocked prepare/review
+  passed. The budget-stopped gate is uncompleted coverage, not a semantic gate failure or a
+  passing gate claim. Root:
+  `test/tmp/acceptance/acceptance-decde16e3a6141daaddf5522aa918449/review-exhaustive/`.
+  A narrow per-vector case/subprofile plan is being prepared for user approval; no new
+  exhaustive change is approved or implemented, and no deadline waiver is implied.
 - At `d6042ab9`, full portable `process` failed twice with 12/13 passing: two workers in
   191.015 seconds and one worker in 353.493 seconds. Tagged workers hit the helper's inner 55-second execution/
   60-second receipt cap on fresh resume despite the existing outer 120-second exception.
   `85d39172` aligns only that helper call to 120; six new units passed in 4.44 seconds.
-  Both quick warm runs pass the actual config/worker/resume obligation, but there is **no
-  new full named portable process pass**. Earlier Windows PIPE failure/fix and staged PoC
-  deadline failure remain in the implementation record rather than disappearing.
+  At unchanged `a4ce5459`, actual public `scripts\run-tests.ps1 -Acceptance process -Workers 1`
+  now **passed 13/13 in 351.471 seconds**, under 480 with all individual caps met. Root:
+  `test/tmp/acceptance/acceptance-be7d2d44ad7d48669710a5f76490035d/process/`.
+  This closes post-correction named portable proof, not Linux/actual-WSL coverage. Prior
+  serial/parallel failures, Windows PIPE failure/fix and staged PoC deadline failure stay recorded.
 - Other named public passes remain revision-scoped: graphs 22/22 in 57.756 seconds and
   controls 8/8 in 70.770 seconds at `f4a04b29`; consumers 3/3 in 111.330 seconds at `992058ae`;
   signals 3/3 in 145.353 seconds at `58387690`. These used two workers, met case caps and
@@ -332,7 +351,8 @@ custody optimization `881b8709` and helper-budget correction `85d39172`.
   limits and missing/extra/same-size checking; mutable outputs are not rehashed for each
   immutable check. Whole producer inspection/checkpoint/seal/full source checks remain.
   Combined validation: 104 passed, four host-facility skips, 235.17 seconds, not full coverage.
-- Third warm, exhaustive selection and full post-fix portable process verification remain open.
+- Exhaustive adequacy still blocks full handoff; scoped Windows, three-warm quick and
+  corrected named portable completion facts remain true despite that outstanding gate.
   Incoming Linux commissioning units cannot collect on native Windows (`fcntl` absent);
   this is a separate host gap with no workaround. Parent docs/inventory validation had
   6 passes and one failure in 7.18 seconds: two pre-existing missing target README/project-
@@ -391,5 +411,5 @@ At that historical checkpoint, planner `81ada94f` had produced only a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
 The producer/reader machinery and fresh immutable-union optimization are now integrated;
 the timed Windows core-review gate passes. The historical proposal supplies neither a
-validation-cache shortcut nor a cap waiver. Third-warm/exhaustive/post-fix portable-process
-gates remain, so overall final acceptance is still withheld.
+validation-cache shortcut nor a cap waiver. The exhaustive gate remains unresolved, so
+overall final acceptance is still withheld.

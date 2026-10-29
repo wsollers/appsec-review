@@ -857,11 +857,15 @@ zero shared CPU/I/O contention. `quick` targets under ten minutes with a twelve-
 current acceptance is **not green**. Review now uses dependency-ready producer stages and
 invocation-specific seals before private readers. OUTPUT-only post-cleanup detachment is
 implemented; optimized public Windows review passed all 13 cases and completes the scoped
-Windows verification todo. At frozen source `a4ce5459`, two two-worker quick warm runs passed
-38/38 in 559.626 and 551.899 seconds; the third result is pending.
+Windows verification todo. At frozen source `a4ce5459`, all three two-worker quick warm runs
+passed 38/38 in 559.626, 551.899 and 567.917 seconds, genuinely demonstrating the runtime goal
+of under ten minutes for two workers, not the serial default.
 Signals passed with two opted-in workers, not the serial default. Historical process/consumers
-passes are not current-source proof; full portable process verification after its helper-budget
-fix and exhaustive selection remain pending. No final three-warm calibration is complete.
+passes remain revision-scoped; the corrected named portable process profile passed 13/13
+in 351.471 seconds with one worker at the same frozen source. The first 24-case exhaustive run
+failed on individual/suite deadlines;
+a per-vector/subprofile proposal is being prepared, not approved or implemented. Three-warm
+quick calibration and scoped Windows completion are done; overall handoff remains withheld.
 Optional real-tool, deployed,
 provider, guidance, warm-CodeQL and native profiles currently fail as unimplemented rather
 than silently passing.
