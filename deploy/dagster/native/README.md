@@ -28,6 +28,20 @@ permissions. The bounded privileged operation broker is wired into the explicit 
 validated with fake dependencies only; there is no generic Docker byte relay or socket-custody bypass. The native
 guards reject unowned launches and unsupported commands; no native failure falls back to Compose.
 
+Required build capture uses `strace` and needs the operator command's explicit
+`allow_process_tree_trace = true`. It defaults to false and cannot be requested by a
+client or added to the global syscall allowlist. Only that immutable command's execution
+gets `ptrace`; other commands retain default denial. Before releasing the static launch
+gate, kernel proof requires a separate PID namespace with the gate as its namespace init,
+the exact non-root UID/GID, zero capabilities, no-new-privileges and enforced seccomp.
+Host PID/network/mount namespace sharing, namespace creation/entry and cross-process VM
+syscalls remain blocked. Tracing is confined to processes visible within that execution's
+private PID namespace; it does not grant host tracing or `CAP_SYS_PTRACE`. The operator
+must provision the pinned capture image/helper and its normal runtime syscall allowlist,
+and commission actual capture plus host/foreign-process denial on the real backend.
+Changing this policy changes the sealed service contract; it cannot reconfigure a live
+lifetime in place. Offline policy tests do not establish that actual capture succeeded.
+
 The privileged broker must **not** use the non-root application's editable checkout or virtual
 environment. `root_entrypoint.py` is a prepared installation asset, not a command to run from
 this checkout as root. An operator must install it with the complete non-editable application

@@ -177,6 +177,28 @@ def encoded(value):
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
+def execution_seccomp(native, command, network):
+    syscalls = [{"names": [name for name in native.syscall_allowlist if name != "clone"],
+                 "action": "SCMP_ACT_ALLOW"},
+                {"names": ["clone3"], "action": "SCMP_ACT_ERRNO", "errnoRet": 38}]
+    if "clone" in native.syscall_allowlist:
+        syscalls.append({"names": ["clone"], "action": "SCMP_ACT_ALLOW",
+                         "args": [{"index": 0, "value": 0x7E020000, "valueTwo": 0,
+                                   "op": "SCMP_CMP_MASKED_EQ"}]})
+    if command["allow_process_tree_trace"]:
+        # The static gate stays closed until kernel proof establishes private PID custody.
+        syscalls.append({"names": ["ptrace"], "action": "SCMP_ACT_ALLOW"})
+    if network == "isolated":
+        for family in (2, 10):
+            syscalls.append({"names": ["socket"], "action": "SCMP_ACT_ALLOW",
+                             "args": [{"index": 0, "value": family, "op": "SCMP_CMP_EQ"}]})
+    return {
+        "defaultAction": "SCMP_ACT_ERRNO", "defaultErrnoRet": 1,
+        "architectures": [{"x86_64": "SCMP_ARCH_X86_64", "aarch64": "SCMP_ARCH_AARCH64"}[
+            native.architecture]], "syscalls": syscalls,
+    }
+
+
 def uuid(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value) is not None
 
@@ -265,6 +287,12 @@ class NativeProof(KernelProof):
                 raise EnforcementUnavailable("native process shares a host namespace")
         values = dict(line.split(":", 1) for line in Path(f"/proc/{pid}/status").read_text().splitlines()
                       if ":" in line)
+        tracing = record["command_policy"]["allow_process_tree_trace"]
+        namespace_pids = values.get("NSpid", "").split()
+        if tracing and (len(namespace_pids) < 2 or namespace_pids[-1] != "1"
+                        or any(not value.isdecimal() for value in namespace_pids)
+                        or namespace_pids[0] != str(pid)):
+            raise EnforcementUnavailable("process-tree tracing requires a proved private PID namespace init")
         uid, gid = map(int, record["image_policy"]["user"].split(":"))
         if (list(map(int, values.get("Uid", "").split())) != [uid] * 4
                 or list(map(int, values.get("Gid", "").split())) != [gid] * 4
@@ -281,7 +309,8 @@ class NativeProof(KernelProof):
                          if line.startswith("Max file size")), "")
             if line.split()[3:5] != [str(requested["fsize_bytes"])] * 2:
                 raise EnforcementUnavailable("native kernel file-size bound is unproved")
-        return {**limits, "pids_max": requested["pids"], "pid": pid, "start_token": process_token(pid)}
+        return {**limits, "pids_max": requested["pids"], "pid": pid, "start_token": process_token(pid),
+                "process_tree_trace": tracing, "pid_namespace": os.readlink(f"/proc/{pid}/ns/pid")}
 
 
 class NativeExecutionDriver(BuildKitWorker):
@@ -441,23 +470,8 @@ class NativeExecutionDriver(BuildKitWorker):
             raise EnforcementUnavailable("native gate inputs exceed bounds")
         (gate / "launch.bin").write_bytes(launch)
         (gate / "launch.bin").chmod(0o444)
-        syscalls = [{"names": [name for name in self.config.native_engine.syscall_allowlist if name != "clone"],
-                     "action": "SCMP_ACT_ALLOW"},
-                    {"names": ["clone3"], "action": "SCMP_ACT_ERRNO", "errnoRet": 38}]
-        if "clone" in self.config.native_engine.syscall_allowlist:
-            syscalls.append({"names": ["clone"], "action": "SCMP_ACT_ALLOW",
-                             "args": [{"index": 0, "value": 0x7E020000, "valueTwo": 0,
-                                       "op": "SCMP_CMP_MASKED_EQ"}]})
-        if requested["network"] == "isolated":
-            for family in (2, 10):
-                syscalls.append({"names": ["socket"], "action": "SCMP_ACT_ALLOW",
-                                 "args": [{"index": 0, "value": family, "op": "SCMP_CMP_EQ"}]})
         seccomp = directory / "seccomp.json"
-        atomic_json(seccomp, {
-            "defaultAction": "SCMP_ACT_ERRNO", "defaultErrnoRet": 1,
-            "architectures": [{"x86_64": "SCMP_ARCH_X86_64", "aarch64": "SCMP_ARCH_AARCH64"}[
-                self.config.native_engine.architecture]], "syscalls": syscalls,
-        })
+        atomic_json(seccomp, execution_seccomp(self.config.native_engine, command, requested["network"]))
         info = gate.stat()
         mounts = [{"source": str(gate), "destination": "/run/appsec-gate",
                    "read_only": True, "identity": [info.st_dev, info.st_ino]}]
@@ -478,7 +492,8 @@ class NativeExecutionDriver(BuildKitWorker):
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
             "--security-opt", "seccomp=" + str(seccomp), "--network",
             self.config.network_id if requested["network"] == "isolated" else "none",
-            "--ipc", "private", "--cgroupns", "private", "--cgroup-parent", str(group)[len("/sys/fs/cgroup/"):],
+            "--pid", "private", "--ipc", "private", "--cgroupns", "private",
+            "--cgroup-parent", str(group)[len("/sys/fs/cgroup/"):],
             "--cpus", str(requested["cpu"]), "--memory", f"{requested['memory_mb']}m",
             "--memory-swap", f"{requested['memory_mb']}m", "--pids-limit", str(requested["pids"]),
             "--log-driver", "none", "--workdir", requested["workdir"],
