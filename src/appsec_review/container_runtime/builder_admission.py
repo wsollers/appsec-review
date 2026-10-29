@@ -651,7 +651,8 @@ class BuilderAdmission:
             native_confirmation = None
             if self.config.native_engine is not None:
                 from appsec_review.container_runtime.engine_broker import EngineCleanupConfirmation
-                native_confirmation = EngineCleanupConfirmation(self.config)
+                native_confirmation = EngineCleanupConfirmation(
+                    self.config, retired=anchor["state"] == "RELEASED")
 
             def reconcile():
                 identity = anchor.get("action_ledger_identity", anchor["ledger_identity"])
@@ -668,6 +669,13 @@ class BuilderAdmission:
                         lease_filter=native_confirmation.lease_matches))
                 return removed
             return _as_client(self.config, reconcile)
+
+    def reconcile_retired(self) -> list[str]:
+        """A new operator release may reconcile prior bindings, never restart or rebind them."""
+        with operator_lock(self.root, "service.lock"):
+            if self._anchor().get("state") != "RELEASED":
+                raise EnforcementUnavailable("cross-release recovery requires a retired lifetime")
+            return self.reconcile()
 
     def verify_native_execution(self, binding: dict, peer: dict, *, name=None, cpu=1, memory_mb=1,
                                 allow_quarantine=False) -> None:
@@ -712,9 +720,6 @@ class BuilderAdmission:
             if anchor.get("state") not in {"PROVISIONING", "RESERVED", "RELEASING"}:
                 raise EnforcementUnavailable("lifetime reservation state is unknown")
             records = _journal_records(self.config)
-            if self.config.native_engine is not None:
-                from appsec_review.container_runtime.engine_broker import assert_engine_retired
-                assert_engine_retired(self.config)
             confirmation = JournalCleanupConfirmation(self.config)
             if len(confirmation._records) != len(records):
                 raise EnforcementUnavailable("unresolved worker intents retain lifetime capacity")
@@ -723,6 +728,12 @@ class BuilderAdmission:
                 raise EnforcementUnavailable("released client contexts are missing proof or rebound")
             if not self.proof.stopped(anchor["members"]):
                 raise EnforcementUnavailable("daemon, proxy, service or worker termination is unconfirmed")
+            if self.config.native_engine is not None:
+                from appsec_review.container_runtime.engine_broker import (
+                    assert_engine_retired, confirm_stopped_create_absence,
+                )
+                confirm_stopped_create_absence(self.config)
+                assert_engine_retired(self.config)
             # A crash after ledger deletion must not permit startup from the old
             # anchor. RELEASING is a durable fail-closed retirement fence.
             anchor["state"] = "RELEASING"

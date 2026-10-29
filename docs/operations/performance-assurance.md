@@ -196,8 +196,10 @@ serialize rather than each spending its parent's allocation. Platform-maintenanc
 review contexts are separate operator work and are not a claim of whole-host accounting.
 
 The image-builder client is selected only by frozen `review_policy.image_builder` configuration,
-with an explicit operator `project_id`. Without it, a required image miss remains
-`derived_image_preparation_unavailable` before staging or daemon mutation. An eligible declared
+with an explicit operator `project_id`. Without it, and without native execution, a required
+image miss is built with the local `docker buildx` client outside resource admission. Under
+native execution without a builder it remains `derived_image_preparation_unavailable` before
+staging or daemon mutation. An eligible declared
 prepared image or valid uncustomized baseline remains usable; a baseline never substitutes for
 required dependencies. Project dependency/repair Dockerfiles and offline CodeQL layering retain
 their required semantics through the configured backend rather than an unbounded Docker client.

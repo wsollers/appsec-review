@@ -117,6 +117,14 @@ retain escaped/reparented helpers in custody; unrelated infrastructure is not mi
 for this engine. Omitting that scope preserves the older global helper check. The
 dedicated daemon must not share the existing socket, data-root, exec-root or image store.
 Source support is not a commissioned daemon.
+Native topology checks use server cgroup/OS/kernel/label fields, not the CLI's
+`ClientInfo` plugin inventory or a workstation hostname. A stale local Desktop plugin
+does not identify the daemon. Docker Desktop server markers still refuse, and actual
+kernel socket-peer, namespace, root, generation and helper-custody proofs remain required.
+The pinned Skopeo transport must negotiate the daemon's supported API. Ubuntu 22.04's
+Skopeo 1.4.1 hardcodes API 1.22 and cannot talk to Docker 29.1.3's minimum API 1.44;
+a command-local `DOCKER_API_VERSION` does not repair that hardcode. Provision a compatible
+pinned private transport rather than lowering the daemon's API requirement.
 Docker 29 may automatically use the existing `/run/containerd/containerd.sock` even with
 separate Docker roots. A dedicated-engine scope therefore also requires an explicit
 `docker_helper_scope.containerd_endpoint` beneath its private exec-root and the actual
@@ -221,6 +229,55 @@ admission mode persists that requirement in ordinary leases. Even a successful r
 must be followed by exact container-absence evidence. Unknown cleanup retains its reservation;
 reconciliation cannot substitute stopped-only evidence. The explicit native entrypoint uses this
 mode; existing Compose cleanup behavior is unchanged.
+
+If a native create was rejected before intent publication, its uncertain client reservation stays
+fenced while the engine is live. Operator admission reconciliation can recover that exact native
+scope only after normal lifetime release has proved empty execution/application/helper cgroups,
+dead generations and no daemon listener. It additionally requires a dedicated, private Docker
+container-metadata directory with no entries, no retained engine owner or unresolved execution,
+a dead client generation, and exact run/configuration/engine/budget binding. A stopped container,
+a missing journal alone, or a foreign scope cannot release capacity. Existing intents still require
+their ordinary independently confirmed removal records; no removal receipt is fabricated.
+
+If the recovery fix is in a newer installed release, use its isolated root entrypoint with
+`--config <current-runtime.toml> --operation reconcile-retired-admission
+--prior-config <retired-lifetime.toml>`. The current configuration declares the new installed
+`runtime_root` and `runtime_release_id`; every other host, policy, budget and admission field
+must equal the unchanged prior configuration. The new operator's runtime is verified normally,
+then reconciliation uses the prior configuration and its original frozen contract. The prior
+lifetime must already be `RELEASED`, its service lock must be free, and the full independent
+retirement/removal proof still applies. This operation cannot serve, restart, or rebind a lifetime.
+
+For a prior lifetime with an uncertain create but no launched process, the corresponding
+`release-prior-lifetime` operation uses the same two-configuration boundary and ordinary exclusive
+lifetime release. Only after all recorded generations and execution/application/helper scopes
+are proved stopped can a private, entirely empty Docker container-metadata directory settle that
+one exact prelaunch intent and its matching ownership fence. A live client, launched process,
+rebound cgroup, foreign owner or any stopped container retains the reservation. The genuine
+absence observation and original failure are preserved in the operator journal; an empty cgroup
+may remain as audit state. Normal admission reconciliation then accepts the exact client
+`native_broker_outcome_unknown` quarantine only with independently confirmed removal evidence.
+
+Rootless-worker inspection accepts Docker's equivalent `SETUID`/`SETGID` and
+`CAP_SETUID`/`CAP_SETGID` spellings only as the same exact pair. The kernel capability bounding
+set, zero effective capabilities and all remaining isolation checks are unchanged.
+
+Native execution uses Docker's default private PID namespace rather than the unsupported
+`--pid private` argument; inspect and kernel namespace proofs remain mandatory. The private
+control root stays mode0700 while its read-only bind-mounted gate directory is explicitly0755
+and the executable0555, including when the root service runs under umask077.
+
+The Docker CLI inlines the compacted seccomp profile content into `HostConfig.SecurityOpt`,
+so inspection compares that inlined JSON canonically with the broker-written profile and rejects
+the path form, `unconfined`, any profile difference and any additional security option.
+
+When an inspection or removal fix is in a newer installed release, a stopped broker's retained
+intents are reconciled with `--operation reconcile-prior-engine --prior-config <prior.toml>`.
+It uses the same two-configuration equivalence as `release-prior-lifetime`, takes the prior
+service's exclusive lock (so the prior broker must be stopped), requires its `RESERVED` lifetime,
+the host and engine identity checks, and then performs only the ordinary restart reconciliation
+under the prior frozen contract. It never serves, publishes contracts, releases the lifetime or
+rebinds a lease; unconfirmed removals remain quarantined.
 
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.

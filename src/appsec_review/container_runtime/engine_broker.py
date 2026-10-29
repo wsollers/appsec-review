@@ -25,7 +25,7 @@ from uuid import uuid4
 from appsec_review.config.native_engine import absolute
 from appsec_review.container_runtime.buildkit_worker import (
     BuildKitWorker, CommandRunner, EnforcementUnavailable, KernelProof, OutcomeUnknown,
-    private_path, process_token,
+    native_docker_topology, private_path, process_token,
 )
 from appsec_review.container_runtime.builder_admission import service_contract
 from appsec_review.storage import atomic_json
@@ -313,6 +313,27 @@ class NativeProof(KernelProof):
                 "process_tree_trace": tracing, "pid_namespace": os.readlink(f"/proc/{pid}/ns/pid")}
 
 
+def _security_options_match(options, profile_path):
+    # The Docker CLI inlines the compacted profile content; the daemon never sees the path.
+    try:
+        expected = json.loads(Path(profile_path).read_bytes())
+    except FileNotFoundError as error:
+        raise OutcomeUnknown("native seccomp profile was lost") from error
+    if not isinstance(options, list) or len(options) != 2 or "no-new-privileges:true" not in options:
+        return False
+    inline = [option for option in options if option.startswith("seccomp=")]
+    if len(inline) != 1:
+        return False
+    try:
+        observed = json.loads(inline[0][len("seccomp="):])
+    except ValueError:
+        return False
+
+    def canonical(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return canonical(observed) == canonical(expected)
+
+
 class NativeExecutionDriver(BuildKitWorker):
     def __init__(self, config, *, runner=None, proof=None):
         super().__init__(config, runner=runner, proof=proof or NativeProof(config))
@@ -324,12 +345,10 @@ class NativeExecutionDriver(BuildKitWorker):
         static_gate(self.config)
         private_path(Path(self.config.docker_binary), directory=False)
         info = json.loads(self._run(self._docker("info", "--format", "{{json .}}")))
-        if (info.get("ID") != self.config.native_engine.engine_id or info.get("OSType") != "linux"
-                or info.get("CgroupDriver") != "cgroupfs" or str(info.get("CgroupVersion")) != "2"
+        if (not native_docker_topology(info) or info.get("ID") != self.config.native_engine.engine_id
                 or info.get("Architecture") not in {
                     self.config.native_engine.architecture,
-                    {"x86_64": "amd64", "aarch64": "arm64"}[self.config.native_engine.architecture]}
-                or "desktop" in str(info).lower()):
+                    {"x86_64": "amd64", "aarch64": "arm64"}[self.config.native_engine.architecture]}):
             raise EnforcementUnavailable("native engine identity or topology differs")
 
     def inventory(self, record=None):
@@ -402,8 +421,7 @@ class NativeExecutionDriver(BuildKitWorker):
                 or actual_binds != expected_binds
                 or any(m.get("Type") not in {"bind", "tmpfs"} for m in inspection.get("Mounts", []))
                 or host.get("LogConfig", {}).get("Type") != "none"
-                or set(host.get("SecurityOpt") or []) != {
-                    "no-new-privileges:true", "seccomp=" + record["driver"]["seccomp"]}):
+                or not _security_options_match(host.get("SecurityOpt"), record["driver"]["seccomp"])):
             raise EnforcementUnavailable("native isolation or mounts differ from approved policy")
         return inspection
 
@@ -453,6 +471,7 @@ class NativeExecutionDriver(BuildKitWorker):
         record["driver"]["cgroup_pending"] = False
         gate = directory / "gate"
         gate.mkdir(mode=0o755)
+        gate.chmod(0o755)
         shutil.copyfile(static_gate(self.config), gate / "gate")
         (gate / "gate").chmod(0o555)
         command = record["command_policy"]
@@ -492,7 +511,7 @@ class NativeExecutionDriver(BuildKitWorker):
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
             "--security-opt", "seccomp=" + str(seccomp), "--network",
             self.config.network_id if requested["network"] == "isolated" else "none",
-            "--pid", "private", "--ipc", "private", "--cgroupns", "private",
+            "--ipc", "private", "--cgroupns", "private",
             "--cgroup-parent", str(group)[len("/sys/fs/cgroup/"):],
             "--cpus", str(requested["cpu"]), "--memory", f"{requested['memory_mb']}m",
             "--memory-swap", f"{requested['memory_mb']}m", "--pids-limit", str(requested["pids"]),
@@ -1033,6 +1052,8 @@ class EngineBroker:
         except (OSError, ValueError, RuntimeError) as exc:
             if record is None:
                 raise
+            record.setdefault("failure", {
+                "exception_type": type(exc).__name__[:64], "message": str(exc)[:2048]})
             record.update(state="REMOVED" if record["state"] == "REMOVED" else "UNKNOWN",
                           quarantine="native_operation_unconfirmed",
                           error_type=type(exc).__name__[:64])
@@ -1121,10 +1142,12 @@ def _operator_records(config):
 
 class EngineCleanupConfirmation:
     """Construct as operator; use all three callbacks together for native-only reconciliation."""
-    def __init__(self, config):
+    def __init__(self, config, *, retired=False):
         self.config, self.contract = config, service_contract(config)
         self.records = {}
-        records, _ = _operator_records(config)
+        records, owners = _operator_records(config)
+        self.known_names = {record["payload"]["name"] for record in records}
+        self.retired_empty = False
         for record in records:
             expected = {
                 "confirmed_removed": True, "binding": record["binding"], "peer": record["peer"],
@@ -1138,6 +1161,13 @@ class EngineCleanupConfirmation:
                     and record["peer"]["uid"] == config.admission.uid
                     and record["peer"]["gid"] == config.admission.gid):
                 self.records[record["payload"]["name"]] = record
+        if (retired and config.docker_helper_scope is not None and not owners
+                and len(self.records) == len(records)):
+            # The caller has proved a RELEASED lifetime, empty cgroups, dead
+            # generations and no daemon listener. Stopped containers still count.
+            containers = Path(config.docker_helper_scope.data_root) / "containers"
+            private_path(containers)
+            self.retired_empty = next(containers.iterdir(), None) is None
 
     def lease_matches(self, entry):
         names = entry.get("containers", [])
@@ -1146,14 +1176,115 @@ class EngineCleanupConfirmation:
         return all(name in self.records and entry.get("native_engine_scope") == {
             **self.records[name]["binding"], "resource_budget": self.config.resources.view(),
         } and entry.get("pid") == self.records[name]["peer"]["pid"]
-            and entry.get("process_identity") == self.records[name]["peer"]["start_token"] for name in names)
+            and entry.get("process_identity") == self.records[name]["peer"]["start_token"]
+            for name in names) or self._absent_lease(entry)
+
+    def _absent_name(self, name):
+        return (self.retired_empty and isinstance(name, str) and name not in self.known_names
+                and re.fullmatch(r"(appsec-[0-9a-f]{20}|appsec-review-[a-zA-Z0-9_-]{1,120})", name)
+                is not None)
+
+    def _absent_lease(self, entry):
+        scope = entry.get("native_engine_scope")
+        if (not self.retired_empty or "persistent" in entry
+                or type(entry.get("pid")) is not int or entry["pid"] <= 0
+                or not isinstance(entry.get("process_identity"), str) or not entry["process_identity"]
+                or process_token(entry["pid"]) == entry["process_identity"]
+                or not isinstance(scope, dict) or set(scope) != BINDING_FIELDS | {"resource_budget"}
+                or not uuid(scope.get("lease_id"))
+                or scope["resource_budget"] != self.config.resources.view()
+                or entry.get("limits") != {key: getattr(self.config.resources, key)
+                                           for key in ("cpu", "memory_mb", "io_slots")}
+                or any(scope.get(key) != getattr(self.config.native_engine, key)
+                       for key in ("service_generation", "engine_id", "engine_generation"))):
+            return False
+        grants = [grant for grant in self.config.native_engine.grants
+                  if grant.uid == self.config.admission.uid and all(
+                      scope[key] == getattr(grant, key) for key in (
+                          "tenant_id", "project_id", "run_id", "target_snapshot", "configuration_id"))]
+        return len(grants) == 1 and all(self._absent_name(name) for name in entry["containers"])
 
     def confirmed_removed(self, name):
-        return name in self.records
+        return name in self.records or self._absent_name(name)
 
     def confirmed_cleanup(self, entry):
-        return (entry.get("quarantine") in {None, "native_engine_removal_unconfirmed", "container_death_unconfirmed"}
+        return (entry.get("quarantine") in {None, "native_engine_removal_unconfirmed",
+                                          "container_death_unconfirmed", "native_broker_outcome_unknown"}
                 and self.lease_matches(entry))
+
+
+def confirm_stopped_create_absence(config):
+    """Caller holds both lifetime locks and has proved all recorded generations/scopes stopped."""
+    records, _ = _operator_records(config)
+    confirmed = EngineCleanupConfirmation(config)
+    pending = [record for record in records if record["payload"]["name"] not in confirmed.records]
+    if not pending:
+        return
+    if len(pending) != 1 or config.docker_helper_scope is None:
+        raise EnforcementUnavailable("stopped native create recovery requires one dedicated engine intent")
+    record = pending[0]
+    containers = Path(config.docker_helper_scope.data_root) / "containers"
+    private_path(containers)
+    if next(containers.iterdir(), None) is not None:
+        raise EnforcementUnavailable("stopped native containers are not confirmed removed")
+    driver = record["driver"]
+    if (not uuid(record.get("execution_id")) or not uuid(record.get("execution_token"))
+            or not uuid(record["binding"].get("lease_id"))
+            or record.get("service_contract") != service_contract(config)
+            or record.get("state") not in {"UNKNOWN", "CREATING"}
+            or not record.get("create_dispatched") or not driver.get("create_pending")
+            or any(driver.get(key) for key in ("launcher", "launch_pending", "started_at", "released"))
+            or record["peer"]["uid"] != config.admission.uid
+            or record["peer"]["gid"] != config.admission.gid
+            or process_token(record["peer"]["pid"]) == record["peer"]["start_token"]
+            or any(record["binding"].get(key) != getattr(config.native_engine, key)
+                   for key in ("service_generation", "engine_id", "engine_generation"))):
+        raise EnforcementUnavailable("native intent lacks its exact dead, prelaunch generation")
+    if len([grant for grant in config.native_engine.grants if grant.uid == record["peer"]["uid"]
+            and all(record["binding"].get(key) == getattr(grant, key) for key in (
+                "tenant_id", "project_id", "run_id", "target_snapshot", "configuration_id"))]) != 1:
+        raise EnforcementUnavailable("native stopped-create run grant changed")
+    group = Path(config.native_engine.execution_cgroup_parent) / record["execution_id"]
+    if driver.get("cgroup") != str(group):
+        raise EnforcementUnavailable("native stopped-create cgroup scope changed")
+    if group.exists():
+        private_path(group)
+        info = group.stat()
+        if ([info.st_dev, info.st_ino] != driver.get("cgroup_identity")
+                or dict(line.split() for line in (group / "cgroup.events").read_text().splitlines())
+                .get("populated") != "0"):
+            raise EnforcementUnavailable("native stopped-create cgroup generation or occupancy changed")
+    elif driver.get("cgroup_pending"):
+        raise EnforcementUnavailable("native cgroup creation remains unresolved")
+    owner = {"kind": "execution", "id": record["execution_id"],
+             "token": record["execution_token"], "service_contract": service_contract(config)}
+    path = Path(config.state_root) / "intents.sqlite3"
+    private_path(path, directory=False)
+    connection = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)
+    try:
+        connection.execute("PRAGMA synchronous=EXTRA")
+        with connection:
+            row = connection.execute("SELECT owner FROM engine_interlock WHERE slot=1").fetchone()
+            if row is None or json.loads(row[0]) != owner:
+                raise EnforcementUnavailable("native stopped-create ownership changed")
+            if record.get("quarantine"):
+                record["resolved_quarantine"] = record.pop("quarantine")
+            record["state"] = "REMOVED"
+            record["stopped_create_absence"] = {
+                "engine_generation": config.native_engine.engine_generation,
+                "private_container_metadata_empty": True, "cgroup_identity": driver.get("cgroup_identity"),
+                "observed_at": time.time(),
+            }
+            record["removal"] = {
+                "confirmed_removed": True, "binding": record["binding"], "peer": record["peer"],
+                "execution_id": record["execution_id"], "execution_token": record["execution_token"],
+                "name": record["payload"]["name"], "service_contract": service_contract(config),
+            }
+            connection.execute("UPDATE engine_executions SET record=? WHERE id=?",
+                               (encoded(record).decode(), record["execution_id"]))
+            connection.execute("DELETE FROM engine_interlock WHERE slot=1")
+    finally:
+        connection.close()
 
 
 def assert_engine_retired(config):

@@ -60,6 +60,21 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Keep implicit discovery on the fast paths; explicit selections remain on demand."""
+    if config.args_source is pytest.Config.ArgsSource.ARGS:
+        return None
+    try:
+        relative = collection_path.relative_to(_REPOSITORY_ROOT / "tests")
+    except ValueError:
+        return None
+    if relative.parts and relative.parts[0] in {"integration", "live"}:
+        return True
+    if len(relative.parts) == 1 and collection_path.match("test_live_*.py"):
+        return True
+    return None
+
+
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Skip, with the reason, tests whose local review target checkout is absent."""
 

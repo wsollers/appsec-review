@@ -827,12 +827,54 @@ class ImageBuilderService:
                         endpoint.unlink()
 
 
+def prior_runtime_admission(config: ImageBuilderServiceConfig,
+                            prior: ImageBuilderServiceConfig) -> BuilderAdmission:
+    if config.native_engine is None or prior.native_engine is None:
+        raise EnforcementUnavailable("cross-release reconciliation requires native runtime identities")
+    current, previous = service_contract(config), service_contract(prior)
+    for name in ("runtime_root", "runtime_release_id"):
+        previous["native_engine"][name] = current["native_engine"][name]
+    if current != previous:
+        raise EnforcementUnavailable("retired reconciliation cannot change host, policy or admission bindings")
+    return BuilderAdmission(prior)
+
+
+def reconcile_retired_runtime(config: ImageBuilderServiceConfig,
+                              prior: ImageBuilderServiceConfig) -> list[str]:
+    return prior_runtime_admission(config, prior).reconcile_retired()
+
+
+def release_prior_runtime(config: ImageBuilderServiceConfig, prior: ImageBuilderServiceConfig) -> None:
+    prior_runtime_admission(config, prior).release()
+
+
+def reconcile_prior_engine(config: ImageBuilderServiceConfig,
+                           prior: ImageBuilderServiceConfig) -> list[dict]:
+    """Serve-equivalent restart reconciliation of a stopped broker under its prior frozen contract."""
+    admission = prior_runtime_admission(config, prior)
+    service = ImageBuilderService(prior, admission=admission)
+    try:
+        if os.geteuid() != 0 or service.engine_broker is None:
+            raise EnforcementUnavailable("prior engine reconciliation requires the root native operator")
+        admission.verify()
+        service.driver.proof.host()
+        service.engine_broker.driver.check_host()
+        service.reconcile(restart=True)
+        return [{key: record.get(key) for key in ("execution_id", "state", "quarantine")}
+                for record in service.engine_broker.records()]
+    finally:
+        service.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument("--reserve-lifetime", action="store_true")
     operation.add_argument("--reconcile-admission", action="store_true")
+    operation.add_argument("--reconcile-retired-admission", type=Path)
+    operation.add_argument("--release-prior-lifetime", type=Path)
+    operation.add_argument("--reconcile-prior-engine", type=Path)
     operation.add_argument("--release-lifetime", action="store_true")
     operation.add_argument("--finalize-commissioning", action="store_true")
     arguments = parser.parse_args()
@@ -844,6 +886,21 @@ def main() -> None:
     if config.native_engine is not None:
         from appsec_review.container_runtime.engine_broker import verify_runtime
         verify_runtime(config)
+    if arguments.reconcile_retired_admission is not None:
+        private_path(arguments.reconcile_retired_admission, directory=False)
+        prior = load_image_builder_service(arguments.reconcile_retired_admission)
+        print(json.dumps(reconcile_retired_runtime(config, prior)))
+        return
+    if arguments.release_prior_lifetime is not None:
+        private_path(arguments.release_prior_lifetime, directory=False)
+        prior = load_image_builder_service(arguments.release_prior_lifetime)
+        release_prior_runtime(config, prior)
+        return
+    if arguments.reconcile_prior_engine is not None:
+        private_path(arguments.reconcile_prior_engine, directory=False)
+        prior = load_image_builder_service(arguments.reconcile_prior_engine)
+        print(json.dumps(reconcile_prior_engine(config, prior)))
+        return
     admission = BuilderAdmission(config)
     if arguments.reserve_lifetime:
         print(admission.reserve())

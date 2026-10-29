@@ -255,7 +255,10 @@ class BuildContainerExecutor:
         command = [
             "docker", "run", "--rm", "--name", _container_name(), "--network", self.network, "--read-only",
             "--user", runtime_user, "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
+            "--security-opt", "no-new-privileges",
+            # Plain Docker builds run uncapped so they finish as fast as the host allows; the
+            # opt-in native broker still requires explicit limits in its translated argv.
+            *(("--cpus", "2", "--memory", "4g") if native_execution_requested() else ()),
             "--pids-limit", "1024", "--tmpfs",
             "/tmp:rw,exec,nosuid,size=2g" if self.profile.name == "android"
             else "/tmp:rw,noexec,nosuid,size=1g",
