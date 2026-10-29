@@ -114,11 +114,21 @@ def _box(box: Box) -> list[str]:
     style = STYLE_BY_KIND[box.kind]
     env = "gapbox" if style.dashed else "abox"
     badges = " ".join(badge(state) for state in box.badges)
-    lines = [rf"\begin{{{env}}}{{{box.kind.value}}}{{{tex(box.chip or style.chip)}}}{{{tex(box.title)}}}{{{tex(box.meta)}}}{{{badges}}}"]
+    lines = []
+    first = box.items[0] if box.items else None
+    if isinstance(first, Table) and len(first.rows) + TABLE_HEAD_LINES > BOX_NEEDSPACE_LINES:
+        # A tabular cannot break, so keep the box title on the page that holds the table.
+        lines.append(rf"\needspace{{{min(len(first.rows) + TABLE_HEAD_LINES, TABLE_NEEDSPACE_CAP)}\baselineskip}}")
+    lines.append(rf"\begin{{{env}}}{{{box.kind.value}}}{{{tex(box.chip or style.chip)}}}{{{tex(box.title)}}}{{{tex(box.meta)}}}{{{badges}}}")
     for item in box.items:
         lines.extend(_item(item))
     lines.append(rf"\end{{{env}}}")
     return lines
+
+
+BOX_NEEDSPACE_LINES = 8  # the abox style's own \needspace
+TABLE_HEAD_LINES = 4
+TABLE_NEEDSPACE_CAP = 30
 
 
 def _tone_color(tone: str) -> str:
@@ -140,7 +150,7 @@ BAR_X0 = 0.27
 BAR_W = 0.58
 BAR_ROW = 5.0
 BAR_H = 3.2
-BAR_LABEL_CHARS = 40
+BAR_LABEL_CHARS = 32
 VALUE_CHARS = 24
 MIN_BAR_W = 0.003
 
@@ -150,7 +160,7 @@ TL_W = 0.645
 TL_AXIS = 4.5
 TL_ROW = 6.0
 TL_H = 3.6
-TL_LABEL_CHARS = 32
+TL_LABEL_CHARS = 25
 MIN_SEG_W = 0.004
 SEG_TEXT_MIN_W = 0.06
 SEG_CHAR_W = 0.0072
@@ -169,9 +179,19 @@ def _pt(x: float, y: float) -> str:
 
 
 def _fit(text: str, limit: int) -> str:
-    """Cleaned text cut to ``limit`` characters with an ellipsis, so a label fits its column."""
+    """Cleaned text cut to ``limit`` characters with an ellipsis, so a label fits its column.
+
+    A short trailing ``(...)`` qualifier, such as an attempt marker, survives the cut so that
+    otherwise identical labels stay distinguishable.
+    """
     cleaned = clean(text)
-    return cleaned if len(cleaned) <= limit else cleaned[:max(limit - 1, 0)].rstrip() + "\u2026"
+    if len(cleaned) <= limit:
+        return cleaned
+    head, sep, tail = cleaned.rpartition(" (")
+    if sep and head and tail.endswith(")") and len(tail) + 3 <= limit // 2:
+        suffix = sep + tail
+        return head[:max(limit - len(suffix) - 1, 0)].rstrip() + "\u2026" + suffix
+    return cleaned[:max(limit - 1, 0)].rstrip() + "\u2026"
 
 
 def _magnitude(value: object) -> float:

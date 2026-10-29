@@ -72,17 +72,19 @@ def test_attempt_stats_tasks_tools_and_subsystems(tmp_path: Path) -> None:
     blocks = _sections(tmp_path)
     build = _job(blocks, JOBS[1])
     stats = {s.label: s for s in next(b for b in build if isinstance(b, Stats)).items}
+    assert len(stats) == 8  # two full rows of four cards
     assert stats["Status"].tone == "insufficient_evidence"
+    assert stats["Events"].value.isdigit() and stats["Gaps"].tone in ("neutral", "coverage_gap")
     assert (stats["Wall time"].value, stats["Queue delay"].value, stats["Tool calls"].value) == ("4m 00s", "1.2 s", "2")
     assert stats["Model calls"].value == "0" and stats["Tokens in+out"].value == "unavailable"
     tasks = _table(build, "Steps and tasks")
-    assert [c.text for c in tasks.rows[0]] == ["main.run", "main", "SUCCEEDED", "4m 00s"]
+    assert [c.text for c in tasks.rows[0]] == ["main.run", "main", "Succeeded", "4m 00s"]
     tools = _table(build, "Tool invocations")
-    assert [c.text for c in _row(tools, "t-cppcheck")] == ["cppcheck", "t-cppcheck", "45.0 s", "SUCCEEDED", "3"]
+    assert [c.text for c in _row(tools, "t-cppcheck")] == ["cppcheck", "t-cppcheck", "45.0 s", "Succeeded", "3"]
     hostile = _row(tools, "t-hostile")
     assert (hostile[3].badge, hostile[3].badge_label, hostile[3].text) == ("contradicted", "FAILED", "FAILED")
     images = _table(build, "Project image builds")
-    assert [c.text for c in images.rows[0]] == ["unit-cpp", "cpp", "BUILT", "2m 00s"]
+    assert [c.text for c in images.rows[0]] == ["unit-cpp", "cpp", "Built", "2m 00s"]
     review = _job(blocks, JOBS[2])
     transitions = _table(review, "Finding transitions")
     assert [(r[1].text, r[2].text) for r in transitions.rows] == [("NONE", "CANDIDATE"), ("CANDIDATE", "CONFIRMED")]
@@ -92,8 +94,8 @@ def _check_model_calls(blocks) -> None:
     review = _job(blocks, JOBS[2])
     calls = _table(review, "Model calls")
     assert [r[0].text for r in calls.rows] == ["m-red-1", "m-blue-1", "m-verify-1", "m-red-2"]
-    assert [c.text for c in _row(calls, "m-blue-1")[3:8]] == ["8.0 s", "5,400", "900", "4,096", "SUCCEEDED"]
-    assert [c.text for c in _row(calls, "m-verify-1")[4:7]] == ["unavailable"] * 3
+    assert [c.text for c in _row(calls, "m-blue-1")[3:8]] == ["8.0 s", "5,400", "900", "4,096", "Succeeded"]
+    assert [c.text for c in _row(calls, "m-verify-1")[4:7]] == ["n/a"] * 3
     failed = _row(calls, "m-red-2")
     assert (failed[7].badge, failed[7].badge_label, failed[7].text) == ("contradicted", "FAILED", "FAILED")
     assert failed[8].text.startswith("\\input{/etc/passwd}") and len(failed[8].text) <= 120

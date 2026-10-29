@@ -71,19 +71,28 @@ def test_overview_structure_stats_and_timeline(tmp_path: Path) -> None:
 
     time = _box(blocks, "Critical path and concurrency").items[0]
     values = {field.label: field.value for field in time.rows}
-    assert values["Critical path candidate"] == "job_inference_security_review/main/main.run/-"
-    assert values["Share of wall time"] == "82.6%" and values["Parallelism (task time / wall time)"] == "1.22x"
+    assert values["Critical path candidate"] == "job_inference_security_review/main/main.run"
+    assert values["Share of wall time"] == "82.6%" and values["Parallelism"] == "1.22x (task time / wall time)"
     assert values["Queue delay p50 / p95 / max"] == "400 ms / 1.2 s / 1.2 s"
 
     operations = _box(blocks, "Slowest operations").items[0]
     assert isinstance(operations, Table) and len(operations.rows) == 12
     assert operations.omitted is not None and operations.omitted.omitted == 4
+    assert not any(row[0].text.endswith("/-") for row in operations.rows)
+
+
+def test_operation_labels_name_run_and_job_level_operations() -> None:
+    from appsec_review.reporting.telemetry.overview import _operation_label
+    assert _operation_label("-/-/-/-") == "(run)"
+    assert _operation_label("job_x/-/-/-") == "job_x (job)"
+    assert _operation_label("job_x/main/main.run/-") == "job_x/main/main.run"
+    assert _operation_label("job_x/-/t1/cppcheck") == "job_x/-/t1/cppcheck"
 
 
 def test_model_usage_marks_missing_tokens_unavailable(tmp_path: Path) -> None:
     table = _box(_blocks(build_telemetry_run(tmp_path)), "Model usage").items[0]
     rows = {(row[0].text, row[1].text): [cell.text for cell in row[2:]] for row in table.rows}
-    assert rows[(MODEL, "verifier")] == ["1", "0", "unavailable", "unavailable", "unavailable", "20.0 s"]
+    assert rows[(MODEL, "verifier")] == ["1", "0", "n/a", "n/a", "n/a", "20.0 s"]
     assert rows[(MODEL, "blue")] == ["1", "0", "5,400", "900", "4,096", "8.0 s"]
     assert rows[(MODEL, "red")] == ["1", "0", "1,200", "300", "0", "12.5 s"]
     hostile = next(key for key in rows if key[0] != MODEL)

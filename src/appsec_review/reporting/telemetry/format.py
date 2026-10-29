@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 UNAVAILABLE = "unavailable"
+NA = "n/a"  # "unavailable" in a narrow numeric table column; each such table says so
 
 
 def _number(value: Any) -> float | None:

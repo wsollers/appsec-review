@@ -149,3 +149,24 @@ def test_badge_label_overrides_the_tone_words_in_both_renderers() -> None:
     html = render_html(document)
     assert '<span class="badge" data-state="contradicted">TIMED OUT</span>' in html
     assert '<span class="badge" data-state="contradicted">FAILED</span>' in html
+
+
+def test_chart_labels_keep_their_attempt_suffix_when_cut() -> None:
+    from appsec_review.reporting.latex import TL_LABEL_CHARS, _fit
+    label = _fit("job_final_report_publication (a2)", TL_LABEL_CHARS)
+    assert len(label) == TL_LABEL_CHARS and label.endswith("\u2026 (a2)") and label.startswith("job_final")
+    assert _fit("short (a1)", TL_LABEL_CHARS) == "short (a1)"
+    assert _fit("x" * 40, 10) == "x" * 9 + "\u2026"
+
+
+def test_a_box_opening_with_a_tall_table_reserves_room_for_its_title() -> None:
+    from appsec_review.reporting.model import Box, Cell, Table
+    from appsec_review.reporting.tokens import BoxKind
+
+    def body(rows: int) -> str:
+        table = Table(("Task",), tuple((Cell(f"t{index}"),) for index in range(rows)), (1.0,))
+        return _body(_doc(Box(BoxKind.RESULT, "Steps", items=(table,))))
+
+    assert r"\needspace{16\baselineskip}" + "\n" + r"\begin{abox}" in body(12)
+    assert r"\needspace{30\baselineskip}" in body(80)
+    assert r"\needspace" not in body(3)

@@ -42,6 +42,16 @@ def _short(value: Any, limit: int = CELL_CHARS) -> str:
     return f"{text}\u2026" if cut else text
 
 
+def _operation_label(value: Any) -> str:
+    """``job/step/task/tool`` with unset trailing parts dropped; run- and job-level operations are named."""
+    parts = clean(value).split("/")
+    while parts and parts[-1] in ("", "-"):
+        parts.pop()
+    if not parts:
+        return "(run)"
+    return f"{parts[0]} (job)" if len(parts) == 1 else "/".join(parts)
+
+
 def _field(label: str, value: Any, *, mono: bool = False, badge: str | None = None) -> Field:
     text, cut = bound(value if value not in (None, "") else fmt.UNAVAILABLE, VALUE_CHARS)
     return Field(label, text, mono=mono, badge=badge, truncation=cut)
@@ -192,7 +202,7 @@ def _job_bars(inputs: TelemetryInputs) -> Block:
             for job, value in ordered]
     shown, omitted = _cap(bars, BAR_LIMIT, "bars")
     source = "the metrics summary" if family else "the job spans in the event log"
-    return BarChart(title="Wall span per job", unit="ms", bars=tuple(shown), omitted=omitted,
+    return BarChart(title="Wall span per job", unit="longest first", bars=tuple(shown), omitted=omitted,
                     caption=(f"First to last event of each job across all attempts, from {source}; "
                              "colour follows the job's latest attempt."))
 
@@ -204,13 +214,15 @@ def _time_fields(inputs: TelemetryInputs) -> Box:
     wall = _number(summary.get("wall_time_ms"))
     summed = _number(summary.get("summed_concurrent_task_ms"))
     ratio = f"{summed / wall:.2f}x" if wall and summed is not None else fmt.UNAVAILABLE
+    critical_operation = critical.get("operation")
     rows = [
-        _field("Critical path candidate", critical.get("operation"), mono=True),
+        _field("Critical path candidate", _operation_label(critical_operation) if critical_operation else None,
+               mono=True),
         Field("Its duration", fmt.duration(critical.get("duration_ms"))),
         Field("Share of wall time", fmt.percent(critical.get("contribution_ratio"))),
         Field("Wall time", fmt.duration(wall)),
         Field("Summed task time", fmt.duration(summed)),
-        Field("Parallelism (task time / wall time)", ratio),
+        Field("Parallelism", f"{ratio} (task time / wall time)" if ratio != fmt.UNAVAILABLE else ratio),
         Field("Queue delays observed", fmt.count(queue.get("count"))),
         Field("Queue delay p50 / p95 / max", " / ".join(fmt.duration(queue.get(key)) for key in ("p50", "p95", "max"))),
     ]
@@ -227,7 +239,7 @@ def _operations(inputs: TelemetryInputs) -> Box:
             Para("Operation timings are unavailable: the metrics summary recorded none."),))
     ordered = sorted(records, key=lambda item: (-(_number(item.get("p95_ms")) or 0), clean(item.get("operation"))))
     shown, omitted = _cap(ordered, OPERATION_LIMIT)
-    rows = tuple((Cell(_short(item.get("operation")), mono=True), Cell(fmt.count(item.get("count"))),
+    rows = tuple((Cell(_short(_operation_label(item.get("operation"))), mono=True), Cell(fmt.count(item.get("count"))),
                   Cell(fmt.duration(item.get("p50_ms"))), Cell(fmt.duration(item.get("p95_ms"))),
                   Cell(fmt.duration(item.get("max_ms")))) for item in shown)
     return Box(BoxKind.RESULT, "Slowest operations", meta="by p95 duration", chip="TIME", items=(
@@ -240,7 +252,7 @@ def _operations(inputs: TelemetryInputs) -> Box:
 def _token_cell(values: list[float | None]) -> str:
     present = [value for value in values if value is not None]
     if not present:
-        return fmt.UNAVAILABLE
+        return fmt.NA
     text = fmt.count(sum(present))
     return text if len(present) == len(values) else f"{text} (partial)"
 
@@ -268,7 +280,7 @@ def _models(inputs: TelemetryInputs) -> Box:
     errors_shown, errors_omitted = _cap(errors, 6, "error classes")
     items: list[Any] = [Table(("Model", "Role", "Calls", "Failed", "Input", "Output", "Cache", "Time"),
                               tuple(shown), (0.26, 0.10, 0.08, 0.08, 0.13, 0.12, 0.11, 0.12), omitted),
-                        Para("Token counts a provider did not report are shown as unavailable, never as zero; "
+                        Para("Token counts a provider did not report are shown as n/a, never as zero; "
                              "'partial' sums only the calls that reported usage.", muted=True)]
     if errors_shown:
         items.append(Bullets(tuple(f"Error class: {error}" for error in errors_shown), errors_omitted))
@@ -407,7 +419,8 @@ def appendix_sections(inputs: TelemetryInputs) -> tuple[Block, ...]:
         Box(BoxKind.PROVENANCE, "Reading this report", items=(Bullets((
             "Telemetry is observational process data about how the review ran; it is never security evidence.",
             "The event log (data/logs/pipeline.jsonl) is authoritative; the metrics summary is derived from it.",
-            "'unavailable' means the value was not recorded, not that it was zero.",
+            "'unavailable' (or 'n/a' in narrow table columns) means the value was not recorded, "
+            "not that it was zero.",
             "Durations are wall-clock offsets from the run's first event; concurrent work overlaps.",
         )),)),
     )

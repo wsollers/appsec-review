@@ -15,7 +15,7 @@ from typing import Any, Iterable, Mapping
 from ..model import Block, Box, Bullets, Cell, Field, Fields, Heading, Note, Stat, Stats, Table, Truncation
 from ..text import anchor, bound, sha256_value, token
 from ..tokens import BoxKind
-from .format import UNAVAILABLE, compact, count, duration, plural
+from .format import NA, UNAVAILABLE, compact, count, duration, plural
 from .inputs import STATUS_TONE, JobSpan, TelemetryInputs
 
 MAX_JOBS = 40
@@ -53,7 +53,7 @@ def _status(value: Any) -> str:
 
 def _status_cell(status: str) -> Cell:
     if status in _SUCCESS:
-        return Cell(status)
+        return Cell(_status_words(status).capitalize())
     return Cell(status, badge=STATUS_TONE.get(status, "unresolved"), badge_label=_status_words(status))
 
 
@@ -113,10 +113,10 @@ def _model_rows(calls: list[Mapping[str, Any]]) -> list[tuple[Cell, ...]]:
     rows = []
     for call in calls:
         error = call.get("error_class")
+        tokens = [count(call.get(key)) for key in ("input_tokens", "output_tokens", "cache_tokens")]
         rows.append((Cell(_label(call.get("invocation_id")), mono=True), Cell(_label(call.get("role"), 40)),
                      Cell(_label(call.get("model"), 60), mono=True), Cell(duration(call.get("duration_ms"))),
-                     Cell(count(call.get("input_tokens"))), Cell(count(call.get("output_tokens"))),
-                     Cell(count(call.get("cache_tokens"))),
+                     *(Cell(NA if value == UNAVAILABLE else value) for value in tokens),
                      _status_cell(_status(call.get("terminal_status") or "UNKNOWN")),
                      Cell(_label(error, ERROR_CHARS) if error else "-", mono=bool(error))))
     return rows
@@ -223,6 +223,7 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
                                   if event.get("event_type") == "DAGSTER_QUEUE_DELAY") if delay is not None]
     wall = STILL_RUNNING if span.end_ms is None else duration(span.end_ms - span.start_ms)
     tone = STATUS_TONE.get(span.status, "unresolved")
+    gaps = _gaps(inputs, span)
     blocks: list[Block] = []
     if level:
         blocks.append(Heading(level=level, text=f"Attempt {_label(span.attempt_id, 48)}",
@@ -232,9 +233,11 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
         Stat("Status", span.status.replace("_", " "), tone),
         Stat("Wall time", wall),
         Stat("Queue delay", duration(sum(delays)) if delays else UNAVAILABLE),
+        Stat("Events", count(span.event_count)),
         Stat("Model calls", count(len(calls))),
         Stat("Tokens in+out", _tokens(calls)),
-        Stat("Tool calls", count(len(tools))))))
+        Stat("Tool calls", count(len(tools))),
+        Stat("Gaps", count(len(gaps)), "coverage_gap" if gaps else "neutral"))))
     blocks.append(Box(kind=BoxKind.PROVENANCE, chip="ATTEMPT", title="Attempt", items=(Fields(rows=(
         Field("Attempt id", _label(span.attempt_id), mono=True),
         Field("Status", span.status, badge=tone, badge_label=_status_words(span.status)),
@@ -250,17 +253,16 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
     if calls:
         failed = sum(1 for call in calls if _status(call.get("terminal_status") or "UNKNOWN") not in _SUCCESS)
         blocks.append(Box(kind=BoxKind.RESPONSE, chip="MODEL", title="Model calls",
-                          meta=f"{plural(len(calls), 'call')}, {count(failed)} not succeeded",
+                          meta=f"{plural(len(calls), 'call')}, {count(failed)} not succeeded; n/a: not recorded",
                           items=(_rows_table(
                               ("Invocation", "Role", "Model", "Duration", "In", "Out", "Cache", "Status", "Error"),
-                              (.13, .08, .15, .09, .08, .08, .08, .11, .2), _model_rows(calls)),)))
+                              (.12, .10, .14, .09, .08, .08, .08, .13, .18), _model_rows(calls)),)))
     if tools:
         blocks.append(Box(kind=BoxKind.RESULT, chip="TOOLS", title="Tool invocations",
                           meta=plural(len(tools), "invocation"),
                           items=(_rows_table(("Tool", "Invocation", "Duration", "Status", "Results"),
                                              (.32, .24, .15, .15, .14), _tool_rows(tools)),)))
     blocks.extend(_subsystems(events))
-    gaps = _gaps(inputs, span)
     if gaps:
         omitted = None
         if len(gaps) > MAX_GAPS:

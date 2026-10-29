@@ -46,7 +46,8 @@ hash is labelled *metrics summary sha256* (`unavailable` when the summary was re
   accounting, event-log presence, torn tail, named gaps, lifecycle gaps and genuinely running work.
 
 **Part II — Job details** (new page): per job in timeline order (first 40 jobs; the rest are
-counted), each attempt's status, wall time, queue delay, model calls, tokens and tool calls; an
+counted), each attempt's status, wall time, queue delay, event count, model calls, tokens, tool calls
+and gap count; an
 attempt box (id, start/end, event count); steps and tasks; model calls (role, model, duration,
 tokens, cache, status, error class); tool invocations; project image builds and finding transitions
 when present; and job gaps (non-terminal or failed attempts, matching lifecycle gaps and still
@@ -159,8 +160,8 @@ fixed PDF creation date. Ordering is by start offset, then job and attempt id.
 
 - Telemetry is **observational process data, not security evidence**. Nothing in this report
   supports or refutes a finding.
-- `unavailable` means the value was not recorded or could not be read; it is never zero work or a
-  clean run. Missing coverage remains a named gap.
+- `unavailable` (shortened to `n/a` in narrow token columns) means the value was not recorded or
+  could not be read; it is never zero work or a clean run. Missing coverage remains a named gap.
 - The report is **read-only toward run evidence**: it never writes `pipeline.jsonl` or
   `summary.json`, and writes only under `data/telemetry/report/`. Run-derived strings (job, tool,
   model and operation names, error classes) are cleaned, bounded and escaped; the container runs

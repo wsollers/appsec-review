@@ -128,16 +128,20 @@
 \newcommand{\boxhead}[5]{%
   \noindent\chip{#1}{#2}\enspace{\bfseries #3}\ifstrempty{#5}{}{\enspace #5}\par\nopagebreak
   \ifstrempty{#4}{}{{\scriptsize\color{muted}#4}\par\nopagebreak}\vspace{1pt}}
-\tcbset{abox base/.style={enhanced jigsaw,breakable,boxrule=0pt,frame hidden,before=\needspace{8\baselineskip},
+\tcbset{abox base/.style={enhanced jigsaw,breakable,boxrule=0pt,frame hidden,
   left=11pt,right=9pt,top=7pt,bottom=7pt,before skip=7pt,after skip=7pt,
   fontupper=\small,parskip=2pt,
   before upper={\setlength{\parskip}{2pt}\raggedright}}}
-\NewTColorBox{abox}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
+\NewTColorBox{abox@box}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
   borderline west={2.6pt}{0pt}{#1-accent},
   before upper={\boxhead{#1}{#2}{#3}{#4}{#5}}}
-\NewTColorBox{gapbox}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
+\NewTColorBox{gapbox@box}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
   boxrule=0.7pt,frame style={dashed},borderline west={0pt}{0pt}{#1-accent},
   before upper={\boxhead{#1}{#2}{#3}{#4}{#5}}}
+%% The title must not be stranded at a page foot. tcolorbox's `before skip` rewrites `before`, so
+%% the space is reserved here, outside the box, rather than in the box style.
+\NewDocumentEnvironment{abox}{m m m m m}{\par\needspace{8\baselineskip}\begin{abox@box}{#1}{#2}{#3}{#4}{#5}}{\end{abox@box}}
+\NewDocumentEnvironment{gapbox}{m m m m m}{\par\needspace{8\baselineskip}\begin{gapbox@box}{#1}{#2}{#3}{#4}{#5}}{\end{gapbox@box}}
 
 %% Key/value line (breakable: a hanging paragraph, not a table).
 \newlength{\kvwidth}\setlength{\kvwidth}{36mm}
