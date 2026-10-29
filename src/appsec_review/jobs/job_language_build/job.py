@@ -29,7 +29,9 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS
 from appsec_review.container_runtime.project_images import node_dependency_root, project_recipe_identity
-from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
+from appsec_review.jobs.build_discovery import (
+    copied_source_symlink, ensure_declared_build_dir, validate_build_recipe,
+)
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, SCOPE_FIELDS, apply_scope
 from appsec_review.jobs.job_project_build import load_accepted_builds
@@ -233,6 +235,7 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
         retained = workspace / Path(*logical.parts)
         retained.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(dependency, retained)
+    ensure_declared_build_dir(workspace, recipe)
 
 
 def _snapshot(root: Path, limit: int) -> dict[str, str]:

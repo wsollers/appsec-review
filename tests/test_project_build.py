@@ -18,6 +18,8 @@ from appsec_review.jobs.job_project_build.job import (
     _probe_cache, _probe_environment,
     _validate_expected_outputs,
 )
+from appsec_review.jobs.build_discovery import ensure_declared_build_dir
+from appsec_review.jobs.job_language_build.wasm import _copy_source as _copy_wasm_source
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.inference import ModelResult
@@ -454,6 +456,41 @@ def test_project_probe_keeps_maven_layout_when_pom_declares_source_directory(tmp
     assert _copy_source(unit, action, workspace) == []
     assert not (workspace / root / "src" / "main").exists()
     assert (workspace / root / "src" / "Main.java").is_file()
+
+
+def test_declared_build_dir_exists_before_recipe_commands_write_into_it(tmp_path: Path) -> None:
+    # A recipe like `clang --target=wasm32 -o build/case091.wasm` cannot mkdir its output directory.
+    root = "projects/wasm/case-091"
+    target = tmp_path / "target"
+    (target / root / "src").mkdir(parents=True)
+    (target / root / "src" / "case091.c").write_text("int f(void){return 0;}\n", encoding="utf-8")
+    run_root = tmp_path / "runs" / "run-1"
+    unit = SimpleNamespace(job=SimpleNamespace(target_root=target, run_root=run_root))
+    recipe = {"source_dir": root, "build_dir": f"{root}/build", "dependency_files": [],
+              "expected_outputs": [f"{root}/build"]}
+    action = {"root": root, "family": "wasm", "build_system": "clang", "recipe": recipe}
+    for copy in (_copy_language_source, _copy_wasm_source):
+        workspace = tmp_path / copy.__module__ / "workspace"
+        copy(unit, action, workspace)
+        assert (workspace / root / "build").is_dir()
+
+    workspace = run_root / "data" / "build" / "probes" / "unit" / "workspace"
+    _copy_source(unit, action, workspace)
+    assert ensure_declared_build_dir(workspace, recipe) == f"{root}/build"
+    assert ensure_declared_build_dir(workspace, recipe) is None
+    assert _validate_expected_outputs(workspace, recipe, f"{root}/build") == [
+        f"required build output is missing: {root}/build"]
+    (workspace / root / "build" / "case091.wasm").write_bytes(b"\0asm")
+    assert _validate_expected_outputs(workspace, recipe, f"{root}/build") == []
+
+    escape = tmp_path / "escape"
+    escape.mkdir()
+    linked = tmp_path / "linked"
+    (linked / "projects").mkdir(parents=True)
+    (linked / "projects" / "wasm").symlink_to(escape, target_is_directory=True)
+    with pytest.raises(ValueError, match="symlink"):
+        ensure_declared_build_dir(linked, recipe)
+    assert not any(escape.iterdir())
 
 
 def test_node_086_087_restore_outputs(tmp_path: Path) -> None:
@@ -1030,3 +1067,30 @@ def test_build_failure_exhausts_three_image_repair_attempts(tmp_path: Path) -> N
     assert len(native["attempts"]) == 4  # Default image plus three inferred custom images.
     assert model.calls == 3
     assert native["gaps"][-1] == "build remained unavailable after 3 image repair attempts"
+
+
+def test_rejected_repair_proposal_keeps_probe_failure_for_the_next_repair(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    repair = RepairModel(([], ["libtwo-dev"]))
+    requests = []
+
+    def model(request, *, timeout_seconds):
+        requests.append(request)
+        return repair.complete(request, timeout_seconds=timeout_seconds)
+
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: RepairingExecutor([], profile, success_package="libtwo-dev"),
+        image_resolver_factory=lambda unit: RepairImageResolver(tmp_path / "image-metadata"),
+        infer=model)]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "SUCCEEDED"
+    native = [request.summary["failure"] for request in requests
+              if request.summary["build_unit"]["family"] == "native"]
+    assert len(native) == 2
+    assert "fixture.h: missing" in native[0]["stderr_tail"]
+    assert "fixture.h: missing" in native[1]["stderr_tail"]
+    assert native[1]["repair_error"] == {
+        "error_class": "ValueError", "message": "repair proposal repeated the current repair set"}
