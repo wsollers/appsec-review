@@ -7,10 +7,11 @@ import json
 import pytest
 
 from appsec_review.acceptance.answer_key import Defect, evaluate_current_report
+from appsec_review.acceptance.staging import StageKind
 from appsec_review.jobs.bound_artifacts import read_bound_json
 from appsec_review.storage import file_sha256
 from appsec_review.storage.validation import current_validation, validation_scope
-from tests.acceptance_review_stages import consumer_chain
+from tests.acceptance_review_stages import consumer_chain, context_for, read_state, stage_lane
 from tests.final_report_support import REPORT
 from tests.integration.test_current_report_acceptance import (
     ROOT, _assert_identity_matrix, _orphan_scanner_hit,
@@ -29,15 +30,39 @@ VECTORS = (
 )
 
 
+def _reuse_guarded_consumer(request):
+    context = context_for(StageKind.CONSUMER, "ci-positive")
+    if context is None:
+        raise ValueError("exhaustive integrity cases require a supervised private consumer tree")
+    plugin = request.config.pluginmanager.get_plugin("tests.acceptance_plugin")
+    preflight = getattr(plugin, "_preflight", None)
+    workspace = getattr(plugin, "_workspace", None)
+    if (not isinstance(preflight, dict) or not preflight.get("span_id") or workspace is None
+            or workspace.root != context.workspace_root or workspace.invocation_id != context.invocation_id):
+        raise ValueError("exhaustive integrity cases require their completed guarded consumer preflight")
+    # That same-process preflight verifies the seal and complete private copy before
+    # installing the immutable-seed guard; consumer_chain would repeat the seed scan.
+    lane = stage_lane(context)
+    lane.emit(
+        "ACCEPTANCE_CONSUMER_PREFLIGHT_REUSED", preflight_span_id=preflight["span_id"],
+        preflight_duration_seconds=preflight["duration_seconds"], variant=context.variant,
+        obligation_id=context.obligation_id, reader_root=str(context.work_root))
+    with lane.span("integrity.rehydrate"):
+        chain = read_state(context.work_root, source_root=context.seed_root, variant=context.variant)
+    return lane, chain
+
+
 @pytest.fixture
-def current_report():
-    staged = consumer_chain("ci-positive")
+def current_report(request, vector):
+    staged = (_reuse_guarded_consumer(request)
+              if vector in {"identity-state-bucket", "orphan-hit"} else consumer_chain("ci-positive"))
     if staged is None:
         raise ValueError("exhaustive integrity cases require a supervised private consumer tree")
     lane, chain = staged
-    reference = chain.handoff(REPORT)["outputs"]["report.assemble"]["artifact"]
-    # This bounded read only locates mutations; the oracle revalidates after mutation.
-    report = read_bound_json(chain.run_root, reference)
+    with lane.span("integrity.metadata"):
+        reference = chain.handoff(REPORT)["outputs"]["report.assemble"]["artifact"]
+        # This bounded read only locates mutations; the oracle revalidates after mutation.
+        report = read_bound_json(chain.run_root, reference)
     assert len(report["findings"]) == 1
     finding = report["findings"][0]
     defect = Defect(
@@ -53,7 +78,8 @@ def test_current_report_integrity_vector(vector, current_report):
     if vector == "identity-state-bucket":
         _assert_identity_matrix(current_report)
     elif vector == "orphan-hit":
-        orphan = _orphan_scanner_hit(chain)
+        with lane.span("integrity.orphan-mutation"):
+            orphan = _orphan_scanner_hit(chain)
         _assert_identity_matrix(current_report, additional=(orphan,))
         path = chain.run_root / "data" / "indices" / "observations" / "superseded" / "stale.sqlite"
         lane.emit(
