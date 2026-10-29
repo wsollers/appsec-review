@@ -97,7 +97,7 @@ def test_shipped_native_declaration_matches_the_native_profile(shipped):
     declaration = _declaration(shipped, native["image_id"])
     assert declaration.runner_source == "application"
     assert declaration.runtime_user == EFFECTIVE_USER
-    assert shipped.job("job_codeql_analysis").typed_settings.preinstalled_undeclared == "fail"
+    assert shipped.job("job_codeql_analysis").typed_settings.preinstalled_undeclared == "derive"
 
 
 @pytest.mark.parametrize("policy", ["fail", "derive"])
