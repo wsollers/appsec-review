@@ -17,7 +17,7 @@ The report reads only two run files, both read-only:
 
 - `runs/<id>/data/logs/pipeline.jsonl` — the authoritative event log. Each record is validated; a
   torn final record is ignored and named.
-- `runs/<id>/data/telemetry/summary.json` — the `appsec-review/run-metrics/5` summary, used when
+- `runs/<id>/data/telemetry/summary.json` — the `appsec-review/run-metrics/6` summary, used when
   its `schema` and `run_id` match the run. Otherwise, if events were read, the summary is
   recomputed in memory with `aggregate_run_metrics` and is **never written back**.
 
@@ -40,6 +40,10 @@ hash is labelled *metrics summary sha256* (`unavailable` when the summary was re
 - **Where the time went** — a bar chart of wall span per job (up to 16, from the summary's
   `job_family_wall_span_ms`, else from event-log spans); the critical-path candidate and its share
   of wall time; wall versus summed task time; queue delays; the slowest operations by p95.
+- **Operations in progress and hotspots** — `operation_progress` rows with their `running` or
+  `lost` state, last progress time, elapsed time and completion ratio, and the
+  `operation_hotspots` ranking with off-CPU and D-state ratios, top wait channel and dominant
+  phase. See [diagnosing a slow or stuck step](metrics.md#diagnosing-a-slow-or-stuck-step).
 - **Run-wide usage** — model usage by model and role, tool calls by tool, project image builds and
   finding-lifecycle transitions. A call counts as failed unless its `terminal_status` (or, for a
   tool, its `disposition`) is `SUCCEEDED`, `COMPLETED` or `ACCEPTED`.

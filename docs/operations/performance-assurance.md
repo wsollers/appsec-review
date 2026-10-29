@@ -443,6 +443,16 @@ Preparation records bind the exact `scope_id`, query profile where applicable an
 `tool_invocation_id`. Nested preparation inherits its action's `resource_lease_id`, linking the
 work to eligibility/admission/release records without relying on concurrent log order.
 Aggregated `resource_spans` retain these links and each span's work counters.
+Spans also carry thread-scoped CPU/off-CPU time, context switches, block operations, syscall
+counts, sampled thread states, closed-vocabulary sub-phase timings and periodic
+`OPERATION_PROGRESS` records (see
+[telemetry architecture](../architecture/telemetry.md#operation-spans-progress-and-phases)).
+All of these attach to an active operation span, so the operation-telemetry comparison, which
+replaces `operation_span`, disables them too: they are inside its measured overhead and its 5%
+threshold. Their designed budget is one `getrusage` and one thread-clock read per span boundary,
+two clock reads per phase, at most 32 × 2 small `/proc` reads per second for sampling and at most
+one progress record per span per minute. That budget is a design bound, not a measured result;
+the earlier 4.290% comparison below predates this instrumentation and has not been remeasured.
 `resource_admissions` retains per-lease queue delay and scope/profile for admission and timeout;
 an action that times out before admission has no execution span. Missing legacy fields stay null.
 Shared-object streaming publication also records its actual copied byte/object counts. These are

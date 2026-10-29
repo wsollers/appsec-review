@@ -335,7 +335,9 @@ setup. If a prior measurement did not capture setup time, report it as unavailab
 Telemetry reuses production `PipelineLog`, `EventLog` and `operation_span` formats, but **only**
 under these test-owned roots, with acceptance namespace/invocation correlation. It is not
 copied into production metrics destinations. Operation spans report wall duration and
-`os.times()` process CPU deltas. Child CPU and span-attributable peak RSS remain null with
+`os.times()` process CPU deltas, plus the thread-scoped, sampling, phase and progress fields
+described in [telemetry architecture](../architecture/telemetry.md#operation-spans-progress-and-phases).
+Child CPU and span-attributable peak RSS remain null with
 explicit reasons; Linux `/proc/self/io` supplies I/O deltas where available, otherwise I/O is
 null with `proc_io_unavailable`. Missing or interrupted measurements keep their unavailable
 reason; never reinterpret nulls as zero resource consumption.

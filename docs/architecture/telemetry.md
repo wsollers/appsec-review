@@ -65,7 +65,7 @@ Native retention/provenance events take run/job/attempt identity explicitly from
 owner. Native reference/byte work counters also measure verified reuse consumption; they describe
 logical reference processing, not fresh scanner execution or physical retained occupancy.
 
-The metrics contract is `appsec-review/run-metrics/5`, adding `interchange` with schema
+The interchange upgrade introduced `appsec-review/run-metrics/5`, adding `interchange` with schema
 `appsec-review/interchange-metrics/1`. It derives publication/receipt identities and verifies the
 referenced bytes and retention/provenance computation instead of trusting event-supplied counts.
 Missing or tampered receipts are named integrity gaps, not zero work. Repeated publication/receipt
@@ -85,16 +85,148 @@ Interchange processing is bounded to 100,000 relevant events; exceeding it produ
 not the presence of a summary field. Integrated source and offline tests do not establish that a
 deployed runtime has been rebuilt or accepted.
 
+## Operation spans, progress and phases
+
+[`observability/spans.py`](../../src/appsec_review/observability/spans.py) wraps bounded units of
+job work in `operation_span`. Each span writes `OPERATION_STARTED` and `OPERATION_COMPLETED`
+through the job's `EventLog`, so records land in the attempt `events.jsonl` and the fsynced
+`pipeline.jsonl`. Correlation is `span_id`, `parent_span_id`, `operation_id` (the stage) and the
+inherited `unit_id`, `scope_id`, `query_profile`, `resource_lease_id` and `tool_invocation_id`.
+The completion record carries `terminal_status`, `duration_ms`, `resources` and `work`.
+
+The design aims to diagnose a slow unit from telemetry alone, without per-item events. All
+per-item data is aggregated in memory on the span. Per span, new records are bounded to one start,
+one completion and at most one progress record per progress interval.
+
+### Resources
+
+`resources` mixes two scopes; the scope is part of each value's meaning:
+
+| Field | Source | Scope |
+| --- | --- | --- |
+| `cpu_user_seconds`, `cpu_system_seconds` | `os.times()` delta | process-inclusive |
+| `logical_read_bytes`, `logical_write_bytes`, `physical_read_bytes`, `physical_write_bytes` | `/proc/self/io` `rchar`/`wchar`/`read_bytes`/`write_bytes` | process-inclusive |
+| `read_syscalls`, `write_syscalls` | `/proc/self/io` `syscr`/`syscw` | process-inclusive |
+| `thread_cpu_seconds` | `time.thread_time()` delta | the span's own thread |
+| `thread_off_cpu_seconds` | `max(0, wall - thread_cpu)` (derived) | the span's own thread |
+| `voluntary_context_switches`, `involuntary_context_switches` | `getrusage(RUSAGE_THREAD)` `ru_nvcsw`/`ru_nivcsw` | thread |
+| `block_input_ops`, `block_output_ops` | `ru_inblock`/`ru_oublock` | thread |
+| `major_page_faults` | `ru_majflt` | thread |
+
+`measurement_scope` remains `process_inclusive_not_additive` and `measurement_source` is
+`os.times/proc-self-io/getrusage-thread/thread_time`. `rusage_scope` is `"thread"`, or null with
+`rusage_unavailable_reason` where `RUSAGE_THREAD` is unavailable (for example off Linux); I/O and
+syscall values are null with `io_unavailable_reason` when `/proc/self/io` is unavailable.
+`child_cpu_seconds` and `peak_rss_bytes` stay null with their existing reasons. An unavailable value
+is null with a reason, never zero. Process-inclusive values include concurrent threads and must not
+be added across overlapping spans. Thread-scoped values exclude work the span hands to other
+threads or child processes, so they are not additive with process-inclusive values. Voluntary
+context switches and thread off-CPU time are the cheap, always-on blocked-time signal.
+
+### Thread states and fsync timing
+
+Each span records its native thread id. A single lazily started daemon process sampler reads
+`/proc/self/task/<tid>/stat` (state) and `/proc/self/task/<tid>/wchan` once per sample interval
+(default 1 s) for each registered active span and accumulates:
+
+```text
+thread_states = {"samples": n, "R": n, "S": n, "D": n, "other": n,
+                 "top_wait_channels": [{"symbol": "jbd2_log_wait_commit", "samples": n}, ...]}
+```
+
+At most five wait channels are retained. A `wchan` symbol that does not match
+`[A-Za-z0-9_.]{1,64}` is tallied as `other`. Estimated blocked (uninterruptible) time is
+`D / samples × wall`; it is a sampled estimate, not kernel-accounted delay. Spans shorter than one
+sample interval report `samples: 0`. Kernel delay accounting (`delayacct`) is deliberately not used:
+it is disabled by default and does not cover journal-commit waits. Nothing here requires root.
+
+Storage fsyncs on the hot path (`storage/atomic.py`, `storage/shared.py`,
+`storage/admission.py`) go through `timed_fsync`, which counts `fsync_calls` and records phase
+`storage.fsync`. The telemetry writers themselves are not instrumented. SQLite-internal fsyncs are
+not counted; they appear as off-CPU time in the `index.sqlite_*` phases and as D-state samples.
+
+### `OPERATION_PROGRESS`
+
+Every progress interval (default 60 s; `0` disables) the sampler writes `OPERATION_PROGRESS` for each
+registered span open for at least one interval. It uses the span's `EventLog`, so the last record is
+fsynced in `pipeline.jsonl` and survives SIGKILL of the worker as the span's last known state. The
+record carries the span correlation, `progress_sequence`, `elapsed_ms`, and cumulative `resources`
+(same shape as above), `work`, `expected`, `phases` and `thread_states`, plus the instantaneous
+`thread_state_now` and `wait_channel_now`.
+
+`OPERATION_PROGRESS` deliberately uses `elapsed_ms`, not `duration_ms`, carries no
+`terminal_status` or `disposition`, and nests counts under `work`. It therefore does not affect
+lifecycle pairing or gaps, duration totals (`duration_ms_by_event`, `operations`),
+`throughput_totals`, `dispositions`, `completed_work_count`, or the OpenVEX metrics filter.
+
+At most 32 active spans are sampled. A span registered beyond that cap is not sampled and its
+completion record carries `progress_unavailable_reason: "active_span_limit"`.
+`OPERATION_COMPLETED` adds `progress_count` and `progress_write_failures`. Sampler exceptions are
+swallowed and counted, never raised into the job; the registry is reset in forked children, and
+the thread exits when no span is registered. `EventLog.write` serializes appends with a
+process-local lock so sampler and job-thread records cannot interleave.
+
+### Phases, counters and expected totals
+
+`operation_phase(name)` times a sub-phase and accumulates it on the innermost active span (the same
+attribution rule as `count_work`; a no-op without a span):
+`phases[name] = {count, wall_ms, thread_cpu_ms, off_cpu_ms}`. It reads only monotonic and
+thread-CPU clocks. Phase names are a closed vocabulary (an unknown name raises `ValueError`) and a
+span holds at most 32 distinct phases. Nested phases are inclusive: a phase's time includes any
+phase inside it, so phase times are not additive. The initial vocabulary is:
+
+| Phase | Where |
+| --- | --- |
+| `index.prepare` | `IndexBuilder.build` entity/relation deduplication |
+| `index.sqlite_write` | DDL, inserts and commit |
+| `index.sqlite_vacuum` | SQLite vacuum |
+| `index.digest` | shard SHA-256 |
+| `index.publish` | private publication and reference verification |
+| `index.link` | `os.link` of the published shard |
+| `index.custody_bind` | custody owner binding |
+| `index.lock_wait` | artifact-indexing shard lock wait |
+| `index.reuse_verify` | artifact-indexing shard reuse verification |
+| `storage.fsync` | `timed_fsync` storage fsyncs |
+| `storage.copy` | storage copy paths that also count `copy_bytes` |
+
+The closed `work` counter vocabulary adds `receipts_processed`, `artifacts_processed`,
+`shards_built`, `shards_reused`, `entities_written`, `relations_written`, `invocations_scanned` and
+`fsync_calls`. `expect_work(name, total)` declares an expected total for a counter on the innermost
+span (`expected[name]`; a known counter and a non-negative integer; the last value wins), so progress
+can show `artifacts_processed` against its expected total and a completion ratio.
+Counters and phases describe instrumented boundaries only; an absent counter is not a measured zero.
+
+All of this attaches to an active span, so replacing `operation_span` (the switch used by the
+operation-telemetry overhead comparison) disables the sampler, progress records, phases and the
+new counters as well. See
+[performance assurance](../operations/performance-assurance.md#metrics-and-comparison).
+
 ## Existing derived views
 
 `appsec-review metrics --run-id <id>` deterministically rebuilds and persists
-`data/telemetry/summary.json` using `appsec-review/run-metrics/5`
-(historical summaries use `/4`). It separates end-to-end wall time, per-job wall spans, summed
+`data/telemetry/summary.json` using `appsec-review/run-metrics/6`
+(historical summaries use `/5` or earlier; `/5` summaries lack `operation_progress`,
+`operation_hotspots` and the span `phases`/`expected`/`thread_states`/`progress_count` fields, and
+their absence is not zero). It separates end-to-end wall time, per-job wall spans, summed
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
 events remain authoritative; the summary is a regenerable operator view.
 The [end-of-review telemetry report](../operations/telemetry-report.md) renders both, read-only,
 into one LaTeX/PDF rollup per run.
+
+Operation spans feed three views. `resource_spans` holds one row per `OPERATION_COMPLETED`, now
+including `phases`, `expected`, `thread_states` and `progress_count`. `operation_progress` (at most
+200 rows) lists spans with `OPERATION_STARTED` and no `OPERATION_COMPLETED`, each with its last
+progress snapshot (`started_at`, `last_progress_at`, `elapsed_ms`, `work`, `expected`, per-counter
+`completion_ratio`, `phases`, `thread_states`) and a `state`. The state is `running`, or `lost` when the
+attempt is closed or the last progress is older than three progress intervals relative to the newest
+run event. A span with no progress record has `last_progress_at: null`. `operation_hotspots` ranks
+the top 20 completed spans by `duration_ms`, with `stage`, `unit_id`, `duration_ms`,
+`thread_off_cpu_ratio`, `d_state_ratio`, `top_wait_channel`, `dominant_phase` (largest phase
+`wall_ms`) and per-item rates (for example `duration_ms` per `artifacts_processed`, `fsync_calls` per
+shard) when those counters exist. Ratios and rates are null when an input is unavailable.
+Operational diagnosis is described in
+[metrics operations](../operations/metrics.md#diagnosing-a-slow-or-stuck-step).
 
 The additive `project_image_builds` view reports preparation starts, fresh builds,
 reuse, failures and failures by language family. Image preparation is paired by
