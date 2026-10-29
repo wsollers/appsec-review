@@ -5,12 +5,14 @@ from dataclasses import dataclass
 from enum import Enum
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Mapping
 
 
 STAGE_ENVIRONMENT = "APPSEC_ACCEPTANCE_STAGE"
+CUSTODY_INPUT_FILE = "custody-input.json"
+CUSTODY_INPUT_SCHEMA = "appsec-review/acceptance-seed-input/1"
 _NAME = re.compile(r"[a-z][a-z0-9-]{0,63}")
 _SHA256 = re.compile(r"[a-f0-9]{64}")
 _COMMIT = re.compile(r"[a-f0-9]{40,64}")
@@ -19,6 +21,38 @@ _COMMIT = re.compile(r"[a-f0-9]{40,64}")
 class StageKind(str, Enum):
     PRODUCER = "producer"
     CONSUMER = "consumer"
+
+
+@dataclass(frozen=True)
+class SeedInputs:
+    variant: str
+    read_only_paths: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.variant, str) or not _NAME.fullmatch(self.variant):
+            raise ValueError("seed inputs require a declared variant")
+        if (not self.read_only_paths or any(not isinstance(value, str) for value in self.read_only_paths)
+                or len(set(self.read_only_paths)) != len(self.read_only_paths)):
+            raise ValueError("seed inputs require unique immutable paths")
+        for value in self.read_only_paths:
+            if not isinstance(value, str) or not value or "\\" in value:
+                raise ValueError("seed input identities use canonical relative logical paths")
+            path = PurePosixPath(value)
+            if (path.is_absolute() or path.as_posix() != value
+                    or any(part in {"..", "."} for part in value.split("/")) or ":" in value):
+                raise ValueError("seed input paths must be relative descendants")
+
+    def record(self) -> dict[str, Any]:
+        return {"schema": CUSTODY_INPUT_SCHEMA, "variant": self.variant,
+                "read_only_paths": list(self.read_only_paths)}
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> SeedInputs:
+        if (set(value) != {"schema", "variant", "read_only_paths"}
+                or value["schema"] != CUSTODY_INPUT_SCHEMA
+                or not isinstance(value["read_only_paths"], list)):
+            raise ValueError("seed input fields do not match the custody contract")
+        return cls(value["variant"], tuple(value["read_only_paths"]))
 
 
 @dataclass(frozen=True)

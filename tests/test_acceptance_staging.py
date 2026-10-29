@@ -7,8 +7,16 @@ from pathlib import Path
 import pytest
 
 from appsec_review.acceptance.staging import (
-    STAGE_ENVIRONMENT, StageContext, StageDeclaration, StageKind, stage_context,
+    STAGE_ENVIRONMENT, SeedInputs, StageContext, StageDeclaration, StageKind, stage_context,
 )
+
+
+def test_seed_inputs_pin_source_and_configuration_without_rewriting_paths() -> None:
+    selected = SeedInputs("ci-positive", ("target", "appsec-review.toml", "runs/example/data/configuration"))
+    assert SeedInputs.from_mapping(selected.record()) == selected
+    for paths in ((), ("target", "target"), ("../target",), ("/target",), ("C:/target",), ("a\\b",)):
+        with pytest.raises(ValueError):
+            SeedInputs("ci-positive", paths)
 
 
 def context(tmp_path: Path) -> StageContext:
