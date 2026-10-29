@@ -45,7 +45,10 @@ uncustomized image. See [builder requirements](../../../docs/operations/performa
 An operator-approved compatible runtime already installed by immutable image ID can instead use
 [explicit preinstalled declarations](../../../docs/operations/codeql-analysis.md#explicit-preinstalled-runtimes).
 That path performs no build and claims no cache reuse; it requires exact source/build/user/release
-bindings and does not upgrade old manifests or runners.
+bindings and does not upgrade old manifests or runners. Once any declaration exists, an
+environment that no declaration names is derived here only under
+`jobs.job_codeql_analysis.settings.preinstalled_undeclared = "derive"` (the shipped value);
+the default `"fail"` refuses it. A declared environment never falls back to derivation.
 For an older image wrapper, explicit ordinary-only `runner_source = "application"` can supply the
 current fixed application wrapper through a read-only bind, with distinct release/source
 provenance and no image mutation. This does not supply missing CodeQL tools or target dependencies.
@@ -103,7 +106,8 @@ image copied from another host.
    `python3 containers/build.py build audit-buildenv-rust-wasm`, which ships `rust-src` for the
    Rust extractor (see [`../../buildenv/rust-wasm/README.md`](../../buildenv/rust-wasm/README.md)).
    Update every `image_id` pin of that image in `appsec-review.toml`. A `preinstalled_runtimes`
-   entry bound to the old `build_image_id` no longer matches. Remove it or re-declare it.
+   entry bound to the old `build_image_id` no longer matches. Remove it or re-declare it; with no
+   entry the new image derives under `preinstalled_undeclared = "derive"` and fails under `"fail"`.
 3. When a graph-export pack, `columns.json` or `catalog.json` changes, recompute the pack tree
    hashes in `assets.lock.json` `export_query_packs` and in the matching `appsec-review.toml`
    `export_queries` blocks, following

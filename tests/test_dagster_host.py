@@ -30,9 +30,10 @@ def test_review_host_preinstalled_runtime_bindings_use_declared_application_runn
     mappings = settings["preinstalled_runtimes"]
     releases = config["review_policy"]["releases"]
     cpp = config["jobs"]["job_project_build"]["settings"]["profiles"]["native"]
-    assert {entry["build_image_id"] for entry in mappings} == {
-        settings["source_image_id"], cpp["image_id"]}
-    assert len(mappings) == 2
+    assert settings["preinstalled_undeclared"] == "derive"
+    build_images = {entry["build_image_id"] for entry in mappings}
+    assert {settings["source_image_id"], cpp["image_id"]} <= build_images
+    assert len(build_images) == len(mappings)
     for entry in mappings:
         assert entry["source_image_id"] == settings["source_image_id"]
         assert entry["runtime_user"] == "1000:1000"

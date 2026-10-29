@@ -152,7 +152,10 @@ unrelated query-pack declarations do not invalidate these build checkpoints.
 CodeQL also supports explicit [preinstalled runtime declarations](codeql-analysis.md#explicit-preinstalled-runtimes)
 binding source image, accepted build image, effective user, CodeQL/runner releases and inspected
 runtime image ID. This is distinct no-build provenance, not reuse of a historical derived-image
-manifest. An incomplete configured mapping fails; an absent mapping preserves bounded preparation.
+manifest. An environment named by a declaration must match exactly one declaration for the
+effective user or fail. An environment no declaration names follows
+`preinstalled_undeclared`: `"fail"` (default) refuses it, `"derive"` (shipped) uses bounded
+preparation. An absent mapping preserves bounded preparation.
 An explicit ordinary-only `runner_source = "application"` mounts the fixed current platform
 wrapper read-only rather than mislabeling an older wrapper inside the image. Its declared release
 and source mode participate in provenance and identity; there is no arbitrary host-path option
