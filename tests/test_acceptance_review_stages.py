@@ -158,6 +158,46 @@ def test_producer_root_is_exact_context_work_root(tmp_path, monkeypatch):
         support.context_for(StageKind.PRODUCER, "native-positive")
 
 
+def test_consumer_telemetry_is_fresh_and_copied_producer_logs_are_not_execution_evidence(prepared, tmp_path):
+    variant, producer, chain = prepared
+    producer.emit("PRODUCER_HISTORY", obligation_id=f"{variant}-prepare")
+    destination = tmp_path.resolve() / "consumer"
+    shutil.copytree(producer.root, destination)
+    copied_driver = destination / "driver"
+    retained = {path.relative_to(copied_driver): path.read_bytes()
+                for path in copied_driver.rglob("*") if path.is_file()}
+    context = StageContext(
+        StageKind.CONSUMER, variant, "consumer-oracle", "acceptance-staged", "1" * 40,
+        {"tests/fixture.py": "2" * 64}, producer.root.parent, destination,
+        producer.root, producer.root.parent / "sealed.json", "3" * 64)
+    lanes = [support.stage_lane(context), support.stage_lane(context)]
+    assert lanes[0].root != lanes[1].root
+    for lane in lanes:
+        assert lane.root.is_relative_to(destination / "consumer-telemetry")
+        assert lane.driver_root != copied_driver
+        path = lane.root / support.TELEMETRY_IDENTITY_FILE
+        identity = json.loads(path.read_text())
+        assert identity["reader_root"] == str(destination)
+        assert identity["obligation_id"] == context.obligation_id
+        assert identity["seed_manifest_sha256"] == context.manifest_sha256
+        assert identity["retained_producer_telemetry"] == {
+            "root": str(copied_driver), "execution_evidence": False}
+        assert identity["metric_paths"] == {
+            "events": str(lane.driver_root / "events.jsonl"), "pipeline": str(lane.pipeline.path)}
+        events = [json.loads(line) for line in (lane.driver_root / "events.jsonl").read_text().splitlines()]
+        assert [event["event"] for event in events] == ["ACCEPTANCE_CONSUMER_TELEMETRY_STARTED"]
+        assert events[0]["metric_identity_path"] == str(path)
+        assert events[0]["metric_identity_sha256"] == file_sha256(path)
+        records, torn = lane.pipeline.read()
+        assert not torn and len(records) == 1 and records[0]["sequence"] == 1
+        lane.emit("CONSUMER_EXECUTION", obligation_id=context.obligation_id)
+    assert retained == {path.relative_to(copied_driver): path.read_bytes()
+                        for path in copied_driver.rglob("*") if path.is_file()}
+    relocated = support.read_state(destination, source_root=producer.root, variant=variant)
+    assert relocated.run_root == destination / "runs" / chain.fixture.run_id
+    assert relocated.config == chain.config
+
+
 def test_direct_negative_copies_are_independent_and_each_validation_is_fresh(prepared):
     _variant, _lane, chain = prepared
     pointer = json.loads((chain.run_root / "data" / "indices" / "accepted.json").read_text())
