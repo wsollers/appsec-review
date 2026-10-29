@@ -56,6 +56,28 @@ BINDING_FIELDS = {
     "namespace", "recipe_identity", "context", "output_tag",
 }
 MAX_BROKER_BYTES = 1024 * 1024
+BOOT_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+START_TOKEN = re.compile(r"(?:[0-9]+:)?(" + BOOT_ID.pattern + r"):[0-9]+")
+
+
+def current_boot_id() -> str:
+    return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+
+
+def previous_boot_receipt(anchor: dict, boot_id: str) -> dict | None:
+    """Every recorded member must carry a parseable boot ID that differs from this boot."""
+    members = anchor.get("members")
+    if not BOOT_ID.fullmatch(boot_id) or not isinstance(members, list) or not members:
+        return None
+    recorded = set()
+    for member in members:
+        token = member.get("start_token") if isinstance(member, dict) else None
+        match = START_TOKEN.fullmatch(token) if isinstance(token, str) else None
+        if match is None or match.group(1) == boot_id:
+            return None
+        recorded.add(match.group(1))
+    return {"basis": "previous_boot", "recorded_boot_ids": sorted(recorded),
+            "current_boot_id": boot_id, "recorded_groups": anchor.get("groups")}
 
 
 def service_contract(config: ImageBuilderServiceConfig) -> dict:
@@ -268,9 +290,15 @@ class LifetimeProof:
                         raise EnforcementUnavailable("lifetime member inventory exceeds its bound")
         return list(output.values())
 
-    def empty(self) -> bool:
+    def empty(self, *, missing_ok: bool = False) -> bool:
         for root in self._roots():
-            values = dict(line.split() for line in (root / "cgroup.events").read_text().splitlines())
+            try:
+                events = (root / "cgroup.events").read_text()
+            except FileNotFoundError:
+                if missing_ok and not root.exists():
+                    continue
+                raise
+            values = dict(line.split() for line in events.splitlines())
             if values.get("populated") != "0":
                 return False
         return True
@@ -283,8 +311,10 @@ class LifetimeProof:
                 roots.append(Path(self.config.native_engine.application_cgroup))
         return roots
 
-    def stopped(self, members: list[dict]) -> bool:
-        if not self.empty() or any(process_token(member["pid"]) == member["start_token"] for member in members):
+    def stopped(self, members: list[dict], *, previous_boot: bool = False) -> bool:
+        # A cgroup that was never recreated after a reboot holds no processes.
+        if (not (self.empty(missing_ok=True) if previous_boot else self.empty())
+                or any(process_token(member["pid"]) == member["start_token"] for member in members)):
             return False
         if (self.config.engine_domain is not None
                 and self.config.engine_domain.control_lifetime_id is not None
@@ -434,9 +464,10 @@ class JournalCleanupConfirmation:
 
 
 class BuilderAdmission:
-    def __init__(self, config: ImageBuilderServiceConfig, *, proof=None):
+    def __init__(self, config: ImageBuilderServiceConfig, *, proof=None, boot_id=current_boot_id):
         self.config = config
         self.proof = proof or LifetimeProof(config)
+        self.boot_id = boot_id
         self.root = Path(config.state_root)
         self.path = self.root / "lifetime.json"
         self.contract = service_contract(config)
@@ -462,6 +493,26 @@ class BuilderAdmission:
                 or anchor.get("groups") != self.proof.groups()):
             raise EnforcementUnavailable("operator lifetime reservation configuration or cgroups changed")
         return anchor
+
+    def _release_anchor(self) -> tuple[dict, dict | None]:
+        """Strict anchor, or one whose every recorded member belongs to a previous boot."""
+        private_path(self.path, directory=False)
+        anchor = bounded_json(self.path)
+        if anchor.get("schema") != LIFETIME_SCHEMA or anchor.get("service_contract") != self.contract:
+            raise EnforcementUnavailable("operator lifetime reservation configuration or cgroups changed")
+        try:
+            if anchor.get("groups") == self.proof.groups():
+                return anchor, None
+        except (OSError, EnforcementUnavailable):
+            pass
+        receipt = anchor.get("release")
+        if anchor.get("state") == "RELEASED" and isinstance(receipt, dict) and receipt.get(
+                "basis") == "previous_boot":
+            return anchor, receipt
+        receipt = previous_boot_receipt(anchor, self.boot_id())
+        if receipt is None:
+            raise EnforcementUnavailable("operator lifetime reservation configuration or cgroups changed")
+        return anchor, receipt
 
     def reserve(self) -> str:
         """Run before starting the daemon, proxy or service; adopt only exact leases."""
@@ -714,7 +765,7 @@ class BuilderAdmission:
     def release(self) -> None:
         """Explicit operator shutdown, never a service/client finally block."""
         with operator_lock(self.root, "service.lock"), operator_lock(self.root, "lifetime.lock"):
-            anchor = self._anchor()
+            anchor, previous_boot = self._release_anchor()
             if anchor.get("state") == "RELEASED":
                 return
             if anchor.get("state") not in {"PROVISIONING", "RESERVED", "RELEASING"}:
@@ -726,7 +777,9 @@ class BuilderAdmission:
             if not _as_client(self.config, lambda: all(
                     _context_absent(self.config, record) for record in confirmation._records.values())):
                 raise EnforcementUnavailable("released client contexts are missing proof or rebound")
-            if not self.proof.stopped(anchor["members"]):
+            stopped = (self.proof.stopped(anchor["members"], previous_boot=True) if previous_boot
+                       else self.proof.stopped(anchor["members"]))
+            if not stopped:
                 raise EnforcementUnavailable("daemon, proxy, service or worker termination is unconfirmed")
             if self.config.native_engine is not None:
                 from appsec_review.container_runtime.engine_broker import (
@@ -737,6 +790,8 @@ class BuilderAdmission:
             # A crash after ledger deletion must not permit startup from the old
             # anchor. RELEASING is a durable fail-closed retirement fence.
             anchor["state"] = "RELEASING"
+            if previous_boot:
+                anchor["release"] = dict(previous_boot, observed_at=time.time())
             self._write_anchor(anchor)
 
             def release():
@@ -745,6 +800,8 @@ class BuilderAdmission:
             if self.engine_admission is None:
                 _as_client(self.config, release)
             else:
-                self.engine_admission.release(anchor["ledger_identity"])
+                # The shared baseline lease binds live cgroup inodes, recreated by a reboot.
+                self.engine_admission.release(anchor["ledger_identity"],
+                                              verify_baseline=previous_boot is None)
             anchor["state"] = "RELEASED"
             self._write_anchor(anchor)

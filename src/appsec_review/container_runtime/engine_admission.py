@@ -154,7 +154,8 @@ class EngineDomainAdmission:
         admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
         admission.verify_persistent(self.config.admission.lease_id, self.request, self.binding)
 
-    def release(self, identity):
+    def release(self, identity, *, verify_baseline=True):
         admission = self._ledger(identity)
-        admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
+        if verify_baseline:
+            admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
         admission._release_persistent(self.config.admission.lease_id, self.request, self.binding)

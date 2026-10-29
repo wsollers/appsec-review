@@ -229,3 +229,88 @@ def test_real_private_containerd_proof_requires_socket_peer_store_and_generation
             proof._private_containerd(["dockerd", "--containerd=" + endpoint])
     else:
         proof._private_containerd(["dockerd", "--containerd=" + endpoint])
+
+CURRENT_BOOT = "11111111-1111-4111-8111-111111111111"
+OLD_BOOT = "22222222-2222-4222-8222-222222222222"
+
+
+class RebootedDomainProof(DomainProof):
+    def groups(self):
+        return {"engine": {"path": "/sys/fs/cgroup/engine-private", "device": 1, "inode": 999}}
+
+
+def rebooted(owner, members):
+    anchor = json.loads(owner.path.read_text())
+    anchor["members"] = members
+    owner.path.write_text(json.dumps(anchor))
+    result = BuilderAdmission(owner.config, proof=CommissioningProof(owner.config),
+                              boot_id=lambda: CURRENT_BOOT)
+    result.proof.generation += 1
+    result.engine_admission.proof = RebootedDomainProof()
+    return result
+
+
+def test_previous_boot_lifetime_releases_despite_recreated_cgroups(provisional):
+    owner = rebooted(provisional, [
+        {"pid": 27386, "start_token": f"{OLD_BOOT}:7668879"},
+        {"pid": 27390, "start_token": f"27390:{OLD_BOOT}:7668901"},
+    ])
+    recorded_groups = json.loads(owner.path.read_text())["groups"]
+    owner.release()
+    assert owner.proof.stopped_calls == [True]
+    anchor = json.loads(owner.path.read_text())
+    assert anchor["state"] == "RELEASED"
+    assert anchor["release"]["basis"] == "previous_boot"
+    assert anchor["release"]["recorded_boot_ids"] == [OLD_BOOT]
+    assert anchor["release"]["current_boot_id"] == CURRENT_BOOT
+    assert anchor["release"]["recorded_groups"] == recorded_groups
+    assert list(json.loads(bank(owner).read_text())["leases"]) == ["existing-engine-services"]
+    before = owner.path.read_bytes(), bank(owner).read_bytes()
+    owner.release()
+    assert (owner.path.read_bytes(), bank(owner).read_bytes()) == before
+    with pytest.raises(EnforcementUnavailable):
+        owner.reserve()
+
+
+@pytest.mark.parametrize("members", [
+    [{"pid": 1, "start_token": f"{CURRENT_BOOT}:5"}],
+    [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}, {"pid": 2, "start_token": f"{CURRENT_BOOT}:6"}],
+    [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}, {"pid": 2, "start_token": "boot:123"}],
+    [{"pid": 1, "start_token": OLD_BOOT}],
+    [{"pid": 1}],
+    [],
+])
+def test_previous_boot_release_requires_every_member_from_another_boot(provisional, members):
+    owner = rebooted(provisional, members)
+    before = owner.path.read_bytes(), bank(owner).read_bytes()
+    with pytest.raises(EnforcementUnavailable, match="configuration or cgroups changed"):
+        owner.release()
+    assert (owner.path.read_bytes(), bank(owner).read_bytes()) == before
+
+
+def test_previous_boot_release_still_requires_stopped_scopes(provisional):
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    owner.proof.stopped_result = False
+    before = owner.path.read_bytes(), bank(owner).read_bytes()
+    with pytest.raises(EnforcementUnavailable, match="termination"):
+        owner.release()
+    assert (owner.path.read_bytes(), bank(owner).read_bytes()) == before
+
+
+def test_previous_boot_release_does_not_apply_to_changed_contracts(provisional):
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    changed = BuilderAdmission(replace(owner.config, host_overhead_mb=256),
+                               proof=owner.proof, boot_id=lambda: CURRENT_BOOT)
+    with pytest.raises(EnforcementUnavailable, match="configuration or cgroups changed"):
+        changed.release()
+
+
+def test_only_previous_boot_proof_treats_missing_cgroups_as_empty(provisional, tmp_path, monkeypatch):
+    present = tmp_path / "present"
+    present.mkdir()
+    (present / "cgroup.events").write_text("populated 0\n")
+    proof = LifetimeProof(provisional.config)
+    monkeypatch.setattr(proof, "_roots", lambda: [present, tmp_path / "missing"])
+    assert proof.empty(missing_ok=True)
+    with pytest.raises(FileNotFoundError):
+        proof.empty()

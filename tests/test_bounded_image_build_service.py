@@ -263,7 +263,8 @@ class FakeLifetimeProof:
     def members(self):
         return deepcopy(self.live_members)
 
-    def stopped(self, members):
+    def stopped(self, members, *, previous_boot=False):
+        self.stopped_calls = getattr(self, "stopped_calls", []) + [previous_boot]
         return self.stopped_result
 
 

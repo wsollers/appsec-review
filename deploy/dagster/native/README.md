@@ -279,6 +279,15 @@ the host and engine identity checks, and then performs only the ordinary restart
 under the prior frozen contract. It never serves, publishes contracts, releases the lifetime or
 rebinds a lease; unconfirmed removals remain quarantined.
 
+Host restart recovery: a reboot recreates the lifetime's cgroups with new inodes, so the strict
+group match can never succeed again. `release-lifetime` and `release-prior-lifetime` instead
+release a lifetime whose every recorded member start token carries a boot ID that differs from
+`/proc/sys/kernel/random/boot_id`. A missing or unparseable boot ID, a member from the current
+boot, or any configuration difference keeps the strict check. The journal, client-context,
+stopped-scope (a not-yet-recreated cgroup counts as empty) and engine-retirement proofs still
+apply, and the shared engine baseline lease is left unverified and retained. The `RELEASED`
+anchor records `release.basis = "previous_boot"` with the recorded and current boot IDs and the
+recorded groups. Serving and reconciliation operations remain strict.
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.
 A separate shared-journal/lease sequence covers builder -> derived-image tool -> removal -> next
