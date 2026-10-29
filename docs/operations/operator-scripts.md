@@ -343,6 +343,50 @@ scripts/clean-temp.sh --docker
 
 ## run-tests
 
+### Explicit acceptance profiles
+
+`--acceptance <profile>` (`-Acceptance <profile>`) selects the separate bounded acceptance
+driver, not one of the legacy suites below. For example:
+
+```bash
+scripts/run-tests.sh --acceptance quick --workers 1 --dry-run
+scripts/run-tests.sh --acceptance graphs --workers 1
+```
+
+```powershell
+.\scripts\run-tests.ps1 -Acceptance quick -Workers 1 -DryRun
+.\scripts\run-tests.ps1 -Acceptance graphs -Workers 1
+```
+
+Acceptance requires the checkout's own virtual environment, always treats missing/skipped/failed
+required coverage as failure, and writes its result/logs/fixture runs only under a unique
+`test/tmp/acceptance/` root. `--workers` (`-Workers`) defaults to 1 and permits at most 2.
+Staged review selects dependency-ready producer phases, frozen-input checkpoints and supervisor
+seals before fresh private consumers. Failed producers leave descendants explicitly blocked,
+not executed or successfully skipped. At frozen `856300ca`, the approved series passed
+`review-report-integrity` 12/12, `review-outcomes` 10/10 and unchanged `review` 13/13 in that
+sequential order, with fresh invocations and two workers each. The 35 executions / 31 unique
+cases took 1138.249 seconds wrapper wall time; all 600-second profile and individual
+60/120-second caps passed, with collection/case cleanup zero and no production services
+touched. Exact results/hashes are in the [series receipt](bounded-acceptance.md#qualified-series-at-856300ca).
+
+Strict producer detachment/checkpoints/seals/private copies remain; new integrity consumers
+retain ordinary 60-second caps. Monolithic `review-exhaustive` has 31 cases, still capped at
+600 seconds and **not qualified**, not an umbrella alias for the series. Earlier monolithic
+and `086ded0a` failures remain recorded. Historical `a4ce5459` three quick warm passes and
+one-worker portable process pass are not new-source or serial-quick proof. Tagged workers
+use their existing 120-second exception internally; other lifecycle helper cases retain 60.
+No global cap increase or platform/provider-wide clearance is implied.
+`--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` only lower profile caps.
+Legacy suites, arbitrary pytest arguments, `--parallel` and `--background` cannot be combined
+with acceptance; the known-failure exemption below does not apply.
+
+See [bounded integration acceptance](bounded-acceptance.md) for profile selections, prerequisites,
+strict collection and cleanup, output schemas, budgets, unimplemented optional profiles and the
+shared-host caveat. The driver does not use a production Dagster endpoint or restart the stack.
+
+### Legacy pytest suites
+
 `run-tests` wraps pytest. It uses the checkout's `.venv` (`.venv/bin/python` or
 `.venv\Scripts\python.exe`); in a worktree without one it falls back to the main checkout's venv and
 sets `PYTHONPATH=src` so the worktree's code is the code under test. Each run gets

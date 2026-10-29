@@ -33,6 +33,8 @@ HOUR = 3600
 
 @pytest.fixture
 def dagster():
+    if os.name == "nt":
+        pytest.skip("legacy Bash/shebang operator sandbox requires POSIX; native acceptance is tested separately")
     server = FakeDagster()
     yield server
     server.close()
@@ -66,6 +68,8 @@ def box(tmp_path: Path, dagster: FakeDagster) -> Sandbox:
 
 
 def real(script: str, *arguments: str) -> subprocess.CompletedProcess:
+    if os.name == "nt":
+        pytest.skip("legacy Bash wrapper probe requires POSIX paths; native acceptance is tested separately")
     environment = {**os.environ, "APPSEC_PYTHON": sys.executable}
     return subprocess.run(["bash", str(SCRIPTS / f"{script}.sh"), *arguments], text=True, capture_output=True,
                           env=environment, cwd="/", timeout=60, check=False)
@@ -73,6 +77,7 @@ def real(script: str, *arguments: str) -> subprocess.CompletedProcess:
 
 # -- syntax, twins, help --------------------------------------------------------------------------
 @pytest.mark.parametrize("name", NAMES)
+@pytest.mark.skipif(os.name == "nt", reason="legacy Bash syntax probe requires POSIX script paths")
 def test_scripts_are_executable_strict_bash_with_a_powershell_twin(name: str) -> None:
     script = SCRIPTS / f"{name}.sh"
     text = script.read_text(encoding="utf-8")
@@ -88,6 +93,7 @@ def test_scripts_are_executable_strict_bash_with_a_powershell_twin(name: str) ->
     assert "docker" not in text and "curl" not in text
 
 
+@pytest.mark.skipif(os.name == "nt", reason="legacy Bash syntax probe requires POSIX script paths")
 def test_shared_libraries_are_strict() -> None:
     assert subprocess.run(["bash", "-n", str(SCRIPTS / "lib" / "common.sh")], check=False).returncode == 0
     assert "Set-StrictMode -Version Latest" in (SCRIPTS / "lib" / "common.ps1").read_text(encoding="utf-8")
@@ -1001,6 +1007,41 @@ def test_parse_output_separates_known_from_new_failures() -> None:
     assert result.counts == {"failed": 1, "error": 1, "passed": 7, "skipped": 2}
 
 
+def test_acceptance_public_dispatch_has_explicit_strict_budgets_without_xdist() -> None:
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("APPSEC_NATIVE_")}
+    command = [sys.executable, str(REPOSITORY / "deploy" / "dagster" / "bin" / "ops.py"),
+               "run-tests", "--acceptance", "quick", "--workers", "2",
+               "--deadline", "30", "--case-deadline", "20", "--dry-run"]
+    result = subprocess.run(command, cwd=REPOSITORY, env=environment, text=True, capture_output=True,
+                            timeout=20, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["strict"] and plan["workers"] == 2
+    assert plan["deadline_seconds"] == 30 and plan["case_deadline_seconds"] == 20
+    assert plan["nodes"] and "-n auto" not in result.stdout
+
+
+def test_acceptance_native_host_entrypoint_forwards_options_without_deployment_state() -> None:
+    environment = {**os.environ, "APPSEC_PYTHON": sys.executable, "APPSEC_REPO_ROOT": str(REPOSITORY),
+                   "APPSEC_NATIVE_CONFIG": "must-not-reach-compose"}
+    if os.name == "nt":
+        shell = shutil.which("powershell")
+        assert shell, "Windows acceptance forwarding requires the native PowerShell host"
+        command = [shell, "-NoProfile", "-File", str(SCRIPTS / "run-tests.ps1"),
+                   "-Acceptance", "quick", "-Workers", "2", "-Deadline", "30", "-CaseDeadline", "20", "-DryRun"]
+    else:
+        shell = shutil.which("bash")
+        assert shell, "Linux acceptance forwarding requires Bash"
+        command = [shell, str(SCRIPTS / "run-tests.sh"), "--acceptance", "quick",
+                   "--workers", "2", "--deadline", "30", "--case-deadline", "20", "--dry-run"]
+    result = subprocess.run(command, cwd=REPOSITORY, env=environment, text=True, capture_output=True,
+                            timeout=30, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(next(line for line in result.stdout.splitlines() if line.startswith("{")))
+    assert plan["workers"] == 2 and plan["deadline_seconds"] == 30 and plan["case_deadline_seconds"] == 20
+    assert plan["strict"] and "docker" not in result.stdout
+
+
 def test_watch_prints_each_job_once_across_polls() -> None:
     watch = ops.Watch(total=2)
     snapshot = run(UUID_ONE, "STARTED", start=T0, steps=[step("a__begin", "SUCCESS", T0 + 60, T0 + 61)])
@@ -1009,6 +1050,7 @@ def test_watch_prints_each_job_once_across_polls() -> None:
     assert watch.update({**snapshot, "status": "SUCCESS", "endTime": T0 + 120})[-1].startswith("FINAL SUCCESS after 2.0 min")
 
 
+@pytest.mark.skipif(os.name == "nt", reason="legacy /opt/app mount contract requires POSIX path semantics")
 def test_resolve_target_and_overlay_validate_their_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ops, "ROOT", tmp_path)
     (tmp_path / "targets" / "demo").mkdir(parents=True)

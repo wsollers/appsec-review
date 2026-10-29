@@ -1,0 +1,75 @@
+{
+  "schema": "appsec-review/owasp-catalog/1",
+  "family": "ASVS",
+  "version": "5.0.0",
+  "authority": "control",
+  "fixture": true,
+  "upstream": {
+    "repository": "https://github.com/OWASP/ASVS",
+    "ref": "v5.0.0_release",
+    "commit": "5cf9b032440be53ce345ab3c130fda46ba1ce7a2",
+    "license": "CC-BY-SA-4.0"
+  },
+  "records": [
+    {
+      "id": "V6.2.1",
+      "title": "Minimum password length",
+      "text": "Fixture control: verify the minimum length enforced for user-set passwords using admissible evidence.",
+      "domain": "authentication_session",
+      "levels": [1, 2, 3],
+      "component_roles": ["application_api_server", "authentication_identity"],
+      "evidence_mode": "static_source",
+      "required_tools": ["source_retrieval"]
+    },
+    {
+      "id": "V8.2.1",
+      "title": "Function-level authorization",
+      "text": "Fixture control: verify function-level access is restricted to explicitly permitted consumers at a trusted boundary.",
+      "domain": "authorization_access_control",
+      "levels": [1, 2, 3],
+      "component_roles": ["application_api_server", "web_frontend", "administrative_tooling"],
+      "evidence_mode": "static_source",
+      "required_tools": ["source_retrieval", "route_index"]
+    },
+    {
+      "id": "V14.2.4",
+      "title": "Sensitive data protection controls",
+      "text": "Fixture control: verify sensitive data receives the protection controls defined for its protection level.",
+      "domain": "cryptography_data_protection",
+      "levels": [2, 3],
+      "component_roles": ["application_api_server", "cryptography_data_protection", "storage"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["evidence_retrieval"]
+    },
+    {
+      "id": "V15.2.1",
+      "title": "Dependency remediation time frames",
+      "text": "Fixture control: verify components are within documented update and remediation time frames.",
+      "domain": "build_supply_chain",
+      "levels": [1, 2, 3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
+    },
+    {
+      "id": "V15.1.2",
+      "title": "Third-party component inventory",
+      "text": "Fixture control: verify an inventory such as an SBOM covers all third-party libraries and that components come from trusted, maintained repositories.",
+      "domain": "build_supply_chain",
+      "levels": [2, 3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
+    },
+    {
+      "id": "V15.2.4",
+      "title": "Dependency source integrity",
+      "text": "Fixture control: verify components and their transitive dependencies resolve from the expected repository without dependency-confusion risk.",
+      "domain": "build_supply_chain",
+      "levels": [3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
+    }
+  ]
+}

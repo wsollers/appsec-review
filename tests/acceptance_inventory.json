@@ -1,0 +1,620 @@
+{
+  "schema": "appsec-review/acceptance-inventory/1",
+  "profiles": {
+    "quick": {
+      "tier": "hermetic",
+      "deadline_seconds": 720,
+      "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli", "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "control-source-evidence", "feed-tls", "native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle"],
+      "deferral": "Representative connected hermetic gate. Full report-integrity/empty/corrupt/benign/blocked variants use the explicit sequential review, review-report-integrity and review-outcomes series; monolithic review-exhaustive remains unqualified. Full signal-integrity, helper-input, TLS, submission-barrier, MCP-integrity, consumer, replay/sensor and OS-specific matrices have separate bounded profiles; genuine OWASP assessment and live tools/providers/native remain unverified."
+    },
+    "signals": {
+      "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["signal-lifecycle", "signal-integrity", "dependency-lifecycle"],
+      "deferral": "Recorded compiler/SBOM and HTTP boundaries; no live tool or external service compatibility claim."
+    },
+    "graphs": {
+      "tier": "hermetic", "deadline_seconds": 180, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest"], "obligations": ["graph-consumer", "graph-matcher", "helper-cli", "helper-input-matrix"],
+      "deferral": "Recorded graph exports and real helper CLI, not current CodeQL/tool compatibility."
+    },
+    "process": {
+      "tier": "hermetic", "deadline_seconds": 480, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest", "python:dagster"],
+      "obligations": ["process-configuration", "process-profile-refusal", "worker-recovery", "submission-recovery", "submission-barrier-matrix", "mcp-accepted-run", "mcp-integrity-matrix", "record-replay-sensor"],
+      "deferral": "Portable real local processes/Dagster. Linux guardian and Windows PowerShell have explicit separate selections."
+    },
+    "process-linux": {
+      "tier": "hermetic", "deadline_seconds": 180, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest", "python:dagster", "platform:linux"],
+      "obligations": ["linux-guardian"],
+      "deferral": "Requires Linux /proc and SO_PEERCRED; not executed on Windows. No native broker commissioning."
+    },
+    "process-windows": {
+      "tier": "hermetic", "deadline_seconds": 60, "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest", "platform:windows"], "obligations": ["windows-dispatch"],
+      "deferral": "Actual PowerShell with invocation-owned compiled transport; not actual WSL."
+    },
+    "controls": {
+      "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"], "obligations": ["control-source-evidence", "feed-tls", "feed-tls-negative-matrix"],
+      "deferral": "Actual source/standards qualification and loopback TLS. Genuine assessment, positive source-bound control assessment, precomputed control facts and review join remain unverified."
+    },
+    "review": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle"],
+      "deferral": "Scripted external model boundary and actual bounded jobs. Full current-report integrity, benign and blocked variants have separate review-report-integrity and review-outcomes series members; no compiler or paid provider."
+    },
+    "review-report-integrity": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-integrity"],
+      "deferral": "Eight independent integrity vectors each use a fresh driver-owned private consumer copy and a 60-second ordinary-case cap. Run sequentially with review and review-outcomes for the complete review matrix; no cross-invocation seed reuse or guarantee of timing."
+    },
+    "review-outcomes": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["ci-benign-prepare", "ci-benign-review", "ci-benign-gate", "ci-benign-report", "review-benign", "ci-blocked-prepare", "ci-blocked-review", "ci-blocked-gate", "ci-blocked-report", "review-blocked"],
+      "deferral": "Complete independent benign and blocked review/gate/report/consumer chains. Run sequentially with review and review-report-integrity for the complete review matrix; all three member invocations must pass with their own authenticated prerequisites."
+    },
+    "review-exhaustive": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle", "current-report-integrity", "ci-benign-prepare", "ci-benign-review", "ci-benign-gate", "ci-benign-report", "review-benign", "ci-blocked-prepare", "ci-blocked-review", "ci-blocked-gate", "ci-blocked-report", "review-blocked"],
+      "deferral": "Unqualified monolithic selection: the prior grouped 24-case invocation at a4ce5459 failed at 599.621 seconds. This selection retains all original vectors with eight independent integrity cases but no 600-second timing guarantee. Use the explicit sequential review, review-report-integrity and review-outcomes series without enlarging any member cap."
+    },
+    "consumers": {
+      "tier": "hermetic", "deadline_seconds": 360, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["review-triage", "publication-rendering", "review-referral"],
+      "deferral": "Actual bounded jobs with scripted model transport. Historical renderer selection, specialist resolution, saturation and cross-lane referral matrices remain unverified."
+    },
+    "tools": {
+      "tier": "tool", "deadline_seconds": 480, "case_deadline_seconds": 60,
+      "prerequisites": ["preinstalled-pinned-tools"], "obligations": [],
+      "deferral": "Unimplemented; explicit preinstalled tool selection and permission required. No acquisition fallback."
+    },
+    "deployed": {
+      "tier": "tool", "deadline_seconds": 120, "case_deadline_seconds": 60,
+      "prerequisites": ["authorized-read-only-deployment"], "obligations": [],
+      "deferral": "Unimplemented; no service or deployed API access in quick."
+    },
+    "provider": {
+      "tier": "provider", "deadline_seconds": 180, "case_deadline_seconds": 60,
+      "prerequisites": ["authorized-provider-model"], "obligations": [],
+      "deferral": "Unimplemented; separate authorization, exact provider/model and request budget required."
+    },
+    "guidance": {
+      "tier": "provider", "deadline_seconds": 300, "case_deadline_seconds": 60,
+      "prerequisites": ["authorized-six-call-evaluation"], "obligations": [],
+      "deferral": "Unimplemented; at most six calls after separate authorization. Quick is not model-quality evidence."
+    },
+    "codeql-warm": {
+      "tier": "codeql", "deadline_seconds": 900, "case_deadline_seconds": 900,
+      "prerequisites": ["compatible-warm-codeql-assets"], "obligations": [],
+      "deferral": "Unimplemented; declared runtime/language pilot only. Never warms, pulls or expands automatically."
+    },
+    "native": {
+      "tier": "native", "deadline_seconds": 300, "case_deadline_seconds": 60,
+      "prerequisites": ["commissioned-native-host-and-grants"], "obligations": [],
+      "deferral": "Unimplemented; separate commissioning and exact grants required."
+    }
+  },
+  "obligations": [
+    {
+      "id": "graph-consumer", "gap_ids": ["G-A2", "G-A4", "G-A8", "G-C10"],
+      "nodes": [
+        "tests/integration/test_graph_semantic_acceptance.py::test_safe_allowlist_and_unguarded_command_remain_distinct_in_graph_consumer",
+        "tests/integration/test_graph_semantic_acceptance.py::test_python_seed_ledger_keeps_in_scope_and_names_out_of_scope",
+        "tests/integration/test_graph_semantic_acceptance.py::test_compiler_id_contamination_is_excluded_but_real_targets_remain"
+      ],
+      "boundary": "Recorded source-resolving graph rows -> actual consumers, seeded scope and compiler-id exclusion",
+      "variants": ["safe-control", "unguarded", "python-seeded", "C", "CXX"],
+      "substitutions": ["Recorded graph export; no current graph engine"],
+      "prerequisites": [], "deferrals": ["Current CodeQL/Kotlin/seeded engine exports remain unverified"]
+    },
+    {
+      "id": "graph-matcher", "gap_ids": ["G-A2", "G-A8", "G-H5"],
+      "nodes": [
+        "tests/integration/test_graph_semantic_acceptance.py::test_timed_lane_inherits_outer_root_without_relocating_source_assets",
+        "tests/integration/test_graph_semantic_acceptance.py::test_matcher_requires_and_forbids_facts_on_the_same_row",
+        "tests/integration/test_graph_semantic_acceptance.py::test_matcher_cannot_pass_vacuous_subjects",
+        "tests/integration/test_local_helper_acceptance.py::test_live_build_toolchain_definitions_cannot_silently_shadow_go_coverage"
+      ],
+      "boundary": "Exact required/forbidden row matching, nonempty subject proof and distinct Go definition retention",
+      "variants": ["missing", "forbidden", "split-columns", "missing-export", "truncated-negative", "empty-subjects"],
+      "substitutions": ["Recorded fixtures; Go live definitions are collected, not executed"],
+      "prerequisites": [], "deferrals": ["pnpm/yarn/Wasm, Lua activation and native language/runtime matrix remain unverified"]
+    },
+    {
+      "id": "helper-cli", "gap_ids": ["G-A11"], "case_deadline_seconds": 30,
+      "nodes": [
+        "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_builds_verifies_and_queries_tiny_graph_documents",
+        "tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_detects_changed_record_count_read_only"
+      ],
+      "boundary": "Actual owned helper subprocess -> bounded SQLite build/verify/query and read-only tamper rejection",
+      "variants": ["build-verify-query", "count-tamper"],
+      "substitutions": ["Tiny local documents, not engine acquisition"],
+      "prerequisites": [], "deferrals": ["Actual Lua rule execution remains a selected-tool obligation"]
+    },
+    {
+      "id": "helper-input-matrix", "gap_ids": ["G-A11"], "case_deadline_seconds": 30,
+      "nodes": ["tests/integration/test_local_helper_acceptance.py::test_real_sqlite_helper_rejects_bad_inputs_without_publishing"],
+      "boundary": "Actual helper subprocess rejects malformed and out-of-root inputs without publication",
+      "variants": ["duplicate-identity", "logical-path", "input-root", "output-root", "record-bound"],
+      "substitutions": ["Tiny local documents, not engine acquisition"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "process-configuration", "gap_ids": ["G-B3", "G-B10"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_process_lifecycle_acceptance.py::test_tagged_multiprocess_workers_receive_layers_hash_and_pool_limit"],
+      "boundary": "Actual tagged Dagster multiprocess admission/configuration/serialization and accepted resume",
+      "variants": ["pool-limit", "profile-layer-hash", "resume-selection", "metrics-receipts"],
+      "substitutions": ["Tiny local fixture job; scripted model catalog"],
+      "prerequisites": ["python:dagster"], "deferrals": ["Pinned DagsterRun has no create_timestamp: actual queue-delay metric unavailable, never synthesized", "Previous 60-second supervisor cap expired after pytest passed in 54.88 seconds; this real-job exception includes interpreter completion and owned cleanup"]
+    },
+    {
+      "id": "process-profile-refusal", "gap_ids": ["G-B3"],
+      "nodes": ["tests/integration/test_process_lifecycle_acceptance.py::test_incompatible_profile_is_refused_by_actual_executor_before_worker_admission"],
+      "boundary": "Actual executor rejects incompatible configuration before worker admission",
+      "variants": ["invalid-selection"], "substitutions": ["Tiny local fixture job"],
+      "prerequisites": ["python:dagster"], "deferrals": []
+    },
+    {
+      "id": "worker-recovery", "gap_ids": ["G-B5"],
+      "nodes": ["tests/integration/test_process_lifecycle_acceptance.py::test_killed_worker_preserves_accepted_predecessor_and_real_attempt_then_resumes"],
+      "boundary": "Actual worker death -> durable attempt/predecessor -> fresh-process accepted reuse",
+      "variants": ["accepted-predecessor", "interrupted-attempt", "fresh-resume"],
+      "substitutions": ["Tiny local job"], "prerequisites": ["python:dagster"],
+      "deferrals": ["Linux confirmed lease generations are separate platform obligations"]
+    },
+    {
+      "id": "record-replay-sensor", "gap_ids": ["G-B10", "G-B11"], "case_deadline_seconds": 120,
+      "nodes": [
+        "tests/integration/test_process_lifecycle_acceptance.py::test_fresh_dagster_record_and_local_replay_preserve_failures_without_live_transport",
+        "tests/integration/test_process_lifecycle_acceptance.py::test_real_step_failure_sensor_observes_failure_while_multiprocess_sibling_is_active"
+      ],
+      "boundary": "Real separate-process recording/replay and active Dagster failure sensor",
+      "variants": ["different-roots", "live-transport-forbidden", "replay-miss", "failure-preservation", "active-sibling"],
+      "substitutions": ["Owned scripted executable, no provider"],
+      "prerequisites": ["python:dagster"], "deferrals": ["Deployed API/assets/package probe remains separately authorized"]
+    },
+    {
+      "id": "submission-recovery", "gap_ids": ["G-B4"],
+      "nodes": [
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation[remote-ack]",
+        "tests/integration/test_transport_acceptance.py::test_submission_storage_failure_dispatches_nothing"
+      ],
+      "boundary": "Actual killed submitter/loopback HTTP and durable uncertain-intent reconciliation",
+      "variants": ["remote-ack", "fsync-failure", "replace-failure", "wrong-identity", "active-identity"],
+      "substitutions": ["Owned loopback server, not deployed Dagster"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "submission-barrier-matrix", "gap_ids": ["G-B4"],
+      "nodes": [
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation[intent]",
+        "tests/integration/test_transport_acceptance.py::test_killed_submitter_keeps_durable_intent_and_refuses_duplicate_until_exact_reconciliation[ack]"
+      ],
+      "boundary": "Actual submitter death before dispatch and after received acknowledgement",
+      "variants": ["intent", "ack"], "substitutions": ["Owned loopback HTTP server, not deployed Dagster"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "mcp-accepted-run", "gap_ids": ["G-B13"],
+      "nodes": ["tests/integration/test_transport_acceptance.py::test_real_mcp_initialization_discovery_tools_errors_and_recovery"],
+      "boundary": "Actual accepted intake/catalog -> actual MCP stdio process, pinned manifest and protocol recovery",
+      "variants": ["handshake", "discovery", "ping", "declared-tools", "invalid-request", "unknown-method"],
+      "substitutions": ["Tiny accepted target; no live model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "mcp-integrity-matrix", "gap_ids": ["G-B13"],
+      "nodes": [
+        "tests/integration/test_transport_acceptance.py::test_real_mcp_manifest_pin_mismatch_fails_closed",
+        "tests/integration/test_transport_acceptance.py::test_real_mcp_malformed_first_message_does_not_kill_session_or_reuse_previous_id"
+      ],
+      "boundary": "Actual accepted-run MCP rejects changed manifest and recovers malformed-first requests without stale IDs",
+      "variants": ["manifest-mismatch", "first-message-parse-error", "prior-id-not-reused"],
+      "substitutions": ["Tiny accepted target; no live model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "linux-guardian", "gap_ids": ["G-B1", "G-B2"],
+      "nodes": [
+        "tests/integration/test_process_lifecycle_acceptance.py::test_real_safety_executor_stops_child_grandchild_and_never_admits_queued_or_retry",
+        "tests/integration/test_transport_acceptance.py::test_real_unix_listener_cannot_be_replaced_and_disconnect_closes_admission"
+      ],
+      "boundary": "Actual Linux guardian/listener, peer credentials and fail-fast owned process tree",
+      "variants": ["sibling-grandchild", "queued-retry-refusal", "listener-ownership", "disconnect"],
+      "substitutions": ["Owned helper processes, no real native workload"],
+      "prerequisites": ["platform:linux"], "deferrals": ["Not executed on Windows; broker/native/database commissioning remains unverified"]
+    },
+    {
+      "id": "windows-dispatch", "gap_ids": ["G-B12"],
+      "nodes": ["tests/integration/test_transport_acceptance.py::test_real_powershell_dispatch_preserves_spaces_unc_distribution_and_exit_status"],
+      "boundary": "Actual Windows PowerShell -> compiled invocation-owned wsl.exe transport",
+      "variants": ["spaces", "UNC", "distribution", "arguments", "exit-status"],
+      "substitutions": ["Compiled local transport stand-in, not actual WSL"],
+      "prerequisites": ["platform:windows"], "deferrals": ["Actual WSL no-op remains separately selected and unverified"]
+    },
+    {
+      "id": "control-source-evidence", "gap_ids": ["G-C9"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_control_evidence_acceptance.py::test_configured_control_evidence_preserves_document_intent_and_reports_missing_assessment"],
+      "boundary": "Real source-document/catalog -> explicit OWASP qualification -> accepted Workbench retrieval with mutation rejection",
+      "variants": ["source-lines", "intent", "hash-provenance", "qualification-only", "source-mutation", "missing-assessment"],
+      "substitutions": ["Five explicitly pinned abridged standards and run-owned qualification input; disabled inference"],
+      "prerequisites": [], "deferrals": ["Genuine assessment, positive source-bound assessment, precomputed control facts and assessment-to-review join remain unverified; qualification never establishes customer target safety"]
+    },
+    {
+      "id": "feed-tls", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
+      "nodes": [
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[declared-exact]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/valid-json-interrupted-ValueError-Content-Length mismatch]"
+      ],
+      "boundary": "Real loopback HTTPS -> bounded fetch/normalize/publish/query with last-good pointer preservation",
+      "variants": ["exact-limit", "valid-json-prefix-truncation"],
+      "substitutions": ["Test-only loopback TLS key/certificate and one-CVE payload; no public refresh"],
+      "prerequisites": [], "deferrals": ["Preinstalled CVE tool database construction remains a selected-tool obligation"]
+    },
+    {
+      "id": "feed-tls-negative-matrix", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
+      "nodes": [
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[stream-exact]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/interrupted-ValueError-Content-Length mismatch]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/oversize-declared-ValueError-byte bound]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/oversize-stream-ValueError-byte bound]",
+        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/status-HTTPError-503]"
+      ],
+      "boundary": "Real loopback TLS streaming bounds, truncation and HTTP failures preserve last-good publication",
+      "variants": ["headerless-stream", "truncation", "declared-oversize", "stream-oversize", "HTTP-503"],
+      "substitutions": ["Test-only loopback certificate and tiny payload; no public refresh"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-positive-prepare", "gap_ids": ["G-C1", "G-H3"],
+      "stage": {"kind": "producer", "variant": "native-positive", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[native-positive]"],
+      "boundary": "Freeze tiny native configuration before accepted upstream fixtures and source-resolving graph",
+      "variants": ["native-positive"], "substitutions": ["Recorded bounded source/graph upstream fixtures"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-positive-review", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "native-positive", "depends_on": ["native-positive-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[native-positive]"],
+      "boundary": "Actual inference review JobRunner with upstream hash binding and eligible PoC basis",
+      "variants": ["native-positive"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-positive-poc", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "native-positive", "depends_on": ["native-positive-review"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_poc_stage[native-positive]"],
+      "boundary": "Actual PoC JobRunner planning before sealing; forbidden model/compiler callbacks and no-build refusal",
+      "variants": ["native-positive"], "substitutions": ["No compiler or provider dispatch"],
+      "prerequisites": [], "deferrals": ["The supervisor seals only after pytest exit and confirmed cleanup"]
+    },
+    {
+      "id": "native-empty-prepare", "gap_ids": ["G-C1", "G-H3"],
+      "stage": {"kind": "producer", "variant": "native-empty", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[native-empty]"],
+      "boundary": "Freeze independent native-empty fixture configuration and source-resolving graph",
+      "variants": ["native-empty"], "substitutions": ["Recorded bounded source/graph upstream fixtures"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-empty-review", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "native-empty", "depends_on": ["native-empty-prepare"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[native-empty]"],
+      "boundary": "Actual inference review without PoC basis; authentic empty candidates",
+      "variants": ["native-empty"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "ci-positive-prepare", "gap_ids": ["G-C2", "G-H3"],
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[ci-positive]"],
+      "boundary": "Freeze independent tiny CI configuration before authentic bounded CI upstream fixtures",
+      "variants": ["ci-positive"], "substitutions": ["Recorded CI upstream; no native graph"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-positive-review", "gap_ids": ["G-C2"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": ["ci-positive-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[ci-positive]"],
+      "boundary": "Actual CI inference review JobRunner and accepted upstream binding",
+      "variants": ["ci-positive"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-positive-gate", "gap_ids": ["G-C2"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": ["ci-positive-review"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_gate_stage[ci-positive]"],
+      "boundary": "Actual publication gate JobRunner with current review handoff binding",
+      "variants": ["ci-positive"], "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-positive-report", "gap_ids": ["G-C2"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": ["ci-positive-gate"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_report_stage[ci-positive]"],
+      "boundary": "Actual final report JobRunner with current gate handoff binding",
+      "variants": ["ci-positive"], "substitutions": [], "prerequisites": [],
+      "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "ci-benign-prepare", "gap_ids": ["G-C4", "G-H3"],
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[ci-benign]"],
+      "boundary": "Freeze independent benign CI fixture configuration and bounded upstream",
+      "variants": ["ci-benign"], "substitutions": ["Recorded CI upstream; no native graph"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-benign-review", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": ["ci-benign-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[ci-benign]"],
+      "boundary": "Actual benign inference review JobRunner",
+      "variants": ["ci-benign"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-benign-gate", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": ["ci-benign-review"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_gate_stage[ci-benign]"],
+      "boundary": "Actual benign publication gate JobRunner",
+      "variants": ["ci-benign"], "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-benign-report", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": ["ci-benign-gate"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_report_stage[ci-benign]"],
+      "boundary": "Actual benign report JobRunner",
+      "variants": ["ci-benign"], "substitutions": [], "prerequisites": [],
+      "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "ci-blocked-prepare", "gap_ids": ["G-C4", "G-H3"],
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[ci-blocked]"],
+      "boundary": "Freeze independent blocked CI fixture configuration and bounded upstream",
+      "variants": ["ci-blocked"], "substitutions": ["Recorded CI upstream; no native graph"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-blocked-review", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": ["ci-blocked-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[ci-blocked]"],
+      "boundary": "Actual inference review JobRunner with failed worker roles, never clean success",
+      "variants": ["ci-blocked"], "substitutions": ["Scripted external Infer role failures"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-blocked-gate", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": ["ci-blocked-review"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_gate_stage[ci-blocked]"],
+      "boundary": "Actual failed-worker publication gate JobRunner",
+      "variants": ["ci-blocked"], "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-blocked-report", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": ["ci-blocked-gate"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_report_stage[ci-blocked]"],
+      "boundary": "Actual failed-worker report JobRunner",
+      "variants": ["ci-blocked"], "substitutions": [], "prerequisites": [],
+      "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "review-candidate", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "native-positive", "depends_on": ["native-positive-poc"]},
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_real_review_and_poc_planning_use_authoritative_contracts"],
+      "boundary": "Actual unmodified accepted review -> candidate verification/brief -> no-build planning, independent of publication gate",
+      "variants": ["eligible", "resolved-entry-path", "evidence-identity", "strict-risk", "dispatch-refused-without-build"],
+      "substitutions": ["Scripted external model and explicitly recorded source-bound graph/surface evidence"],
+      "prerequisites": [], "deferrals": ["Actual current compiler compatibility is not exercised; existing detailed compile tests are preserved"]
+    },
+    {
+      "id": "review-corrupt", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "native-positive", "depends_on": ["native-positive-poc"]},
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_corrupt_review_is_rejected_before_dispatch"],
+      "boundary": "Actual accepted-byte corruption in a fresh private copy is rejected before dispatch",
+      "variants": ["corrupt-before-dispatch"],
+      "substitutions": ["Scripted model only"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-empty", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "native-empty", "depends_on": ["native-empty-review"]},
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_authentic_empty_candidates_are_not_a_missing_field"],
+      "boundary": "Actual legitimate empty review candidate publication, not a missing candidate field",
+      "variants": ["empty-not-missing"],
+      "substitutions": ["Scripted model only"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "current-report-oracle", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "ci-positive", "depends_on": ["ci-positive-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_current_report_quick_contract"],
+      "boundary": "Actual accepted report -> current gate/review/manifest/evidence source resolution, never historical shard discovery",
+      "variants": ["identity-state-bucket", "report-tamper"],
+      "substitutions": ["Scripted model and recorded upstream observation; all publication application-owned"],
+      "prerequisites": [], "deferrals": ["Scanner detection is distinct from current final-report survival"]
+    },
+    {
+      "id": "current-report-integrity", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 60,
+      "stage": {"kind": "consumer", "variant": "ci-positive", "depends_on": ["ci-positive-report"]},
+      "nodes": [
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[identity-state-bucket]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[missing-current]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[orphan-hit]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[report-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[manifest-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[finding-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[handoff-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[same-length-report-tamper]"
+      ],
+      "boundary": "Full original current report oracle matrix as eight independently collected driver-private consumers, with one mutation and fresh production validation scope per mutation case",
+      "variants": ["identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper", "finding-tamper", "handoff-tamper", "same-length-report-tamper"],
+      "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-benign", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "ci-benign", "depends_on": ["ci-benign-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_benign_and_blocked_real_reports_never_promote_scanner_detection[benign]"],
+      "boundary": "Actual benign review -> gate -> accepted report without promoting scanner hits",
+      "variants": ["benign"],
+      "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-blocked", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "ci-blocked", "depends_on": ["ci-blocked-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_benign_and_blocked_real_reports_never_promote_scanner_detection[blocked]"],
+      "boundary": "Actual failed-worker review -> gate -> accepted report without promoting scanner hits",
+      "variants": ["blocked", "unavailable-worker-is-not-clean-success"],
+      "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-triage", "gap_ids": ["G-C3"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_review_consumer_acceptance.py::test_triage_assessment_orders_admits_and_binds_real_review_handoff"],
+      "boundary": "Actual triage ordering/admission retains severity, reason and accepted review artifact binding",
+      "variants": ["ordering", "admission", "severity", "artifact-binding"],
+      "substitutions": ["Recorded accepted upstream index; only external Infer transport is scripted"],
+      "prerequisites": [], "deferrals": ["Request-count and active-claim saturation are unverified"]
+    },
+    {
+      "id": "publication-rendering", "gap_ids": ["G-C2", "G-C7"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_review_consumer_acceptance.py::test_authentic_publication_renders_counts_states_gaps_and_provenance"],
+      "boundary": "Actual review -> gate -> report -> HTML/LaTeX with counts, states, gaps and provenance",
+      "variants": ["HTML", "LaTeX", "current-publication"],
+      "substitutions": ["Scripted model transport; authentic application-owned publication"],
+      "prerequisites": [], "deferrals": ["Historical/stale renderer selection and renderer tamper rejection remain unverified"]
+    },
+    {
+      "id": "review-referral", "gap_ids": ["G-C5", "G-C6"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_review_consumer_acceptance.py::test_worker_referral_deduplicates_next_round_after_foreign_repair"],
+      "boundary": "Actual worker referral repair -> next-round deduplication and bounded convergence",
+      "variants": ["foreign-anchor-repair", "deduplication", "round-cutoff"],
+      "substitutions": ["Scripted external model transport"],
+      "prerequisites": [], "deferrals": ["Specialist resolution and cross-package/cross-lane referral remain unverified"]
+    },
+    {
+      "id": "signal-lifecycle", "gap_ids": ["G-A5", "G-B7"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_signal_job_acceptance.py::test_full_signal_jobs_preserve_report_source_and_context_semantics"],
+      "boundary": "Real catalog/artifact -> complete coverage/profile jobs -> immutable queryable publication",
+      "variants": ["lcov", "cobertura", "jacoco", "llvm", "folded-hotspots", "missing-signal-build"],
+      "substitutions": ["Recorded native and managed compiler receipts; unrelated intake is independently covered"],
+      "prerequisites": [], "deferrals": ["Compiler-generated report provenance and downstream review consumption are separate obligations"]
+    },
+    {
+      "id": "signal-integrity", "gap_ids": ["G-A5", "G-B7"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_signal_job_acceptance.py::test_changed_profile_cannot_publish_an_accepted_signal"],
+      "boundary": "Changed recorded profile bytes fail the actual producer before accepted publication",
+      "variants": ["hash-tamper", "no-accepted-output", "typed-failure"],
+      "substitutions": ["Recorded compiler receipts"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "dependency-lifecycle", "gap_ids": ["G-A5"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_dependency_job_acceptance.py::test_dependency_job_deduplicates_requests_and_publishes_bound_exposure_and_cache_context"],
+      "boundary": "Accepted native metadata/links -> full dependency job twice -> repository/request dedup, exposure and cache publication",
+      "variants": ["DEBUG-and-runtime-conflict", "QA", "one-repository-two-packages", "fresh-cache", "immutable-prior-index"],
+      "substitutions": ["Recorded compiler and empty SBOM publication boundary", "Bounded scripted HTTP response"],
+      "prerequisites": [], "deferrals": ["Current compiler, Syft and public Scorecard compatibility are unverified"]
+    },
+    {
+      "id": "mcp-error-recovery", "gap_ids": ["G-B13"],
+      "nodes": ["tests/test_mcp_jsonrpc_errors.py::test_malformed_message_has_no_stale_id_and_next_request_succeeds"],
+      "boundary": "Actual stdio JSON-RPC loop with malformed first/subsequent messages and recovery",
+      "variants": ["first-message-parse-error", "prior-id-not-reused"],
+      "substitutions": ["Inert retrieval adapter construction; real accepted-run MCP coverage is a separate obligation"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "harness-contract", "gap_ids": ["G-H1", "G-H2"],
+      "nodes": ["tests/test_acceptance_lanes.py::test_lane_contract_bounds_selection_and_workers"],
+      "boundary": "Frozen LaneSpec selection, deadline and worker validation",
+      "variants": ["serial-default", "at-most-two-workers", "invalid-budgets"],
+      "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "harness-isolation", "gap_ids": ["G-H1", "G-H5"],
+      "nodes": [
+        "tests/test_acceptance_lanes.py::test_acceptance_uses_isolated_roots_and_production_telemetry",
+        "tests/test_acceptance_lanes.py::test_owned_paths_cannot_escape_or_select_production_state",
+        "tests/test_acceptance_lanes.py::test_acceptance_metrics_remain_separate_while_an_owned_review_process_runs"
+      ],
+      "boundary": "LaneWorkspace to real EventLog/PipelineLog and OperationSpan with production sentinel",
+      "variants": ["distinct-invocations", "cpu-and-explicit-io-availability", "owned-path-rejection", "active-owned-review-heartbeat"],
+      "substitutions": ["Tiny local fixture represents production runs; no real review is read or changed"],
+      "prerequisites": [], "deferrals": ["Symlink-privileged path test is not a required quick selection"]
+    },
+    {
+      "id": "harness-owned-fixtures", "gap_ids": ["G-H1", "G-H3"],
+      "nodes": ["tests/test_acceptance_runner.py::test_owned_job_fixture_and_local_transport"],
+      "boundary": "Supervisor fixture runs directory, real loopback socket and owned file write",
+      "variants": ["windows", "linux"], "substitutions": ["No inference, acquisition, Docker or target checkout"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "inventory-drift", "gap_ids": ["G-H5", "G-A8"],
+      "nodes": [
+        "tests/test_acceptance_inventory.py::test_inventory_matches_active_catalogs",
+        "tests/test_acceptance_inventory.py::test_inventory_selections_and_dispositions",
+        "tests/test_acceptance_inventory.py::test_no_untracked_duplicate_test_definitions",
+        "tests/test_acceptance_inventory.py::test_staged_review_inventory_has_explicit_complete_compatible_prerequisites",
+        "tests/test_acceptance_inventory.py::test_review_quick_representatives_and_exhaustive_variants_keep_strict_caps"
+      ],
+      "boundary": "Configured job table, MCP TOOLS, model catalogs/transports, and AST test-definition uniqueness",
+      "variants": ["all-configured-jobs", "all-public-MCP-tools", "all-provider-families"],
+      "substitutions": ["Static drift checks are not execution coverage"],
+      "prerequisites": [], "deferrals": ["Catalog membership and unique definitions are not runtime feature coverage"]
+    }
+  ],
+  "catalogs": {
+    "jobs": [
+      "job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_change_context_analysis",
+      "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index",
+      "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index",
+      "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection",
+      "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification",
+      "job_inference_security_review", "job_language_build", "job_model_connectivity",
+      "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment",
+      "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation",
+      "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build",
+      "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis",
+      "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync",
+      "job_tree_sitter_ast"
+    ],
+    "mcp_tools": [
+      "coverage", "find", "list_codeql_databases", "query_artifacts", "query_build_security",
+      "query_change_context", "query_ci_configuration", "query_code_graph", "query_codeql",
+      "query_codeql_neighborhood", "query_dataset_inventory", "query_debug_symbols", "query_hotspots", "query_observations",
+      "query_owasp_workbench", "query_precomputed", "query_syntax", "read_excerpt", "resolve_evidence", "search", "trace"
+    ],
+    "provider_families": ["anthropic-api", "claude-cli", "copilot-sdk", "openai"],
+    "provider_transports": ["anthropic-api", "claude-cli", "copilot-sdk"],
+    "disposition": "Catalog membership detects drift only. All connected execution remains deferred until a specific obligation below proves it."
+  },
+  "deferred_features": [
+    {
+      "id": "build-tools-graphs", "gap_ids": ["G-A1", "G-A2", "G-A3", "G-A4", "G-A5", "G-A6", "G-A7", "G-A8", "G-A9", "G-A10", "G-A11"],
+      "boundary": "Accepted build/tool/parser/history/graph producers and consumer semantics",
+      "nodes": [], "variants": ["language-runtime-matrix", "warm-codeql", "cached-real-tools", "native"],
+      "substitutions": [], "prerequisites": ["Integrated W3/W4 lanes"],
+      "deferrals": ["No broad existing live scripts are quick selections", "No downloads, cold builds or produced-binary execution"]
+    },
+    {
+      "id": "control-plane", "gap_ids": ["G-B1", "G-B2", "G-B3", "G-B4", "G-B5", "G-B6", "G-B7", "G-B8", "G-B9", "G-B10", "G-B11", "G-B12", "G-B13"],
+      "boundary": "Real local/Dagster process lifecycle, replay, transports, MCP and exact selected deployment compatibility",
+      "nodes": [], "variants": ["failure-recovery", "profile-propagation", "stdio-HTTP-TLS", "windows-WSL"],
+      "substitutions": ["Quick external transports must use invocation-owned scripted executables or loopback"],
+      "prerequisites": ["Integrated W2/W3 lanes"], "deferrals": ["Native and deployed compatibility require separate selection and grants"]
+    },
+    {
+      "id": "review-publication", "gap_ids": ["G-C1", "G-C2", "G-C3", "G-C4", "G-C5", "G-C6", "G-C7", "G-C8", "G-C9", "G-C10"],
+      "boundary": "Authentic review/PoC/oracle/control-evidence/publication and final consumer handoffs",
+      "nodes": [], "variants": ["positive", "benign", "blocked", "eligible-empty-corrupt"],
+      "substitutions": ["Scripted model transport does not prove provider compatibility or guidance quality"],
+      "prerequisites": ["Integrated W1/W5 lanes"], "deferrals": ["Provider and guidance evaluation require separate authorization"]
+    }
+  ],
+  "known_duplicate_definitions": []
+}

@@ -47,14 +47,19 @@ class HttpDownloader:
             if status != 200:
                 raise RuntimeError(f"download returned HTTP {status}: {url}")
             declared = response.headers.get("Content-Length")
-            if declared is not None and int(declared) > max_bytes:
-                raise ValueError(f"download exceeds configured byte bound: {url}")
+            if declared is not None:
+                declared = int(declared)
+                if declared > max_bytes:
+                    raise ValueError(f"download exceeds configured byte bound: {url}")
             for chunk in iter(lambda: response.read(1024 * 1024), b""):
                 total += len(chunk)
                 if total > max_bytes:
                     raise ValueError(f"download exceeded configured byte bound: {url}")
                 digest.update(chunk)
                 output.write(chunk)
+            if declared is not None and total != declared:
+                raise ValueError(
+                    f"download Content-Length mismatch: expected {declared} bytes, received {total}: {url}")
             output.flush()
             os.fsync(output.fileno())
             return {
