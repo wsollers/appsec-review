@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import ntpath
 import os
 from pathlib import Path
 import re
@@ -22,11 +23,29 @@ DEFAULT_PRIVATE_KEY = "~/.config/appsec-review/signing/private/operator.pem"
 DEFAULT_TRUSTED_KEYS_DIR = "/etc/appsec-review/signing/trusted-keys"
 DEFAULT_IMAGE_SIGNATURES_DIR = "/var/lib/appsec-review/signing/images"
 DEFAULT_OPENSSL = "/usr/bin/openssl"
+WINDOWS_OPENSSL = r"C:\Program Files\Git\mingw64\bin\openssl.exe"
 # Written on the host before the image build and copied into the final image stages; never committed.
 MODULE_ENVELOPE = Path("deploy") / "dagster" / "signing" / "python-modules.json"
 PACKAGE_ROOT = Path("src") / "appsec_review"
 
 Runner = Callable[..., subprocess.CompletedProcess]
+
+
+def host_defaults(windows: bool | None = None) -> dict[str, str]:
+    r"""``APPSEC_SIGNING_*`` path defaults for this host: POSIX paths, or Git for Windows OpenSSL and
+    ``%ProgramData%\appsec-review\signing\{trusted-keys,images}`` on native Windows."""
+    if not (os.name == "nt" if windows is None else windows):
+        return {"APPSEC_SIGNING_TRUSTED_KEYS_DIR": DEFAULT_TRUSTED_KEYS_DIR,
+                "APPSEC_SIGNING_IMAGE_SIGNATURES_DIR": DEFAULT_IMAGE_SIGNATURES_DIR,
+                "APPSEC_SIGNING_OPENSSL": DEFAULT_OPENSSL}
+    signing = ntpath.join(os.environ.get("ProgramData") or r"C:\ProgramData", "appsec-review", "signing")
+    openssl = next((candidate for candidate in (
+        ntpath.join(root, "Git", "mingw64", "bin", "openssl.exe")
+        for root in (os.environ.get("ProgramW6432"), os.environ.get("ProgramFiles")) if root)
+        if os.path.isfile(candidate)), WINDOWS_OPENSSL)
+    return {"APPSEC_SIGNING_TRUSTED_KEYS_DIR": ntpath.join(signing, "trusted-keys"),
+            "APPSEC_SIGNING_IMAGE_SIGNATURES_DIR": ntpath.join(signing, "images"),
+            "APPSEC_SIGNING_OPENSSL": openssl}
 
 
 class SigningError(RuntimeError):
@@ -42,16 +61,25 @@ class SigningSettings:
     openssl: Path
 
     @classmethod
-    def load(cls, values: Mapping[str, str]) -> "SigningSettings":
-        """Read ``APPSEC_SIGNING_*`` from ``values`` (the process environment over ``.env``)."""
-        def get(name: str, default: str) -> str:
-            return values.get(name) or default
+    def load(cls, values: Mapping[str, str], *, windows: bool | None = None) -> "SigningSettings":
+        """Read ``APPSEC_SIGNING_*`` from ``values`` (the process environment over ``.env``).
+
+        Unset paths take :func:`host_defaults`; a value that is set is always used as given.
+        """
+        defaults = host_defaults(windows)
+
+        def get(name: str, default: str | None = None) -> str:
+            return values.get(name) or (defaults[name] if default is None else default)
         return cls(python=get("APPSEC_SIGNING_PYTHON", sys.executable),
                    private_key=Path(get("APPSEC_SIGNING_PRIVATE_KEY", DEFAULT_PRIVATE_KEY)).expanduser(),
-                   trusted_keys_dir=Path(get("APPSEC_SIGNING_TRUSTED_KEYS_DIR", DEFAULT_TRUSTED_KEYS_DIR)),
-                   image_signatures_dir=Path(get("APPSEC_SIGNING_IMAGE_SIGNATURES_DIR",
-                                                 DEFAULT_IMAGE_SIGNATURES_DIR)),
-                   openssl=Path(get("APPSEC_SIGNING_OPENSSL", DEFAULT_OPENSSL)))
+                   trusted_keys_dir=Path(get("APPSEC_SIGNING_TRUSTED_KEYS_DIR")),
+                   image_signatures_dir=Path(get("APPSEC_SIGNING_IMAGE_SIGNATURES_DIR")),
+                   openssl=Path(get("APPSEC_SIGNING_OPENSSL")))
+
+    def compose_environment(self) -> dict[str, str]:
+        """The bind-mount sources Compose interpolates, set to the directories verification used."""
+        return {"APPSEC_SIGNING_TRUSTED_KEYS_DIR": str(self.trusted_keys_dir),
+                "APPSEC_SIGNING_IMAGE_SIGNATURES_DIR": str(self.image_signatures_dir)}
 
 
 def signing_cli(settings: SigningSettings, repository: Path, arguments: list[str], *,

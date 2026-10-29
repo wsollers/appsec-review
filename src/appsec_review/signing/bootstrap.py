@@ -27,7 +27,6 @@ IMPORT_HOOK_NAME = "appsec_review_signing_import_hook"
 BOOTSTRAP_NAME = "appsec_review_signing_bootstrap"
 VERIFIER_FILES = ((CORE_NAME, "core.py"), (MODULES_NAME, "modules.py"), (IMPORT_HOOK_NAME, "import_hook.py"))
 
-DEFAULT_OPENSSL = "/usr/bin/openssl"
 DEFAULT_PACKAGE = "appsec_review"
 SIGNATURE_ENV = "APPSEC_REVIEW_MODULE_SIGNATURE"
 MODULE_ROOT_ENV = "APPSEC_REVIEW_MODULE_ROOT"
@@ -39,15 +38,21 @@ MAX_SOURCE_BYTES = 4 * 1024 * 1024
 
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _O_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+_O_BINARY = getattr(os, "O_BINARY", 0)
+_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+
+
+def _is_link(info):
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
 
 
 def read_source(path):
     """Read a regular, non-symlink source file once, refusing anything unbounded."""
     path = Path(os.path.abspath(path))
     try:
-        if stat.S_ISLNK(os.lstat(path).st_mode):
+        if _is_link(os.lstat(path)):
             raise ImportError(f"signing verifier file must not be a symbolic link: {path}")
-        descriptor = os.open(path, os.O_RDONLY | _O_NOFOLLOW | _O_CLOEXEC)
+        descriptor = os.open(path, os.O_RDONLY | _O_NOFOLLOW | _O_CLOEXEC | _O_BINARY)
     except OSError as error:
         raise ImportError(f"signing verifier file cannot be opened: {path}: {error}") from error
     with os.fdopen(descriptor, "rb") as handle:
@@ -93,7 +98,7 @@ def load_verifier(directory):
         info = os.lstat(directory)
     except OSError as error:
         raise ImportError(f"signing verifier directory cannot be inspected: {directory}: {error}") from error
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+    if _is_link(info) or not stat.S_ISDIR(info.st_mode):
         raise ImportError(f"signing verifier directory must be a plain directory: {directory}")
     loaded = []
     added = []
@@ -119,8 +124,10 @@ def _verifier_directory():
     return Path(os.path.abspath(__file__)).parent
 
 
-def activate(*, envelope, package_root, trusted_keys_dir, openssl=DEFAULT_OPENSSL, package=DEFAULT_PACKAGE):
+def activate(*, envelope, package_root, trusted_keys_dir, openssl=None, package=DEFAULT_PACKAGE):
     """Verify the signed tree and install the import hook before any package code can run.
+
+    ``openssl`` defaults to the host's ``core.default_openssl()``.
 
     Returns the installed finder. The package's parent directory is appended to ``sys.path`` only
     after the hook is installed; the hook serves the package regardless of path order.
@@ -128,7 +135,7 @@ def activate(*, envelope, package_root, trusted_keys_dir, openssl=DEFAULT_OPENSS
     sys.dont_write_bytecode = True
     core, modules, import_hook = load_verifier(_verifier_directory())
     try:
-        verifier = core.OpenSSL(os.fspath(openssl))
+        verifier = core.OpenSSL(None if openssl is None else os.fspath(openssl))
         verifier.self_test()
         manifest = modules.verify_modules(envelope, package_root, trusted_keys_dir, verifier, package=package)
         finder = import_hook.install_verified_import_hook(manifest)
@@ -160,9 +167,9 @@ def activate_from_environment(environ=None):
     missing = sorted(name for name, value in values.items() if not value)
     if missing:
         raise _environment_error("signed module enforcement requires " + ", ".join(missing))
-    openssl = environ.get(OPENSSL_ENV, "") or DEFAULT_OPENSSL
-    relative = sorted(name for name, value in (*values.items(), (OPENSSL_ENV, openssl))
-                      if not os.path.isabs(value))
+    openssl = environ.get(OPENSSL_ENV, "") or None
+    checked = (*values.items(), (OPENSSL_ENV, openssl)) if openssl else tuple(values.items())
+    relative = sorted(name for name, value in checked if not os.path.isabs(value))
     if relative:
         raise _environment_error("signed module paths must be absolute: " + ", ".join(relative))
     return activate(envelope=Path(values[SIGNATURE_ENV]), package_root=Path(values[MODULE_ROOT_ENV]),
@@ -175,7 +182,7 @@ def _parser():
     parser.add_argument("--envelope", required=True, type=Path)
     parser.add_argument("--package-root", required=True, type=Path)
     parser.add_argument("--trusted-keys", required=True, type=Path)
-    parser.add_argument("--openssl", default=DEFAULT_OPENSSL)
+    parser.add_argument("--openssl", help="absolute OpenSSL binary (default: the host default)")
     parser.add_argument("--package", default=DEFAULT_PACKAGE)
     parser.add_argument("--module", required=True)
     return parser
@@ -192,7 +199,8 @@ def main(argv=None):
     try:
         if not sys.flags.isolated or not sys.flags.no_site:
             raise RuntimeError("signed module bootstrap requires Python -I -S")
-        for path in (args.envelope, args.package_root, args.trusted_keys, Path(args.openssl)):
+        openssl = () if args.openssl is None else (Path(args.openssl),)
+        for path in (args.envelope, args.package_root, args.trusted_keys, *openssl):
             if not path.is_absolute():
                 raise RuntimeError(f"signed module bootstrap paths must be absolute: {path}")
         finder = activate(envelope=args.envelope, package_root=args.package_root,

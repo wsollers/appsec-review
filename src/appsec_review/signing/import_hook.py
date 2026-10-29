@@ -308,14 +308,16 @@ class VerifiedFinder(importlib.abc.MetaPathFinder):
             raise SignatureVerificationError(f"already-imported module {name!r} is not signed: {error}") from error
         filename = getattr(module, "__file__", None)
         if filename is None:
-            expected = [_directory_path(self.manifest, parts)]
-            if kind != "namespace" or [os.path.realpath(entry) for entry in getattr(module, "__path__", ())] != expected:
+            expected = [os.path.normcase(_directory_path(self.manifest, parts))]
+            actual = [os.path.normcase(os.path.realpath(entry)) for entry in getattr(module, "__path__", ())]
+            if kind != "namespace" or actual != expected:
                 raise SignatureVerificationError(
                     f"already-imported module {name!r} was not loaded from the verified package root")
             return
         if relpath is None or not isinstance(filename, str):
             raise SignatureVerificationError(f"already-imported module {name!r} has no signed source file")
-        if os.path.realpath(filename) != os.path.join(str(self.manifest.root), *relpath.split("/")):
+        if os.path.normcase(os.path.realpath(filename)) != os.path.normcase(
+                os.path.join(str(self.manifest.root), *relpath.split("/"))):
             raise SignatureVerificationError(
                 f"already-imported module {name!r} was loaded from {filename!r}, not the verified {relpath}")
         self.manifest.read_verified(relpath)

@@ -157,6 +157,8 @@ def test_start_verifies_then_launches_exactly_the_verified_id(env_file: Path) ->
     assert command[-3:] == ["up", "-d", "--wait"]
     assert command[command.index("-f", command.index("-f") + 1) + 1].endswith("compose.claude.yaml")
     assert kwargs["env"][host.IMAGE_VARIABLE] == SIGNED
+    assert kwargs["env"]["APPSEC_SIGNING_TRUSTED_KEYS_DIR"] == "/trust"
+    assert kwargs["env"]["APPSEC_SIGNING_IMAGE_SIGNATURES_DIR"] == "/sigs"
     lines = env_file.read_text(encoding="utf-8").splitlines()
     assert lines == ["APPSEC_COMPOSE_PROJECT=appsec-review-dagster-wsl", "DAGSTER_POSTGRES_PASSWORD=secret",
                      f"{host.IMAGE_VARIABLE}={SIGNED}"]
@@ -287,3 +289,21 @@ def test_module_envelope_is_ignored_but_reaches_the_build_context() -> None:
     ignored = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
     assert not any(line.strip().startswith(("deploy/dagster/signing", "deploy/dagster/**")) for line in ignored)
     assert image_signing.MODULE_ENVELOPE.as_posix() == "deploy/dagster/signing/python-modules.json"
+
+
+def test_signing_settings_default_to_host_paths(monkeypatch) -> None:
+    for name in ("ProgramW6432", "ProgramFiles"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ProgramData", r"C:\ProgramData")
+    posix = image_signing.SigningSettings.load({}, windows=False)
+    assert (str(posix.openssl), str(posix.trusted_keys_dir), str(posix.image_signatures_dir)) == (
+        "/usr/bin/openssl", "/etc/appsec-review/signing/trusted-keys", "/var/lib/appsec-review/signing/images")
+    windows = image_signing.host_defaults(windows=True)
+    assert windows == {"APPSEC_SIGNING_OPENSSL": r"C:\Program Files\Git\mingw64\bin\openssl.exe",
+                       "APPSEC_SIGNING_TRUSTED_KEYS_DIR": r"C:\ProgramData\appsec-review\signing\trusted-keys",
+                       "APPSEC_SIGNING_IMAGE_SIGNATURES_DIR": r"C:\ProgramData\appsec-review\signing\images"}
+    overridden = image_signing.SigningSettings.load({"APPSEC_SIGNING_OPENSSL": r"D:\ssl\openssl.exe"}, windows=True)
+    assert str(overridden.openssl) == r"D:\ssl\openssl.exe"
+    assert overridden.compose_environment() == {
+        "APPSEC_SIGNING_TRUSTED_KEYS_DIR": windows["APPSEC_SIGNING_TRUSTED_KEYS_DIR"],
+        "APPSEC_SIGNING_IMAGE_SIGNATURES_DIR": windows["APPSEC_SIGNING_IMAGE_SIGNATURES_DIR"]}

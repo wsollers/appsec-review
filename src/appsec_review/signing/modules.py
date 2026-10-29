@@ -82,7 +82,7 @@ def _package_directory(package_root: _PathLike) -> Path:
         info = os.lstat(path)
     except OSError as error:
         raise SignatureVerificationError(f"package root cannot be inspected: {path}: {error}") from error
-    if stat.S_ISLNK(info.st_mode):
+    if _core.is_link_or_reparse_point(info):
         raise SignatureVerificationError(f"package root must not be a symbolic link: {path}")
     if not stat.S_ISDIR(info.st_mode):
         raise SignatureVerificationError(f"package root must be a directory: {path}")
@@ -105,7 +105,8 @@ def _walk(root: Path, *, skip_bytecode: bool) -> list[tuple[str, Path]]:
             parts = (*prefix, name)
             relpath = "/".join(parts)
             _check_name(name, repr(relpath))
-            if entry.is_symlink():
+            if entry.is_symlink() or (_core.windows_host()
+                                      and _core.is_link_or_reparse_point(entry.stat(follow_symlinks=False))):
                 raise SignatureVerificationError(f"symbolic links are not supported in the package: {relpath}")
             if entry.is_dir(follow_symlinks=False):
                 if name != _IGNORED_DIRECTORY:
@@ -177,7 +178,7 @@ def _read_beneath(root: Path, parts: tuple[str, ...]) -> bytes:
             info = os.lstat(current)
         except OSError as error:
             raise SignatureVerificationError(f"package directory cannot be inspected: {current}: {error}") from error
-        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        if not stat.S_ISDIR(info.st_mode) or _core.is_link_or_reparse_point(info):
             raise SignatureVerificationError(f"package path component is not a plain directory: {current}")
     return _read_file(current / parts[-1])
 

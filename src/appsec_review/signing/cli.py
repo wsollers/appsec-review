@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 from typing import Any
 
+from . import core as _core
 from .core import OpenSSL, SignatureVerificationError, _write_new_file, key_id
 from .images import EnvelopeImageVerifier, inspect_image_id, sign_image
 from .modules import sign_modules, verify_modules
@@ -114,14 +115,20 @@ def _package_root(value: Path | None) -> Path:
 
 
 def _private_parent(path: Path) -> None:
-    """Create the private key directory 0700, or require an existing one to be owned and private."""
+    """Create the private key directory 0700, or require an existing one to be owned and private.
+
+    Windows has no POSIX owner or mode bits: there the directory must still be a real directory (no
+    link or reparse point) and its privacy comes from the user profile's inherited ACL.
+    """
     parent = path.parent
     if not os.path.lexists(parent):
         parent.mkdir(mode=0o700, parents=True)
         os.chmod(parent, 0o700)
     info = os.lstat(parent)
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+    if _core.is_link_or_reparse_point(info) or not stat.S_ISDIR(info.st_mode):
         raise ValueError(f"private key directory must be a real directory: {parent}")
+    if _core.windows_host():
+        return
     if hasattr(os, "getuid") and info.st_uid != os.getuid():
         raise ValueError(f"private key directory is not owned by the current user: {parent}")
     if stat.S_IMODE(info.st_mode) & 0o077:
@@ -143,7 +150,7 @@ def _keygen(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, 
         if not os.path.lexists(directory):
             directory.mkdir(mode=0o755, parents=True)
             os.chmod(directory, 0o755)
-        elif os.path.islink(directory) or not directory.is_dir():
+        elif _core.is_link_or_reparse_point(os.lstat(directory)) or not directory.is_dir():
             raise ValueError(f"trusted keys directory must be a real directory: {directory}")
         trusted = directory / f"{identity.removeprefix('sha256:')}.pem"
         _write_new_file(trusted, public_key_pem, 0o644)
@@ -323,7 +330,8 @@ def _write_copy(directory: Path, name: str, data: bytes) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".tmp", dir=directory)
     try:
         with os.fdopen(descriptor, "wb") as handle:
-            os.fchmod(handle.fileno(), 0o644)
+            if hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), 0o644)
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())

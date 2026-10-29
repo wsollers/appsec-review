@@ -324,6 +324,31 @@ Run these steps on the review host from the repository checkout, never during a 
 
 Every CLI command prints one JSON report, never key material, and exits nonzero on any failure.
 
+## Windows hosts
+
+A native Windows operator host signs and verifies with the same envelopes as Linux and WSL:
+
+- **OpenSSL.** The default is the Git for Windows build,
+  `C:\Program Files\Git\mingw64\bin\openssl.exe` (or under `%ProgramFiles%`/`%ProgramW6432%`).
+  An absolute path on Windows needs a drive or a UNC share; a drive-less `/rooted` path is
+  rejected. OpenSSL runs with only `SYSTEMROOT`, `WINDIR`, `TEMP`, `TMP`, `PATHEXT`, `COMSPEC` and a
+  `PATH` of the binary's directory (its MinGW DLLs) plus `System32`. `OPENSSL_CONF` names an empty
+  file in a private temporary directory, because Windows has no `/dev/null` file.
+- **Defaults.** A missing `[signing]` value, or exactly the POSIX default that the repository
+  `appsec-review.toml` names, becomes the Windows default: the OpenSSL above,
+  `%ProgramData%\appsec-review\signing\trusted-keys` and `%ProgramData%\appsec-review\signing\images`.
+  Any other drive-less path fails configuration loading. The Dagster `lifecycle.py` reads the same
+  defaults for unset `APPSEC_SIGNING_*` variables and passes the verified directories to Compose
+  as bind-mount sources.
+- **Custody.** Windows has no POSIX owner or mode bits, so the private-key directory and trust
+  anchors are not mode-checked there. Their privacy comes from NTFS ACLs: keep the private key under
+  the user profile (`%USERPROFILE%\.config\appsec-review\signing\private`) and make
+  `%ProgramData%\appsec-review\signing` writable only by Administrators. Symbolic links, junctions
+  and other reparse points are still refused.
+- **Manifests.** Manifest paths are always `/`-separated and package-relative, so a manifest signed
+  in WSL verifies on Windows and the reverse. Hashes cover raw bytes: a checkout that converts line
+  endings (`core.autocrlf`) changes them. The repository's `.gitattributes` pins LF for source files.
+
 ## Named gaps
 
 These areas are not covered by signing. Do not read their absence from a failure report as
@@ -366,7 +391,7 @@ have no work scheduled on this branch.
 
 | Gap | Status | Remaining work |
 | --- | --- | --- |
-| Windows host support | In progress on this branch | Signing, verification and the Dagster signed build/start flow assume POSIX ownership and modes, `/usr/bin/openssl` and `/dev/null`. A native Windows operator host needs its own OpenSSL path, key and trust-anchor custody, and `lifecycle.py` behavior. |
+| Windows host support | In progress on this branch | The code supports a native Windows host (see [Windows hosts](#windows-hosts)). The unit tests and the Dagster signed build and start flow still need validation on Windows with Docker Desktop. |
 | Native release third-party dependency manifest | In progress on this branch | Sign and verify the native release `lib/` closure outside `appsec_review`, which is now an installation and commissioning duty (see [Named gaps](#named-gaps)). |
 | Compose bypass and reload | In progress on this branch | Re-verify the recorded image ID when Compose is started directly, and make `lifecycle.py reload` cover every service, not only `code-location`. |
 | cve-bin-tool pin | In progress on this branch | Pin the locally built cve-bin-tool image and cover it with `--all-pinned`, so that no run launches it unverified. |

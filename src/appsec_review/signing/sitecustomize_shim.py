@@ -18,9 +18,11 @@ def _load_bootstrap(directory):
     import stat
 
     path = os.path.join(directory, "bootstrap.py")
-    if stat.S_ISLNK(os.lstat(path).st_mode):
+    info = os.lstat(path)
+    if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:  # Windows reparse point
         raise ImportError(f"signing bootstrap must not be a symbolic link: {path}")
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+                         | getattr(os, "O_BINARY", 0))
     with os.fdopen(descriptor, "rb") as handle:
         if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
             raise ImportError(f"signing bootstrap is not a regular file: {path}")

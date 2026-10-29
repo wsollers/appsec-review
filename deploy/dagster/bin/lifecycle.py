@@ -98,6 +98,7 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
         return OK
     if action in LAUNCHING:
         try:
+            settings = signing_settings(environ)
             image_id = verified_image(platform, profile, environ, runner=runner)
         except SigningError as error:
             print(f"refusing to {action}: the image signature did not verify on this host: {error}",
@@ -105,7 +106,8 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
             return REFUSED
         record_image(environment_file, image_id)
         print(f"verified {image_id}; Compose launches exactly this image", flush=True)
-        environment = {**environ, IMAGE_VARIABLE: image_id}
+        # Compose mounts exactly the trust anchors and envelopes the host verification used.
+        environment = {**environ, **settings.compose_environment(), IMAGE_VARIABLE: image_id}
     else:
         environment = compose_environment(environment_file, environ)
     return runner(compose_base(platform, profile) + commands[action], cwd=repository, env=environment,

@@ -4,12 +4,21 @@ Private keys never appear here or anywhere in the repository. ``trusted_keys_dir
 public-key PEM trust anchors named ``<key_id hex>.pem``; ``image_signatures_dir`` holds container
 image envelopes named ``<image id hex>.json``. A missing table means the defaults below, including
 ``image_enforcement = "required"``; enforcement is never disabled implicitly.
+
+On a native Windows host the POSIX defaults are replaced by host defaults, both when the table is
+missing and when it names exactly a POSIX default (as the repository ``appsec-review.toml`` does):
+the Git for Windows OpenSSL and ``%ProgramData%\\appsec-review\\signing\\{trusted-keys,images}``.
+Any other drive-less ``/rooted`` path is rejected there.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, field as _field
+import ntpath
+import os
+from pathlib import Path, PureWindowsPath
 from typing import Any, Mapping
+
+from appsec_review.signing import core as _core
 
 
 DEFAULT_OPENSSL = "/usr/bin/openssl"
@@ -21,17 +30,36 @@ IMAGE_ENFORCEMENTS: tuple[str, ...] = (IMAGE_ENFORCEMENT_REQUIRED, IMAGE_ENFORCE
 _KEYS = frozenset({"openssl", "trusted_keys_dir", "image_signatures_dir", "image_enforcement"})
 
 
+def _windows_data_dir(leaf: str) -> str:
+    program_data = os.environ.get("ProgramData") or r"C:\ProgramData"
+    return ntpath.join(program_data, "appsec-review", "signing", leaf)
+
+
+def host_default(field_name: str) -> str:
+    """The host default for ``openssl``, ``trusted_keys_dir`` or ``image_signatures_dir``."""
+    if field_name == "openssl":
+        return _core.default_openssl()
+    posix = {"trusted_keys_dir": DEFAULT_TRUSTED_KEYS_DIR, "image_signatures_dir": DEFAULT_IMAGE_SIGNATURES_DIR}
+    if not _core.windows_host():
+        return posix[field_name]
+    return _windows_data_dir({"trusted_keys_dir": "trusted-keys", "image_signatures_dir": "images"}[field_name])
+
+
+_POSIX_DEFAULTS = {"openssl": DEFAULT_OPENSSL, "trusted_keys_dir": DEFAULT_TRUSTED_KEYS_DIR,
+                   "image_signatures_dir": DEFAULT_IMAGE_SIGNATURES_DIR}
+
+
 def _absolute(value: object, field: str) -> Path:
-    if not isinstance(value, Path) or not value.is_absolute():
+    if not isinstance(value, Path) or not _core.is_absolute_path(str(value)):
         raise ValueError(f"signing.{field} must be an absolute path")
     return value
 
 
 @dataclass(frozen=True, slots=True)
 class SigningConfig:
-    openssl: Path = Path(DEFAULT_OPENSSL)
-    trusted_keys_dir: Path = Path(DEFAULT_TRUSTED_KEYS_DIR)
-    image_signatures_dir: Path = Path(DEFAULT_IMAGE_SIGNATURES_DIR)
+    openssl: Path = _field(default_factory=lambda: Path(host_default("openssl")))
+    trusted_keys_dir: Path = _field(default_factory=lambda: Path(host_default("trusted_keys_dir")))
+    image_signatures_dir: Path = _field(default_factory=lambda: Path(host_default("image_signatures_dir")))
     image_enforcement: str = IMAGE_ENFORCEMENT_REQUIRED
 
     def __post_init__(self) -> None:
@@ -56,6 +84,18 @@ def _path_value(value: object, field: str) -> str:
     return value
 
 
+def _host_path(text: str, field_name: str) -> str:
+    """On Windows map an exact POSIX default to the host default and refuse other drive-less roots."""
+    if not _core.windows_host():
+        return text
+    if text == _POSIX_DEFAULTS[field_name]:
+        return host_default(field_name)
+    windows = PureWindowsPath(text)
+    if windows.root and not windows.drive:
+        raise ValueError(f"signing.{field_name} must be an absolute path with a drive on Windows: {text}")
+    return text
+
+
 def parse_signing(value: object, repository_root: Path) -> SigningConfig:
     """Parse ``[signing]``; relative directories resolve against the configuration file's directory.
 
@@ -71,14 +111,16 @@ def parse_signing(value: object, repository_root: Path) -> SigningConfig:
         raise ValueError("unknown signing settings: " + ", ".join(sorted(map(str, unknown))))
     settings: dict[str, Any] = {}
     if "openssl" in value:
-        openssl = Path(_path_value(value["openssl"], "openssl"))
-        if not openssl.is_absolute() or ".." in openssl.parts:
+        text = _host_path(_path_value(value["openssl"], "openssl"), "openssl")
+        parts = PureWindowsPath(text).parts if _core.windows_host() else Path(text).parts
+        if not _core.is_absolute_path(text) or ".." in parts:
             raise ValueError("signing.openssl must be an absolute path")
-        settings["openssl"] = openssl
+        settings["openssl"] = Path(text)
     for name in ("trusted_keys_dir", "image_signatures_dir"):
         if name in value:
-            candidate = Path(_path_value(value[name], name))
-            settings[name] = (candidate if candidate.is_absolute() else repository_root / candidate).resolve()
+            text = _host_path(_path_value(value[name], name), name)
+            candidate = Path(text)
+            settings[name] = (candidate if _core.is_absolute_path(text) else repository_root / candidate).resolve()
     if "image_enforcement" in value:
         enforcement = value["image_enforcement"]
         if not isinstance(enforcement, str) or enforcement not in IMAGE_ENFORCEMENTS:
@@ -90,5 +132,5 @@ def parse_signing(value: object, repository_root: Path) -> SigningConfig:
 __all__ = [
     "DEFAULT_IMAGE_SIGNATURES_DIR", "DEFAULT_OPENSSL", "DEFAULT_TRUSTED_KEYS_DIR",
     "IMAGE_ENFORCEMENTS", "IMAGE_ENFORCEMENT_DISABLED", "IMAGE_ENFORCEMENT_REQUIRED",
-    "SigningConfig", "parse_signing",
+    "SigningConfig", "host_default", "parse_signing",
 ]

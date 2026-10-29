@@ -12,8 +12,9 @@ from collections.abc import Iterator, Mapping
 import contextlib
 import hashlib
 import json
+import ntpath
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import shutil
 import stat
@@ -33,11 +34,15 @@ SIGNATURE_BYTES = 64
 
 ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 _ED25519_SPKI_BYTES = len(ED25519_SPKI_PREFIX) + 32
+WINDOWS_GIT_OPENSSL = r"C:\Program Files\Git\mingw64\bin\openssl.exe"
 _SANITIZED_ENV = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "OPENSSL_CONF": "/dev/null"}
+_WINDOWS_ENV_NAMES = ("SYSTEMROOT", "WINDIR", "TEMP", "TMP", "PATHEXT", "COMSPEC")
 _KEY_ID = re.compile(r"sha256:[0-9a-f]{64}")
 _KEY_FILE = re.compile(r"([0-9a-f]{64})\.pem")
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _O_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+_O_BINARY = getattr(os, "O_BINARY", 0)
+_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 # RFC 8032 section 7.1, TEST 2. OpenSSL 3.0 cannot sign or verify an empty -rawin message (TEST 1).
 _KAT_PUBLIC_KEY = bytes.fromhex("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c")
@@ -49,6 +54,55 @@ _KAT_SIGNATURE = bytes.fromhex(
 
 class SignatureVerificationError(Exception):
     """A signature, trust anchor, or envelope could not be verified; callers must fail closed."""
+
+
+def windows_host() -> bool:
+    """True on a native Windows interpreter; tests replace this to exercise the Windows paths."""
+    return os.name == "nt"
+
+
+def is_absolute_path(value: str | os.PathLike[str]) -> bool:
+    """Absolute on this host: on Windows a drive-qualified or UNC path, never a bare ``/rooted`` one."""
+    text = os.fspath(value)
+    if not isinstance(text, str) or not text or "\x00" in text:
+        return False
+    if windows_host():
+        path = PureWindowsPath(text)
+        return bool(path.drive and path.root)
+    return os.path.isabs(text)
+
+
+def default_openssl() -> str:
+    """``/usr/bin/openssl`` on POSIX; on Windows the Git for Windows OpenSSL, preferring an existing one."""
+    if not windows_host():
+        return DEFAULT_OPENSSL
+    candidates = [ntpath.join(root, "Git", "mingw64", "bin", "openssl.exe")
+                  for root in (os.environ.get("ProgramW6432"), os.environ.get("ProgramFiles")) if root]
+    candidates.append(WINDOWS_GIT_OPENSSL)
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return WINDOWS_GIT_OPENSSL
+
+
+def is_link_or_reparse_point(info: os.stat_result) -> bool:
+    """A symbolic link, or on Windows any reparse point (junction, mount point, symlink)."""
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
+
+
+def windows_openssl_environment(binary: str, config_path: str,
+                                environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Minimal Windows environment: system variables, the binary's directory (its DLLs) and System32.
+
+    ``OPENSSL_CONF`` names an empty private file; ``OPENSSL_MODULES``/``OPENSSL_ENGINES`` and every
+    other inherited variable are dropped.
+    """
+    source = {name.upper(): value for name, value in (os.environ if environ is None else environ).items()}
+    environment = {name: source[name] for name in _WINDOWS_ENV_NAMES if source.get(name)}
+    system_root = environment.get("SYSTEMROOT") or environment.get("WINDIR") or r"C:\Windows"
+    environment["PATH"] = ";".join((ntpath.dirname(binary), ntpath.join(system_root, "System32")))
+    environment["OPENSSL_CONF"] = config_path
+    return environment
 
 
 def key_id(public_key_der: bytes) -> str:
@@ -119,7 +173,8 @@ def _private_directory(parent: str | None) -> Iterator[Path]:
 
 
 def _write_new_file(path: Path, data: bytes, mode: int) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_NOFOLLOW | _O_CLOEXEC, mode)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_NOFOLLOW | _O_CLOEXEC | _O_BINARY,
+                         mode)
     try:
         with os.fdopen(descriptor, "wb") as handle:
             descriptor = -1
@@ -143,12 +198,12 @@ def _read_regular_file(path: Path, limit: int, what: str) -> bytes:
         raise SignatureVerificationError(f"{what} is missing: {path}") from error
     except OSError as error:
         raise SignatureVerificationError(f"{what} cannot be inspected: {path}: {error}") from error
-    if stat.S_ISLNK(info.st_mode):
+    if is_link_or_reparse_point(info):
         raise SignatureVerificationError(f"{what} must not be a symbolic link: {path}")
     if not stat.S_ISREG(info.st_mode):
         raise SignatureVerificationError(f"{what} must be a regular file: {path}")
     try:
-        descriptor = os.open(path, os.O_RDONLY | _O_NOFOLLOW | _O_CLOEXEC)
+        descriptor = os.open(path, os.O_RDONLY | _O_NOFOLLOW | _O_CLOEXEC | _O_BINARY)
     except OSError as error:
         raise SignatureVerificationError(f"{what} cannot be opened: {path}: {error}") from error
     with os.fdopen(descriptor, "rb") as handle:
@@ -166,10 +221,10 @@ def _read_regular_file(path: Path, limit: int, what: str) -> bytes:
 class OpenSSL:
     """Absolute-path OpenSSL 3 CLI run without a shell and with a fixed, minimal environment."""
 
-    def __init__(self, binary: str = DEFAULT_OPENSSL, *, timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    def __init__(self, binary: str | None = None, *, timeout: float = DEFAULT_TIMEOUT_SECONDS,
                  temp_dir: str | None = None) -> None:
-        binary = os.fspath(binary)
-        if not isinstance(binary, str) or not os.path.isabs(binary):
+        binary = default_openssl() if binary is None else os.fspath(binary)
+        if not isinstance(binary, str) or not is_absolute_path(binary):
             raise SignatureVerificationError(f"OpenSSL binary must be an absolute path: {binary!r}")
         if not os.path.isfile(binary) or not os.access(binary, os.X_OK):
             raise SignatureVerificationError(f"OpenSSL binary is not an executable file: {binary}")
@@ -179,11 +234,23 @@ class OpenSSL:
 
     def _run(self, arguments: list[str], *, stdin: bytes | None = None,
              check: bool = True) -> subprocess.CompletedProcess[bytes]:
+        if not windows_host():
+            return self._execute(arguments, stdin, check, dict(_SANITIZED_ENV), "/")
+        # Windows has no /dev/null file and OPENSSL_CONF=NUL is not portable across builds; an empty
+        # private configuration file loads nothing on every OpenSSL 3 build.
+        with _private_directory(self.temp_dir) as directory:
+            config = directory / "openssl.cnf"
+            _write_new_file(config, b"", 0o600)
+            return self._execute(arguments, stdin, check,
+                                 windows_openssl_environment(self.binary, str(config)), str(directory))
+
+    def _execute(self, arguments: list[str], stdin: bytes | None, check: bool, environment: dict[str, str],
+                 cwd: str) -> subprocess.CompletedProcess[bytes]:
         try:
             completed = subprocess.run(
                 [self.binary, *arguments], input=stdin,
                 stdin=subprocess.DEVNULL if stdin is None else None,
-                capture_output=True, env=dict(_SANITIZED_ENV), cwd="/", shell=False,
+                capture_output=True, env=environment, cwd=cwd, shell=False,
                 close_fds=True, timeout=self.timeout, check=False)
         except subprocess.TimeoutExpired as error:
             raise SignatureVerificationError(f"openssl {arguments[0]} timed out") from error
