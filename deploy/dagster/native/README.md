@@ -103,6 +103,15 @@ retain escaped/reparented helpers in custody; unrelated infrastructure is not mi
 for this engine. Omitting that scope preserves the older global helper check. The
 dedicated daemon must not share the existing socket, data-root, exec-root or image store.
 Source support is not a commissioned daemon.
+Docker 29 may automatically use the existing `/run/containerd/containerd.sock` even with
+separate Docker roots. A dedicated-engine scope therefore also requires an explicit
+`docker_helper_scope.containerd_endpoint` beneath its private exec-root and the actual
+daemon's matching `--containerd` argument. Kernel proof authenticates that Unix peer,
+its root UID, same-host namespaces, control cgroup and stable generation, and requires
+the helper's explicit `--root DATA_ROOT/containerd`, `--state EXEC_ROOT/containerd` and
+`--address ENDPOINT` arguments. Private Docker arguments or an empty container list alone
+do not establish a separate containerd image store. Existing infrastructure containerd
+must never be adopted, reconfigured or stopped for this arrangement.
 
 The opt-in `lifetime_domain = "engine"` additionally requires a typed `engine_domain`
 with a private root-controlled metadata directory, exact existing shared cgroup ceiling
