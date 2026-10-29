@@ -51,7 +51,8 @@ def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operatio
     trusted_path(configuration)
     if configuration.stat().st_mode & 0o077:
         raise PermissionError("root service configuration must be private")
-    if operation not in {"serve", "reserve-lifetime", "reconcile-admission", "release-lifetime"}:
+    if operation not in {"serve", "reserve-lifetime", "reconcile-admission", "release-lifetime",
+                         "finalize-commissioning"}:
         raise ValueError("unsupported root lifecycle operation")
     argv = (str(python), "-I", "-S", str(entrypoint), "--config", str(configuration))
     if operation != "serve":
@@ -69,7 +70,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--operation", choices=("serve", "reserve-lifetime", "reconcile-admission",
-                                               "release-lifetime"), default="serve")
+                                               "release-lifetime", "finalize-commissioning"), default="serve")
     args = parser.parse_args(argv)
     specification = launch_spec(Path(sys.executable), Path(__file__).absolute(), args.config,
                                 operation=args.operation)

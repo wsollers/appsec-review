@@ -286,6 +286,11 @@ class LifetimeProof:
     def stopped(self, members: list[dict]) -> bool:
         if not self.empty() or any(process_token(member["pid"]) == member["start_token"] for member in members):
             return False
+        if (self.config.engine_domain is not None
+                and self.config.engine_domain.control_lifetime_id is not None
+                and any(KernelProof(self.config).owned_helper_groups())):
+            return False
+
         endpoint = Path(self.config.docker_endpoint)
         try:
             info = endpoint.lstat()
@@ -302,6 +307,24 @@ class LifetimeProof:
             except ConnectionRefusedError:
                 return True
         return False
+
+    def commissioned(self) -> None:
+        """Only engine control may be alive when provisional policy is sealed."""
+        for root in self._roots():
+            if root == Path(self.config.host_cgroup):
+                continue
+            if dict(line.split() for line in (root / "cgroup.events").read_text().splitlines()).get(
+                    "populated") != "0":
+                raise EnforcementUnavailable("commissioning requires empty application and action scopes")
+        from appsec_review.container_runtime.buildkit_worker import BuildKitWorker
+        driver = BuildKitWorker(self.config)
+        driver.deadline = time.monotonic() + self.config.command_timeout_seconds
+        driver.proof.host()
+        driver._inventory()
+        driver._network()
+        if self.config.native_engine is not None:
+            from appsec_review.container_runtime.engine_broker import NativeExecutionDriver
+            NativeExecutionDriver(self.config).check_host()
 
 
 def _journal_records(config: ImageBuilderServiceConfig) -> list[dict]:
@@ -445,9 +468,19 @@ class BuilderAdmission:
         with operator_lock(self.root, "lifetime.lock"):
             if self.path.exists() or self.path.is_symlink():
                 anchor = self._anchor()
-                if anchor.get("state") != "RESERVED":
+                expected_state = ("PROVISIONING" if self.config.lifecycle_stage == "provisioning"
+                                  else "RESERVED")
+                if anchor.get("state") != expected_state:
                     raise EnforcementUnavailable("retired lifetime IDs cannot be silently reused")
                 self._verify_ledger(anchor)
+                if expected_state == "PROVISIONING":
+                    members = {(item["pid"], item["start_token"]): item for item in anchor["members"]}
+                    for member in self.proof.members():
+                        members[(member["pid"], member["start_token"])] = member
+                    if len(members) > 4096:
+                        raise EnforcementUnavailable("provisioning member history exceeds its bound")
+                    anchor["members"] = list(members.values())
+                    self._write_anchor(anchor)
                 return self.config.admission.lease_id
             groups = self.proof.groups()
             if not self.proof.stopped([]):
@@ -471,7 +504,9 @@ class BuilderAdmission:
 
             ledger_identity = _as_client(self.config, acquire)
             anchor = {
-                "schema": LIFETIME_SCHEMA, "state": "RESERVED", "service_contract": self.contract,
+                "schema": LIFETIME_SCHEMA,
+                "state": "PROVISIONING" if self.config.lifecycle_stage == "provisioning" else "RESERVED",
+                "service_contract": self.contract,
                 "groups": groups, "ledger_identity": ledger_identity, "members": [],
             }
             if self.engine_admission is not None:
@@ -479,6 +514,50 @@ class BuilderAdmission:
                 anchor["ledger_identity"] = self.engine_admission.reserve()
             self._write_anchor(anchor)
             return self.config.admission.lease_id
+
+    def finalize_commissioning(self) -> None:
+        """Seal observed assets once; the existing engine lease never changes."""
+        from appsec_review.container_runtime.engine_admission import COMMISSIONING_FIELDS
+
+        if (self.config.lifecycle_stage != "configured" or self.engine_admission is None
+                or self.config.engine_domain.control_lifetime_id is None):
+            raise EnforcementUnavailable("finalization requires an explicit configured engine lifetime")
+        with operator_lock(self.root, "service.lock"), operator_lock(self.root, "lifetime.lock"):
+            private_path(self.path, directory=False)
+            anchor = bounded_json(self.path)
+            if anchor.get("state") == "RESERVED":
+                self._anchor()
+                self._verify_ledger(anchor)
+                return
+            previous = anchor.get("service_contract", {})
+            if (anchor.get("schema") != LIFETIME_SCHEMA or anchor.get("state") != "PROVISIONING"
+                    or previous.get("lifecycle_stage") != "provisioning"):
+                raise EnforcementUnavailable("only an unused provisional lifetime can be finalized")
+            current = self.contract
+            if ({key: value for key, value in previous.items() if key not in COMMISSIONING_FIELDS}
+                    != {key: value for key, value in current.items() if key not in COMMISSIONING_FIELDS}):
+                raise EnforcementUnavailable("commissioning cannot rebind engine custody or capacity")
+            groups = self.proof.groups()
+            if any(groups.get(name) != value for name, value in anchor["groups"].items()):
+                raise EnforcementUnavailable("provisional lifetime cgroups were rebound")
+            self._verify_ledger(anchor)
+            journal = open_operator_journal(self.root)
+            try:
+                if any(journal.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                       for table in ("builds", "requests", "engine_executions", "engine_requests",
+                                     "engine_interlock")):
+                    raise EnforcementUnavailable("commissioning requires an unused work journal")
+            finally:
+                journal.close()
+            self.proof.commissioned()
+            members = {(item["pid"], item["start_token"]): item for item in anchor["members"]}
+            for member in self.proof.members():
+                members[(member["pid"], member["start_token"])] = member
+            if len(members) > 4096:
+                raise EnforcementUnavailable("commissioning member history exceeds its bound")
+            anchor.update(state="RESERVED", service_contract=current, groups=groups,
+                          members=list(members.values()))
+            self._write_anchor(anchor)
 
     def _verify_ledger(self, anchor: dict):
         if self.engine_admission is not None:
@@ -630,7 +709,7 @@ class BuilderAdmission:
             anchor = self._anchor()
             if anchor.get("state") == "RELEASED":
                 return
-            if anchor.get("state") not in {"RESERVED", "RELEASING"}:
+            if anchor.get("state") not in {"PROVISIONING", "RESERVED", "RELEASING"}:
                 raise EnforcementUnavailable("lifetime reservation state is unknown")
             records = _journal_records(self.config)
             if self.config.native_engine is not None:
