@@ -30,9 +30,10 @@ relationship indexes. Each step sorts the unit's artifacts it indexes (package a
 members, every validated artifact for relationships) by `(workspace_path, sha256)` and packs
 them into deterministic batches. A batch closes before it would exceed `MAX_ARTIFACTS_PER_SHARD`
 (5,000 artifacts) or `MAX_ROWS_PER_SHARD` (100,000 relations plus entities). An artifact that alone
-exceeds the row bound gets its own shard. `<NNNN>` is the zero-padded batch number within the
-unit. Earlier releases published one member shard per package artifact and one relationship shard
-per artifact; the `members-` and `relations-` prefixes are unchanged.
+exceeds the row bound gets its own shard. `<NNNN>` is the zero-based, four-digit batch number
+within the unit (`0000` first). A shard ID outside `[A-Za-z0-9_.-]{1,128}` is an integrity
+failure. Earlier releases published one member shard per package artifact and one relationship
+shard per artifact; the `members-` and `relations-` prefixes are unchanged.
 
 Per-artifact and per-invocation detail stays in rows, not shards: relations, one coverage row per
 artifact keyed by its `workspace_path`, and that artifact's gaps. A shard's `IndexIdentity` gaps
@@ -87,11 +88,14 @@ shard, not the total. A follow-up issue tracks this.
 
 ### Deferred: parallel build units
 
-Build units are indexed sequentially. A future bounded worker pool across build units must run
-each task under `contextvars.copy_context().run(...)`, as
-`storage.shared.PublicationThreadPoolExecutor` does, because the attempt owner, the validation
-scope and operation spans are `ContextVar` values that a bare thread does not inherit. It must sort
-results by shard identity before publication, so handoffs stay deterministic.
+Build units and their batches are indexed sequentially. A future bounded worker pool across build
+units must run each task under `contextvars.copy_context().run(...)`, as
+`storage.shared.PublicationThreadPoolExecutor` does. The attempt owner, the validation scope and
+operation spans are `ContextVar` values: in a bare thread the owner is absent, so
+`IndexBuilder.build()` would skip custody registration and lose work telemetry without failing.
+Such a pool may index different completed receipts in parallel, never the batches of one receipt,
+and must sort results by `(build_unit_id, family, batch)` before publication, so handoffs stay
+deterministic.
 
 ## Node retention policy
 

@@ -199,17 +199,19 @@ The classification of the examined layouts is:
 #### Index shard durability
 
 Every `IndexBuilder` shard is written in a private temporary file beside its final path, with
-`journal_mode=OFF`, `synchronous=OFF`, one transaction and no `VACUUM`. That file is not evidence
-while it is being written, so the builder establishes durability and integrity once, at
-publication: one `fsync`, one SHA-256 over the finished bytes, then `adopt_private_file`
-hard-links (not copies) the file into `data/shared/objects/<sha256>`, falling back to a copy only
-across filesystems. The named path under `data/indices/` is then linked atomically and without
-replacement. Custody registration is unchanged: the `index-shard` named binding, the attempt
-receipt and the request lookup entry. `build()` returns only after the shard is durable, hashed,
-linked and registered; publication is never deferred to a background task. Identical inputs
-produce byte-identical shards, so matching existing bytes are reused and a mismatching named path
-is a conflict. The validation digest cache recognizes hard-link aliases of one object, so a
-published shard is hashed about once rather than once per path.
+`journal_mode=OFF`, `synchronous=OFF`, an exclusive lock, one transaction and no `VACUUM`. Rows are
+inserted in sorted order and secondary indexes are created after the bulk inserts. That file is not
+evidence while it is being written, so the builder establishes durability and integrity once, at
+publication: one `fsync`, then one SHA-256 over the finished bytes. For a shard under
+`data/indices/` written by a claimed attempt, `adopt_private_file` then hard-links (not copies) the
+file into `data/shared/objects/<sha256>`, falling back to a copy only across filesystems. The named
+path is then linked atomically and without replacement. Custody registration is unchanged: the
+`index-shard` named binding, the attempt receipt and the request lookup entry. `build()` returns
+only after the shard is durable, hashed, linked and registered; publication is never deferred to a
+background task. Identical inputs produce byte-identical shards, so matching existing bytes are
+reused and a mismatching named path is a conflict. The builder records its digest in the
+validation digest cache, which recognizes hard-link aliases of one file, so a published shard is
+hashed about once rather than once per path.
 
 Job execution binds the current attempt explicitly at its validator/handler/finalizer boundary.
 The participating parallel producer pools propagate this context; no filesystem-wide write
