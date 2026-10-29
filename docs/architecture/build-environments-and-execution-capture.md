@@ -33,8 +33,10 @@ catalog + locked assets                 accepted target catalog + build recipe
           |                                             |
           v                                             v
 shared base/tool image build              resolve configured family image by SHA-256
+operator re-pins and signs                and verify its signature envelope
           |                                             |
           |                                  derive/cache project dependency image
+          |                                  (pinned base verified before derive or reuse)
           |                                             |
           +-----------------------+---------------------+
                                   |
@@ -51,6 +53,7 @@ shared base/tool image build              resolve configured family image by SHA
                                   |
                                   v
                  isolated tool-gitleaks container
+                 image ID pin and signature verified
                  network: none; report redaction: 100%
                                   |
                      +------------+-------------+
@@ -86,7 +89,10 @@ fixes its executable and version.
 The language-family images referenced by `jobs.job_project_build.settings.profiles` are a separate
 current-state concern. Each profile declares a local tag, immutable image ID, and numeric non-root
 user. `BuildContainerExecutor.resolve` refuses to run when the local tag no longer resolves to the
-configured image ID. The ten build-environment entries in `containers/catalog.toml` (the shared
+configured image ID, or when that ID has no signature envelope from a trusted key; it verifies the
+signature again before each build or capture run, and a derived project image is verified through
+its recorded pinned base (see [`../operations/signing.md`](../operations/signing.md)). The ten
+build-environment entries in `containers/catalog.toml` (the shared
 `buildenv-native-toolchain` plus `audit-buildenv-{cpp,go,python,php,rust-wasm,typescript,java,
 android,dotnet}`) are `enabled`, `kind = "buildenv"`, and every configured profile points at one
 of them (`rust` and `wasm` share `audit-buildenv-rust-wasm:local`); only the former
@@ -133,7 +139,10 @@ manifest, or more than 48 members is an inventory gap, and build capture records
 root's and the unit's `node_modules` to the image. Installed `node_modules` links in a target
 checkout are never copied, so they are not build-source symlinks.
 
-The project-image cache is keyed by the full recipe identity. Reuse requires the manifest, retained
+The project-image cache is keyed by the full recipe identity. Before deriving or reusing a project
+image, `ProjectImageResolver` verifies the pinned family base's signature; the derived image itself
+is unsigned and is trusted through that verified base and its recorded identity. Reuse requires the
+manifest, retained
 Dockerfile hash, and current local image ID to agree. A missing or changed image, Dockerfile, or
 manifest rejects the cache entry. Docker daemon mutation is narrowly serialized, while unrelated
 family work can remain parallel.
@@ -313,7 +322,9 @@ temporary scan corpus containing:
 - retained tool-call records plus their stdout and stderr; and
 - retained response-file snapshots.
 
-The cataloged gitleaks image is resolved to an immutable local image ID before execution. It runs in
+The cataloged gitleaks image is resolved to an immutable local image ID, and that ID's signature is
+verified, before execution. If verification fails, the scan does not run: the capture is redacted
+and a named gap is recorded. It runs in
 a second container with no network, a read-only input mount, a writable run-owned scratch mount,
 non-root identity, read-only root, dropped capabilities, `no-new-privileges`, and catalog resource
 limits. Gitleaks scans in directory mode with JSON output, exit code `1` meaning findings, and

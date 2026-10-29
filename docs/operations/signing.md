@@ -66,6 +66,44 @@ the gaps listed under [Named gaps](#named-gaps).
   `/var/lib/appsec-review/signing/images`. Envelopes are self-authenticating, so the operator who
   signs only needs write access to this directory. The Dagster services mount it read-only.
 
+The private key signs on the operator host and never leaves it. Every verifier reads only public
+trust anchors and envelopes, and each one runs the OpenSSL self-test before it first verifies:
+
+```mermaid
+flowchart LR
+    subgraph host["Operator host: signing side"]
+        keygen["appsec-review signing keygen"]
+        key["Private key, 0600 in a 0700 dir<br/>~/.config/appsec-review/signing/private/operator.pem"]
+        signer["appsec-review signing<br/>sign-image / sign-modules"]
+    end
+    subgraph anchors["Root-owned, not group or other writable"]
+        trusted["trusted_keys_dir<br/>/etc/appsec-review/signing/trusted-keys/KEYID.pem"]
+    end
+    subgraph objects["Signed objects and their envelopes"]
+        images["Pinned local images<br/>Docker image ID sha256:..."]
+        sigs["image_signatures_dir<br/>/var/lib/appsec-review/signing/images/IMAGEID.json"]
+        tree["appsec_review package tree"]
+        manifest["python-modules envelope<br/>deploy/dagster/signing/python-modules.json (Dagster image)<br/>or RELEASE/signing/python-modules.json (native release)"]
+    end
+    subgraph verifiers["Verifiers: OpenSSL self-test, then verify"]
+        hostv["Host: lifecycle.py and<br/>signing verify-image / verify-modules"]
+        imgv["Image launch: ContainerExecutor, BuildContainerExecutor,<br/>ProjectImageResolver, CodeQLImageResolver, cve-bin-tool build"]
+        modv["Module startup: bootstrap.py, sitecustomize shim,<br/>native root_entrypoint.py"]
+    end
+    keygen --> key
+    keygen -- "public key, installed by root" --> trusted
+    key --> signer
+    images -- "image ID" --> signer
+    tree -- "file SHA-256 values" --> signer
+    signer -- "container-image envelope" --> sigs
+    signer -- "python-modules envelope" --> manifest
+    trusted -. "read-only" .-> hostv & imgv & modv
+    sigs -. "read-only" .-> hostv & imgv
+    images --> hostv & imgv
+    manifest -. "read-only" .-> hostv & modv
+    tree --> modv
+```
+
 ## Configuration: `[signing]`
 
 `[signing]` in `appsec-review.toml` is parsed into the typed `SigningConfig`. Unknown keys and wrong
@@ -97,6 +135,46 @@ Every pinned image is verified when it is launched or reused, after its identity
 | `ProjectImageResolver.resolve` via `_verify_base` (`container_runtime/project_images.py`) | The pinned base before a project image is derived from it or reused over it. |
 | `CodeQLImageResolver.resolve` (`codeql/runtime.py`) | The licensed CodeQL source image, the environment image (or its recorded pinned base), and a preinstalled runtime image. |
 | cve-bin-tool database build (`jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`) | A pre-existing local `settings.image` (Docker path) or the approved preinstalled image (native path). The image is launched by ID. |
+
+A catalog tool launch through `ContainerExecutor.resolve_image` runs in this order. The other call
+sites use the same `EnvelopeImageVerifier` after their own identity checks:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant J as Job step
+    participant E as ContainerExecutor
+    participant D as Docker daemon
+    participant V as EnvelopeImageVerifier
+    participant S as image_signatures_dir
+    participant K as trusted_keys_dir
+    participant O as OpenSSL CLI
+    J->>E: run(tool request)
+    E->>D: docker image inspect TAG (.Id)
+    D-->>E: image ID, or an error
+    alt inspect fails
+        E-->>J: ImageUnavailableError (no launch)
+    else ID is not sha256 form, or differs from the catalog pin when one is set
+        E-->>J: ValueError: local image digest mismatch (no launch)
+    else ID equals the pin
+        E->>V: verify(image_id, reference=TAG)
+        V->>S: lstat IMAGEID.json (regular file, no symlink)
+        Note over V,S: An envelope that already verified with the same<br/>device, inode, size, mtime and ctime returns from the cache
+        opt first verification in this process
+            V->>O: self_test (RFC 8032 known answer, corrupted signature rejected)
+            V->>K: TrustedKeys.load (file name equals key ID, Ed25519 only)
+        end
+        V->>O: verify_envelope(kind container-image): pkeyutl -verify -rawin
+        V->>V: subject image_id equals the inspected ID
+        alt envelope missing, malformed, untrusted or for another subject
+            V-->>E: SignatureVerificationError
+            E-->>J: SignatureVerificationError: refusing to launch (no docker run)
+        else verified
+            V-->>E: verified
+            E->>D: docker run --network none --read-only ... IMAGE_ID
+        end
+    end
+```
 
 The pipeline never signs the images that it derives at run time: project images and CodeQL derived
 images. Such an image is trusted only through its verified signed inputs and the identity recorded
@@ -142,6 +220,43 @@ under the configured policy.
   from `lib/` is imported or placed on `sys.path`. The layout is in
   [the native README](../../deploy/dagster/native/README.md).
 
+All three entry points run the same `bootstrap.activate` steps before any `appsec_review` module is
+imported. They differ in how they start and how they fail:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant L as Launcher
+    participant B as bootstrap.activate
+    participant O as OpenSSL CLI
+    participant T as Envelope, trust anchors, package tree
+    participant H as sys.meta_path
+    participant R as runpy
+    alt bootstrap CLI
+        L->>B: python -I -S bootstrap.py --envelope E --package-root R --trusted-keys K --module M
+        Note over L,B: main requires isolated and no-site flags and absolute paths
+    else Dagster image
+        L->>B: site imports the sitecustomize shim, which loads bootstrap.py from APPSEC_REVIEW_SIGNING_BOOTSTRAP_DIR
+        Note over L,B: activate_from_environment reads APPSEC_REVIEW_MODULE_SIGNATURE,<br/>MODULE_ROOT, TRUSTED_KEYS_DIR, OPENSSL and REQUIRE_SIGNED_MODULES=1
+    else native release
+        L->>B: python -I -S root_entrypoint.py checks trusted_path, then loads signing/bootstrap/bootstrap.py
+    end
+    B->>B: dont_write_bytecode, load core, modules and import_hook by file path
+    B->>O: self_test (RFC 8032 known answer)
+    B->>T: verify_modules: TrustedKeys.load, verify_envelope(kind python-modules)
+    B->>T: walk the tree: every file listed with a matching SHA-256, root __init__.py present
+    B->>H: install_verified_import_hook (re-verify imported modules, finder first)
+    B->>B: append the package parent to sys.path
+    alt any check fails
+        B-->>L: bootstrap CLI and shim: message on stderr, exit 78
+        B-->>L: root_entrypoint: the exception aborts startup before lib/ is on sys.path
+    else verified
+        B->>R: bootstrap CLI: finder claims M, then run_module(M, run_name=__main__)
+        B->>R: root_entrypoint: sys.path is stdlib plus lib/, then run_module(image_builder_service)
+        Note over B,R: The shim returns instead, and the interpreter continues with its own main
+    end
+```
+
 ## Operator runbook
 
 Run these steps on the review host from the repository checkout, never during a running review.
@@ -182,6 +297,31 @@ Run these steps on the review host from the repository checkout, never during a 
    [Signed image](../../deploy/dagster/README.md#signed-image) and
    [operator scripts](operator-scripts.md).
 
+   ```mermaid
+   flowchart TD
+       subgraph build["lifecycle.py build (stack-rebuild, or stack-start with --build or a missing image)"]
+           settings["signing_settings: APPSEC_SIGNING_* from the environment over .env"]
+           signmods["signing sign-modules<br/>src/appsec_review to deploy/dagster/signing/python-modules.json"]
+           verifymods["signing verify-modules: status verified"]
+           dockerbuild["docker build --target runtime, runtime-copilot or runtime-windows<br/>tag appsec-review-dagster:PLATFORM[-copilot]"]
+           signimg["signing sign-image TAG<br/>envelope in image_signatures_dir"]
+           verifyimg["signing verify-image: status verified, same image ID"]
+       end
+       subgraph launch["lifecycle.py start (stack-start, stack-restart, stack-rebuild)<br/>or reload (stack-restart --code-location-only)"]
+           reference["APPSEC_REVIEW_DAGSTER_IMAGE from the process environment, else the local tag"]
+           verify["signing verify-image of that reference"]
+           record["record_image: APPSEC_REVIEW_DAGSTER_IMAGE=sha256:ID<br/>in deploy/dagster/.env (atomic, 0600)"]
+           compose["docker compose up -d --wait with that exact ID<br/>reload: --no-deps --force-recreate code-location"]
+       end
+       failed["FAILED, exit 1: lifecycle build failed"]
+       refused["REFUSED, exit 3: refusing to start or reload<br/>Compose is not run, ops.py reports refused"]
+       settings --> signmods --> verifymods --> dockerbuild --> signimg --> verifyimg
+       verifyimg --> reference --> verify
+       verify -- verified --> record --> compose
+       signmods & verifymods & dockerbuild & signimg & verifyimg -- error --> failed
+       reference & verify -- SigningError --> refused
+   ```
+
 Every CLI command prints one JSON report, never key material, and exits nonzero on any failure.
 
 ## Named gaps
@@ -189,15 +329,14 @@ Every CLI command prints one JSON report, never key material, and exits nonzero 
 These areas are not covered by signing. Do not read their absence from a failure report as
 evidence that they are verified.
 
-- **Native bounded-builder and engine paths do not verify signatures yet.** This work was deferred to
-  avoid overlapping a concurrent broker fix. The follow-up locations are as follows (line numbers at
-  commit `b0cb93407`):
+- **Native bounded-builder and engine paths do not verify signatures yet.** The follow-up locations
+  are as follows (line numbers at commit `b0cb93407`); see [Planned work](#planned-work):
   - `container_runtime/engine_broker.py`: `DockerEngine.image` (~368), `_image_policies` (~806) and
-    `_reference` (~824);
+    `_reference` (~824) (deferred);
   - `container_runtime/buildkit_worker.py`: `BuildkitDriver.prepare` worker-image inspect (~589/598),
-    `worker` (~441/444), the egress proxy image check (~718/720) and `_inputs` (~736);
+    `worker` (~441/444), the egress proxy image check (~718/720) and `_inputs` (~736) (in progress);
   - `container_runtime/image_builder_service.py`: `_start_spec` allowed and aliased images
-    (~504, at ~513 and ~523).
+    (~504, at ~513 and ~523) (in progress).
 - **Third-party packages are not covered per module.** Only `appsec_review` is in a manifest.
   `site-packages` dependencies and their native libraries are covered only by the signed Dagster
   image. In a native release, the `lib/` closure is an installation and commissioning duty.
@@ -218,6 +357,21 @@ evidence that they are verified.
   but nothing re-verifies that ID.
 - **`lifecycle.py reload`** verifies the image and then recreates only `code-location`. The other
   services keep running the image that they started with.
+
+## Planned work
+
+Each remaining gap has a status. "In progress on this branch" items are being closed on the
+`container-module-signing` branch and change to "done" when their change lands. "Deferred" items
+have no work scheduled on this branch.
+
+| Gap | Status | Remaining work |
+| --- | --- | --- |
+| Windows host support | In progress on this branch | Signing, verification and the Dagster signed build/start flow assume POSIX ownership and modes, `/usr/bin/openssl` and `/dev/null`. A native Windows operator host needs its own OpenSSL path, key and trust-anchor custody, and `lifecycle.py` behavior. |
+| Native release third-party dependency manifest | In progress on this branch | Sign and verify the native release `lib/` closure outside `appsec_review`, which is now an installation and commissioning duty (see [Named gaps](#named-gaps)). |
+| Compose bypass and reload | In progress on this branch | Re-verify the recorded image ID when Compose is started directly, and make `lifecycle.py reload` cover every service, not only `code-location`. |
+| cve-bin-tool pin | In progress on this branch | Pin the locally built cve-bin-tool image and cover it with `--all-pinned`, so that no run launches it unverified. |
+| BuildKit worker and image builder service verification | In progress on this branch | Verify the worker, egress proxy and input images in `buildkit_worker.py` and the allowed and aliased images in `image_builder_service.py`. |
+| Engine broker | Deferred | Verify images in `engine_broker.py` (`DockerEngine.image`, `_image_policies`, `_reference`). This overlaps the native-broker-process branch and waits for it. |
 
 ## Tests
 

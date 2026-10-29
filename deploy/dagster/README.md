@@ -190,7 +190,9 @@ that runs the lifecycle, which needs this checkout's dependencies). Set them in 
 `.env`.
 
 The signing design, key custody, operator runbook and named gaps are in
-[`docs/operations/signing.md`](../../docs/operations/signing.md). the container runtime catalog during its build, before any
+[`docs/operations/signing.md`](../../docs/operations/signing.md).
+
+The shared runtime image also loads the container runtime catalog during its build, before any
 profile-specific stages. Every enabled tool manifest must survive `.dockerignore`, including
 manual tools such as `containers/report/latex/tool.toml`; manual selection does not make a
 manifest optional. The report renderer's downloads and build assets remain excluded. This check

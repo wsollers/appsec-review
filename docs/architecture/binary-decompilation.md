@@ -63,6 +63,8 @@ indexes it, and review workers retrieve and cite it.
     [[binary_decompilation.binaries]]
  2. appsec-review binary-decompile  -->  verify file SHA-256 and size
                                          stage a copy as the only file under /target
+                                         resolve the tool-ghidra tag to its local image ID
+                                         and verify that ID's signature (refuse if unsigned)
                                          docker run tool-ghidra (no network, read-only, non-root,
                                                                  raised memory/CPU/time)
                                            analyzeHeadless: import -> auto-analysis
@@ -71,7 +73,8 @@ indexes it, and review workers retrieve and cite it.
                                          publish  data/binary-decompilation/<sha256>/<identity16>/
                                          point    data/binary-decompilation/<sha256>/current.json
  3. appsec-review binary-decompile
-      --verify-only                 -->  re-hash the publication for the current image
+      --verify-only                 -->  verify the current image's signature, then
+                                         re-hash the publication for that image
 
  review submission (implemented)
  -------------------------------
@@ -492,7 +495,9 @@ not measure efficacy on C++, on large binaries, or on Windows binaries.
 - **Large binaries are unmeasured.** The defaults (8 GiB, 4 CPUs, 2 hours) are starting values, not
   tuned ones. All tables are loaded into memory during normalization.
 - **Image id is host-local.** The catalog does not pin `image_id`, so two hosts that build the
-  image produce different identities for the same binary.
+  image produce different identities for the same binary. Because it is unpinned,
+  `signing sign-image --all-pinned` skips it; the operator signs the tag explicitly (see
+  [`../operations/signing.md`](../operations/signing.md)).
 - **Linux hosts:** files the container writes belong to uid 10001. Removal of the staging
   directory is best effort and may leave residue under `.staging/`.
 - **Concurrency:** two simultaneous runs for the same binary are not locked against each other.

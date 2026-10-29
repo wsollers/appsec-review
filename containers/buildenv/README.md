@@ -61,7 +61,10 @@ defect (see [Moving forward, not reproducing](../README.md#moving-forward-not-re
 locks record the SHA-256 of the downloaded inputs a working build used; when upstream moves,
 re-acquire and record the new hash. After rebuilding and smoking an image, update its pin by hand or
 with `appsec-review update-image-pins --write`, which re-pins each moved tag to its local image (see
-[`../../docs/operations/image-pin-verification.md`](../../docs/operations/image-pin-verification.md));
+[`../../docs/operations/image-pin-verification.md`](../../docs/operations/image-pin-verification.md))
+and then sign it with `appsec-review signing sign-image --all-pinned` (see
+[`../../docs/operations/signing.md`](../../docs/operations/signing.md)); `BuildContainerExecutor`
+refuses an unsigned build image;
 the pipeline never builds images or rewrites pins on its own, and `job_image_pin_verification` fails
 a review whose local images no longer match their pins. When a Dockerfile here changes, rebuild the image and update
 the pin in the same change. The committed pins name whichever host last re-pinned (see the last

@@ -447,12 +447,15 @@ ID in its pins (`image_id` in the catalog, the build profiles in `appsec-review.
 `source_image_id`). Pins are host-local and are never compared across machines. See
 [Moving forward, not reproducing](containers/README.md#moving-forward-not-reproducing).
 
-The pipeline never builds images. The operator rebuilds them on the host with `containers/build.py`
-and re-pins them with `appsec-review update-image-pins --write`. Every review then verifies at its
+The pipeline never builds images. The operator rebuilds them on the host with `containers/build.py`,
+re-pins them with `appsec-review update-image-pins --write`, and signs them with
+`appsec-review signing sign-image --all-pinned --private-key <key>`. Every review then verifies at its
 start (`job_image_pin_verification`) that every enabled catalog image, build profile and CodeQL source
 image resolves on the local daemon to exactly its pin, and fails before intake naming every missing
 image or moved tag. See
-[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md).
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md). Every
+launch or reuse of a pinned image then verifies its signature and refuses an unsigned or
+untrusted image ID; see [`docs/operations/signing.md`](docs/operations/signing.md).
 
 ## Sync third-party metadata
 
@@ -738,7 +741,8 @@ in a checkout while a run or test suite uses it.
    ([Download the acceptance target](#download-the-acceptance-target)).
 3. Build and smoke every enabled image, acquiring inputs first where needed
    ([Build the tool container images](#build-the-tool-container-images)). Record new image IDs in
-   their pins on that host.
+   their pins on that host, then sign them with the operator key
+   ([`docs/operations/signing.md`](docs/operations/signing.md#operator-runbook)).
 4. Sync third-party metadata if it is older than you want
    ([Sync third-party metadata](#sync-third-party-metadata)).
 5. Run the nothing-to-find review on the pinned images
@@ -767,6 +771,11 @@ python deploy/dagster/bin/lifecycle.py start
 python deploy/dagster/bin/lifecycle.py status
 python deploy/dagster/bin/verify.py
 ```
+
+`lifecycle.py build` signs the `appsec_review` modules, builds the image and signs and verifies its
+ID with the operator key; `start` verifies that signature again, records the ID in
+`deploy/dagster/.env` and launches exactly that image, or refuses with exit code 3. Create the key
+and trust anchor first; see [Signed image](deploy/dagster/README.md#signed-image).
 
 On native Windows, run the same commands in PowerShell, then sign in to the container CLI with
 `docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login`.
