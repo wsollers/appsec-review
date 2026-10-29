@@ -127,9 +127,11 @@ namespace in `runs/metadata/project-images/`. Reuse requires operator-declared `
 unrelated query declarations do not. Supplied generator/Dockerfile payloads are not fingerprinted:
 `dockerfile_sha256` remains null, and the owner must update the relevant release declaration when
 the generator or build environment changes. Missing declarations disable image reuse.
-Under review admission, creation of an unavailable derived image is a named
-`derived_image_preparation_unavailable` gap until the operator supplies an authenticated
-builder with an explicit execution policy and confirmed cancellation/cleanup. The default
+Without a configured `review_policy.image_builder` or native execution, a missing derived image
+is built with the local `docker buildx` client, and build and capture containers run without
+CPU/RAM caps so builds finish as fast as the host allows. When an authenticated builder is
+configured or native execution is requested, a missing image it cannot prepare is a named
+`derived_image_preparation_unavailable` gap. The builder's default
 `bounded` policy retains CPU/RAM enforcement. The opt-in `concurrency_only` policy allows
 exactly one image build, without builder-specific CPU/RAM caps, while retaining deadlines,
 zero swap, private custody, provenance, independent cleanup and durable engine exclusivity.
