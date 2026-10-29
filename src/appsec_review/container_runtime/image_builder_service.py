@@ -34,11 +34,11 @@ from appsec_review.config.image_builder_service import (
 )
 from appsec_review.config.assurance import ResourceBudget, validate_concurrency_only_enforcement
 from appsec_review.container_runtime.buildkit_worker import (
-    BuildKitWorker, EnforcementUnavailable, OutcomeUnknown, private_path, process_token, verify_builder_image,
+    BuildKitWorker, EnforcementUnavailable, OutcomeUnknown, private_path, process_token, resolve_builder_verifier,
+    verify_builder_image,
 )
 from appsec_review.container_runtime.builder_admission import BuilderAdmission, open_operator_journal, service_contract
 from appsec_review.signing.images import ImageSignatureVerifier
-from appsec_review.signing.policy import default_image_verifier
 
 
 SCHEMA = "appsec-review/bounded-image-builder/1"
@@ -530,7 +530,7 @@ class ImageBuilderService:
             raise PermissionError("image input cannot rebind a declared alias")
         # Declared operator images are signed before any solve; same-run outputs are derived images
         # trusted through their verified pinned bases and the operator journal.
-        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
+        verifier = resolve_builder_verifier(self._image_verifier)
         for image in self.config.images:
             verify_builder_image(verifier, image.image_id, f"build input {image.alias}")
         return {"network": network, "build_args": arguments, "image_inputs": images,

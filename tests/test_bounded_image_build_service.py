@@ -979,7 +979,7 @@ def test_real_driver_refuses_unsigned_declared_input_before_transport(tmp_path, 
         assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
 
 
-@pytest.mark.parametrize("signed", [True, False])
+@pytest.mark.parametrize("signed", [True, False, None])
 def test_real_driver_verifies_pinned_egress_proxy_image(tmp_path, monkeypatch, signed):
     network, proxy, proxy_image = "1" * 64, "2" * 64, "sha256:" + "3" * 64
     config = replace(configuration(tmp_path)[0], network_id=network, proxy_container_id=proxy,
@@ -1001,13 +1001,62 @@ def test_real_driver_verifies_pinned_egress_proxy_image(tmp_path, monkeypatch, s
     proof = SimpleNamespace(process_cgroup=lambda pid: Path(config.host_cgroup) / "proxy")
     verifier = SignedImages(proxy_image) if signed else SignedImages()
     monkeypatch.setattr(workers, "private_path", lambda *args, **kwargs: None)
-    driver = workers.BuildKitWorker(config, runner=runner, proof=proof, image_verifier=verifier)
+    if signed is None:
+        unloadable_signing_policy(monkeypatch)
+    driver = workers.BuildKitWorker(config, runner=runner, proof=proof,
+                                    image_verifier=None if signed is None else verifier)
     if signed:
         driver._network()
     else:
-        with pytest.raises(workers.ImageSignatureRefused, match="egress proxy"):
+        with pytest.raises(workers.ImageSignatureRefused, match="egress proxy" if signed is False else "policy"):
             driver._network()
-    assert verifier.calls == [proxy_image]
+    assert verifier.calls == ([] if signed is None else [proxy_image])
+
+
+def unloadable_signing_policy(monkeypatch):
+    def unavailable():
+        raise SignatureVerificationError("signing configuration could not be loaded")
+
+    monkeypatch.setattr(workers, "default_image_verifier", unavailable)
+
+
+def test_real_driver_refuses_prepare_when_signing_policy_cannot_load(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        unloadable_signing_policy(monkeypatch)
+        harness.prepare_context()
+        assert harness.prepare()["state"] == "UNKNOWN"
+        record = harness.service.store.records()[0]
+        assert "ImageSignatureRefused" in record["error"] and "policy unavailable" in record["error"]
+        assert not any("create" in call for call in commands.calls)
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+def test_service_start_spec_refuses_when_signing_policy_cannot_load(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, SignedImages(WORKER_IMAGE, BASE))
+        path = harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        unloadable_signing_policy(monkeypatch)
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        # A RuntimeError is what the serve loop catches; the request is refused, not the service.
+        with pytest.raises(RuntimeError, match="policy unavailable") as raised:
+            harness.start()
+        assert isinstance(raised.value, workers.ImageSignatureRefused)
+        assert harness.service.store.records()[0]["state"] == "PREPARED"
+        assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+def test_real_driver_refuses_inputs_when_signing_policy_cannot_load(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        harness.service._image_verifier = SignedImages(BASE)
+        path = harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        unloadable_signing_policy(monkeypatch)
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        assert harness.start()["state"] == "UNKNOWN"
+        assert "policy unavailable" in harness.service.store.records()[0]["error"]
+        assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
 
 
 @pytest.mark.parametrize("cpu,memory,swap", [

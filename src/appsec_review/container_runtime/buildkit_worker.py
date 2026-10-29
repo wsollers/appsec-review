@@ -45,7 +45,19 @@ class ImageSignatureRefused(EnforcementUnavailable, SignatureVerificationError):
     """A pinned builder image failed signature verification; nothing was launched or consumed."""
 
 
-def verify_builder_image(verifier: ImageSignatureVerifier, image_id: str, purpose: str) -> None:
+def resolve_builder_verifier(verifier: ImageSignatureVerifier | None) -> ImageSignatureVerifier:
+    """Return ``verifier`` or the process default; an unloadable signing policy refuses the build."""
+    if verifier is not None:
+        return verifier
+    try:
+        return default_image_verifier()
+    except SignatureVerificationError as error:
+        raise ImageSignatureRefused(f"refusing every builder image: image-signing policy unavailable: {error}") \
+            from error
+
+
+def verify_builder_image(verifier: ImageSignatureVerifier | None, image_id: str, purpose: str) -> None:
+    verifier = resolve_builder_verifier(verifier)
     try:
         verifier.verify(image_id, reference=purpose)
     except SignatureVerificationError as error:
@@ -550,8 +562,7 @@ class BuildKitWorker:
         self._image_verifier = image_verifier
 
     def _verify_image(self, image_id: str, purpose: str) -> None:
-        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
-        verify_builder_image(verifier, image_id, purpose)
+        verify_builder_image(self._image_verifier, image_id, purpose)
 
     def _begin(self, record: dict):
         self.deadline = time.monotonic() + self.config.cleanup_timeout_seconds
