@@ -301,3 +301,49 @@ def test_native_inspection_with_lost_profile_is_unknown_not_accepted(created_rec
     Path(created_record.record["driver"]["seccomp"]).unlink()
     with pytest.raises(engine.OutcomeUnknown):
         created_record.driver._inspect_native(created_record.record)
+
+
+def test_prior_engine_reconcile_runs_serve_restart_cleanup_under_prior_contract(native, monkeypatch):
+    current = replace(native.config, native_engine=replace(
+        native.config.native_engine, runtime_root="/new-operator/lib", runtime_release_id="new"))
+    calls = []
+    admission = SimpleNamespace(verify=lambda: calls.append("verify"))
+    monkeypatch.setattr(services, "prior_runtime_admission", lambda config, prior: (
+        calls.append(("admission", config, prior)) or admission))
+
+    class Service:
+        def __init__(self, config, *, admission):
+            calls.append(("service", config, admission))
+            self.driver = SimpleNamespace(proof=SimpleNamespace(host=lambda: calls.append("host")))
+            self.engine_broker = SimpleNamespace(
+                driver=SimpleNamespace(check_host=lambda: calls.append("engine")),
+                records=lambda: [{"execution_id": "e", "state": "REMOVED", "removal": {}}])
+
+        def reconcile(self, *, restart):
+            calls.append(("reconcile", restart))
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(services, "ImageBuilderService", Service)
+    monkeypatch.setattr(services.os, "geteuid", lambda: 0)
+    assert services.reconcile_prior_engine(current, native.config) == [
+        {"execution_id": "e", "state": "REMOVED", "quarantine": None}]
+    assert calls == [("admission", current, native.config), ("service", native.config, admission),
+                     "verify", "host", "engine", ("reconcile", True), "close"]
+
+
+def test_prior_engine_reconcile_refuses_policy_change_and_always_releases_service(native, monkeypatch):
+    changed = replace(native.config, native_engine=replace(
+        native.config.native_engine, runtime_release_id="new", engine_generation="other"))
+    with pytest.raises(engine.EnforcementUnavailable, match="cannot change"):
+        services.reconcile_prior_engine(changed, native.config)
+    closed = []
+    monkeypatch.setattr(services, "prior_runtime_admission", lambda config, prior: SimpleNamespace(
+        verify=lambda: (_ for _ in ()).throw(engine.EnforcementUnavailable("not reserved"))))
+    monkeypatch.setattr(services, "ImageBuilderService", lambda config, admission: SimpleNamespace(
+        engine_broker=object(), close=lambda: closed.append(True)))
+    monkeypatch.setattr(services.os, "geteuid", lambda: 0)
+    with pytest.raises(engine.EnforcementUnavailable, match="not reserved"):
+        services.reconcile_prior_engine(native.config, native.config)
+    assert closed == [True]

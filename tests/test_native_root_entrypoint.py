@@ -116,7 +116,8 @@ def test_installed_root_lifecycle_is_not_an_arbitrary_command_entrypoint(install
         entrypoint.launch_spec(*installed_release, operation="docker run --privileged")
 
 
-@pytest.mark.parametrize("operation", ["reconcile-retired-admission", "release-prior-lifetime"])
+@pytest.mark.parametrize("operation", [
+    "reconcile-retired-admission", "release-prior-lifetime", "reconcile-prior-engine"])
 def test_retired_recovery_separates_current_and_prior_private_configurations(installed_release, operation):
     python, bootstrap, config = installed_release
     prior = config.with_name("prior.toml")
@@ -134,6 +135,7 @@ def test_retired_recovery_separates_current_and_prior_private_configurations(ins
 
 @pytest.mark.parametrize("operation", [
     "serve", "reconcile-admission", "reconcile-retired-admission", "release-prior-lifetime",
+    "reconcile-prior-engine",
 ])
 def test_prior_configuration_cannot_be_ignored_or_implicitly_assumed(installed_release, operation):
     python, bootstrap, config = installed_release
@@ -141,4 +143,5 @@ def test_prior_configuration_cannot_be_ignored_or_implicitly_assumed(installed_r
         entrypoint.launch_spec(
             python, bootstrap, config, operation=operation,
             prior_configuration=None if operation in {
-                "reconcile-retired-admission", "release-prior-lifetime"} else config)
+                "reconcile-retired-admission", "release-prior-lifetime",
+                "reconcile-prior-engine"} else config)

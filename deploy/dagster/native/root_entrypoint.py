@@ -53,9 +53,10 @@ def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operatio
     if configuration.stat().st_mode & 0o077:
         raise PermissionError("root service configuration must be private")
     if operation not in {"serve", "reserve-lifetime", "reconcile-admission", "release-lifetime",
-                         "finalize-commissioning", "reconcile-retired-admission", "release-prior-lifetime"}:
+                         "finalize-commissioning", "reconcile-retired-admission", "release-prior-lifetime",
+                         "reconcile-prior-engine"}:
         raise ValueError("unsupported root lifecycle operation")
-    if (operation in {"reconcile-retired-admission", "release-prior-lifetime"}) != (
+    if (operation in {"reconcile-retired-admission", "release-prior-lifetime", "reconcile-prior-engine"}) != (
             prior_configuration is not None):
         raise ValueError("retired reconciliation requires its separate prior configuration")
     if prior_configuration is not None:
@@ -81,7 +82,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--operation", choices=("serve", "reserve-lifetime", "reconcile-admission",
                                                "release-lifetime", "finalize-commissioning",
-                                               "reconcile-retired-admission", "release-prior-lifetime"), default="serve")
+                                               "reconcile-retired-admission", "release-prior-lifetime",
+                                               "reconcile-prior-engine"), default="serve")
     parser.add_argument("--prior-config", type=Path)
     args = parser.parse_args(argv)
     specification = launch_spec(Path(sys.executable), Path(__file__).absolute(), args.config,

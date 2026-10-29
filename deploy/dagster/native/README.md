@@ -271,6 +271,14 @@ The Docker CLI inlines the compacted seccomp profile content into `HostConfig.Se
 so inspection compares that inlined JSON canonically with the broker-written profile and rejects
 the path form, `unconfined`, any profile difference and any additional security option.
 
+When an inspection or removal fix is in a newer installed release, a stopped broker's retained
+intents are reconciled with `--operation reconcile-prior-engine --prior-config <prior.toml>`.
+It uses the same two-configuration equivalence as `release-prior-lifetime`, takes the prior
+service's exclusive lock (so the prior broker must be stopped), requires its `RESERVED` lifetime,
+the host and engine identity checks, and then performs only the ordinary restart reconciliation
+under the prior frozen contract. It never serves, publishes contracts, releases the lifetime or
+rebinds a lease; unconfirmed removals remain quarantined.
+
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.
 A separate shared-journal/lease sequence covers builder -> derived-image tool -> removal -> next
