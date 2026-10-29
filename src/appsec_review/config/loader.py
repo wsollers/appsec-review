@@ -20,6 +20,7 @@ from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
+from .signing import SigningConfig, parse_signing
 
 
 class ProcessingMode(str, Enum):
@@ -563,6 +564,7 @@ class AppConfig:
     # (``appsec_review.config.run_selection``). Recorded in a run's configuration manifest; not hashed.
     selection_source: str = "environment"
     compiler_target: CompilerTarget = CompilerTarget.CLANG
+    signing: SigningConfig = SigningConfig()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -878,6 +880,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
     target_acquisition = parse_target_acquisition(document.get("target_acquisition"), repository_root)
     banned_functions = parse_banned_functions(document.get("banned_functions"))
+    signing = parse_signing(document.get("signing"), repository_root)
+    resolved_document["signing"] = signing.view()
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
     runtime_value = document.get("runtime")
@@ -1239,4 +1243,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         banned_functions=banned_functions,
         review_policy=review_policy,
         compiler_target=selected_compiler,
+        signing=signing,
     )
