@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -363,6 +364,57 @@ def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
     assert len([call for call in calls if call[:3] == ("docker", "volume", "rm")]) == 1
     assert result.limits["network"] == "bridge"
     assert (tmp_path / "scratch" / "database").is_dir()
+
+
+def test_codeql_gradle_replay_mounts_executable_tmp_and_other_actions_do_not(tmp_path: Path) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def runner(argv, _timeout):
+        calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, (IMAGE + "\n").encode(), b"", False
+        if "/opt/appsec/codeql_runner.py" in argv and "database" in argv:
+            (tmp_path / "scratch" / "database-export").mkdir()
+        return 0, b"ok", b"", False
+
+    image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, IMAGE, IMAGE,
+                        "build:local", IMAGE, "codeql:local", "10001:10001",
+                        "b" * 64, "c" * 64, False, "manifest.json")
+    settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
+                               query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+
+    def replay(argv: list[str], environment: dict[str, str]) -> None:
+        (scratch / "protected-replay.json").write_text(json.dumps({
+            "schema": "appsec-review/codeql-build-replay/1",
+            "commands": [{"ordinal": 1, "argv": argv, "working_directory": ".",
+                          "environment": environment}]}), encoding="utf-8")
+
+    def tmpfs(arguments: tuple[str, ...]) -> tuple[str, bool]:
+        calls.clear()
+        result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
+            "database", arguments, scratch_root=scratch)
+        shutil.rmtree(scratch / "database", ignore_errors=True)
+        run = next(call for call in calls if "/opt/appsec/codeql_runner.py" in call)
+        return run[run.index("--tmpfs") + 1], result.limits["tmp_executable"]
+
+    manual = ("--mode", "manual", "--language", "java", "--replay", "protected-replay.json",
+              "--database", "database")
+    replay(["./gradlew", "assembleDebug"], {})
+    assert tmpfs(manual) == ("/tmp:rw,exec,nosuid,size=2g", True)
+    replay(["sh", "gradlew", "build"], {"GRADLE_USER_HOME": "/tmp/appsec-review-gradle"})
+    assert tmpfs(manual) == ("/tmp:rw,exec,nosuid,size=2g", True)
+    replay(["mvn", "-B", "package"], {"MAVEN_OPTS": "-Dmaven.repo.local=/tmp/m2"})
+    assert tmpfs(manual) == ("/tmp:rw,noexec,nosuid,size=2g", False)
+    assert tmpfs(("--mode", "none", "--language", "java", "--database", "database")) == (
+        "/tmp:rw,noexec,nosuid,size=2g", False)
+    # A replay path outside scratch is never trusted to widen the mount.
+    replay(["gradle", "build"], {})
+    (tmp_path / "outside.json").write_text((scratch / "protected-replay.json").read_text(), encoding="utf-8")
+    replay(["mvn", "-B", "package"], {})
+    assert tmpfs(("--mode", "manual", "--language", "java", "--replay", "../outside.json",
+                  "--database", "database")) == ("/tmp:rw,noexec,nosuid,size=2g", False)
 
 
 def test_codeql_execution_survives_a_moved_derived_tag_but_not_a_missing_image(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import inspect
+import json
 import os
 import re
 import shlex
@@ -370,17 +371,13 @@ def test_replayed_jvm_build_environment_writes_only_tmp_and_reads_image_caches()
     assert gradle["GRADLE_RO_DEP_CACHE"] == "/opt/project-deps/gradle/caches"
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=(
-    "Android CodeQL replay: the recorded GRADLE_USER_HOME=/tmp/appsec-review-gradle overrides the "
-    "runner's /scratch relocation, and the CodeQL executor mounts /tmp noexec, so AAPT2 and Gradle "
-    "native libraries extracted under the Gradle home cannot execute"))
-def test_android_codeql_replay_keeps_gradle_home_executable():
-    replayed = _probe_environment(
-        {"environment": {}, "source_dir": ".", "build_system": "gradle"})["GRADLE_USER_HOME"]
-    runner = (CODEQL_TOOL / "codeql_runner.py").read_text(encoding="utf-8")
-    # The command environment is applied after, and therefore over, the runner's relocation.
-    command_wins = (runner.index('value["GRADLE_USER_HOME"] = "/scratch/.codeql-cache/gradle"') <
-                    runner.index("child_environment.update(command_environment)"))
-    codeql_tmp_noexec = '"/tmp:rw,noexec' in inspect.getsource(runtime.CodeQLExecutor._execute)
-    effective = replayed if command_wins else "/scratch/.codeql-cache/gradle"
-    assert not (effective.startswith("/tmp/") and codeql_tmp_noexec)
+def test_android_codeql_replay_keeps_gradle_home_executable(tmp_path):
+    environment = _probe_environment({"environment": {}, "source_dir": ".", "build_system": "gradle"})
+    assert environment["GRADLE_USER_HOME"].startswith("/tmp/")
+    command = ["gradle", "--no-daemon", "assembleDebug"]
+    (tmp_path / "protected-replay.json").write_text(json.dumps({
+        "schema": "appsec-review/codeql-build-replay/1",
+        "commands": [{"ordinal": 1, "argv": command, "working_directory": ".",
+                      "environment": environment}]}), encoding="utf-8")
+    # The replayed Gradle home lives on /tmp, so the executor must mount /tmp executable.
+    assert runtime.replay_needs_executable_tmp(tmp_path, ("--replay", "protected-replay.json"))

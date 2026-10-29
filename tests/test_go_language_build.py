@@ -735,6 +735,26 @@ def test_go_probe_environment_gives_an_undeclared_dependency_build_a_writable_mo
                                "environment": {"GOMODCACHE": "/go/pkg/mod"}})["GOMODCACHE"] == "/opt/project-deps/go"
 
 
+def test_go_mod_mod_build_downloads_into_scratch_and_reads_the_image_cache_first() -> None:
+    recipe = {"build_system": "go", "source_dir": "go", "network_required": True,
+              "environment": {"GOFLAGS": "-mod=mod -buildvcs=false", "GOMODCACHE": "/go/pkg/mod"}}
+    environment = _probe_environment(recipe)
+    # The image-restored cache is on the read-only root; -mod=mod may need to download.
+    assert environment["GOMODCACHE"] == "/tmp/appsec-go-mod"
+    assert environment["GOPROXY"] == (
+        "file:///opt/project-deps/go/cache/download,https://proxy.golang.org,direct")
+    # Builds stay online: an explicit upstream is kept after the image cache, never replaced by off.
+    upstream = _probe_environment({**recipe, "environment": {
+        **recipe["environment"], "GOPROXY": "https://goproxy.example,direct"}})
+    assert upstream["GOPROXY"] == "file:///opt/project-deps/go/cache/download,https://goproxy.example,direct"
+    assert _probe_environment({**recipe, "environment": dict(environment)})["GOPROXY"] == environment["GOPROXY"]
+    # Without -mod=mod the image cache is complete for the module graph and stays in place.
+    readonly = _probe_environment({**recipe, "environment": {"GOFLAGS": "-mod=readonly",
+                                                              "GOMODCACHE": "/go/pkg/mod"}})
+    assert readonly["GOMODCACHE"] == "/opt/project-deps/go"
+    assert "GOPROXY" not in readonly
+
+
 def test_go_failed_sibling_does_not_discard_successful_unit(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     sibling = target / "broken" / "cmd" / "app"
