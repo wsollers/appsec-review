@@ -1,5 +1,5 @@
 """One-way commissioning retains the same real, continuously counted engine lease."""
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -522,3 +522,25 @@ def test_recovery_runtime_cannot_also_rebind_prior_state_or_gate(native, monkeyp
     with pytest.raises(EnforcementUnavailable, match="cannot change"):
         services.release_prior_runtime(current, native.config)
     assert (native.lifetime.path.read_bytes(), bank(native.lifetime).read_bytes()) == before
+
+
+def legacy_contract(config):
+    """The contract a release from before operator source mappings recorded: no source key at all."""
+    value = json.loads(json.dumps(asdict(config)))
+    for image in value["native_engine"]["images"]:
+        assert image.pop("source_image_id") is None
+    return value
+
+
+@pytest.mark.parametrize("native", ["engine-domain"], indirect=True)
+def test_prior_lifetime_recorded_before_source_mappings_still_releases(native, monkeypatch):
+    prior = native.config
+    anchor = json.loads(native.lifetime.path.read_text())
+    assert anchor["service_contract"] == legacy_contract(prior) == service_contract(prior)
+    restart_prior_lifetime(native)
+    opened = []
+    monkeypatch.setattr(services, "BuilderAdmission",
+                        lambda config: opened.append(restarted_admission(config)) or opened[-1])
+    services.release_prior_runtime(recovery_runtime(prior), prior)
+    released = json.loads(opened[0].path.read_text())
+    assert released["state"] == "RELEASED" and released["service_contract"] == legacy_contract(prior)

@@ -84,6 +84,11 @@ def service_contract(config: ImageBuilderServiceConfig) -> dict:
     value = asdict(config)
     if config.native_engine is None:
         value.pop("native_engine")
+    else:
+        # Unmapped images keep the pre-source-mapping shape so earlier persisted contracts still match.
+        for image in value["native_engine"]["images"]:
+            if image["source_image_id"] is None:
+                del image["source_image_id"]
     return json.loads(json.dumps(value))
 
 

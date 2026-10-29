@@ -3,6 +3,7 @@ from dataclasses import replace
 import pytest
 
 from appsec_review.config.native_engine import NativeImage, parse_native_engine
+from appsec_review.container_runtime.builder_admission import service_contract
 from appsec_review.container_runtime.build_executor import BuildContainerExecutor, BuildProfile
 from appsec_review.container_runtime.native_contracts import client_contracts
 from appsec_review.runtime import resources
@@ -134,3 +135,18 @@ def test_build_executor_resolves_pinned_profile_through_mapped_client(inspected)
         runner=lambda argv, timeout: native.client.run(argv, timeout))
     executor.resolve()
     assert sent == ["base:release"]
+
+
+def test_service_contract_keeps_pre_mapping_shape_for_unmapped_images(native):
+    image = native.config.native_engine.images[0]
+    unmapped = service_contract(native.config)
+    assert unmapped["native_engine"]["images"] == [{
+        "image_id": BASE, "release_id": "image-1", "user": image.user, "command_ids": ["python"],
+        "allow_isolated_network": False, "aliases": ["base:release"], "allow_derived": False}]
+    mapped_contract = service_contract(replace(native.config, native_engine=sourced(native)))
+    assert mapped_contract["native_engine"]["images"][0]["source_image_id"] == PIN
+    assert mapped_contract != unmapped
+    other = service_contract(replace(native.config, native_engine=sourced(native, source=OTHER_PIN)))
+    assert other["native_engine"]["images"][0]["source_image_id"] == OTHER_PIN
+    assert other != mapped_contract
+    assert native.config.native_engine.images[0].source_image_id is None
