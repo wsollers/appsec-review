@@ -81,3 +81,20 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         name = marker.args[0]
         if not (_REPOSITORY_ROOT / "targets" / name).is_dir():
             pytest.skip(f"local review target checkout is absent: targets/{name}")
+
+
+@pytest.fixture(autouse=True)
+def _no_telemetry_report_container(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run-completion hooks in unit tests never start the LaTeX report container.
+
+    Integration and live tests keep the real renderer; tests of the renderer call it directly.
+    """
+    try:
+        relative = Path(str(request.node.path)).resolve().relative_to(_REPOSITORY_ROOT / "tests")
+    except ValueError:
+        return
+    if relative.parts and relative.parts[0] in {"integration", "live"} or relative.name.startswith("test_live_"):
+        return
+    from appsec_review.reporting import telemetry_finalize
+
+    monkeypatch.setattr(telemetry_finalize, "render_telemetry_report", lambda *args, **kwargs: None)

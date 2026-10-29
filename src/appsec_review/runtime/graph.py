@@ -6,9 +6,10 @@ import json
 from pathlib import Path
 import re
 from typing import Any
+import logging
 
 from appsec_review.config import AppConfig
-from appsec_review.observability import PipelineLog
+from appsec_review.observability import PipelineLog, write_run_metrics
 from appsec_review.runtime.job import Job
 from appsec_review.runtime.resume import ResumeDecision, ResumePlanner
 from appsec_review.runtime.runner import JobRunner
@@ -17,6 +18,7 @@ from appsec_review.storage import FileLock, atomic_json
 
 # The last job that runs before a deferred target fingerprint exists: it creates the target.
 ACQUISITION_JOB = "job_target_acquisition"
+LOGGER = logging.getLogger(__name__)
 
 
 class GraphRunner:
@@ -73,6 +75,38 @@ class GraphRunner:
         force_from: str | None = None,
         trigger: str = "manual",
         orchestration: Mapping[str, str] | None = None,
+    ) -> Mapping[str, Any]:
+        terminal: dict[str, Path] = {}
+        try:
+            return self._run(target_root=target_root, source_fingerprint=source_fingerprint, run_id=run_id,
+                             force_from=force_from, trigger=trigger, orchestration=orchestration,
+                             terminal=terminal)
+        finally:
+            if "run_root" in terminal:
+                self._finish(terminal["run_root"])
+
+    def _finish(self, run_root: Path) -> None:
+        """After a terminal graph event and outside the resume lock: final metrics, then the report."""
+        # Imported here: telemetry_render's own imports load this module, so a top-level import cycles.
+        from appsec_review.reporting.telemetry_finalize import finalize_telemetry_report
+
+        try:
+            write_run_metrics(run_root)
+        except Exception as exc:  # derived telemetry must not replace the run's own outcome
+            LOGGER.warning("run metrics for %s were not written: %s", run_root.name, type(exc).__name__)
+        finalize_telemetry_report(run_root, self.config.telemetry_report,
+                                  repository_root=self.config.runtime.repository_root)
+
+    def _run(
+        self,
+        *,
+        target_root: Path,
+        source_fingerprint: str | None,
+        run_id: str | None,
+        force_from: str | None,
+        trigger: str,
+        orchestration: Mapping[str, str] | None,
+        terminal: dict[str, Path],
     ) -> Mapping[str, Any]:
         runner = JobRunner(self.config)
         correlation = dict(orchestration or {})
@@ -147,6 +181,7 @@ class GraphRunner:
                     orchestrator=dict(orchestration or {}).get("system", "application"),
                     message="application graph stopped at failed job",
                     details={"error_type": type(exc).__name__, "completed_handoffs": upstream})
+                terminal["run_root"] = run_root
                 raise
             graph_status = ("COMPLETED_WITH_GAPS" if any(
                 value.get("status", {}).get("status") == "COMPLETED_WITH_GAPS"
@@ -160,6 +195,7 @@ class GraphRunner:
             PipelineLog(run_root).write("RUN_COMPLETED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
                 details={"completion_status": graph_status, "handoffs": completed_handoffs})
+            terminal["run_root"] = run_root
             orchestration_receipt = None
             if correlation.get("system") and correlation.get("run_id"):
                 receipt_path = (run_root / "data" / "orchestration" / correlation["system"] /

@@ -236,3 +236,30 @@ def test_concurrent_resume_attempts_cannot_claim_same_run(tmp_path: Path) -> Non
     release.set()
     thread.join(15)
     assert not first_error
+
+
+def test_graph_terminal_paths_render_the_telemetry_report_after_metrics_outside_the_lock(
+        tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.reporting import telemetry_finalize
+    from appsec_review.storage import FileLock
+
+    config, target = _fixture(tmp_path)
+    rendered: list[tuple[str, dict]] = []
+
+    def render(run_root, settings, *, repository_root=None):
+        with FileLock(run_root / "data" / "resume.lock"):  # the graph has released its claim
+            summary = json.loads((run_root / "data/telemetry/summary.json").read_text(encoding="utf-8"))
+        assert settings == config.telemetry_report and repository_root == config.runtime.repository_root
+        rendered.append((run_root.name, summary["event_counts"]))
+
+    monkeypatch.setattr(telemetry_finalize, "render_telemetry_report", render)
+    fingerprint = source_fingerprint(target)
+    with pytest.raises(RuntimeError, match="partial failure"):
+        GraphRunner(config, [build_intake(), build_catalog(fail_task="retrieval_indexes.build_path_index")]).run(
+            target_root=target, source_fingerprint=fingerprint)
+    failed_run, counts = rendered[-1]
+    assert counts["GRAPH_FAILED"] == 1  # final metrics were written after the terminal event
+    outcome = GraphRunner(config, [build_intake(), build_catalog()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=failed_run)
+    assert [name for name, _ in rendered] == [failed_run, outcome["run_id"]]
+    assert rendered[-1][1]["RUN_COMPLETED"] == 1
