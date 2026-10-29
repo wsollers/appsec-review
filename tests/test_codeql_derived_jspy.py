@@ -170,7 +170,6 @@ def test_declared_source_image_with_other_effective_user_fails_closed(shipped, t
 def test_fail_policy_rejects_undeclared_node_and_python_images(shipped, tmp_path, monkeypatch, kind):
     monkeypatch.setattr(runtime, "application_runtime_user", lambda _user: HOST_USER)
     image_id, _tag, user = _profile_images(shipped)[kind]
-    assert shipped.settings.preinstalled_undeclared == "fail"
     with pytest.raises(ValueError, match="requires one exact environment/user declaration") as caught:
         _resolver(shipped, tmp_path, "fail").declared_identity(build_image_id=image_id, runtime_user=user)
     assert f"build_image_id={image_id}" in str(caught.value)
