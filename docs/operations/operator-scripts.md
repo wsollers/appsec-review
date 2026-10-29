@@ -361,6 +361,11 @@ scripts/run-tests.sh --acceptance graphs --workers 1
 Acceptance requires the checkout's own virtual environment, always treats missing/skipped/failed
 required coverage as failure, and writes its result/logs/fixture runs only under a unique
 `test/tmp/acceptance/` root. `--workers` (`-Workers`) defaults to 1 and permits at most 2.
+Staged review selects dependency-ready producer phases, frozen-input checkpoints and supervisor
+seals before fresh private consumers. Failed producers leave descendants explicitly blocked,
+not executed or successfully skipped. `review` has 13 core cases; `review-exhaustive` has 24
+uncalibrated cases. Current staged review is blocked by hardlink/custody incompatibility;
+the measured two-worker signals pass is not serial or overall acceptance proof.
 `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` only lower profile caps.
 Legacy suites, arbitrary pytest arguments, `--parallel` and `--background` cannot be combined
 with acceptance; the known-failure exemption below does not apply.

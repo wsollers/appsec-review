@@ -854,10 +854,12 @@ dependencies. Serial is the default, with at most two workers. All state, fixtur
 production-format telemetry stay beneath a unique `test/tmp/acceptance/` root, never production
 `runs/`, `data/` or `targets/`. This supports process/storage isolation beside a review, not
 zero shared CPU/I/O contention. `quick` targets under ten minutes with a twelve-minute hard cap;
-current quick acceptance remains red despite revision-bound named `process` and `consumers`
-profile passes.
-The authentic oracle and serial signals budget remain unresolved; final integrated public-driver
-calibration is not complete. Optional real-tool, deployed,
+current acceptance is **not green**. Review now uses dependency-ready producer stages and
+invocation-specific seals before private readers, but the latest public run fails during
+prepare on a hardlink/custody conflict; no complete staged chain is proved.
+Signals passed with two opted-in workers, not the serial default. Historical process/consumers
+passes are not current-source proof. No final quick, three-warm or exhaustive calibration is
+complete. Optional real-tool, deployed,
 provider, guidance, warm-CodeQL and native profiles currently fail as unimplemented rather
 than silently passing.
 

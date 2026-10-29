@@ -6,6 +6,11 @@ For revision-specific measurements and remaining work, see the
 [implementation record](../reviews/integration-live-test-implementation.md).
 These profiles are separate from the existing stepwise corpus and deployed-review acceptance tools.
 
+**Current status: not green.** Staged review fails during prepare on hardlink/custody
+incompatibility; signals passed only with two opted-in workers. See
+[current measured status](#current-staged-status-not-green), not historical profile passes,
+before assessing coverage or budgets.
+
 ## What a passing profile means
 
 A profile selects connected application behavior, with exact pytest nodes declared in
@@ -59,7 +64,8 @@ Remove `-DryRun` / `--dry-run` to execute the inspected selection. Dry run print
 | `process-linux` | Linux guardian/process-tree and Unix listener/peer-credential obligations | 180 s |
 | `process-windows` | Actual PowerShell dispatch with an invocation-owned compiled transport | 60 s |
 | `controls` | Explicit OWASP qualification with document/catalog context and accepted Workbench retrieval; loopback HTTPS, including negative matrix | 240 s |
-| `review` | Authentic review/gate/PoC planning, empty/corrupt review, current-report oracle, benign/blocked final publication | 600 s |
+| `review` | 13 core staged cases: native prepare/review/PoC and empty/corrupt consumers; CI prepare/review/gate/report and representative current-report reader | 600 s |
+| `review-exhaustive` | 24 staged cases retaining full current-report integrity, same-length tampering, benign/blocked and core vectors; uncalibrated | 600 s |
 | `consumers` | Real triage/admission, next-round referral repair/deduplication/convergence and accepted report HTML/LaTeX rendering | 360 s |
 
 This table summarizes the inventory, not a promise that every profile has passed. `quick` is
@@ -67,10 +73,12 @@ representative, not the union of all hermetic profiles. Inventory revision `09cb
 negative matrices in explicit full profiles instead of removing variants: signal integrity in
 `signals`, helper bad inputs/graph-matcher negatives in `graphs`, TLS negatives in `controls`,
 and submission barriers/MCP integrity/invalid process profile/record-replay-sensor in `process`.
-Empty/corrupt and benign/blocked review variants remain in `review`; the three consumer nodes
-are enrolled in `consumers`, not `quick`. OS-specific cases have their own selections.
+Empty/corrupt variants remain in core `review`; full integrity and benign/blocked variants
+remain in `review-exhaustive`, not removed to force a pass. The three consumer nodes are
+enrolled in `consumers`, not `quick`. OS-specific cases have their own selections.
 Inspect the inventory at the commit under test for the exact selection; collection supplies
-the actual case count, not a fixed count copied from an older quick result.
+the actual case count, not a fixed count copied from an older quick result. At `58387690`,
+quick has 35 selectors resolving to 38 cases; staged producer phases count in that denominator.
 
 The selectable `tools`, `deployed`, `provider`, `guidance`, `codeql-warm` and `native` profiles
 currently have no executable obligations. Actual invocation fails with `profile_not_implemented`;
@@ -92,8 +100,9 @@ provider, discover credentials or authorize deployment/native access.
   design target pending final integrated public-driver calibration, not an achieved benchmark.
 - `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` can only lower declared
   ceilings. Three seconds are reserved **inside** a supervised process deadline for cleanup.
-  Interpreter/plugin startup, fixtures, case execution and owned-process cleanup count toward
-  its cap; collection and driver setup also consume the suite budget.
+  Interpreter/plugin startup, fixtures, custody prechecks/copy/checkpoint/seal, case execution
+  and owned-process cleanup count toward its cap; collection and driver setup also consume
+  the suite budget. Staging is not unmetered setup or an increased cap.
 - Legacy suite arguments, arbitrary pytest selections, `--parallel` and `--background` cannot
   be combined with acceptance. Do not bypass the public driver to claim its budget passed.
 
@@ -101,6 +110,40 @@ Storage/process isolation allows hermetic acceptance alongside an ongoing review
 its run storage or restarting services. It does **not** guarantee zero shared CPU, memory, disk
 or I/O contention. Check host load and coordinate before running; use serial execution and
 report load-related limitations rather than promising production performance isolation.
+
+## Staged producer/reader process
+
+The inventory declares dependency-ready producer phases, not a preaccepted output cache.
+Native-positive runs prepare -> review -> PoC; native-empty ends after review; CI variants
+run prepare -> review -> gate -> report. Each phase runs real application jobs at the
+scripted external boundary. A failed/incomplete predecessor leaves descendants explicitly
+blocked and unexecuted; they still fail profile adequacy.
+
+Prepare declares frozen target/configuration/overlay/fixture inputs. The supervisor captures
+their actual bytes and verifies those inputs plus predecessor checkpoints around subsequent
+phases. Only after a successful producer exits with confirmed owned cleanup can the
+supervisor checkpoint its tree; the terminal phase publishes an invocation-specific seal
+outside the producer tree. Schema **`appsec-review/acceptance-invocation-seed/1`** is distinct
+from the operator `appsec-review/acceptance-seed/1` format; neither is interchangeable.
+
+Consumers verify the exact invocation/variant/commit/source/tree binding and receive fresh
+ordinary private copies with byte/path/hash/mode verification and materialization receipts.
+Only reader run/runs loci relocate: authenticated source/configuration paths remain frozen.
+Mutation vectors get independent copies and production validation scopes, not rewritten
+accepted bytes or cached proof shared across attempts.
+
+Consumer execution writes its own `consumer-telemetry/<uuid>/telemetry-origin.json`
+sidecar (`appsec-review/acceptance-consumer-telemetry/1`). It names current event/metric paths
+and labels retained copied producer telemetry `execution_evidence: false`. Retained producer
+history must not be counted as freshly executed consumer work.
+
+Custody still requires bounded ordinary files with `st_nlink == 1`; links/redirects and
+special files fail. Real `IndexBuilder` atomic `os.link` publication is currently denied,
+and persistent legitimate named/content-addressed aliases would also fail single-link
+custody. **Do not just enable hardlinks.** Bounded fully-contained producer OUTPUT-only
+post-cleanup detachment before checkpoints, preserving bytes/paths/hashes/modes and all
+ordinary-file seal/copy checks, is a new proposal awaiting user approval, not implemented
+policy or an operator workaround.
 
 ## Artifacts and telemetry
 
@@ -114,7 +157,12 @@ Each invocation creates only a unique
 | `driver/` | Production-format `PipelineLog`, `events.jsonl` and acceptance operation spans |
 | `runs/` | Real fixture job attempts, accepted handoffs, indices, logs and other run-owned evidence |
 | `processes/collection/` | Collection log, pytest outcome, exit/gate records and supervisor result |
-| `processes/case-<node-hash>/` | The same per-case records plus private pytest cache/base-temp |
+| `processes/case-<ordinal>/`, `p/case-<ordinal>/` | Ordinary/staged process records and private cache/base-temp; staged HOME/TEMP/DAGSTER_HOME are process-specific |
+| `source-identities.json` | Exact staged Python/helper, schema, pipeline, selected/static/configuration byte identities |
+| `stages/<variant>/` | Invocation-owned authentic producer chain and frozen inputs |
+| `custody/<variant>/` | Immutable-input receipts, predecessor checkpoints and terminal invocation seal |
+| `consumers/case-<ordinal>/` and sibling `.custody.json` | Fresh verified reader copy and materialization receipt |
+| `consumers/.../consumer-telemetry/<uuid>/` | Current consumer streams and `telemetry-origin.json`; copied producer history stays separate |
 | `home/`, `temporary/`, `dagster/` | Private HOME/profile, TEMP/TMP/TMPDIR and DAGSTER_HOME |
 
 The public command prints `acceptance: PASSED|FAILED; <N> cases; <seconds>s` and the path to
@@ -123,11 +171,14 @@ execution failures return 1, while invalid options/profile/deadline selections r
 
 `appsec-review/acceptance-result/1` records the tested commit, dirty-working-tree flag,
 inventory SHA-256, source-file SHA-256 identities, Python versions, selected/collected nodes,
-selected/executed/failed/skipped/unexecuted obligations, prerequisites, case outcomes, cleanup
+selected/executed/failed/skipped/blocked/unexecuted obligations, executed/unexecuted nodes,
+prerequisites, case outcomes, cleanup
 and `coverage_status`. From parent correction `19c7c000`, source identities also record the
-two allowed pinned static taxonomy inputs. Source identities cover the declared files recorded
-by the driver; they are not an attestation of every transitive dependency. A dirty result must
-not be described as testing only the named commit.
+two allowed pinned static taxonomy inputs. Staged provenance now includes all Python under
+`src/`, the local helper import closure, selected tests/driver/configuration, and every file
+under `docs/schemas/` and `pipeline/`, checked before/after phases and at suite completion.
+This is byte provenance for those declared inputs, not every external dependency or arbitrary
+host state. A dirty result must not be described as testing only the named commit.
 
 From `09cbf227`, each supervised process also records `static_input_identities`. A mismatch
 against the suite's source identities fails that case as `static_reference_changed_during_suite`,
@@ -203,6 +254,8 @@ Genuine assessment, positive assessment/source binding, precomputed control fact
 review join remain unverified. The pinned Dagster run object lacks `create_timestamp`, so
 queue-delay timing is unavailable.
 
+## Historical pre-staging evidence
+
 At `06a4ea6c`, three triage/referral/presentation nodes passed through the real
 `supervised_pytest` and `tests.acceptance_plugin` boundary in 225.664 seconds, with all owned
 Windows trees cleaned up. Each used a measured 120-second real-job exception and the serial
@@ -220,7 +273,7 @@ specialist resolution. The implementation record retains exact nodes, commit, ti
 artifacts and these limitations; do not treat direct tests or guarded exact-node results as a
 passing named public profile.
 
-Latest candidate/oracle follow-up `b72e79a9` passed the minimal native candidate case but
+Pre-staging candidate/oracle follow-up `b72e79a9` passed the minimal native candidate case but
 timed out the exhaustive current-report oracle before its fixture returned. No oracle
 assertion was reached. This is a material remaining 120-second adequacy gap, not accepted
 report proof or a green `review`/`quick` profile; intermediate validated/completed job events
@@ -231,7 +284,35 @@ Separating representative/exhaustive work requires separately budgeted authentic
 prerequisites or publication/harness performance work; splitting assertions alone is not
 evidence that fresh public fixtures fit.
 
-## Frozen-parent evidence status
+## Current staged status: not green
+
+At exact parent `5838769042418b12378d0850aa0ded20a8b0c057` (containing main `84108306`):
+
+- Actual public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **failed** 13 selected
+  cases in **24.4064413 seconds**: three prepares failed on real `IndexBuilder` atomic
+  `os.link` denied by the staged guard; ten descendants were correctly blocked, not executed.
+  Owned cleanup confirmed zero survivors and `production_services_touched` was false.
+  Result: `test/tmp/acceptance/acceptance-88a0d85707f7442f80d2765174e3f3c2/review/result.json`.
+- Actual public `scripts\run-tests.ps1 -Acceptance signals -Workers 2` **passed 3/3 in
+  145.353 seconds** under its unchanged 240-second ceiling.
+  Result: `test/tmp/acceptance/acceptance-cb32192d91924fdbb4d3bc5d6e8259e1/signals/result.json`.
+  This resolves the measured two-worker timing concern, not default-serial feasibility.
+- No complete staged authentic chain, final quick, three-warm or exhaustive proof exists.
+  Historical process/consumers passes below are not current-source proofs.
+- Integrated runner/custody validation reported 79 passed, one skip and two failures in
+  344.73 seconds. Both failures were corrected by `58387690`; the affected/core/fixture/
+  inventory rerun passed 72 with one host skip in 56.53 seconds. This is not a new single
+  full-suite green result.
+- Windows `WinError 5` remains unexplained: a bounded ten-transaction probe (4.055 seconds)
+  did not explain it. Genuine assessment/source-bound review, Linux guardian, actual WSL,
+  tool/provider/CodeQL/native compatibility, specialist/renderer-selection/saturation/cross-lane
+  consumer cases and unselected record/replay/sensor variant matrices remain gaps.
+
+No production runs/services were inspected or mutated. Path/process/metrics isolation is not
+zero CPU/I/O contention. Default workers remain one, maximum two; all existing caps are
+unchanged. The separate output-detachment proposal above still needs user approval.
+
+## Historical non-staged profile results
 
 The documentation snapshot includes exact parent
 `1ff865561cc79171d56e389ead1c961975234a11` and frozen main `a8883acc`. Evidence below is
@@ -270,7 +351,8 @@ still scoped to each tested revision, not retrospectively to every later merge.
   do not make quick, the full oracle matrix, serial signals scheduling or all consumer
   capabilities green.
 
-Planner `81ada94f` produced only a read-only
+At that historical checkpoint, planner `81ada94f` had produced only a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
-It awaits user review and is not implemented. Do not treat it as
-accepted prerequisite materialization, a validation-cache shortcut or a cap waiver.
+The producer/reader machinery is now integrated as described above; its current custody
+failure is not fixed by that historical proposal or by treating it as a validation-cache
+shortcut or cap waiver. Output detachment is a separate, still-unapproved proposal.

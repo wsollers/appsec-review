@@ -10,14 +10,17 @@ revisions from outstanding commissioning.
 
 The public driver in `deploy/dagster/bin/ops_tests.py` reads the explicit feature-to-node inventory,
 creates a `LaneWorkspace`, verifies a checkout-owned environment, supervises collection and then
-runs each collected case in a fresh guarded process. At most two cases run concurrently.
+runs each collected case in a fresh guarded process. Staged obligations dispatch only when
+their explicit predecessor has passed custody checks. Default concurrency is one; at most
+two dependency-ready cases run concurrently.
 
 ```text
 scripts/run-tests.{sh,ps1} --acceptance PROFILE
   -> inventory obligations + prerequisites + caps
   -> unique test/tmp/acceptance/<invocation>/<profile>
   -> supervised collection -> exact collected parameter cases
-  -> owned pytest process -> real application producer -> accepted handoff/index -> consumer
+  -> dependency-ready producer phases -> frozen inputs + predecessor checkpoints
+  -> post-exit/cleanup supervisor seal -> verified fresh private consumer
   -> confirmed process cleanup + strict obligation accounting -> result.json
 ```
 
@@ -31,6 +34,52 @@ MCP-tool and provider snapshots detect drift; they do not prove execution of eve
 Every executable obligation declares a bounded question, source nodes, variants, substitutions,
 prerequisites and deferrals. Current profile membership cannot retrospectively turn an old
 measurement into evidence for newly added cases.
+
+## Integrated staging and custody
+
+Parent `58387690` contains main `84108306`, staged chunks `938a9117` / `f21aff31` plus
+`9a80453b`, and coordinator corrections. The staged path is implemented, not merely the
+earlier planner proposal, but a full authentic staged chain has not passed.
+
+Variant-specific producers run prepare -> review -> PoC for native-positive, prepare ->
+review for native-empty, and prepare -> review -> gate -> report for CI variants. Each
+variant has one producer chain and one terminal sealing phase. Frozen configuration,
+overlay, target bytes, fixture metadata and declared immutable inputs cannot be rewritten
+between phases. The supervisor verifies predecessor tree checkpoints and immutable-input
+receipts; after successful interpreter exit and owned cleanup it checkpoints and, at the
+terminal phase, seals the resulting tree outside that tree.
+
+The invocation seal is **`appsec-review/acceptance-invocation-seed/1`**, not the operator
+`appsec-review/acceptance-seed/1` protocol. It binds invocation, variant, exact tested commit,
+source identities, producer, immutable inputs and bounded tree records including bytes,
+paths and ordinary permission bits. `source-identities.json` pins all `src/**/*.py`, the
+local test-helper import closure, selected tests/driver/configuration/static inputs, and all
+files under `docs/schemas/` and `pipeline/`. Pre/post source checks and the source-manifest
+digest bind that byte provenance rather than trusting a commit label alone.
+
+Each consumer receives a newly verified ordinary copy with a separate materialization
+receipt. Reader run/runs loci relocate; authenticated source/configuration paths and sealed
+absolute references stay frozen. No accepted handoff, claim, hash or configuration is
+rewritten for relocation. Mutation vectors receive separate fresh copies and independent
+production validation, never a cross-case validation cache.
+
+When a consumer executes, its current spans/metrics have a separate private `consumer-telemetry/<uuid>/` root
+and `telemetry-origin.json` (`appsec-review/acceptance-consumer-telemetry/1`). Its sidecar
+identifies current metric paths and marks retained copied producer telemetry as
+`execution_evidence: false`. Copied producer logs/metrics remain history, not evidence that
+the consumer reran those producers.
+
+Custody requires bounded ordinary files with `st_nlink == 1`; links, redirected ancestors
+and special files fail. Failed or incomplete producers invalidate seal availability and
+leave descendants explicitly blocked/unexecuted. Blocked requirements fail adequacy even
+when cleanup succeeds; they cannot become skipped passes or executed coverage.
+
+**Current blocker:** real `IndexBuilder` atomic `os.link` publication is denied by the staged
+guard. Legitimate persistent named/content-addressed aliases also violate single-link
+custody, so enabling `os.link` alone cannot fix it. Bounded fully-contained producer
+**OUTPUT-only** post-cleanup detachment before checkpoints, preserving bytes/paths/hashes/
+modes and every ordinary-file seal/copy check, is a **new proposal awaiting user approval**.
+It is not implemented or permission to relax the current guard/custody policy.
 
 ## Authentic joins and explicit substitutions
 
@@ -66,6 +115,10 @@ process, controls and review matrices without removing negative variants. It enr
 three consumer nodes in a separate `consumers` profile. The ordinary 60-second limit and
 explicit 15/30/120-second obligation caps remain distinct from suite caps; process startup/replay
 has explicit 120-second allowances within its 480-second suite.
+The current staged inventory further separates 13 core `review` cases from 24
+`review-exhaustive` cases (full integrity/benign/blocked variants). Both retain 600-second
+suite ceilings; exhaustive calibration is unproved. Current `quick` has 35 selectors resolving
+to 38 cases, including its staged prerequisites, without increasing its 720-second cap.
 
 The application supports genuine OWASP assessment mode, but this bounded control fixture
 explicitly uses `QUALIFICATION` with worker/reviewer inference disabled and five pinned
@@ -149,7 +202,7 @@ case whose identities disagree with the suite's source hashes, even after succes
 execution. Mutation detection includes descriptor truncation/append flags. These checks do
 not replace the named timing and host-dependent gaps in the implementation record.
 
-Frozen parent `1ff86556` contains current main `a8883acc`, source-history/OpenVEX changes and
+Historical parent `1ff86556` contained then-main `a8883acc`, source-history/OpenVEX changes and
 the native/reference corrections. Its capacity overlay no longer forces three review teams:
 production/Copilot production profiles retain seven, while the overlay selects four I/O and
 four scanner slots. Explicit one-team acceptance fixtures are bounded test configuration,
@@ -159,8 +212,9 @@ The named `process` profile has a revision-bound 13/13 public CLI pass at `16a52
 `consumers` passed 3/3 at `1ff86556`; Linux-specific obligations remain outside those proofs.
 An exact-node dependency pass at `1ff86556` likewise does not establish a whole signals/quick
 pass. Planner `81ada94f`'s read-only
-`staged-authentic-producer/private-verified-materialization` proposal awaits user review;
-it has no implemented execution path and grants no budget or validation waiver.
+`staged-authentic-producer/private-verified-materialization` proposal is historical: its
+staged implementation now exists as described above. The separate output-detachment proposal
+remains unapproved. Neither grants a budget or validation waiver.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.
@@ -175,5 +229,5 @@ the public driver are different evidence classes.
 
 These boundaries support concurrent review storage/process isolation, not guaranteed zero host
 contention. Serial is the default. Live tools, provider quality, deployed/native compatibility,
-Linux-specific execution and the final integrated quick budget require their own authorized,
-revision-bound evidence.
+Linux-specific execution, unselected record/replay/sensor variant matrices and the final
+integrated quick budget require their own authorized, revision-bound evidence.
