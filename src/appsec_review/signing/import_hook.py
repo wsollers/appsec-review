@@ -3,6 +3,8 @@
 Stdlib-only and loadable either as ``appsec_review.signing.import_hook`` or standalone by file path. A
 standalone loader must first execute ``core.py`` as ``appsec_review_signing_core`` and ``modules.py``
 as ``appsec_review_signing_modules`` in ``sys.modules``; this module never searches ``sys.path``.
+Standalone loaders register this module as ``appsec_review_signing_import_hook`` (see
+``bootstrap.py``).
 
 The installed finder claims the manifest package and every dotted name below it, resolves them only
 from the manifest, and raises for anything it cannot resolve, so no later finder, bytecode cache, or

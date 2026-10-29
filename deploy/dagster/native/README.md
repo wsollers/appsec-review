@@ -51,6 +51,29 @@ Python `-I -S`, a root-controlled working directory and a fixed minimal host env
 processing and editable `.pth` hooks are disabled; the release's library directory is added
 explicitly. Client-requested environment is never inherited by this root process.
 
+The release must also carry a signed module manifest. Before anything from `lib/` is imported or
+placed on `sys.path`, the entrypoint loads the standalone verifier by file path, self-tests
+`/usr/bin/openssl`, verifies the envelope against the trust anchors and the whole installed
+`lib/appsec_review` tree, and installs an import hook that serves `appsec_review` only from
+verified bytes. Any mismatch, unlisted file, missing file or untrusted signature stops startup.
+The required root-owned, read-only layout is:
+
+```text
+<release>/root_entrypoint.py
+<release>/lib/appsec_review/...                     # non-editable install of the signed tree
+<release>/signing/python-modules.json               # python-modules envelope
+<release>/signing/trusted-keys/<sha256-hex>.pem     # Ed25519 public trust anchors
+<release>/signing/bootstrap/{bootstrap,core,modules,import_hook}.py
+```
+
+Sign on the host from the source tree with the operator key (never copied into the release), for
+example `python -c 'from appsec_review.signing import OpenSSL, sign_modules;
+sign_modules(OpenSSL(), "<operator-key.pem>", "src/appsec_review", "python-modules.json")'`.
+Install the package with identical bytes, copy the envelope and the operator's public key PEM
+(named by its key ID), and copy the four verifier files from `src/appsec_review/signing/`.
+Only the `appsec_review` package is covered; other distributions in `lib/` remain an
+installation/commissioning responsibility.
+
 Metadata checks reject indirect, client-owned or writable launch paths, public configuration and
 writable release mounts. They do not prove the provenance of every transitive installed file.
 Installation/commissioning must establish that complete root-controlled, non-editable closure;

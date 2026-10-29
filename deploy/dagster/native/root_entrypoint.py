@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 from pathlib import Path
 import runpy
@@ -14,6 +15,9 @@ ROOT_ENVIRONMENT = {
     "LANG": "C.UTF-8",
     "HOME": "/nonexistent",
 }
+OPENSSL = Path("/usr/bin/openssl")
+SIGNING_BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py")
+SIGNING_BOOTSTRAP_MODULE = "appsec_review_signing_bootstrap"
 
 
 def trusted_path(path: Path, *, directory: bool = False) -> None:
@@ -29,17 +33,54 @@ def trusted_path(path: Path, *, directory: bool = False) -> None:
             raise PermissionError("root entrypoint path has an unsupported type")
 
 
+def signing_paths(root: Path) -> dict[str, Path]:
+    """Root-controlled module envelope, trust anchors and standalone verifier of a release."""
+    signing = root / "signing"
+    paths = {
+        "envelope": signing / "python-modules.json",
+        "trusted_keys": signing / "trusted-keys",
+        "bootstrap": signing / "bootstrap",
+    }
+    for directory in (signing, paths["trusted_keys"], paths["bootstrap"]):
+        trusted_path(directory, directory=True)
+    trusted_path(paths["envelope"])
+    for name in SIGNING_BOOTSTRAP_FILES:
+        trusted_path(paths["bootstrap"] / name)
+    for key in sorted(paths["trusted_keys"].iterdir()):
+        trusted_path(key)
+    return paths
+
+
 def release_paths(entrypoint: Path) -> tuple[Path, Path]:
     trusted_path(entrypoint)
     root = entrypoint.parent
     library = root / "lib"
     trusted_path(library, directory=True)
-    for path in (root, library):
+    signing = signing_paths(root)
+    for path in (root, library, signing["envelope"].parent):
         if not os.statvfs(path).f_flag & os.ST_RDONLY:
             raise PermissionError("root service requires a separately installed read-only release")
     trusted_path(library / "appsec_review" / "__init__.py")
     trusted_path(library / "appsec_review" / "container_runtime" / "image_builder_service.py")
     return root, library
+
+
+def load_signing_bootstrap(path: Path):
+    """Execute the trusted standalone verifier from bytes read once, without following links."""
+    trusted_path(path)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise PermissionError("signing bootstrap is not a regular file")
+        data = handle.read()
+    spec = importlib.util.spec_from_file_location(SIGNING_BOOTSTRAP_MODULE, path)
+    if spec is None:
+        raise PermissionError("signing bootstrap cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    module.__cached__ = None
+    sys.modules[SIGNING_BOOTSTRAP_MODULE] = module
+    exec(compile(data, str(path), "exec", dont_inherit=True), module.__dict__)
+    return module
 
 
 def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operation: str = "serve",
@@ -88,7 +129,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     specification = launch_spec(Path(sys.executable), Path(__file__).absolute(), args.config,
                                 operation=args.operation, prior_configuration=args.prior_config)
-    _, library = release_paths(Path(__file__).absolute())
+    root, library = release_paths(Path(__file__).absolute())
+    signing = signing_paths(root)
+    trusted_path(OPENSSL)
     standard_library = list(sys.path)
     for value in standard_library:
         path = Path(value)
@@ -98,8 +141,13 @@ def main(argv: list[str] | None = None) -> None:
     os.environ.clear()
     os.environ.update(ROOT_ENVIRONMENT)
     os.chdir(specification["cwd"])
+    sys.dont_write_bytecode = True
+    # Nothing from lib runs before the signed tree is verified and the import hook serves it.
+    bootstrap = load_signing_bootstrap(signing["bootstrap"] / "bootstrap.py")
+    bootstrap.activate(envelope=signing["envelope"], package_root=library / "appsec_review",
+                       trusted_keys_dir=signing["trusted_keys"], openssl=str(OPENSSL))
     # -S prevents editable-install .pth hooks; only the installed release is added.
-    sys.path[:] = [str(library), *standard_library]
+    sys.path[:] = [*standard_library, str(library)]
     sys.argv[:] = ["appsec-review-image-builder", "--config", str(args.config)]
     if args.prior_config is not None:
         sys.argv.extend(("--" + args.operation, str(args.prior_config)))

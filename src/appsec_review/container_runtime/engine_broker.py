@@ -119,9 +119,19 @@ def static_gate(config):
     return path
 
 
+_SIGNING_BOOTSTRAP_MODULES = {
+    "appsec_review_signing_bootstrap": "bootstrap.py",
+    "appsec_review_signing_core": "core.py",
+    "appsec_review_signing_modules": "modules.py",
+    "appsec_review_signing_import_hook": "import_hook.py",
+}
+
+
 def _installed_module_path(name: str, path: Path, root: Path, stdlib: Path) -> bool:
     return (path.is_relative_to(root) or path.is_relative_to(stdlib)
-            or (name == "__main__" and path == root.parent / "root_entrypoint.py"))
+            or (name == "__main__" and path == root.parent / "root_entrypoint.py")
+            or (name in _SIGNING_BOOTSTRAP_MODULES
+                and path == root.parent / "signing" / "bootstrap" / _SIGNING_BOOTSTRAP_MODULES[name]))
 
 
 def verify_runtime(config):
