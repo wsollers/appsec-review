@@ -23,6 +23,19 @@ def test_application_codeql_runner_has_exact_readonly_host_backing():
     assert (root / asset).is_file() and not (root / asset).is_symlink()
 
 
+def test_github_token_reaches_only_the_code_location_from_the_operator_shell():
+    root = Path(__file__).resolve().parents[1]
+    compose = yaml.safe_load((root / "deploy/dagster/compose.yaml").read_text())
+    config = tomllib.loads((root / "appsec-review.toml").read_text())
+    token_env = config["jobs"]["job_source_history_analysis"]["settings"]["github"]["token_env"]
+    services = compose["services"]
+    assert services["code-location"]["environment"][token_env] == f"${{{token_env}:-}}"
+    assert all(token_env not in (services[name].get("environment") or {})
+               for name in services if name != "code-location")
+    example = (root / "deploy/dagster/.env.example").read_text()
+    assert not any(line.lstrip("# ").startswith(f"{token_env}=") for line in example.splitlines())
+
+
 def test_review_host_preinstalled_runtime_bindings_use_declared_application_runner():
     root = Path(__file__).resolve().parents[1]
     config = tomllib.loads((root / "appsec-review.toml").read_text())

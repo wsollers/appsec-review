@@ -84,6 +84,9 @@ services:
     environment:
       <<: *dagster-environment
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Source-history GitHub enrichment only. Exported in the operator's shell when the stack is
+      # created (for example from `gh auth token`), never stored in .env; model workers never see it.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       HOME: /tmp
     depends_on:
       postgres:

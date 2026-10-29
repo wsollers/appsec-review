@@ -139,6 +139,30 @@ Without that credential, enrichment records `github_credentials_missing` and mak
 request; local Git history can still be analyzed. Explicit `github.enabled = false` denies
 enrichment even when a source and token exist.
 
+In the Dagster deployment, jobs run in the `code-location` container, which takes `GITHUB_TOKEN`
+from the shell that creates it. Export the token for the stack command only; never write it to
+`deploy/dagster/.env` or any other file. From a Linux or WSL shell signed in with `gh`:
+
+```bash
+GITHUB_TOKEN="$(gh auth token)" scripts/stack-restart.sh --code-location-only
+```
+
+From PowerShell for a WSL stack, `WSLENV` carries the variable into the distribution:
+
+```powershell
+$env:GITHUB_TOKEN = gh auth token; $env:WSLENV = "GITHUB_TOKEN/u:$env:WSLENV"
+.\scripts\stack-restart.ps1 -Wsl -CodeLocationOnly
+Remove-Item Env:GITHUB_TOKEN
+```
+
+A native Windows stack omits `WSLENV` and `-Wsl`. A fine-grained personal access token with
+read-only *Contents*, *Metadata*, and *Pull requests* access to the target repositories can stand
+in for `gh auth token`. The value is fixed when Compose creates the container: a later
+`stack-start`, `stack-restart`, or `stack-rebuild` run without the variable recreates the
+`code-location` without it, and subsequent runs record `github_credentials_missing`. Anyone who
+can run `docker inspect` on the host can read it. Only the application process uses it; model
+workers (Claude CLI and Copilot SDK) and tool containers never receive it.
+
 Discovery does not authorize credentialed access by itself. Requests use the configured API
 endpoint and existing request, pagination, and timeout bounds; redirects are refused. The
 token is never written to argv, logs, artifacts, or retrieval shards. Enrichment runs in the
