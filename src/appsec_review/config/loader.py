@@ -21,6 +21,7 @@ from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
+from .signing import SigningConfig, parse_signing
 
 
 class ProcessingMode(str, Enum):
@@ -565,6 +566,7 @@ class AppConfig:
     selection_source: str = "environment"
     compiler_target: CompilerTarget = CompilerTarget.CLANG
     telemetry_report: TelemetryReportSettings = TelemetryReportSettings()
+    signing: SigningConfig = SigningConfig()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -889,6 +891,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     telemetry_report = parse_telemetry_report(reporting_value.get("telemetry_report"))
     if "reporting" in document:
         resolved_document["reporting"]["telemetry_report"] = telemetry_report.view()
+    signing = parse_signing(document.get("signing"), repository_root)
+    resolved_document["signing"] = signing.view()
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
     runtime_value = document.get("runtime")
@@ -1251,4 +1255,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         review_policy=review_policy,
         compiler_target=selected_compiler,
         telemetry_report=telemetry_report,
+        signing=signing,
     )

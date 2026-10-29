@@ -10,7 +10,92 @@ import yaml
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy" / "dagster" / "bin"))
+import host  # noqa: E402
 from host import deployment_profile, provider_overlay, project_name, reject_other_deployments, validate_workspace  # noqa: E402
+from host import dagster_url, url_or_default, web_port  # noqa: E402
+
+DEPLOYMENT = Path(__file__).resolve().parents[1] / "deploy" / "dagster"
+PORT = "APPSEC_DAGSTER_WEB_PORT"
+
+
+def test_webserver_host_port_is_configurable_with_unchanged_default() -> None:
+    compose = yaml.safe_load((DEPLOYMENT / "compose.yaml").read_text(encoding="utf-8"))
+    assert compose["services"]["webserver"]["ports"] == ["127.0.0.1:${APPSEC_DAGSTER_WEB_PORT:-3000}:3000"]
+    for overlay in DEPLOYMENT.glob("compose.*.yaml"):
+        services = yaml.safe_load(overlay.read_text(encoding="utf-8")).get("services") or {}
+        assert all("ports" not in service for service in services.values()), overlay.name
+    assert "# APPSEC_DAGSTER_WEB_PORT=3000" in (DEPLOYMENT / ".env.example").read_text(encoding="utf-8")
+
+
+def test_web_port_defaults_to_3000_and_follows_compose_precedence(tmp_path: Path) -> None:
+    environment = tmp_path / ".env"
+    assert web_port(environment, {}) == 3000
+    assert dagster_url("/graphql", environment, {}) == "http://127.0.0.1:3000/graphql"
+    environment.write_text(f"{PORT}=3001\n", encoding="utf-8")
+    assert dagster_url("/graphql", environment, {}) == "http://127.0.0.1:3001/graphql"
+    assert dagster_url("", environment, {PORT: "13000"}) == "http://127.0.0.1:13000"
+    assert web_port(environment, {PORT: ""}) == 3001
+    environment.write_text(f"# {PORT}=3001\n{PORT}=\n", encoding="utf-8")
+    assert web_port(environment, {}) == 3000
+
+
+@pytest.mark.parametrize("value", ["0", "65536", "abc", "3000x", "-1", "30 00", "３０００"])
+def test_invalid_web_port_is_refused(tmp_path: Path, value: str) -> None:
+    with pytest.raises(RuntimeError, match=f"{PORT} must be an integer from 1 to 65535"):
+        web_port(None, {PORT: value})
+    environment = tmp_path / ".env"
+    environment.write_text(f"{PORT}={value}\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match=PORT):
+        web_port(environment, {})
+
+
+def test_helper_url_defaults_use_the_port_and_refuse_invalid(monkeypatch, capsys) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    monkeypatch.setenv(PORT, "3002")
+    assert url_or_default(parser, None, "/graphql") == "http://127.0.0.1:3002/graphql"
+    assert url_or_default(parser, "http://example.invalid:9/graphql", "/graphql") == "http://example.invalid:9/graphql"
+    monkeypatch.setenv(PORT, "99999")
+    assert url_or_default(parser, "http://127.0.0.1:9", "") == "http://127.0.0.1:9"
+    with pytest.raises(SystemExit) as raised:
+        url_or_default(parser, None, "")
+    assert raised.value.code == 2
+    assert f"{PORT} must be an integer from 1 to 65535" in capsys.readouterr().err
+
+
+def test_ops_default_url_uses_port_unless_url_given(monkeypatch, tmp_path: Path, capsys) -> None:
+    import ops
+
+    monkeypatch.setattr(ops, "DEPLOYMENT", tmp_path)
+    monkeypatch.delenv("APPSEC_DAGSTER_URL", raising=False)
+    monkeypatch.delenv(PORT, raising=False)
+    assert ops.default_url() == "http://127.0.0.1:3000/graphql"
+    (tmp_path / ".env").write_text(f"{PORT}=3001\n", encoding="utf-8")
+    assert ops.default_url() == "http://127.0.0.1:3001/graphql"
+    monkeypatch.setenv("APPSEC_DAGSTER_URL", "http://127.0.0.1:9/graphql")
+    assert ops.default_url() == "http://127.0.0.1:9/graphql"
+    monkeypatch.delenv("APPSEC_DAGSTER_URL")
+    monkeypatch.setenv(PORT, "not-a-port")
+
+    def forbidden(_args):
+        pytest.fail("an invalid web port reached a command handler")
+
+    monkeypatch.setattr(ops, "cmd_stack_status", forbidden)
+    assert ops.main(["stack-status"]) == ops.USAGE
+    assert f"{PORT} must be an integer from 1 to 65535" in capsys.readouterr().err
+
+
+def test_validate_deployment_refuses_invalid_web_port(monkeypatch, tmp_path: Path) -> None:
+    environment = tmp_path / ".env"
+    environment.write_text(f"APPSEC_DEPLOYMENT_PLATFORM=linux\nAPPSEC_COMPOSE_PROJECT={project_name('linux')}\n"
+                           f"{PORT}=70000\n", encoding="utf-8")
+    monkeypatch.setattr(host, "actual_platform", lambda: "linux")
+    monkeypatch.delenv(PORT, raising=False)
+    with pytest.raises(RuntimeError, match=PORT):
+        host.validate_deployment(tmp_path, environment, "linux")
+    environment.write_text(environment.read_text(encoding="utf-8").replace("70000", "3001"), encoding="utf-8")
+    host.validate_deployment(tmp_path, environment, "linux")
 
 
 def test_application_codeql_runner_has_exact_readonly_host_backing():
@@ -110,20 +195,32 @@ def test_compose_environment_without_gh_login_leaves_github_token_unset(monkeypa
     assert "2.17 or later" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(("action", "supplied"), [("start", True), ("reload", True), ("stop", False), ("build", False)])
-def test_lifecycle_supplies_github_token_only_when_creating_containers(monkeypatch, action, supplied):
+@pytest.mark.parametrize(("action", "supplied"), [("start", True), ("reload", True), ("stop", False), ("status", False)])
+def test_lifecycle_supplies_github_token_only_when_creating_containers(tmp_path, monkeypatch, action, supplied):
     import lifecycle
 
-    seen = {}
-    monkeypatch.delenv("APPSEC_NATIVE_DEPLOYMENT_ID", raising=False)
-    monkeypatch.setattr(lifecycle, "validate_deployment", lambda *_a: None)
-    monkeypatch.setattr(lifecycle, "reject_other_deployments", lambda *_a: None)
-    monkeypatch.setattr(lifecycle, "compose_environment", lambda: {"GITHUB_TOKEN": "from-gh"})
-    monkeypatch.setattr(lifecycle.subprocess, "run",
-                        lambda argv, **kwargs: seen.update(kwargs) or subprocess.CompletedProcess(argv, 0))
-    monkeypatch.setattr(sys, "argv", ["lifecycle.py", action])
-    assert lifecycle.main() == 0
-    assert seen["env"] == ({"GITHUB_TOKEN": "from-gh"} if supplied else None)
+    verified = "sha256:" + "a" * 64
+    seen = []
+
+    class Settings:
+        @staticmethod
+        def compose_environment():
+            return {"APPSEC_SIGNING_TRUSTED_KEYS_DIR": "/trust"}
+
+    monkeypatch.setattr(lifecycle, "environment_file", tmp_path / ".env")
+    monkeypatch.setattr(lifecycle, "signing_settings", lambda _environ: Settings())
+    monkeypatch.setattr(lifecycle, "verified_image", lambda *_a, **_k: verified)
+    monkeypatch.setattr(lifecycle, "compose_environment",
+                        lambda environ: {**environ, "GITHUB_TOKEN": "from-gh"})
+
+    def runner(argv, **kwargs):
+        seen.append(kwargs["env"])
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert lifecycle.run_action(action, "wsl", "dev", {"PATH": "/usr/bin"}, runner=runner) == lifecycle.OK
+    [environment] = seen
+    assert (environment.get("GITHUB_TOKEN") == "from-gh") is supplied
+    assert environment[host.IMAGE_VARIABLE] == (verified if supplied else host.UNVERIFIED_IMAGE)
 
 
 def test_projects_have_separate_names() -> None:

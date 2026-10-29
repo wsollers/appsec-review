@@ -18,7 +18,7 @@ Logic: `deploy/dagster/bin/ops.py`. Details:
 | --- | --- |
 | `stack-start.sh` / `.ps1` | Start (and if needed build) the Dagster stack, then check health, the Claude overlay and model connectivity. |
 | `stack-stop.sh` / `.ps1` | Stop the containers, keeping volumes; refuses while a run is active unless `--force`; `--purge-volumes --yes` removes data. |
-| `stack-restart.sh` / `.ps1` | Stop and start the stack, or recreate only the code location. |
+| `stack-restart.sh` / `.ps1` | Stop and start the stack, or reload every Dagster image service (`--code-location-only`), keeping PostgreSQL. |
 | `stack-rebuild.sh` / `.ps1` | Build the image and recreate the stack with the Claude overlay. |
 | `stack-status.sh` / `.ps1` | One-screen status: containers, health, compose files, image, active runs, disk. |
 | `stack-logs.sh` / `.ps1` | Show one service's container logs. |

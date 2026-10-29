@@ -195,6 +195,17 @@ def test_stack_start_dry_run_changes_nothing(box: Sandbox) -> None:
     assert box.lifecycle_calls() == []
 
 
+def test_stack_start_refuses_when_lifecycle_cannot_verify_the_image_signature(box: Sandbox) -> None:
+    box.dagster.runs()
+    result = box.run("stack-start", "--no-probe", extra={"FAKE_LIFECYCLE_RC": "3"})
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "image signature did not verify" in result.stderr
+    assert [call["argv"] for call in box.lifecycle_calls()] == [["start"]]
+    assert not [call for call in box.docker_calls() if call[:1] == ["exec"]]
+    reload = box.run("stack-restart", "--code-location-only", extra={"FAKE_LIFECYCLE_RC": "3"})
+    assert reload.returncode == 3 and "image signature did not verify" in reload.stderr
+
+
 def test_stack_start_reports_a_missing_claude_overlay(box: Sandbox) -> None:
     box.stack(files=[str(box.deploy / "compose.yaml")])
     box.dagster.runs()

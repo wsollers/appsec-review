@@ -109,10 +109,14 @@ rebuild moves tags on the shared daemon that a live run may be using.
    enabled unpinned catalog image that is missing is listed under `unpinned_missing`. The command
    exits non-zero in any of those cases. It never adds a pin to an unpinned catalog entry; that is a
    reviewed edit. Review the diff and commit it. Only the session on the review host that built the
-   images changes these pins (see `.claude/skills/multi-session-coordination/SKILL.md`).
+   images changes these pins (see `.claude/skills/multi-session-coordination/SKILL.md`). Then sign the
+   re-pinned images with `appsec-review signing sign-image --all-pinned --private-key <key>`: with
+   `[signing] image_enforcement = "required"` an unsigned pinned image is refused at launch (see
+   [Container image and Python module signing](signing.md)).
 
-3. **Rebuild and reload the Dagster code location**, so the packaged image carries the new pins and
-   the gate checks against them, then prove the workspace reconnected:
+3. **Rebuild and reload the Dagster image services** (code location, webserver and daemon), so the
+   packaged image carries the new pins and the gate checks against them, then prove the workspace
+   reconnected:
 
    ```bash
    python deploy/dagster/bin/lifecycle.py build

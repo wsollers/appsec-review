@@ -39,7 +39,8 @@ def _runs(url: str) -> list[dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://127.0.0.1:3000/graphql")
+    parser.add_argument("--url", help="Dagster GraphQL endpoint (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
     parser.add_argument("--reason", required=True)
     parser.add_argument("--run-id", action="append", required=True,
                         help="exact previously enumerated non-terminal Dagster run id; repeat as needed")
@@ -48,6 +49,9 @@ def main() -> int:
                         default="SAFE_TERMINATE")
     parser.add_argument("--evidence", type=Path)
     args = parser.parse_args()
+    from host import url_or_default
+
+    args.url = url_or_default(parser, args.url, "/graphql")
     requested = set(args.run_id)
     all_runs = {run["runId"]: run for run in _runs(args.url)}
     missing = sorted(requested - set(all_runs))

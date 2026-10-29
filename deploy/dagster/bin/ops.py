@@ -27,13 +27,14 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import actual_platform, deployment_profile, project_name, provider_overlay, read_environment, reject_native_environment
+from host import (actual_platform, dagster_url, deployment_profile, image_tag as host_image_tag, project_name,
+                  provider_overlay, read_environment, reject_native_environment)
 
 
 DEPLOYMENT = Path(__file__).resolve().parents[1]
 ROOT = DEPLOYMENT.parents[1]
 BIN = Path(__file__).resolve().parent
-DEFAULT_URL = os.environ.get("APPSEC_DAGSTER_URL", "http://127.0.0.1:3000/graphql")
+URL_VARIABLE = "APPSEC_DAGSTER_URL"
 SERVICES = ("postgres", "code-location", "daemon", "webserver")
 TERMINAL = frozenset({"SUCCESS", "FAILURE", "CANCELED"})
 FAILED_FINAL = frozenset({"FAILURE", "CANCELED"})
@@ -159,8 +160,7 @@ def overlay_name(profile: str = "dev") -> str:
 
 
 def image_tag(profile: str = "dev") -> str:
-    suffix = "-copilot" if profile in {"copilot-dev", "copilot-prod"} else ""
-    return f"appsec-review-dagster:{actual_platform()}{suffix}"
+    return host_image_tag(actual_platform(), profile)
 
 
 # -- Dagster GraphQL ------------------------------------------------------------------------------
@@ -255,7 +255,11 @@ def lifecycle(action: str, settings: dict[str, str], dry_run: bool) -> int:
     say(f"+ {(shown + ' ') if shown else ''}{shlex.join(argv)}")
     if dry_run:
         return OK
-    return subprocess.run(argv, cwd=ROOT, env={**os.environ, **settings}, check=False).returncode
+    returncode = subprocess.run(argv, cwd=ROOT, env={**os.environ, **settings}, check=False).returncode
+    if returncode == REFUSED and action in {"start", "reload"}:
+        raise OpsError(f"lifecycle {action} refused: the image signature did not verify on this host "
+                       "(scripts/stack-rebuild signs a fresh build with the operator key)", REFUSED)
+    return returncode
 
 
 def resolve_target(value: str) -> str:
@@ -422,7 +426,7 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
     image_missing = docker("image", "inspect", image_tag(profile), "--format", "{{.Id}}").returncode != 0
     if build or image_missing:
         reason = "--build" if build else f"image {image_tag(profile)} is missing"
-        say(f"building the image ({reason})")
+        say(f"building, signing and verifying the image ({reason})")
         if lifecycle("build", settings, args.dry_run) != 0:
             raise OpsError("lifecycle build failed")
     if lifecycle("start", settings, args.dry_run) != 0:
@@ -1012,7 +1016,8 @@ def build_parser() -> argparse.ArgumentParser:
         if dry_run:
             sub.add_argument("--dry-run", action="store_true", help="print what would happen; change nothing")
         if url:
-            sub.add_argument("--url", default=DEFAULT_URL, help="Dagster GraphQL endpoint (default %(default)s)")
+            sub.add_argument("--url", help=f"Dagster GraphQL endpoint (default: {URL_VARIABLE}, otherwise "
+                             "http://127.0.0.1:<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
         if force:
             sub.add_argument("--force", action="store_true", help="proceed although a run is active")
         return sub
@@ -1024,7 +1029,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_deploy_options(start)
     restart = add("stack-restart", cmd_stack_restart, "Stop and start the stack (volumes kept).", dry_run=True, force=True)
     restart.add_argument("--no-probe", action="store_true", help="skip the model connectivity probe")
-    restart.add_argument("--code-location-only", action="store_true", help="recreate only the code-location container")
+    restart.add_argument("--code-location-only", action="store_true",
+                         help="reload: verify the image and recreate the code-location, webserver and daemon "
+                         "containers, keeping PostgreSQL running")
     add_deploy_options(restart)
     rebuild = add("stack-rebuild", cmd_stack_rebuild, "Build the image and recreate the stack with the overlay.",
                   dry_run=True, force=True)
@@ -1072,6 +1079,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def default_url() -> str:
+    """``APPSEC_DAGSTER_URL``, otherwise the GraphQL endpoint on the stack's configured web port."""
+    return os.environ.get(URL_VARIABLE) or dagster_url("/graphql", DEPLOYMENT / ".env")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     extra: list[str] = []
@@ -1084,6 +1096,12 @@ def main(argv: list[str] | None = None) -> int:
             print("error: arguments after -- are only accepted by run-tests", file=sys.stderr, flush=True)
             return USAGE
         args.extra = extra
+    if hasattr(args, "url") and not args.url:
+        try:
+            args.url = default_url()
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr, flush=True)
+            return USAGE
     try:
         try:
             reject_native_environment()

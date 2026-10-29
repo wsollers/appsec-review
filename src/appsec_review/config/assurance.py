@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -100,7 +100,7 @@ class ImageBuilderConfig:
     lifetime_domain: str = "actions"
 
     def __post_init__(self) -> None:
-        if not isinstance(self.endpoint, str) or not Path(self.endpoint).is_absolute():
+        if not isinstance(self.endpoint, str) or not PurePosixPath(self.endpoint).is_absolute():
             raise ValueError("image builder endpoint must be an absolute operator-owned Unix socket")
         for name in ("release_id", "tenant_id"):
             if not isinstance(getattr(self, name), str) or not _ID.fullmatch(getattr(self, name)):

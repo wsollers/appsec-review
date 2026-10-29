@@ -23,6 +23,9 @@ from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.runtime.resources import reserve_execution, review_resources_active, tracked_container
 from appsec_review.runtime import execution_safety as safety
+from appsec_review.signing.core import SignatureVerificationError
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.policy import default_image_verifier
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,15 +138,19 @@ def _default_runner(argv: Sequence[str], timeout: int) -> CommandOutcome:
 class ContainerExecutor:
     """Execute only enabled catalog images under the repository runtime policy."""
 
-    def __init__(self, catalog: ContainerCatalog, run_root: Path, *, runner: Runner | None = None):
+    def __init__(self, catalog: ContainerCatalog, run_root: Path, *, runner: Runner | None = None,
+                 image_verifier: ImageSignatureVerifier | None = None):
         self.catalog = catalog
         self.run_root = run_root.resolve()
         self.runner = runner or _default_runner
+        # None defers to the process-wide default, resolved at first use rather than construction.
+        self._image_verifier = image_verifier
 
     def _run_control(self, argv: Sequence[str]) -> CommandOutcome:
         return self.runner(argv, 60)
 
     def resolve_image(self, tool: ToolImage) -> str:
+        """Return the pinned image's immutable ID once its identity and signature are verified."""
         outcome = self._run_control(("docker", "image", "inspect", tool.tag, "--format", "{{.Id}}"))
         if outcome.exit_code != 0 or outcome.timed_out:
             raise ImageUnavailableError(f"cataloged image is not locally available: {tool.tool_id}")
@@ -152,6 +159,12 @@ class ContainerExecutor:
             raise ValueError(f"Docker returned a non-immutable image id for {tool.tool_id}")
         if tool.expected_image_id is not None and image_id != tool.expected_image_id:
             raise ValueError(f"local image digest mismatch for {tool.tool_id}")
+        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
+        try:
+            verifier.verify(image_id, reference=tool.tag)
+        except SignatureVerificationError as error:
+            raise SignatureVerificationError(
+                f"refusing to launch {tool.tool_id} image {tool.tag} ({image_id}): {error}") from error
         return image_id
 
     def _validate(self, request: ExecutionRequest, tool: ToolImage) -> tuple[Path, tuple[Mount, ...]]:

@@ -14,7 +14,7 @@ from typing import Any
 from appsec_review.config.assurance import ComponentReleases
 from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope
-from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
+from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, derived_base_image_id
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build.job import (
     _captured_command, _dispatches, _mapped_files, _probe_environment, _snapshot,
@@ -306,7 +306,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     _copy_source(unit, dispatch, workspace)
     before = _snapshot(workspace, int(settings["workspace_file_limit"]))
     profile = BuildProfile(str(dispatch["family"]), str(image["image_tag"]),
-                           str(image["image_id"]), str(image["user"]))
+                           str(image["image_id"]), str(image["user"]),
+                           derived_from_image_id=derived_base_image_id(image))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(settings["command_timeout_seconds"]),
         output_bytes=int(settings["stream_limit_bytes"]))

@@ -18,6 +18,8 @@ from uuid import uuid4
 
 import pytest
 
+pytest.importorskip("fcntl", reason="the builder admission service is POSIX-only")
+
 from appsec_review.config.assurance import ResourceBudget, parse_review_policy
 from appsec_review.config.image_builder_service import (
     BuilderAdmissionConfig, BuilderGrant, BuilderImage, ImageBuilderServiceConfig, load_image_builder_service,
@@ -29,6 +31,7 @@ from appsec_review.container_runtime import image_builder_service as services
 from appsec_review.observability.events import EventLog
 from appsec_review.runtime.resources import review_resource_scope
 from appsec_review.runtime.resources import process_identity
+from appsec_review.signing.core import SignatureVerificationError
 
 
 BASE = "sha256:" + "a" * 64
@@ -882,6 +885,179 @@ def test_real_driver_refuses_unproved_enforcement_and_cleanup(tmp_path, monkeypa
         else:
             commands.container["Id"] = "f" * 64
         assert harness.request("cleanup")["state"] == "UNKNOWN"
+
+
+class SignedImages:
+    """Image verifier fake: accepts only the given IDs, as if only they had trusted envelopes."""
+
+    def __init__(self, *signed):
+        self.signed, self.calls = set(signed), []
+
+    def verify(self, image_id, *, reference=None):
+        self.calls.append(image_id)
+        if image_id not in self.signed:
+            raise SignatureVerificationError(f"{image_id} has no trusted signature envelope")
+
+
+def signed_driver(harness, commands, proof, verifier):
+    harness.service.driver = workers.BuildKitWorker(
+        harness.config, runner=commands, proof=proof, image_verifier=verifier)
+    return harness.service.driver
+
+
+def test_real_driver_verifies_pinned_worker_and_inputs_and_launches_by_id(tmp_path, monkeypatch):
+    verifier = SignedImages(WORKER_IMAGE, BASE)
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, verifier)
+        harness.service._image_verifier = verifier
+        path = harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        assert verifier.calls == [WORKER_IMAGE]
+        create = next(call for call in commands.calls if "create" in call)
+        assert create[create.index("rootlesskit") + 1] == WORKER_IMAGE
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        assert harness.start()["state"] == "RUNNING"
+        assert harness.request("status")["state"] == "SUCCEEDED"
+        # The derived output is never treated as a signed input.
+        assert BUILT not in verifier.calls and verifier.calls.count(BASE) == 2
+        copy = next(call for call in commands.calls if call[0].endswith("skopeo"))
+        assert f"docker-daemon:{BASE}" in copy
+
+
+def test_real_driver_refuses_unsigned_worker_image_before_create(tmp_path, monkeypatch):
+    verifier = SignedImages(BASE)
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, verifier)
+        harness.prepare_context()
+        assert harness.prepare()["state"] == "UNKNOWN"
+        record = harness.service.store.records()[0]
+        assert "refusing to use BuildKit worker image" in record["error"]
+        assert not any("create" in call for call in commands.calls)
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+def test_real_driver_refuses_worker_image_id_differing_from_pin(tmp_path, monkeypatch):
+    verifier = SignedImages(WORKER_IMAGE, BASE)
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, verifier)
+        run = commands.run
+
+        def retagged(argv, timeout, **kwargs):
+            if argv[3:6] == ["image", "inspect", WORKER_IMAGE]:
+                return 0, json.dumps([{"Id": "sha256:" + "9" * 64, "Config": {}}]).encode(), b""
+            return run(argv, timeout, **kwargs)
+
+        commands.run = retagged
+        harness.prepare_context()
+        assert harness.prepare()["state"] == "UNKNOWN"
+        assert verifier.calls == [] and not any("create" in call for call in commands.calls)
+
+
+def test_service_refuses_unsigned_declared_input_before_solve(tmp_path, monkeypatch):
+    verifier = SignedImages(WORKER_IMAGE)
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, verifier)
+        harness.service._image_verifier = verifier
+        path = harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        with pytest.raises(workers.ImageSignatureRefused, match="build input base:release"):
+            harness.start()
+        assert harness.service.store.records()[0]["state"] == "PREPARED"
+        assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+def test_real_driver_refuses_unsigned_declared_input_before_transport(tmp_path, monkeypatch):
+    verifier = SignedImages(WORKER_IMAGE)
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, verifier)
+        path = harness.prepare_context()
+        harness.prepare()
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        assert harness.start()["state"] == "UNKNOWN"
+        assert "refusing to use build input base:release image" in harness.service.store.records()[0]["error"]
+        assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
+
+
+@pytest.mark.parametrize("signed", [True, False, None])
+def test_real_driver_verifies_pinned_egress_proxy_image(tmp_path, monkeypatch, signed):
+    network, proxy, proxy_image = "1" * 64, "2" * 64, "sha256:" + "3" * 64
+    config = replace(configuration(tmp_path)[0], network_id=network, proxy_container_id=proxy,
+                     proxy_image_id=proxy_image, proxy_release_id="proxy-release",
+                     proxy_url="http://10.0.0.2:3128", ip_release_id="ip-release")
+    replies = {
+        ("network", "inspect"): [{
+            "Id": network, "Driver": "bridge", "Internal": True, "EnableIPv6": False,
+            "Options": {"com.docker.network.bridge.gateway_mode_ipv4": "isolated"},
+            "Containers": {proxy: {"IPv4Address": "10.0.0.2/24"}}}],
+        ("container", "inspect"): [{
+            "Id": proxy, "Image": proxy_image, "State": {"Running": True, "Pid": 99},
+            "Config": {"Labels": {"appsec.egress.release": "proxy-release"}},
+            "HostConfig": {"CapDrop": ["ALL"], "ReadonlyRootfs": True}, "Mounts": []}],
+    }
+    runner = SimpleNamespace(run=lambda argv, timeout, **kwargs: (
+        0, json.dumps([{"addr_info": []}] if argv[0] == config.ip_binary else replies[tuple(argv[3:5])]).encode(),
+        b""))
+    proof = SimpleNamespace(process_cgroup=lambda pid: Path(config.host_cgroup) / "proxy")
+    verifier = SignedImages(proxy_image) if signed else SignedImages()
+    monkeypatch.setattr(workers, "private_path", lambda *args, **kwargs: None)
+    if signed is None:
+        unloadable_signing_policy(monkeypatch)
+    driver = workers.BuildKitWorker(config, runner=runner, proof=proof,
+                                    image_verifier=None if signed is None else verifier)
+    if signed:
+        driver._network()
+    else:
+        with pytest.raises(workers.ImageSignatureRefused, match="egress proxy" if signed is False else "policy"):
+            driver._network()
+    assert verifier.calls == ([] if signed is None else [proxy_image])
+
+
+def unloadable_signing_policy(monkeypatch):
+    def unavailable():
+        raise SignatureVerificationError("signing configuration could not be loaded")
+
+    monkeypatch.setattr(workers, "default_image_verifier", unavailable)
+
+
+def test_real_driver_refuses_prepare_when_signing_policy_cannot_load(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        unloadable_signing_policy(monkeypatch)
+        harness.prepare_context()
+        assert harness.prepare()["state"] == "UNKNOWN"
+        record = harness.service.store.records()[0]
+        assert "ImageSignatureRefused" in record["error"] and "policy unavailable" in record["error"]
+        assert not any("create" in call for call in commands.calls)
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+def test_service_start_spec_refuses_when_signing_policy_cannot_load(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        signed_driver(harness, commands, proof, SignedImages(WORKER_IMAGE, BASE))
+        path = harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        unloadable_signing_policy(monkeypatch)
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        # A RuntimeError is what the serve loop catches; the request is refused, not the service.
+        with pytest.raises(RuntimeError, match="policy unavailable") as raised:
+            harness.start()
+        assert isinstance(raised.value, workers.ImageSignatureRefused)
+        assert harness.service.store.records()[0]["state"] == "PREPARED"
+        assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+def test_real_driver_refuses_inputs_when_signing_policy_cannot_load(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+        harness.service._image_verifier = SignedImages(BASE)
+        path = harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        unloadable_signing_policy(monkeypatch)
+        path.joinpath("Dockerfile").write_text("FROM base:release\n")
+        assert harness.start()["state"] == "UNKNOWN"
+        assert "policy unavailable" in harness.service.store.records()[0]["error"]
+        assert not any(call[0].endswith("skopeo") or "--frontend" in call for call in commands.calls)
 
 
 @pytest.mark.parametrize("cpu,memory,swap", [

@@ -16,8 +16,9 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import (actual_platform, compose_environment, deployment_profile, project_name, provider_overlay,
-                  reject_other_deployments, validate_deployment)
+from host import (IMAGE_SERVICES, IMAGE_VARIABLE, SELF_CHECK_COMMAND, SELF_CHECK_SERVICE, actual_platform,
+                  deployment_profile, non_launching_environment, project_name, provider_overlay,
+                  reject_other_deployments, url_or_default, validate_deployment)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +26,8 @@ DEPLOYMENT = ROOT / "deploy" / "dagster"
 LOCK = ROOT / "runs" / "metadata" / "dagster-smoke.lock"
 TERMINAL = {"SUCCESS", "FAILURE", "CANCELED"}
 FEEDS = {"nvd_sync", "osv_sync", "mitre_sync", "kev_sync", "epss_sync", "cve_bin_tool_db_build"}
+SIGNING_MOUNTS = ("/etc/appsec-review/signing/trusted-keys", "/var/lib/appsec-review/signing/images")
+APPLICATION_SERVICES = IMAGE_SERVICES
 
 
 def compose(platform: str) -> list[str]:
@@ -33,10 +36,33 @@ def compose(platform: str) -> list[str]:
             "-f", str(DEPLOYMENT / "compose.yaml"), "-f", str(DEPLOYMENT / overlay)]
 
 
-def run(command: list[str], *, capture: bool = False,
-        env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=ROOT, check=True, text=True,
-                          capture_output=capture, env=env)
+def lifecycle(action: str) -> list[str]:
+    return [sys.executable, str(DEPLOYMENT / "bin" / "lifecycle.py"), action]
+
+
+def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
+    environment = non_launching_environment(DEPLOYMENT / ".env") if command[:2] == ["docker", "compose"] else None
+    return subprocess.run(command, cwd=ROOT, check=True, text=True, capture_output=capture, env=environment)
+
+
+def check_signed_image(services: dict) -> None:
+    images = {services[name].get("image") for name in APPLICATION_SERVICES}
+    if len(images) != 1:
+        raise RuntimeError(f"application services must share one verified image: {sorted(map(str, images))}")
+    if any("build" in services[name] or services[name].get("pull_policy") != "never"
+           for name in APPLICATION_SERVICES):
+        raise RuntimeError(f"application services must launch only {IMAGE_VARIABLE}, never build or pull")
+    for name in APPLICATION_SERVICES:
+        mounts = {item["target"]: item for item in services[name].get("volumes", [])}
+        for target in SIGNING_MOUNTS:
+            if target not in mounts or not mounts[target].get("read_only"):
+                raise RuntimeError(f"{name} must mount {target} read-only")
+    gated = services[SELF_CHECK_SERVICE]
+    command = list(gated.get("command") or [])
+    if command[:len(SELF_CHECK_COMMAND)] != list(SELF_CHECK_COMMAND) or len(command) <= len(SELF_CHECK_COMMAND):
+        raise RuntimeError(f"{SELF_CHECK_SERVICE} must start through the in-container image self-check")
+    if (gated.get("environment") or {}).get(IMAGE_VARIABLE) != gated.get("image"):
+        raise RuntimeError(f"{SELF_CHECK_SERVICE} must receive {IMAGE_VARIABLE} equal to its image")
 
 
 def check_config(platform: str) -> dict:
@@ -50,6 +76,7 @@ def check_config(platform: str) -> dict:
     if set(services) != {"postgres", "code-location", "webserver", "daemon"}:
         raise RuntimeError("Compose service set changed")
     code = services["code-location"]
+    check_signed_image(services)
     mounts = {item["target"]: item for item in code["volumes"]}
     for target in ("/opt/app/runs", "/opt/app/data", "/var/run/docker.sock"):
         if target not in mounts:
@@ -60,8 +87,6 @@ def check_config(platform: str) -> dict:
         if os.path.normcase(os.path.normpath(source)) != os.path.normcase(os.path.normpath(expected)):
             raise RuntimeError(f"{target} must bind this host's checkout: {expected}")
     if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}:
-        if code["build"].get("target") != "runtime-copilot":
-            raise RuntimeError("Copilot code-location image does not install the SDK runtime")
         mount = mounts.get("/var/copilot-home")
         if not mount or not Path(mount["source"]).is_dir():
             raise RuntimeError("Copilot requires the dedicated worker login directory")
@@ -78,8 +103,6 @@ def check_config(platform: str) -> dict:
             raise RuntimeError("Windows Compose still requires a Linux host CLI mount")
         if code["environment"].get("HOME") != "/var/claude-home" or "/var/claude-home" not in mounts:
             raise RuntimeError("Windows subscription CLI home is not persistent")
-        if code["build"].get("target") != "runtime-windows":
-            raise RuntimeError("Windows code-location image does not install the Claude CLI")
     else:
         for target, kind in (("/usr/local/bin/claude", "file"), ("/tmp/.claude", "dir"),
                              ("/tmp/.claude.json", "file")):
@@ -150,8 +173,10 @@ def check_cli(platform: str) -> None:
 def live_stack(platform: str, url: str) -> None:
     reject_other_deployments(platform)
     reject_contention(url, platform)
-    run(compose(platform) + ["build", "code-location"])
-    run(compose(platform) + ["up", "-d", "--wait"], env=compose_environment())
+    # The lifecycle builds the profile's final stage (host.image_target), signs and verifies it, and
+    # starts only the verified image ID.
+    run(lifecycle("build"))
+    run(lifecycle("start"))
     reject_contention(url, platform)
     check_cli(platform)
     run([sys.executable, str(DEPLOYMENT / "bin" / "verify.py"), "--url", url], capture=True)
@@ -190,9 +215,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--platform", choices=("windows", "linux", "wsl"), required=True)
     parser.add_argument("--mode", choices=("config", "live", "feeds"), default="config")
-    parser.add_argument("--url", default="http://127.0.0.1:3000")
+    parser.add_argument("--url", help="Dagster webserver URL (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>)")
     parser.add_argument("--timeout-seconds", type=int, default=14400)
     args = parser.parse_args()
+    args.url = url_or_default(parser, args.url)
     if args.timeout_seconds < 1:
         parser.error("--timeout-seconds must be positive")
     result = check_config(args.platform)

@@ -39,6 +39,19 @@ def test_installed_bootstrap_is_permitted_only_as_the_exact_main_module():
         assert not _installed_module_path(name, path, root, stdlib)
 
 
+def test_installed_signing_verifier_is_permitted_only_under_its_standalone_names():
+    root, stdlib = Path("/operator/release/lib"), Path("/usr/lib/python3.12")
+    verifier = root.parent / "signing/bootstrap"
+    for name, filename in [("appsec_review_signing_bootstrap", "bootstrap.py"),
+                           ("appsec_review_signing_core", "core.py"),
+                           ("appsec_review_signing_modules", "modules.py"),
+                           ("appsec_review_signing_import_hook", "import_hook.py")]:
+        assert _installed_module_path(name, verifier / filename, root, stdlib)
+        assert not _installed_module_path("other", verifier / filename, root, stdlib)
+        assert not _installed_module_path(name, Path("/client/signing/bootstrap") / filename, root, stdlib)
+    assert not _installed_module_path("appsec_review_signing_core", verifier / "modules.py", root, stdlib)
+
+
 def test_root_client_contract_publication_is_durable_and_refuses_policy_drift(native, tmp_path, monkeypatch):
     root = tmp_path / "public-contracts"
     root.mkdir(mode=0o711)

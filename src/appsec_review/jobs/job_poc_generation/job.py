@@ -119,7 +119,8 @@ class Services:
                  cache: dict[str, Any]) -> Any:
         key = build.image_id
         if key not in cache:
-            profile = BuildProfile("native", build.image_tag, build.image_id, build.image_user)
+            profile = BuildProfile("native", build.image_tag, build.image_id, build.image_user,
+                                   derived_from_image_id=build.image_derived_from)
             executor = (self.executor_factory(unit, profile) if self.executor_factory else
                         BuildContainerExecutor(profile, timeout_seconds=settings.build.command_timeout_seconds,
                                                output_bytes=settings.build.output_bytes, network="none"))

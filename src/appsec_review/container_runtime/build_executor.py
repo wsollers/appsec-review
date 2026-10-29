@@ -25,6 +25,9 @@ from appsec_review.runtime.resources import (
 )
 from appsec_review.storage import atomic_json, canonical_json
 from appsec_review.runtime import execution_safety as safety
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.core import SignatureVerificationError
+from appsec_review.signing.policy import default_image_verifier
 from .catalog import load_catalog
 from .identity import application_runtime_user, grant_runtime_user
 from .build_capture import (
@@ -51,10 +54,19 @@ class BuildProfile:
     tag: str
     image_id: str
     user: str
+    # Set only from a ProjectImageResolver record (``project_images.derived_base_image_id``): the
+    # pinned base this runtime-derived, unsigned project image was built FROM. The executor then
+    # verifies that base's signature instead of the derived image's.
+    derived_from_image_id: str | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_id):
             raise ValueError(f"build profile image id is invalid: {self.name}")
+        if self.derived_from_image_id is not None and (
+                not isinstance(self.derived_from_image_id, str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.derived_from_image_id)
+                or self.derived_from_image_id == self.image_id):
+            raise ValueError(f"build profile derived base image id is invalid: {self.name}")
         if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", self.user):
             raise ValueError(f"build profile user must be numeric non-root: {self.name}")
         if not self.tag or any(char.isspace() for char in self.tag):
@@ -198,7 +210,8 @@ class BuildContainerExecutor:
     )
 
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
-                 runner: Runner | None = None, network: str = "bridge") -> None:
+                 runner: Runner | None = None, network: str = "bridge",
+                 image_verifier: ImageSignatureVerifier | None = None) -> None:
         if network not in {"bridge", "none"}:
             raise ValueError("build container network must be bridge or none")
         self.profile = profile
@@ -207,6 +220,30 @@ class BuildContainerExecutor:
         self.runner = runner or _run
         # Dependency downloads need egress; a job that only compiles already-fetched source asks for none.
         self.network = network
+        # None defers to the process-wide default, resolved at first use rather than construction.
+        self._image_verifier = image_verifier
+
+    def _verifier(self) -> ImageSignatureVerifier:
+        return self._image_verifier if self._image_verifier is not None else default_image_verifier()
+
+    def _verify_image(self, image_id: str, reference: str, purpose: str) -> None:
+        try:
+            self._verifier().verify(image_id, reference=reference)
+        except SignatureVerificationError as error:
+            raise SignatureVerificationError(
+                f"refusing to launch {purpose} image {reference} ({image_id}): {error}") from error
+
+    def _verify_profile_image(self) -> None:
+        """Require a valid signature for the pinned build image before any ``docker run``.
+
+        A runtime-derived project image is unsigned; its declared pinned base is verified instead.
+        """
+        profile = self.profile
+        if profile.derived_from_image_id is None:
+            self._verify_image(profile.image_id, profile.tag, f"build profile {profile.name}")
+        else:
+            self._verify_image(profile.derived_from_image_id, f"base of {profile.tag}",
+                               f"build profile {profile.name} base")
 
     def resolve(self) -> None:
         code, stdout, _stderr, timed_out = self.runner(
@@ -215,6 +252,7 @@ class BuildContainerExecutor:
             raise RuntimeError(f"build image is unavailable: {self.profile.name}")
         if stdout.decode("utf-8", "replace").strip() != self.profile.image_id:
             raise ValueError(f"build image identity changed: {self.profile.name}")
+        self._verify_profile_image()
 
     def _bind_source(self, path: Path) -> Path:
         return resolve_host_bind_path(path, self.runner)
@@ -296,6 +334,7 @@ class BuildContainerExecutor:
                     or any(left.is_relative_to(right) or right.is_relative_to(left)
                            for index, left in enumerate(roots) for right in roots[index + 1:])):
                 raise ValueError("instrumentation and evidence require separate roots outside the workspace")
+        self._verify_profile_image()
         try:
             _root, command = self._prepare(
                 workspace=workspace, working_directory=working_directory, environment=environment)
@@ -368,6 +407,7 @@ class BuildContainerExecutor:
             capture_environment.setdefault("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
             capture_environment.setdefault("MSBUILDDISABLENODEREUSE", "1")
             capture_environment.setdefault("UseSharedCompilation", "false")
+        self._verify_profile_image()
         root, command = self._prepare(
             workspace=workspace, working_directory=working_directory,
             environment=capture_environment)
@@ -646,6 +686,7 @@ class BuildContainerExecutor:
                     not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) or
                     (tool.expected_image_id is not None and image_id != tool.expected_image_id)):
                 raise RuntimeError("pinned gitleaks image is unavailable or changed")
+            self._verify_image(image_id, tool.tag, tool.tool_id)
             runtime_user = application_runtime_user(tool.user)
             grant_runtime_user(scan_root, runtime_user)
             command = [
@@ -722,7 +763,8 @@ class BuildContainerExecutor:
                 "report": {"uri": "gitleaks.json", "sha256": self._digest(report)}
                 if report.is_file() else None,
             })
-        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError, SignatureVerificationError) as exc:
+            # Without a trusted scan, every retained capture source is redacted and the gap named.
             gap = f"gitleaks capture scan failed: {exc}"
             redact_invocation = True
             for source in sorted(set(persistent.values()),

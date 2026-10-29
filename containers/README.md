@@ -109,7 +109,10 @@ a read-only target mount, and one writable scratch mount. Image definitions pack
 Application jobs own arguments and translate tool output into findings.
 
 A catalog entry may pin `image_id`; the application executor then refuses to run a local image
-whose id differs (`src/appsec_review/container_runtime/executor.py`). Image-ID pins are host-local:
+whose id differs (`src/appsec_review/container_runtime/executor.py`). Pinned or not, it also refuses
+an image whose id has no signature envelope from a trusted operator key; sign images after building
+and re-pinning them (see [`../docs/operations/signing.md`](../docs/operations/signing.md)).
+Image-ID pins are host-local:
 a rebuilt image's id is not reproducible across hosts, results are never compared across hosts,
 and a changed pin means rerunning, not a defect (asset locks stay exact). `job_image_pin_verification`
 fails a review whose local images do not match their pins, and `appsec-review update-image-pins`

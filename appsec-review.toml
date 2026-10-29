@@ -68,6 +68,23 @@ disable_grype = true
 # Enabling removes only this policy gate; unsupported tool/platform requirements remain gaps.
 enable_swift = false
 
+[signing]
+# Ed25519 signatures verified through the system OpenSSL 3 CLI (src/appsec_review/signing/).
+# Private signing keys never enter this repository, images, runs/ or test fixtures; they stay with
+# the operator (`appsec-review signing keygen`, default ~/.config/appsec-review/signing/private/).
+# `trusted_keys_dir` holds the trust anchors: root-owned public-key PEM files named
+# `<key_id hex>.pem`, where key_id is the sha256 of the key's DER SubjectPublicKeyInfo; a file whose
+# name does not match its key is rejected. `image_signatures_dir` holds one envelope per signed
+# container image, `<image id hex>.json`. Relative directories resolve against this file's directory;
+# `openssl` must be an absolute path to an OS-owned binary.
+# `image_enforcement = "required"` refuses to launch or reuse any image without a valid envelope from
+# a trusted key; "disabled" turns image verification off entirely and must be an explicit choice.
+# Runtime profiles and capacity overlays cannot change this table.
+openssl = "/usr/bin/openssl"
+trusted_keys_dir = "/etc/appsec-review/signing/trusted-keys"
+image_signatures_dir = "/var/lib/appsec-review/signing/images"
+image_enforcement = "required"
+
 [binary_decompilation]
 # Pre-run Ghidra decompilation of third-party binaries (`appsec-review binary-decompile`). It runs
 # before a review is submitted, one binary at a time, so its container limits exceed the central
@@ -302,6 +319,13 @@ workers = 1
 [jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.settings]
 feed_root = "data/feeds/cve-bin-tool"
 image = "appsec-review/cve-bin-tool:3.4"
+# Optional exact pin: image_id = "sha256:<64 hex>". When set, `image` must resolve to it, the step
+# never builds the image, and `appsec-review signing sign-image --all-pinned` signs it. Unset, the
+# step verifies whatever `image` resolves to, or builds it unverified when the tag is missing.
+# The pin is unset pending its owner, the review-host session that builds the image (never invent
+# one): build and smoke the image on the review host, read
+# `docker image inspect --format '{{.Id}}' appsec-review/cve-bin-tool:3.4`, set
+# `image_id = "sha256:..."` here, then run `appsec-review signing sign-image --all-pinned ...`.
 tool_version = "3.4"
 build_context = "tools/cve-bin-tool"
 build_timeout_seconds = 1800

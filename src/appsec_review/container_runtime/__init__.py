@@ -10,6 +10,7 @@ from .project_images import (
     ProjectImage,
     ProjectImageBuildError,
     ProjectImageResolver,
+    derived_base_image_id,
     project_dependency_environment,
     project_recipe_identity,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "ExecutionResult",
     "Mount",
     "ToolImage",
+    "derived_base_image_id",
     "load_catalog",
     "profiles_from_settings",
     "project_recipe_identity",

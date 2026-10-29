@@ -8,7 +8,8 @@ methods still allocate application attempts, validate unit receipts and artifact
 accepted handoffs and manifests.
 
 The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
-the web console is published, on `127.0.0.1:3000`. The repository's `runs/` and `data/` directories
+the web console is published, on `127.0.0.1:3000` by default (see `APPSEC_DAGSTER_WEB_PORT` below).
+The repository's `runs/` and `data/` directories
 are mounted into the Dagster containers, and `targets/` and `rules/` (the checked-in rule packs) are
 mounted read-only; PostgreSQL and Dagster compute logs use named volumes.
 The code location alone receives the host Docker socket. Every containerized step uses it: scanner
@@ -152,6 +153,77 @@ The console is then available at <http://localhost:3000>. The verification comma
 HTTP endpoint and GraphQL workspace, then compares the connected jobs and schedules with
 `appsec-review.toml`, including cron, time zone, and enabled state.
 
+The published host port is `APPSEC_DAGSTER_WEB_PORT` (default `3000`; an integer from 1 to 65535),
+read like Compose does: the process environment, then `deploy/dagster/.env`. `ops.py` and the
+`scripts/` wrappers, `smoke.py`, `verify.py`, `run_report.py`, `recover_runs.py`, `review_run.py`, and
+`stepwise.py` derive their default URL from it unless `--url` (or, for `ops.py`, `APPSEC_DAGSTER_URL`)
+is given, and refuse an invalid value. On Windows, WSL forwards a WSL stack's `localhost:3000` to the
+Windows host, so to run a Windows stack alongside a WSL stack set `APPSEC_DAGSTER_WEB_PORT=3001` (for
+example) in the Windows checkout's `deploy/dagster/.env` and open <http://localhost:3001>.
+
+### Signed image
+
+The stack runs only a signed image whose Python package is signed too. `lifecycle.py build` runs, in
+order and on the host:
+
+1. `appsec-review signing sign-modules` over `src/appsec_review` into the ignored build-context file
+   `deploy/dagster/signing/python-modules.json`, then `verify-modules` against the trust anchors;
+2. `docker build --target <stage>` of the profile's final stage (`runtime`, `runtime-copilot`, or
+   `runtime-windows`) with the local tag `appsec-review-dagster:<platform>[-copilot]`;
+3. `sign-image` of the resulting image ID with the operator key, then `verify-image` of that ID.
+
+`lifecycle.py start` and `reload` verify the image (the tag, or an explicit
+`APPSEC_REVIEW_DAGSTER_IMAGE` in the process environment) against the host trust anchors before any
+Compose command. If verification fails they exit 3 without starting anything, and the operator
+scripts report `refused`. On success they record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `.env`
+and Compose launches exactly that ID (`pull_policy: never`, no `build:` section). `reload` recreates
+every service that runs the image (`code-location`, `webserver`, `daemon`; `host.IMAGE_SERVICES`) and
+leaves PostgreSQL running, so no service keeps an older image. Plain
+`docker compose ... exec` commands reuse the recorded ID. Read-only Compose actions (`config`, `status`,
+`logs`, `stop`) substitute an unlaunchable placeholder when no ID is recorded. The image variable has no
+default, so `docker compose up` without a recorded or exported ID fails. Do not run
+`docker compose up` directly or set `APPSEC_REVIEW_DAGSTER_IMAGE` by hand: Compose itself does not
+re-verify the ID it is given.
+
+The code location re-checks inside the container before it serves. Its Compose command is
+`python -m appsec_review.signing.container_self_check -- dagster code-server start ...`
+(`host.SELF_CHECK_COMMAND`), and it receives `APPSEC_REVIEW_DAGSTER_IMAGE`. The gate finds its own
+full container ID from the Docker bind mounts of `/etc/hostname`, `/etc/hosts` and
+`/etc/resolv.conf` in `/proc/self/mountinfo`, and runs `docker container inspect` by that ID through
+the mounted socket. It requires the reported `.Id` to be that ID, `.Config.Hostname` to be the
+container's host name, and `.Image` to equal `APPSEC_REVIEW_DAGSTER_IMAGE` exactly. It then verifies
+the image ID against the mounted trust anchors and envelopes with the configured `[signing]` policy.
+On success it prints a `container-image-self-check` JSON line with status `verified` and execs the
+code server. On any failure it prints status `refused` and exits 3, so the code location never
+becomes healthy and the webserver and daemon, which wait for it, are not started. With
+`image_enforcement = "disabled"` it prints status `disabled` and starts the server unchecked. The
+gate itself runs from verified modules, because the image's `sitecustomize.py` verifies the package
+first. `lifecycle.py reload` recreates the code location, so the gate runs again with the newly
+verified ID. The gate does not replace host verification: access to the Docker socket is
+root-equivalent, and a malicious image can simply omit its own check, so the host-side verification
+in `lifecycle.py` remains the authority. A webserver or daemon started with `--no-deps` may not wait
+for a healthy code location and then skips the gate.
+
+Inside the final stages every Python process runs the image's `sitecustomize.py` (a copy of
+`signing/sitecustomize_shim.py` in the interpreter's standard library directory). It loads the
+root-owned verifier from `/opt/appsec-review/signing-bootstrap/` and verifies
+`/usr/local/lib/python3.12/site-packages/appsec_review` against
+`/opt/appsec-review/signing/python-modules.json` with `/usr/bin/openssl` and the mounted trust anchors.
+If verification fails, the process exits with code 78. The image contains no keys. Compose mounts
+`APPSEC_SIGNING_TRUSTED_KEYS_DIR` (default `/etc/appsec-review/signing/trusted-keys`) and
+`APPSEC_SIGNING_IMAGE_SIGNATURES_DIR` (default `/var/lib/appsec-review/signing/images`) read-only at the
+same container paths as `[signing]` in `appsec-review.toml`. Both host directories must exist before
+start. The signatures directory must be writable by the operator who runs the build.
+
+The host-side steps use `APPSEC_SIGNING_PRIVATE_KEY` (default
+`~/.config/appsec-review/signing/private/operator.pem`, created with `appsec-review signing keygen`),
+`APPSEC_SIGNING_OPENSSL` (default `/usr/bin/openssl`), and `APPSEC_SIGNING_PYTHON` (default: the Python
+that runs the lifecycle, which needs this checkout's dependencies). Set them in the environment or in
+`.env`.
+
+The signing design, key custody, operator runbook and named gaps are in
+[`docs/operations/signing.md`](../../docs/operations/signing.md).
+
 The shared runtime image also loads the container runtime catalog during its build, before any
 profile-specific stages. Every enabled tool manifest must survive `.dockerignore`, including
 manual tools such as `containers/report/latex/tool.toml`; manual selection does not make a
@@ -162,8 +234,8 @@ Run the offline packaging regression tests with
 These tests stage catalog assets through the build-context exclusion rules and exercise the same
 catalog-loading command used by the image build; they do not build or restart the deployment.
 
-Rebuild and reload only the code location after an application change, then prove that the
-workspace reconnected:
+Rebuild and reload the image services (code location, webserver and daemon) after an application
+change, then prove that the workspace reconnected:
 
 ```bash
 python deploy/dagster/bin/lifecycle.py build
@@ -587,7 +659,9 @@ limit and is bounded only by `max_concurrent`.
 
 `deploy/dagster/.env` (from bootstrap; see `.env.example`) supplies Compose interpolation:
 `DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, optionally `APPSEC_REVIEW_PROFILE` (`dev`|`prod`, default `dev`), the three
-`APPSEC_CLAUDE_*` bind paths for Linux/WSL, and optionally `ANTHROPIC_API_KEY`. Compose passes
+`APPSEC_CLAUDE_*` bind paths for Linux/WSL, and optionally `ANTHROPIC_API_KEY`. `lifecycle.py start` records
+`APPSEC_REVIEW_DAGSTER_IMAGE`, the verified image ID, there; the optional `APPSEC_SIGNING_*` settings
+are described under [Signed image](#signed-image). Compose passes
 `ANTHROPIC_API_KEY` (empty by default) only to the code location; it is used only by models
 configured with `provider = "anthropic-api"`, and the `claude-cli` transport removes it from the
 CLI's environment. `APPSEC_REVIEW_CONFIG` is fixed to `/opt/app/appsec-review.toml` by
@@ -605,6 +679,14 @@ python -m pytest -q
 docker build --file deploy/dagster/Dockerfile --target test --tag appsec-review-dagster-test .
 docker run --rm appsec-review-dagster-test
 ```
+
+The `test` stage is built from `runtime-base`, before the module envelope is copied and enforcement
+is enabled. It does not enforce signed modules and needs neither the envelope nor trust anchors. The
+inherited `APPSEC_REVIEW_*` signing paths have no effect unless
+`APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1` or `APPSEC_REVIEW_MODULE_SIGNATURE` is set. The
+`runtime-base` build checks that `site` imports the signing `sitecustomize.py`, that
+`APPSEC_REVIEW_MODULE_ROOT` is the installed package, and that enforcement without an envelope exits
+78.
 
 The deployment tests cover TOML schedule generation, registry discovery, repository-wide node-name
 uniqueness, manual/scheduled graph convergence, structured metadata mapping, multiprocess branch

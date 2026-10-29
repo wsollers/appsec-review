@@ -16,7 +16,11 @@ x-dagster-environment: &dagster-environment
   APPSEC_REVIEW_PROFILE: ${APPSEC_REVIEW_PROFILE:-dev}
 
 x-dagster-service: &dagster-service
-  image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM:?Run deploy/dagster/bin/bootstrap.py first}
+  # The exact image ID that lifecycle.py start/reload verified on this host against the trusted keys;
+  # never a mutable tag, never a default, and never an implicit build or pull. Every service that uses
+  # this image must keep this form (host.IMAGE_SERVICES; tests/test_dagster_signing.py enforces it).
+  image: ${APPSEC_REVIEW_DAGSTER_IMAGE:?APPSEC_REVIEW_DAGSTER_IMAGE must be a host-verified sha256 image id; start through deploy/dagster/bin/ops.py}
+  pull_policy: never
   user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
   cgroup_parent: appsecreview-services.slice
   environment: *dagster-environment
@@ -28,6 +32,19 @@ x-dagster-service: &dagster-service
     - ../../targets:/opt/app/targets
     - ../../rules:/opt/app/rules:ro
     - ../../test/acceptance:/opt/app/test/acceptance:ro
+    # Signing trust anchors and image envelopes, read-only; they must already exist on the host.
+    - type: bind
+      source: ${APPSEC_SIGNING_TRUSTED_KEYS_DIR:-/etc/appsec-review/signing/trusted-keys}
+      target: /etc/appsec-review/signing/trusted-keys
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${APPSEC_SIGNING_IMAGE_SIGNATURES_DIR:-/var/lib/appsec-review/signing/images}
+      target: /var/lib/appsec-review/signing/images
+      read_only: true
+      bind:
+        create_host_path: false
   init: true
   restart: unless-stopped
   logging:
@@ -65,11 +82,14 @@ services:
     pids_limit: 2048
     group_add:
       - "${APPSEC_DOCKER_GID:-0}"
-    build:
-      context: ../..
-      dockerfile: deploy/dagster/Dockerfile
-      target: runtime
+    # The in-container gate (appsec_review.signing.container_self_check) requires this container's own
+    # image to be exactly the launched ID and to verify against the mounted trust anchors, then execs
+    # the code server; on refusal the code location never becomes healthy (host.SELF_CHECK_COMMAND).
     command:
+      - python
+      - -m
+      - appsec_review.signing.container_self_check
+      - --
       - dagster
       - code-server
       - start
@@ -83,6 +103,7 @@ services:
       - appsec_review
     environment:
       <<: *dagster-environment
+      APPSEC_REVIEW_DAGSTER_IMAGE: ${APPSEC_REVIEW_DAGSTER_IMAGE:?APPSEC_REVIEW_DAGSTER_IMAGE must be a host-verified sha256 image id; start through deploy/dagster/bin/ops.py}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Source-history GitHub enrichment only. lifecycle.py fills it from the creating shell's `gh`
       # login when unset; never stored in .env, and model workers never see it.
@@ -100,6 +121,18 @@ services:
       - ../../test/acceptance:/opt/app/test/acceptance:ro
       - ../../containers/tools/codeql/codeql_runner.py:/opt/app/containers/tools/codeql/codeql_runner.py:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${APPSEC_SIGNING_TRUSTED_KEYS_DIR:-/etc/appsec-review/signing/trusted-keys}
+        target: /etc/appsec-review/signing/trusted-keys
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${APPSEC_SIGNING_IMAGE_SIGNATURES_DIR:-/var/lib/appsec-review/signing/images}
+        target: /var/lib/appsec-review/signing/images
+        read_only: true
+        bind:
+          create_host_path: false
     # Each check starts a Python process that imports dagster (~10-13s of CPU on a loaded host), so
     # the timeout must exceed that import and the interval must leave the CPU idle between checks.
     healthcheck:
@@ -118,7 +151,7 @@ services:
     pids_limit: 512
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APPSEC_DAGSTER_WEB_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy

@@ -19,6 +19,13 @@ yet (see "Submit the review").
   ```
 
   The first build downloads a 570 MB archive and produces an image of about 1.8 GB.
+- The built image signed with the operator key. The catalog does not pin this image, so
+  `--all-pinned` skips it; sign the tag explicitly, and re-sign after every rebuild (see
+  [`signing.md`](signing.md)):
+
+  ```sh
+  appsec-review signing sign-image appsec-review/tool-ghidra:12.1.4 --private-key ~/.config/appsec-review/signing/private/operator.pem
+  ```
 - A right to analyze the binary. You must state it in the configuration.
 
 ## 1. Register the binary
@@ -210,7 +217,8 @@ receipt) and `scratch/raw/stdout.bin` and `stderr.bin` (the Ghidra log).
 | `INVALID_EXPORT` | The export script did not finish, or its output broke the contract | Read `stdout.bin` for the script error. |
 
 `RuntimeError: cataloged image is not locally available: tool-ghidra` means the image was not built
-on this host.
+on this host. `SignatureVerificationError: refusing to launch tool-ghidra image ...` means the
+local image has no trusted signature; sign it as shown in the prerequisites.
 
 ## Efficacy check on the known binary
 

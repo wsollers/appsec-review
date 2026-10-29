@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Stop and start the stack, or recreate only the code location.
+Stop and start the stack, or (-CodeLocationOnly) reload every Dagster image service, keeping PostgreSQL.
 .DESCRIPTION
 PowerShell twin of scripts/stack-restart.sh with the same options (-PascalCase). -Wsl re-runs the bash
 twin inside the WSL distribution named by -Distro (default Ubuntu-24.04) with translated paths; use it

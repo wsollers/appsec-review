@@ -21,9 +21,13 @@ QUERY = """query RunReport {
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://127.0.0.1:3000/graphql")
+    parser.add_argument("--url", help="Dagster GraphQL endpoint (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
     parser.add_argument("--stale-seconds", type=int, default=3600)
     args = parser.parse_args()
+    from host import url_or_default
+
+    args.url = url_or_default(parser, args.url, "/graphql")
     request = Request(args.url, data=json.dumps({"query": QUERY}).encode(),
                       headers={"Content-Type": "application/json"})
     with urlopen(request, timeout=30) as response:

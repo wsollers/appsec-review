@@ -30,7 +30,7 @@ from appsec_review.container_runtime import (
     profiles_from_settings,
     verify_capture_record,
 )
-from appsec_review.container_runtime.project_images import node_dependency_root
+from appsec_review.container_runtime.project_images import derived_base_image_id, node_dependency_root
 from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import (
     BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
@@ -491,7 +491,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     for relative, digest in before.items():
         stat = (workspace / relative).stat()
         snapshot_files[relative] = {"sha256": digest, "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
-    profile = BuildProfile(str(image.get("family", action["family"])), str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
+    profile = BuildProfile(str(image.get("family", action["family"])), str(image["image_tag"]), str(image["image_id"]), str(image["user"]),
+                           derived_from_image_id=derived_base_image_id(image))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))

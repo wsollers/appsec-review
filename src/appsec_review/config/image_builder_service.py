@@ -77,7 +77,7 @@ class BuilderGrant:
             absolute(getattr(self, name))
         if self.client_context_root != self.service_context_root:
             raise ValueError("translated context mappings are not commissioned")
-        if Path(self.run_root).name != self.run_id or type(self.allow_network) is not bool:
+        if PurePosixPath(self.run_root).name != self.run_id or type(self.allow_network) is not bool:
             raise ValueError("invalid run or network authorization")
 
 
@@ -130,9 +130,9 @@ class EngineDomainConfig:
             raise ValueError("engine domain requires a bounded explicit baseline inventory")
         for root in self.baseline_cgroups:
             absolute(root)
-            if root == self.cgroup or not Path(root).is_relative_to(self.cgroup):
+            if root == self.cgroup or not PurePosixPath(root).is_relative_to(self.cgroup):
                 raise ValueError("baseline engine groups must be strict domain descendants")
-        if any(Path(left).is_relative_to(right) for left in self.baseline_cgroups
+        if any(PurePosixPath(left).is_relative_to(right) for left in self.baseline_cgroups
                for right in self.baseline_cgroups if left != right):
             raise ValueError("baseline engine groups cannot overlap")
         if (type(self.cpu) is not int or not 1 <= self.cpu <= 2
@@ -155,12 +155,12 @@ class DockerHelperScope:
             absolute(value)
             if value == "/" or value in {"/run", "/var", "/var/lib", "/tmp"}:
                 raise ValueError("Docker helper scope requires private dedicated roots")
-        if (Path(self.data_root).is_relative_to(self.exec_root)
-                or Path(self.exec_root).is_relative_to(self.data_root)):
+        if (PurePosixPath(self.data_root).is_relative_to(self.exec_root)
+                or PurePosixPath(self.exec_root).is_relative_to(self.data_root)):
             raise ValueError("Docker data and execution roots must be separate")
         if self.containerd_endpoint is not None:
             absolute(self.containerd_endpoint)
-            if not Path(self.containerd_endpoint).is_relative_to(self.exec_root):
+            if not PurePosixPath(self.containerd_endpoint).is_relative_to(self.exec_root):
                 raise ValueError("dedicated containerd endpoint must remain under the private execution root")
 
 
@@ -258,15 +258,15 @@ class ImageBuilderServiceConfig:
             if (self.docker_helper_scope is None or self.host_cpu >= domain.cpu
                     or self.host_overhead_mb >= domain.memory_mb
                     or self.host_cgroup == domain.cgroup
-                    or not Path(self.host_cgroup).is_relative_to(domain.cgroup)
-                    or Path(self.worker_cgroup_parent).is_relative_to(domain.cgroup)):
+                    or not PurePosixPath(self.host_cgroup).is_relative_to(domain.cgroup)
+                    or PurePosixPath(self.worker_cgroup_parent).is_relative_to(domain.cgroup)):
                 raise ValueError("engine domain must separate dedicated control overhead from action work")
             for root in domain.baseline_cgroups:
-                if Path(root).is_relative_to(self.host_cgroup) or Path(self.host_cgroup).is_relative_to(root):
+                if PurePosixPath(root).is_relative_to(self.host_cgroup) or PurePosixPath(self.host_cgroup).is_relative_to(root):
                     raise ValueError("baseline engine custody cannot overlap dedicated control overhead")
             for grant in self.grants:
-                if any(Path(domain.metadata_root).is_relative_to(root)
-                       or Path(root).is_relative_to(domain.metadata_root)
+                if any(PurePosixPath(domain.metadata_root).is_relative_to(root)
+                       or PurePosixPath(root).is_relative_to(domain.metadata_root)
                        for root in (grant.run_root, grant.client_context_root, grant.service_context_root)):
                     raise ValueError("engine admission must remain outside client custody")
         if (self.cpu + self.host_cpu > self.resources.cpu
@@ -276,7 +276,7 @@ class ImageBuilderServiceConfig:
             raise ValueError("builder worker, host or context exceeds the aggregate/staging budget")
         for grant in self.grants:
             if (grant.uid != self.admission.uid or grant.client_context_root !=
-                    str(Path(self.admission.metadata_root) / "bounded-image-contexts")):
+                    str(PurePosixPath(self.admission.metadata_root) / "bounded-image-contexts")):
                 raise ValueError("all builder grants must share the admitted client UID and metadata ledger")
         keys = [(g.uid, g.tenant_id, g.project_id, g.run_id) for g in self.grants]
         if len(keys) != len(set(keys)) or len({i.alias for i in self.images}) != len(self.images):
@@ -301,15 +301,15 @@ class ImageBuilderServiceConfig:
                 self.engine_domain is None or self.engine_domain.control_lifetime_id is None
                 or self.native_engine is not None or self.network_id is not None):
             raise ValueError("provisioning requires an explicit engine control lifetime without clients or egress")
-        host, workers = Path(self.host_cgroup), Path(self.worker_cgroup_parent)
+        host, workers = PurePosixPath(self.host_cgroup), PurePosixPath(self.worker_cgroup_parent)
         if (host == workers or host.is_relative_to(workers) or workers.is_relative_to(host)
                 or not host.is_relative_to("/sys/fs/cgroup")
                 or not workers.is_relative_to("/sys/fs/cgroup")):
             raise ValueError("host and worker cgroups must be separate cgroup-v2 subtrees")
         for grant in self.grants:
             for protected in (self.state_root, self.endpoint, self.docker_endpoint):
-                if (Path(protected).is_relative_to(grant.service_context_root)
-                        or Path(protected).is_relative_to(grant.run_root)):
+                if (PurePosixPath(protected).is_relative_to(grant.service_context_root)
+                        or PurePosixPath(protected).is_relative_to(grant.run_root)):
                     raise ValueError("operator state must be outside client context custody")
         if self.docker_helper_scope is not None:
             scope = self.docker_helper_scope
@@ -317,7 +317,7 @@ class ImageBuilderServiceConfig:
                 raise ValueError("Docker helper scope must be a typed operator declaration")
             for grant in self.grants:
                 for protected in (scope.data_root, scope.exec_root):
-                    if any(Path(protected).is_relative_to(root) or Path(root).is_relative_to(protected)
+                    if any(PurePosixPath(protected).is_relative_to(root) or PurePosixPath(root).is_relative_to(protected)
                            for root in (grant.run_root, grant.client_context_root, grant.service_context_root)):
                         raise ValueError("Docker helper roots must be outside client custody")
         if self.native_engine is not None:
@@ -326,18 +326,18 @@ class ImageBuilderServiceConfig:
                 raise ValueError("native engine requires typed operator policy")
             if native.endpoint in {self.endpoint, self.docker_endpoint}:
                 raise ValueError("native broker must have a separate private socket")
-            parent = Path(native.execution_cgroup_parent)
+            parent = PurePosixPath(native.execution_cgroup_parent)
             if self.engine_domain is not None and (
                     parent.is_relative_to(self.engine_domain.cgroup)
                     or native.application_cgroup is None
-                    or Path(native.application_cgroup).is_relative_to(self.engine_domain.cgroup)):
+                    or PurePosixPath(native.application_cgroup).is_relative_to(self.engine_domain.cgroup)):
                 raise ValueError("native actions and application cannot be charged as engine overhead")
-            if any(parent.is_relative_to(root) or Path(root).is_relative_to(parent)
+            if any(parent.is_relative_to(root) or PurePosixPath(root).is_relative_to(parent)
                    for root in (self.host_cgroup, self.worker_cgroup_parent)):
                 raise ValueError("native executions require a separate bounded cgroup subtree")
             if native.application_cgroup is not None:
-                application = Path(native.application_cgroup)
-                if any(application.is_relative_to(root) or Path(root).is_relative_to(application)
+                application = PurePosixPath(native.application_cgroup)
+                if any(application.is_relative_to(root) or PurePosixPath(root).is_relative_to(application)
                        for root in (self.host_cgroup, self.worker_cgroup_parent, parent)):
                     raise ValueError("native application requires a separate capped cgroup subtree")
             for grant in native.grants:
@@ -346,7 +346,7 @@ class ImageBuilderServiceConfig:
                 ) == (grant.uid, grant.tenant_id, grant.project_id, grant.run_id, grant.target_snapshot, grant.run_root)]
                 if len(matches) != 1:
                     raise ValueError("native grant must match one existing service run grant")
-                if any(Path(protected).is_relative_to(root)
+                if any(PurePosixPath(protected).is_relative_to(root)
                        for protected in (native.endpoint, self.state_root, self.docker_endpoint,
                                          native.gate_binary, native.runtime_python, native.runtime_root)
                        for root in (grant.run_root, grant.target_root)):
@@ -362,11 +362,11 @@ class ImageBuilderServiceConfig:
             if self.engine_domain is not None:
                 controls += (self.engine_domain.metadata_root,)
             for grant in native.grants:
-                if any(Path(control).is_relative_to(root) for control in controls
+                if any(PurePosixPath(control).is_relative_to(root) for control in controls
                        for root in (grant.run_root, grant.target_root)):
                     raise ValueError("native control and engine roots must remain outside run and target custody")
-            if any(Path(control).is_relative_to(mount.source_root)
-                   or Path(mount.source_root).is_relative_to(control)
+            if any(PurePosixPath(control).is_relative_to(mount.source_root)
+                   or PurePosixPath(mount.source_root).is_relative_to(control)
                    for mount in native.mounts for control in controls):
                 raise ValueError("native mounts cannot expose broker control paths or their ancestors")
 

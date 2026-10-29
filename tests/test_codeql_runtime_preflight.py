@@ -227,7 +227,7 @@ def test_helper_matches_the_environment_database_one_resolves(harness, monkeypat
     }[index]
     assert codeql._scope_runtime_environment(scope, RECEIPTS, settings) == expected
     assert seen == [{"build_image_tag": expected[0], "build_image_id": expected[1],
-                     "runtime_user": expected[2], "scope_id": scope.scope_id}]
+                     "runtime_user": expected[2], "scope_id": scope.scope_id, "build_image_derived_from": None}]
 
 
 def test_helper_keeps_missing_build_unit_an_integrity_failure(harness):

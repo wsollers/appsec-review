@@ -35,7 +35,7 @@ import tomllib
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import read_environment
+from host import read_environment, url_or_default
 import review_run
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -946,7 +946,8 @@ def command_parity(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--url", default="http://127.0.0.1:3000/graphql")
+    parser.add_argument("--url", help="Dagster GraphQL endpoint (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
     parser.add_argument("--interval-seconds", type=int, default=30)
     parser.add_argument("--show", type=int, default=10, help="examples printed per gap list and audit kind")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -997,6 +998,7 @@ def main(argv: list[str] | None = None) -> int:
     system.add_argument("--tag", required=True)
     system.add_argument("--app-run", help="evaluate this finished application run instead of starting one")
     args = parser.parse_args(argv)
+    args.url = url_or_default(parser, args.url, "/graphql")
     if args.interval_seconds < 1:
         parser.error("--interval-seconds must be positive")
     handlers = {"init": command_init, "next": command_next, "check": command_check,

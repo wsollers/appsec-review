@@ -14,6 +14,7 @@ from appsec_review.observability import EventLog
 from appsec_review.runtime.resources import (
     Reservation, ResourceAdmission, reserve_execution, review_resource_scope,
 )
+from tests.conftest import AcceptingRecordingImageVerifier
 from tests.test_container_runtime import DIGEST, catalog
 
 
@@ -181,12 +182,15 @@ def _mixed_worker(metadata, backend, eligible, started, release):
             raise AssertionError(argv)
         return CommandOutcome(*value) if backend == "scanner" else value
     with review_resource_scope(root, budget, events):
+        # A spawned worker does not inherit the parent's conftest default verifier.
+        verifier = AcceptingRecordingImageVerifier()
         if backend == "scanner":
-            ContainerExecutor(catalog(work), work / "run", runner=runner).execute(
+            ContainerExecutor(catalog(work), work / "run", runner=runner, image_verifier=verifier).execute(
                 ExecutionRequest("tool-fixture", ("/bin/fixture",), work, work / "run" / "scratch"))
         else:
             BuildContainerExecutor(BuildProfile("native", "fixture", DIGEST, "10001:10001"),
-                                   timeout_seconds=10, output_bytes=1024, runner=runner).execute(
+                                   timeout_seconds=10, output_bytes=1024, runner=runner,
+                                   image_verifier=verifier).execute(
                                        ("cc", "--version"), workspace=work,
                                        working_directory=".", environment={})
 

@@ -87,6 +87,7 @@ Everything below is declared in the file named in the last column; nothing else 
 | `java` and `APPSEC_GRADLE_HOME` | Gradle provenance test | `tests/test_gradle_provenance.py` |
 | `APPSEC_LIVE_SEEDED_CLANG=1`, `clang++-18` for the compiler check, and the built `tool-native-cpp`, `tool-clang-static-analysis` and `tool-joern` images for the container check | `tests/live/test_seeded_clang_live.py` | that file |
 | `APPSEC_RUN_LIVE_INFERENCE=1` and a signed-in `claude` | Live model recipe inference in `tests/test_live_build_toolchains.py` | that file |
+| `APPSEC_REVIEW_SIGNING_INTEGRATION=1`, `/usr/bin/openssl`, a Docker daemon with buildx and the local `appsec-review/base-python:3.12-bookworm` image (never pulled) | Real-OpenSSL image and module signing tests: signed image launch through `ContainerExecutor`, module enforcement in a container built like the Dagster runtime stage, the isolated host bootstrap, `--all-pinned --builder-service-config`, the container self-check against real containers and (Windows only) NTFS key custody | `tests/integration/signing/` |
 | `APPSEC_MULTI_VULN_WORKSPACE`, `APPSEC_CPP_ACCEPTANCE_TARGET`, `APPSEC_REVIEW_BUILDENV_PINS=local` | Live code-graph, C++ acceptance and build-image tests | `tests/live/test_code_graph_live.py`, `tests/orchestration/dagster/test_post_build_security.py`, `tests/integration/test_family_project_builds.py` |
 | Built tool, build-environment and CodeQL images | Live, integration and full-tier tests (skipped, naming the missing image) | `containers/catalog.toml` |
 | `NVD_API_KEY` | Authenticated NVD rate during metadata sync | `docs/operations/third-party-data-sync.md` |
@@ -478,12 +479,15 @@ ID in its pins (`image_id` in the catalog, the build profiles in `appsec-review.
 `source_image_id`). Pins are host-local and are never compared across machines. See
 [Moving forward, not reproducing](containers/README.md#moving-forward-not-reproducing).
 
-The pipeline never builds images. The operator rebuilds them on the host with `containers/build.py`
-and re-pins them with `appsec-review update-image-pins --write`. Every review then verifies at its
+The pipeline never builds images. The operator rebuilds them on the host with `containers/build.py`,
+re-pins them with `appsec-review update-image-pins --write`, and signs them with
+`appsec-review signing sign-image --all-pinned --private-key <key>`. Every review then verifies at its
 start (`job_image_pin_verification`) that every enabled catalog image, build profile and CodeQL source
 image resolves on the local daemon to exactly its pin, and fails before intake naming every missing
 image or moved tag. See
-[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md).
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md). Every
+launch or reuse of a pinned image then verifies its signature and refuses an unsigned or
+untrusted image ID; see [`docs/operations/signing.md`](docs/operations/signing.md).
 
 ## Sync third-party metadata
 
@@ -629,15 +633,26 @@ Other options: the global `--config <path-or-file-URI>` (before the subcommand) 
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and
 `--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
 `appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
-optionally into an existing run. Three further subcommands run outside a review graph:
+optionally into an existing run. Four further subcommands run outside a review graph:
 `appsec-review acquire-target [--system <id>] [--verify-only]` (hash-pinned Git, Perforce or
 review-export acquisition into `targets/`; see
 [`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md)),
 `appsec-review binary-decompile` (pre-run Ghidra decompilation; see
-[`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)) and
+[`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)),
 `appsec-review update-image-pins [--write]` (re-pins every configured image-ID pin to the image its
 tag resolves to on the local daemon after a host rebuild; see
-[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)).
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)) and the
+`appsec-review signing` group: `keygen` (an Ed25519 operator key, by default
+`~/.config/appsec-review/signing/private/operator.pem`, optionally installing its public key as a
+`<key id>.pem` trust anchor), `sign-image REFERENCE... | --all-pinned [--builder-service-config FILE]`
+(signs local image IDs; `--all-pinned` signs only pinned images whose local ID equals the pin, plus
+the named bounded builder service configuration's pins), `verify-image`,
+`sign-modules`/`verify-modules` (signed `appsec_review` package manifests) and `export-bootstrap DIR`
+(copies the standalone module-verification bootstrap). Each prints JSON, never private key material,
+and exits nonzero on any failure; `[signing]` in `appsec-review.toml` supplies the OpenSSL binary,
+trust anchors and image-signature directory unless overridden on the command line. Threat model, key
+custody, enforcement points, runbook and named gaps:
+[`docs/operations/signing.md`](docs/operations/signing.md).
 
 Without installing the package, run the module from the source tree instead:
 
@@ -759,7 +774,8 @@ in a checkout while a run or test suite uses it.
    ([Download the acceptance target](#download-the-acceptance-target)).
 3. Build and smoke every enabled image, acquiring inputs first where needed
    ([Build the tool container images](#build-the-tool-container-images)). Record new image IDs in
-   their pins on that host.
+   their pins on that host, then sign them with the operator key
+   ([`docs/operations/signing.md`](docs/operations/signing.md#operator-runbook)).
 4. Sync third-party metadata if it is older than you want
    ([Sync third-party metadata](#sync-third-party-metadata)).
 5. Run the nothing-to-find review on the pinned images
@@ -788,6 +804,11 @@ python deploy/dagster/bin/lifecycle.py start
 python deploy/dagster/bin/lifecycle.py status
 python deploy/dagster/bin/verify.py
 ```
+
+`lifecycle.py build` signs the `appsec_review` modules, builds the image and signs and verifies its
+ID with the operator key; `start` verifies that signature again, records the ID in
+`deploy/dagster/.env` and launches exactly that image, or refuses with exit code 3. Create the key
+and trust anchor first; see [Signed image](deploy/dagster/README.md#signed-image).
 
 On native Windows, run the same commands in PowerShell, then sign in to the container CLI with
 `docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login`.

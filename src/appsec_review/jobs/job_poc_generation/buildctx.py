@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
+from appsec_review.container_runtime.project_images import derived_base_image_id
 from appsec_review.indexing.build_facts import classify_command
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage import canonical_json, file_sha256
@@ -80,6 +81,8 @@ class BuildUnit:
     objects: tuple[str, ...]          # workspace-relative object and static-library outputs of the build
     shared_libraries: tuple[str, ...]
     gaps: tuple[str, ...] = ()
+    # The pinned base when the image is a runtime-derived project image (see derived_base_image_id).
+    image_derived_from: str | None = None
 
     def identity(self) -> dict[str, Any]:
         return {"build_unit_id": self.build_unit_id, "receipt_fingerprint": self.receipt_fingerprint,
@@ -236,7 +239,8 @@ class AcceptedBuilds:
             str(receipt["build_unit_id"]), str(receipt.get("build_system")), str(receipt.get("root")),
             str(receipt.get("fingerprint")), workspace, dict(files), file_sha256(manifest_path),
             str(image.get("image_tag", "")), str(image.get("image_id", "")), str(image.get("user", "")),
-            command, tuple(sorted(set(objects))), tuple(sorted(set(shared))), tuple(gaps))
+            command, tuple(sorted(set(objects))), tuple(sorted(set(shared))), tuple(gaps),
+            derived_base_image_id(image))
 
     # -- the disposable copy -----------------------------------------------------------------------
     def materialize(self, unit: BuildUnit, destination: Path, *, byte_limit: int) -> int:

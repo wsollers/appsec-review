@@ -51,6 +51,41 @@ Python `-I -S`, a root-controlled working directory and a fixed minimal host env
 processing and editable `.pth` hooks are disabled; the release's library directory is added
 explicitly. Client-requested environment is never inherited by this root process.
 
+The release must also carry a signed module manifest and a signed release-library manifest.
+Before anything from `lib/` is imported or placed on `sys.path`, the entrypoint loads the
+standalone verifier by file path and self-tests `/usr/bin/openssl`. It then verifies the
+`python-release-lib` envelope against every regular file in `lib/` outside `lib/appsec_review/`
+(third-party packages, `.dist-info`, native extensions, `.pth` and data files). Next it verifies the
+`python-modules` envelope against the whole installed `lib/appsec_review` tree and installs an
+import hook that serves `appsec_review` only from verified bytes. Any mismatch, unlisted file,
+missing file, symbolic link, `__pycache__` directory, `.pyc`/`.pyo` file or untrusted signature
+stops startup.
+The required root-owned, read-only layout is:
+
+```text
+<release>/root_entrypoint.py
+<release>/lib/appsec_review/...                     # non-editable install of the signed tree
+<release>/lib/...                                   # third-party closure covered by python-release-lib.json
+<release>/signing/python-modules.json               # python-modules envelope
+<release>/signing/python-release-lib.json           # python-release-lib envelope over lib/ except appsec_review/
+<release>/signing/trusted-keys/<sha256-hex>.pem     # Ed25519 public trust anchors
+<release>/signing/bootstrap/{bootstrap,core,modules,import_hook,release_lib}.py
+```
+
+Sign on the host from the source tree with the operator key (never copied into the release), for
+example `python -c 'from appsec_review.signing import OpenSSL, sign_modules;
+sign_modules(OpenSSL(), "<operator-key.pem>", "src/appsec_review", "python-modules.json")'`.
+Install the package with identical bytes, copy the envelope and the operator's public key PEM
+(named by its key ID), and copy the five verifier files from `src/appsec_review/signing/`.
+After the complete staged `lib/` is assembled (with `PYTHONDONTWRITEBYTECODE=1`, so no
+`__pycache__` exists) and before it is made read-only, sign its third-party closure on the host:
+`appsec-review signing sign-release-lib --private-key <operator-key.pem> --lib <staged>/lib
+--output <staged>/signing/python-release-lib.json`, and check it with `verify-release-lib`. Any
+later change to `lib/` requires re-signing. The CLI equivalents (`appsec-review signing
+sign-modules`, `verify-modules`, `sign-release-lib`, `verify-release-lib`, `export-bootstrap`),
+key custody and named gaps are in
+[`docs/operations/signing.md`](../../../docs/operations/signing.md).
+
 Metadata checks reject indirect, client-owned or writable launch paths, public configuration and
 writable release mounts. They do not prove the provenance of every transitive installed file.
 Installation/commissioning must establish that complete root-controlled, non-editable closure;

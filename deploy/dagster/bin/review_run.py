@@ -224,7 +224,7 @@ def show_run(run: dict) -> None:
             print(f"error_state_file=pending failed_steps={','.join(failed[-5:]) or '-'}", flush=True)
 
 
-def submit(run_id: str, url: str = "http://127.0.0.1:3000/graphql", *,
+def submit(run_id: str, url: str, *,
            stop_on_first_error: bool = False) -> None:
     import ops
 
@@ -239,10 +239,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("submit", "status", "watch", "reconcile"))
     parser.add_argument("--run-id", help="Dagster UUID; generated for submit")
-    parser.add_argument("--url", default="http://127.0.0.1:3000/graphql")
+    parser.add_argument("--url", help="Dagster GraphQL endpoint (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
     parser.add_argument("--interval-seconds", type=int, default=30)
     parser.add_argument("--stop-on-first-error", action="store_true")
     args = parser.parse_args()
+    from host import url_or_default
+
+    args.url = url_or_default(parser, args.url, "/graphql")
     if args.action != "submit" and not args.run_id:
         parser.error("--run-id is required for status and watch")
     if args.interval_seconds < 1:

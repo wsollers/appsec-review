@@ -801,12 +801,16 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://127.0.0.1:3000")
+    parser.add_argument("--url", help="Dagster webserver URL (default http://127.0.0.1:"
+                        "<APPSEC_DAGSTER_WEB_PORT, default 3000>)")
     parser.add_argument("--run-id", help="also verify this completed Dagster run and its application receipts")
     parser.add_argument("--required-family", action="append", default=[],
                         help="require zero-gap successful language-build receipts for this family")
     parser.add_argument("--evidence", type=Path, help="write the concise verification report to this path")
     args = parser.parse_args()
+    from host import url_or_default
+
+    args.url = url_or_default(parser, args.url)
     repository = Path(__file__).resolve().parents[3]
     config_path = repository / "appsec-review.toml"
     document = tomllib.loads(config_path.read_text(encoding="utf-8"))

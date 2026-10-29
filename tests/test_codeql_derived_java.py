@@ -245,8 +245,10 @@ def test_database_job_derives_runtime_on_the_receipt_image(monkeypatch, shipped,
         codeql._database_one(unit, scope, {scope.build_unit_id: {"image": image}})
 
     [(request, derived)] = resolved
+    # A customized project image is derived and unsigned; its pinned base carries the signature.
     assert request == {"build_image_tag": image["image_tag"], "build_image_id": image["image_id"],
-                       "runtime_user": image["user"], "scope_id": scope.scope_id}
+                       "runtime_user": image["user"], "scope_id": scope.scope_id,
+                       "build_image_derived_from": image["base_image_id"] if customized else None}
     identity = resolver(shipped, "derive", tmp_path).declared_identity(
         build_image_id=image["image_id"], runtime_user=image["user"])
     assert (derived.schema, derived.identity, derived.preinstalled) == (runtime.IMAGE_SCHEMA, identity, False)

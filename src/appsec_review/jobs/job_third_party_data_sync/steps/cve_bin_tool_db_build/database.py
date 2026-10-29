@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -12,8 +13,13 @@ from typing import Any, Callable, Mapping
 
 from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
 from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot, require_beneath, verify_current
+from appsec_review.signing.core import SignatureVerificationError
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.policy import default_image_verifier
 from appsec_review.storage import file_sha256
 
+
+_IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
 
 @dataclass(frozen=True, slots=True)
 class CveBinToolSettings:
@@ -23,6 +29,9 @@ class CveBinToolSettings:
     build_context: Path
     build_timeout_seconds: int
     run_timeout_seconds: int
+    # Optional exact image ID for ``image``. When set, the tag must resolve to it and the image is
+    # never built here; when unset, whatever the tag resolves to is verified (or built unverified).
+    image_id: str | None = None
 
     @classmethod
     def from_mapping(cls, root: Path, value: Mapping[str, Any]) -> "CveBinToolSettings":
@@ -30,6 +39,9 @@ class CveBinToolSettings:
         context = Path(str(value.get("build_context", "")))
         if not str(feed) or not str(context):
             raise ValueError("cve-bin-tool feed_root and build_context are required")
+        image_id = value.get("image_id")
+        if image_id is not None and (not isinstance(image_id, str) or not _IMAGE_ID.fullmatch(image_id)):
+            raise ValueError("cve-bin-tool image_id must be sha256:<64 lowercase hex>")
         settings = cls(
             feed_root=(root / feed).resolve() if not feed.is_absolute() else feed.resolve(),
             image=str(value.get("image", "")),
@@ -37,6 +49,7 @@ class CveBinToolSettings:
             build_context=(root / context).resolve() if not context.is_absolute() else context.resolve(),
             build_timeout_seconds=int(value.get("build_timeout_seconds", 1800)),
             run_timeout_seconds=int(value.get("run_timeout_seconds", 3600)),
+            image_id=image_id,
         )
         if not settings.image or not settings.tool_version or min(settings.build_timeout_seconds, settings.run_timeout_seconds) < 1:
             raise ValueError("cve-bin-tool image, version, and positive timeouts are required")
@@ -84,14 +97,35 @@ def resolve_nvd_snapshot(nvd_root: Path, expected_pointer: Mapping[str, Any]) ->
             "layers": layers, "layer_count": len(layers)}
 
 
-def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: Path) -> dict[str, str]:
+def _verify_pinned_image(image_id: str, settings: CveBinToolSettings,
+                         image_verifier: ImageSignatureVerifier | None) -> None:
+    reference = settings.image
+    if settings.image_id is not None and image_id != settings.image_id:
+        raise SignatureVerificationError(
+            f"refusing to launch cve-bin-tool image {reference}: it resolves to {image_id}, "
+            f"not the pinned {settings.image_id}")
+    verifier = image_verifier if image_verifier is not None else default_image_verifier()
+    try:
+        verifier.verify(image_id, reference=reference)
+    except SignatureVerificationError as error:
+        raise SignatureVerificationError(
+            f"refusing to launch cve-bin-tool image {reference} ({image_id}): {error}") from error
+
+
+def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: Path, *,
+                    image_verifier: ImageSignatureVerifier | None = None) -> dict[str, str]:
     from appsec_review.config.native_dagster import native_execution_requested
     if native_execution_requested():
-        return _native_builder(settings, input_dir, output_dir)
+        return _native_builder(settings, input_dir, output_dir, image_verifier=image_verifier)
     inspect = subprocess.run(["docker", "image", "inspect", settings.image, "--format", "{{.Id}}"],
                              stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                              errors="replace", check=False)
-    if inspect.returncode != 0:
+    built_here = inspect.returncode != 0
+    if built_here and settings.image_id is not None:
+        raise SignatureVerificationError(
+            f"refusing to build cve-bin-tool image {settings.image}: it is pinned to {settings.image_id}; "
+            "load and sign the pinned image first")
+    if built_here:
         built = subprocess.run(["docker", "build", "--tag", settings.image, str(settings.build_context)],
                                stdin=subprocess.DEVNULL, capture_output=True, text=True,
                                encoding="utf-8", errors="replace",
@@ -102,6 +136,10 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                                  errors="replace", check=True)
     image_id = inspect.stdout.strip()
+    # An image just built from settings.build_context is derived at runtime and unsigned; without an
+    # image_id pin nothing names its output, so only a pre-existing settings.image is verified.
+    if not built_here:
+        _verify_pinned_image(image_id, settings, image_verifier)
     bind_input = _docker_bind_source(input_dir.resolve())
     bind_output = _docker_bind_source(output_dir.resolve())
     container_name = f"appsec-review-cve-bin-tool-{uuid.uuid4().hex}"
@@ -111,7 +149,7 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
         "--security-opt", "no-new-privileges", "--pids-limit", "128", "--user",
         application_runtime_user("65532:65532"),
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "-v", f"{bind_input}:/input:ro",
-        "-v", f"{bind_output}:/output:rw", "--entrypoint", "python", settings.image,
+        "-v", f"{bind_output}:/output:rw", "--entrypoint", "python", image_id,
         "/opt/builder/build_db.py", "/input", "/output",
     ]
     try:
@@ -129,7 +167,8 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
     return {"image": settings.image, "image_id": image_id, "tool_version": settings.tool_version}
 
 
-def _native_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: Path) -> dict[str, str]:
+def _native_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: Path, *,
+                    image_verifier: ImageSignatureVerifier | None = None) -> dict[str, str]:
     from appsec_review.container_runtime.native_client import native_run
     from appsec_review.runtime.resources import reserve_execution, tracked_container
 
@@ -139,6 +178,7 @@ def _native_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
         if inspected is None or inspected[0] != 0 or inspected[3]:
             raise RuntimeError("native cve-bin-tool requires an approved preinstalled image")
         image_id = inspected[1].decode().strip()
+        _verify_pinned_image(image_id, settings, image_verifier)
         name = f"appsec-review-cve-bin-tool-{uuid.uuid4().hex}"
         output_dir.chmod(0o700)
         command = (
