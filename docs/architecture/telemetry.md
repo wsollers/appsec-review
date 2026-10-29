@@ -115,13 +115,26 @@ one completion and at most one progress record per progress interval.
 
 `measurement_scope` remains `process_inclusive_not_additive` and `measurement_source` is
 `os.times/proc-self-io/getrusage-thread/thread_time`. `rusage_scope` is `"thread"`, or null with
-`rusage_unavailable_reason` where `RUSAGE_THREAD` is unavailable (for example off Linux); I/O and
+`rusage_unavailable_reason`: `rusage_thread_unavailable` where `RUSAGE_THREAD` is unavailable (for
+example off Linux), or `span_exited_on_another_thread` when the span ended on a different thread
+than it started on (the thread values are then also null). I/O and
 syscall values are null with `io_unavailable_reason` when `/proc/self/io` is unavailable.
 `child_cpu_seconds` and `peak_rss_bytes` stay null with their existing reasons. An unavailable value
 is null with a reason, never zero. Process-inclusive values include concurrent threads and must not
 be added across overlapping spans. Thread-scoped values exclude work the span hands to other
 threads or child processes, so they are not additive with process-inclusive values. Voluntary
 context switches and thread off-CPU time are the cheap, always-on blocked-time signal.
+
+### Sampling configuration
+
+```toml
+[runtime]
+operation_progress_interval_seconds = 60  # OPERATION_PROGRESS cadence; 0 disables progress
+operation_sample_interval_seconds = 1     # thread-state sampling cadence; 0 disables sampling
+```
+
+Values must be finite, non-negative numbers of seconds. With both at `0` no span is registered with
+the sampler. The settings are part of the run's frozen configuration.
 
 ### Thread states and fsync timing
 
@@ -134,8 +147,9 @@ thread_states = {"samples": n, "R": n, "S": n, "D": n, "other": n,
                  "top_wait_channels": [{"symbol": "jbd2_log_wait_commit", "samples": n}, ...]}
 ```
 
-At most five wait channels are retained. A `wchan` symbol that does not match
-`[A-Za-z0-9_.]{1,64}` is tallied as `other`. Estimated blocked (uninterruptible) time is
+At most five wait channels are reported. A `wchan` symbol that does not match
+`[A-Za-z0-9_.]{1,64}` is recorded under the wait-channel symbol `other`, as is any new symbol once a
+span has tracked 64 distinct symbols. Estimated blocked (uninterruptible) time is
 `D / samples × wall`; it is a sampled estimate, not kernel-accounted delay. Spans shorter than one
 sample interval report `samples: 0`. Kernel delay accounting (`delayacct`) is deliberately not used:
 it is disabled by default and does not cover journal-commit waits. Nothing here requires root.
@@ -147,24 +161,41 @@ not counted; they appear as off-CPU time in the `index.sqlite_*` phases and as D
 
 ### `OPERATION_PROGRESS`
 
-Every progress interval (default 60 s; `0` disables) the sampler writes `OPERATION_PROGRESS` for each
+Every progress interval the sampler writes `OPERATION_PROGRESS` for each
 registered span open for at least one interval. It uses the span's `EventLog`, so the last record is
 fsynced in `pipeline.jsonl` and survives SIGKILL of the worker as the span's last known state. The
-record carries the span correlation, `progress_sequence`, `elapsed_ms`, and cumulative `resources`
-(same shape as above), `work`, `expected`, `phases` and `thread_states`, plus the instantaneous
+record carries the span correlation, `progress_sequence`, `progress_interval_ms`, `elapsed_ms`, and
+cumulative `resources`, `work`, `expected`, `phases` and `thread_states`, plus the instantaneous
 `thread_state_now` and `wait_channel_now`.
+
+Progress `resources` have the same fields, but `measurement_source` is
+`os.times/proc-self-io/proc-self-task`: the sampler cannot call `getrusage` for another thread, so
+thread CPU, context switches and major faults come from `/proc/self/task/<tid>`, and block
+input/output operations are derived from that thread's I/O bytes in 512-byte units. Where those files
+are unavailable the thread values are null with `rusage_unavailable_reason:
+"proc_thread_unavailable"`. Do not compare progress and completion thread values as if they used
+one source.
 
 `OPERATION_PROGRESS` deliberately uses `elapsed_ms`, not `duration_ms`, carries no
 `terminal_status` or `disposition`, and nests counts under `work`. It therefore does not affect
 lifecycle pairing or gaps, duration totals (`duration_ms_by_event`, `operations`),
-`throughput_totals`, `dispositions`, `completed_work_count`, or the OpenVEX metrics filter.
+`throughput_totals`, `dispositions`, `completed_work_count`, or the OpenVEX metrics filter. Repeated
+progress records for one span are distinguished by `progress_sequence`, not deduplicated as one.
 
-At most 32 active spans are sampled. A span registered beyond that cap is not sampled and its
-completion record carries `progress_unavailable_reason: "active_span_limit"`.
-`OPERATION_COMPLETED` adds `progress_count` and `progress_write_failures`. Sampler exceptions are
-swallowed and counted, never raised into the job; the registry is reset in forked children, and
-the thread exits when no span is registered. `EventLog.write` serializes appends with a
-process-local lock so sampler and job-thread records cannot interleave.
+`OPERATION_COMPLETED` adds `progress_count`, `progress_write_failures`, `sampler_errors` and
+`progress_unavailable_reason`. The reason is null when progress was possible, otherwise one of:
+
+| Reason | Meaning |
+| --- | --- |
+| `active_span_limit` | 32 spans were already sampled; this span was not sampled. |
+| `sampling_disabled` | Both intervals are `0`. |
+| `progress_disabled` | Progress interval is `0`; thread-state sampling may still run. |
+| `sampler_unavailable` | The sampler thread could not start. |
+
+Sampler exceptions are swallowed and counted in `sampler_errors`, never raised into the job; the
+registry is reset in forked children, and the thread exits when no span is registered.
+`EventLog.write` serializes appends with a process-local lock so sampler and job-thread records
+cannot interleave.
 
 ### Phases, counters and expected totals
 
@@ -179,7 +210,7 @@ phase inside it, so phase times are not additive. The initial vocabulary is:
 | --- | --- |
 | `index.prepare` | `IndexBuilder.build` entity/relation deduplication |
 | `index.sqlite_write` | DDL, inserts and commit |
-| `index.sqlite_vacuum` | SQLite vacuum |
+| `index.sqlite_vacuum` | SQLite vacuum (may go unused while `IndexBuilder.build` is restructured; an absent phase is not zero time) |
 | `index.digest` | shard SHA-256 |
 | `index.publish` | private publication and reference verification |
 | `index.link` | `os.link` of the published shard |
@@ -216,15 +247,21 @@ into one LaTeX/PDF rollup per run.
 
 Operation spans feed three views. `resource_spans` holds one row per `OPERATION_COMPLETED`, now
 including `phases`, `expected`, `thread_states` and `progress_count`. `operation_progress` (at most
-200 rows) lists spans with `OPERATION_STARTED` and no `OPERATION_COMPLETED`, each with its last
-progress snapshot (`started_at`, `last_progress_at`, `elapsed_ms`, `work`, `expected`, per-counter
-`completion_ratio`, `phases`, `thread_states`) and a `state`. The state is `running`, or `lost` when the
-attempt is closed or the last progress is older than three progress intervals relative to the newest
-run event. A span with no progress record has `last_progress_at: null`. `operation_hotspots` ranks
-the top 20 completed spans by `duration_ms`, with `stage`, `unit_id`, `duration_ms`,
-`thread_off_cpu_ratio`, `d_state_ratio`, `top_wait_channel`, `dominant_phase` (largest phase
-`wall_ms`) and per-item rates (for example `duration_ms` per `artifacts_processed`, `fsync_calls` per
-shard) when those counters exist.
+200 rows, ordered by `started_at`) lists spans with `OPERATION_STARTED` and no
+`OPERATION_COMPLETED`. Each row carries the correlation (`run_id`, `job_id`, `attempt_id`,
+`span_id`, `parent_span_id`, `stage`, `unit_id`, `scope_id`), `started_at`, and the last progress
+snapshot (`last_progress_at`, `progress_sequence`, `elapsed_ms`, `work`, `expected`, per-counter
+`completion_ratio`, `phases`, `thread_states`, `thread_state_now`, `wait_channel_now`), plus a
+`state`. The state is `running`, or `lost` when a job terminal closed the attempt or the last
+progress is older than three times that record's `progress_interval_ms` relative to the newest run
+event. A span with no progress record has `last_progress_at: null` and can become `lost` only through
+its closed attempt. `operation_hotspots` ranks the top 20 completed spans by `duration_ms`, with
+`job_id`, `attempt_id`, `span_id`, `stage`, `unit_id`, `terminal_status`, `duration_ms`,
+`thread_off_cpu_ratio`, `d_state_ratio`, `top_wait_channel`, `dominant_phase` and
+`dominant_phase_wall_ms` (the phase with the largest `wall_ms`), and the per-item rates
+`ms_per_artifact` (`duration_ms / artifacts_processed`) and `fsync_calls_per_shard`
+(`fsync_calls / (shards_built + shards_reused)`). A ratio or rate is null when its inputs were not
+recorded or its denominator is zero.
 Operational diagnosis is described in
 [metrics operations](../operations/metrics.md#diagnosing-a-slow-or-stuck-step).
 

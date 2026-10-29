@@ -126,21 +126,38 @@ process-inclusive values across overlapping spans. A null value with an `*_unava
 not measured; it is not zero.
 
 `operation_progress` (at most 200 rows) lists spans that started and have not completed, with their
-last progress snapshot: `started_at`, `last_progress_at`, `elapsed_ms`, cumulative `work`, `expected`,
-`completion_ratio` per expected counter, `phases` and `thread_states`. `state` is `running`, or `lost`
-when the attempt has closed or the last progress is older than three progress intervals relative to
-the newest run event. A `lost` span's last snapshot is its last known state, not a completion.
-`last_progress_at: null` means no progress record was written (the span was younger than one
-progress interval, progress was disabled, or the span exceeded the 32-span sampling cap).
+correlation (`run_id`, `job_id`, `attempt_id`, `span_id`, `parent_span_id`, `stage`, `unit_id`,
+`scope_id`) and last progress snapshot: `started_at`, `last_progress_at`, `progress_sequence`,
+`elapsed_ms`, cumulative `work`, `expected`, `completion_ratio` per expected counter, `phases`,
+`thread_states`, `thread_state_now` and `wait_channel_now`. `state` is `running`, or `lost` when the
+attempt has closed or the last progress is older than three progress intervals relative to the newest
+run event. A `lost` span's last snapshot is its last known state, not a completion.
+`last_progress_at: null` means no progress record was written: the span was younger than one
+progress interval, or the completion-side `progress_unavailable_reason` applies (`progress_disabled`,
+`sampling_disabled`, `active_span_limit` or `sampler_unavailable`).
 
-`operation_hotspots` ranks the 20 longest completed spans by `duration_ms` with `stage`, `unit_id`,
-`thread_off_cpu_ratio`, `d_state_ratio` (`D / samples`), `top_wait_channel`, `dominant_phase` (largest
-phase `wall_ms`) and per-item rates where their counters exist (`duration_ms` per
-`artifacts_processed`, `fsync_calls` per shard).
+`operation_hotspots` ranks the 20 longest completed spans by `duration_ms` with `job_id`,
+`attempt_id`, `span_id`, `stage`, `unit_id`, `terminal_status`, `thread_off_cpu_ratio`,
+`d_state_ratio` (`D / samples`), `top_wait_channel`, `dominant_phase` and `dominant_phase_wall_ms`
+(the phase with the largest `wall_ms`), `ms_per_artifact` (`duration_ms / artifacts_processed`) and
+`fsync_calls_per_shard` (`fsync_calls / (shards_built + shards_reused)`). Ratios and rates are null
+when their inputs were not recorded or the denominator is zero.
+
+The cadences are configured in the frozen run configuration:
+
+```toml
+[runtime]
+operation_progress_interval_seconds = 60  # 0 disables OPERATION_PROGRESS
+operation_sample_interval_seconds = 1     # 0 disables thread-state sampling
+```
+
+Shorter intervals give finer progress and blocked-time estimates at higher overhead; the
+performance acceptance comparison measures that overhead at 1 s and 0.1 s.
 
 Progress records are excluded from lifecycle pairing, duration totals, `throughput_totals`,
 `dispositions` and `completed_work_count`, so they never inflate those figures. The
-[telemetry report](telemetry-report.md) shows running/lost operations and hotspots.
+[telemetry report](telemetry-report.md) shows running/lost operations in its "Operations in
+progress" box and the ranking in its "Operation hotspots" box.
 
 ## Diagnosing a slow or stuck step
 
@@ -161,11 +178,13 @@ first with `appsec-review metrics --run-id <id>`; it is safe while the run is ac
    names the kernel function, for example `jbd2_log_wait_commit` (ext4 journal commit, typically
    fsync-driven). A high `S` ratio points to locks, sleeps or child processes instead.
 4. **Which phase?** In `phases`, the phase with the largest `wall_ms`, and how much of it is
-   `off_cpu_ms`, locates the cost: `index.sqlite_write` and `index.sqlite_vacuum` include
+   `off_cpu_ms`, locates the cost (`dominant_phase` and `dominant_phase_wall_ms` in a hotspot row):
+   `index.sqlite_write` (and `index.sqlite_vacuum`, where still used) includes
    SQLite-internal fsyncs, `storage.fsync` covers explicit storage fsyncs, and `index.lock_wait`
    is shard lock contention. Remember nested phases are inclusive.
 5. **Per-item cost.** Compare `fsync_calls`, `write_syscalls`, `shards_built`/`shards_reused` and
-   `invocations_scanned` with `artifacts_processed`. A per-item fsync or an
+   `invocations_scanned` with `artifacts_processed`; a hotspot row gives `ms_per_artifact` and
+   `fsync_calls_per_shard` directly. A per-item fsync or an
    artifacts × invocations scan shows up as a rate that grows with the input.
 
 Example: in run `2026-10-29-0004` the artifact-indexing relationships step took 45 minutes. Its

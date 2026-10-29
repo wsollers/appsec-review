@@ -40,10 +40,13 @@ hash is labelled *metrics summary sha256* (`unavailable` when the summary was re
 - **Where the time went** — a bar chart of wall span per job (up to 16, from the summary's
   `job_family_wall_span_ms`, else from event-log spans); the critical-path candidate and its share
   of wall time; wall versus summed task time; queue delays; the slowest operations by p95.
-- **Operations in progress and hotspots** — `operation_progress` rows with their `running` or
-  `lost` state, last progress time, elapsed time and completion ratio, and the
-  `operation_hotspots` ranking with off-CPU and D-state ratios, top wait channel and dominant
-  phase. See [diagnosing a slow or stuck step](metrics.md#diagnosing-a-slow-or-stuck-step).
+- **Operations in progress** and **Operation hotspots** — placed after the slowest operations in
+  "Where the time went". The first lists `operation_progress` rows, lost spans first, with state,
+  elapsed time, last heartbeat, progress against expected totals, and the current thread state and
+  wait channel; it is a gap box when any span is `lost`. The second lists `operation_hotspots` with
+  duration, off-CPU and D-state ratios, top wait channel, dominant phase and per-item rates. Each is a
+  gap box saying the summary predates it when the section is absent (a `/5` summary). See
+  [diagnosing a slow or stuck step](metrics.md#diagnosing-a-slow-or-stuck-step).
 - **Run-wide usage** — model usage by model and role, tool calls by tool, project image builds and
   finding-lifecycle transitions. A call counts as failed unless its `terminal_status` (or, for a
   tool, its `disposition`) is `SUCCEEDED`, `COMPLETED` or `ACCEPTED`.

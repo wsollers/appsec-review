@@ -116,6 +116,8 @@ invocation it examines, which exposes the artifacts × invocations scan. Shard b
 `shards_reused`. Phases cover the shard build (`index.prepare`, `index.sqlite_write`,
 `index.sqlite_vacuum`, `index.digest`, `index.publish`, `index.link`, `index.custody_bind`), shard
 lock waits (`index.lock_wait`) and reuse verification (`index.reuse_verify`), plus `storage.fsync`
-and `storage.copy` with `fsync_calls`. A long unit writes `OPERATION_PROGRESS` with these counters
+and `storage.copy` with `fsync_calls`. `index.sqlite_vacuum` stays in the vocabulary but may go
+unused while `IndexBuilder.build` is restructured; an absent phase is not zero time. A long unit
+writes `OPERATION_PROGRESS` with these counters
 while it runs. To investigate a slow unit, follow
 [diagnosing a slow or stuck step](metrics.md#diagnosing-a-slow-or-stuck-step).

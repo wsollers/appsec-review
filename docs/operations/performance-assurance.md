@@ -453,6 +453,12 @@ threshold. Their designed budget is one `getrusage` and one thread-clock read pe
 two clock reads per phase, at most 32 × 2 small `/proc` reads per second for sampling and at most
 one progress record per span per minute. That budget is a design bound, not a measured result;
 the earlier 4.290% comparison below predates this instrumentation and has not been remeasured.
+The performance acceptance comparison accelerates the cadences to a 1.0 s progress interval and a
+0.1 s sample interval (from the 60 s / 1 s defaults) so heartbeats and sampling run inside its
+few-second workload, and records them as `sampling_intervals_seconds` in
+`telemetry-comparison.json`. It also checks the run-metrics/6 `operation_progress`,
+`operation_hotspots` and span `phases`/`expected`/`thread_states`/`progress_count` shapes, and that
+the sections are empty when the instrumentation is disabled.
 `resource_admissions` retains per-lease queue delay and scope/profile for admission and timeout;
 an action that times out before admission has no execution span. Missing legacy fields stay null.
 Shared-object streaming publication also records its actual copied byte/object counts. These are
