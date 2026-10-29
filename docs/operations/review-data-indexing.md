@@ -193,8 +193,23 @@ The classification of the examined layouts is:
 | Review cells and judge/verifier sidecars | `review/cells.py`, inference `teams.py`; reuse, `stages.verify_receipts`, reporting cell readers | **(b) Closed for new publications**: original producing claim/invocation, immutable numbered results/checks and per-attempt reuse receipts. Legacy origin remains explicitly unknown. |
 | Shared v3 packages | `review_packages.publish_review_packages`; `verify_review_packages`, document-issue analysis | **(b)**: immutable exact bytes, input validation, computed-versus-reused receipts. |
 | Guidance bundles | `guidance.compose.pin_bundle`; target-plan, project-build, post-build, dependency and PoC guidance helpers | **(b)**: no-overwrite publication before inference, model-sensitive identities where model metadata is stored, attempt receipts. |
-| Non-derived SQLite and OWASP indexes | `retrieval.index.IndexBuilder`, `owasp_workbench.indexes`; manifest publication/verification and `WorkbenchIndex` | **(b)**: private build plus no-replace publication retained; physical dedupe is not a cache hit; consumers pin the selected original receipt. |
+| Non-derived SQLite and OWASP indexes | `retrieval.index.IndexBuilder`, `owasp_workbench.indexes`; manifest publication/verification and `WorkbenchIndex` | **(b)**: private build adopted by hard link into the object store (see [index shard durability](#index-shard-durability)); no-replace publication retained; physical dedupe is not a cache hit; consumers pin the selected original receipt. |
 | Public reference snapshots | Feed `publish_snapshot`, NVD `_publish`; `verify_current`, NVD incremental/verification paths, cve-bin-tool NVD resolver, indexing feed pins/products, review references and scanner feed readers | **(b)** for new claimed publications: independent immutable producer records and per-attempt consumption receipts. Legacy/imported origin remains explicitly unknown. |
+
+#### Index shard durability
+
+Every `IndexBuilder` shard is written in a private temporary file beside its final path, with
+`journal_mode=OFF`, `synchronous=OFF`, one transaction and no `VACUUM`. That file is not evidence
+while it is being written, so the builder establishes durability and integrity once, at
+publication: one `fsync`, one SHA-256 over the finished bytes, then `adopt_private_file`
+hard-links (not copies) the file into `data/shared/objects/<sha256>`, falling back to a copy only
+across filesystems. The named path under `data/indices/` is then linked atomically and without
+replacement. Custody registration is unchanged: the `index-shard` named binding, the attempt
+receipt and the request lookup entry. `build()` returns only after the shard is durable, hashed,
+linked and registered; publication is never deferred to a background task. Identical inputs
+produce byte-identical shards, so matching existing bytes are reused and a mismatching named path
+is a conflict. The validation digest cache recognizes hard-link aliases of one object, so a
+published shard is hashed about once rather than once per path.
 
 Job execution binds the current attempt explicitly at its validator/handler/finalizer boundary.
 The participating parallel producer pools propagate this context; no filesystem-wide write
