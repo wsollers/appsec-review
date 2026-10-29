@@ -551,12 +551,9 @@ def _import_predecessor_databases(unit: UnitContext, scopes: Sequence[CodeQLScop
                             file_limit=settings.database_file_limit, bytes_limit=settings.database_bytes_limit)
 
 
-def _database_one(unit: UnitContext, scope: CodeQLScope,
-                  receipts: Mapping[str, Mapping[str, Any]]) -> Mapping[str, Any]:
-    from uuid import uuid4
-    invocation = uuid4().hex
-    settings = _settings(unit)
-    language = settings.languages[scope.language]
+def _scope_runtime_environment(scope: CodeQLScope, receipts: Mapping[str, Mapping[str, Any]],
+                               settings: CodeQLAnalysisSettings) -> tuple[str, str, str]:
+    """Return the (build image tag, build image id, runtime user) a scope's database runs in."""
     receipt = receipts.get(scope.build_unit_id or "")
     if scope.build_unit_id and receipt is None:
         raise FrameworkIntegrityError("CodeQL planned build unit disappeared")
@@ -566,9 +563,66 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
     })
     if not isinstance(image_value, Mapping):
         raise FrameworkIntegrityError("CodeQL environment image identity is unavailable")
+    return (str(image_value["image_tag"]), str(image_value["image_id"]),
+            str(image_value.get("user") or settings.runtime_user))
+
+
+_PREFLIGHT_ENVIRONMENT_LIMIT = 32
+_PREFLIGHT_SCOPE_LIMIT = 16
+
+
+def _preflight_runtime_environments(unit: UnitContext, scopes: Sequence[CodeQLScope],
+                                    receipts: Mapping[str, Mapping[str, Any]],
+                                    settings: CodeQLAnalysisSettings) -> None:
+    """Reject every unresolvable runtime declaration before any scope is admitted."""
+    if not settings.preinstalled_runtimes:
+        # Without declarations every environment takes the derived path; nothing can conflict.
+        return
+    environments: dict[tuple[str, str], list[str]] = {}
+    for scope in scopes:
+        _tag, build_image_id, runtime_user = _scope_runtime_environment(scope, receipts, settings)
+        environments.setdefault((build_image_id, runtime_user), []).append(scope.scope_id)
+    resolver = CodeQLImageResolver(
+        repository_root=unit.job.repository_root, metadata_root=unit.job.metadata_root,
+        settings=settings, timeout_seconds=settings.database_timeout_seconds,
+        output_bytes=settings.output_bytes, releases=_policy(unit).releases)
+    failures = []
+    for (build_image_id, runtime_user), scope_ids in environments.items():
+        try:
+            resolver.declared_identity(build_image_id=build_image_id, runtime_user=runtime_user)
+        except ValueError as exc:
+            try:
+                effective_user = application_runtime_user(runtime_user)
+            except ValueError:
+                effective_user = runtime_user
+            failures.append((build_image_id, runtime_user, effective_user, scope_ids, str(exc)))
+    if not failures:
+        return
+    entries = []
+    for image_id, runtime_user, effective_user, scope_ids, reason in failures[:_PREFLIGHT_ENVIRONMENT_LIMIT]:
+        shown = ", ".join(scope_ids[:_PREFLIGHT_SCOPE_LIMIT])
+        if len(scope_ids) > _PREFLIGHT_SCOPE_LIMIT:
+            shown += f", ... {len(scope_ids) - _PREFLIGHT_SCOPE_LIMIT} more"
+        entries.append(f"image_id={image_id} runtime_user={runtime_user} "
+                       f"effective_user={effective_user} scopes=[{shown}]: {reason}")
+    if len(failures) > _PREFLIGHT_ENVIRONMENT_LIMIT:
+        entries.append(f"... {len(failures) - _PREFLIGHT_ENVIRONMENT_LIMIT} more environments")
+    raise ValueError(
+        f"CodeQL runtime preflight rejected {len(failures)} of {len(environments)} environment(s) "
+        f"(preinstalled_undeclared={settings.preinstalled_undeclared}): " + "; ".join(entries))
+
+
+def _database_one(unit: UnitContext, scope: CodeQLScope,
+                  receipts: Mapping[str, Mapping[str, Any]]) -> Mapping[str, Any]:
+    from uuid import uuid4
+    invocation = uuid4().hex
+    settings = _settings(unit)
+    language = settings.languages[scope.language]
+    receipt = receipts.get(scope.build_unit_id or "")
+    build_image_tag, build_image_id, runtime_user = _scope_runtime_environment(scope, receipts, settings)
     image, _stdout, _stderr = _resolve_image(unit,
-        build_image_tag=str(image_value["image_tag"]), build_image_id=str(image_value["image_id"]),
-        runtime_user=str(image_value.get("user") or settings.runtime_user), scope_id=scope.scope_id)
+        build_image_tag=build_image_tag, build_image_id=build_image_id,
+        runtime_user=runtime_user, scope_id=scope.scope_id)
     root = unit.job.run_root / "data" / "codeql" / "scopes" / scope.scope_id
     root.mkdir(parents=True, exist_ok=True)
     image_artifact = _json_artifact(unit.job.run_root, root / "image.json", asdict(image))
@@ -1537,6 +1591,7 @@ def build_job() -> Job:
 
     def execute_scopes(unit: UnitContext) -> Mapping[str, Any]:
         plan_value, receipts, settings = _plan_from(unit), _receipt_map(unit), _settings(unit)
+        _preflight_runtime_environments(unit, plan_value.scopes, receipts, settings)
         imported = _import_predecessor_databases(unit, plan_value.scopes, receipts, settings)
         budget = unit.job.review_policy.resources
         admission = ResourceAdmission(unit.job.metadata_root, budget)
