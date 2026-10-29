@@ -91,6 +91,10 @@ def require_builder() -> BuilderOwner:
     return owner
 
 
+def builder_configured() -> bool:
+    return _OWNER.get() is not None
+
+
 def builder_namespace() -> str | None:
     owner = _OWNER.get()
     return owner.namespace if owner is not None else None
@@ -316,7 +320,8 @@ class ImageBuildSession:
 
 @contextmanager
 def bounded_image_preparation(*, identity: str, tag: str, timeout_seconds: int):
-    if not review_resources_active():
+    from appsec_review.config.native_dagster import native_execution_requested
+    if not review_resources_active() or (not builder_configured() and not native_execution_requested()):
         yield None
         return
     owner = require_builder()

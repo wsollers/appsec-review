@@ -220,8 +220,9 @@ def test_mixed_codeql_scanner_build_processes_share_one_budget(tmp_path):
 
 
 @pytest.mark.parametrize("backend", ("project", "codeql"))
-def test_unbounded_derived_image_build_is_named_gap_before_daemon_mutation(tmp_path, backend):
+def test_unbounded_derived_image_build_is_named_gap_before_daemon_mutation(tmp_path, backend, monkeypatch):
     from appsec_review.codeql.runtime import CodeQLImageResolver
+    monkeypatch.setenv("APPSEC_NATIVE_REQUESTED", "1")
     target = tmp_path / "target"
     target.mkdir()
     calls = []
@@ -270,3 +271,31 @@ def test_review_admission_can_use_declared_prepared_image_without_building(tmp_p
         baseline = resolver.resolve({"source_dir": ".", "system_packages": []}, profile)[0]
         assert not baseline.customized and not baseline.reused
     assert len(builds) == 1
+
+
+def test_plain_docker_review_builds_derived_images_without_native_builder(tmp_path, monkeypatch):
+    from appsec_review.container_runtime.image_builder import bounded_image_preparation
+    from appsec_review.runtime.resources import require_bounded_image_builder
+    for name in [name for name in os.environ if name.startswith("APPSEC_NATIVE_")]:
+        monkeypatch.delenv(name)
+    with review_resource_scope(tmp_path / "metadata", ResourceBudget(), EventLog(tmp_path / "events.jsonl")):
+        require_bounded_image_builder()
+        with bounded_image_preparation(identity="fixture", tag="fixture:tag", timeout_seconds=5) as builder:
+            assert builder is None
+
+
+@pytest.mark.parametrize("native", (False, True))
+def test_plain_docker_build_container_is_uncapped(tmp_path, monkeypatch, native):
+    for name in [name for name in os.environ if name.startswith("APPSEC_NATIVE_")]:
+        monkeypatch.delenv(name)
+    if native:
+        monkeypatch.setenv("APPSEC_NATIVE_REQUESTED", "1")
+    executor = BuildContainerExecutor(BuildProfile("native", "base", DIGEST, "10001:10001"),
+                                      timeout_seconds=5, output_bytes=1024,
+                                      runner=lambda argv, timeout: (0, b"", b"", False))
+    monkeypatch.setattr(executor, "_bind_source", lambda path: path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _root, command = executor._prepare(workspace=workspace, working_directory=".", environment={})
+    assert ("--cpus" in command and "--memory" in command) is native
+    assert "--pids-limit" in command

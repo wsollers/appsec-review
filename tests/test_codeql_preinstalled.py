@@ -358,7 +358,8 @@ def test_application_runner_does_not_expand_native_mount_authority(tmp_path, mon
     assert not docker.calls
 
 
-def test_no_declaration_keeps_required_bounded_preparation(tmp_path):
+def test_no_declaration_keeps_required_bounded_preparation(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPSEC_NATIVE_REQUESTED", "1")
     value = settings_value()
     value["preinstalled_runtimes"] = []
     docker = FakeDocker()

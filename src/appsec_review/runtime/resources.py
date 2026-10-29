@@ -71,9 +71,15 @@ class ImagePreparationUnavailable(RuntimeError):
 
 
 def require_bounded_image_builder() -> None:
+    """Require the approved builder when one is configured or native execution is requested.
+
+    Without either, derived images are built with the ordinary local ``docker buildx`` path.
+    """
     if review_resources_active():
-        from appsec_review.container_runtime.image_builder import require_builder
-        require_builder()
+        from appsec_review.config.native_dagster import native_execution_requested
+        from appsec_review.container_runtime.image_builder import builder_configured, require_builder
+        if builder_configured() or native_execution_requested():
+            require_builder()
 
 
 @contextmanager
