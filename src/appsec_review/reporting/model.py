@@ -127,7 +127,52 @@ class PageBreak:
     pass
 
 
-Block = Union[Heading, Box, Stats, Note, Legend, PageBreak]
+@dataclass(frozen=True, slots=True)
+class Bar:
+    label: str
+    value: float                       # non-negative magnitude; the renderer scales to the largest bar
+    display: str                       # preformatted value text shown beside the bar
+    tone: str = "neutral"              # a verdict token or "neutral"
+
+
+@dataclass(frozen=True, slots=True)
+class BarChart:
+    """Horizontal bars, one per row, in the given order."""
+
+    title: str
+    unit: str
+    bars: tuple[Bar, ...]
+    caption: str = ""
+    omitted: Truncation | None = None  # bars not shown
+
+
+@dataclass(frozen=True, slots=True)
+class Segment:
+    start_ms: int                      # offset from the timeline origin
+    end_ms: int                        # >= start_ms
+    tone: str = "neutral"              # a verdict token or "neutral"
+    label: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Lane:
+    label: str
+    segments: tuple[Segment, ...]
+    annotation: str = ""               # preformatted text shown at the right of the lane
+
+
+@dataclass(frozen=True, slots=True)
+class Timeline:
+    """A Gantt-style chart: one lane per row, segments positioned on a shared 0..total_ms axis."""
+
+    title: str
+    total_ms: int
+    lanes: tuple[Lane, ...]
+    caption: str = ""
+    omitted: Truncation | None = None  # lanes not shown
+
+
+Block = Union[Heading, Box, Stats, Note, Legend, PageBreak, BarChart, Timeline]
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,3 +187,4 @@ class Document:
     blocks: tuple[Block, ...]
     named_gaps: tuple[str, ...] = ()  # artifacts the loader could not read, by name
     renderer: str = "appsec-review-report/1"
+    head_label: str = "ledger head"   # what ``ledger_head`` identifies, shown on the cover and footer
