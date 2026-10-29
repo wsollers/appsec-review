@@ -305,7 +305,9 @@ and prepared configuration do not establish those operational properties.
 ## Integration and acceptance tests
 
 `tests/integration/test_native_broker_mounts.py` (run-root subdirectory bind mount; broker
-rejection of a `,` subpath and of a symlinked subpath) and `tests/acceptance/test_native_tiny_build.py`
+rejection of a `,` subpath and of a symlinked subpath), `tests/integration/test_native_image_sources_live.py`
+(each contract `image_sources` pin inspects as the pin and runs an allowlisted command created with
+the pin; skipped when the contract maps no pins) and `tests/acceptance/test_native_tiny_build.py`
 (the frozen `tiny-build` command compiles and runs `hello.c` under strace process-tree capture)
 drive a real commissioned broker through the public `NativeClient`. They never commission, start
 or reconfigure anything, and skip with the unmet precondition named unless:
@@ -327,5 +329,6 @@ systemd-run --wait --pipe --collect --slice=appsecreview-services-appsecf370.sli
   --property=WorkingDirectory=/home/wsollers/projects/appsec-review-native-broker \
   --setenv=APPSEC_NATIVE_INTEGRATION=1 --setenv=APPSEC_NATIVE_ACCEPTANCE=1 -- \
   /home/wsollers/projects/appsec-review-native-broker/.venv/bin/python -m pytest -q -p no:cacheprovider -rs --basetemp=test/tmp/native-live \
-  tests/integration/test_native_broker_mounts.py tests/acceptance/test_native_tiny_build.py
+  tests/integration/test_native_broker_mounts.py tests/integration/test_native_image_sources_live.py \
+  tests/acceptance/test_native_tiny_build.py
 ```

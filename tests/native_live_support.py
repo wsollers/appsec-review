@@ -115,7 +115,7 @@ class NativeSession:
 
     def run_argv(self, name: str, executable: str, arguments: Sequence[str], *, source: Path,
                  cpu: int = 2, memory_mb: int = 1024,
-                 environment: Sequence[tuple[str, str]] = ()) -> list[str]:
+                 environment: Sequence[tuple[str, str]] = (), image: str | None = None) -> list[str]:
         argv = ["docker", "run", "--rm", "--name", name, "--network", "none",
                 "--read-only", "--user", f"{self.contract.uid}:{self.contract.gid}", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--cpus", str(cpu), "--memory", f"{memory_mb}m",
@@ -124,7 +124,7 @@ class NativeSession:
                 "--entrypoint", executable]
         for key, value in environment:
             argv.extend(("--env", f"{key}={value}"))
-        argv.extend((self.contract.image_ids[0], *arguments))
+        argv.extend((image or self.contract.image_ids[0], *arguments))
         return argv
 
     def remove(self, name: str) -> None:
