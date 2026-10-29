@@ -6,9 +6,10 @@ For revision-specific measurements and remaining work, see the
 [implementation record](../reviews/integration-live-test-implementation.md).
 These profiles are separate from the existing stepwise corpus and deployed-review acceptance tools.
 
-**Current status: not green.** Producer detachment is implemented and the complete CI chain
-reaches a passing private oracle consumer, but review still has one stage deadline failure
-and two blocked consumers; signals passed only with two opted-in workers. See
+**Current status: not finally green.** Windows core review passed 13/13 and completes its
+scoped Windows verification todo. Two two-worker quick warm runs passed 38/38; warm 3,
+exhaustive selection and full portable process verification after its helper-budget fix
+remain pending. See
 [current measured status](#current-staged-status-not-green), not historical profile passes,
 before assessing coverage or budgets.
 
@@ -93,12 +94,16 @@ provider, discover credentials or authorize deployment/native access.
   (`-Workers 2`) is the maximum; it schedules isolated case subprocesses, not `pytest -n auto`.
 - An ordinary case has a 60-second hard cap. Explicit obligation exceptions are 15 seconds for
   loopback feed transport, 30 seconds for the helper CLI, and 120 seconds for declared
-  signals/dependency, controls, review/oracle, consumer and process-startup/replay obligations.
+  signals/dependency, controls, review/oracle, consumer and tagged-worker startup/resume obligations.
   `process` has a 120-second profile case ceiling to account for current-main startup and
   cleanup; obligations still marked 60 seconds retain that cap. Profile-level 120-second
-  maxima do not silently grant every case that allowance.
-- `quick` targets less than ten minutes, with a hard twelve-minute suite ceiling. This is a
-  design target pending final integrated public-driver calibration, not an achieved benchmark.
+  maxima do not silently grant every case that allowance. The lifecycle helper accepts only
+  explicit 60/120-second budgets: tagged workers use 120, other helper cases retain 60.
+  Its five-second internal reserve/receipt now reflect the selected cap; the outer existing
+  exception and 480-second process aggregate are unchanged, not globally increased.
+- `quick` targets less than ten minutes, with a hard twelve-minute suite ceiling. Two measured
+  two-worker warm runs meet the target; warm 3 and final calibration remain pending, and this
+  is not default-serial proof.
 - `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` can only lower declared
   ceilings. Three seconds are reserved **inside** a supervised process deadline for cleanup.
   Interpreter/plugin startup, fixtures, custody prechecks/copy/checkpoint/seal, case execution
@@ -150,8 +155,8 @@ The receipt schema is `appsec-review/acceptance-producer-detachment/1`, with
 `acceptance.stage.producer_publication` spans. The guard permits real mutable producer links,
 not sealed/private-reader or immutable-input links. Only verified anonymous stdio PIPE
 wrapping is distinguished from filesystem descriptor mutations: unresolved/off-root/immutable
-filesystem writes still fail. The Windows completion todo remains open until the complete
-timed review passes; partial Windows detachment/CI-reader proof is not that completion gate.
+filesystem writes still fail. The timed Windows core-review pass completes its scoped
+verification todo, not Linux/actual-WSL coverage or general Windows failure reliability.
 
 ## Artifacts and telemetry
 
@@ -288,40 +293,46 @@ assertion was reached. This historical failure was not accepted report proof; in
 validated/completed job events cannot substitute for accepted final output.
 A separate direct matrix check without the audit plugin also timed out after the report
 fixture completed and oracle evaluation began. This is not merely guard overhead.
-The current staged core CI oracle now passes with separately budgeted authentic producers.
-That does not establish the full `review-exhaustive` matrix or a green `review`/`quick`;
+The current staged core review now passes with separately budgeted authentic producers.
+That does not establish the full `review-exhaustive` matrix or final quick calibration;
 splitting assertions alone is not evidence that every fresh public fixture fits.
 
 ## Current staged status: not green
 
-At exact parent `d6042ab9c13e86c8045560bdebc09a68544d272a`:
+The source checkpoint is exact parent `a4ce5459ab51727cb3793c0425894a7f56fc21dc`, including
+custody optimization `881b8709` and helper-budget correction `85d39172`.
 
-- Public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **failed** in 530.257 seconds
-  under the 600-second suite cap: 10/13 passed, native-positive PoC timed out, candidate and
-  corruption consumers were correctly blocked. Pytest passed that producer's assertions in
-  54.28 seconds, but its total stage took 120.023 seconds and expired during final sealed-input
-  postcheck; its seal was invalidated. Root:
-  `test/tmp/acceptance/acceptance-a59d77fffc7447658af064fbb8ff67c9/review/`.
-- Native-positive, native-empty and CI review detached 38 files each (114 total) with bytes,
-  modes and bindings preserved. Native-empty's sealed private consumer passed in 56.403
-  seconds. The actual CI prepare -> review -> gate -> report -> sealed private current-report
-  oracle chain completed; its consumer passed in 101.245 seconds with reader-only relocation,
-  fresh telemetry and no accepted hash/path/configuration rewrite.
-- Public `process-windows` passed 1/1 in 17.898 seconds (60-second cap), one worker, at
-  `acceptance-fd7907ac0051437987dbd4a07fc0987c/process-windows/` below `test/tmp/acceptance/`.
-  This is actual PowerShell with a compiled owned WSL shim, **not actual WSL**. Earlier
-  `992058ae` failed in 8.905 seconds on stdin PIPE classification; the source fix is disclosed,
-  not a retry-to-green claim. Combined native Windows validation: 89 passed, one host skip,
-  141.73 seconds.
+- Optimized public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **passed 13/13 in
+  469.729 seconds** under 600, with all individual 60/120-second caps met. Three real review
+  producers detached 114 output files; native candidate, fresh corruption/empty and CI
+  review/gate/report/oracle private consumers naturally passed with no binding rewrites.
+  Cleanup confirmed zero survivors and `production_services_touched` was false. Root:
+  `test/tmp/acceptance/acceptance-13846b2ca1fc4685ae71ac1e43796e44/review/`.
+- The Windows verification todo is **done for that demonstrated scope**, not Linux, actual
+  WSL or general `WinError 5` reliability.
+- Frozen source/environment `a4ce5459`, actual public quick with two workers:
+  warm 1 **passed 38/38 in 559.626 seconds**, root
+  `test/tmp/acceptance/acceptance-59628deb115e419e8edbca858eb536a8/quick/`;
+  warm 2 **passed 38/38 in 551.899 seconds**, root
+  `test/tmp/acceptance/acceptance-8206b2c4d27b4e1990a7dba1cb10ed17/quick/`.
+  Warm 3 was still running at this checkpoint; no third result or final handoff is claimed.
+- At `d6042ab9`, full portable `process` failed twice with 12/13 passing: two workers in
+  191.015 seconds and one worker in 353.493 seconds. Tagged workers hit the helper's inner 55-second execution/
+  60-second receipt cap on fresh resume despite the existing outer 120-second exception.
+  `85d39172` aligns only that helper call to 120; six new units passed in 4.44 seconds.
+  Both quick warm runs pass the actual config/worker/resume obligation, but there is **no
+  new full named portable process pass**. Earlier Windows PIPE failure/fix and staged PoC
+  deadline failure remain in the implementation record rather than disappearing.
 - Other named public passes remain revision-scoped: graphs 22/22 in 57.756 seconds and
   controls 8/8 in 70.770 seconds at `f4a04b29`; consumers 3/3 in 111.330 seconds at `992058ae`;
   signals 3/3 in 145.353 seconds at `58387690`. These used two workers, met case caps and
   confirmed cleanup zero / no production services touched; they are not final-source warm
   proofs or serial-default signals proof.
-- Repeated immutable verification currently hashes the entire mutable tree. Equivalent fresh
-  immutable-subtree-only verification is assigned for optimization, not integrated in `d6042ab9`:
-  no cap change, cross-call cache or omission of whole checkpoint/seal/detachment checks.
-- Windows completion remains open; no full quick, exhaustive or three-warm proof exists.
+- Fresh immutable capture now traverses/hashes the declared union once per scope with full
+  limits and missing/extra/same-size checking; mutable outputs are not rehashed for each
+  immutable check. Whole producer inspection/checkpoint/seal/full source checks remain.
+  Combined validation: 104 passed, four host-facility skips, 235.17 seconds, not full coverage.
+- Third warm, exhaustive selection and full post-fix portable process verification remain open.
   Incoming Linux commissioning units cannot collect on native Windows (`fcntl` absent);
   this is a separate host gap with no workaround. Parent docs/inventory validation had
   6 passes and one failure in 7.18 seconds: two pre-existing missing target README/project-
@@ -333,8 +344,8 @@ At exact parent `d6042ab9c13e86c8045560bdebc09a68544d272a`:
 
 No production runs/services were inspected or mutated. Path/process/metrics isolation is not
 zero CPU/I/O contention. Default workers remain one, maximum two; all existing caps are
-unchanged. Detachment is implemented with real Windows publication and CI-reader proof, but
-the explicit Windows full-review completion todo remains open.
+unchanged. Scoped Windows review verification is complete; it does not waive the remaining
+calibration/profile gates or establish default-serial timing.
 
 ## Historical non-staged profile results
 
@@ -369,15 +380,16 @@ still scoped to each tested revision, not retrospectively to every later merge.
   measurements total 102.625 + 56.574 + 83.919 = 243.118 seconds **before collection**,
   above the declared 240-second serial signals ceiling. This is a projection from separate
   runs, not an actual new integrated failure or a permitted deadline increase.
-- **Overall not green:** quick remains red; the authentic oracle fixture still exhausts the
-  117-second execution allowance before its matrix. Windows `WinError 5`, genuine assessment,
+- **At that historical checkpoint, overall not green:** quick was red; the authentic oracle
+  fixture exhausted the 117-second execution allowance before its matrix. Windows `WinError 5`,
+  genuine assessment,
   and live/provider/native/Linux validation remain gaps. The process/consumers profile passes
   do not make quick, the full oracle matrix, serial signals scheduling or all consumer
   capabilities green.
 
 At that historical checkpoint, planner `81ada94f` had produced only a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
-The producer/reader machinery is now integrated as described above; its remaining stage
-deadline failure is not fixed by that historical proposal or by treating it as a validation-cache
-shortcut or cap waiver. Output detachment is now implemented and partially Windows-proven;
-the final timed review gate remains not green.
+The producer/reader machinery and fresh immutable-union optimization are now integrated;
+the timed Windows core-review gate passes. The historical proposal supplies neither a
+validation-cache shortcut nor a cap waiver. Third-warm/exhaustive/post-fix portable-process
+gates remain, so overall final acceptance is still withheld.
