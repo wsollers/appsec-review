@@ -135,7 +135,7 @@ Every pinned image is verified when it is launched or reused, after its identity
 | `BuildContainerExecutor.resolve`, each build/capture run, and the gitleaks capture scan (`container_runtime/build_executor.py`) | The build profile image, or the recorded pinned base of a derived project image; the gitleaks image. A gitleaks failure redacts the capture and records a named gap. |
 | `ProjectImageResolver.resolve` via `_verify_base` (`container_runtime/project_images.py`) | The pinned base before a project image is derived from it or reused over it. |
 | `CodeQLImageResolver.resolve` (`codeql/runtime.py`) | The licensed CodeQL source image, the environment image (or its recorded pinned base), and a preinstalled runtime image. |
-| cve-bin-tool database build (`jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`) | A pre-existing local `settings.image` (Docker path) or the approved preinstalled image (native path). The image is launched by ID. |
+| cve-bin-tool database build (`jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`) | A pre-existing local `settings.image` (Docker path) or the approved preinstalled image (native path), after checking that it resolves to the optional `settings.image_id` pin. The image is launched by ID. |
 
 A catalog tool launch through `ContainerExecutor.resolve_image` runs in this order. The other call
 sites use the same `EnvelopeImageVerifier` after their own identity checks:
@@ -297,8 +297,9 @@ Run these steps on the review host from the repository checkout, never during a 
    appsec-review signing verify-image <tag> [<tag> ...]
    ```
 
-   `--all-pinned` signs every enabled catalog image and every configured `*image_id` pin whose tag
-   resolves locally to exactly its pin. A mismatched or missing tag fails and is not signed. An
+   `--all-pinned` signs every enabled catalog image and every configured `*image_id` pin of an
+   enabled job or one of its steps whose tag resolves locally to exactly its pin. A mismatched or
+   missing tag fails and is not signed. An
    unpinned catalog image is reported `skipped_unpinned`; sign it explicitly with
    `sign-image REFERENCE`.
 3. **Sign modules for a native release or a manual deployment.** The output must lie outside the
@@ -393,10 +394,13 @@ evidence that they are verified.
   dependencies are imported by the standard finders from the read-only release, and empty
   directories are not part of the manifest.
 - **Derived images are unsigned.** They rely on verified inputs and recorded identities.
-- **The cve-bin-tool image is built locally and unpinned.** On the first Docker-path run, when
-  `settings.image` is absent, the image is built from its context and launched unverified. Later
-  runs find the tag and require a signature, so they fail until the operator runs
-  `sign-image <settings.image>`. `--all-pinned` does not cover the image.
+- **The cve-bin-tool image is pinned only optionally.** Its step settings accept an `image_id` pin.
+  When it is set, the tag must resolve to exactly that ID (otherwise the launch is refused), the
+  step never builds the image, and `sign-image --all-pinned` signs it. The repository configuration
+  leaves it unset until the review host records the ID of the image it built. Unset, on the first
+  Docker-path run with `settings.image` absent, the image is built from its context and launched
+  unverified; later runs verify whatever the tag resolves to, so they fail until the operator runs
+  `sign-image <settings.image>`, and any signed image retagged as `settings.image` is accepted.
 - **Data read through `__file__` paths** instead of `importlib.resources` is covered only by the
   startup tree verification. The deployed trees are read-only or image-pinned.
 - **Code that runs before the hook is installed** is outside module verification. This includes
@@ -423,7 +427,7 @@ have no work scheduled on this branch.
 | Windows host support | In progress on this branch | The code supports a native Windows host (see [Windows hosts](#windows-hosts)). The unit tests and the Dagster signed build and start flow still need validation on Windows with Docker Desktop. |
 | Native release third-party dependency manifest | Done on this branch | `sign-release-lib` / `verify-release-lib` and the root entrypoint verify the native release `lib/` closure outside `appsec_review` (see [Release library](#release-library)). Dagster container dependencies are covered by the image signature. |
 | Compose bypass and reload | Done on this branch | Every Dagster image service requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default and `pull_policy: never`, and `lifecycle.py reload` verifies the image and recreates every service that runs it (`host.IMAGE_SERVICES`, kept equal to the compose files by a unit test). Residual: a direct `docker compose up` with a hand-set or previously recorded ID is not re-verified (see [Named gaps](#named-gaps)). |
-| cve-bin-tool pin | In progress on this branch | Pin the locally built cve-bin-tool image and cover it with `--all-pinned`, so that no run launches it unverified. |
+| cve-bin-tool pin | Done on this branch | The cve-bin-tool step accepts an optional `image_id` pin; when set, the tag must resolve to it, the image is never built by the step, and `sign-image --all-pinned` covers it (it walks enabled jobs' step settings too). Residual: the repository configuration leaves the pin unset until the review host records it (see [Named gaps](#named-gaps)). |
 | BuildKit worker and image builder service verification | In progress on this branch | Verify the worker, egress proxy and input images in `buildkit_worker.py` and the allowed and aliased images in `image_builder_service.py`. |
 | Engine broker | Deferred | Verify images in `engine_broker.py` (`DockerEngine.image`, `_image_policies`, `_reference`). This overlaps the native-broker-process branch and waits for it. |
 

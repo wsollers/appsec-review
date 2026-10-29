@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import dataclasses
 import os
 from pathlib import Path
 import shutil
@@ -430,3 +431,86 @@ def test_native_cve_bin_tool_image_is_verified_before_launch(tmp_path: Path, mon
         cve_database._docker_builder(_cve_settings(tmp_path), tmp_path / "input", tmp_path / "output",
                                      image_verifier=_rejecting(PINNED))
     assert [call for call in calls if call[:2] == ("docker", "run")] == []
+
+
+def _cve_context(tmp_path: Path) -> dict[str, object]:
+    context = tmp_path / "context"
+    context.mkdir(exist_ok=True)
+    for name in ("Dockerfile", "build_db.py"):
+        (context / name).write_text("", encoding="utf-8")
+    return {"feed_root": str(tmp_path / "feed"), "image": "appsec-review/cve-bin-tool:3.4",
+            "tool_version": "3.4", "build_context": str(context)}
+
+
+def test_cve_bin_tool_settings_parse_an_optional_image_id_pin(tmp_path: Path) -> None:
+    value = _cve_context(tmp_path)
+    assert cve_database.CveBinToolSettings.from_mapping(tmp_path, value).image_id is None
+    assert cve_database.CveBinToolSettings.from_mapping(tmp_path, {**value, "image_id": PINNED}).image_id == PINNED
+
+
+@pytest.mark.parametrize("pin", ["", "sha256:" + "A" * 64, "sha256:" + "a" * 63, "a" * 64, 7,
+                                 "sha256:" + "a" * 64 + "\n"])
+def test_cve_bin_tool_settings_reject_an_invalid_image_id_pin(tmp_path: Path, pin: object) -> None:
+    with pytest.raises(ValueError, match="image_id"):
+        cve_database.CveBinToolSettings.from_mapping(tmp_path, {**_cve_context(tmp_path), "image_id": pin})
+
+
+def _pinned_cve_settings(tmp_path: Path, pin: str) -> cve_database.CveBinToolSettings:
+    return dataclasses.replace(_cve_settings(tmp_path), image_id=pin)
+
+
+def test_cve_bin_tool_image_not_matching_its_pin_is_refused_before_verification(
+        tmp_path: Path, cve_docker) -> None:
+    docker, verifier = cve_docker(present=True), RecordingVerifier()
+    with pytest.raises(SignatureVerificationError, match=f"resolves to {PINNED}, not the pinned {OTHER}"):
+        cve_database._docker_builder(_pinned_cve_settings(tmp_path, OTHER), tmp_path / "input",
+                                     tmp_path / "output", image_verifier=verifier)
+    assert docker.runs == [] and verifier.calls == []
+
+
+def test_cve_bin_tool_image_matching_its_pin_is_verified_and_launched_by_id(tmp_path: Path, cve_docker) -> None:
+    docker, verifier = cve_docker(present=True), RecordingVerifier()
+    tool = cve_database._docker_builder(_pinned_cve_settings(tmp_path, PINNED), tmp_path / "input",
+                                        tmp_path / "output", image_verifier=verifier)
+    assert tool["image_id"] == PINNED and verifier.calls == [(PINNED, "appsec-review/cve-bin-tool:3.4")]
+    run = docker.runs[0]
+    assert run[run.index("--entrypoint") + 2] == PINNED
+
+
+def test_unsigned_cve_bin_tool_image_matching_its_pin_is_not_launched(tmp_path: Path, cve_docker) -> None:
+    docker = cve_docker(present=True)
+    with pytest.raises(SignatureVerificationError, match="has no signature envelope"):
+        cve_database._docker_builder(_pinned_cve_settings(tmp_path, PINNED), tmp_path / "input",
+                                     tmp_path / "output", image_verifier=_rejecting(PINNED))
+    assert docker.runs == []
+
+
+def test_missing_pinned_cve_bin_tool_image_is_never_built(tmp_path: Path, cve_docker) -> None:
+    docker, verifier = cve_docker(present=False), RecordingVerifier()
+    with pytest.raises(SignatureVerificationError, match="refusing to build cve-bin-tool image"):
+        cve_database._docker_builder(_pinned_cve_settings(tmp_path, PINNED), tmp_path / "input",
+                                     tmp_path / "output", image_verifier=verifier)
+    assert [call for call in docker.calls if call[:2] in (["docker", "build"], ["docker", "run"])] == []
+    assert verifier.calls == []
+
+
+def test_native_cve_bin_tool_image_not_matching_its_pin_is_refused(tmp_path: Path, monkeypatch) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def native_run(argv, timeout):
+        calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, PINNED.encode(), b"", False
+        return 0, b"", b"", False
+
+    monkeypatch.setattr(native_dagster, "native_execution_requested", lambda: True)
+    monkeypatch.setattr(native_client, "native_run", native_run)
+    monkeypatch.setattr(resources, "reserve_execution", lambda **kwargs: nullcontext())
+    monkeypatch.setattr(resources, "tracked_container", lambda *args, **kwargs: nullcontext())
+    (tmp_path / "input").mkdir()
+    (tmp_path / "output").mkdir()
+    verifier = RecordingVerifier()
+    with pytest.raises(SignatureVerificationError, match="not the pinned"):
+        cve_database._docker_builder(_pinned_cve_settings(tmp_path, OTHER), tmp_path / "input",
+                                     tmp_path / "output", image_verifier=verifier)
+    assert [call for call in calls if call[:2] == ("docker", "run")] == [] and verifier.calls == []

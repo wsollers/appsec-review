@@ -233,6 +233,38 @@ def test_sign_all_pinned_signs_matching_pins_and_never_a_mismatched_image(
     assert code == 0, report
 
 
+CVE_SOURCE = "jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.settings.image_id"
+
+
+def _cve_document(**settings: object) -> dict:
+    step = {"settings": {"image": "fixture/cve-bin-tool:3.4", "tool_version": "3.4", **settings}}
+    return {"jobs": {"job_third_party_data_sync": {"settings": {}, "steps": {"cve_bin_tool_db_build": step}}}}
+
+
+def test_pinned_images_include_the_cve_bin_tool_step_only_when_pinned() -> None:
+    assert signing_cli.pinned_images([], _cve_document()) == []
+    assert signing_cli.pinned_images([], _cve_document(image_id=IMAGE_A)) == [
+        {"source": CVE_SOURCE, "tag": "fixture/cve-bin-tool:3.4", "image_id": IMAGE_A}]
+    disabled = _cve_document(image_id=IMAGE_A)
+    disabled["jobs"]["job_third_party_data_sync"]["settings"]["enabled"] = False
+    assert signing_cli.pinned_images([], disabled) == []
+
+
+def test_sign_all_pinned_signs_the_pinned_cve_bin_tool_image_only_when_its_tag_matches(
+        tmp_path, capsys, key, config, local_images) -> None:
+    (config.runtime.repository_root / "containers" / "catalog.toml").write_text("", encoding="utf-8")
+    config.resolved_json = json.dumps(_cve_document(image_id=IMAGE_A)).encode()
+    local_images["fixture/cve-bin-tool:3.4"] = IMAGE_B
+    code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private))
+    assert code == 1 and [(row["source"], row["status"]) for row in report["images"]] == [
+        (CVE_SOURCE, "mismatched")]
+    local_images["fixture/cve-bin-tool:3.4"] = IMAGE_A
+    code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private))
+    assert code == 0 and [(row["source"], row["status"]) for row in report["images"]] == [
+        (CVE_SOURCE, "signed")]
+    assert [path.name for path in (tmp_path / "signatures").iterdir()] == [f"{IMAGE_A.removeprefix('sha256:')}.json"]
+
+
 PACKAGE = {"__init__.py": b"VALUE = 1\n", "core.py": b"def answer():\n    return 42\n",
            "sub/__init__.py": b"", "sub/leaf.py": b"LEAF = 'leaf'\n"}
 

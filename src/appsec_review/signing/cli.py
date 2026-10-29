@@ -183,9 +183,11 @@ def pinned_images(catalog_images: Sequence[Mapping[str, Any]],
 
     Starts from the pin gate's ``configured_pins`` (enabled catalog images, enabled jobs' ``tag`` /
     ``image_id`` and ``source_image_tag`` / ``source_image_id`` pairs) and adds every other
-    ``*image_id`` setting of an enabled job, including those inside arrays of tables (for example
-    CodeQL's preinstalled ``build_image_id`` and ``runtime_image_id``). Such a pin's tag is the
-    sibling ``<prefix>image_tag`` or ``<prefix>tag`` when present, otherwise ``None``.
+    ``*image_id`` setting of an enabled job or of one of its steps (for example the cve-bin-tool
+    step's optional ``image_id``), including those inside arrays of tables (for example CodeQL's
+    preinstalled ``build_image_id`` and ``runtime_image_id``). Such a pin's tag is the sibling
+    ``<prefix>image_tag`` or ``<prefix>tag`` (or ``image`` for a bare ``image_id``) when present,
+    otherwise ``None``.
     """
     from appsec_review.jobs.job_image_pin_verification.pins import configured_pins
     from appsec_review.runtime.selection import resolved_job_is_enabled
@@ -201,8 +203,8 @@ def pinned_images(catalog_images: Sequence[Mapping[str, Any]],
                     if source in known:
                         continue
                     prefix = key[:-len(PINNED_ID_SUFFIX)]
-                    tag = next((value[name] for name in (f"{prefix}image_tag", f"{prefix}tag")
-                                if isinstance(value.get(name), str)), None)
+                    names = (f"{prefix}image_tag", f"{prefix}tag") + (("image",) if not prefix else ())
+                    tag = next((value[name] for name in names if isinstance(value.get(name), str)), None)
                     pins.append({"source": source, "tag": tag, "image_id": child})
                     known.add(source)
                 else:
@@ -214,6 +216,9 @@ def pinned_images(catalog_images: Sequence[Mapping[str, Any]],
     for job_id, job in sorted(dict(document.get("jobs") or {}).items()):
         if isinstance(job, Mapping) and resolved_job_is_enabled(job_id, job):
             walk(job.get("settings") or {}, f"jobs.{job_id}.settings")
+            for step_id, step in sorted(dict(job.get("steps") or {}).items()):
+                if isinstance(step, Mapping):
+                    walk(step.get("settings") or {}, f"jobs.{job_id}.steps.{step_id}.settings")
     return pins
 
 

@@ -37,6 +37,12 @@ manifest. When the configured `image` tag is missing locally, the step runs `doc
 3600) bounds the networkless database build container. Scanning consumers must still treat CVE
 matches as applicability leads rather than findings.
 
+A pre-existing `image` is launched by ID only after its signature verifies (see
+[signing](signing.md)); a freshly built one is derived and unverified. The optional `image_id`
+setting (`sha256:<64 hex>`) pins the image: the tag must then resolve to exactly that ID, the step
+never builds it, and `appsec-review signing sign-image --all-pinned` signs it. Without the pin the
+step verifies whatever the tag currently resolves to, so a retagged but signed image is accepted.
+
 ## Immutable publication provenance
 
 New claimed publications retain their existing shared snapshot payloads and add small immutable
