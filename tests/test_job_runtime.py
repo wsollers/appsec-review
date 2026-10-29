@@ -99,6 +99,109 @@ def test_failed_job_has_a_terminal_receipt(tmp_path: Path) -> None:
     assert status["error"]["type"] == "RuntimeError"
 
 
+@pytest.mark.parametrize("interruption", ("rejection", "metrics"))
+def test_failed_attempt_replay_completes_interrupted_finalization_without_rewriting_diagnostics(
+        tmp_path, monkeypatch, interruption):
+    from appsec_review.observability import PipelineLog
+    import appsec_review.runtime.runner as runtime
+
+    runner = JobRunner(load_config(write_config(tmp_path)))
+    job = Job("job_fixture", "fixture", lambda _: {}, units=(Unit("work.only", lambda _: {}),))
+    claim = runner.begin_attempt(job)
+    context = runner._context_from_claim(job, claim)
+    calls = 0
+    original = runner._publish_rejection if interruption == "rejection" else runtime.write_run_metrics
+
+    def interrupt(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("interrupted failure finalization")
+        return original(*args, **kwargs)
+
+    if interruption == "rejection":
+        monkeypatch.setattr(runner, "_publish_rejection", interrupt)
+    else:
+        monkeypatch.setattr(runtime, "write_run_metrics", interrupt)
+    with pytest.raises(OSError, match="interrupted"):
+        runner.fail_attempt(job, claim, LookupError("original"))
+    paths = [context.attempt_root / "status.json", context.attempt_root / "logs/traceback.txt",
+             *context.attempt_root.glob("rejected-*.json")]
+    before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in paths}
+    runner.fail_attempt(job, claim, ValueError("replay must preserve original"))
+    runner.fail_attempt(job, claim, ValueError("idempotent"))
+    assert before == {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in paths}
+    assert (context.attempt_root / "failure-finalized.json").is_file()
+    assert (context.attempt_root / "rejected-handoff.json").is_file()
+    records, partial = PipelineLog(context.run_root).read()
+    assert not partial
+    assert sum(record["event_type"] == "JOB_FAILED" for record in records) == 1
+    assert sum(record["event_type"] == "HANDOFF_REJECTED" for record in records) == 1
+    assert not (context.attempt_root.parent.parent / "latest.json").exists()
+
+
+def test_failed_step_replay_repairs_interrupted_event_without_rewriting_status(tmp_path, monkeypatch):
+    from appsec_review.observability import PipelineLog
+
+    runner = JobRunner(load_config(write_config(tmp_path)))
+    job = Job("job_fixture", "fixture", lambda _: {}, units=(Unit("work.only", lambda _: {}),))
+    claim = runner.begin_attempt(job)
+    context = runner._context_from_claim(job, claim)
+    marker = context.attempt_root / "steps/work/lifecycle.json"
+    with monkeypatch.context() as patch:
+        def interrupted(*args, **kwargs):
+            raise OSError("event unavailable")
+        patch.setattr(context.events, "write", interrupted)
+        with pytest.raises(OSError, match="event unavailable"):
+            runner._fail_step(context, "work", LookupError("original"))
+    before = marker.read_bytes(), marker.stat().st_mtime_ns
+    runner._fail_step(context, "work", ValueError("replay"))
+    runner._fail_step(context, "work", ValueError("again"))
+    assert before == (marker.read_bytes(), marker.stat().st_mtime_ns)
+    records, _ = PipelineLog(context.run_root).read()
+    assert sum(record["event_type"] == "STEP_FAILED" for record in records) == 1
+
+
+def test_split_failures_close_step_attempt_once_and_preserve_accepted_pointer(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from appsec_review.observability import PipelineLog
+
+    def fail(unit):
+        raise LookupError(unit.unit_id)
+
+    runner = JobRunner(load_config(write_config(tmp_path)))
+    good = Job("job_fixture", "fixture", lambda _: {},
+               units=(Unit("work.first", lambda _: {"terminal_status": "SUCCEEDED"}),))
+    accepted = runner.run(good)
+    root = Path(accepted["attempt_root"]).parents[4]
+    latest = root / "data/jobs/job_fixture/latest.json"
+    original = latest.read_bytes()
+    job = Job("job_fixture", "fixture", fail,
+              units=(Unit("work.first", fail), Unit("work.second", fail)))
+    claim = runner.begin_attempt(job, run_id=accepted["status"]["run_id"])
+    def execute(unit):
+        with pytest.raises(LookupError, match=unit.unit_id):
+            runner.execute_or_reuse_unit(job, claim, unit.unit_id)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(execute, job.units))
+    attempt = root / claim["attempt_path"]
+    assert json.loads((attempt / "status.json").read_bytes())["status"] == "FAILED"
+    assert json.loads((attempt / "steps/work/lifecycle.json").read_bytes())["status"] == "FAILED"
+    assert all(json.loads((attempt / f"steps/work/tasks/{name}/status.json").read_bytes())["status"]
+               == "FAILED" for name in ("first", "second"))
+    rejection = (attempt / "rejected-handoff.json").read_bytes()
+    runner.fail_attempt(job, claim, RuntimeError("replay"))
+    assert (attempt / "rejected-handoff.json").read_bytes() == rejection
+    assert latest.read_bytes() == original
+    with pytest.raises(ValueError, match="failed attempt cannot publish"):
+        runner.finalize_attempt(job, claim)
+    events, _ = PipelineLog(root).read()
+    failed = [event for event in events if event["attempt_id"] == claim["attempt_id"]]
+    assert sum(event["event_type"] == "JOB_FAILED" for event in failed) == 1
+    assert sum(event["event_type"] == "STEP_FAILED" for event in failed) == 1
+    assert sum(event["event_type"] == "HANDOFF_REJECTED" for event in failed) == 1
+
+
 def test_failed_input_preparation_records_terminal_without_executing_unit(tmp_path):
     def forbidden(unit):
         pytest.fail("invalid upstream reached unit execution")

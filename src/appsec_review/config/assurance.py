@@ -96,6 +96,7 @@ class ImageBuilderConfig:
     host_overhead_mb: int = 512
     max_concurrency: int = 1
     cleanup_timeout_seconds: int = 60
+    resource_mode: str = "bounded"
 
     def __post_init__(self) -> None:
         if not isinstance(self.endpoint, str) or not Path(self.endpoint).is_absolute():
@@ -109,9 +110,44 @@ class ImageBuilderConfig:
                 raise ValueError(f"image builder {name} must be a positive integer")
         if self.cleanup_timeout_seconds > 300:
             raise ValueError("image builder cleanup timeout exceeds 300 seconds")
+        if not isinstance(self.resource_mode, str) or self.resource_mode not in {"bounded", "concurrency_only"}:
+            raise ValueError("image builder resource_mode must be bounded or concurrency_only")
+        if self.resource_mode == "concurrency_only" and self.max_concurrency != 1:
+            raise ValueError("concurrency-only image preparation requires exactly one build")
+
+    @property
+    def requested_limits(self) -> dict[str, Any]:
+        limits = {"cpu": self.cpu, "memory_bytes": self.memory_mb * 1024**2,
+                  "host_cpu": self.host_cpu, "host_overhead_bytes": self.host_overhead_mb * 1024**2,
+                  "max_log_bytes": 64 * 1024}
+        if self.resource_mode == "concurrency_only":
+            return {**{key: None for key in limits if key != "max_log_bytes"},
+                    "max_log_bytes": limits["max_log_bytes"], "resource_mode": self.resource_mode}
+        return limits
+
+    def build_reservation(self, budget: ResourceBudget) -> tuple[int, int]:
+        if self.resource_mode == "concurrency_only":
+            return (budget.cpu - self.host_cpu,
+                    budget.memory_mb - self.host_overhead_mb - budget.staging_memory_mb)
+        return self.cpu + self.host_cpu, self.memory_mb + self.host_overhead_mb
 
     def view(self) -> dict[str, Any]:
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+def validate_concurrency_only_enforcement(value: object) -> None:
+    if not isinstance(value, dict):
+        raise ValueError("concurrency-only builder observations are missing")
+    for prefix in ("", "host_"):
+        if (value.get(prefix + "resource_mode") != "concurrency_only"
+                or value.get(prefix + "cpu_quota_us", "missing") is not None
+                or value.get(prefix + "memory_max", "missing") is not None
+                or type(value.get(prefix + "cpu_period_us")) is not int
+                or value[prefix + "cpu_period_us"] <= 0
+                or type(value.get(prefix + "swap_max")) is not int
+                or value[prefix + "swap_max"] != 0
+                or not isinstance(value.get(prefix + "inherited_limits"), list)):
+            raise ValueError("concurrency-only builder must prove uncapped CPU/RAM and retained swap policy")
 
 
 @dataclass(frozen=True, slots=True)

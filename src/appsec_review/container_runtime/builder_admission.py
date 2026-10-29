@@ -238,7 +238,10 @@ class LifetimeProof:
             groups.append(("executions", native.execution_cgroup_parent, native.cpu, native.memory_mb))
         for name, path, cpu, memory in groups:
             root = Path(path)
-            kernel.limits(root, cpu, memory * 1024 * 1024)
+            if name in {"host", "workers"}:
+                kernel.builder_limits(root, cpu, memory * 1024 * 1024)
+            else:
+                kernel.limits(root, cpu, memory * 1024 * 1024)
             info = root.stat()
             output[name] = {"path": path, "device": info.st_dev, "inode": info.st_ino}
         return output
@@ -498,10 +501,10 @@ class BuilderAdmission:
                     admission._check_persistent(
                         state, self.config.admission.lease_id, self.request, self.binding)
                     matches = []
+                    cpu, memory_mb = self.config.client_policy.build_reservation(self.config.resources)
                     required = {
-                        "cpu": self.config.cpu + self.config.host_cpu,
-                        "memory_mb": (self.config.memory_mb + self.config.host_overhead_mb
-                                      + self.config.resources.staging_memory_mb),
+                        "cpu": cpu,
+                        "memory_mb": memory_mb + self.config.resources.staging_memory_mb,
                         "io_slots": 1,
                     }
                     for entry in state["leases"].values():

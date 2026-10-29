@@ -72,14 +72,20 @@ class FakeBackend:
         if action == "prepare":
             assert not list(Path(binding["context"]).iterdir())
             limits = body["limits"]
-            response.update(state="PREPARED", private_context=True, limits={
+            observed = {
                 "cpu_quota_us": limits["cpu"] * 100000, "cpu_period_us": 100000,
                 "memory_max": limits["memory_bytes"],
                 "host_cpu_quota_us": limits["host_cpu"] * 100000, "host_cpu_period_us": 100000,
                 "host_memory_max": limits["host_overhead_bytes"],
-            })
+            } if limits.get("resource_mode") != "concurrency_only" else {
+                prefix + key: value for prefix in ("", "host_") for key, value in {
+                    "resource_mode": "concurrency_only", "cpu_quota_us": None, "memory_max": None,
+                    "cpu_period_us": 100000, "swap_max": 0, "inherited_limits": [],
+                }.items()
+            }
+            response.update(state="PREPARED", private_context=True, limits=observed)
             if self.failure == "limits":
-                response["limits"]["memory_max"] *= 2
+                response["limits"]["memory_max"] = (observed["memory_max"] or 1) * 2
             if self.failure == "isolation":
                 response["private_context"] = False
             if self.failure == "stale_image":
@@ -125,6 +131,7 @@ def backend(monkeypatch):
 @pytest.mark.parametrize("overrides", (
     {"cpu": True}, {"memory_mb": 0}, {"max_concurrency": 0}, {"host_cpu": 20},
     {"release_id": ""}, {"endpoint": "relative"}, {"unexpected": 1},
+    {"resource_mode": "unrestricted"}, {"resource_mode": "concurrency_only", "max_concurrency": 2},
 ))
 def test_builder_configuration_rejects_invalid_or_unbudgeted_contract(tmp_path, overrides):
     with pytest.raises(ValueError):
@@ -167,8 +174,9 @@ def test_builder_tracks_intent_before_preparation_and_confirms_cleanup(tmp_path,
     ("limits", False), ("isolation", False), ("timeout", False), ("logs", False),
     ("worker", True), ("tenant", True), ("cleanup", True),
 ))
-def test_builder_failure_requires_independent_cleanup(tmp_path, backend, failure, retained):
-    owner = context(tmp_path)
+@pytest.mark.parametrize("resource_mode", ("bounded", "concurrency_only"))
+def test_builder_failure_requires_independent_cleanup(tmp_path, backend, failure, retained, resource_mode):
+    owner = context(tmp_path, policy=configuration(tmp_path, resource_mode=resource_mode))
     backend.failure = failure
     with active(owner):
         tag = f"appsec-review-codeql:{builders.builder_namespace()[:12]}fixture"
@@ -317,6 +325,32 @@ def test_builder_contract_is_frozen_in_configuration_and_claim(tmp_path, backend
     with pytest.raises(ValueError, match="policy"):
         runner._context_from_claim(job, changed)
     assert backend.calls == []
+
+
+def test_concurrency_only_policy_is_explicit_truthful_and_receipt_bound(tmp_path, backend):
+    owner = context(tmp_path, policy=configuration(tmp_path, resource_mode="concurrency_only"))
+    assert configuration(tmp_path).image_builder.resource_mode == "bounded"
+    with active(owner):
+        tag = f"derived:{builders.builder_namespace()[:12]}fixture"
+        with builders.bounded_image_preparation(identity="fixture", tag=tag, timeout_seconds=10) as session:
+            reservation = next(iter(leases(owner).values()))["reservation"]
+            budget = owner.review_policy.resources
+            assert reservation == {"cpu": budget.cpu - 1, "memory_mb": budget.memory_mb - 512, "io_slots": 1}
+            (session.context / "Dockerfile").write_text("FROM fixture\n")
+            session.build(network="none")
+        builders.verify_builder_receipt(session.receipt(), identity="fixture", tag=tag, image_id=BUILT)
+        changed = json.loads((session.root / "terminal.json").read_text())
+        changed["enforcement"]["requested_limits"]["resource_mode"] = "bounded"
+        changed_path = session.root / "changed.json"
+        changed_path.write_text(json.dumps(changed))
+        with pytest.raises(ValueError, match="resource policy"):
+            builders.verify_builder_receipt(builders.reference(owner.run_root, changed_path),
+                                           identity="fixture", tag=tag, image_id=BUILT)
+    requested = backend.requests["prepare"]["limits"]
+    assert requested["resource_mode"] == "concurrency_only"
+    assert all(requested[name] is None for name in ("cpu", "host_cpu", "memory_bytes", "host_overhead_bytes"))
+    assert session.enforcement["limits"]["cpu_quota_us"] is None
+    assert backend.calls == ["prepare", "start", "cancel", "cleanup"]
 
 
 @pytest.fixture

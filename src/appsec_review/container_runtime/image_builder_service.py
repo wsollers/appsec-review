@@ -32,7 +32,7 @@ from uuid import uuid4
 from appsec_review.config.image_builder_service import (
     IMAGE_ID, BuilderGrant, ImageBuilderServiceConfig, identifier, load_image_builder_service,
 )
-from appsec_review.config.assurance import ResourceBudget
+from appsec_review.config.assurance import ResourceBudget, validate_concurrency_only_enforcement
 from appsec_review.container_runtime.buildkit_worker import (
     BuildKitWorker, EnforcementUnavailable, OutcomeUnknown, private_path, process_token,
 )
@@ -591,7 +591,8 @@ class ImageBuilderService:
             if action != "prepare" or body["worker"] is not None:
                 raise ValueError("unknown build; prepare must precede side effects")
             if (not isinstance(body["limits"], dict) or body["limits"] != self.config.requested_limits
-                    or any(type(value) is not int for value in body["limits"].values())):
+                    or (self.config.resource_mode == "bounded" and
+                        any(type(value) is not int for value in body["limits"].values()))):
                 raise EnforcementUnavailable("requested limits differ from the operator envelope")
             records = self.store.records()
             if len(records) >= self.config.max_records:
@@ -670,6 +671,12 @@ class ImageBuilderService:
     def _validate_limits(self, limits):
         if not isinstance(limits, dict):
             raise EnforcementUnavailable("driver supplied no kernel enforcement")
+        if self.config.resource_mode == "concurrency_only":
+            try:
+                validate_concurrency_only_enforcement(limits)
+            except ValueError as exc:
+                raise EnforcementUnavailable(str(exc)) from exc
+            return
         for prefix, cpu, memory in (("", self.config.cpu, self.config.memory_mb),
                                     ("host_", self.config.host_cpu, self.config.host_overhead_mb)):
             values = [limits.get(prefix + name) for name in ("cpu_quota_us", "cpu_period_us", "memory_max")]

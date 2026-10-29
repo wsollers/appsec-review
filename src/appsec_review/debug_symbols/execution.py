@@ -10,6 +10,7 @@ import re
 import time
 from typing import TYPE_CHECKING, Any
 
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime.catalog import ContainerCatalog, load_catalog
 from appsec_review.container_runtime.executor import (
     ContainerExecutor, ExecutionRequest, ImageUnavailableError, Mount,
@@ -17,8 +18,8 @@ from appsec_review.container_runtime.executor import (
 from appsec_review.debug_symbols._reader_binary import ReaderFailure
 from appsec_review.debug_symbols._container_export import ARGUMENTS
 from appsec_review.debug_symbols.contract import SymbolIntegrityError
-from appsec_review.storage import file_sha256
-from appsec_review.storage.shared import put_bytes, safe_path
+from appsec_review.storage import atomic_bytes, file_sha256
+from appsec_review.storage.shared import safe_path
 
 if TYPE_CHECKING:
     from appsec_review.runtime import UnitContext
@@ -43,24 +44,24 @@ def build_image_identity(image: object) -> dict[str, str]:
     return {"image_id": image["image_id"], "user": image["user"]}
 
 
-def execution_plan(repository_root: Path) -> dict[str, Any]:
+def execution_plan(repository_root: Path, releases: ComponentReleases = ComponentReleases()) -> dict[str, Any]:
     catalog = load_catalog(repository_root)
     tool = catalog.tool(_TOOL_ID)
     if tool.expected_image_id is None or "/usr/bin/python3" not in (
             tool.executable, *tool.additional_executables):
         raise SymbolIntegrityError("managed debug-symbol reader image is not pinned or approved")
-    return {"schema": "appsec-review/debug-symbol-execution-plan/1",
-            "launcher_sha256": file_sha256(_LAUNCHER),
-            "tool_manifest_sha256": file_sha256(tool.manifest_path),
-            "runtime_policy_sha256": file_sha256(catalog.runtime_policy),
+    release = releases.values.get("job_debug_symbol_indexing", releases.values.get("platform"))
+    return {"schema": "appsec-review/debug-symbol-execution-plan/2",
+            "release_id": release,
+            "reuse_allowed": release is not None,
+            "reuse_unavailable_reason": None if release is not None else "missing_release_identity",
+            "runtime_policy": dict(catalog.policy),
+            "reader_policy": {"executable": tool.executable,
+                              "additional_executables": list(tool.additional_executables),
+                              "cpus": tool.cpus, "memory": tool.memory,
+                              "pids_limit": tool.pids_limit, "timeout_seconds": tool.timeout_seconds,
+                              "output_bytes": tool.output_bytes},
             "fallback": {"image_id": tool.expected_image_id, "user": tool.user}}
-
-
-def reader_implementation_identity() -> str:
-    root = Path(__file__).parent
-    files = ("readers.py", "_reader_binary.py", "_reader_dwarf.py", "_reader_pdb.py",
-             "_container_export.py", "execution.py")
-    return hashlib.sha256("".join(file_sha256(root / name) for name in files).encode()).hexdigest()
 
 
 class ContainerExporter:
@@ -70,16 +71,17 @@ class ContainerExporter:
         self.unit = unit
         self.plan = plan
         self.catalog = load_catalog(unit.job.repository_root)
-        if execution_plan(unit.job.repository_root) != plan:
+        if execution_plan(unit.job.repository_root, unit.job.review_policy.releases) != plan:
             raise SymbolIntegrityError("debug-symbol execution plan changed")
         self.build_image = build_image_identity(build_image) if build_image is not None else None
-        payload = _LAUNCHER.read_bytes()
-        if hashlib.sha256(payload).hexdigest() != plan["launcher_sha256"]:
-            raise SymbolIntegrityError("debug-symbol launcher identity changed")
-        # Installed code is not necessarily a host bind mount in the Dagster image.
-        self.launcher_ref = put_bytes(unit.job.run_root, payload)
-        self.launcher = safe_path(unit.job.run_root, self.launcher_ref["path"])
-        self.launcher.chmod(0o644)
+        # Provision a private bind source, not a customer evidence object. The deployed
+        # package is verified at startup; exact byte comparison protects staging custody.
+        self.payload = _LAUNCHER.read_bytes()
+        relative = (unit.unit_root / "provisioning" / "debug-symbol-export.py").relative_to(
+            unit.job.run_root).as_posix()
+        self.launcher = safe_path(unit.job.run_root, relative)
+        atomic_bytes(self.launcher, self.payload)
+        self.launcher.chmod(0o444)
         self.scratch = unit.job.attempt_root / "artifacts" / "debug-symbols" / "executions" / key
         self.factory = executor_factory or ContainerExecutor
         self.attempts: list[dict[str, Any]] = []
@@ -109,7 +111,7 @@ class ContainerExporter:
                  timeout_seconds: float, max_output_bytes: int) -> bytes:
         if name not in ARGUMENTS or tuple(arguments) != ARGUMENTS[name]:
             raise SymbolIntegrityError("unapproved debug-symbol export command")
-        if file_sha256(self.launcher) != self.plan["launcher_sha256"]:
+        if self.launcher.read_bytes() != self.payload:
             raise SymbolIntegrityError("debug-symbol launcher identity changed")
         started = time.monotonic()
         candidates: list[tuple[str, Mapping[str, Any]]] = []
@@ -140,7 +142,8 @@ class ContainerExporter:
             )
             attempt: dict[str, Any] = {
                 "environment": environment, "image_id": image["image_id"],
-                "launcher_sha256": self.plan["launcher_sha256"], "launcher": self.launcher_ref}
+                "release_id": self.plan["release_id"],
+                "launcher_assurance": "supplied_platform_excluded"}
             attempt_started = time.monotonic()
             result = None
             try:
@@ -182,9 +185,9 @@ class ContainerExporter:
             if outcome == "succeeded":
                 if "output" not in attempt:
                     raise SymbolIntegrityError("successful debug-symbol export has no retained output")
-                if file_sha256(self.launcher) != self.plan["launcher_sha256"]:
+                if self.launcher.read_bytes() != self.payload:
                     raise SymbolIntegrityError("debug-symbol launcher identity changed")
-                self.identity = f"{name}@{image['image_id']}:{self.plan['launcher_sha256']}"
+                self.identity = f"{name}@{image['image_id']}:{self.plan['release_id'] or 'undeclared'}"
                 with safe_path(self.unit.job.run_root, attempt["output"]["path"]).open("rb") as stream:
                     data = stream.read(max_output_bytes + 1)
                 if (len(data) != attempt["output"]["size_bytes"]

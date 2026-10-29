@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 import re
 import tomllib
 
-from appsec_review.config.assurance import ResourceBudget
+from appsec_review.config.assurance import ImageBuilderConfig, ResourceBudget
 from appsec_review.config.native_engine import NativeEngineConfig, parse_native_engine
 
 
@@ -150,6 +150,7 @@ class ImageBuilderServiceConfig:
     proxy_url: str | None = None
     ip_binary: str = "/usr/sbin/ip"
     ip_release_id: str | None = None
+    resource_mode: str = "bounded"
 
     def __post_init__(self):
         for name in ("endpoint", "state_root", "host_cgroup", "worker_cgroup_parent",
@@ -184,6 +185,7 @@ class ImageBuilderServiceConfig:
             raise ValueError("service requires a typed persistent admission binding")
         if not isinstance(self.resources, ResourceBudget):
             raise ValueError("service requires a typed aggregate resource budget")
+        self.client_policy
         if (self.cpu + self.host_cpu > self.resources.cpu
                 or self.memory_mb + self.host_overhead_mb + self.resources.staging_memory_mb
                 > self.resources.memory_mb
@@ -253,12 +255,16 @@ class ImageBuilderServiceConfig:
                 raise ValueError("native mounts cannot expose broker control paths or their ancestors")
 
     @property
+    def client_policy(self) -> ImageBuilderConfig:
+        return ImageBuilderConfig(
+            self.endpoint, self.release_id, self.grants[0].tenant_id,
+            cpu=self.cpu, memory_mb=self.memory_mb, host_cpu=self.host_cpu,
+            host_overhead_mb=self.host_overhead_mb, max_concurrency=self.max_concurrency,
+            cleanup_timeout_seconds=self.cleanup_timeout_seconds, resource_mode=self.resource_mode)
+
+    @property
     def requested_limits(self) -> dict:
-        return {
-            "cpu": self.cpu, "memory_bytes": self.memory_mb * 1024 * 1024,
-            "host_cpu": self.host_cpu, "host_overhead_bytes": self.host_overhead_mb * 1024 * 1024,
-            "max_log_bytes": 64 * 1024,
-        }
+        return self.client_policy.requested_limits
 
 
 def _typed(cls, value: object):

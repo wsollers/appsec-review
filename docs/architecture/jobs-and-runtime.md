@@ -344,6 +344,14 @@ configuration binding, handlers and validator lists, checkpoints, receipts, hash
 coverage gaps, shard validation, the accepted manifest pointer, the central log, and accepted
 handoffs. TOML controls the multiprocess executor and concurrency bounds.
 
+Graph completion is a separate lifecycle node that waits for every terminal application's
+accepted finalization. With default-enabled OpenVEX, both the independent export and gate-only
+report must finish before the adapter emits graph/run completion, publishes the orchestration
+receipt, or refreshes final metrics. Their handoff maps and resume decisions are merged once,
+with shared ancestors deduplicated and gaps retained from either branch. A failed terminal
+prevents successful graph completion. Explicitly disabling export leaves the report as the
+sole required terminal; it does not add export fan-in to the report's data contract.
+
 Dagster run UUIDs and application run ids are separate identities. The adapter passes the Dagster
 UUID into `JobRunner` as orchestration correlation, and the runner records it in terminal
 `status.json`. The adapter tags the Dagster run with `appsec/application_run_id` and

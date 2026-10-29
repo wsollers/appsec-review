@@ -159,8 +159,14 @@ def complete(runner: Any, job: Job, claim: Mapping[str, Any]) -> Mapping[str, An
     if first is not None:
         error = RuntimeError(f"job reported partial failure: {', '.join(failed)}: {first}")
         error.__cause__ = first
+        for note in getattr(first, "__notes__", ()):
+            error.add_note(note)
         if not claim.get("reused"):
-            runner.fail_attempt(job, claim, error)
+            try:
+                runner.fail_attempt(job, claim, error)
+            except Exception as finalization_error:
+                error.add_note(f"failure finalization unavailable: {type(finalization_error).__name__}: "
+                               f"{finalization_error}")
         raise error
     return runner.finalize_attempt(job, claim)
 

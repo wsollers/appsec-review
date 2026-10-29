@@ -29,8 +29,10 @@ in an accepted build receipt is an integrity failure.
 The shared native compiler image provisions the exact pinned `llvm-18` package,
 including `/usr/bin/llvm-dwarfdump-18` and `/usr/bin/llvm-pdbutil-18`, and checks
 both versions at image-build time. Consumer compiler images inherit those tools.
-The package-owned, hash-bound Python export driver is staged into run-owned
-storage so sibling-container execution also works from the Dagster image.
+The package-owned Python export driver is staged into private run-owned
+provisioning storage so sibling-container execution also works from the Dagster image.
+Its bytes are compared with the installed payload before and after execution;
+the launcher is not a customer evidence object or a shared content-store artifact.
 Its isolated interpreter disables environment/user imports and site startup hooks.
 Only the selected accepted input file and this driver are mounted read-only;
 run-owned scratch is the only writable bind. Network, root filesystem writes,
@@ -49,8 +51,10 @@ Both lanes use LLVM's offline readers; native PDB parsing needs neither DIA nor
 a Windows reader host. The runtime never discovers host tools on PATH, downloads
 readers, follows source-server instructions, or fetches symbols. The former
 `reader.tools` host-path settings are rejected rather than silently ignored.
-Tool identity binds the immutable image, platform launcher and accepted output
-receipts, not a version string alone. The format contract uses LLVM 18.1.3.
+Tool identity binds the immutable image, declared `job_debug_symbol_indexing`
+release (or `platform` release), typed execution policy and accepted output
+receipts. Supplied launcher, reader source and tool-manifest payloads remain
+excluded from customer-evidence hashing. The format contract uses LLVM 18.1.3.
 Fixtures include both Clang/LLD-produced and genuine MSVC 19.51-produced PDBs.
 LLVM 18.1.3 has a known `pdb2yaml --all` crash on retained MSVC `S_REGREL32`
 records; these artifacts report tool-failure coverage, not empty successful
@@ -87,8 +91,11 @@ and retrieval all emit structured events. Run
 selected target, attempt/failure counts, reader environment/outcome counts,
 fallback counts, export bytes/duration, latest index counts/duration, query
 work and metric gaps. Execution receipts, bounded raw exports and diagnostics
-remain protected, hash-bound evidence. Image and launcher changes invalidate
-resume input identity. Source paths and symbol names are not metric labels.
+remain protected, hash-bound evidence. Image, declared release and typed-policy
+changes invalidate resume identity. Operators must bump the declared release
+when changing supplied reader/launcher code; missing release identity explicitly
+disables reuse. Deployment source/image byte verification is separate from
+customer evidence processing. Source paths and symbol names are not metric labels.
 Read coverage before interpreting an empty query.
 
 For contracts, authority limits, routing and the unit-test matrix, see

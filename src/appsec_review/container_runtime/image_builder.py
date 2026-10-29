@@ -18,7 +18,9 @@ import time
 from typing import Any, Mapping
 from uuid import uuid4
 
-from appsec_review.config.assurance import ImageBuilderConfig, ResourceBudget
+from appsec_review.config.assurance import (
+    ImageBuilderConfig, ResourceBudget, validate_concurrency_only_enforcement,
+)
 from appsec_review.runtime import resources as resource_runtime
 from appsec_review.observability.spans import count_work, operation_span
 from appsec_review.runtime.resources import (
@@ -75,8 +77,8 @@ def require_builder() -> BuilderOwner:
     owner = _OWNER.get()
     if owner is None:
         raise ImagePreparationUnavailable(
-            "derived_image_preparation_unavailable: no operator-approved bounded builder "
-            "with enforced CPU/memory and confirmed cancellation")
+            "derived_image_preparation_unavailable: no operator-approved builder "
+            "with a declared resource policy and confirmed cancellation")
     if os.name != "posix" or not hasattr(socket, "SO_PEERCRED"):
         raise ImagePreparationUnavailable("bounded image builder requires authenticated Linux Unix sockets")
     review_owner, active = resource_runtime._OWNER.get(), resource_runtime._ACTIVE.get()
@@ -109,6 +111,8 @@ def verify_builder_receipt(ref: Mapping[str, Any], *, identity: str, tag: str, i
             or receipt.get("execution", {}).get("image_id") != image_id
             or receipt.get("cleanup", {}).get("state") != "CLEANED"):
         raise ValueError("cached image lacks its run-bound successful preparation receipt")
+    if receipt["enforcement"].get("requested_limits") != owner.config.requested_limits:
+        raise ValueError("cached image builder resource policy differs")
 
 
 class UnixBuilderClient:
@@ -225,15 +229,16 @@ class ImageBuildSession:
         self.context.parent.mkdir(parents=True, mode=0o700)
         self.context.mkdir(parents=True, mode=0o700)
         config = self.owner.config
-        response = self.exchange("prepare", extra={"limits": {
-            "cpu": config.cpu, "memory_bytes": config.memory_mb * 1024 * 1024,
-            "host_cpu": config.host_cpu,
-            "host_overhead_bytes": config.host_overhead_mb * 1024 * 1024,
-            "max_log_bytes": MAX_LOG_BYTES,
-        }})
+        response = self.exchange("prepare", extra={"limits": config.requested_limits})
         limits = response.get("limits", {})
         if not isinstance(limits, dict):
             raise ValueError("builder resource enforcement report is invalid")
+        if self.last_state != "PREPARED" or response.get("private_context") is not True:
+            raise ImagePreparationUnavailable("builder private isolation is unverified")
+        if config.resource_mode == "concurrency_only":
+            validate_concurrency_only_enforcement(limits)
+            self.enforcement = {**response, "requested_limits": config.requested_limits}
+            return
         quota, period, memory = (limits.get(name) for name in ("cpu_quota_us", "cpu_period_us", "memory_max"))
         if (self.last_state != "PREPARED" or response.get("private_context") is not True
                 or any(type(value) is not int or value <= 0 for value in (quota, period, memory))
@@ -245,7 +250,7 @@ class ImageBuildSession:
                 or host_quota > config.host_cpu * host_period
                 or host_memory > config.host_overhead_mb * 1024 * 1024):
             raise ImagePreparationUnavailable("bounded builder host overhead enforcement is unverified")
-        self.enforcement = response
+        self.enforcement = {**response, "requested_limits": config.requested_limits}
 
     def build(self, *, network: str, build_args: Mapping[str, str] | None = None,
               image_inputs: Mapping[str, str] | None = None):
@@ -317,8 +322,9 @@ def bounded_image_preparation(*, identity: str, tag: str, timeout_seconds: int):
     owner = require_builder()
     session = ImageBuildSession(owner, identity=identity, tag=tag, timeout_seconds=timeout_seconds)
     config = owner.config
-    with reserve_execution(cpu=str(config.cpu + config.host_cpu),
-                           memory=f"{config.memory_mb + config.host_overhead_mb}m",
+    cpu, memory_mb = config.build_reservation(owner.resources)
+    with reserve_execution(cpu=str(cpu),
+                           memory=f"{memory_mb}m",
                            action="image.prepare", timeout_seconds=math.ceil(session.remaining())):
         lease = track_image_build({**session.binding, "endpoint": config.endpoint,
                                    "resource_budget": owner.resources.view()},

@@ -203,6 +203,33 @@ class KernelProof:
             raise EnforcementUnavailable("CPU, memory or swap enforcement is missing or excessive")
         return {"cpu_quota_us": int(quota), "cpu_period_us": int(period), "memory_max": int(value)}
 
+    def builder_limits(self, root: Path, cpu: int, memory: int) -> dict:
+        if self.config.resource_mode == "bounded":
+            return self.limits(root, cpu, memory)
+        if root.resolve(strict=True) != root:
+            raise EnforcementUnavailable("cgroup path is not canonical")
+        private_path(root)
+        quota, period = (root / "cpu.max").read_text().split()
+        if (quota != "max" or not period.isdecimal() or int(period) <= 0
+                or (root / "memory.max").read_text().strip() != "max"):
+            raise EnforcementUnavailable("concurrency-only builder has a builder-specific CPU/RAM cap")
+        inherited = []
+        swap_stopped = (root / "memory.swap.max").read_text().strip() == "0"
+        for parent in root.parents:
+            if not (parent / "cpu.max").is_file():
+                break
+            cpu_value = (parent / "cpu.max").read_text().strip()
+            memory_value = (parent / "memory.max").read_text().strip()
+            swap_value = (parent / "memory.swap.max").read_text().strip()
+            swap_stopped = swap_stopped or swap_value == "0"
+            inherited.append({"path": str(parent), "cpu_max": cpu_value,
+                              "memory_max": memory_value, "swap_max": swap_value})
+        if not swap_stopped:
+            raise EnforcementUnavailable("concurrency-only builder zero-swap policy is unverified")
+        return {"resource_mode": "concurrency_only", "cpu_quota_us": None,
+                "cpu_period_us": int(period), "memory_max": None, "swap_max": 0,
+                "inherited_limits": inherited}
+
     def process_cgroup(self, pid: int) -> Path:
         values = Path(f"/proc/{pid}/cgroup").read_text().splitlines()
         if len(values) != 1 or not values[0].startswith("0::/"):
@@ -236,8 +263,8 @@ class KernelProof:
         host = Path(config.host_cgroup)
         if not self.process_cgroup(os.getpid()).is_relative_to(host):
             raise EnforcementUnavailable("service overhead is outside its capped host cgroup")
-        limits = self.limits(host, config.host_cpu, config.host_overhead_mb * 1024 * 1024)
-        self.limits(Path(config.worker_cgroup_parent), config.cpu, config.memory_mb * 1024 * 1024)
+        limits = self.builder_limits(host, config.host_cpu, config.host_overhead_mb * 1024 * 1024)
+        self.builder_limits(Path(config.worker_cgroup_parent), config.cpu, config.memory_mb * 1024 * 1024)
         endpoint = Path(config.docker_endpoint)
         private_path(endpoint, directory=False)
         if not stat.S_ISSOCK(endpoint.lstat().st_mode):
@@ -320,7 +347,7 @@ class KernelProof:
         if actual != expected_mounts or any(
                 m.get("Type") not in {"bind", "tmpfs"} for m in inspection.get("Mounts", [])):
             raise EnforcementUnavailable("worker mounts are not the isolated run-owned mapping")
-        return self.limits(group, config.cpu, config.memory_mb * 1024 * 1024)
+        return self.builder_limits(group, config.cpu, config.memory_mb * 1024 * 1024)
 
     def stopped(self, cid: str) -> bool:
         root = Path(self.config.worker_cgroup_parent) / cid
@@ -455,9 +482,10 @@ class BuildKitWorker:
             "--label", f"appsec.builder.token={record['worker']['start_token']}",
             "--label", f"appsec.builder.build={record['binding']['build_id']}",
             "--cgroup-parent", "/" + str(Path(config.worker_cgroup_parent).relative_to("/sys/fs/cgroup")),
-            "--cpu-period", "100000", "--cpu-quota", str(config.cpu * 100000),
-            "--memory", str(config.memory_mb * 1024 * 1024),
-            "--memory-swap", str(config.memory_mb * 1024 * 1024),
+            *(() if config.resource_mode == "concurrency_only" else (
+                "--cpu-period", "100000", "--cpu-quota", str(config.cpu * 100000),
+                "--memory", str(config.memory_mb * 1024 * 1024),
+                "--memory-swap", str(config.memory_mb * 1024 * 1024))),
             "--pids-limit", "512", "--cap-drop=ALL", "--cap-add=SETUID", "--cap-add=SETGID",
             "--read-only", "--ipc=private",
             "--user", f"{config.worker_uid}:{config.worker_uid}",

@@ -22,6 +22,7 @@ approved_first_party_projects = []
 codeql = "codeql-2.27.0-cert-v2.62.0"
 codeql_runner = "appsec-codeql-runner-89568569"
 job_openvex_export = "openvex-export-2"
+job_debug_symbol_indexing = "debug-symbol-readers-3"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.

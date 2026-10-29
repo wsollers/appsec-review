@@ -90,6 +90,19 @@ Whether the complete installed application, broker, engine/helpers and proxy fit
 unproved commissioning prerequisite. Fake entrypoint integration is not actual Dagster service,
 kernel enforcement, network or capacity certification.
 
+The builder's opt-in `resource_mode = "concurrency_only"` does not relax these native
+application limits. The current native operator requires application descendants in the
+same capped `host_cgroup` that the builder helper proof would require uncapped in that
+mode. That arrangement cannot activate concurrency-only operation without a separately
+approved application/helper cgroup and lifecycle arrangement; installation alone is not
+sufficient. Do not remove the application's cap, bypass either proof, or claim that this
+source-level builder mode commissions the whole native Dagster deployment.
+
+A separate daemon with private socket/data-root would avoid mutating the existing
+infra image store, but it does not satisfy the current global helper proof while
+another daemon remains outside the declared topology. Dedicated-daemon coexistence
+is a separate unverified commissioning prerequisite, not a supported bypass.
+
 The broker's application client now translates only the closed operation set into authenticated
 run/lease/engine requests. Generic executor and build execution paths enter that scope; unsupported
 operations fail rather than falling back to ambient Docker. Each execution reserves one cancellation

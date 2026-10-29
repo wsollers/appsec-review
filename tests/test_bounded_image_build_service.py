@@ -51,7 +51,7 @@ def forbid_real_execution(monkeypatch):
     monkeypatch.setattr(os, "fork", forbidden)
 
 
-def configuration(tmp_path):
+def configuration(tmp_path, resource_mode="bounded"):
     state = tmp_path / "operator"
     state.mkdir(mode=0o700)
     run_root = tmp_path / "runs" / "run-one"
@@ -73,13 +73,15 @@ def configuration(tmp_path):
         docker_endpoint=str(tmp_path / "docker.sock"), docker_binary="/usr/bin/docker",
         skopeo_binary="/usr/bin/skopeo", docker_release_id="docker-release",
         skopeo_release_id="skopeo-release", grants=(grant,),
+        resource_mode=resource_mode,
         images=(BuilderImage(alias="base:release", image_id=BASE, release_id="base-release"),),
         admission=BuilderAdmissionConfig(metadata_root=str(metadata), uid=os.getuid(),
                                          gid=os.getgid(), lease_id=uuid4().hex),
     )
     policy = parse_review_policy({
         "project_id": "project",
-        "image_builder": {"endpoint": config.endpoint, "tenant_id": "tenant", "release_id": config.release_id},
+        "image_builder": {"endpoint": config.endpoint, "tenant_id": "tenant", "release_id": config.release_id,
+                          "resource_mode": resource_mode},
     })
     context = SimpleNamespace(
         review_policy=policy, run_root=run_root, metadata_root=metadata,
@@ -155,13 +157,19 @@ class ProtocolAdmissionFixture(BuilderAdmission):
 
 
 class Harness:
-    def __init__(self, tmp_path, driver=None, *, require_worker_reservation=False):
+    def __init__(self, tmp_path, driver=None, *, require_worker_reservation=False, resource_mode="bounded"):
         self.config, self.context = configuration(tmp_path)
+        self.config = replace(self.config, resource_mode=resource_mode)
+        self.context.review_policy = replace(
+            self.context.review_policy,
+            image_builder=replace(self.context.review_policy.image_builder, resource_mode=resource_mode))
         self.peer = (services.Peer(os.getpid(), os.getuid(), os.getgid(), process_identity(os.getpid()))
                      if require_worker_reservation else services.Peer(1234, os.getuid(), os.getgid(), "boot:123"))
         self.live = True
         self.now = 10.0
         self.driver = driver or FakeDriver()
+        if resource_mode == "concurrency_only" and isinstance(self.driver, FakeDriver):
+            self.driver.limits = concurrency_only_observations()
         self.lifetime_proof = FakeLifetimeProof(self.config)
         admission_type = BuilderAdmission if require_worker_reservation else ProtocolAdmissionFixture
         self.lifetime = admission_type(self.config, proof=self.lifetime_proof)
@@ -222,9 +230,9 @@ def harness(tmp_path):
     harness.service.close()
 
 
-@pytest.fixture
-def admitted_harness(tmp_path):
-    harness = Harness(tmp_path, require_worker_reservation=True)
+@pytest.fixture(params=("bounded", "concurrency_only"))
+def admitted_harness(tmp_path, request):
+    harness = Harness(tmp_path, require_worker_reservation=True, resource_mode=request.param)
     yield harness
     harness.service.close()
 
@@ -500,12 +508,12 @@ class FakeProof:
     def host(self):
         if self.fail:
             raise workers.EnforcementUnavailable("fake delegated enforcement missing")
-        return {key: value for key, value in LIMITS.items() if key.startswith("host_")}
+        return {key: value for key, value in self.limits.items() if key.startswith("host_")}
 
     def worker(self, inspection, record):
         if inspection["Id"] != record["driver"]["container_id"]:
             raise workers.EnforcementUnavailable("replaced native worker")
-        return {key: value for key, value in LIMITS.items() if not key.startswith("host_")}
+        return {key: value for key, value in self.limits.items() if not key.startswith("host_")}
 
     def stopped(self, cid):
         return self.empty
@@ -606,9 +614,10 @@ class FakeCommands:
 
 
 @contextmanager
-def real_driver_harness(tmp_path, monkeypatch):
+def real_driver_harness(tmp_path, monkeypatch, resource_mode="bounded"):
     fake_commands, fake_proof = FakeCommands(), FakeProof()
-    harness = Harness(tmp_path)
+    fake_proof.limits = deepcopy(LIMITS) if resource_mode == "bounded" else concurrency_only_observations()
+    harness = Harness(tmp_path, resource_mode=resource_mode)
     driver = workers.BuildKitWorker(harness.config, runner=fake_commands, proof=fake_proof)
     harness.service.driver = driver
     # Only binary custody is bypassed. Context/state custody still uses the
@@ -620,8 +629,18 @@ def real_driver_harness(tmp_path, monkeypatch):
         harness.service.close()
 
 
-def test_real_driver_builds_exports_loads_and_proves_fresh_result_with_fakes(tmp_path, monkeypatch):
-    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, _):
+def concurrency_only_observations():
+    return {
+        prefix + key: value for prefix in ("", "host_") for key, value in {
+            "resource_mode": "concurrency_only", "cpu_quota_us": None, "cpu_period_us": 100000,
+            "memory_max": None, "swap_max": 0, "inherited_limits": [],
+        }.items()
+    }
+
+
+@pytest.mark.parametrize("resource_mode", ("bounded", "concurrency_only"))
+def test_real_driver_builds_exports_loads_and_proves_fresh_result_with_fakes(tmp_path, monkeypatch, resource_mode):
+    with real_driver_harness(tmp_path, monkeypatch, resource_mode) as (harness, commands, _):
         path = harness.prepare_context()
         assert harness.prepare()["state"] == "PREPARED"
         path.joinpath("Dockerfile").write_text("FROM base:release\nRUN [\"true\"]\n")
@@ -635,6 +654,8 @@ def test_real_driver_builds_exports_loads_and_proves_fresh_result_with_fakes(tmp
         assert not any("pull" == part or "push" == part for call in commands.calls for part in call)
         create = next(call for call in commands.calls if "create" in call)
         assert "--pull=never" in create and "--cap-drop=ALL" in create
+        assert ("--cpu-quota" in create) is (resource_mode == "bounded")
+        assert ("--memory" in create) is (resource_mode == "bounded")
         assert harness.config.docker_endpoint not in [
             value for index, value in enumerate(create) if index and create[index - 1] == "--mount"]
 
@@ -672,8 +693,9 @@ def test_lost_create_with_absent_container_does_not_prove_cleanup(tmp_path, monk
         assert harness.service.store.records()[0]["driver"]["create_pending"] is True
 
 
-def test_real_driver_restart_reconciles_recorded_launcher_and_worker(tmp_path, monkeypatch):
-    with real_driver_harness(tmp_path, monkeypatch) as (harness, commands, proof):
+@pytest.mark.parametrize("resource_mode", ("bounded", "concurrency_only"))
+def test_real_driver_restart_reconciles_recorded_launcher_and_worker(tmp_path, monkeypatch, resource_mode):
+    with real_driver_harness(tmp_path, monkeypatch, resource_mode) as (harness, commands, proof):
         path = harness.prepare_context()
         harness.prepare()
         path.joinpath("Dockerfile").write_text("FROM base:release\n")
@@ -683,6 +705,45 @@ def test_real_driver_restart_reconciles_recorded_launcher_and_worker(tmp_path, m
         harness.service.driver = workers.BuildKitWorker(harness.config, runner=commands, proof=proof)
         harness.service.reconcile(restart=True)
         assert harness.service.store.records()[0]["state"] == "CLEANED"
+
+
+def test_concurrency_only_service_keeps_sole_slot_until_independently_cleaned(tmp_path, monkeypatch):
+    with real_driver_harness(tmp_path, monkeypatch, "concurrency_only") as (harness, _, proof):
+        harness.prepare_context()
+        assert harness.prepare()["state"] == "PREPARED"
+        first_binding, first_worker = deepcopy(harness.binding), deepcopy(harness.worker)
+        proof.empty = False
+        assert harness.request("cleanup")["state"] == "UNKNOWN"
+        harness.prepare_context()
+        with pytest.raises(workers.EnforcementUnavailable, match="unresolved"):
+            harness.prepare()
+        proof.empty = True
+        assert harness.request("cleanup", binding=first_binding, worker=first_worker)["state"] == "CLEANED"
+        harness.worker = None
+        assert harness.prepare()["state"] == "PREPARED"
+        assert harness.request("cleanup")["state"] == "CLEANED"
+
+
+@pytest.mark.parametrize("cpu,memory,swap,accepted", [
+    ("max 100000", "max", "0", True),
+    ("100000 100000", "max", "0", False),
+    ("max 100000", "4096", "0", False),
+    ("max 100000", "max", "max", False),
+])
+def test_concurrency_only_kernel_proof_does_not_claim_finite_caps(tmp_path, cpu, memory, swap, accepted):
+    config, _ = configuration(tmp_path, "concurrency_only")
+    root = tmp_path / "fake-cgroup"
+    root.mkdir()
+    (root / "cpu.max").write_text(cpu)
+    (root / "memory.max").write_text(memory)
+    (root / "memory.swap.max").write_text(swap)
+    if accepted:
+        observed = workers.KernelProof(config).builder_limits(root, 1, 4096)
+        assert observed["cpu_quota_us"] is None and observed["memory_max"] is None
+        assert observed["swap_max"] == 0 and observed["inherited_limits"] == []
+    else:
+        with pytest.raises(workers.EnforcementUnavailable):
+            workers.KernelProof(config).builder_limits(root, 1, 4096)
 
 
 @pytest.mark.parametrize("failure", ["host-enforcement", "process-sandbox", "cgroup-populated", "worker-replaced"])

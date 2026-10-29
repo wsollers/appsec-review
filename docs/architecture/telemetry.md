@@ -94,6 +94,16 @@ concurrent task time, queue delay, completed and still-running work, reuse, proc
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
 events remain authoritative; the summary is a regenerable operator view.
 
+The additive `project_image_builds` view reports preparation starts, fresh builds,
+reuse, failures and failures by language family. Image preparation is paired by
+`build_unit_id`, including `PROJECT_IMAGE_BUILT`, `PROJECT_IMAGE_REUSED` and
+accepted-repair reuse as terminals; unrelated repair failures do not close that
+phase. A handled `PROJECT_IMAGE_BUILD_FAILED` is a nested preparation gap, not a
+failed Dagster step or `TASK_FAILED`. Concurrent starts/terminals need not be
+adjacent. Ordinary split task failures separately close FAILED step/attempt state;
+new-contract terminal Dagster failure recording supplies graph/run terminal events
+when success-only finalizers are skipped. Historical events are not rewritten.
+
 The additive `owasp` section resolves `OWASP_ASSESSMENT_RECORDED` to the hash-verified workbench
 report. It retains each publication attempt and the latest coverage denominators without summing
 the same rows across retries. A missing, changed, or invalid latest receipt is a named gap, not a

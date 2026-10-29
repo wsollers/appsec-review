@@ -264,7 +264,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
         finalize_ins = {"claim": In(dict), **{
             unit.unit_id.replace(".", "__"): In(Nothing) for unit in job.units}}
 
-        def make_finalize(selected: Job, selected_ins: Mapping[str, In], is_last: bool):
+        def make_finalize(selected: Job, selected_ins: Mapping[str, In]):
             @op(name=_node_name(selected, "finalize", node_namespace), ins=dict(selected_ins), out=Out(dict),
                 tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
                 description=f"Validate and publish the accepted handoff for {selected.job_id}.")
@@ -277,40 +277,11 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                     f"appsec/{selected.job_id}/status": outcome["status"]["status"],
                 })
                 context.add_output_metadata(_metadata_for_outcome(outcome, context.run_id))
-                if is_last:
-                    job_completion = str(outcome["status"]["status"])
-                    completion = ("COMPLETED_WITH_GAPS" if "COMPLETED_WITH_GAPS" in {
-                        str(claim.get("prior_graph_completion_status", "SUCCEEDED")), job_completion,
-                    } else job_completion)
-                    event = "GRAPH_COMPLETED_WITH_GAPS" if completion == "COMPLETED_WITH_GAPS" else "GRAPH_SUCCEEDED"
-                    log = PipelineLog(config.runtime.runs_dir / str(outcome["status"]["run_id"]))
-                    log.write(event, run_id=str(outcome["status"]["run_id"]), trigger=str(claim["trigger"]),
-                              orchestrator="dagster", details={"dagster_run_id": context.run_id,
-                              "completion_status": completion,
-                              "duration_ms": max(0, int((datetime.now(timezone.utc) - datetime.fromisoformat(
-                                  str(claim["graph_started_at"]))).total_seconds() * 1000))})
-                    log.write("RUN_COMPLETED", run_id=str(outcome["status"]["run_id"]),
-                              trigger=str(claim["trigger"]), orchestrator="dagster",
-                              details={"dagster_run_id": context.run_id, "completion_status": completion})
-                    orchestration_path = (config.runtime.runs_dir / str(outcome["status"]["run_id"]) /
-                                          "data" / "orchestration" / "dagster" / f"{context.run_id}.json")
-                    atomic_json(orchestration_path, {
-                        "schema": "appsec-review/orchestration-receipt/1",
-                        "status": "SUCCEEDED",
-                        "completion_status": completion,
-                        "application_run_id": str(outcome["status"]["run_id"]),
-                        "orchestrator": {"system": "dagster", "run_id": context.run_id},
-                        "decisions": list(claim.get("resume_decisions", [])),
-                        "handoff_sha256": {
-                            **dict(claim.get("completed_handoffs", {})),
-                            selected.job_id: outcome["handoff_sha256"],
-                        },
-                    })
-                    write_run_metrics(config.runtime.runs_dir / str(outcome["status"]["run_id"]))
                 propagated = dict(claim.get("upstream_handoffs", {}))
                 if selected.propagate_handoff:
                     propagated[selected.job_id] = outcome["handoff_sha256"]
                 return {"run_id": outcome["status"]["run_id"],
+                        "trigger": claim["trigger"],
                         "handoffs": propagated,
                         "completed_handoffs": {**dict(claim.get("completed_handoffs", {})),
                                                selected.job_id: outcome["handoff_sha256"]},
@@ -321,7 +292,59 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                         "graph_started_at": claim["graph_started_at"],
                         "resume_decisions": list(claim.get("resume_decisions", []))}
             return finalize
-        finalize_ops[job.job_id] = make_finalize(job, finalize_ins, job.job_id in terminal_jobs)
+        finalize_ops[job.job_id] = make_finalize(job, finalize_ins)
+
+    @op(name=f"{node_namespace + '__' if node_namespace else ''}{name}__complete",
+        ins={job_id: In(dict) for job_id in sorted(terminal_jobs)}, out=Out(dict),
+        tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
+        description="Finalize application graph receipts and metrics after every terminal job.")
+    @guarded_op(configs)
+    def complete(context, **terminals):
+        config = configs.for_run(context.dagster_run)
+        values = list(terminals.values())
+        run_ids = {value["run_id"] for value in values}
+        triggers = {value["trigger"] for value in values}
+        if len(run_ids) != 1 or len(triggers) != 1:
+            raise ValueError("terminal branches belong to different application runs or triggers")
+        run_id, trigger = run_ids.pop(), triggers.pop()
+        if any(value["completion_status"] not in {"SUCCEEDED", "COMPLETED_WITH_GAPS"} for value in values):
+            raise ValueError("terminal branch has not completed successfully")
+        completion = ("COMPLETED_WITH_GAPS" if any(
+            value["completion_status"] == "COMPLETED_WITH_GAPS" for value in values) else "SUCCEEDED")
+        merged = {}
+        for field in ("handoffs", "completed_handoffs"):
+            merged[field] = {}
+            for value in values:
+                for job_id, digest in value[field].items():
+                    if job_id in merged[field] and merged[field][job_id] != digest:
+                        raise ValueError("terminal branches disagree on accepted handoff identities")
+                    merged[field][job_id] = digest
+        decisions = {}
+        for value in values:
+            for decision in value["resume_decisions"]:
+                job_id = decision["job_id"]
+                if job_id in decisions and decisions[job_id] != decision:
+                    raise ValueError("terminal branches disagree on resume decisions")
+                decisions[job_id] = decision
+        ordered_decisions = [decisions[job.job_id] for job in jobs if job.job_id in decisions]
+        started = min(datetime.fromisoformat(value["graph_started_at"]) for value in values)
+        run_root = config.runtime.runs_dir / run_id
+        event = "GRAPH_COMPLETED_WITH_GAPS" if completion == "COMPLETED_WITH_GAPS" else "GRAPH_SUCCEEDED"
+        log = PipelineLog(run_root)
+        log.write(event, run_id=run_id, trigger=trigger, orchestrator="dagster",
+                  details={"dagster_run_id": context.run_id, "completion_status": completion,
+                           "duration_ms": max(0, int((datetime.now(timezone.utc) - started).total_seconds() * 1000))})
+        log.write("RUN_COMPLETED", run_id=run_id, trigger=trigger, orchestrator="dagster",
+                  details={"dagster_run_id": context.run_id, "completion_status": completion})
+        atomic_json(run_root / "data" / "orchestration" / "dagster" / f"{context.run_id}.json", {
+            "schema": "appsec-review/orchestration-receipt/1",
+            "status": "SUCCEEDED", "completion_status": completion,
+            "application_run_id": run_id, "orchestrator": {"system": "dagster", "run_id": context.run_id},
+            "decisions": ordered_decisions, "handoff_sha256": merged["completed_handoffs"],
+        })
+        write_run_metrics(run_root)
+        return {"run_id": run_id, "trigger": trigger, **merged, "completion_status": completion,
+                "graph_started_at": started.isoformat(), "resume_decisions": ordered_decisions}
 
     @graph(name=name)
     def generated_graph():
@@ -338,9 +361,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                     claim=claim, **dependencies)
             finalized[job.job_id] = finalize_ops[job.job_id](
                 claim=claim, **{unit_id.replace(".", "__"): value for unit_id, value in values.items()})
-        if len(terminal_jobs) != 1:
-            raise ValueError(f"Dagster application graph requires one terminal job: {sorted(terminal_jobs)}")
-        return finalized[next(iter(terminal_jobs))]
+        return complete(**{job_id: finalized[job_id] for job_id in sorted(terminal_jobs)})
 
     return generated_graph.to_job(
         description=f"Application-owned integrity lifecycle exposed as the real {name} Dagster DAG.",

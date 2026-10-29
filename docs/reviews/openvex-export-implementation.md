@@ -416,6 +416,44 @@ evidence; those manual gaps remain below.
 
 ## Failures and qualifications
 
+- The multivuln startup owner later exposed a Dagster adapter gap on exact integrated main
+  `a8883acc6d4045828694a0b1b698970d2a077426`: its installed definitions smoke still required
+  one terminal application job, although default-on OpenVEX and gate-only reporting are
+  intentionally independent terminals. This was reproduced in a dedicated Linux-filesystem
+  WSL checkout by `tests/orchestration/dagster/test_completion.py`, before any target review.
+  The correction moves graph/run completion, orchestration receipt publication and final
+  metrics refresh into one lifecycle fan-in node after every terminal accepted finalization.
+  Per-job finalizers only publish their own handoffs. The fan-in preserves either branch's
+  gap state, merges handoffs and deduplicates shared resume decisions, rejecting conflicting
+  identities; a failed terminal cannot publish success. Export remains default-on and
+  independent, and the report still consumes only the gate.
+  The focused Linux command below passed **49 tests, two deselected in 50.62 seconds**:
+
+  ```sh
+  .venv/bin/python -m pytest -q \
+    tests/orchestration/dagster/test_completion.py \
+    tests/orchestration/dagster/test_definitions.py \
+    tests/orchestration/test_topology.py tests/test_openvex_wiring.py \
+    -k 'not test_wave1_exposes_real_producer_shard_topology and not test_wave1_dagster_path_runs_application_graph' \
+    --basetemp=test/tmp/openvex-dagster-focused-fixed --tb=short
+  ```
+
+  The new regression validates the entire real definitions repository with export enabled and
+  explicitly disabled, not only one graph lookup. Synthetic in-process lifecycle tests prove
+  one final receipt/event/metrics refresh after both terminals, shared-ancestor deduplication,
+  gaps from either terminal or their ancestor, and terminal failure. A first broader run found
+  and corrected a new standalone completion-op name collision; the full-repository regression
+  now covers that. The two unchanged deselected legacy cases respectively assert the obsolete
+  direct image-pin-to-intake edge despite accepted target-acquisition insertion, and attempt
+  a real Claude CLI preflight unavailable in the isolated unit environment. The initial attempt
+  stopped at that missing CLI; no model call or real target review was executed. No assertions,
+  gating or packaging smoke were weakened to hide either gap.
+  An actual Linux wheel was built and installed with its dependencies in a second isolated
+  environment. Python `-I` verified the exact installed adapter bytes, runtime assets,
+  `copilot-prod` definitions-module import, full repository validation and final fan-in from
+  report plus export. The environment's dependency check passed. This proves the failing
+  packaging import boundary, not a Docker rebuild/deployment, native stack restart or acceptance
+  review. The startup owner retains those actions and must freeze the landed correction first.
 - An initial wheel build lacked the already-declared `setuptools>=75` backend. Restoring that
   build dependency resolved it; no application dependency or pin was loosened.
 - An exploratory standalone job import without application resources failed in the existing

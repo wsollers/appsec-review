@@ -33,6 +33,10 @@ class Engine:
         self.runs = []
 
     def __call__(self, argv, timeout):
+        if tuple(argv[:3]) == ("docker", "rm", "--force"):
+            return CommandOutcome(0, b"", b"")
+        if tuple(argv[:3]) == ("docker", "container", "inspect"):
+            return CommandOutcome(1, b"", f"No such container: {argv[3]}".encode())
         if tuple(argv[:3]) == ("docker", "image", "inspect"):
             image = argv[3]
             if image == BUILD_IMAGE and self.build_missing:
@@ -186,7 +190,8 @@ def test_execution_receipts_are_hash_bound_to_accepted_symbols(tmp_path, monkeyp
         load_accepted_debug_symbols(context.run_root)
 
 
-def test_managed_image_and_launcher_are_resume_inputs(monkeypatch, catalog):
+def test_managed_image_and_declared_release_are_resume_inputs(monkeypatch, catalog):
+    from appsec_review.config.assurance import ComponentReleases
     first = execution.execution_plan(ROOT)
     tool = catalog.tool("tool-native-cpp")
     changed = replace(catalog, tools={**catalog.tools, tool.tool_id:
@@ -194,7 +199,62 @@ def test_managed_image_and_launcher_are_resume_inputs(monkeypatch, catalog):
     monkeypatch.setattr(execution, "load_catalog", lambda _: changed)
     second = execution.execution_plan(ROOT)
     assert first != second
-    assert len(first["launcher_sha256"]) == 64
+    assert first["reuse_unavailable_reason"] == "missing_release_identity"
+    declared = execution.execution_plan(
+        ROOT, ComponentReleases({"job_debug_symbol_indexing": "readers-3"}))
+    changed_release = execution.execution_plan(
+        ROOT, ComponentReleases({"job_debug_symbol_indexing": "readers-4"}))
+    assert declared["reuse_allowed"]
+    assert declared != changed_release
+    assert not any(key.endswith("sha256") for key in declared)
+
+
+@pytest.mark.parametrize("target", ["clang", "msvc"])
+def test_production_reader_runs_inside_strict_job_scope(tmp_path, monkeypatch, catalog, target):
+    from appsec_review.config import load_config
+    from appsec_review.runtime import JobRunner
+    from appsec_review.runtime.scope import review_scope
+    from tests.test_debug_symbol_indexing import RUN_ID, SNAPSHOT
+
+    config = load_config(ROOT / "appsec-review.toml", compiler_target=target)
+    config = replace(config, runtime=replace(config.runtime, runs_dir=tmp_path,
+                                             metadata_dir=tmp_path / "metadata"))
+    binary = "tiny.elf" if target == "clang" else "tiny.exe"
+    context, _, _ = _seed(
+        tmp_path, target, run_name=RUN_ID, debug=target == "msvc", produced=True,
+        binary_bytes=(FIXTURES / binary).read_bytes(),
+        debug_bytes=(FIXTURES / "tiny.pdb").read_bytes() if target == "msvc" else None,
+        configuration=config)
+    engine = Engine((FIXTURES / ("tiny.dwarf.txt" if target == "clang" else "tiny.pdb.yaml")).read_bytes())
+    factory = lambda image_catalog, run_root: ContainerExecutor(image_catalog, run_root, runner=engine)
+    job = build_job(executor_factory=factory)
+    result = JobRunner(config).run(job, run_id=RUN_ID, target_root=tmp_path,
+                                   source_fingerprint=SNAPSHOT)
+    assert result["handoff"]["execution_status"] == "SUCCEEDED"
+    assert result["result"]["outputs"]["acceptance.publish_handoff"]["item_count"] > 0
+    assert len(engine.runs) == 1
+    decision = json.loads((Path(result["attempt_root"]) / "artifacts/debug-symbols/decision.json").read_bytes())
+    assert decision["execution"]["release_id"] == "debug-symbol-readers-3"
+    assert decision["execution"]["schema"].endswith("/2")
+    assert not any("provisioning/" in ref["path"] for ref in result["handoff"]["artifacts"])
+    with review_scope(ROOT, context.run_root, tmp_path):
+        with pytest.raises(ValueError, match="supplied platform payload hashing"):
+            file_sha256(catalog.tool("tool-native-cpp").manifest_path)
+        assert file_sha256(context.run_root / result["handoff"]["artifacts"][0]["path"])
+
+
+def test_launcher_staging_substitution_is_rejected(tmp_path, monkeypatch, catalog):
+    context, _, _ = _seed(tmp_path)
+    context = replace(context, repository_root=ROOT)
+    from appsec_review.runtime import UnitContext
+    unit = UnitContext(context, "extract.clang_dwarf", "extract", "clang_dwarf",
+                       context.attempt_root / "steps/extract/tasks/clang_dwarf", {})
+    exporter = execution.ContainerExporter(unit, execution.execution_plan(ROOT), None, "fixture")
+    exporter.launcher.chmod(0o644)
+    exporter.launcher.write_bytes(b"substituted")
+    with pytest.raises(execution.SymbolIntegrityError, match="launcher identity changed"):
+        exporter("llvm_dwarfdump", execution.ARGUMENTS["llvm_dwarfdump"],
+                 FIXTURES / "tiny.elf", timeout_seconds=1, max_output_bytes=1024)
 
 
 @pytest.mark.parametrize("fixture", ["msvc-tiny", "msvc-inline"])
