@@ -206,9 +206,21 @@ def test_hermetic_guard_refuses_external_writes_commands_and_connections(tmp_pat
     sentinel = tmp_path / "sentinel"
     sentinel.write_text("unchanged", encoding="utf-8")
     outcome, _ = execute(tmp_path,
-        "import pathlib, socket, subprocess, pytest\n"
+        "import os, pathlib, socket, subprocess, sys, pytest\n"
         "def test_guard():\n"
         f"    with pytest.raises(PermissionError): pathlib.Path({str(sentinel)!r}).write_text('changed')\n"
+        f"    with pytest.raises(PermissionError): os.open({str(sentinel)!r}, os.O_RDWR)\n"
+        f"    descriptor = os.open({str(sentinel)!r}, os.O_RDONLY)\n"
+        "    try:\n"
+        "        with pytest.raises(PermissionError): open(descriptor, 'wb', closefd=False)\n"
+        "        with pytest.raises(PermissionError): os.ftruncate(descriptor, 0)\n"
+        "    finally: os.close(descriptor)\n"
+        "    with pytest.raises(PermissionError): open(9999999, 'rb', closefd=False)\n"
+        "    child = subprocess.Popen([sys.executable, '-c', "
+        "\"import sys; v=sys.stdin.buffer.read(); sys.stdout.buffer.write(v.upper()); sys.stderr.write('pipe stderr')\"], "
+        "cwd=os.environ['APPSEC_ACCEPTANCE_ROOT'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n"
+        "    out, err = child.communicate(b'pipe input', timeout=5)\n"
+        "    assert child.returncode == 0 and out == b'PIPE INPUT' and err == b'pipe stderr'\n"
         "    with pytest.raises(PermissionError): subprocess.run(['docker', 'info'])\n"
         "    with socket.socket() as connection:\n"
         "        with pytest.raises(PermissionError): connection.connect(('192.0.2.1', 12345))\n")
@@ -673,3 +685,98 @@ def test_source_identities_include_transitive_fixture_helpers_and_dynamic_core(t
     path.write_bytes(path.read_bytes() + b"\n")
     with pytest.raises(ValueError, match="acceptance_source_changed:" + changed):
         ops_tests._verify_sources(root, identities)
+
+
+def test_fresh_source_verification_stops_at_the_current_case_deadline(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.acceptance import custody
+    from appsec_review import storage
+
+    identities = {}
+    for name in ("first", "second"):
+        path = tmp_path / name
+        path.write_bytes(b"fresh bounded source")
+        identities[name] = storage.file_sha256(path)
+    original = storage.file_sha256
+    inspected = []
+
+    def expiring(path):
+        digest = original(path)
+        inspected.append(path)
+        custody._DEADLINE.set(time.monotonic() - 1)
+        return digest
+
+    monkeypatch.setattr(storage, "file_sha256", expiring)
+    with pytest.raises(custody.CustodyError, match="deadline_exceeded"):
+        with custody.custody_deadline(time.monotonic() + 10):
+            ops_tests._verify_sources(tmp_path.resolve(), identities)
+    assert inspected == [tmp_path / "first"]
+
+
+_PUBLICATION_PREPARE = '''
+    import subprocess, sys
+    from tests.test_acceptance_custody import publish_micro_outputs
+    with pytest.raises(PermissionError):
+        os.link(root / "target/source.py", root / "forbidden-input-alias")
+    with pytest.raises(PermissionError):
+        os.link(root / "runs/micro-run/data/configuration/frozen.json", root / "forbidden-config-alias")
+    with pytest.raises(PermissionError):
+        os.link(str(root) + "/target/../target/source.py", root / "noncanonical-alias")
+    with pytest.raises(PermissionError):
+        open(9999999, "wb", closefd=False)
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import sys; v=sys.stdin.buffer.read(); sys.stdout.buffer.write(v.upper()); sys.stderr.write('owned pipe')"],
+        cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = child.communicate(b"stdio micro", timeout=5)
+    assert child.returncode == 0 and out == b"STDIO MICRO" and err == b"owned pipe"
+    publish_micro_outputs(root)
+    if os.link in os.supports_dir_fd:
+        directory = root / "runs/micro-run/data"
+        (directory / "pipe-link-source").write_bytes(b"actual transient link")
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.link("pipe-link-source", "pipe-link-destination", src_dir_fd=descriptor, dst_dir_fd=descriptor)
+            os.unlink("pipe-link-destination", dir_fd=descriptor)
+        finally:
+            os.close(descriptor)
+        (directory / "pipe-link-source").unlink()
+'''
+
+
+@pytest.mark.parametrize("fail_detachment", [False, True])
+def test_real_producer_publication_and_pipe_stdio_keep_strict_acceptance_custody(
+        tmp_path: Path, monkeypatch, capsys, fail_detachment: bool) -> None:
+    source = _STAGED_MICRO.replace(
+        '    (root / "custody-input.json").write_text',
+        _PUBLICATION_PREPARE + '\n    (root / "custody-input.json").write_text')
+    source = source.replace(
+        '    (root / "progress.txt").write_text("review", encoding="utf-8")',
+        '    descriptor = os.open(root / "target/source.py", os.O_RDONLY)\n'
+        '    try:\n'
+        '        with pytest.raises(PermissionError): os.ftruncate(descriptor, 0)\n'
+        '    finally: os.close(descriptor)\n'
+        '    (root / "progress.txt").write_text("review", encoding="utf-8")')
+    staged_inventory(tmp_path, monkeypatch, source=source)
+    if fail_detachment:
+        from appsec_review.acceptance import custody
+
+        def cancelled(*args):
+            raise custody.CustodyError("injected detachment cancellation")
+
+        monkeypatch.setattr(custody, "_detach_publication_member", cancelled)
+    code = ops_tests.run_acceptance(arguments(workers=2), ROOT)
+    result = acceptance_result(capsys)
+    assert result["cleanup"]["confirmed"]
+    prepare = result["cases"][0]
+    assert prepare["pytest"]["cases"][0]["outcome"] == "passed"
+    receipt = json.loads(Path(prepare["producer_publication"]["path"]).read_bytes())
+    if fail_detachment:
+        assert code == 1 and not prepare["passed"] and receipt["outcome"] == "failed"
+        assert result["blocked_obligations"] == ["micro-review", "micro-report", "micro-consumer"]
+        assert not list((Path(result["artifacts_root"]) / "custody/micro").glob("*.checkpoint.json"))
+        assert not (Path(result["artifacts_root"]) / "custody/micro/sealed.json").exists()
+    else:
+        assert code == 0 and prepare["passed"] and receipt["outcome"] == "detached"
+        assert receipt["replaced_files"] == receipt["verified_copy_files"] == 4
+        assert prepare["producer_publication"]["sha256"]
+        assert any(item["operation"] == "producer_publication" for item in prepare["staging"])
+        assert result["cases"][2]["seal"]["sha256"]

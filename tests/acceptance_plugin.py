@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import platform
 import shlex
+import stat
 import sys
 import time
 
@@ -52,7 +53,9 @@ def _guard(workspace: LaneWorkspace) -> None:
     writable = [root]
     immutable = []
     if context is not None:
-        from appsec_review.acceptance.custody import CustodyError, ordinary_path, snapshot_tree, verify_inputs, verify_seed
+        from appsec_review.acceptance.custody import (
+            CustodyError, ordinary_path, producer_link_path, snapshot_tree, verify_inputs, verify_seed,
+        )
 
         ordinary_path(context.work_root)
         reporting = Path(os.environ["APPSEC_ACCEPTANCE_OUTCOME"]).parent
@@ -106,6 +109,24 @@ def _guard(workspace: LaneWorkspace) -> None:
         except OSError:
             return None
 
+    def stdio_pipe_descriptor(descriptor):
+        try:
+            if not stat.S_ISFIFO(os.fstat(descriptor).st_mode):
+                return False
+            if os.name == "nt":
+                import ctypes
+                from ctypes import wintypes
+                import msvcrt
+
+                api = ctypes.WinDLL("kernel32", use_last_error=True)
+                api.GetFileType.argtypes = [wintypes.HANDLE]
+                api.GetFileType.restype = wintypes.DWORD
+                return api.GetFileType(msvcrt.get_osfhandle(descriptor)) == 3  # FILE_TYPE_PIPE
+            identity = os.readlink(f"/proc/self/fd/{descriptor}")
+            return identity.startswith("pipe:[") and identity.endswith("]") and identity[6:-1].isdigit()
+        except OSError:
+            return False
+
     def path_of(value):
         if isinstance(value, int):
             return descriptor_path(value)
@@ -132,9 +153,35 @@ def _guard(workspace: LaneWorkspace) -> None:
                for item in immutable):
             raise PermissionError("acceptance sealed and prepared inputs are read-only")
 
+    def producer_link(value, directory_fd):
+        raw = os.fsdecode(value)
+        if os.path.normpath(raw) != raw:
+            raise PermissionError("acceptance producer links require lexical canonical paths")
+        path = Path(raw)
+        if not path.is_absolute():
+            parent = path_of(directory_fd) if directory_fd not in (None, -1) else Path.cwd()
+            if parent is None:
+                raise PermissionError("acceptance cannot resolve link directory descriptor")
+            path = parent / path
+        try:
+            producer_link_path(context, path)
+        except (ValueError, OSError) as error:
+            raise PermissionError(f"acceptance producer link refused: {error}") from error
+        mutation(path, structural=True)
+
     def audit(event, args):
         if event == "open":
-            path = path_of(args[0])
+            # Popen wraps its anonymous stdio pipe fds before its execution audit event.
+            # Only verified pipe wrapping is exempt, never unresolved filesystem fds,
+            # path opens, descriptor truncation, executable or transport checks.
+            if isinstance(args[0], int):
+                if stdio_pipe_descriptor(args[0]):
+                    return
+                path = descriptor_path(args[0])
+                if path is None:
+                    raise PermissionError("acceptance cannot resolve non-pipe file descriptor")
+            else:
+                path = path_of(args[0])
             if path == null_device:
                 return
             mode = args[1] or ""
@@ -157,6 +204,10 @@ def _guard(workspace: LaneWorkspace) -> None:
                 directory_fd = args[3]
             mutation(args[0], directory_fd=directory_fd, structural=event != "os.mkdir")
         elif event in {"os.rename", "os.link", "os.symlink"}:
+            if context is not None and event == "os.link" and context.kind is StageKind.PRODUCER:
+                producer_link(args[0], args[2])
+                producer_link(args[1], args[3])
+                return
             if context is not None and event in {"os.link", "os.symlink"}:
                 raise PermissionError("acceptance staged fixtures require ordinary independent files")
             mutation(args[0], directory_fd=args[2] if event == "os.rename" else None, structural=True)

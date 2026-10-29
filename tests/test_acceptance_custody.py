@@ -245,3 +245,190 @@ def test_manifest_publication_is_exclusive_and_never_part_of_its_own_tree(tmp_pa
         custody.seal_seed(producer, producer.work_root / "seal.json")
     with pytest.raises(custody.CustodyError, match="producer"):
         custody.seal_seed(consumer, tmp_path / "other.json")
+
+
+def publish_micro_outputs(root: Path) -> list[Path]:
+    """Use the actual transient index and retained shared publishers, without JobRunner."""
+    from appsec_review.retrieval.index import IndexBuilder
+    from appsec_review.storage import shared
+    from tests.test_shared_artifacts import actor
+
+    run = root / "runs/unchanged-run-id"
+    transient = run / "data/indices/source/transient.sqlite"
+    IndexBuilder(transient, name="source", fingerprint="a" * 64, target_snapshot="micro").build()
+    assert transient.stat().st_nlink == 1
+    owner = actor(run, 1)
+    index = run / "data/indices/source/published.sqlite"
+    guidance = run / "data/guidance/micro/task.md"
+    with shared.publication_scope_for_owner(owner):
+        IndexBuilder(index, name="source", fingerprint="b" * 64, target_snapshot="micro").build()
+        shared.publish_named(run, guidance, b"bounded publication fixture\n", namespace="guidance")
+    assert index.stat().st_nlink == guidance.stat().st_nlink == 2
+    return [index, guidance]
+
+
+def publication_fixture(tmp_path: Path):
+    producer, consumer = seed(tmp_path)
+    inputs = custody.capture_inputs(producer)
+    outputs = publish_micro_outputs(producer.work_root)
+    # This unit boundary models an already returned supervisor receipt, not accepted evidence.
+    completed = {
+        "outcome": "completed", "exit_code": 0,
+        "cleanup": {"confirmed": True, "started": True, "remaining_processes": 0,
+                    "boundary": "windows_job" if os.name == "nt" else "linux_process_group"}}
+    path = tmp_path / "custody/publication.json"
+    return producer, consumer, inputs, outputs, completed, path
+
+
+def test_actual_publishers_detach_to_ordinary_files_without_byte_mode_or_binding_changes(tmp_path: Path) -> None:
+    producer, consumer, inputs, outputs, completed, path = publication_fixture(tmp_path)
+    before, identities = custody._producer_tree(producer.work_root)
+    with pytest.raises(custody.CustodyError, match="hardlinked"):
+        custody.snapshot_tree(producer.work_root)
+    receipt = custody.detach_producer_outputs(
+        producer, path, producer_result=completed, frozen_inputs=inputs)
+    assert receipt["outcome"] == "detached"
+    assert receipt["replaced_files"] == receipt["verified_copy_files"] == 4
+    assert receipt["verified_copy_bytes"] == sum(group["size"] * group["link_count"] for group in receipt["groups"])
+    assert len(receipt["groups"]) == 2 and all(group["bindings"] for group in receipt["groups"])
+    assert custody.snapshot_tree(producer.work_root) == before
+    custody.verify_inputs(producer, inputs)
+    assert all((producer.work_root / name).stat().st_nlink == 1 for name in before["files"])
+    for output in outputs:
+        relative = output.relative_to(producer.work_root).as_posix()
+        assert output.stat().st_ino != identities[relative].st_ino
+    checkpoint = tmp_path / "custody/ordinary-checkpoint.json"
+    digest = custody.checkpoint_seed(producer, checkpoint)
+    custody.verify_checkpoint(producer, checkpoint, digest)
+    manifest_path = tmp_path / "custody/ordinary-seal.json"
+    consumer = replace(consumer, manifest_path=manifest_path,
+                       manifest_sha256=custody.seal_seed(producer, manifest_path))
+    custody.materialize_seed(consumer)
+    assert custody.snapshot_tree(consumer.work_root) == before
+    assert all((consumer.work_root / name).stat().st_nlink == 1 for name in before["files"])
+
+
+@pytest.mark.parametrize("damage", ["external", "unclassified", "cross-run", "immutable", "binding"])
+def test_publication_rejects_all_ineligible_groups_before_replacing_any_inode(tmp_path: Path, damage: str) -> None:
+    producer, _consumer, inputs, outputs, completed, path = publication_fixture(tmp_path)
+    source = outputs[0]
+    if damage == "binding":
+        binding = next((producer.work_root / "runs/unchanged-run-id/data/shared/named/index-shard").glob("*.json"))
+        binding.write_bytes(b"torn binding")
+    else:
+        destination = {
+            "external": tmp_path / "external-alias",
+            "unclassified": producer.work_root / "runs/unchanged-run-id/data/unregistered/alias",
+            "cross-run": producer.work_root / "runs/other-run/data/indices/source/alias",
+            "immutable": producer.work_root / "target/source-alias.py",
+        }[damage]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        os.link(source, destination)
+    original = {output: custody._identity(output.stat()) for output in outputs}
+    with pytest.raises((ValueError, OSError)):
+        custody.detach_producer_outputs(producer, path, producer_result=completed, frozen_inputs=inputs)
+    assert original == {output: custody._identity(output.stat()) for output in outputs}
+    receipt = json.loads(path.read_bytes())
+    assert receipt["outcome"] == "failed" and receipt["replaced_files"] == 0
+    assert receipt["verified_copy_files"] == 0 and receipt["reason"]
+    assert receipt["inspected_files"] and receipt["inspected_bytes"]
+    assert receipt["groups"] and not receipt["groups"][-1]["eligible"]
+    group = receipt["groups"][-1]
+    assert group["observed_link_counts"] and group["sha256"] and group["size"] and group["mode"]
+    if damage == "external":
+        assert group["link_count"] > group["enumerated_member_count"]
+    assert not list(producer.work_root.rglob(".custody-*"))
+
+
+@pytest.mark.parametrize("failure", ["expired", "identity", "race", "replace", "partial-replace"])
+def test_publication_errors_never_retry_or_return_a_successful_receipt(
+        tmp_path: Path, monkeypatch, failure: str) -> None:
+    producer, _consumer, inputs, outputs, completed, path = publication_fixture(tmp_path)
+    original_inodes = {output: output.stat().st_ino for output in outputs}
+    if failure == "identity":
+        from types import SimpleNamespace
+
+        read = custody._read_file_record
+
+        def unsupported(*args, **kwargs):
+            record, metadata = read(*args, **kwargs)
+            return record, SimpleNamespace(st_dev=metadata.st_dev, st_ino=0, st_nlink=metadata.st_nlink)
+
+        monkeypatch.setattr(custody, "_read_file_record", unsupported)
+    elif failure == "race":
+        classify = custody._publication_groups
+
+        def changed(*args):
+            result = classify(*args)
+            os.link(outputs[0], tmp_path / "appeared-after-inspection")
+            return result
+
+        monkeypatch.setattr(custody, "_publication_groups", changed)
+    elif failure in {"replace", "partial-replace"}:
+        replace_file = os.replace
+        replacements = []
+
+        def refused(source, destination):
+            replacements.append((source, destination))
+            if len(replacements) == (2 if failure == "partial-replace" else 1):
+                raise PermissionError("injected replacement refusal; no retry")
+            return replace_file(source, destination)
+
+        monkeypatch.setattr(custody.os, "replace", refused)
+    deadline = time.monotonic() - 1 if failure == "expired" else time.monotonic() + 20
+    with pytest.raises((custody.CustodyError, PermissionError)):
+        token = custody._DEADLINE.set(deadline)
+        try:
+            custody.detach_producer_outputs(producer, path, producer_result=completed, frozen_inputs=inputs)
+        finally:
+            custody._DEADLINE.reset(token)
+    receipt = json.loads(path.read_bytes())
+    assert receipt["outcome"] == "failed" and receipt["reason"]
+    if failure in {"replace", "partial-replace"}:
+        expected = 1 if failure == "partial-replace" else 0
+        assert receipt["replaced_files"] == expected
+        assert receipt["verified_copy_files"] == len(replacements) == expected + 1
+    else:
+        assert all(output.stat().st_ino == original_inodes[output] for output in outputs)
+
+
+def test_unclean_or_failed_producer_cannot_request_detachment(tmp_path: Path) -> None:
+    producer, _consumer, inputs, _outputs, completed, path = publication_fixture(tmp_path)
+    for change in (
+            {"exit_code": 1}, {"outcome": "timeout"},
+            {"cleanup": {**completed["cleanup"], "confirmed": False}},
+            {"cleanup": {**completed["cleanup"], "remaining_processes": 1}}):
+        with pytest.raises(custody.CustodyError, match="requires_successful_owned_cleanup"):
+            custody.detach_producer_outputs(
+                producer, path, producer_result={**completed, **change}, frozen_inputs=inputs)
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("namespace", ["review-cell", "cell-check", "ambiguous"])
+def test_publication_shared_prefix_requires_one_exact_production_binding(
+        tmp_path: Path, namespace: str) -> None:
+    from appsec_review.storage import shared
+    from tests.test_shared_artifacts import actor
+
+    producer, _consumer, inputs, _outputs, completed, receipt_path = publication_fixture(tmp_path)
+    run = producer.work_root / "runs/unchanged-run-id"
+    output = run / "data/jobs/job_inference_security_review/cells/micro/result.json"
+    owner = actor(run, 2)
+    with shared.publication_scope_for_owner(owner):
+        shared.publish_named(run, output, b'{"bounded":"cell/check publication"}\n',
+                             namespace="review-cell" if namespace == "ambiguous" else namespace)
+        if namespace == "ambiguous":
+            owner.named("cell-check", output, computed=True)
+    before, identities = custody._producer_tree(producer.work_root)
+    if namespace == "ambiguous":
+        with pytest.raises(custody.CustodyError, match="ambiguous_alias"):
+            custody.detach_producer_outputs(
+                producer, receipt_path, producer_result=completed, frozen_inputs=inputs)
+        assert custody._producer_tree(producer.work_root)[0] == before
+        assert output.stat().st_ino == identities[output.relative_to(producer.work_root).as_posix()].st_ino
+        assert json.loads(receipt_path.read_bytes())["replaced_files"] == 0
+    else:
+        receipt = custody.detach_producer_outputs(
+            producer, receipt_path, producer_result=completed, frozen_inputs=inputs)
+        assert receipt["outcome"] == "detached" and receipt["replaced_files"] == 6
+        assert custody.snapshot_tree(producer.work_root) == before
