@@ -17,9 +17,8 @@ from appsec_review.signing import core, import_hook, modules
 from appsec_review.signing.core import OpenSSL, key_id
 from appsec_review.signing.import_hook import VerifiedFinder, VerifiedNamespaceLoader, VerifiedSourceLoader
 from appsec_review.signing.modules import VerifiedManifest, sign_modules
+from tests.signing._host import OPENSSL_BINARY
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 PACKAGE = "demo_pkg"
 TREE = {
     "__init__.py": b"VALUE = 1\n",

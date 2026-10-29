@@ -1,6 +1,7 @@
 """Native Windows host behavior, simulated on POSIX by replacing ``core.windows_host``."""
 from __future__ import annotations
 
+import ntpath
 import os
 from pathlib import Path
 import stat
@@ -12,9 +13,11 @@ import pytest
 from appsec_review.config import signing as signing_config
 from appsec_review.signing import cli as signing_cli
 from appsec_review.signing import core, modules
+from tests.signing._host import OPENSSL_BINARY
 
 
 GIT_OPENSSL = r"C:\Program Files\Git\mingw64\bin\openssl.exe"
+posix_only = pytest.mark.skipif(os.name == "nt", reason="genuine POSIX host behavior")
 
 
 @pytest.fixture
@@ -33,6 +36,7 @@ def test_windows_absolute_paths_need_a_drive_or_unc_share(windows, value, absolu
     assert core.is_absolute_path(value) is absolute
 
 
+@posix_only
 def test_posix_absolute_paths_are_unchanged() -> None:
     assert core.is_absolute_path("/usr/bin/openssl")
     assert not core.is_absolute_path("usr/bin/openssl")
@@ -62,8 +66,9 @@ def test_windows_openssl_environment_keeps_only_system_variables_and_the_binary_
 
 
 def test_windows_openssl_runs_with_an_empty_private_config_file(windows, monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(core, "windows_host", lambda: False)
-    openssl = core.OpenSSL("/usr/bin/openssl", temp_dir=str(tmp_path))
+    if os.name != "nt":
+        monkeypatch.setattr(core, "windows_host", lambda: False)
+    openssl = core.OpenSSL(OPENSSL_BINARY, temp_dir=str(tmp_path))
     monkeypatch.setattr(core, "windows_host", lambda: True)
     seen = []
     real_run = subprocess.run
@@ -79,10 +84,11 @@ def test_windows_openssl_runs_with_an_empty_private_config_file(windows, monkeyp
     for config, data, cwd, path in seen:
         assert data == b""
         assert cwd == str(config.parent) and config.parent.parent == tmp_path
-        assert path.split(";")[0] == "/usr/bin"
+        assert path.split(";")[0] == ntpath.dirname(OPENSSL_BINARY)
         assert not config.parent.exists()
 
 
+@posix_only
 def test_posix_openssl_environment_is_unchanged(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(core.subprocess, "run",
@@ -128,10 +134,16 @@ def test_manifest_paths_are_posix_relative_on_every_host(windows, tmp_path) -> N
 
 def test_windows_walk_rejects_a_junction_in_the_package(windows, monkeypatch, tmp_path) -> None:
     root = _tree(tmp_path / "pkg")
-    junction = os.lstat(root / "sub")
-    real = core.is_link_or_reparse_point
-    monkeypatch.setattr(core, "is_link_or_reparse_point",
-                        lambda info: info.st_ino == junction.st_ino or real(info))
+    if os.name == "nt":
+        import _winapi
+
+        (root / "sub").rename(tmp_path / "outside")
+        _winapi.CreateJunction(str(tmp_path / "outside"), str(root / "sub"))
+    else:
+        junction = os.lstat(root / "sub")
+        real = core.is_link_or_reparse_point
+        monkeypatch.setattr(core, "is_link_or_reparse_point",
+                            lambda info: info.st_ino == junction.st_ino or real(info))
     with pytest.raises(core.SignatureVerificationError, match="symbolic links"):
         modules.build_manifest(root)
 
@@ -159,6 +171,7 @@ def test_windows_maps_the_repository_posix_defaults_and_refuses_other_rooted_pat
         signing_config.parse_signing({"trusted_keys_dir": "/srv/keys"}, tmp_path)
 
 
+@posix_only
 def test_posix_signing_config_is_unchanged(tmp_path) -> None:
     config = signing_config.SigningConfig()
     assert config.view() == {"openssl": "/usr/bin/openssl",
@@ -179,6 +192,7 @@ def test_windows_private_key_directory_skips_posix_modes_but_not_links(windows, 
         signing_cli._private_parent(directory / "operator.pem")
 
 
+@posix_only
 def test_posix_private_key_directory_still_requires_0700(tmp_path) -> None:
     directory = tmp_path / "private"
     directory.mkdir()
@@ -192,7 +206,8 @@ def test_bootstrap_openssl_defaults_to_the_host_default() -> None:
 
     assert bootstrap._parser().parse_args(
         ["--envelope", "/e", "--package-root", "/r", "--trusted-keys", "/k", "--module", "m"]).openssl is None
-    environ = {"APPSEC_REVIEW_MODULE_SIGNATURE": "relative.json", "APPSEC_REVIEW_MODULE_ROOT": "/r",
-               "APPSEC_REVIEW_TRUSTED_KEYS_DIR": "/k"}
+    environ = {"APPSEC_REVIEW_MODULE_SIGNATURE": "relative.json",
+               "APPSEC_REVIEW_MODULE_ROOT": os.path.abspath("/r"),
+               "APPSEC_REVIEW_TRUSTED_KEYS_DIR": os.path.abspath("/k")}
     with pytest.raises(Exception, match=r"absolute: APPSEC_REVIEW_MODULE_SIGNATURE$"):
         bootstrap.activate_from_environment(environ)

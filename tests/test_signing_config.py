@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from appsec_review.config import SigningConfig, load_config, parse_signing
 from appsec_review.config.loader import overlay_capacity_keys, profile_override_keys
+from appsec_review.config.signing import host_default
 
 
 ROOT = Path(__file__).parents[1]
@@ -27,9 +29,12 @@ def test_repository_config_requires_image_signatures_with_documented_defaults() 
     config = load_config(ROOT / "appsec-review.toml")
 
     assert config.signing == SigningConfig()
-    assert config.signing.openssl == Path("/usr/bin/openssl")
-    assert config.signing.trusted_keys_dir == Path("/etc/appsec-review/signing/trusted-keys")
-    assert config.signing.image_signatures_dir == Path("/var/lib/appsec-review/signing/images")
+    for field in ("openssl", "trusted_keys_dir", "image_signatures_dir"):
+        assert getattr(config.signing, field) == Path(host_default(field))
+    if os.name != "nt":
+        assert config.signing.openssl == Path("/usr/bin/openssl")
+        assert config.signing.trusted_keys_dir == Path("/etc/appsec-review/signing/trusted-keys")
+        assert config.signing.image_signatures_dir == Path("/var/lib/appsec-review/signing/images")
     assert config.signing.image_enforcement == "required"
     assert config.signing.image_enforced is True
     assert json.loads(config.resolved_json)["signing"] == config.signing.view()
@@ -53,11 +58,12 @@ def test_relative_directories_resolve_against_the_configuration_directory(tmp_pa
 
 
 def test_absolute_directories_are_kept(tmp_path: Path) -> None:
+    signatures = str(tmp_path / "sigs") if os.name == "nt" else "/srv/signatures"
     signing = parse_signing({"trusted_keys_dir": str(tmp_path / "keys"),
-                             "image_signatures_dir": "/srv/signatures"}, Path("/unused"))
+                             "image_signatures_dir": signatures}, Path("/unused"))
 
     assert signing.trusted_keys_dir == (tmp_path / "keys").resolve()
-    assert signing.image_signatures_dir == Path("/srv/signatures")
+    assert signing.image_signatures_dir == Path(signatures)
 
 
 def test_unknown_keys_are_rejected(tmp_path: Path) -> None:

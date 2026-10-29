@@ -14,9 +14,8 @@ from appsec_review.signing.core import OpenSSL, SignatureVerificationError, key_
 from appsec_review.signing.release_lib import (
     RELEASE_LIB_KIND, build_manifest, sign_release_lib, verify_release_lib,
 )
+from tests.signing._host import OPENSSL_BINARY, symlink
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 SIGNING_SOURCE = Path(__file__).resolve().parents[2] / "src" / "appsec_review" / "signing"
 LIBRARY = {
     "fakepkg/__init__.py": b"VALUE = 1\n",
@@ -88,12 +87,14 @@ def _tamper(library: Path, how: str) -> None:
     elif how == "missing":
         (library / "fakepkg-1.0.dist-info/RECORD").unlink()
     elif how == "symlink":
-        (library / "fakepkg/linked.py").symlink_to(library / "fakepkg/__init__.py")
+        symlink(library / "fakepkg/linked.py", library / "fakepkg/__init__.py")
     elif how == "pycache":
         _write(library, {"fakepkg/__pycache__/__init__.cpython-312.pyc": b"cached"})
     elif how == "pyc":
         _write(library, {"fakepkg/stale.pyc": b"cached"})
     elif how == "fifo":
+        if os.name == "nt":
+            pytest.skip("FIFOs are not available on Windows")
         os.mkfifo(library / "fakepkg/pipe")
     elif how == "excluded-is-not-a-hole":
         _write(library, {"appsec_review_extra/__init__.py": b""})
@@ -152,7 +153,7 @@ spec.loader.exec_module(bootstrap)
 outcome = "verified"
 try:
     files = bootstrap.verify_release_library(envelope=sys.argv[2], library=sys.argv[3],
-                                             trusted_keys_dir=sys.argv[4], openssl="/usr/bin/openssl")
+                                             trusted_keys_dir=sys.argv[4], openssl=sys.argv[5])
 except Exception as error:
     outcome = type(error).__name__
 print(json.dumps({"outcome": outcome, "path": sys.path,
@@ -173,7 +174,7 @@ def test_standalone_bootstrap_verifies_transiently_and_never_adds_lib_to_sys_pat
         _tamper(library, "extra")
     result = subprocess.run(
         [sys.executable, "-I", "-S", "-B", "-c", STANDALONE, str(verifier / "bootstrap.py"), str(envelope),
-         str(library), str(trusted)],
+         str(library), str(trusted), OPENSSL_BINARY],
         capture_output=True, text=True, timeout=120, env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)

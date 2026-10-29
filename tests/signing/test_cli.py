@@ -14,9 +14,8 @@ from appsec_review import cli
 from appsec_review.config.signing import SigningConfig
 from appsec_review.signing import cli as signing_cli
 from appsec_review.signing.core import OpenSSL, key_id
+from tests.signing._host import OPENSSL_BINARY, POSIX_ONLY, symlink
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 IMAGE_A = "sha256:" + "a1" * 32
 IMAGE_B = "sha256:" + "b2" * 32
 IMAGE_C = "sha256:" + "c3" * 32
@@ -81,12 +80,15 @@ def test_keygen_writes_private_key_0600_in_0700_dir_and_installs_the_trusted_key
     code, report = _main(capsys, "keygen", "--openssl", OPENSSL_BINARY, "--private-key", str(private_key),
                          "--trusted-keys-dir", str(trusted))
     assert code == 0
-    assert _mode(private_key) == 0o600 and _mode(private_key.parent) == 0o700
+    if os.name != "nt":
+        assert _mode(private_key) == 0o600 and _mode(private_key.parent) == 0o700
     openssl = OpenSSL(OPENSSL_BINARY)
     expected = key_id(openssl.public_key_der(openssl.public_key_pem(private_key)))
     assert report["key_id"] == expected
     installed = trusted / f"{expected.removeprefix('sha256:')}.pem"
-    assert report["trusted_key"] == str(installed) and _mode(installed) == 0o644
+    assert report["trusted_key"] == str(installed)
+    if os.name != "nt":
+        assert _mode(installed) == 0o644
     assert installed.read_bytes().startswith(b"-----BEGIN PUBLIC KEY-----")
     assert "PRIVATE KEY" not in json.dumps(report)
 
@@ -100,6 +102,7 @@ def test_keygen_refuses_to_overwrite_an_existing_private_key(tmp_path, capsys) -
     assert private_key.read_bytes() == before
 
 
+@POSIX_ONLY
 def test_keygen_refuses_a_group_accessible_key_directory(tmp_path, capsys) -> None:
     directory = tmp_path / "shared"
     directory.mkdir()
@@ -362,7 +365,8 @@ def test_export_bootstrap_copies_files_byte_identically(tmp_path, capsys) -> Non
     source = Path(signing_cli.__file__).resolve().parent
     for name in signing_cli.BOOTSTRAP_FILES:
         assert (directory / name).read_bytes() == (source / name).read_bytes()
-        assert _mode(directory / name) == 0o644
+        if os.name != "nt":
+            assert _mode(directory / name) == 0o644
     assert sorted(path.name for path in directory.iterdir()) == sorted(signing_cli.BOOTSTRAP_FILES)
     # Re-exporting over regular files replaces them.
     (directory / "core.py").write_bytes(b"stale\n")
@@ -375,13 +379,13 @@ def test_export_bootstrap_refuses_symbolic_link_targets(tmp_path, capsys) -> Non
     directory.mkdir()
     victim = tmp_path / "victim.py"
     victim.write_bytes(b"original\n")
-    (directory / "modules.py").symlink_to(victim)
+    symlink(directory / "modules.py", victim)
     code, report = _main(capsys, "export-bootstrap", str(directory))
     assert code == 1 and "symbolic link" in report["error"]
     assert victim.read_bytes() == b"original\n" and not (directory / "core.py").exists()
 
     linked = tmp_path / "linked"
-    linked.symlink_to(tmp_path / "real", target_is_directory=True)
+    symlink(linked, tmp_path / "real", target_is_directory=True)
     (tmp_path / "real").mkdir()
     code, report = _main(capsys, "export-bootstrap", str(linked))
     assert code == 1 and "symbolic link" in report["error"]

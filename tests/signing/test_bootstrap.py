@@ -15,9 +15,8 @@ import pytest
 
 from appsec_review.signing.core import OpenSSL, key_id
 from appsec_review.signing.modules import sign_modules
+from tests.signing._host import OPENSSL_BINARY, symlink
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 SIGNING_SOURCE = Path(__file__).resolve().parents[2] / "src" / "appsec_review" / "signing"
 VERIFIER_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py")
 STANDALONE_NAMES = ("appsec_review_signing_core", "appsec_review_signing_modules",
@@ -186,7 +185,7 @@ def test_activate_from_environment_installs_the_hook_in_a_fresh_interpreter(veri
               "bootstrap = importlib.util.module_from_spec(spec)\n"
               "spec.loader.exec_module(bootstrap)\n"
               "finder = bootstrap.activate_from_environment()\n"
-              "assert sys.meta_path[0] is finder and sys.path[-1] == finder.manifest.root.parent.as_posix()\n"
+              "assert sys.meta_path[0] is finder and sys.path[-1] == str(finder.manifest.root.parent)\n"
               "import appsec_review.probe\n")
     result = subprocess.run([sys.executable, "-I", "-S", "-c", script], capture_output=True, text=True,
                             timeout=120, env=_signed_env(signed, APPSEC_REVIEW_REQUIRE_SIGNED_MODULES="1"))
@@ -207,8 +206,8 @@ def test_activate_from_environment_is_not_enforced_without_signature_or_requirem
     ({"APPSEC_REVIEW_MODULE_SIGNATURE": "/release/python-modules.json"},
      "requires APPSEC_REVIEW_MODULE_ROOT, APPSEC_REVIEW_TRUSTED_KEYS_DIR"),
     ({"APPSEC_REVIEW_REQUIRE_SIGNED_MODULES": "yes"}, "must be 0 or 1"),
-    ({"APPSEC_REVIEW_MODULE_SIGNATURE": "modules.json", "APPSEC_REVIEW_MODULE_ROOT": "/r",
-      "APPSEC_REVIEW_TRUSTED_KEYS_DIR": "/k", "APPSEC_REVIEW_OPENSSL": "openssl"},
+    ({"APPSEC_REVIEW_MODULE_SIGNATURE": "modules.json", "APPSEC_REVIEW_MODULE_ROOT": os.path.abspath("/r"),
+      "APPSEC_REVIEW_TRUSTED_KEYS_DIR": os.path.abspath("/k"), "APPSEC_REVIEW_OPENSSL": "openssl"},
      "must be absolute: APPSEC_REVIEW_MODULE_SIGNATURE, APPSEC_REVIEW_OPENSSL"),
 ])
 def test_activate_from_environment_fails_closed_on_incomplete_configuration(standalone, environ, message):
@@ -232,7 +231,7 @@ def test_load_verifier_rejects_symlinks_and_foreign_registrations(standalone, ve
     for name in VERIFIER_FILES:
         shutil.copyfile(verifier_dir / name, linked / name)
     (linked / "modules.py").unlink()
-    (linked / "modules.py").symlink_to(verifier_dir / "modules.py")
+    symlink(linked / "modules.py", verifier_dir / "modules.py")
     with pytest.raises(ImportError, match="symbolic link"):
         standalone.load_verifier(linked)
     assert not any(name in sys.modules for name in STANDALONE_NAMES[:3])

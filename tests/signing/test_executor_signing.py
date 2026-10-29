@@ -18,9 +18,8 @@ from appsec_review.container_runtime.executor import CommandOutcome, ContainerEx
 from appsec_review.container_runtime.project_images import SCHEMA as PROJECT_IMAGE_SCHEMA
 from appsec_review.signing import EnvelopeImageVerifier, OpenSSL, SignatureVerificationError, key_id, sign_image
 from appsec_review.signing.policy import set_default_image_verifier
+from tests.signing._host import OPENSSL_BINARY
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 PINNED = "sha256:" + "a" * 64
 DERIVED = "sha256:" + "d" * 64
 OTHER = "sha256:" + "e" * 64

@@ -17,10 +17,10 @@ from appsec_review.signing import policy
 from appsec_review.signing.policy import (
     default_image_verifier, image_verifier_from_config, set_default_image_verifier,
 )
+from tests.signing._host import OPENSSL_BINARY
 
 
 ROOT = Path(__file__).parents[2]
-OPENSSL_BINARY = "/usr/bin/openssl"
 IMAGE = "sha256:" + "c3" * 32
 
 requires_openssl = pytest.mark.skipif(
@@ -69,9 +69,9 @@ def test_required_enforcement_builds_an_envelope_verifier(tmp_path: Path) -> Non
         verifier.verify(IMAGE)
 
 
-def test_only_explicit_disabled_enforcement_builds_the_disabled_verifier() -> None:
+def test_only_explicit_disabled_enforcement_builds_the_disabled_verifier(tmp_path: Path) -> None:
     verifier = image_verifier_from_config(SigningConfig(image_enforcement="disabled",
-                                                        openssl=Path("/nonexistent/openssl")))
+                                                        openssl=tmp_path / "nonexistent" / "openssl"))
 
     assert isinstance(verifier, DisabledImageVerifier)
     assert verifier.enforced is False
@@ -176,7 +176,7 @@ def test_default_fails_closed_when_the_application_root_has_no_configuration(mon
 
 def test_default_fails_closed_when_the_configured_verifier_cannot_be_built(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(_config(
-        tmp_path, f'[signing]\nopenssl = "{tmp_path / "missing-openssl"}"\n')))
+        tmp_path, f"[signing]\nopenssl = '{tmp_path / 'missing-openssl'}'\n")))
 
     with pytest.raises(SignatureVerificationError, match="OpenSSL binary is not an executable file"):
         default_image_verifier()

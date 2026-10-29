@@ -14,6 +14,8 @@ from appsec_review.signing.modules import sign_modules
 from appsec_review.signing.release_lib import sign_release_lib
 
 
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="the native root entrypoint is a Linux-only root service")
+
 REPOSITORY = Path(__file__).parents[1]
 SIGNING_SOURCE = REPOSITORY / "src/appsec_review/signing"
 SPEC = importlib.util.spec_from_file_location(

@@ -18,6 +18,8 @@ from uuid import uuid4
 
 import pytest
 
+pytest.importorskip("fcntl", reason="the builder admission service is POSIX-only")
+
 from appsec_review.config.assurance import ResourceBudget, parse_review_policy
 from appsec_review.config.image_builder_service import (
     BuilderAdmissionConfig, BuilderGrant, BuilderImage, ImageBuilderServiceConfig, load_image_builder_service,

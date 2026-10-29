@@ -14,9 +14,8 @@ from appsec_review.signing.core import OpenSSL, SignatureVerificationError, Trus
 from appsec_review.signing.modules import (
     MODULES_KIND, VerifiedManifest, build_manifest, sign_modules, verify_modules,
 )
+from tests.signing._host import OPENSSL_BINARY, symlink
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 PACKAGE = "demo_pkg"
 TREE = {
     "__init__.py": b"VALUE = 1\n",
@@ -88,11 +87,11 @@ def test_build_manifest_rejects_native_and_pth_files(tmp_path, name):
 
 def test_build_manifest_rejects_symlinks_and_odd_names(tmp_path):
     root = _write_tree(tmp_path / PACKAGE)
-    (root / "link.py").symlink_to(root / "core.py")
+    symlink(root / "link.py", root / "core.py")
     with pytest.raises(SignatureVerificationError, match="symbolic link"):
         build_manifest(root, package=PACKAGE)
     (root / "link.py").unlink()
-    (root / "linked_dir").symlink_to(root / "sub", target_is_directory=True)
+    symlink(root / "linked_dir", root / "sub", target_is_directory=True)
     with pytest.raises(SignatureVerificationError, match="symbolic link"):
         build_manifest(root, package=PACKAGE)
     (root / "linked_dir").unlink()
@@ -108,9 +107,11 @@ def test_build_manifest_rejects_symlinks_and_odd_names(tmp_path):
 def test_build_manifest_rejects_fifo_and_symlinked_root(tmp_path):
     root = _write_tree(tmp_path / PACKAGE)
     alias = tmp_path / "alias"
-    alias.symlink_to(root, target_is_directory=True)
+    symlink(alias, root, target_is_directory=True)
     with pytest.raises(SignatureVerificationError, match="package root must not be a symbolic link"):
         build_manifest(alias, package=PACKAGE)
+    if os.name == "nt":
+        pytest.skip("FIFOs are not available on Windows")
     os.mkfifo(root / "pipe")
     with pytest.raises(SignatureVerificationError, match="non-regular"):
         build_manifest(root, package=PACKAGE)
@@ -167,7 +168,7 @@ def test_symlink_is_rejected_even_to_identical_content(openssl, signing_key, sig
     outside = tmp_path / "outside.py"
     outside.write_bytes(TREE["core.py"])
     (package_root / "core.py").unlink()
-    (package_root / "core.py").symlink_to(outside)
+    symlink(package_root / "core.py", outside)
     with pytest.raises(SignatureVerificationError, match="symbolic link"):
         _verify(openssl, signing_key, envelope_path, package_root)
 
@@ -252,11 +253,11 @@ def test_read_verified_refuses_symlinked_parent_directory(openssl, signing_key, 
     copy = tmp_path / "copy"
     _write_tree(copy)
     (package_root / "sub").rename(tmp_path / "moved-sub")
-    (package_root / "sub").symlink_to(copy / "sub", target_is_directory=True)
+    symlink(package_root / "sub", copy / "sub", target_is_directory=True)
     with pytest.raises(SignatureVerificationError, match="cannot be opened safely|not a plain directory"):
         manifest.read_verified("sub/leaf.py")
     (package_root / "core.py").unlink()
-    (package_root / "core.py").symlink_to(copy / "core.py")
+    symlink(package_root / "core.py", copy / "core.py")
     with pytest.raises(SignatureVerificationError):
         manifest.read_verified("core.py")
 
@@ -268,7 +269,7 @@ def test_read_verified_lstat_fallback_refuses_symlinked_parent(openssl, signing_
     assert manifest.read_verified("sub/leaf.py") == TREE["sub/leaf.py"]
     copy = _write_tree(tmp_path / "copy")
     (package_root / "sub").rename(tmp_path / "moved-sub")
-    (package_root / "sub").symlink_to(copy / "sub", target_is_directory=True)
+    symlink(package_root / "sub", copy / "sub", target_is_directory=True)
     with pytest.raises(SignatureVerificationError, match="not a plain directory"):
         manifest.read_verified("sub/leaf.py")
 
@@ -324,4 +325,4 @@ def test_build_manifest_over_real_package_is_fast():
     assert "__init__.py" in subject["files"]
     assert "signing/modules.py" in subject["files"]
     assert not any("__pycache__" in relpath for relpath in subject["files"])
-    assert elapsed < 10.0
+    assert elapsed < (30.0 if os.name == "nt" else 10.0)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 import stat
@@ -93,15 +94,15 @@ def test_build_signs_modules_then_builds_signs_and_verifies_the_image(env_file: 
     assert sign_modules[:4] == ["/venv/bin/python", "-m", "appsec_review", "signing"]
     assert sign_modules[sign_modules.index("--output") + 1] == str(ROOT / "deploy/dagster/signing/python-modules.json")
     assert sign_modules[sign_modules.index("--package-root") + 1] == str(ROOT / "src/appsec_review")
-    assert sign_modules[sign_modules.index("--private-key") + 1] == "/keys/operator.pem"
-    assert commands[1][commands[1].index("--trusted-keys-dir") + 1] == "/trust"
+    assert sign_modules[sign_modules.index("--private-key") + 1] == str(Path("/keys/operator.pem"))
+    assert commands[1][commands[1].index("--trusted-keys-dir") + 1] == str(Path("/trust"))
     build = commands[2]
     assert build[build.index("--target") + 1] == "runtime"
     assert build[build.index("--tag") + 1] == "appsec-review-dagster:wsl"
     assert runner.calls[2][1]["env"]["DOCKER_BUILDKIT"] == "1"
     assert commands[3][commands[3].index("sign-image") + 1] == "appsec-review-dagster:wsl"
     assert commands[4][commands[4].index("verify-image") + 1] == SIGNED
-    assert runner.calls[0][1]["env"]["PYTHONPATH"].split(":")[0] == str(ROOT / "src")
+    assert runner.calls[0][1]["env"]["PYTHONPATH"].split(os.pathsep)[0] == str(ROOT / "src")
     assert runner.compose_calls() == []
 
 
@@ -152,18 +153,19 @@ def test_start_verifies_then_launches_exactly_the_verified_id(env_file: Path) ->
     assert runner.steps() == ["verify-image", "docker compose"]
     verify = runner.calls[0][0]
     assert verify[verify.index("verify-image") + 1] == "appsec-review-dagster:wsl"
-    assert verify[verify.index("--signatures-dir") + 1] == "/sigs"
-    assert verify[verify.index("--trusted-keys-dir") + 1] == "/trust"
+    assert verify[verify.index("--signatures-dir") + 1] == str(Path("/sigs"))
+    assert verify[verify.index("--trusted-keys-dir") + 1] == str(Path("/trust"))
     (command, kwargs), = runner.compose_calls()
     assert command[-3:] == ["up", "-d", "--wait"]
     assert command[command.index("-f", command.index("-f") + 1) + 1].endswith("compose.claude.yaml")
     assert kwargs["env"][host.IMAGE_VARIABLE] == SIGNED
-    assert kwargs["env"]["APPSEC_SIGNING_TRUSTED_KEYS_DIR"] == "/trust"
-    assert kwargs["env"]["APPSEC_SIGNING_IMAGE_SIGNATURES_DIR"] == "/sigs"
+    assert kwargs["env"]["APPSEC_SIGNING_TRUSTED_KEYS_DIR"] == str(Path("/trust"))
+    assert kwargs["env"]["APPSEC_SIGNING_IMAGE_SIGNATURES_DIR"] == str(Path("/sigs"))
     lines = env_file.read_text(encoding="utf-8").splitlines()
     assert lines == ["APPSEC_COMPOSE_PROJECT=appsec-review-dagster-wsl", "DAGSTER_POSTGRES_PASSWORD=secret",
                      f"{host.IMAGE_VARIABLE}={SIGNED}"]
-    assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
 
 
 def test_explicit_image_is_verified_by_id(env_file: Path) -> None:
@@ -191,7 +193,7 @@ def test_non_launching_actions_never_verify_and_use_a_placeholder_only_without_a
 
 
 def test_signing_settings_default_to_the_configured_host_directories() -> None:
-    settings = image_signing.SigningSettings.load({})
+    settings = image_signing.SigningSettings.load({}, windows=False)
     config = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     assert f'trusted_keys_dir = "{settings.trusted_keys_dir.as_posix()}"' in config
     assert f'image_signatures_dir = "{settings.image_signatures_dir.as_posix()}"' in config
@@ -350,7 +352,7 @@ def test_signing_settings_default_to_host_paths(monkeypatch) -> None:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ProgramData", r"C:\ProgramData")
     posix = image_signing.SigningSettings.load({}, windows=False)
-    assert (str(posix.openssl), str(posix.trusted_keys_dir), str(posix.image_signatures_dir)) == (
+    assert (posix.openssl.as_posix(), posix.trusted_keys_dir.as_posix(), posix.image_signatures_dir.as_posix()) == (
         "/usr/bin/openssl", "/etc/appsec-review/signing/trusted-keys", "/var/lib/appsec-review/signing/images")
     windows = image_signing.host_defaults(windows=True)
     assert windows == {"APPSEC_SIGNING_OPENSSL": r"C:\Program Files\Git\mingw64\bin\openssl.exe",

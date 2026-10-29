@@ -18,9 +18,8 @@ from appsec_review.signing.core import (
     STATEMENT_SCHEMA, OpenSSL, SignatureVerificationError, TrustedKeys, canonical_json, key_id,
     make_statement, read_envelope, sign_statement, verify_envelope, write_envelope,
 )
+from tests.signing._host import OPENSSL_BINARY, symlink
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 KIND = "container-image"
 SUBJECT = {"image_id": "sha256:" + "ab" * 32, "id_kind": "docker-image-id"}
 
@@ -88,8 +87,9 @@ def test_openssl_binary_must_be_absolute_and_executable(tmp_path):
 def test_private_key_is_created_exclusively_with_private_modes(openssl, tmp_path):
     path = tmp_path / "new-parent" / "operator.pem"
     assert openssl.generate_private_key(path) == path
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     assert path.read_bytes().startswith(b"-----BEGIN PRIVATE KEY-----")
     original = path.read_bytes()
     with pytest.raises(FileExistsError):
@@ -205,7 +205,7 @@ def test_symlinked_trusted_key_is_rejected(openssl, signers, tmp_path):
     real = signers[0].install(tmp_path / "real")
     directory = tmp_path / "keys"
     directory.mkdir()
-    (directory / real.name).symlink_to(real)
+    symlink(directory / real.name, real)
     with pytest.raises(SignatureVerificationError, match="symbolic link"):
         TrustedKeys.load(directory, openssl)
 
@@ -275,7 +275,7 @@ def test_read_envelope_rejects_symlinks_missing_and_oversized_files(envelope, tm
     path = tmp_path / "envelope.json"
     write_envelope(path, envelope)
     link = tmp_path / "link.json"
-    link.symlink_to(path)
+    symlink(link, path)
     with pytest.raises(SignatureVerificationError, match="symbolic link"):
         read_envelope(link)
     with pytest.raises(SignatureVerificationError, match="missing"):

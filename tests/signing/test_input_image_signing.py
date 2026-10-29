@@ -25,9 +25,8 @@ from appsec_review.signing import (
 from tests.test_codeql_preinstalled import (
     BASE, INSTALLED_BUILD, INSTALLED_SOURCE, RELEASES, SOURCE, USER, settings_value,
 )
+from tests.signing._host import OPENSSL_BINARY
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 PINNED = "sha256:" + "a" * 64
 DERIVED = "sha256:" + "b" * 64
 OTHER = "sha256:" + "e" * 64

@@ -13,9 +13,8 @@ from appsec_review.signing import (
     SignatureVerificationError, image_statement, inspect_image_id, key_id, make_statement,
     sign_image, sign_statement, write_envelope,
 )
+from tests.signing._host import OPENSSL_BINARY
 
-
-OPENSSL_BINARY = "/usr/bin/openssl"
 IMAGE_A = "sha256:" + "a1" * 32
 IMAGE_B = "sha256:" + "b2" * 32
 
