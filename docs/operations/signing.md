@@ -518,9 +518,12 @@ evidence that they are verified.
 
 - **The native engine broker does not verify signatures yet.** It launches the images declared under
   `native_engine.images` of the bounded builder service configuration unverified. The follow-up
-  locations are as follows (line numbers at commit `b0cb93407`); see [Planned work](#planned-work):
-  `container_runtime/engine_broker.py`: `DockerEngine.image` (~368), `_image_policies` (~806) and
-  `_reference` (~824) (deferred).
+  locations are as follows (line numbers at `native-broker-jobs` commit `fad721d87`); see
+  [Planned work](#planned-work): `container_runtime/engine_broker.py`: `DockerEngine.image` (~404),
+  its launch caller (~505), `_image_policies` (~874), `_reference` (~892) and the `PRESENT`
+  reference check (~1098) (deferred). The verifier to call is
+  `signing.policy.default_image_verifier().verify(image_id, reference=...)`, wrapped as
+  `buildkit_worker.py` does (`ImageSignatureRefused`, fail closed when the policy cannot load).
 - **The native bounded-builder service resolves its image verifier from the application
   configuration.** `ImageBuilderService` and `BuildKitWorker` use `default_image_verifier`, so the
   operator service needs a readable `appsec-review.toml` (or `APPSEC_REVIEW_CONFIG`) with `[signing]`,
