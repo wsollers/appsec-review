@@ -86,6 +86,43 @@ def action_resources(settings: RuntimeSettings, action: str) -> tuple[int, int]:
     return settings.threads, settings.ram_mb
 
 
+_GRADLE_LAUNCHERS = frozenset({"gradle", "gradlew"})
+
+
+def replay_needs_executable_tmp(scratch: Path, argv: Sequence[str]) -> bool:
+    """Return whether a database replay runs Gradle, whose user home is kept under ``/tmp``.
+
+    Gradle, and the Android plugin's AAPT2, extract and run native binaries beneath
+    ``GRADLE_USER_HOME``; the accepted build environment places that home on the ``/tmp``
+    tmpfs, so those replays need an executable ``/tmp``. An unreadable replay is left to the
+    runner, which rejects it.
+    """
+    if "--replay" not in argv:
+        return False
+    index = list(argv).index("--replay") + 1
+    if index >= len(argv):
+        return False
+    root = scratch.resolve()
+    path = (root / argv[index]).resolve()
+    if root not in path.parents:
+        return False
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    commands = document.get("commands") if isinstance(document, Mapping) else None
+    for command in commands if isinstance(commands, list) else ():
+        if not isinstance(command, Mapping):
+            continue
+        values, environment = command.get("argv"), command.get("environment")
+        if (isinstance(values, list) and values and isinstance(values[0], str)
+                and PurePosixPath(values[0]).name in _GRADLE_LAUNCHERS):
+            return True
+        if isinstance(environment, Mapping) and "GRADLE_USER_HOME" in environment:
+            return True
+    return False
+
+
 def _stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -459,6 +496,7 @@ class CodeQLExecutor:
         timeout = action_timeout(self.settings, action)
         # Export reads a staged database and pack without network access.
         network = "none" if action in {"export", "compile"} else "bridge"
+        executable_tmp = action == "database" and replay_needs_executable_tmp(scratch, argv)
         threads, ram_mb = action_resources(self.settings, action)
         database_name = None
         volume_name = None
@@ -500,7 +538,8 @@ class CodeQLExecutor:
             "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", str(threads),
             "--memory", f"{ram_mb + 1024}m", "--pids-limit", "2048",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", *mounts, "--workdir", "/scratch",
+            "--tmpfs", f"/tmp:rw,{'exec' if executable_tmp else 'noexec'},nosuid,size=2g",
+            *mounts, "--workdir", "/scratch",
             "--env", "HOME=/tmp/codeql-home", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC", "--entrypoint", "python3", self.image.image_id,
             RUNNER_CONTAINER_PATH, action,
@@ -572,6 +611,7 @@ class CodeQLExecutor:
             stderr_path.relative_to(self.run_root).as_posix(), stdout_sha, stderr_sha,
             stdout_total, stderr_total, stdout_truncated, stderr_truncated, stdout_tail, stderr_tail,
             {"network": network, "root_filesystem": "read-only", "user": runtime_user,
+             "tmp_executable": executable_tmp,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": threads,
              "ram_mb": ram_mb, "timeout_seconds": timeout,
              "runner_source": self.image.runner_source, "runner_release_id": self.image.runner_release_id,

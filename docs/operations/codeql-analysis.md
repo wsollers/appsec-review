@@ -56,7 +56,15 @@ fail explicitly. Required image layering uses the separately configured
 be replaced by an uncustomized base image. A derived image layers that payload onto each accepted build image and runs as a distinct non-root
 user on Docker's bridge network so manual builds can restore declared dependencies,
 read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bounded head/tail
-logs.
+logs. Builds need that egress until a dependency proxy is hosted (see [TODO](../TODO.md)).
+
+The runtime `/tmp` tmpfs is `noexec`, except for a database replay that runs Gradle (a `gradle` or
+`gradlew` launcher, or a recorded `GRADLE_USER_HOME`). The accepted build environment keeps the
+Gradle user home under `/tmp`, and Gradle and the Android plugin's AAPT2 run native binaries they
+extract there, so those replays get an executable `/tmp`. The execution receipt records
+`tmp_executable`. A Go build whose accepted `GOFLAGS` includes `-mod=mod` on a dependency-bearing
+image writes modules to `/tmp/appsec-go-mod` and reads the image's read-only module cache first as a
+`file://` `GOPROXY` before the network.
 
 ### Explicit preinstalled runtimes
 

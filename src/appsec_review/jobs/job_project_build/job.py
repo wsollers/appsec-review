@@ -313,6 +313,16 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         # the cache would be the read-only image root, so declared modules resolve into the
         # build container's writable scratch instead.
         environment["GOMODCACHE"] = "/tmp/appsec-go-mod"
+    if (str(recipe.get("build_system", "")) == "go" and recipe.get("network_required")
+            and "-mod=mod" in environment.get("GOFLAGS", "").split()):
+        # -mod=mod may add requirements and download modules, but the image-restored module
+        # cache is on the read-only root. Download into writable scratch and serve the image
+        # cache as the first proxy, so cached modules are reused before the network is used.
+        environment["GOMODCACHE"] = "/tmp/appsec-go-mod"
+        upstream = environment.get("GOPROXY") or "https://proxy.golang.org,direct"
+        image_proxy = "file:///opt/project-deps/go/cache/download"
+        if upstream.split(",", 1)[0] != image_proxy:
+            environment["GOPROXY"] = f"{image_proxy},{upstream}"
     return environment
 
 

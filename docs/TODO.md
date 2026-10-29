@@ -769,3 +769,19 @@ This is a separate layer from the job contract, and both are required. The job c
 whether a job produced the declared number of correct outputs for its input. Query unit tests ask
 whether a single query returns the correct rows for a known database. Neither substitutes for the
 other, and conflating them is how a suite that runs but answers wrongly passes.
+
+## Host a dependency proxy so builds can run without external egress
+
+Project, language and CodeQL replay builds currently need external network egress (Docker bridge)
+so package managers can fetch dependencies the derived project image did not already restore:
+Maven, Gradle, Go modules, npm/pnpm/Yarn, pip, NuGet, Cargo, Composer, Conan and CMake
+FetchContent/ExternalProject. Until a proxy exists, every image that builds keeps that egress.
+PoC generation and remediation validation rebuilds stay on --network none.
+
+- [ ] Choose and host a caching artifact proxy (for example Artifactory or Nexus) covering those
+  ecosystems, with pinned upstreams and an operator-owned allowlist.
+- [ ] Point build containers at it through typed central configuration (for example GOPROXY,
+  Maven/Gradle mirrors, NPM_CONFIG_REGISTRY, PIP_INDEX_URL, NuGet and Cargo sources, Conan
+  remotes) rather than per-recipe settings, and record the proxy identity in build receipts.
+- [ ] Then restrict build containers to an isolated network whose only egress is the proxy, and
+  report any dependency the proxy could not serve as a named build gap.
