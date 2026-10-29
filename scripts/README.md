@@ -35,7 +35,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 | `review-status.sh` / `.ps1` | List recent runs and the active run's current steps. |
 | `review-stop.sh` / `.ps1` | End the current review (every non-terminal run) with `SAFE_TERMINATE`; `--now` cancels at once. |
 | `review-stop-id.sh` / `.ps1` | End one review by Dagster run id or application run id. |
-| `render-report.sh` / `.ps1` | Render a finished run's report to PDF or single-page HTML (`--format pdf\|html`); output goes to `runs/reports/` by default. Details: [`docs/operations/report-rendering.md`](../docs/operations/report-rendering.md). |
+| `render-report.sh` / `.ps1` | Render a finished run's review report to PDF or single-page HTML (`--format pdf\|html`), or with `--kind telemetry` (`-Kind telemetry`) its end-of-run telemetry report (`--format pdf\|tex`; a PDF goes to `runs/<id>/data/telemetry/report/`); other output goes to `runs/reports/` by default. Details: [`docs/operations/report-rendering.md`](../docs/operations/report-rendering.md), [`docs/operations/telemetry-report.md`](../docs/operations/telemetry-report.md). |
 
 ## CodeQL
 

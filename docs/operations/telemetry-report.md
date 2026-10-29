@@ -58,10 +58,20 @@ and count, run start/end, renderer `appsec-review-telemetry-report/1`) and a sho
 ## When it is produced
 
 The report is a best-effort completion hook that runs after the final `write_run_metrics` on every
-terminal path: the Dagster completion op, Dagster error and cancellation handling, and the direct
-runner's terminal paths — **including failed and cancelled runs**. The hook never raises, never
-changes the run's completion status, and never appends to `pipeline.jsonl`. A rendering problem is
-recorded only in the report's own receipt.
+terminal path — **including failed and cancelled runs**:
+
+- Dagster: the completion op, and Dagster error and cancellation handling (after the receipt lock
+  is released).
+- Application orchestrator (`GraphRunner`): after `RUN_COMPLETED` or `GRAPH_FAILED` is written and
+  the resume lock is released, the graph writes the final run metrics and then renders the report.
+  The per-job metric refreshes in `JobRunner` do not trigger it.
+
+The hook never raises, never changes the run's completion status or the error a failed run
+re-raises, and never appends to `pipeline.jsonl`. A rendering problem is logged once and recorded
+only in the report's own receipt. Resuming a run renders it again and replaces the earlier report.
+
+Unit tests never start the report container: an autouse fixture in `tests/conftest.py` replaces the
+renderer outside `tests/integration`, `tests/live` and `test_live_*` modules.
 
 ## Outputs and receipt
 
@@ -130,9 +140,13 @@ scripts/render-report.sh --kind telemetry --run <run-id> [--format pdf|tex]
 scripts\render-report.ps1 -Kind telemetry -Run <run-id> [-Format pdf|tex]
 ```
 
-`--kind` defaults to `review`, so existing script calls are unchanged. In `pdf` mode the exit code
-is 0 for `rendered` or `tex_only`, 1 for `failed` and 2 for a usage error. Re-rendering replaces the
-report directory atomically and reads the run evidence read-only.
+`--kind` defaults to `review`, so existing script calls are unchanged. `--format` defaults to `tex`
+when `--out` is given (written without Docker) and to `pdf` otherwise; `pdf` writes the receipted
+report under `runs/<id>/data/telemetry/report/` and, with `--out`, also copies the files there.
+Settings come from `--config`, else the run's `data/configuration/resolved.json`, else the defaults.
+The exit code is 0 when a report was produced (`rendered` or `tex_only`), 1 when it was not
+(`failed` or `disabled`) and 2 for a usage or input error. Re-rendering replaces the report
+directory atomically and reads the run evidence read-only.
 
 ## Determinism
 
