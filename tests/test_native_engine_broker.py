@@ -80,6 +80,7 @@ class FakeEngine:
 @pytest.fixture
 def native(tmp_path, request):
     config, context = configuration(tmp_path)
+    engine_domain = getattr(request, "param", False) == "engine-domain"
     target = tmp_path / "target"
     target.mkdir()
     native = NativeEngineConfig(
@@ -90,7 +91,8 @@ def native(tmp_path, request):
         runtime_python="/operator/python", runtime_root="/operator/lib", runtime_release_id="runtime-1",
         syscall_allowlist=("read", "write", "exit_group"),
         images=(NativeImage(BASE, "image-1", f"{os.getuid()}:{os.getgid()}", ("python",),
-                            aliases=("base:release",), allow_derived=getattr(request, "param", False)),),
+                            aliases=("base:release",),
+                            allow_derived=getattr(request, "param", False) is True or engine_domain),),
         commands=(NativeCommand("python", "/usr/bin/python3", arguments=(NativeArgument("literal",
                                   values=("worker.py",)),), environment_keys=("HOME",)),),
         grants=(NativeGrant(os.getuid(), "tenant", "project", "run-one", "target-one", "config-1",
@@ -99,9 +101,39 @@ def native(tmp_path, request):
                 NativeMount("scratch", str(context.run_root), "/scratch", "run", False)),
         tmpfs=(NativeTmpfs("/tmp", 1024),))
     config = replace(config, native_engine=native)
+    if engine_domain:
+        from appsec_review.config.image_builder_service import DockerHelperScope, EngineDomainConfig
+
+        metadata = tmp_path / "engine-metadata"
+        metadata.mkdir(mode=0o700)
+        config = replace(
+            config, resource_mode="concurrency_only", lifetime_domain="engine",
+            host_cgroup="/sys/fs/cgroup/engine-domain/builder",
+            docker_helper_scope=DockerHelperScope("/var/lib/builder-private", "/run/builder-private"),
+            native_engine=replace(native, application_cgroup="/sys/fs/cgroup/application-private"),
+            engine_domain=EngineDomainConfig(str(metadata), "/sys/fs/cgroup/engine-domain",
+                                            ("/sys/fs/cgroup/engine-domain/docker.service",
+                                             "/sys/fs/cgroup/engine-domain/containerd.service")))
+        context.review_policy = replace(context.review_policy, image_builder=replace(
+            context.review_policy.image_builder, resource_mode="concurrency_only", lifetime_domain="engine"))
     lifetime = BuilderAdmission(config, proof=FakeLifetimeProof(config))
+    if engine_domain:
+        class DomainProof:
+            enough = True
+
+            def groups(self):
+                return {"engine": {"path": config.engine_domain.cgroup, "device": 1, "inode": 123}}
+
+            def live(self):
+                if not self.enough:
+                    raise RuntimeError("engine headroom is insufficient")
+
+        lifetime.engine_admission.proof = DomainProof()
     lifetime.reserve()
     service = ImageBuilderService(config, driver=FakeDriver(), admission=lifetime)
+    if engine_domain:
+        from tests.test_bounded_image_build_service import concurrency_only_observations
+        service.driver.limits = concurrency_only_observations()
     service.driver.service = service
     engine = FakeEngine()
     broker = EngineBroker(service, driver=engine)

@@ -91,6 +91,124 @@ def configuration(tmp_path, resource_mode="bounded"):
     return config, context
 
 
+@pytest.mark.parametrize("helper,arguments", [
+    ("dockerd", ["dockerd", "--exec-root", "/run/other-engine"]),
+    ("containerd", ["containerd", "--config", "/run/other-engine/containerd/config.toml"]),
+    ("containerd-shim-runc-v2", ["shim", "-address", "/run/other-engine/containerd.sock"]),
+    ("runc", ["runc", "--root", "/run/builder-private-other/runc"]),
+])
+def test_dedicated_helper_scope_excludes_unrelated_infrastructure(tmp_path, monkeypatch, helper, arguments):
+    from appsec_review.config.image_builder_service import DockerHelperScope
+
+    config, _ = configuration(tmp_path)
+    config = replace(config, docker_helper_scope=DockerHelperScope(
+        "/var/lib/builder-private", "/run/builder-private"))
+    proof = workers.KernelProof(config)
+    monkeypatch.setattr(proof, "_process", lambda pid: (1, arguments))
+    assert not proof._owned_helper(helper, 102, 101, Path("/sys/fs/cgroup/other-engine"))
+
+
+@pytest.mark.parametrize("helper,arguments,parent", [
+    ("containerd", ["containerd", "--config", "/run/builder-private/containerd/config.toml"], 1),
+    ("containerd-shim-runc-v2", ["shim", "-address", "/run/builder-private/containerd.sock"], 1),
+    ("runc", ["runc", "--root=/run/builder-private/runc"], 1),
+    ("runc", ["runc"], 101),
+])
+def test_dedicated_scope_still_rejects_escaped_owned_helpers(tmp_path, monkeypatch, helper, arguments, parent):
+    from appsec_review.config.image_builder_service import DockerHelperScope
+
+    config, _ = configuration(tmp_path)
+    config = replace(config, docker_helper_scope=DockerHelperScope(
+        "/var/lib/builder-private", "/run/builder-private"))
+    proof = workers.KernelProof(config)
+    monkeypatch.setattr(proof, "_process", lambda pid: (parent, arguments))
+    group = Path("/sys/fs/cgroup/escaped")
+    assert proof._owned_helper(helper, 102, 101, group)
+    with pytest.raises(workers.EnforcementUnavailable, match="escapes"):
+        proof._helper_group(helper, group)
+
+
+def test_helper_scope_preserves_default_and_rejects_ambiguous_roots(tmp_path):
+    from appsec_review.config.image_builder_service import DockerHelperScope
+
+    config, _ = configuration(tmp_path)
+    proof = workers.KernelProof(config)
+    assert proof._owned_helper("dockerd", 102, 101, Path("/sys/fs/cgroup/other"))
+    with pytest.raises(workers.EnforcementUnavailable, match="ambiguous"):
+        proof._option(["runc", "--root=/run/one", "--root", "/run/two"], "--root")
+    for data, execution in (("/var/lib", "/run/private"), ("/private", "/private/exec")):
+        with pytest.raises(ValueError):
+            DockerHelperScope(data, execution)
+    with pytest.raises(ValueError, match="client custody"):
+        replace(config, docker_helper_scope=DockerHelperScope(
+            config.grants[0].run_root + "/engine", "/run/builder-private"))
+
+
+def test_escaped_child_of_reparented_owned_shim_remains_in_custody(tmp_path, monkeypatch):
+    from appsec_review.config.image_builder_service import DockerHelperScope
+
+    config, _ = configuration(tmp_path)
+    config = replace(config, docker_helper_scope=DockerHelperScope(
+        "/var/lib/builder-private", "/run/builder-private"))
+    proof = workers.KernelProof(config)
+    processes = {103: (102, ["runc", "init"]),
+                 102: (1, ["shim", "-address", "/run/builder-private/containerd.sock"])}
+    monkeypatch.setattr(proof, "_process", lambda pid: processes[pid])
+    monkeypatch.setattr(proof, "process_cgroup", lambda pid: Path("/sys/fs/cgroup/escaped"))
+    assert proof._owned_helper("runc", 103, 101, Path("/sys/fs/cgroup/escaped"))
+    with pytest.raises(workers.EnforcementUnavailable, match="escapes"):
+        proof._helper_group("runc", Path("/sys/fs/cgroup/escaped"))
+
+
+@pytest.mark.parametrize("baseline_mb,host_mb,inactive_mb,dirty_mb,foreign,passes", [
+    (1700, 100, 1000, 0, False, True),
+    (1700, 100, 0, 0, False, False),
+    (1700, 100, 1000, 1000, False, False),
+    (100, 513, 0, 0, False, False),
+    (100, 100, 0, 0, True, False),
+])
+def test_engine_domain_memory_proof_retains_dirty_and_owned_overhead_costs(
+        tmp_path, monkeypatch, baseline_mb, host_mb, inactive_mb, dirty_mb, foreign, passes):
+    from appsec_review.config.image_builder_service import DockerHelperScope, EngineDomainConfig
+    from appsec_review.container_runtime import engine_admission
+
+    config, _ = configuration(tmp_path)
+    root = "/sys/fs/cgroup/engine-private"
+    config = replace(
+        config, resource_mode="concurrency_only", lifetime_domain="engine",
+        host_cgroup=root + "/builder",
+        docker_helper_scope=DockerHelperScope("/var/lib/builder-private", "/run/builder-private"),
+        engine_domain=EngineDomainConfig(str(tmp_path / "engine-metadata"), root, (root + "/docker",)))
+    real_path = Path
+
+    def mapped(value):
+        text = str(value)
+        return real_path(str(tmp_path / "kernel") + text[len(root):]) if text.startswith(root) else real_path(value)
+
+    monkeypatch.setattr(engine_admission, "Path", mapped)
+    for group, memory, inactive, dirty in (
+            (root, baseline_mb + host_mb, inactive_mb, dirty_mb),
+            (root + "/builder", host_mb, 0, 0),
+            (root + "/docker", baseline_mb, inactive_mb, dirty_mb)):
+        path = mapped(group)
+        path.mkdir(parents=True, mode=0o700, exist_ok=True)
+        (path / "cpu.max").write_text("200000 100000")
+        (path / "memory.max").write_text(str(2048 * 1024**2))
+        (path / "memory.swap.max").write_text("0")
+        (path / "memory.current").write_text(str(memory * 1024**2))
+        (path / "memory.stat").write_text(
+            f"inactive_file {inactive * 1024**2}\nfile_dirty {dirty * 1024**2}\nfile_writeback 0\n")
+        (path / "cgroup.procs").write_text("")
+    if foreign:
+        (mapped(root) / "cgroup.procs").write_text(str(os.getpid()))
+    proof = engine_admission.EngineDomainProof(config)
+    if passes:
+        proof.live()
+    else:
+        with pytest.raises(workers.EnforcementUnavailable, match="consumer" if foreign else "headroom"):
+            proof.live()
+
+
 class FakeDriver:
     def __init__(self):
         self.calls = []

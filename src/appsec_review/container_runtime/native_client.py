@@ -66,6 +66,7 @@ class NativeClientContract:
     host_cgroup: str | None = None
     host_cpu: int = 1
     host_memory_mb: int = 512
+    host_namespaces: Mapping[str, str] | None = None
 
     @classmethod
     def load(cls, path: Path) -> "NativeClientContract":
@@ -110,6 +111,12 @@ class NativeClientContract:
                 raise ValueError("native host reservation requires a cgroup-v2 path")
         if any(type(value) is not int or value < 1 for value in (self.host_cpu, self.host_memory_mb)):
             raise ValueError("native host reservation limits are invalid")
+        if self.host_namespaces is not None and (
+                not isinstance(self.host_namespaces, Mapping)
+                or set(self.host_namespaces) != {"mnt", "pid", "user"}
+                or any(not isinstance(value, str) or not re.fullmatch(rf"{name}:\[[0-9]+\]", value)
+                       for name, value in self.host_namespaces.items())):
+            raise ValueError("native host namespace identities are incomplete or invalid")
         if not isinstance(self.mounts, tuple) or len(self.mounts) > 64:
             raise ValueError("native client mount map is unbounded")
         ids = set()
@@ -183,10 +190,13 @@ class NativeClient:
             channel.connect(str(endpoint))
             pid, uid, _ = struct.unpack("3i", channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
             if (uid != 0 or pid != self.contract.broker_pid
-                    or process_token(pid) != self.contract.broker_start_token
-                    or any(os.readlink(f"/proc/{pid}/ns/{name}") != os.readlink(f"/proc/self/ns/{name}")
-                           for name in ("mnt", "pid", "user"))):
+                    or process_token(pid) != self.contract.broker_start_token):
                 raise PermissionError("native broker peer was replaced or changed namespaces")
+            for name in ("mnt", "pid", "user"):
+                expected = (self.contract.host_namespaces[name] if self.contract.host_namespaces is not None
+                            else os.readlink(f"/proc/{pid}/ns/{name}"))
+                if expected != os.readlink(f"/proc/self/ns/{name}"):
+                    raise PermissionError("native broker peer was replaced or changed namespaces")
             current = endpoint.lstat()
             if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
                 raise PermissionError("native broker socket changed during connection")

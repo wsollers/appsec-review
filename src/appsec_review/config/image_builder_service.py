@@ -111,6 +111,48 @@ class BuilderAdmissionConfig:
 
 
 @dataclass(frozen=True)
+class EngineDomainConfig:
+    metadata_root: str
+    cgroup: str
+    baseline_cgroups: tuple[str, ...]
+    cpu: int = 2
+    memory_mb: int = 2048
+
+    def __post_init__(self):
+        absolute(self.metadata_root)
+        absolute(self.cgroup)
+        if (not self.cgroup.startswith("/sys/fs/cgroup/")
+                or not isinstance(self.baseline_cgroups, tuple) or not self.baseline_cgroups
+                or len(self.baseline_cgroups) > 16 or len(set(self.baseline_cgroups)) != len(self.baseline_cgroups)):
+            raise ValueError("engine domain requires a bounded explicit baseline inventory")
+        for root in self.baseline_cgroups:
+            absolute(root)
+            if root == self.cgroup or not Path(root).is_relative_to(self.cgroup):
+                raise ValueError("baseline engine groups must be strict domain descendants")
+        if any(Path(left).is_relative_to(right) for left in self.baseline_cgroups
+               for right in self.baseline_cgroups if left != right):
+            raise ValueError("baseline engine groups cannot overlap")
+        if (type(self.cpu) is not int or not 1 <= self.cpu <= 2
+                or type(self.memory_mb) is not int or not 1 <= self.memory_mb <= 2048):
+            raise ValueError("engine domain cannot exceed the existing 2-CPU/2-GiB envelope")
+
+
+@dataclass(frozen=True)
+class DockerHelperScope:
+    data_root: str
+    exec_root: str
+
+    def __post_init__(self):
+        for value in (self.data_root, self.exec_root):
+            absolute(value)
+            if value == "/" or value in {"/run", "/var", "/var/lib", "/tmp"}:
+                raise ValueError("Docker helper scope requires private dedicated roots")
+        if (Path(self.data_root).is_relative_to(self.exec_root)
+                or Path(self.exec_root).is_relative_to(self.data_root)):
+            raise ValueError("Docker data and execution roots must be separate")
+
+
+@dataclass(frozen=True)
 class ImageBuilderServiceConfig:
     endpoint: str
     state_root: str
@@ -151,6 +193,9 @@ class ImageBuilderServiceConfig:
     ip_binary: str = "/usr/sbin/ip"
     ip_release_id: str | None = None
     resource_mode: str = "bounded"
+    docker_helper_scope: DockerHelperScope | None = None
+    lifetime_domain: str = "actions"
+    engine_domain: EngineDomainConfig | None = None
 
     def __post_init__(self):
         for name in ("endpoint", "state_root", "host_cgroup", "worker_cgroup_parent",
@@ -186,6 +231,25 @@ class ImageBuilderServiceConfig:
         if not isinstance(self.resources, ResourceBudget):
             raise ValueError("service requires a typed aggregate resource budget")
         self.client_policy
+        if ((self.engine_domain is not None and not isinstance(self.engine_domain, EngineDomainConfig))
+                or (self.lifetime_domain == "engine") != isinstance(self.engine_domain, EngineDomainConfig)):
+            raise ValueError("engine-domain lifetime requires its exact typed admission policy")
+        if self.engine_domain is not None:
+            domain = self.engine_domain
+            if (self.docker_helper_scope is None or self.host_cpu >= domain.cpu
+                    or self.host_overhead_mb >= domain.memory_mb
+                    or self.host_cgroup == domain.cgroup
+                    or not Path(self.host_cgroup).is_relative_to(domain.cgroup)
+                    or Path(self.worker_cgroup_parent).is_relative_to(domain.cgroup)):
+                raise ValueError("engine domain must separate dedicated control overhead from action work")
+            for root in domain.baseline_cgroups:
+                if Path(root).is_relative_to(self.host_cgroup) or Path(self.host_cgroup).is_relative_to(root):
+                    raise ValueError("baseline engine custody cannot overlap dedicated control overhead")
+            for grant in self.grants:
+                if any(Path(domain.metadata_root).is_relative_to(root)
+                       or Path(root).is_relative_to(domain.metadata_root)
+                       for root in (grant.run_root, grant.client_context_root, grant.service_context_root)):
+                    raise ValueError("engine admission must remain outside client custody")
         if (self.cpu + self.host_cpu > self.resources.cpu
                 or self.memory_mb + self.host_overhead_mb + self.resources.staging_memory_mb
                 > self.resources.memory_mb
@@ -222,6 +286,15 @@ class ImageBuilderServiceConfig:
                 if (Path(protected).is_relative_to(grant.service_context_root)
                         or Path(protected).is_relative_to(grant.run_root)):
                     raise ValueError("operator state must be outside client context custody")
+        if self.docker_helper_scope is not None:
+            scope = self.docker_helper_scope
+            if not isinstance(scope, DockerHelperScope):
+                raise ValueError("Docker helper scope must be a typed operator declaration")
+            for grant in self.grants:
+                for protected in (scope.data_root, scope.exec_root):
+                    if any(Path(protected).is_relative_to(root) or Path(root).is_relative_to(protected)
+                           for root in (grant.run_root, grant.client_context_root, grant.service_context_root)):
+                        raise ValueError("Docker helper roots must be outside client custody")
         if self.native_engine is not None:
             native = self.native_engine
             if not isinstance(native, NativeEngineConfig):
@@ -229,9 +302,19 @@ class ImageBuilderServiceConfig:
             if native.endpoint in {self.endpoint, self.docker_endpoint}:
                 raise ValueError("native broker must have a separate private socket")
             parent = Path(native.execution_cgroup_parent)
+            if self.engine_domain is not None and (
+                    parent.is_relative_to(self.engine_domain.cgroup)
+                    or native.application_cgroup is None
+                    or Path(native.application_cgroup).is_relative_to(self.engine_domain.cgroup)):
+                raise ValueError("native actions and application cannot be charged as engine overhead")
             if any(parent.is_relative_to(root) or Path(root).is_relative_to(parent)
                    for root in (self.host_cgroup, self.worker_cgroup_parent)):
                 raise ValueError("native executions require a separate bounded cgroup subtree")
+            if native.application_cgroup is not None:
+                application = Path(native.application_cgroup)
+                if any(application.is_relative_to(root) or Path(root).is_relative_to(application)
+                       for root in (self.host_cgroup, self.worker_cgroup_parent, parent)):
+                    raise ValueError("native application requires a separate capped cgroup subtree")
             for grant in native.grants:
                 matches = [item for item in self.grants if (
                     item.uid, item.tenant_id, item.project_id, item.run_id, item.target_snapshot, item.run_root
@@ -249,6 +332,14 @@ class ImageBuilderServiceConfig:
                         native.gate_binary, native.runtime_python, native.runtime_root)
             if native.client_contract_root is not None:
                 controls += (native.client_contract_root,)
+            if self.docker_helper_scope is not None:
+                controls += (self.docker_helper_scope.data_root, self.docker_helper_scope.exec_root)
+            if self.engine_domain is not None:
+                controls += (self.engine_domain.metadata_root,)
+            for grant in native.grants:
+                if any(Path(control).is_relative_to(root) for control in controls
+                       for root in (grant.run_root, grant.target_root)):
+                    raise ValueError("native control and engine roots must remain outside run and target custody")
             if any(Path(control).is_relative_to(mount.source_root)
                    or Path(mount.source_root).is_relative_to(control)
                    for mount in native.mounts for control in controls):
@@ -260,7 +351,8 @@ class ImageBuilderServiceConfig:
             self.endpoint, self.release_id, self.grants[0].tenant_id,
             cpu=self.cpu, memory_mb=self.memory_mb, host_cpu=self.host_cpu,
             host_overhead_mb=self.host_overhead_mb, max_concurrency=self.max_concurrency,
-            cleanup_timeout_seconds=self.cleanup_timeout_seconds, resource_mode=self.resource_mode)
+            cleanup_timeout_seconds=self.cleanup_timeout_seconds, resource_mode=self.resource_mode,
+            lifetime_domain=self.lifetime_domain)
 
     @property
     def requested_limits(self) -> dict:
@@ -285,6 +377,13 @@ def load_image_builder_service(path: Path) -> ImageBuilderServiceConfig:
     table["resources"] = _typed(ResourceBudget, table.get("resources", {}))
     if "native_engine" in table:
         table["native_engine"] = parse_native_engine(table["native_engine"])
+    if "docker_helper_scope" in table:
+        table["docker_helper_scope"] = _typed(DockerHelperScope, table["docker_helper_scope"])
+    if "engine_domain" in table:
+        domain = dict(table["engine_domain"])
+        if isinstance(domain.get("baseline_cgroups"), list):
+            domain["baseline_cgroups"] = tuple(domain["baseline_cgroups"])
+        table["engine_domain"] = _typed(EngineDomainConfig, domain)
     table["admission"] = _typed(BuilderAdmissionConfig, table.get("admission"))
     for name, cls in (("grants", BuilderGrant), ("images", BuilderImage)):
         if not isinstance(table.get(name), list):

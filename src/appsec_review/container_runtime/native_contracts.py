@@ -41,7 +41,10 @@ def client_contracts(config) -> tuple[NativeClientContract, ...]:
             tuple({name: getattr(mount, name) for name in (
                 "mount_id", "source_root", "destination", "read_only")}
                 for mount in native.mounts if mount.mount_id in grant.mount_ids), aliases,
-            grant.image_ids, config.host_cgroup, config.host_cpu, config.host_overhead_mb))
+            grant.image_ids, native.application_cgroup or config.host_cgroup,
+            native.application_cpu if native.application_cgroup else config.host_cpu,
+            native.application_memory_mb if native.application_cgroup else config.host_overhead_mb,
+            {name: os.readlink(f"/proc/self/ns/{name}") for name in ("mnt", "pid", "user")}))
     return tuple(result)
 
 

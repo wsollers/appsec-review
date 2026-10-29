@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 import socket
 import stat
@@ -12,12 +13,25 @@ from tests.test_native_engine_broker import native, lease  # noqa: F401
 from tests.test_bounded_image_build_service import forbid_real_execution  # noqa: F401
 
 
+@pytest.mark.parametrize("published_namespaces", [False, True])
 @pytest.mark.parametrize("failure", [None, "peer-uid", "peer-pid", "socket-replacement",
                                     "oversize", "wrong-binding", "wrong-budget", "disconnect"])
-def test_native_transport_authenticates_peer_and_bounded_bound_response(native, monkeypatch, failure):
+def test_native_transport_authenticates_peer_and_bounded_bound_response(
+        native, monkeypatch, failure, published_namespaces):
     endpoint = Path(native.client.contract.endpoint)
     calls = []
     original_lstat = Path.lstat
+    original_readlink = native_client.os.readlink
+    if published_namespaces:
+        native.client.contract = replace(native.client.contract, host_namespaces={
+            name: original_readlink(f"/proc/self/ns/{name}") for name in ("mnt", "pid", "user")})
+
+        def guarded_readlink(path, *args, **kwargs):
+            if str(path).startswith(f"/proc/{native.peer.pid}/ns/"):
+                raise PermissionError("real root peer procfs is not readable by the application")
+            return original_readlink(path, *args, **kwargs)
+
+        monkeypatch.setattr(native_client.os, "readlink", guarded_readlink)
 
     def socket_stat(path, *args, **kwargs):
         if path != endpoint:
@@ -76,6 +90,14 @@ def test_native_transport_authenticates_peer_and_bounded_bound_response(native, 
             result = native.client.request("image.inspect", {"reference": "base:release"})
             assert result["state"] == "PRESENT"
             assert result["broker_process"]["pid"] == native.peer.pid
+
+
+@pytest.mark.parametrize("namespaces", [
+    {"mnt": "mnt:[1]"}, {"mnt": "bad", "pid": "pid:[1]", "user": "user:[1]"},
+])
+def test_native_contract_rejects_incomplete_namespace_identity(native, namespaces):
+    with pytest.raises(ValueError, match="namespace"):
+        replace(native.client.contract, host_namespaces=namespaces)
 
 
 def test_client_deadline_caps_each_exchange_and_refuses_expired_work(native, monkeypatch):

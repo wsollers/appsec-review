@@ -84,24 +84,49 @@ retry. This is a single exact-grant run path, not an automatic multi-review depl
 
 A PostgreSQL advisory lock excludes only participants in this
 protocol; it does not protect against an existing Compose scheduler. A separately commissioned,
-exclusive instance database remains mandatory. All application/controller/CLI descendants must
-share the published persistent host cgroup; its existing 1-CPU/512-MiB cap is enforced, not enlarged.
-Whether the complete installed application, broker, engine/helpers and proxy fit remains an
-unproved commissioning prerequisite. Fake entrypoint integration is not actual Dagster service,
-kernel enforcement, network or capacity certification.
+exclusive instance database remains mandatory. Without an explicit application group,
+application/controller/CLI descendants still share the published capped host group
+(default 1 CPU/512 MiB). `native_engine.application_cgroup` instead publishes a separate
+capped application subtree, at most 4 CPU/5 GiB, disjoint from control helpers, builds
+and native executions. Its identity and termination join the lifetime proof. This does
+not create application capacity: the operator must account it within the existing
+service envelope before starting anything.
 
-The builder's opt-in `resource_mode = "concurrency_only"` does not relax these native
-application limits. The current native operator requires application descendants in the
-same capped `host_cgroup` that the builder helper proof would require uncapped in that
-mode. That arrangement cannot activate concurrency-only operation without a separately
-approved application/helper cgroup and lifecycle arrangement; installation alone is not
-sufficient. Do not remove the application's cap, bypass either proof, or claim that this
-source-level builder mode commissions the whole native Dagster deployment.
+The explicit `resource_mode = "concurrency_only"` keeps one build, deadlines, cancellation,
+cleanup and zero swap without builder-specific CPU/RAM caps. Shared ancestor ceilings
+still apply and are reported. Optional `docker_helper_scope` pins separate root-private
+Docker data/execution roots and requires those exact arguments on the socket's actual
+daemon generation. Helper ancestry, owned groups and private runtime-root arguments
+retain escaped/reparented helpers in custody; unrelated infrastructure is not mistaken
+for this engine. Omitting that scope preserves the older global helper check. The
+dedicated daemon must not share the existing socket, data-root, exec-root or image store.
+Source support is not a commissioned daemon.
 
-A separate daemon with private socket/data-root would avoid mutating the existing
-infra image store, but it does not satisfy the current global helper proof while
-another daemon remains outside the declared topology. Dedicated-daemon coexistence
-is a separate unverified commissioning prerequisite, not a supported bypass.
+The opt-in `lifetime_domain = "engine"` additionally requires a typed `engine_domain`
+with a private root-controlled metadata directory, exact existing shared cgroup ceiling
+(at most 2 CPU/2 GiB), and explicit disjoint baseline engine groups. Both the existing
+engine consumers and dedicated control lifetime have real persistent reservations in
+that one ledger. Defaults allocate the baseline 1 CPU/1536 MiB and dedicated control
+1 CPU/512 MiB; these are admission charges, not new per-builder caps or guaranteed
+working-set maxima. Kernel inventory rejects non-engine/unknown consumers and memory
+headroom violations; only clean inactive file cache is excluded from observed working
+sets, never dirty/writeback pages or slab. Actual observations accompany host receipts.
+No application, scanner or build execution may be relabeled as engine overhead.
+
+In this explicit mode the real action ledger retains its full 8 CPU/10 GiB budget:
+one build reserves that whole action envelope, and a later 8-CPU action can be admitted
+while the separate control lifetime remains counted. This intentionally replaces
+retire-before-CodeQL in the older action-domain arrangement. It never migrates a live
+lease. Actual shutdown still requires the service lock, all owned app/control/worker
+generations and scopes stopped, no daemon listener, clean journal and retired engine
+ownership before releasing only the dedicated lifetime. The baseline engine reservation
+remains. Bounded/default action-domain policy is unchanged.
+
+Commissioning remains unverified. In particular, if existing services already reserve
+the whole 6-CPU/8-GiB service envelope, a new native application cannot be started
+alongside them merely because they are idle. A separately authorized controlled
+transition or genuinely available service capacity is required; do not overbook,
+increase a ceiling, or move application costs into the engine/action domains.
 
 The broker's application client now translates only the closed operation set into authenticated
 run/lease/engine requests. Generic executor and build execution paths enter that scope; unsupported
@@ -109,7 +134,8 @@ operations fail rather than falling back to ambient Docker. Each execution reser
 and one removal message beyond its normal request budget. Cleanup retries require their original
 nonce, and uncertain outcomes remain journaled for reconciliation. The global helper proof admits
 native `runc`/shim helpers only under the explicitly declared and capped execution subtree; another
-daemon or an unrelated subtree remains rejected.
+daemon remains rejected without the explicit dedicated-engine scope described above.
+An owned helper in an unrelated subtree remains rejected in either mode.
 
 The broker requires an explicit `native_engine.client_contract_root` before serving native
 clients. This pre-existing directory and its ancestors must be root-controlled and traversable
@@ -118,7 +144,12 @@ and engine proof and private listener binding, the broker durably publishes nons
 root-owned read-only `grant-0.json`, `grant-1.json`, etc., in operator grant order. Select the
 exact file in the native deployment's `engine_contract`; clients never invent their own mapping.
 Each file pins the actual broker PID/start token, operator run/engine identity, matching resource
-budget, grant-limited mounts and unambiguous executable aliases. Restart can refresh the broker
+budget, grant-limited mounts, broker mount/PID/user namespace identities and unambiguous
+executable aliases. The non-root client compares its own namespace identities to this
+root-published declaration after authenticating the actual root socket peer PID/start token;
+it need not read root-only procfs namespace links. The broker still independently checks
+the application peer's real namespaces. Unreadable procfs is never silently accepted.
+Restart can refresh the broker
 process identity, but changing policy at an occupied publication path requires reconciliation.
 Stale clients reject a restarted peer. Neither private socket, the broker release/journal nor an
 ancestor containing those paths may be exposed through any worker mount, including read-only
