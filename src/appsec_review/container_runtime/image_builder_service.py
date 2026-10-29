@@ -34,9 +34,11 @@ from appsec_review.config.image_builder_service import (
 )
 from appsec_review.config.assurance import ResourceBudget, validate_concurrency_only_enforcement
 from appsec_review.container_runtime.buildkit_worker import (
-    BuildKitWorker, EnforcementUnavailable, OutcomeUnknown, private_path, process_token,
+    BuildKitWorker, EnforcementUnavailable, OutcomeUnknown, private_path, process_token, verify_builder_image,
 )
 from appsec_review.container_runtime.builder_admission import BuilderAdmission, open_operator_journal, service_contract
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.policy import default_image_verifier
 
 
 SCHEMA = "appsec-review/bounded-image-builder/1"
@@ -406,10 +408,13 @@ def release_context(record: dict) -> None:
 
 class ImageBuilderService:
     def __init__(self, config: ImageBuilderServiceConfig, *, driver=None, admission=None,
-                 clock=time.monotonic, alive=process_token):
+                 clock=time.monotonic, alive=process_token,
+                 image_verifier: ImageSignatureVerifier | None = None):
         self.config, self.clock, self.alive = config, clock, alive
+        # None defers to the process-wide default, resolved at first use rather than construction.
+        self._image_verifier = image_verifier
         self.store = IntentStore(Path(config.state_root))
-        self.driver = driver or BuildKitWorker(config)
+        self.driver = driver or BuildKitWorker(config, image_verifier=image_verifier)
         self.admission = admission or BuilderAdmission(config)
         self.stopping = False
         self.contract = service_contract(config)
@@ -523,6 +528,11 @@ class ImageBuilderService:
         aliases = {image.alias: image.image_id for image in self.config.images}
         if any(tag in aliases and aliases[tag] != image_id for tag, image_id in images.items()):
             raise PermissionError("image input cannot rebind a declared alias")
+        # Declared operator images are signed before any solve; same-run outputs are derived images
+        # trusted through their verified pinned bases and the operator journal.
+        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
+        for image in self.config.images:
+            verify_builder_image(verifier, image.image_id, f"build input {image.alias}")
         return {"network": network, "build_args": arguments, "image_inputs": images,
                 "authorized_inputs": {**aliases, **images}}
 

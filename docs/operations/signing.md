@@ -88,7 +88,7 @@ flowchart LR
     end
     subgraph verifiers["Verifiers: OpenSSL self-test, then verify"]
         hostv["Host: lifecycle.py and<br/>signing verify-image / verify-modules"]
-        imgv["Image launch: ContainerExecutor, BuildContainerExecutor,<br/>ProjectImageResolver, CodeQLImageResolver, cve-bin-tool build"]
+        imgv["Image launch: ContainerExecutor, BuildContainerExecutor,<br/>ProjectImageResolver, CodeQLImageResolver, cve-bin-tool build,<br/>BuildKitWorker, ImageBuilderService"]
         modv["Module startup: bootstrap.py, sitecustomize shim,<br/>native root_entrypoint.py"]
     end
     keygen --> key
@@ -136,6 +136,15 @@ Every pinned image is verified when it is launched or reused, after its identity
 | `ProjectImageResolver.resolve` via `_verify_base` (`container_runtime/project_images.py`) | The pinned base before a project image is derived from it or reused over it. |
 | `CodeQLImageResolver.resolve` (`codeql/runtime.py`) | The licensed CodeQL source image, the environment image (or its recorded pinned base), and a preinstalled runtime image. |
 | cve-bin-tool database build (`jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`) | A pre-existing local `settings.image` (Docker path) or the approved preinstalled image (native path), after checking that it resolves to the optional `settings.image_id` pin. The image is launched by ID. |
+| `BuildKitWorker.prepare`, `_network` and `_inputs` (`container_runtime/buildkit_worker.py`) | The pinned `worker_image_id` after `docker image inspect` confirms that exact ID and before `docker container create` (the worker is created by ID); the pinned `proxy_image_id` of the running operator egress proxy whenever the isolated network is checked; each declared operator input image (`[[image_builder_service.images]]`) before Skopeo transports it. |
+| `ImageBuilderService._start_spec` (`container_runtime/image_builder_service.py`) | Every declared operator input image before a `start` request is accepted, so nothing is snapshotted or solved. |
+
+Same-run outputs that a later build in the bounded builder consumes are derived images. They are
+not signed: they are trusted through their verified pinned bases and the operator journal records
+that authorize them (`ImageBuilderService._prior_output_ids`). A refusal in the bounded builder
+raises `buildkit_worker.ImageSignatureRefused`, which is both an `EnforcementUnavailable` and a
+`SignatureVerificationError`. The service records the build as `UNKNOWN` (or rejects the `start`
+request) and the client can still clean up.
 
 A catalog tool launch through `ContainerExecutor.resolve_image` runs in this order. The other call
 sites use the same `EnvelopeImageVerifier` after their own identity checks:
@@ -380,14 +389,17 @@ A native Windows operator host signs and verifies with the same envelopes as Lin
 These areas are not covered by signing. Do not read their absence from a failure report as
 evidence that they are verified.
 
-- **Native bounded-builder and engine paths do not verify signatures yet.** The follow-up locations
-  are as follows (line numbers at commit `b0cb93407`); see [Planned work](#planned-work):
-  - `container_runtime/engine_broker.py`: `DockerEngine.image` (~368), `_image_policies` (~806) and
-    `_reference` (~824) (deferred);
-  - `container_runtime/buildkit_worker.py`: `BuildkitDriver.prepare` worker-image inspect (~589/598),
-    `worker` (~441/444), the egress proxy image check (~718/720) and `_inputs` (~736) (in progress);
-  - `container_runtime/image_builder_service.py`: `_start_spec` allowed and aliased images
-    (~504, at ~513 and ~523) (in progress).
+- **The native engine broker does not verify signatures yet.** The follow-up locations are as
+  follows (line numbers at commit `b0cb93407`); see [Planned work](#planned-work):
+  `container_runtime/engine_broker.py`: `DockerEngine.image` (~368), `_image_policies` (~806) and
+  `_reference` (~824) (deferred).
+- **The native bounded-builder service resolves its image verifier from the application
+  configuration.** `ImageBuilderService` and `BuildKitWorker` use `default_image_verifier`, so the
+  operator service needs a readable `appsec-review.toml` (or `APPSEC_REVIEW_CONFIG`) with `[signing]`,
+  trust anchors and envelopes for its pinned images. Without them every build is refused.
+  `sign-image --all-pinned` does not read the operator service configuration, so its
+  `worker_image_id`, `proxy_image_id` and declared input images are signed by naming them
+  (`sign-image <image ID or tag>`).
 - **Third-party packages are not covered by an import hook.** In the Dagster image,
   `site-packages` dependencies and their native libraries are covered only by the signed image. In a
   native release, the `python-release-lib` manifest is verified once at startup; afterwards
@@ -428,7 +440,7 @@ have no work scheduled on this branch.
 | Native release third-party dependency manifest | Done on this branch | `sign-release-lib` / `verify-release-lib` and the root entrypoint verify the native release `lib/` closure outside `appsec_review` (see [Release library](#release-library)). Dagster container dependencies are covered by the image signature. |
 | Compose bypass and reload | Done on this branch | Every Dagster image service requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default and `pull_policy: never`, and `lifecycle.py reload` verifies the image and recreates every service that runs it (`host.IMAGE_SERVICES`, kept equal to the compose files by a unit test). Residual: a direct `docker compose up` with a hand-set or previously recorded ID is not re-verified (see [Named gaps](#named-gaps)). |
 | cve-bin-tool pin | Done on this branch | The cve-bin-tool step accepts an optional `image_id` pin; when set, the tag must resolve to it, the image is never built by the step, and `sign-image --all-pinned` covers it (it walks enabled jobs' step settings too). Residual: the repository configuration leaves the pin unset until the review host records it (see [Named gaps](#named-gaps)). |
-| BuildKit worker and image builder service verification | In progress on this branch | Verify the worker, egress proxy and input images in `buildkit_worker.py` and the allowed and aliased images in `image_builder_service.py`. |
+| BuildKit worker and image builder service verification | Done on this branch | `BuildKitWorker` verifies the pinned worker image before creating the worker by ID, the pinned egress proxy image whenever the isolated network is checked, and each declared input image before transport; `ImageBuilderService._start_spec` verifies the declared input images before accepting a solve. Same-run derived outputs are trusted through their verified bases. Residual: the service resolves its verifier from the application configuration (see [Named gaps](#named-gaps)). |
 | Engine broker | Deferred | Verify images in `engine_broker.py` (`DockerEngine.image`, `_image_policies`, `_reference`). This overlaps the native-broker-process branch and waits for it. |
 
 ## Tests

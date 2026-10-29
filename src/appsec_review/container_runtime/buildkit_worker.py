@@ -24,6 +24,9 @@ from typing import Callable
 from urllib.parse import urlsplit
 
 from appsec_review.config.image_builder_service import IMAGE_ID, ImageBuilderServiceConfig
+from appsec_review.signing.core import SignatureVerificationError
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.policy import default_image_verifier
 
 
 MAX_LOG_BYTES = 64 * 1024
@@ -36,6 +39,17 @@ class EnforcementUnavailable(RuntimeError):
 
 class OutcomeUnknown(RuntimeError):
     pass
+
+
+class ImageSignatureRefused(EnforcementUnavailable, SignatureVerificationError):
+    """A pinned builder image failed signature verification; nothing was launched or consumed."""
+
+
+def verify_builder_image(verifier: ImageSignatureVerifier, image_id: str, purpose: str) -> None:
+    try:
+        verifier.verify(image_id, reference=purpose)
+    except SignatureVerificationError as error:
+        raise ImageSignatureRefused(f"refusing to use {purpose} image {image_id}: {error}") from error
 
 
 def native_docker_topology(info: dict) -> bool:
@@ -525,12 +539,19 @@ class KernelProof:
 
 
 class BuildKitWorker:
-    def __init__(self, config: ImageBuilderServiceConfig, *, runner=None, proof=None):
+    def __init__(self, config: ImageBuilderServiceConfig, *, runner=None, proof=None,
+                 image_verifier: ImageSignatureVerifier | None = None):
         self.config = config
         self.runner = runner or CommandRunner(Path(config.state_root) / "host-scratch")
         self.proof = proof or KernelProof(config)
         self.jobs: dict[str, Command] = {}
         self.deadline: float | None = None
+        # None defers to the process-wide default, resolved at first use rather than construction.
+        self._image_verifier = image_verifier
+
+    def _verify_image(self, image_id: str, purpose: str) -> None:
+        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
+        verify_builder_image(verifier, image_id, purpose)
 
     def _begin(self, record: dict):
         self.deadline = time.monotonic() + self.config.cleanup_timeout_seconds
@@ -600,6 +621,7 @@ class BuildKitWorker:
             raise EnforcementUnavailable("declared BuildKit image is not installed")
         if set(image.get("Config", {}).get("Volumes") or {}) - {"/home/user/.local/share/buildkit"}:
             raise EnforcementUnavailable("worker image declares unbounded implicit data volumes")
+        self._verify_image(config.worker_image_id, "BuildKit worker")
         self._inventory()
         self._network()
         directory = Path(record["directory"])
@@ -725,6 +747,8 @@ class BuildKitWorker:
                 or proxy_host.get("CapDrop") != ["ALL"] or not proxy_host.get("ReadonlyRootfs")
                 or any(mount.get("Type") != "tmpfs" for mount in proxy.get("Mounts", []))):
             raise EnforcementUnavailable("allowlisted egress proxy release is unproved")
+        # The proxy runs operator-provisioned; its pinned image is verified on every use.
+        self._verify_image(config.proxy_image_id, "egress proxy")
         # The proxy is an operator dependency, not uncharged background work.
         proxy_pid = proxy.get("State", {}).get("Pid")
         if not self.proof.process_cgroup(proxy_pid).is_relative_to(config.host_cgroup):
@@ -736,11 +760,16 @@ class BuildKitWorker:
     def _inputs(self, record: dict, save: Callable[[], None]) -> tuple[dict[str, str], list[str]]:
         config = self.config
         aliases = record["start"]["authorized_inputs"]
+        # Declared operator images are pinned and signed. Other authorized inputs are same-run
+        # outputs, derived images trusted through their verified pinned bases and the operator journal.
+        declared = {image.image_id: image.alias for image in config.images}
         locations, stores = {}, []
         for index, image_id in enumerate(sorted(set(aliases.values()))):
             image = json.loads(self._run(self._docker("image", "inspect", image_id)))[0]
             if image.get("Id") != image_id or image.get("Config", {}).get("OnBuild"):
                 raise EnforcementUnavailable("input image is missing or contains implicit ONBUILD work")
+            if image_id in declared:
+                self._verify_image(image_id, f"build input {declared[image_id]}")
             destination = Path(record["directory"]) / "inputs" / str(index)
             record["driver"]["host_operation_pending"] = True
             save()
