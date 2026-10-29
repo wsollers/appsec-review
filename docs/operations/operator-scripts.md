@@ -85,10 +85,15 @@ several sessions share one Docker daemon and one Dagster stack.
    never run `docker compose` on `compose.yaml` alone. The only direct docker calls that change
    state are `docker exec ... dagster job launch` and, for `--purge-volumes`, removal of this
    project's own containers and volumes.
-4. **No silent reverts.** Compose lets the shell override `.env`. `stack-restart`/`rebuild`/`start`
+4. **Signed image only.** `lifecycle.py build` signs the Python package, builds the image, signs the
+   image ID with the operator key and verifies it. `lifecycle.py start`/`reload` verify the image on the
+   host first and launch only that exact ID; if verification fails they exit 3 and the scripts report
+   `refused` without touching Compose. See
+   [Signed image](../../deploy/dagster/README.md#signed-image).
+5. **No silent reverts.** Compose lets the shell override `.env`. `stack-restart`/`rebuild`/`start`
    carry the running code-location's non-empty target, overlay and recording values forward and say so,
    so a recreate never changes what a stack reviews. Change them only with the options below.
-5. **Evidence.** `review-stop` and `review-stop-id` end runs with `recover_runs.py`, which writes
+6. **Evidence.** `review-stop` and `review-stop-id` end runs with `recover_runs.py`, which writes
    `runs/metadata/dagster-recovery/<timestamp>.json`.
 
 ## Stack
@@ -98,7 +103,7 @@ several sessions share one Docker daemon and one Dagster stack.
 | `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
 | `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`. |
-| `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` then `start`, which recreates containers whose image changed. |
+| `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` (sign modules, build, sign and verify the image) then `start`, which recreates containers whose image changed. |
 | `stack-status` | One screen: containers and health, compose files, image tag and age, deployment settings, active runs, last application run, Dagster URL, free disk of `runs/` and `test/tmp`. Exit 1 when a service is missing or unhealthy. |
 | `stack-logs [service] [--tail N] [--follow]` | `docker logs` for one service, or every service without `--follow`. |
 

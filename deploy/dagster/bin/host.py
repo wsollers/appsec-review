@@ -8,6 +8,11 @@ import subprocess
 
 PROJECT_PREFIX = "appsec-review-dagster"
 PLATFORMS = {"windows", "wsl", "linux"}
+COPILOT_PROFILES = {"copilot-dev", "copilot-prod"}
+# Compose launches the application services only by this exact, host-verified image ID.
+IMAGE_VARIABLE = "APPSEC_REVIEW_DAGSTER_IMAGE"
+# Fills the variable for Compose actions that never create containers (config, ps, logs, stop).
+UNVERIFIED_IMAGE = "sha256:" + "0" * 64
 
 
 def reject_native_environment() -> None:
@@ -54,9 +59,35 @@ def deployment_profile(environment: Path) -> str:
 
 
 def provider_overlay(platform: str, profile: str) -> str:
-    if profile in {"copilot-dev", "copilot-prod"}:
+    if profile in COPILOT_PROFILES:
         return "compose.copilot.yaml"
     return "compose.windows.yaml" if platform == "windows" else "compose.claude.yaml"
+
+
+def image_target(platform: str, profile: str) -> str:
+    """The final, signature-enforcing Dockerfile stage for this host and profile."""
+    if profile in COPILOT_PROFILES:
+        return "runtime-copilot"
+    return "runtime-windows" if platform == "windows" else "runtime"
+
+
+def image_tag(platform: str, profile: str) -> str:
+    """The local build tag; Compose never launches it, only the verified ID it resolves to."""
+    suffix = "-copilot" if profile in COPILOT_PROFILES else ""
+    return f"appsec-review-dagster:{platform}{suffix}"
+
+
+def compose_environment(environment: Path, environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Process environment for a Compose action that never creates containers.
+
+    The recorded verified image (process environment, then ``.env``) is kept; otherwise an unlaunchable
+    placeholder satisfies interpolation. Only ``lifecycle.py start``/``reload`` may set a launchable ID.
+    """
+    values = dict(os.environ if environ is None else environ)
+    recorded = read_environment(environment).get(IMAGE_VARIABLE) if environment.is_file() else None
+    if not values.get(IMAGE_VARIABLE) and not recorded:
+        values[IMAGE_VARIABLE] = UNVERIFIED_IMAGE
+    return values
 
 
 def validate_deployment(repository: Path, environment: Path, platform: str) -> None:

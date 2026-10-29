@@ -118,13 +118,15 @@ def test_report_build_assets_stay_out_of_runtime_context() -> None:
 def test_shared_runtime_build_checks_packaged_catalog(tmp_path: Path) -> None:
     assert not (ROOT / "deploy/dagster/Dockerfile.dockerignore").exists()
     dockerfile = (ROOT / "deploy/dagster/Dockerfile").read_text(encoding="utf-8")
-    runtime = dockerfile.split(" AS runtime\n", 1)[1].split("\nFROM ", 1)[0]
+    runtime = dockerfile.split(" AS runtime-base\n", 1)[1].split("\nFROM ", 1)[0]
     assert "WORKDIR /opt/app\n" in runtime
     command, = [command for command in re.findall(r'python -c "([^"]+)"', runtime)
                 if "appsec_review.container_runtime.catalog" in command]
     assert runtime.index("COPY containers ./containers") < runtime.index(command)
-    for stage in ("runtime-copilot", "runtime-windows", "test"):
-        assert f"FROM runtime AS {stage}\n" in dockerfile
+    for stage in ("runtime", "runtime-copilot-base", "runtime-windows-base", "test"):
+        assert f"FROM runtime-base AS {stage}\n" in dockerfile
+    assert "FROM runtime-copilot-base AS runtime-copilot\n" in dockerfile
+    assert "FROM runtime-windows-base AS runtime-windows\n" in dockerfile
     _stage_catalog(tmp_path, (ROOT / ".dockerignore").read_text(encoding="utf-8"))
     completed = subprocess.run(
         [sys.executable, "-c", command], cwd=tmp_path, capture_output=True, text=True,

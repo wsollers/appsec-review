@@ -27,7 +27,8 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import actual_platform, deployment_profile, project_name, provider_overlay, read_environment, reject_native_environment
+from host import (actual_platform, deployment_profile, image_tag as host_image_tag, project_name, provider_overlay,
+                  read_environment, reject_native_environment)
 
 
 DEPLOYMENT = Path(__file__).resolve().parents[1]
@@ -159,8 +160,7 @@ def overlay_name(profile: str = "dev") -> str:
 
 
 def image_tag(profile: str = "dev") -> str:
-    suffix = "-copilot" if profile in {"copilot-dev", "copilot-prod"} else ""
-    return f"appsec-review-dagster:{actual_platform()}{suffix}"
+    return host_image_tag(actual_platform(), profile)
 
 
 # -- Dagster GraphQL ------------------------------------------------------------------------------
@@ -255,7 +255,11 @@ def lifecycle(action: str, settings: dict[str, str], dry_run: bool) -> int:
     say(f"+ {(shown + ' ') if shown else ''}{shlex.join(argv)}")
     if dry_run:
         return OK
-    return subprocess.run(argv, cwd=ROOT, env={**os.environ, **settings}, check=False).returncode
+    returncode = subprocess.run(argv, cwd=ROOT, env={**os.environ, **settings}, check=False).returncode
+    if returncode == REFUSED and action in {"start", "reload"}:
+        raise OpsError(f"lifecycle {action} refused: the image signature did not verify on this host "
+                       "(scripts/stack-rebuild signs a fresh build with the operator key)", REFUSED)
+    return returncode
 
 
 def resolve_target(value: str) -> str:
@@ -422,7 +426,7 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
     image_missing = docker("image", "inspect", image_tag(profile), "--format", "{{.Id}}").returncode != 0
     if build or image_missing:
         reason = "--build" if build else f"image {image_tag(profile)} is missing"
-        say(f"building the image ({reason})")
+        say(f"building, signing and verifying the image ({reason})")
         if lifecycle("build", settings, args.dry_run) != 0:
             raise OpsError("lifecycle build failed")
     if lifecycle("start", settings, args.dry_run) != 0:

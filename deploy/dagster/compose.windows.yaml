@@ -1,8 +1,6 @@
 services:
   code-location:
     user: "0:0"
-    build:
-      target: runtime-windows
     environment:
       HOME: /var/claude-home
       DISABLE_AUTOUPDATER: "1"
