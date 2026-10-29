@@ -614,7 +614,9 @@ tag resolves to on the local daemon after a host rebuild; see
 `sign-modules`/`verify-modules` (signed `appsec_review` package manifests) and `export-bootstrap DIR`
 (copies the standalone module-verification bootstrap). Each prints JSON, never private key material,
 and exits nonzero on any failure; `[signing]` in `appsec-review.toml` supplies the OpenSSL binary,
-trust anchors and image-signature directory unless overridden on the command line.
+trust anchors and image-signature directory unless overridden on the command line. Threat model, key
+custody, enforcement points, runbook and named gaps:
+[`docs/operations/signing.md`](docs/operations/signing.md).
 
 Without installing the package, run the module from the source tree instead:
 

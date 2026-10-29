@@ -72,7 +72,9 @@ sign_modules(OpenSSL(), "<operator-key.pem>", "src/appsec_review", "python-modul
 Install the package with identical bytes, copy the envelope and the operator's public key PEM
 (named by its key ID), and copy the four verifier files from `src/appsec_review/signing/`.
 Only the `appsec_review` package is covered; other distributions in `lib/` remain an
-installation/commissioning responsibility.
+installation/commissioning responsibility. The CLI equivalents (`appsec-review signing
+sign-modules`, `verify-modules`, `export-bootstrap`), key custody and named gaps are in
+[`docs/operations/signing.md`](../../../docs/operations/signing.md).
 
 Metadata checks reject indirect, client-owned or writable launch paths, public configuration and
 writable release mounts. They do not prove the provenance of every transitive installed file.
