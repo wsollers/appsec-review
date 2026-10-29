@@ -827,8 +827,8 @@ class ImageBuilderService:
                         endpoint.unlink()
 
 
-def reconcile_retired_runtime(config: ImageBuilderServiceConfig,
-                              prior: ImageBuilderServiceConfig) -> list[str]:
+def prior_runtime_admission(config: ImageBuilderServiceConfig,
+                            prior: ImageBuilderServiceConfig) -> BuilderAdmission:
     if config.native_engine is None or prior.native_engine is None:
         raise EnforcementUnavailable("cross-release reconciliation requires native runtime identities")
     current, previous = service_contract(config), service_contract(prior)
@@ -836,7 +836,16 @@ def reconcile_retired_runtime(config: ImageBuilderServiceConfig,
         previous["native_engine"][name] = current["native_engine"][name]
     if current != previous:
         raise EnforcementUnavailable("retired reconciliation cannot change host, policy or admission bindings")
-    return BuilderAdmission(prior).reconcile_retired()
+    return BuilderAdmission(prior)
+
+
+def reconcile_retired_runtime(config: ImageBuilderServiceConfig,
+                              prior: ImageBuilderServiceConfig) -> list[str]:
+    return prior_runtime_admission(config, prior).reconcile_retired()
+
+
+def release_prior_runtime(config: ImageBuilderServiceConfig, prior: ImageBuilderServiceConfig) -> None:
+    prior_runtime_admission(config, prior).release()
 
 
 def main() -> None:
@@ -846,6 +855,7 @@ def main() -> None:
     operation.add_argument("--reserve-lifetime", action="store_true")
     operation.add_argument("--reconcile-admission", action="store_true")
     operation.add_argument("--reconcile-retired-admission", type=Path)
+    operation.add_argument("--release-prior-lifetime", type=Path)
     operation.add_argument("--release-lifetime", action="store_true")
     operation.add_argument("--finalize-commissioning", action="store_true")
     arguments = parser.parse_args()
@@ -861,6 +871,11 @@ def main() -> None:
         private_path(arguments.reconcile_retired_admission, directory=False)
         prior = load_image_builder_service(arguments.reconcile_retired_admission)
         print(json.dumps(reconcile_retired_runtime(config, prior)))
+        return
+    if arguments.release_prior_lifetime is not None:
+        private_path(arguments.release_prior_lifetime, directory=False)
+        prior = load_image_builder_service(arguments.release_prior_lifetime)
+        release_prior_runtime(config, prior)
         return
     admission = BuilderAdmission(config)
     if arguments.reserve_lifetime:

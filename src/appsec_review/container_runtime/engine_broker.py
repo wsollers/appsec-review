@@ -451,6 +451,7 @@ class NativeExecutionDriver(BuildKitWorker):
         record["driver"]["cgroup_pending"] = False
         gate = directory / "gate"
         gate.mkdir(mode=0o755)
+        gate.chmod(0o755)
         shutil.copyfile(static_gate(self.config), gate / "gate")
         (gate / "gate").chmod(0o555)
         command = record["command_policy"]
@@ -490,7 +491,7 @@ class NativeExecutionDriver(BuildKitWorker):
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
             "--security-opt", "seccomp=" + str(seccomp), "--network",
             self.config.network_id if requested["network"] == "isolated" else "none",
-            "--pid", "private", "--ipc", "private", "--cgroupns", "private",
+            "--ipc", "private", "--cgroupns", "private",
             "--cgroup-parent", str(group)[len("/sys/fs/cgroup/"):],
             "--cpus", str(requested["cpu"]), "--memory", f"{requested['memory_mb']}m",
             "--memory-swap", f"{requested['memory_mb']}m", "--pids-limit", str(requested["pids"]),
@@ -1031,6 +1032,8 @@ class EngineBroker:
         except (OSError, ValueError, RuntimeError) as exc:
             if record is None:
                 raise
+            record.setdefault("failure", {
+                "exception_type": type(exc).__name__[:64], "message": str(exc)[:2048]})
             record.update(state="REMOVED" if record["state"] == "REMOVED" else "UNKNOWN",
                           quarantine="native_operation_unconfirmed",
                           error_type=type(exc).__name__[:64])
@@ -1185,8 +1188,83 @@ class EngineCleanupConfirmation:
         return name in self.records or self._absent_name(name)
 
     def confirmed_cleanup(self, entry):
-        return (entry.get("quarantine") in {None, "native_engine_removal_unconfirmed", "container_death_unconfirmed"}
+        return (entry.get("quarantine") in {None, "native_engine_removal_unconfirmed",
+                                          "container_death_unconfirmed", "native_broker_outcome_unknown"}
                 and self.lease_matches(entry))
+
+
+def confirm_stopped_create_absence(config):
+    """Caller holds both lifetime locks and has proved all recorded generations/scopes stopped."""
+    records, _ = _operator_records(config)
+    confirmed = EngineCleanupConfirmation(config)
+    pending = [record for record in records if record["payload"]["name"] not in confirmed.records]
+    if not pending:
+        return
+    if len(pending) != 1 or config.docker_helper_scope is None:
+        raise EnforcementUnavailable("stopped native create recovery requires one dedicated engine intent")
+    record = pending[0]
+    containers = Path(config.docker_helper_scope.data_root) / "containers"
+    private_path(containers)
+    if next(containers.iterdir(), None) is not None:
+        raise EnforcementUnavailable("stopped native containers are not confirmed removed")
+    driver = record["driver"]
+    if (not uuid(record.get("execution_id")) or not uuid(record.get("execution_token"))
+            or not uuid(record["binding"].get("lease_id"))
+            or record.get("service_contract") != service_contract(config)
+            or record.get("state") not in {"UNKNOWN", "CREATING"}
+            or not record.get("create_dispatched") or not driver.get("create_pending")
+            or any(driver.get(key) for key in ("launcher", "launch_pending", "started_at", "released"))
+            or record["peer"]["uid"] != config.admission.uid
+            or record["peer"]["gid"] != config.admission.gid
+            or process_token(record["peer"]["pid"]) == record["peer"]["start_token"]
+            or any(record["binding"].get(key) != getattr(config.native_engine, key)
+                   for key in ("service_generation", "engine_id", "engine_generation"))):
+        raise EnforcementUnavailable("native intent lacks its exact dead, prelaunch generation")
+    if len([grant for grant in config.native_engine.grants if grant.uid == record["peer"]["uid"]
+            and all(record["binding"].get(key) == getattr(grant, key) for key in (
+                "tenant_id", "project_id", "run_id", "target_snapshot", "configuration_id"))]) != 1:
+        raise EnforcementUnavailable("native stopped-create run grant changed")
+    group = Path(config.native_engine.execution_cgroup_parent) / record["execution_id"]
+    if driver.get("cgroup") != str(group):
+        raise EnforcementUnavailable("native stopped-create cgroup scope changed")
+    if group.exists():
+        private_path(group)
+        info = group.stat()
+        if ([info.st_dev, info.st_ino] != driver.get("cgroup_identity")
+                or dict(line.split() for line in (group / "cgroup.events").read_text().splitlines())
+                .get("populated") != "0"):
+            raise EnforcementUnavailable("native stopped-create cgroup generation or occupancy changed")
+    elif driver.get("cgroup_pending"):
+        raise EnforcementUnavailable("native cgroup creation remains unresolved")
+    owner = {"kind": "execution", "id": record["execution_id"],
+             "token": record["execution_token"], "service_contract": service_contract(config)}
+    path = Path(config.state_root) / "intents.sqlite3"
+    private_path(path, directory=False)
+    connection = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)
+    try:
+        connection.execute("PRAGMA synchronous=EXTRA")
+        with connection:
+            row = connection.execute("SELECT owner FROM engine_interlock WHERE slot=1").fetchone()
+            if row is None or json.loads(row[0]) != owner:
+                raise EnforcementUnavailable("native stopped-create ownership changed")
+            if record.get("quarantine"):
+                record["resolved_quarantine"] = record.pop("quarantine")
+            record["state"] = "REMOVED"
+            record["stopped_create_absence"] = {
+                "engine_generation": config.native_engine.engine_generation,
+                "private_container_metadata_empty": True, "cgroup_identity": driver.get("cgroup_identity"),
+                "observed_at": time.time(),
+            }
+            record["removal"] = {
+                "confirmed_removed": True, "binding": record["binding"], "peer": record["peer"],
+                "execution_id": record["execution_id"], "execution_token": record["execution_token"],
+                "name": record["payload"]["name"], "service_contract": service_contract(config),
+            }
+            connection.execute("UPDATE engine_executions SET record=? WHERE id=?",
+                               (encoded(record).decode(), record["execution_id"]))
+            connection.execute("DELETE FROM engine_interlock WHERE slot=1")
+    finally:
+        connection.close()
 
 
 def assert_engine_retired(config):

@@ -53,9 +53,10 @@ def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operatio
     if configuration.stat().st_mode & 0o077:
         raise PermissionError("root service configuration must be private")
     if operation not in {"serve", "reserve-lifetime", "reconcile-admission", "release-lifetime",
-                         "finalize-commissioning", "reconcile-retired-admission"}:
+                         "finalize-commissioning", "reconcile-retired-admission", "release-prior-lifetime"}:
         raise ValueError("unsupported root lifecycle operation")
-    if (operation == "reconcile-retired-admission") != (prior_configuration is not None):
+    if (operation in {"reconcile-retired-admission", "release-prior-lifetime"}) != (
+            prior_configuration is not None):
         raise ValueError("retired reconciliation requires its separate prior configuration")
     if prior_configuration is not None:
         trusted_path(prior_configuration)
@@ -80,7 +81,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--operation", choices=("serve", "reserve-lifetime", "reconcile-admission",
                                                "release-lifetime", "finalize-commissioning",
-                                               "reconcile-retired-admission"), default="serve")
+                                               "reconcile-retired-admission", "release-prior-lifetime"), default="serve")
     parser.add_argument("--prior-config", type=Path)
     args = parser.parse_args(argv)
     specification = launch_spec(Path(sys.executable), Path(__file__).absolute(), args.config,
@@ -98,8 +99,8 @@ def main(argv: list[str] | None = None) -> None:
     # -S prevents editable-install .pth hooks; only the installed release is added.
     sys.path[:] = [str(library), *standard_library]
     sys.argv[:] = ["appsec-review-image-builder", "--config", str(args.config)]
-    if args.operation == "reconcile-retired-admission":
-        sys.argv.extend(("--reconcile-retired-admission", str(args.prior_config)))
+    if args.prior_config is not None:
+        sys.argv.extend(("--" + args.operation, str(args.prior_config)))
     elif args.operation != "serve":
         sys.argv.append("--" + args.operation)
     runpy.run_module("appsec_review.container_runtime.image_builder_service", run_name="__main__")

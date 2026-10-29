@@ -248,9 +248,24 @@ then reconciliation uses the prior configuration and its original frozen contrac
 lifetime must already be `RELEASED`, its service lock must be free, and the full independent
 retirement/removal proof still applies. This operation cannot serve, restart, or rebind a lifetime.
 
+For a prior lifetime with an uncertain create but no launched process, the corresponding
+`release-prior-lifetime` operation uses the same two-configuration boundary and ordinary exclusive
+lifetime release. Only after all recorded generations and execution/application/helper scopes
+are proved stopped can a private, entirely empty Docker container-metadata directory settle that
+one exact prelaunch intent and its matching ownership fence. A live client, launched process,
+rebound cgroup, foreign owner or any stopped container retains the reservation. The genuine
+absence observation and original failure are preserved in the operator journal; an empty cgroup
+may remain as audit state. Normal admission reconciliation then accepts the exact client
+`native_broker_outcome_unknown` quarantine only with independently confirmed removal evidence.
+
 Rootless-worker inspection accepts Docker's equivalent `SETUID`/`SETGID` and
 `CAP_SETUID`/`CAP_SETGID` spellings only as the same exact pair. The kernel capability bounding
 set, zero effective capabilities and all remaining isolation checks are unchanged.
+
+Native execution uses Docker's default private PID namespace rather than the unsupported
+`--pid private` argument; inspect and kernel namespace proofs remain mandatory. The private
+control root stays mode0700 while its read-only bind-mounted gate directory is explicitly0755
+and the executable0555, including when the root service runs under umask077.
 
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.

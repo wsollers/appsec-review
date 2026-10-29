@@ -182,11 +182,12 @@ def test_new_runtime_reconciles_unchanged_retired_contract_not_current_contract(
     assert native.config.native_engine.runtime_root == "/operator/lib"
 
 
+@pytest.mark.parametrize("operation", [services.reconcile_retired_runtime, services.release_prior_runtime])
 @pytest.mark.parametrize("field", [
     "engine_id", "engine_generation", "endpoint", "runtime_python", "gate_binary",
     "application_cpu", "resource-budget",
 ])
-def test_new_operator_cannot_rebind_other_prior_policy(native, monkeypatch, field):
+def test_new_operator_cannot_rebind_other_prior_policy(native, monkeypatch, field, operation):
     if field == "resource-budget":
         current = replace(native.config, resources=replace(native.config.resources, cpu=7))
     else:
@@ -200,7 +201,7 @@ def test_new_operator_cannot_rebind_other_prior_policy(native, monkeypatch, fiel
             native.config.native_engine, **{field: value}))
     monkeypatch.setattr(services, "BuilderAdmission", lambda config: pytest.fail("rebound policy used"))
     with pytest.raises(engine.EnforcementUnavailable, match="cannot change"):
-        services.reconcile_retired_runtime(current, native.config)
+        operation(current, native.config)
 
 
 def test_cross_release_reconciliation_requires_actual_prior_release(native):
@@ -213,24 +214,28 @@ def test_cross_release_reconciliation_requires_actual_prior_release(native):
     assert native.lifetime.reconcile_retired() == []
 
 
+@pytest.mark.parametrize("operation", ["reconcile-retired-admission", "release-prior-lifetime"])
 def test_retired_operator_cli_verifies_current_runtime_before_prior_reconciliation(
-        native, monkeypatch, capsys):
+        native, monkeypatch, capsys, operation):
     import sys
     current = replace(native.config, native_engine=replace(
         native.config.native_engine, runtime_root="/new-operator/lib", runtime_release_id="new-operator"))
     seen = []
     monkeypatch.setattr(sys, "argv", [
-        "operator", "--config", "/current.toml", "--reconcile-retired-admission", "/prior.toml"])
+        "operator", "--config", "/current.toml", "--" + operation, "/prior.toml"])
     monkeypatch.setattr(services.os, "umask", lambda value: 0)
     monkeypatch.setattr(services, "private_path", lambda *args, **kwargs: None)
     monkeypatch.setattr(services, "load_image_builder_service",
                         lambda path: current if str(path) == "/current.toml" else native.config)
     monkeypatch.setattr(engine, "verify_runtime", lambda config: seen.append(("verified", config)))
-    monkeypatch.setattr(services, "reconcile_retired_runtime",
+    monkeypatch.setattr(services, "BuilderAdmission",
+                        lambda config: pytest.fail("current contract must not construct prior admission"))
+    handler = "reconcile_retired_runtime" if operation == "reconcile-retired-admission" else "release_prior_runtime"
+    monkeypatch.setattr(services, handler,
                         lambda config, prior: seen.append(("reconcile", config, prior)) or ["reclaimed"])
     services.main()
     assert seen == [("verified", current), ("reconcile", current, native.config)]
-    assert json.loads(capsys.readouterr().out) == ["reclaimed"]
+    assert capsys.readouterr().out == ('["reclaimed"]\n' if operation == "reconcile-retired-admission" else "")
 
 
 @pytest.mark.parametrize("current_missing", [True, False])

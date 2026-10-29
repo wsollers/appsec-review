@@ -302,6 +302,24 @@ def test_confirmed_removal_resolves_broker_quarantine_without_discarding_its_rea
         assert native.broker.get(created["execution_id"])["resolved_quarantine"] == "native_operation_unconfirmed"
         resources.container_stopped(payload["name"])
 
+
+def test_initial_driver_failure_is_preserved_in_private_journal_after_cleanup_failure(native, monkeypatch):
+    def fail(record, save):
+        raise RuntimeError("original-create-rejection")
+
+    monkeypatch.setattr(native.engine, "create", fail)
+    native.engine.confirmed = False
+    payload, _ = create_payload(native)
+    with lease(native):
+        resources.track_container(payload["name"])
+        reply = request(native, "execution.create", payload)
+        assert reply["state"] == "UNKNOWN" and "failure" not in reply
+    native.broker.reconcile(restart=True)
+    record = native.broker.get(reply["execution_id"])
+    assert record["error_type"] == "OutcomeUnknown"
+    assert record["failure"] == {
+        "exception_type": "RuntimeError", "message": "original-create-rejection"}
+
 @pytest.mark.parametrize("helper", ["runc", "containerd-shim-runc-v2"])
 def test_native_helper_requires_its_declared_capped_execution_parent(native, monkeypatch, helper):
     from appsec_review.container_runtime.buildkit_worker import KernelProof

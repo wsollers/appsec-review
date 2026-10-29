@@ -720,9 +720,6 @@ class BuilderAdmission:
             if anchor.get("state") not in {"PROVISIONING", "RESERVED", "RELEASING"}:
                 raise EnforcementUnavailable("lifetime reservation state is unknown")
             records = _journal_records(self.config)
-            if self.config.native_engine is not None:
-                from appsec_review.container_runtime.engine_broker import assert_engine_retired
-                assert_engine_retired(self.config)
             confirmation = JournalCleanupConfirmation(self.config)
             if len(confirmation._records) != len(records):
                 raise EnforcementUnavailable("unresolved worker intents retain lifetime capacity")
@@ -731,6 +728,12 @@ class BuilderAdmission:
                 raise EnforcementUnavailable("released client contexts are missing proof or rebound")
             if not self.proof.stopped(anchor["members"]):
                 raise EnforcementUnavailable("daemon, proxy, service or worker termination is unconfirmed")
+            if self.config.native_engine is not None:
+                from appsec_review.container_runtime.engine_broker import (
+                    assert_engine_retired, confirm_stopped_create_absence,
+                )
+                confirm_stopped_create_absence(self.config)
+                assert_engine_retired(self.config)
             # A crash after ledger deletion must not permit startup from the old
             # anchor. RELEASING is a durable fail-closed retirement fence.
             anchor["state"] = "RELEASING"
