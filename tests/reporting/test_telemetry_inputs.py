@@ -59,3 +59,11 @@ def test_document_is_deterministic_and_renders(tmp_path: Path) -> None:
     assert first == second
     assert first.renderer == RENDERER and first.head_label == "metrics summary sha256"
     assert render_latex(first) == render_latex(second)
+
+
+def test_format_helpers() -> None:
+    from appsec_review.reporting.telemetry import format as fmt
+    assert [fmt.duration(v) for v in (850, 4200, 1012000, 7_500_000, None, -1)] == [
+        "850 ms", "4.2 s", "16m 52s", "2h 05m", "unavailable", "unavailable"]
+    assert (fmt.count(7810), fmt.compact(7810), fmt.compact(950), fmt.percent(0.825889), fmt.count(True)) == (
+        "7,810", "7.8k", "950", "82.6%", "unavailable")
