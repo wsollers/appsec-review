@@ -47,7 +47,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `run-tests.sh` / `.ps1` | Run a named pytest suite with a unique base temp under `test/tmp/` and a log file; legacy suites report `known-failures.txt` entries as known. `--acceptance PROFILE` / `-Acceptance PROFILE` selects strict isolated acceptance (default one, maximum two workers), including dependency-ready producers, verified post-cleanup OUTPUT detachment, frozen inputs and private consumers; blocked descendants never count as executed. No known-failure exemptions. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-tests), [acceptance guide](../docs/operations/bounded-acceptance.md). |
+| `run-tests.sh` / `.ps1` | Run a named pytest suite with a unique base temp under `test/tmp/` and a log file; legacy suites report `known-failures.txt` entries as known. `--acceptance PROFILE` / `-Acceptance PROFILE` selects strict isolated acceptance (default one, maximum two workers), including dependency-ready producers, verified post-cleanup OUTPUT detachment, fresh immutable-union checks and private consumers; whole checkpoints/seals remain strict and blocked descendants never count as executed. No known-failure exemptions. Completed two-worker warm calibration, one-worker portable-profile proof and unresolved exhaustive gate: [acceptance guide](../docs/operations/bounded-acceptance.md); CLI details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-tests). |
 | `clean-temp.sh` / `.ps1` | Remove disposable state under `test/tmp/` (dry run unless `--yes`). Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#clean-temp). |
 
 ## Support files

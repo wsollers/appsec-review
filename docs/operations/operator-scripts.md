@@ -364,10 +364,15 @@ required coverage as failure, and writes its result/logs/fixture runs only under
 Staged review selects dependency-ready producer phases, frozen-input checkpoints and supervisor
 seals before fresh private consumers. Failed producers leave descendants explicitly blocked,
 not executed or successfully skipped. `review` has 13 core cases; `review-exhaustive` has 24
-uncalibrated cases. Producer OUTPUT detachment is implemented after successful owned cleanup;
-strict checkpoints/seals/copies remain. Latest review has a real CI chain/private-reader pass,
-but a native-positive PoC stage deadline failure blocks two consumers. The measured two-worker
-signals pass is not serial or overall acceptance proof.
+cases; its first public run failed on individual/suite deadlines. Producer OUTPUT detachment
+is implemented after successful owned cleanup; strict checkpoints/seals/copies remain.
+Optimized Windows review passed 13/13 and completes
+its scoped Windows verification todo. All three two-worker quick warm runs passed 38/38
+under ten minutes; this is not serial-default proof. Corrected named portable process passed
+13/13 with one worker in 351.471 seconds at the same source. The exhaustive deadline gap still blocks full
+handoff; its split proposal is not approved/implemented. Tagged workers use their existing
+120-second exception internally; other lifecycle helper cases retain 60 seconds. This is not
+a global cap increase or final green gate.
 `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` only lower profile caps.
 Legacy suites, arbitrary pytest arguments, `--parallel` and `--background` cannot be combined
 with acceptance; the known-failure exemption below does not apply.

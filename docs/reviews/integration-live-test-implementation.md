@@ -11,13 +11,14 @@ all inventory members or optional live profiles have executed.
 ## Current reconciliation checkpoint
 
 The current documentation branch incorporates exact parent
-`d6042ab9c13e86c8045560bdebc09a68544d272a`, including harness detachment `1d7d621a`,
-the inherited frozen main, staged chunks and coordinator corrections. Detachment is
-implemented with actual Windows publisher and complete CI staged/private-reader proof.
-**Overall acceptance remains not green:** the public review has one native-positive PoC
-stage deadline failure and two blocked consumers. Windows completion remains open; no full
-quick, three-warm or exhaustive proof exists. Every result below remains bound to its stated
-revision, not retrospectively to later source merges.
+`a4ce5459ab51727cb3793c0425894a7f56fc21dc`, including custody optimization `881b8709`,
+detachment `1d7d621a`, helper-budget consistency `85d39172` and inherited staged/frozen-main
+work. Optimized public Windows review passed 13/13 and completes the scoped Windows
+verification todo. All three two-worker quick warm runs at that frozen source passed 38/38
+under ten minutes. **Overall final acceptance is still withheld:** the first exhaustive
+profile failed on individual/suite deadlines; its new split proposal is not approved or
+implemented. Corrected named portable process now passed 13/13 at the same frozen source.
+Every result remains bound to its stated revision, not retrospectively to later merges.
 
 ### Actually integrated staged contract
 
@@ -41,7 +42,8 @@ history is explicitly `execution_evidence: false`, not freshly executed consumer
 Blocked descendants remain failed/unexecuted coverage, never successful skips.
 
 Core `review` now selects 13 staged cases; `review-exhaustive` retains 24 full integrity,
-same-length tamper, benign/blocked and core cases, uncalibrated. Quick has 35 selectors
+same-length tamper, benign/blocked and core cases; its first public attempt failed as detailed
+below. Quick has 35 selectors
 resolving to 38 cases including prerequisites. Caps are unchanged: quick 720 seconds,
 review/exhaustive 600, signals 240; ordinary/declared per-case caps and cleanup reserves still
 apply. Default workers are one, maximum two.
@@ -62,7 +64,84 @@ allowed by the guard. Verified anonymous stdio PIPE wrapping is distinct from fi
 descriptor mutation; unresolved/off-root/immutable filesystem mutations remain denied.
 The ordinary checkpoint/seal/private-copy policy is not relaxed.
 
-### Latest actual public review at `d6042ab9`
+### Optimized public Windows review and frozen warm checkpoint
+
+The actual public `scripts\run-tests.ps1 -Acceptance review -Workers 2` at frozen `a4ce5459`
+**passed 13/13 in 469.729 seconds**, under 600, with every individual 60/120-second cap met. Three real review
+producers detached **114 output files**. Native candidate, fresh corruption, empty and CI
+review -> gate -> report -> oracle private consumers naturally passed with no binding
+rewrites, zero surviving owned processes and `production_services_touched=false`. Root:
+`test/tmp/acceptance/acceptance-13846b2ca1fc4685ae71ac1e43796e44/review/`.
+
+The Windows verification todo is **done for that demonstrated publication/staged-review
+scope**. It does not establish Linux, actual WSL or general Windows `WinError 5` reliability.
+
+Source and environment were frozen at exact `a4ce5459` for three public quick warm runs,
+each with two workers:
+
+| Warm run | Actual result | Evidence root below `test/tmp/acceptance/` |
+| --- | --- | --- |
+| 1 | **Passed 38/38**, 559.626 s | `acceptance-59628deb115e419e8edbca858eb536a8/quick/` |
+| 2 | **Passed 38/38**, 551.899 s | `acceptance-8206b2c4d27b4e1990a7dba1cb10ed17/quick/` |
+| 3 | **Passed 38/38**, 567.917 s | `acceptance-adc9cf098cca48b28ae2780803973906/quick/` |
+
+All three measured runs have identical full source-identity closure and distinct invocation
+IDs. Every case cap passed, owned cleanup confirmed zero survivors, and no production services
+were touched. The under-ten-minute runtime target and twelve-minute ceiling are genuinely
+demonstrated for **two workers**, not the serial default, exhaustive coverage or a final handoff.
+Combined focused validation reported **104 passed, four host-facility skips, 235.17 seconds**;
+those skips remain gaps, not executed coverage.
+
+### First public exhaustive result at the same `a4ce5459`
+
+`scripts\run-tests.ps1 -Acceptance review-exhaustive -Workers 2` **failed** 24 selected
+cases in **599.621 seconds**: 20 passed, two deadline-stopped cases and two correctly blocked
+descendants. Root:
+`test/tmp/acceptance/acceptance-decde16e3a6141daaddf5522aa918449/review-exhaustive/`.
+
+- `current-report-integrity` hit its own hard deadline; its receipt was **118.444 seconds**,
+  below 120 total. Being below the outer total ceiling does not erase the execution timeout.
+- `ci-blocked-gate` had only **9.059 seconds** before the 600-second suite end.
+  `ci-blocked-report` and `review-blocked` were consequently blocked, not executed coverage.
+  This is no semantic failure claim for the budget-stopped gate and no evidence it passed.
+- All native, CI-positive oracle and CI-benign full paths passed; CI-blocked prepare and
+  review passed. Those passes do not satisfy the missing integrity/gate/report/consumer work.
+
+A narrow per-vector case/subprofile proposal is being prepared for user approval. **No new
+exhaustive change is approved or implemented.** The current source/inventory/caps stay as
+recorded; earlier staging/detachment approvals do not authorize this new change. Overall
+handoff stays blocked, while Windows completion and three-warm quick completion remain done.
+
+### Implemented fresh immutable-union optimization
+
+`881b8709` changes immutable capture to fresh traversal/hashing of the declared union once
+per scope, including the declaration. Overlapping paths count once; full ordinary-file,
+depth/entry/file/byte/deadline limits and missing/extra/same-size checking remain. Mutable
+outputs are not hashed for every immutable check. Whole producer inspection, checkpoints,
+seals and full source checks remain unchanged. There is no cross-call proof cache, weakened
+seal or cap increase.
+
+### Portable process failures and helper-budget correction
+
+At `d6042ab9`, full named portable `process` failed twice with **12/13 passing**: two workers
+took **191.015 seconds**, one worker **353.493 seconds**. Both tagged-worker failures hit
+the helper's inner 55-second execution/60-second receipt cap on fresh resume even though
+inventory/supervisor already declared its 120-second exception.
+
+`85d39172` fixes that mismatch: `case(name, deadline_seconds=60)` accepts only 60/120, and
+tagged workers explicitly select 120; remaining helper cases retain 60. The helper reserves
+five seconds and records the selected cap. Outer 120-second exception and aggregate
+480-second process ceiling are unchanged, not increased globally. Six new units passed in
+4.44 seconds. All three actual quick warm runs passed the config/worker/resume obligation.
+
+The actual public `scripts\run-tests.ps1 -Acceptance process -Workers 1` at unchanged
+`a4ce5459` subsequently **passed 13/13 in 351.471 seconds**, below its 480-second profile cap,
+with all individual caps met. Root:
+`test/tmp/acceptance/acceptance-be7d2d44ad7d48669710a5f76490035d/process/`.
+This closes post-budget-correction named portable proof without erasing either prior failed
+run or claiming Linux/actual-WSL execution. Source and environment remained unchanged.
+
+### Earlier partial public review at `d6042ab9`
 
 `scripts\run-tests.ps1 -Acceptance review -Workers 2` **failed**: 10/13 passed, one
 native-positive PoC producer timed out and two consumers were correctly blocked. The whole
@@ -81,13 +160,10 @@ override a failed case cap. Evidence root:
   invalidated and candidate/corruption consumers remained blocked, not executed coverage.
 
 Owned cleanup confirmed zero survivors and `production_services_touched` was false.
-The explicit Windows completion todo remains **open** because the timed staged review is
-not green despite genuine detachment and CI consumer proof.
-
-Repeated immutable verification currently hashes the entire mutable tree. Harness owner
-`ad52f90d` is optimizing equivalent fresh immutable-subtree-only verification; this is not
-yet an integrated or measured correction here. Caps are unchanged, and no caching or omission
-of whole checkpoint/seal/detachment checks is authorized.
+At that revision the Windows completion todo was still open despite genuine detachment and
+CI consumer proof. Repeated immutable verification hashed the entire mutable tree; the
+later integrated `881b8709` optimization and passing core review above supersede that blocker,
+not the recorded failure itself.
 
 ### Other revision-bound public and focused results
 
@@ -106,7 +182,7 @@ The earlier `process-windows` attempt at `992058ae` **failed in 8.905 seconds** 
 PIPE was misclassified. The subsequent result follows an actual source correction, not an
 undisclosed retry-to-green.
 
-Combined native Windows validation at the current parent reported **89 passed, one host
+Combined native Windows validation at `d6042ab9` reported **89 passed, one host
 skip in 141.73 seconds**, not a full acceptance/warm-suite result. Incoming frozen-main Linux
 commissioning focused units cannot collect on native Windows because `fcntl` is absent;
 this is a separate host gap, not a detachment regression or permission for a workaround.
@@ -464,8 +540,8 @@ At that historical checkpoint, planner `81ada94f` had produced a read-only
 It was not yet implemented and could not be cited as accepted prerequisite reuse, timing
 proof or permission to share validation caches. The staged machinery has since been integrated,
 as recorded at the top; output detachment is now implemented with actual Windows
-publisher/CI-reader evidence. The historical named consumers pass does not clear the current
-native-positive PoC deadline failure or complete the Windows timed-review gate.
+publisher/CI-reader evidence and a later optimized core-review pass. The historical named
+consumers pass does not replace the unresolved exhaustive gate.
 
 ## Shared decisions
 
@@ -603,7 +679,7 @@ reported; setup duration is unavailable unless captured separately.
 | `b72e79a9`, exact-node candidate/oracle follow-up | Candidate passed 112.285527 s; oracle timed out 117.024162 s; group 229.923300 s, both cleanups zero | No oracle assertion reached; not a green review profile |
 | `b72e79a9`, bounded direct functional matrix | Timeout 117.014358 s, cleanup zero; report fixture completed 104.102093 s | Audit plugin absent; oracle evaluation started but did not complete, so not merely guard overhead |
 | `16a520f4`, named public `process` | 13/13 passed, 340.136 s, cleanup zero | Real profile CLI proof on that revision; Linux-specific requirements unexecuted |
-| `1ff86556`, named public `consumers` | 3/3 passed, 207.438 s, public cleanup requirement satisfied | Current named profile proof for three bounded nodes, not exhaustive W5 or concurrent production review |
+| `1ff86556`, named public `consumers` | 3/3 passed, 207.438 s, public cleanup requirement satisfied | Named profile proof on that revision, not exhaustive W5 or concurrent production review |
 | `1ff86556`, final guarded dependency exact node | 1/1 passed, 83.9186626 s, cleanup zero; raw pytest 81.8 s | Wrapper-only exit 1 disclosed and receipt verified without rerun; not whole signals |
 | Focused native/interchange/selected-overlay units | 7 passed, reported 9.73 s | Focused unit scope only |
 | Separate signal-positive/corruption/dependency measurements | 102.625 + 56.574 + 83.919 = 243.118 s before collection | Projected above serial signals 240 s; not an actual new integrated failure |
@@ -630,9 +706,10 @@ Do not reconstruct unavailable setup metrics by subtracting unrelated test-body 
   and a later named `consumers` profile pass. Integrated quick calibration and the listed
   specialist, renderer-selection, saturation and cross-lane obligations remain unverified.
 - Historical `b72e79a9` passed the tiny candidate but timed out the all-in-one oracle.
-  Current `d6042ab9` passes the staged core CI oracle, not the uncalibrated exhaustive matrix;
-  native-positive PoC times out and leaves candidate/corruption consumers blocked.
-  No final whole-profile quick/review green is established.
+  At `d6042ab9`, native-positive PoC timed out and blocked candidate/corruption consumers.
+  The optimized Windows review now passes 13/13, and all three frozen quick warm runs pass
+  38/38 under ten minutes with two workers; corrected named portable process passes 13/13.
+  Exhaustive deadlines still withhold final acceptance; the new split plan is not implemented.
 - Two existing ELF catalog tests assert an exact gap count and fail after the new
   `delivery_fact_unavailable` gap. The dependency verifier error-wording discrepancy described
   above is also baseline. Neither is silently converted into passing acceptance.

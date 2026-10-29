@@ -856,11 +856,17 @@ production-format telemetry stay beneath a unique `test/tmp/acceptance/` root, n
 zero shared CPU/I/O contention. `quick` targets under ten minutes with a twelve-minute hard cap;
 current acceptance is **not green**. Review now uses dependency-ready producer stages and
 invocation-specific seals before private readers. OUTPUT-only post-cleanup detachment is
-implemented and the full CI chain reaches its private oracle reader, but the latest review
-profile fails the native-positive PoC stage deadline and blocks two consumers.
+implemented; optimized public Windows review passed all 13 cases and completes the scoped
+Windows verification todo. At frozen source `a4ce5459`, all three two-worker quick warm runs
+passed 38/38 in 559.626, 551.899 and 567.917 seconds, genuinely demonstrating the runtime goal
+of under ten minutes for two workers, not the serial default.
 Signals passed with two opted-in workers, not the serial default. Historical process/consumers
-passes are not current-source proof. No final quick, three-warm or exhaustive calibration is
-complete. Optional real-tool, deployed,
+passes remain revision-scoped; the corrected named portable process profile passed 13/13
+in 351.471 seconds with one worker at the same frozen source. The first 24-case exhaustive run
+failed on individual/suite deadlines;
+a per-vector/subprofile proposal is being prepared, not approved or implemented. Three-warm
+quick calibration and scoped Windows completion are done; overall handoff remains withheld.
+Optional real-tool, deployed,
 provider, guidance, warm-CodeQL and native profiles currently fail as unimplemented rather
 than silently passing.
 

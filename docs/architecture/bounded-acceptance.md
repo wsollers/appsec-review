@@ -37,11 +37,14 @@ measurement into evidence for newly added cases.
 
 ## Integrated staging and custody
 
-The documentation branch incorporates exact parent `d6042ab9`, including implemented
-detachment `1d7d621a`, staged chunks and the inherited frozen main. The complete CI producer
-chain and private current-report consumer now have actual public proof. The core review
-profile is still not green: native-positive PoC exceeded its total stage deadline and left
-candidate/corruption consumers blocked.
+The documentation branch incorporates exact parent `a4ce5459`, including detachment
+`1d7d621a`, immutable-check optimization `881b8709` and helper-budget consistency `85d39172`.
+Optimized public Windows review passed all 13 core cases, including native candidate,
+fresh corruption/empty readers and the CI review/gate/report/oracle private consumer chain.
+All three two-worker quick warm runs at that frozen source passed 38/38, demonstrating the
+runtime target for that concurrency only. Corrected named portable process passed 13/13 with
+one worker in 351.471 seconds at the same frozen source. The first exhaustive profile failed on individual/
+suite deadlines, so overall acceptance is not finally green.
 
 Variant-specific producers run prepare -> review -> PoC for native-positive, prepare ->
 review for native-empty, and prepare -> review -> gate -> report for CI variants. Each
@@ -89,15 +92,18 @@ usable checkpoint/seal and are not retried.
 The guard permits links only in mutable producer locations, not sealed/private reader or
 immutable input paths. Verified anonymous stdio PIPE wrapping is distinct from filesystem
 descriptor mutation: unresolved, off-root or immutable file-descriptor writes remain denied.
-The actual Windows review detached 38 files in each of native-positive, native-empty and CI
-review (114 total), preserving bytes/modes/bindings. Native-empty and the full CI sealed
-reader chain passed. The Windows completion todo remains **open** because the complete timed
-review still fails, not because detachment remains unimplemented.
+The actual Windows review detached 114 files across native-positive, native-empty and CI
+review producers, preserving bytes/modes/bindings. All native and CI core consumers passed
+without binding rewrites, with cleanup zero and no production services touched. The Windows
+verification todo is **done for this demonstrated publication/staged-review scope**, not
+Linux, actual WSL or general Windows `WinError 5` reliability.
 
-Current remaining cost is repeated immutable verification hashing the entire mutable tree.
-Equivalent fresh immutable-subtree-only verification is assigned for optimization; it is
-not integrated in `d6042ab9` and does not authorize caps, cross-call caching or skipping
-whole checkpoint/seal/detachment checks.
+`capture_inputs` now freshly traverses/hashes the declared immutable union once per scope,
+including the declaration; overlapping paths count once. Missing/extra entries, same-size
+edits, ordinary-file identity and depth/entry/file/byte/deadline limits remain checked.
+Mutable outputs are not rehashed for every immutable check. Whole producer inspection,
+checkpoints, seals and full source checks remain; this is neither a cross-call proof cache
+nor a cap increase or omission of full custody checks.
 
 ## Authentic joins and explicit substitutions
 
@@ -232,8 +238,12 @@ An exact-node dependency pass at `1ff86556` likewise does not establish a whole 
 pass. Planner `81ada94f`'s read-only
 `staged-authentic-producer/private-verified-materialization` proposal is historical: its
 staged implementation now exists as described above. Output detachment is now separately
-implemented and has actual Windows detachment/CI-reader evidence, but the timed Windows
-completion gate remains open. Neither grants a budget or validation waiver.
+implemented and has a complete timed Windows core-review pass. Its scoped verification todo
+and three-warm two-worker quick calibration are done; corrected named portable process also
+passes. The exhaustive gate remains: its failure includes an own-deadline integrity timeout
+and a gate stopped by remaining suite budget; its blocked report/consumer are unexecuted coverage, not
+semantic gate failures. A narrow per-vector/subprofile proposal awaits approval and is not
+implemented. No prior approval grants a budget or validation waiver for that new proposal.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.
