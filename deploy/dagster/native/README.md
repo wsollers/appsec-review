@@ -267,6 +267,10 @@ Native execution uses Docker's default private PID namespace rather than the uns
 control root stays mode0700 while its read-only bind-mounted gate directory is explicitly0755
 and the executable0555, including when the root service runs under umask077.
 
+The Docker CLI inlines the compacted seccomp profile content into `HostConfig.SecurityOpt`,
+so inspection compares that inlined JSON canonically with the broker-written profile and rejects
+the path form, `unconfined`, any profile difference and any additional security option.
+
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.
 A separate shared-journal/lease sequence covers builder -> derived-image tool -> removal -> next

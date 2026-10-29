@@ -219,3 +219,85 @@ def test_lifetime_retains_capacity_until_stopped_proof_precedes_native_settlemen
     assert native.lifetime._anchor()["state"] == "RELEASED"
     native.lifetime.release()
     assert seen == [native.config]
+
+
+def _inspected(record, security_options):
+    return [{
+        "Id": record["driver"]["container_id"], "Image": record["payload"]["image_id"],
+        "State": {"Status": "created", "Running": False},
+        "Config": {"Labels": {"appsec.native.execution": record["execution_id"],
+                              "appsec.native.token": record["execution_token"],
+                              "appsec.native.service": record["binding"]["service_generation"]},
+                   "User": record["image_policy"]["user"], "Tty": False,
+                   "Entrypoint": ["/run/appsec-gate/gate"], "Cmd": None,
+                   "WorkingDir": record["payload"]["workdir"]},
+        "HostConfig": {"Privileged": False, "Devices": [], "DeviceRequests": None, "CapAdd": None,
+                       "CapDrop": ["ALL"], "ReadonlyRootfs": True, "PidMode": "", "IpcMode": "private",
+                       "NetworkMode": "none", "CgroupnsMode": "private", "UTSMode": "", "UsernsMode": "",
+                       "Sysctls": None, "ExtraHosts": None, "Links": None, "PortBindings": {},
+                       "PublishAllPorts": False, "Tmpfs": {}, "Ulimits": [],
+                       "LogConfig": {"Type": "none", "Config": {}}, "SecurityOpt": security_options},
+        "Mounts": [{"Type": "bind", "Source": record["driver"]["mounts"][0]["source"],
+                    "Destination": "/run/appsec-gate", "Mode": "", "RW": False, "Propagation": "rprivate"}],
+    }]
+
+
+@pytest.fixture
+def created_record(native, tmp_path, monkeypatch):
+    payload, _ = create_payload(native)
+    payload = {**payload, "network": "none", "tmpfs": [], "fsize_bytes": None}
+    profile = {"defaultAction": "SCMP_ACT_ERRNO", "defaultErrnoRet": 1,
+               "syscalls": [{"action": "SCMP_ACT_ALLOW", "names": ["read", "ptrace"]}]}
+    seccomp = tmp_path / "seccomp.json"
+    seccomp.write_text(json.dumps(profile, indent=2))
+    record = {
+        "execution_id": payload["execution_id"], "execution_token": "a" * 32, "payload": payload,
+        "binding": native.client.contract.binding, "image_policy": asdict(native.config.native_engine.images[0]),
+        "driver": {"container_id": "c" * 64, "seccomp": str(seccomp), "mounts": [
+            {"source": str(tmp_path / "gate"), "destination": "/run/appsec-gate", "read_only": True}]},
+    }
+    driver = engine.NativeExecutionDriver(native.config, proof=SimpleNamespace())
+    inspection = {}
+
+    def command(argv):
+        if argv[-3:-1] == ["container", "inspect"] or "inspect" in argv:
+            return json.dumps(inspection["value"]).encode()
+        return (record["driver"]["container_id"] + "\n").encode()
+
+    monkeypatch.setattr(driver, "_run", command)
+    return SimpleNamespace(driver=driver, record=record, profile=profile, inspection=inspection)
+
+
+def test_native_inspection_accepts_docker_cli_inlined_seccomp_profile(created_record):
+    # Docker CLI reads --security-opt seccomp=<file> and stores the compacted content, not the path.
+    inline = json.dumps(created_record.profile, separators=(",", ":"))
+    created_record.inspection["value"] = _inspected(
+        created_record.record, ["no-new-privileges:true", "seccomp=" + inline])
+    assert created_record.driver._inspect_native(created_record.record)["Id"] == "c" * 64
+
+
+@pytest.mark.parametrize("options", [
+    lambda record, profile: ["no-new-privileges:true", "seccomp=" + record["driver"]["seccomp"]],
+    lambda record, profile: ["no-new-privileges:true", "seccomp=unconfined"],
+    lambda record, profile: ["no-new-privileges:true", "seccomp=" + json.dumps(
+        {**profile, "defaultAction": "SCMP_ACT_ALLOW"})],
+    lambda record, profile: ["no-new-privileges:true", "seccomp=" + json.dumps(
+        {**profile, "defaultErrnoRet": True})],
+    lambda record, profile: ["seccomp=" + json.dumps(profile)],
+    lambda record, profile: ["no-new-privileges:true", "seccomp=" + json.dumps(profile),
+                             "apparmor=unconfined"],
+    lambda record, profile: None,
+])
+def test_native_inspection_rejects_any_other_seccomp_or_security_options(created_record, options):
+    created_record.inspection["value"] = _inspected(
+        created_record.record, options(created_record.record, created_record.profile))
+    with pytest.raises(engine.EnforcementUnavailable):
+        created_record.driver._inspect_native(created_record.record)
+
+
+def test_native_inspection_with_lost_profile_is_unknown_not_accepted(created_record):
+    created_record.inspection["value"] = _inspected(
+        created_record.record, ["no-new-privileges:true", "seccomp=" + json.dumps(created_record.profile)])
+    Path(created_record.record["driver"]["seccomp"]).unlink()
+    with pytest.raises(engine.OutcomeUnknown):
+        created_record.driver._inspect_native(created_record.record)

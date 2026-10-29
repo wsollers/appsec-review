@@ -313,6 +313,27 @@ class NativeProof(KernelProof):
                 "process_tree_trace": tracing, "pid_namespace": os.readlink(f"/proc/{pid}/ns/pid")}
 
 
+def _security_options_match(options, profile_path):
+    # The Docker CLI inlines the compacted profile content; the daemon never sees the path.
+    try:
+        expected = json.loads(Path(profile_path).read_bytes())
+    except FileNotFoundError as error:
+        raise OutcomeUnknown("native seccomp profile was lost") from error
+    if not isinstance(options, list) or len(options) != 2 or "no-new-privileges:true" not in options:
+        return False
+    inline = [option for option in options if option.startswith("seccomp=")]
+    if len(inline) != 1:
+        return False
+    try:
+        observed = json.loads(inline[0][len("seccomp="):])
+    except ValueError:
+        return False
+
+    def canonical(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return canonical(observed) == canonical(expected)
+
+
 class NativeExecutionDriver(BuildKitWorker):
     def __init__(self, config, *, runner=None, proof=None):
         super().__init__(config, runner=runner, proof=proof or NativeProof(config))
@@ -400,8 +421,7 @@ class NativeExecutionDriver(BuildKitWorker):
                 or actual_binds != expected_binds
                 or any(m.get("Type") not in {"bind", "tmpfs"} for m in inspection.get("Mounts", []))
                 or host.get("LogConfig", {}).get("Type") != "none"
-                or set(host.get("SecurityOpt") or []) != {
-                    "no-new-privileges:true", "seccomp=" + record["driver"]["seccomp"]}):
+                or not _security_options_match(host.get("SecurityOpt"), record["driver"]["seccomp"])):
             raise EnforcementUnavailable("native isolation or mounts differ from approved policy")
         return inspection
 
