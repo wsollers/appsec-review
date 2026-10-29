@@ -9,6 +9,7 @@ from types import MappingProxyType
 from dagster import DynamicOut, DynamicOutput, In, Nothing, Out, graph, multiprocess_executor, op
 
 from appsec_review.config.run_selection import reject_run_selection
+from appsec_review.observability import write_run_metrics
 from appsec_review.orchestration.topology import launch_upstream_handoffs
 from appsec_review.runtime import UnitContext
 from appsec_review.runtime.launch import begin as launch_begin, configured_target, launch_inputs
@@ -107,6 +108,8 @@ def build_dagster_job(config, runner_factory):
         tags={"appsec/pool": "lifecycle"}, pool="lifecycle")
     def finalize(context, claim):
         outcome = runner_factory(config).finalize_attempt(job, claim)
+        # This standalone graph is the whole run, so its end writes the run metrics once.
+        write_run_metrics(config.runtime.runs_dir / str(outcome["status"]["run_id"]))
         context.instance.add_run_tags(context.run_id, {
             "appsec/application_run_id": str(outcome["status"]["run_id"]),
             "appsec/job_tree_sitter_ast/status": str(outcome["status"]["status"]),

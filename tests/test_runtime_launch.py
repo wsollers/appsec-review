@@ -75,6 +75,26 @@ def test_a_failed_unit_marks_the_attempt_failed(tmp_path: Path) -> None:
     assert not (attempt.parent.parent / "latest.json").exists()
 
 
+def test_a_standalone_launch_writes_the_run_metrics_summary_once_after_its_attempt(
+        tmp_path: Path, monkeypatch) -> None:
+    import appsec_review.observability as observability
+
+    real, written = observability.write_run_metrics, []
+    monkeypatch.setattr(observability, "write_run_metrics",
+                        lambda root: written.append(root.name) or real(root))
+    runner = JobRunner(load_config(write_config(tmp_path)))
+    outcome = launch(runner, _job([]), LaunchInputs(None, "none"), run_id=None)
+    run_id = outcome["status"]["run_id"]
+    summary = tmp_path / "runs" / run_id / "data/telemetry/summary.json"
+    assert written == [run_id]
+    assert json.loads(summary.read_text(encoding="utf-8"))["event_counts"]["JOB_SUCCEEDED"] == 1
+
+    with pytest.raises(RuntimeError, match="report failed"):
+        launch(runner, _job([], fail="report"), LaunchInputs(None, "none"), run_id=run_id)
+    assert written == [run_id, run_id]
+    assert json.loads(summary.read_text(encoding="utf-8"))["event_counts"]["JOB_FAILED"] == 1
+
+
 def test_unit_order_rejects_cycles_and_unknown_dependencies() -> None:
     handler = lambda context: {}  # noqa: E731
     cyclic = Job("job_fixture", "fixture", handler, units=(

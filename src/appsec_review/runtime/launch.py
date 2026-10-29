@@ -11,11 +11,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 from appsec_review.runtime.job import Job
+
+LOGGER = logging.getLogger(__name__)
 
 # Jobs that read the target checkout. Every other job receives no target root and the "none"
 # source fingerprint, so its identity does not depend on the target. The inference review, the gate, the PoC
@@ -173,8 +176,24 @@ def complete(runner: Any, job: Job, claim: Mapping[str, Any]) -> Mapping[str, An
 
 def launch(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, trigger: str = "manual",
            orchestration: Mapping[str, str] | None = None) -> Mapping[str, Any]:
-    """Begin (or reuse), execute and finalize one attempt in process, as Dagster does with ops."""
+    """Begin (or reuse), execute and finalize one attempt in process, as Dagster does with ops.
+
+    A standalone launch ends its run, so it writes the run-wide metrics summary once afterwards;
+    publication itself never refreshes it (the summary re-verifies every handoff in the run).
+    """
 
     claim = begin(runner, job, inputs, run_id=run_id, trigger=trigger,
                   orchestration=orchestration or {"system": "local"})
-    return complete(runner, job, claim)
+    try:
+        return complete(runner, job, claim)
+    finally:
+        _write_run_metrics(runner.runs.resolve(str(claim["run_id"])))
+
+
+def _write_run_metrics(run_root: Path) -> None:
+    from appsec_review.observability import write_run_metrics
+
+    try:
+        write_run_metrics(run_root)
+    except Exception as exc:  # derived telemetry must not replace the attempt's own outcome
+        LOGGER.warning("run metrics for %s were not written: %s", run_root.name, type(exc).__name__)
