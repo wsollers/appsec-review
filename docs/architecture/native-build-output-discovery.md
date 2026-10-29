@@ -437,3 +437,42 @@ A FetchContent-heavy native build changes as follows:
 
 The workspace manifest and the source fingerprint are unchanged, so CodeQL, PoC and remediation
 consumers are unaffected.
+
+## Implementation notes
+
+Recorded by the implementation where the code refined or deviated from the design above.
+
+### Chunk A (mechanism)
+
+- **Receipt schema.** Receipt validation is open-key: `job_artifact_indexing/job.py`
+  `_RECEIPT_SCHEMAS` only allowlists schema names. `RECEIPT_SCHEMA` therefore stays
+  `appsec-review/language-build-receipt/1`, and `build_output_dispositions` is an added field.
+  `EXECUTOR_IDENTITY` is bumped to `appsec-review/generic-language-build-executor/4`.
+- **`classify_tree` gains `keep_linked=False`.** This additive keyword yields a `supply_chain`
+  root's linked kinds (`executable`, `shared-library`, `static-library`) as kept rows. Native
+  dependency roots pass it, and Conan generator output does not. `keep` remains the explicit
+  path list that the npm classifier uses. `classify_tree` returns `False` when
+  `max_layout_roots` is exhausted, and the root then stays per-file.
+- **A configured exclusion wins over everything beneath it,** including deeper registered roots
+  and their `keep` paths. Configured file rules also apply inside classified roots.
+- **Rank merging.** For one root, a configured exclusion outranks fact bases, and fact bases
+  outrank a heuristic. An equal-rank fact disagreement leaves the root `per_file` and records a
+  conflict. Equal-rank heuristics that disagree also fall back to `per_file`.
+- **An absent `[build_outputs]` table** gives the discovery defaults with no rules. The shipped
+  rules live in `appsec-review.toml`.
+- **Gaps.** The recorder still emits no gaps on its own. `named_gaps()` gives callers the
+  observed conflict and bound gaps:
+  - `build-output-classification-conflict: <root>`
+  - `build-output-kept-bound-exceeded: <root> kept <n> linked files; <m> more stay counted only`
+  - `build-output-root-bound-exceeded: <n> roots beyond max_layout_roots stay per-file target content`
+
+  The generic `_catalog` appends them.
+- **Kept rows** carry `build_output_root` beside `scope_role`.
+- **Bookkeeping projection.** `excluded_bookkeeping` keeps its schema and its semantics: a
+  reason is recorded only for changed, kind-matched files that the walk yields. Files inside a
+  pruned root or a configured exclusion are not bookkeeping-counted. A FetchContent sub-build
+  excluded by the shipped rule therefore lowers the CMake bookkeeping counts.
+- **Misplaced tables.** `jobs.<id>.build_outputs` and `jobs.<id>.settings.build_outputs` fail at
+  load.
+- **Unused hook.** `node.catalog` and `php.catalog` accept the `dispositions=` keyword and
+  ignore it until the installer-record classifiers use it.

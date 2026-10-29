@@ -49,15 +49,15 @@ from appsec_review.swift_policy import reject_swift_derived, swift_enabled_from_
 from . import capture as captured_build, dotnet, elf, go, gradle_provenance, jvm, native, native_components, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
 from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
-from appsec_review.jobs.build_bookkeeping import (
-    BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
-)
+from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
+from appsec_review.jobs.build_output_scope import BuildOutputDispositions
+from appsec_review.config.build_outputs import BuildOutputPolicy
 from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
 RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
-EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/3+" + POLICY_IDENTITY
+EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/4+" + POLICY_IDENTITY
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (
         dotnet.CAPTURE_DESCRIPTOR, native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
@@ -285,29 +285,31 @@ def _kind(path: Path, family: str = "native", *, relative: str = "",
 
 def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
              build_unit_id: str, family: str = "native",
-             exclusions: BookkeepingExclusions | None = None) -> tuple[list[dict[str, Any]], list[str]]:
-    """Catalog changed build outputs; build bookkeeping is counted in ``exclusions``, not listed."""
+             exclusions: BookkeepingExclusions | None = None, *,
+             dispositions: BuildOutputDispositions | None = None) -> tuple[list[dict[str, Any]], list[str]]:
+    """Catalog changed build outputs from the disposition walk.
+
+    Build bookkeeping is counted in ``exclusions``, configured ``[build_outputs]`` exclusions and
+    classified trees in ``dispositions``; neither is listed per file.
+    """
     if family == "node":
-        return node.catalog(run_root, workspace, before, limit, build_unit_id)
-    exclusions = exclusions if exclusions is not None else BookkeepingExclusions()
-    profiles = cargo_profile_directories(workspace) if family == "rust" else frozenset()
+        return node.catalog(run_root, workspace, before, limit, build_unit_id, dispositions=dispositions)
+    if dispositions is None:
+        dispositions = BuildOutputDispositions(family=family, bookkeeping=exclusions)
     artifacts, gaps = [], []
-    for path in sorted(workspace.rglob("*")):
-        try:
-            if path.is_symlink() or not path.is_file():
-                continue
-        except OSError:
-            continue
-        relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
+    for relative, decision in dispositions.walk(workspace):
+        path = workspace / relative
         kind = _kind(path, family, relative=relative, before=before)
-        unchanged = before.get(relative) == digest
-        if kind is None or (unchanged and kind not in {
-                "test-coverage", "execution-profile", "executable", "shared-library", "static-library",
-                "native-output", "package", "jvm-archive"}):
+        if kind is None:
             continue
-        reason = bookkeeping_reason(relative, cargo=family == "rust", cargo_profile_directories=profiles)
-        if reason is not None:
-            exclusions.record(reason, relative)
+        digest = file_sha256(path)
+        unchanged = before.get(relative) == digest
+        if unchanged and kind not in {
+                "test-coverage", "execution-profile", "executable", "shared-library", "static-library",
+                "native-output", "package", "jvm-archive"}:
+            continue
+        if decision.bookkeeping is not None:
+            dispositions.record_bookkeeping(decision.bookkeeping, relative)
             continue
         artifact = {"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
                           "sha256": digest, "size_bytes": path.stat().st_size,
@@ -315,6 +317,8 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
                           "mapping_confidence": 1.0,
                           "artifact_origin": "accepted-input" if unchanged else "build-output"}
+        if decision.scope_role is not None:
+            artifact.update(scope_role=decision.scope_role, build_output_root=decision.root)
         if kind in {"executable", "shared-library", "native-output"}:
             try:
                 facts = elf.loader_facts(path)
@@ -330,6 +334,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         if len(artifacts) >= limit:
             gaps.append("artifact catalog truncated at configured count bound")
             break
+    gaps.extend(dispositions.named_gaps())
     gaps.extend(apply_scope(artifacts))
     return artifacts, gaps
 
@@ -550,9 +555,14 @@ def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _build_output_policy(unit: UnitContext) -> BuildOutputPolicy:
+    return getattr(unit.job.config, "build_outputs", None) or BuildOutputPolicy()
+
+
 def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
                  settings: Mapping[str, Any] | None = None, *,
-                 releases: ComponentReleases | None = None) -> str:
+                 releases: ComponentReleases | None = None,
+                 build_outputs: BuildOutputPolicy | None = None) -> str:
     image = dispatch["image"]
     family = str(dispatch["family"])
     artifact_overrides = settings.get("compiler_artifact_collection_overrides", {}) if settings else {}
@@ -581,7 +591,8 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
             "decisions": dispatch.get("processing_decisions"),
             "build_capture_decision": dispatch.get("build_capture_decision"),
         },
-        "family_options": (settings.get(str(dispatch["family"]), {}) if settings is not None else {})})).hexdigest()
+        "family_options": (settings.get(str(dispatch["family"]), {}) if settings is not None else {}),
+        "build_outputs": (build_outputs or BuildOutputPolicy()).identity})).hexdigest()
 
 
 def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
@@ -627,7 +638,7 @@ def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: 
 def _platform_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
                       gaps: list[str], projects: list[dict[str, Any]]) -> dict[str, Any]:
     return {"schema": RECEIPT_SCHEMA, "fingerprint": _fingerprint(
-                dispatch, accepted, unit.job.config.settings, releases=unit.job.review_policy.releases),
+                dispatch, accepted, unit.job.config.settings, releases=unit.job.review_policy.releases, build_outputs=_build_output_policy(unit)),
             "source_fingerprint": unit.job.source_fingerprint,
             "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
             "build_unit_id": dispatch["build_unit_id"], "family": "dotnet", "root": dispatch["root"],
@@ -696,7 +707,7 @@ def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
                       dependency: Mapping[str, Any], gaps: list[str]) -> dict[str, Any]:
     return {"schema": RECEIPT_SCHEMA,
             "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings,
-                                        releases=unit.job.review_policy.releases),
+                                        releases=unit.job.review_policy.releases, build_outputs=_build_output_policy(unit)),
             "source_fingerprint": unit.job.source_fingerprint,
             "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
             "build_unit_id": dispatch["build_unit_id"], "family": "node", "root": dispatch["root"],
@@ -845,7 +856,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     family = str(dispatch["family"])
     fingerprint = _fingerprint(dispatch, accepted, unit.job.config.settings,
-                               releases=unit.job.review_policy.releases)
+                               releases=unit.job.review_policy.releases, build_outputs=_build_output_policy(unit))
     root = (unit.job.run_root / "data" / "build" / family / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
     workspace = root / "workspace"
@@ -933,7 +944,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if recipe_gaps:
             return {"schema": RECEIPT_SCHEMA,
                     "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings,
-                                                releases=unit.job.review_policy.releases),
+                                                releases=unit.job.review_policy.releases, build_outputs=_build_output_policy(unit)),
                     "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
                     "build_unit_id": build_unit_id, "family": family, "root": dispatch["root"],
@@ -1105,20 +1116,22 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise FrameworkIntegrityError("target changed during generic language-build execution")
     bookkeeping = BookkeepingExclusions()
+    dispositions = BuildOutputDispositions(_build_output_policy(unit), family=family, bookkeeping=bookkeeping)
     if family == "php":
         artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
             int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
-            str(dispatch.get("build_system", "composer")))
+            str(dispatch.get("build_system", "composer")), dispositions=dispositions)
     elif family == "node":
         artifacts, catalog_gaps = node.catalog(
             unit.job.run_root, workspace, before,
             int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
             package_facts=[fact for row in node_rows if row.get("origin") == "accepted-recipe"
-                           for fact in row.get("package_integrity", ())])
+                           for fact in row.get("package_integrity", ())],
+            dispositions=dispositions)
     else:
         artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
                                            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family,
-                                           bookkeeping)
+                                           bookkeeping, dispositions=dispositions)
     gaps.extend([*python_metadata_gaps, *php_metadata_gaps, *catalog_gaps])
     # The unit's own build compiled its native_components under this same capture.
     native_database, native_gaps = native_components.publish(
@@ -1299,6 +1312,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                                "sha256": file_sha256(workspace_manifest_path)},
         "artifacts": artifacts,
         "excluded_bookkeeping": bookkeeping.document(),
+        "build_output_dispositions": dispositions.document(),
         "gaps": list(dict.fromkeys(gaps)), "terminal_status": status,
         "checkpoint_reused": False, "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(), "duration_ms": int((time.monotonic()-started)*1000),

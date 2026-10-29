@@ -278,7 +278,10 @@ def _symbol_addon(relative: str, addons: Mapping[str, str]) -> tuple[str, str] |
 
 def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
             build_unit_id: str, *,
-            package_facts: Sequence[Mapping[str, Any]] = ()) -> tuple[list[dict[str, Any]], list[str]]:
+            package_facts: Sequence[Mapping[str, Any]] = (),
+            dispositions: Any = None) -> tuple[list[dict[str, Any]], list[str]]:
+    # ``dispositions`` (jobs/build_output_scope.py) is accepted for the npm installer-record
+    # integration that replaces ``_catalog_files`` with its walk; this catalogue ignores it.
     artifacts: list[dict[str, Any]] = []
     candidates, gaps = _catalog_files(workspace, max(1, limit) * 10)
     archives: dict[str, str] = {}
