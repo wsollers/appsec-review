@@ -11,6 +11,7 @@ from appsec_review.acceptance.lanes import LaneWorkspace
 from appsec_review.acceptance.staging import (
     CUSTODY_INPUT_FILE, SeedInputs, StageContext, StageKind, stage_context,
 )
+from appsec_review.storage import file_sha256
 from tests.final_report_support import (
     GATE, REPORT, Chain, environment, gate_job, job_tables, report_job, run_job,
 )
@@ -21,6 +22,7 @@ from tests.poc_chain import poc_tables
 
 STATE_FILE = "fixture-state.json"
 STATE_SCHEMA = "appsec-review/acceptance-review-fixture/1"
+TELEMETRY_IDENTITY_FILE = "telemetry-origin.json"
 
 
 @dataclass(frozen=True)
@@ -51,10 +53,28 @@ def context_for(kind: StageKind, variant: str | None = None) -> StageContext | N
 
 
 def stage_lane(context: StageContext) -> LaneWorkspace:
-    lane = LaneWorkspace(ROOT, context.work_root, context.variant, context.invocation_id)
-    lane.root.mkdir(parents=True, exist_ok=True)
+    consumer = context.kind is StageKind.CONSUMER
+    root = (context.work_root / "consumer-telemetry" / uuid4().hex) if consumer else context.work_root
+    lane = LaneWorkspace(ROOT, root, context.variant, context.invocation_id)
+    lane.root.mkdir(parents=True, exist_ok=not consumer)
     lane.runs_dir.mkdir(exist_ok=True)
     lane.driver_root.mkdir(exist_ok=True)
+    if consumer:
+        identity = {
+            "schema": "appsec-review/acceptance-consumer-telemetry/1",
+            "invocation_id": context.invocation_id, "obligation_id": context.obligation_id,
+            "variant": context.variant, "reader_root": str(context.work_root),
+            "seed_manifest_sha256": context.manifest_sha256,
+            "metric_paths": {"events": str(lane.driver_root / "events.jsonl"),
+                             "pipeline": str(lane.pipeline.path)},
+            "retained_producer_telemetry": {
+                "root": str(context.work_root / "driver"), "execution_evidence": False,
+            },
+        }
+        path = lane.root / TELEMETRY_IDENTITY_FILE
+        path.write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="utf-8")
+        lane.emit("ACCEPTANCE_CONSUMER_TELEMETRY_STARTED", **identity,
+                  metric_identity_path=str(path), metric_identity_sha256=file_sha256(path))
     return lane
 
 
