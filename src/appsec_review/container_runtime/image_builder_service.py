@@ -834,6 +834,7 @@ def main() -> None:
     operation.add_argument("--reserve-lifetime", action="store_true")
     operation.add_argument("--reconcile-admission", action="store_true")
     operation.add_argument("--release-lifetime", action="store_true")
+    operation.add_argument("--finalize-commissioning", action="store_true")
     arguments = parser.parse_args()
     if os.name != "posix" or not hasattr(socket, "SO_PEERCRED"):
         raise SystemExit("authenticated native Linux Unix sockets are required")
@@ -846,6 +847,9 @@ def main() -> None:
     admission = BuilderAdmission(config)
     if arguments.reserve_lifetime:
         print(admission.reserve())
+        return
+    if arguments.finalize_commissioning:
+        admission.finalize_commissioning()
         return
     if arguments.reconcile_admission:
         print(json.dumps(admission.reconcile()))

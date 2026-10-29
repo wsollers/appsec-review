@@ -18,6 +18,8 @@ proxy on an internal, gateway-mode=isolated Docker bridge. Its overhead shares
 the host cap. No proxy, daemon, image, network or cgroup is provisioned here.
 Reserve lifetime admission before starting these processes; the full operator
 configuration and cgroup directory identities are immutable for that lifetime.
+Explicit engine-control provisioning instead seals observed asset identities once,
+without changing its already counted control lease or frozen custody/costs.
 """
 from __future__ import annotations
 
@@ -117,6 +119,7 @@ class EngineDomainConfig:
     baseline_cgroups: tuple[str, ...]
     cpu: int = 2
     memory_mb: int = 2048
+    control_lifetime_id: str | None = None
 
     def __post_init__(self):
         absolute(self.metadata_root)
@@ -135,6 +138,10 @@ class EngineDomainConfig:
         if (type(self.cpu) is not int or not 1 <= self.cpu <= 2
                 or type(self.memory_mb) is not int or not 1 <= self.memory_mb <= 2048):
             raise ValueError("engine domain cannot exceed the existing 2-CPU/2-GiB envelope")
+        if self.control_lifetime_id is not None and (
+                not isinstance(self.control_lifetime_id, str)
+                or not re.fullmatch(r"[0-9a-f]{32}", self.control_lifetime_id)):
+            raise ValueError("engine control lifetime requires an exact lease UUID")
 
 
 @dataclass(frozen=True)
@@ -196,6 +203,7 @@ class ImageBuilderServiceConfig:
     docker_helper_scope: DockerHelperScope | None = None
     lifetime_domain: str = "actions"
     engine_domain: EngineDomainConfig | None = None
+    lifecycle_stage: str = "configured"
 
     def __post_init__(self):
         for name in ("endpoint", "state_root", "host_cgroup", "worker_cgroup_parent",
@@ -236,6 +244,8 @@ class ImageBuilderServiceConfig:
             raise ValueError("engine-domain lifetime requires its exact typed admission policy")
         if self.engine_domain is not None:
             domain = self.engine_domain
+            if domain.control_lifetime_id not in {None, self.admission.lease_id}:
+                raise ValueError("engine control lifetime must retain its original admission lease")
             if (self.docker_helper_scope is None or self.host_cpu >= domain.cpu
                     or self.host_overhead_mb >= domain.memory_mb
                     or self.host_cgroup == domain.cgroup
@@ -276,6 +286,12 @@ class ImageBuilderServiceConfig:
                 raise ValueError("network verification requires an operator iproute2 release")
         elif any(grant.allow_network for grant in self.grants):
             raise ValueError("package-network grants require a commissioned isolated egress proxy")
+        if self.lifecycle_stage not in {"provisioning", "configured"}:
+            raise ValueError("unknown builder lifetime stage")
+        if self.lifecycle_stage == "provisioning" and (
+                self.engine_domain is None or self.engine_domain.control_lifetime_id is None
+                or self.native_engine is not None or self.network_id is not None):
+            raise ValueError("provisioning requires an explicit engine control lifetime without clients or egress")
         host, workers = Path(self.host_cgroup), Path(self.worker_cgroup_parent)
         if (host == workers or host.is_relative_to(workers) or workers.is_relative_to(host)
                 or not host.is_relative_to("/sys/fs/cgroup")

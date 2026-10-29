@@ -7,6 +7,8 @@ must use their own domains; this ledger cannot authorize either.
 from __future__ import annotations
 
 import os
+from dataclasses import asdict
+import json
 from pathlib import Path
 
 from appsec_review.config.assurance import ResourceBudget
@@ -15,6 +17,21 @@ from appsec_review.runtime.resources import Reservation, ResourceAdmission
 
 
 BASELINE_LEASE = "existing-engine-services"
+COMMISSIONING_FIELDS = frozenset({
+    "grants", "images", "native_engine", "network_id", "proxy_container_id",
+    "proxy_image_id", "proxy_release_id", "proxy_url", "ip_release_id", "lifecycle_stage",
+})
+
+
+def engine_control_binding(config):
+    """Freeze control custody/costs, not identities produced during provisioning."""
+    contract = asdict(config)
+    for name in COMMISSIONING_FIELDS:
+        contract.pop(name)
+    return {
+        "kind": "appsec-review/engine-control-lifetime/1",
+        "contract": json.loads(json.dumps(contract)),
+    }
 
 
 class EngineDomainProof:
@@ -98,8 +115,10 @@ class EngineDomainProof:
 
 class EngineDomainAdmission:
     def __init__(self, config, binding, request, *, proof=None):
-        self.config, self.binding, self.request = config, binding, request
+        self.config, self.request = config, request
         domain = config.engine_domain
+        self.binding = (engine_control_binding(config)
+                        if domain.control_lifetime_id is not None else binding)
         self.budget = ResourceBudget(cpu=domain.cpu, memory_mb=domain.memory_mb,
                                      io_slots=1, staging_memory_mb=1)
         self.baseline_request = Reservation(

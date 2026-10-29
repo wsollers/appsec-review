@@ -100,7 +100,9 @@ def test_root_entrypoint_refuses_nonisolated_startup_before_service_import(monke
             entrypoint.main(["--config", "/unused"])
 
 
-@pytest.mark.parametrize("operation", ["reserve-lifetime", "reconcile-admission", "release-lifetime"])
+@pytest.mark.parametrize("operation", [
+    "reserve-lifetime", "reconcile-admission", "release-lifetime", "finalize-commissioning",
+])
 def test_installed_root_lifecycle_preserves_isolated_launch_boundary(installed_release, operation):
     python, bootstrap, config = installed_release
     specification = entrypoint.launch_spec(python, bootstrap, config, operation=operation)

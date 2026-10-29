@@ -47,6 +47,8 @@ reservation and kernel/cgroup checks.
 Its closed `--operation` selector supports serving, pre-start lifetime reservation, admission
 reconciliation and independently verified lifetime release through the same installed isolated
 entrypoint. It is not an arbitrary root command or maintenance interface.
+An additional closed `finalize-commissioning` operation supports the explicit engine-control
+provisioning lifetime described below; it neither starts a daemon nor submits work.
 
 The preparation helper writes a fresh private instance layout without starting processes or
 overwriting an occupied, partially prepared or differently configured instance. Its child
@@ -121,6 +123,35 @@ lease. Actual shutdown still requires the service lock, all owned app/control/wo
 generations and scopes stopped, no daemon listener, clean journal and retired engine
 ownership before releasing only the dedicated lifetime. The baseline engine reservation
 remains. Bounded/default action-domain policy is unchanged.
+
+An operator cannot know a daemon's future PID/start token, or future network/container IDs,
+before starting it. For commissioning, set `engine_domain.control_lifetime_id` to the exact
+admission lease UUID and initially select `lifecycle_stage = "provisioning"`. This requires
+the explicit concurrency-only engine domain, no native clients or package network, and empty
+owned scopes. `reserve-lifetime` creates a real continuously counted engine-control lease
+before any daemon/proxy starts. Its immutable binding fixes control custody, releases,
+kernel groups, resource budgets and lease identity, independently of subsequently observed
+client/image/network identities. No lease is transferred, rebound or temporarily removed.
+Repeated reservation records additional exact owned process generations for recovery.
+The `PROVISIONING` fence refuses normal service/client admission.
+
+After acquiring the actual immutable assets, select `lifecycle_stage = "configured"` in
+the final private operator configuration and invoke `finalize-commissioning`. Under both
+operator locks it verifies the same existing counted engine lease and original cgroup
+identities, an unused work/interlock journal, empty application/action scopes, real daemon
+custody, dedicated container inventory and egress isolation. A native configuration also
+requires the real pinned daemon generation and engine ID. Only then is the complete final
+service contract sealed and the fence advanced to `RESERVED`. Failure retains both leases
+and the provisional fence. Repeating finalization with exactly that sealed contract is
+idempotent; another policy or generation requires actual retirement, never refinalization.
+Without an explicit control lifetime, the existing stopped-first, fully configured lifecycle
+and persistent bindings are unchanged.
+
+A failed provisional installation also requires actual retirement before releasing its
+control lease. Independent process inventory still detects escaped/reparented helpers by
+their dedicated roots, even when owned cgroups and the Unix listener are already absent.
+The existing engine baseline stays reserved after that release. Acquisition/install receipts,
+empty fake scopes and offline tests do not substitute for the real commissioning proofs.
 
 Commissioning remains unverified. In particular, if existing services already reserve
 the whole 6-CPU/8-GiB service envelope, a new native application cannot be started
