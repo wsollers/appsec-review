@@ -13,6 +13,7 @@ from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import GraphRunner, active_job_ids, job_is_enabled
 from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.signing.cli import add_parser as add_signing_parser, run as run_signing
 
 INDEX_TERMINAL_JOB_ID = "job_review_data_indexing"
 
@@ -122,6 +123,8 @@ def parser() -> argparse.ArgumentParser:
     pins.add_argument("--write", action="store_true",
                       help="apply the edits; without it the planned edits are only printed")
 
+    add_signing_parser(commands)
+
     commands.add_parser("schedules", help="print configured schedules")
     return root
 
@@ -131,6 +134,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if getattr(args, "admit_manual_poc", False) and (
             args.job_id != "job_final_publication_gate" or not args.upstream_from_run or not args.run_id):
         parser().error("--admit-manual-poc requires run job_final_publication_gate --run-id --upstream-from-run")
+    if args.command == "signing":
+        return run_signing(args, lambda: load_config(args.config, profile=args.profile))
     compiler = getattr(args, "compiler_target", None)
     if args.command in {"run", "plan-resume", "resume"} and getattr(args, "run_id", None):
         preliminary = load_config(args.config, profile=args.profile)

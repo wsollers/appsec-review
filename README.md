@@ -597,15 +597,23 @@ Other options: the global `--config <path-or-file-URI>` (before the subcommand) 
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and
 `--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
 `appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
-optionally into an existing run. Three further subcommands run outside a review graph:
+optionally into an existing run. Four further subcommands run outside a review graph:
 `appsec-review acquire-target [--system <id>] [--verify-only]` (hash-pinned Git, Perforce or
 review-export acquisition into `targets/`; see
 [`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md)),
 `appsec-review binary-decompile` (pre-run Ghidra decompilation; see
-[`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)) and
+[`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)),
 `appsec-review update-image-pins [--write]` (re-pins every configured image-ID pin to the image its
 tag resolves to on the local daemon after a host rebuild; see
-[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)).
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)) and the
+`appsec-review signing` group: `keygen` (an Ed25519 operator key, by default
+`~/.config/appsec-review/signing/private/operator.pem`, optionally installing its public key as a
+`<key id>.pem` trust anchor), `sign-image REFERENCE... | --all-pinned` (signs local image IDs;
+`--all-pinned` signs only pinned images whose local ID equals the pin), `verify-image`,
+`sign-modules`/`verify-modules` (signed `appsec_review` package manifests) and `export-bootstrap DIR`
+(copies the standalone module-verification bootstrap). Each prints JSON, never private key material,
+and exits nonzero on any failure; `[signing]` in `appsec-review.toml` supplies the OpenSSL binary,
+trust anchors and image-signature directory unless overridden on the command line.
 
 Without installing the package, run the module from the source tree instead:
 
