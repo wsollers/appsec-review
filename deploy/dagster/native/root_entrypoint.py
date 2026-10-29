@@ -16,7 +16,7 @@ ROOT_ENVIRONMENT = {
     "HOME": "/nonexistent",
 }
 OPENSSL = Path("/usr/bin/openssl")
-SIGNING_BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py")
+SIGNING_BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py", "release_lib.py")
 SIGNING_BOOTSTRAP_MODULE = "appsec_review_signing_bootstrap"
 
 
@@ -34,16 +34,18 @@ def trusted_path(path: Path, *, directory: bool = False) -> None:
 
 
 def signing_paths(root: Path) -> dict[str, Path]:
-    """Root-controlled module envelope, trust anchors and standalone verifier of a release."""
+    """Root-controlled module and library envelopes, trust anchors and standalone verifier of a release."""
     signing = root / "signing"
     paths = {
         "envelope": signing / "python-modules.json",
+        "release_lib": signing / "python-release-lib.json",
         "trusted_keys": signing / "trusted-keys",
         "bootstrap": signing / "bootstrap",
     }
     for directory in (signing, paths["trusted_keys"], paths["bootstrap"]):
         trusted_path(directory, directory=True)
     trusted_path(paths["envelope"])
+    trusted_path(paths["release_lib"])
     for name in SIGNING_BOOTSTRAP_FILES:
         trusted_path(paths["bootstrap"] / name)
     for key in sorted(paths["trusted_keys"].iterdir()):
@@ -144,6 +146,9 @@ def main(argv: list[str] | None = None) -> None:
     sys.dont_write_bytecode = True
     # Nothing from lib runs before the signed tree is verified and the import hook serves it.
     bootstrap = load_signing_bootstrap(signing["bootstrap"] / "bootstrap.py")
+    # The third-party closure of lib is verified before activate() places lib on sys.path.
+    bootstrap.verify_release_library(envelope=signing["release_lib"], library=library,
+                                     trusted_keys_dir=signing["trusted_keys"], openssl=str(OPENSSL))
     bootstrap.activate(envelope=signing["envelope"], package_root=library / "appsec_review",
                        trusted_keys_dir=signing["trusted_keys"], openssl=str(OPENSSL))
     # -S prevents editable-install .pth hooks; only the installed release is added.

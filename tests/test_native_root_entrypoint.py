@@ -11,6 +11,7 @@ import pytest
 
 from appsec_review.signing.core import OpenSSL, key_id
 from appsec_review.signing.modules import sign_modules
+from appsec_review.signing.release_lib import sign_release_lib
 
 
 REPOSITORY = Path(__file__).parents[1]
@@ -28,6 +29,7 @@ def _signing_layout(release: Path) -> None:
     (signing / "trusted-keys").mkdir(parents=True)
     (signing / "bootstrap").mkdir()
     (signing / "python-modules.json").write_text("{}")
+    (signing / "python-release-lib.json").write_text("{}")
     for name in entrypoint.SIGNING_BOOTSTRAP_FILES:
         shutil.copyfile(SIGNING_SOURCE / name, signing / "bootstrap" / name)
 
@@ -167,8 +169,9 @@ def test_prior_configuration_cannot_be_ignored_or_implicitly_assumed(installed_r
 
 
 @pytest.mark.parametrize("missing", [
-    "signing/python-modules.json", "signing/trusted-keys", "signing/bootstrap/bootstrap.py",
-    "signing/bootstrap/core.py", "signing/bootstrap/modules.py", "signing/bootstrap/import_hook.py",
+    "signing/python-modules.json", "signing/python-release-lib.json", "signing/trusted-keys",
+    "signing/bootstrap/bootstrap.py", "signing/bootstrap/core.py", "signing/bootstrap/modules.py",
+    "signing/bootstrap/import_hook.py", "signing/bootstrap/release_lib.py",
 ])
 def test_root_launch_requires_the_installed_module_signature_and_verifier(installed_release, missing):
     python, bootstrap, config = installed_release
@@ -245,10 +248,18 @@ def signed_release(tmp_path):
     (package / "container_runtime").mkdir(parents=True)
     (package / "__init__.py").write_text("")
     (package / "container_runtime/image_builder_service.py").write_text(SERVICE)
+    dependency = release / "lib/fakedep"
+    dependency.mkdir()
+    (dependency / "__init__.py").write_text("")
+    (release / "lib/fakedep-1.0.dist-info").mkdir()
+    (release / "lib/fakedep-1.0.dist-info/METADATA").write_text("Name: fakedep\n")
     _signing_layout(release)
     envelope = release / "signing/python-modules.json"
     envelope.unlink()
     sign_modules(openssl, private_key, package, envelope)
+    library_envelope = release / "signing/python-release-lib.json"
+    library_envelope.unlink()
+    sign_release_lib(openssl, private_key, release / "lib", library_envelope)
     public_key_pem = openssl.public_key_pem(private_key)
     anchor = key_id(openssl.public_key_der(public_key_pem)).removeprefix("sha256:")
     (release / f"signing/trusted-keys/{anchor}.pem").write_bytes(public_key_pem)
@@ -282,7 +293,9 @@ def test_root_entrypoint_runs_the_service_only_through_the_verified_import_hook(
     assert not list((release / "lib").rglob("__pycache__"))
 
 
-@pytest.mark.parametrize("tamper", ["service", "unlisted", "envelope", "trust-anchor"])
+@pytest.mark.parametrize("tamper", ["service", "unlisted", "envelope", "trust-anchor", "dependency",
+                                    "unlisted-dependency", "missing-dependency", "dependency-pycache",
+                                    "library-envelope"])
 def test_root_entrypoint_rejects_tampered_release_before_running_the_service(signed_release, tamper):
     release, config, scratch = signed_release
     package = release / "lib/appsec_review"
@@ -296,6 +309,16 @@ def test_root_entrypoint_rejects_tampered_release_before_running_the_service(sig
         signed = json.loads(envelope.read_text())
         signed["statement"]["subject"]["files"]["__init__.py"] = "sha256:" + "0" * 64
         envelope.write_text(json.dumps(signed))
+    elif tamper == "dependency":
+        (release / "lib/fakedep/__init__.py").write_text("import os\n")
+    elif tamper == "unlisted-dependency":
+        (release / "lib/evil.pth").write_text("import os\n")
+    elif tamper == "missing-dependency":
+        (release / "lib/fakedep-1.0.dist-info/METADATA").unlink()
+    elif tamper == "dependency-pycache":
+        (release / "lib/fakedep/__pycache__").mkdir()
+    elif tamper == "library-envelope":
+        (release / "signing/python-release-lib.json").write_text("{}")
     else:
         for anchor in (release / "signing/trusted-keys").iterdir():
             anchor.unlink()

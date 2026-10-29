@@ -1,4 +1,4 @@
-"""The ``appsec-review signing`` command group: operator keys, image signatures and module manifests.
+"""The ``appsec-review signing`` command group: operator keys, image signatures and file manifests.
 
 Every command prints one JSON document and exits nonzero when anything failed. Private key material
 is never printed. Configuration is loaded only when a command needs a ``[signing]`` value that was
@@ -22,10 +22,12 @@ from . import core as _core
 from .core import OpenSSL, SignatureVerificationError, _write_new_file, key_id
 from .images import EnvelopeImageVerifier, inspect_image_id, sign_image
 from .modules import sign_modules, verify_modules
+from .release_lib import sign_release_lib, verify_release_lib
 
 
 DEFAULT_PRIVATE_KEY = Path("~/.config/appsec-review/signing/private/operator.pem")
-BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py", "sitecustomize_shim.py")
+BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py", "release_lib.py",
+                   "sitecustomize_shim.py")
 PINNED_ID_SUFFIX = "image_id"
 
 # Replaced by tests so ``docker image inspect`` never runs; OpenSSL keeps using subprocess.run.
@@ -77,6 +79,19 @@ def add_parser(commands: argparse._SubParsersAction) -> argparse.ArgumentParser:
     check.add_argument("--trusted-keys-dir", type=Path, required=True)
     check.add_argument("--package-root", type=Path,
                        help="package directory (default: the installed appsec_review package)")
+
+    release = sub.add_parser("sign-release-lib", parents=[common],
+                             help="sign the third-party file manifest of a native release lib directory")
+    release.add_argument("--private-key", type=Path, required=True)
+    release.add_argument("--output", type=Path, required=True, metavar="ENVELOPE")
+    release.add_argument("--lib", type=Path, required=True,
+                         help="release lib directory; its top-level appsec_review package is excluded")
+
+    check_release = sub.add_parser("verify-release-lib", parents=[common],
+                                   help="verify a native release lib directory against a signed library manifest")
+    check_release.add_argument("--envelope", type=Path, required=True)
+    check_release.add_argument("--trusted-keys-dir", type=Path, required=True)
+    check_release.add_argument("--lib", type=Path, required=True)
 
     export = sub.add_parser("export-bootstrap",
                             help="copy the standalone module-verification bootstrap files into a directory")
@@ -326,6 +341,28 @@ def _verify_modules(args: argparse.Namespace, config: Callable[[], Any]) -> tupl
             "package_root": str(manifest.root), "files": len(manifest.files)}, True
 
 
+def _sign_release_lib(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, bool]:
+    library = args.lib.resolve()
+    output = Path(os.path.abspath(args.output.expanduser()))
+    if output.resolve().is_relative_to(library):
+        raise ValueError(f"the envelope must be written outside the signed release library: {output}")
+    openssl = _openssl(args, config)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    envelope = sign_release_lib(openssl, args.private_key.expanduser(), library, output)
+    return {"envelope": str(output), "lib": str(library),
+            "files": len(envelope["statement"]["subject"]["files"]),
+            "key_ids": [item["key_id"] for item in envelope["signatures"]]}, True
+
+
+def _verify_release_lib(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, bool]:
+    report: dict[str, Any] = {"envelope": str(args.envelope), "lib": str(args.lib)}
+    try:
+        files = verify_release_lib(args.envelope, args.lib, args.trusted_keys_dir, _openssl(args, config))
+    except _FAILURES as error:
+        return {**report, "status": "failed", "error": str(error)}, False
+    return {**report, "status": "verified", "files": len(files)}, True
+
+
 def _write_copy(directory: Path, name: str, data: bytes) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".tmp", dir=directory)
     try:
@@ -371,6 +408,8 @@ _HANDLERS: dict[str, Callable[[argparse.Namespace, Callable[[], Any]], tuple[dic
     "verify-image": _verify_image,
     "sign-modules": _sign_modules,
     "verify-modules": _verify_modules,
+    "sign-release-lib": _sign_release_lib,
+    "verify-release-lib": _verify_release_lib,
     "export-bootstrap": _export_bootstrap,
 }
 

@@ -48,7 +48,8 @@ the gaps listed under [Named gaps](#named-gaps).
 - **Kinds.** `container-image` has the subject `{"image_id": "sha256:<64 hex>", "id_kind":
   "docker-image-id"}`. The ID is the `.Id` that the same daemon reports, and launch then uses that
   exact ID. `python-modules` has the subject `{"package": "appsec_review", "files": {relpath:
-  "sha256:<hex>"}}`.
+  "sha256:<hex>"}}`. `python-release-lib` has the subject `{"excluded": ["appsec_review"], "files":
+  {relpath: {"sha256": "<hex>", "size": <bytes>}}}` over a native release `lib/` directory.
 
 ## Key custody
 
@@ -215,10 +216,11 @@ under the configured policy.
   image contains no keys. The `test` stage does not enforce. Details are in
   [Signed image](../../deploy/dagster/README.md#signed-image).
 - **Native release.** `root_entrypoint.py` checks with `trusted_path` that `signing/`, the envelope,
-  every trust anchor, the four verifier files and `/usr/bin/openssl` are root-owned and on a read-only
-  release. It loads `signing/bootstrap/bootstrap.py` and verifies `lib/appsec_review` before anything
-  from `lib/` is imported or placed on `sys.path`. The layout is in
-  [the native README](../../deploy/dagster/native/README.md).
+  every trust anchor, the five verifier files and `/usr/bin/openssl` are root-owned and on a read-only
+  release. It loads `signing/bootstrap/bootstrap.py`, verifies the third-party closure of `lib/`
+  with `verify_release_library` (see [Release library](#release-library)) and then verifies
+  `lib/appsec_review`, all before anything from `lib/` is imported or placed on `sys.path`. The
+  layout is in [the native README](../../deploy/dagster/native/README.md).
 
 All three entry points run the same `bootstrap.activate` steps before any `appsec_review` module is
 imported. They differ in how they start and how they fail:
@@ -257,6 +259,25 @@ sequenceDiagram
     end
 ```
 
+### Release library
+
+A native release also signs the third-party closure of its `lib/` directory, which is placed on
+`sys.path` next to the verified `appsec_review` package.
+
+- **Manifest.** `sign-release-lib --lib <release>/lib` (`release_lib.sign_release_lib`) records the
+  SHA-256 and size of every regular file under `lib/` except the top-level `appsec_review/`
+  directory, which the `python-modules` manifest covers. Third-party packages, `.dist-info` and
+  `.data` directories, native extensions (`.so`) and `.pth` files are included and hashed.
+- **Refusals.** Signing and verification both refuse symbolic links and reparse points, non-regular
+  files, any `__pycache__` directory and any `.pyc`/`.pyo` file. Verification also refuses every
+  unlisted file, every missing listed file and every size or digest mismatch.
+- **Startup.** `root_entrypoint.py` calls `bootstrap.verify_release_library` with
+  `signing/python-release-lib.json` before `bootstrap.activate`, so a failure stops startup before
+  `lib/` reaches `sys.path`, exactly like a module verification failure. `release_lib.py` is loaded
+  under the transient name `appsec_review_signing_release_lib` and removed from `sys.modules`
+  afterwards, so only the four verifier modules stay loaded.
+- **Dagster image.** Container dependencies are covered by the signed image, not by this manifest.
+
 ## Operator runbook
 
 Run these steps on the review host from the repository checkout, never during a running review.
@@ -281,11 +302,15 @@ Run these steps on the review host from the repository checkout, never during a 
    unpinned catalog image is reported `skipped_unpinned`; sign it explicitly with
    `sign-image REFERENCE`.
 3. **Sign modules for a native release or a manual deployment.** The output must lie outside the
-   package tree. Then export the bootstrap files into the release.
+   package tree. For a native release, also sign the assembled `lib/` (outside `appsec_review/`)
+   after it is complete and before it is made read-only. Then export the bootstrap files into the
+   release.
 
    ```bash
    appsec-review signing sign-modules --private-key <key> --package-root src/appsec_review --output <envelope>
    appsec-review signing verify-modules --envelope <envelope> --trusted-keys-dir <anchors> --package-root <installed>/appsec_review
+   appsec-review signing sign-release-lib --private-key <key> --lib <release>/lib --output <release>/signing/python-release-lib.json
+   appsec-review signing verify-release-lib --envelope <release>/signing/python-release-lib.json --trusted-keys-dir <anchors> --lib <release>/lib
    appsec-review signing export-bootstrap <release>/signing/bootstrap
    ```
 
@@ -362,9 +387,11 @@ evidence that they are verified.
     `worker` (~441/444), the egress proxy image check (~718/720) and `_inputs` (~736) (in progress);
   - `container_runtime/image_builder_service.py`: `_start_spec` allowed and aliased images
     (~504, at ~513 and ~523) (in progress).
-- **Third-party packages are not covered per module.** Only `appsec_review` is in a manifest.
-  `site-packages` dependencies and their native libraries are covered only by the signed Dagster
-  image. In a native release, the `lib/` closure is an installation and commissioning duty.
+- **Third-party packages are not covered by an import hook.** In the Dagster image,
+  `site-packages` dependencies and their native libraries are covered only by the signed image. In a
+  native release, the `python-release-lib` manifest is verified once at startup; afterwards
+  dependencies are imported by the standard finders from the read-only release, and empty
+  directories are not part of the manifest.
 - **Derived images are unsigned.** They rely on verified inputs and recorded identities.
 - **The cve-bin-tool image is built locally and unpinned.** On the first Docker-path run, when
   `settings.image` is absent, the image is built from its context and launched unverified. Later
@@ -392,7 +419,7 @@ have no work scheduled on this branch.
 | Gap | Status | Remaining work |
 | --- | --- | --- |
 | Windows host support | In progress on this branch | The code supports a native Windows host (see [Windows hosts](#windows-hosts)). The unit tests and the Dagster signed build and start flow still need validation on Windows with Docker Desktop. |
-| Native release third-party dependency manifest | In progress on this branch | Sign and verify the native release `lib/` closure outside `appsec_review`, which is now an installation and commissioning duty (see [Named gaps](#named-gaps)). |
+| Native release third-party dependency manifest | Done on this branch | `sign-release-lib` / `verify-release-lib` and the root entrypoint verify the native release `lib/` closure outside `appsec_review` (see [Release library](#release-library)). Dagster container dependencies are covered by the image signature. |
 | Compose bypass and reload | In progress on this branch | Re-verify the recorded image ID when Compose is started directly, and make `lifecycle.py reload` cover every service, not only `code-location`. |
 | cve-bin-tool pin | In progress on this branch | Pin the locally built cve-bin-tool image and cover it with `--all-pinned`, so that no run launches it unverified. |
 | BuildKit worker and image builder service verification | In progress on this branch | Verify the worker, egress proxy and input images in `buildkit_worker.py` and the allowed and aliased images in `image_builder_service.py`. |

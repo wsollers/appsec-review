@@ -293,10 +293,40 @@ def test_sign_modules_defaults_to_the_installed_package(capsys, key, config, tmp
     assert "signing/cli.py" in json.loads(envelope.read_bytes())["statement"]["subject"]["files"]
 
 
+def test_sign_release_lib_then_verify_release_lib_round_trip_and_tamper(tmp_path, capsys, key, config) -> None:
+    library = tmp_path / "release" / "lib"
+    _package(library / "appsec_review")
+    (library / "dep").mkdir()
+    (library / "dep" / "__init__.py").write_bytes(b"DEP = 1\n")
+    (library / "dep.pth").write_bytes(b"dep\n")
+    envelope = tmp_path / "release" / "signing" / "python-release-lib.json"
+    code, report = _main(capsys, "sign-release-lib", "--private-key", str(key.private), "--output", str(envelope),
+                         "--lib", str(library))
+    assert code == 0 and report["files"] == 2 and report["key_ids"] == [key.key_id]
+    verify = ("verify-release-lib", "--envelope", str(envelope), "--trusted-keys-dir", str(key.trusted),
+              "--lib", str(library))
+    code, report = _main(capsys, *verify)
+    assert code == 0 and report["status"] == "verified" and report["files"] == 2
+
+    (library / "dep" / "extra.py").write_bytes(b"EXTRA = 1\n")
+    code, report = _main(capsys, *verify)
+    assert code == 1 and report["status"] == "failed" and "not in the signed manifest" in report["error"]
+
+
+def test_sign_release_lib_refuses_an_envelope_inside_the_library(tmp_path, capsys, key, config) -> None:
+    library = tmp_path / "lib"
+    library.mkdir()
+    code, report = _main(capsys, "sign-release-lib", "--private-key", str(key.private),
+                         "--output", str(library / "python-release-lib.json"), "--lib", str(library))
+    assert code == 1 and "outside the signed release library" in report["error"]
+    assert not (library / "python-release-lib.json").exists()
+
+
 def test_export_bootstrap_copies_files_byte_identically(tmp_path, capsys) -> None:
     directory = tmp_path / "release" / "signing"
     code, report = _main(capsys, "export-bootstrap", str(directory))
     assert code == 0 and sorted(report["files"]) == sorted(signing_cli.BOOTSTRAP_FILES)
+    assert "release_lib.py" in report["files"]
     source = Path(signing_cli.__file__).resolve().parent
     for name in signing_cli.BOOTSTRAP_FILES:
         assert (directory / name).read_bytes() == (source / name).read_bytes()

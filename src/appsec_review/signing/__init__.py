@@ -28,12 +28,14 @@ from .images import (
 )
 from .import_hook import VerifiedFinder, install_verified_import_hook
 from .modules import MODULES_KIND, VerifiedManifest, build_manifest, sign_modules, verify_modules
+from .release_lib import RELEASE_LIB_KIND, sign_release_lib, verify_release_lib
 
 __all__ = [
     "ALGORITHM",
     "IMAGE_ID_KIND",
     "IMAGE_KIND",
     "MODULES_KIND",
+    "RELEASE_LIB_KIND",
     "DisabledImageVerifier",
     "EnvelopeImageVerifier",
     "ImageSignatureVerifier",
@@ -46,7 +48,9 @@ __all__ = [
     "install_verified_import_hook",
     "sign_image",
     "sign_modules",
+    "sign_release_lib",
     "verify_modules",
+    "verify_release_lib",
     "STATEMENT_SCHEMA",
     "OpenSSL",
     "SignatureVerificationError",

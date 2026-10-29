@@ -5,7 +5,8 @@ outside the verified tree, in one directory together with copies of ``core.py``,
 and ``import_hook.py``. It loads those siblings by file path and registers them as
 ``appsec_review_signing_core``, ``appsec_review_signing_modules`` and
 ``appsec_review_signing_import_hook``. Loaders that load this file by path register it as
-``appsec_review_signing_bootstrap``.
+``appsec_review_signing_bootstrap``. A native release also deploys ``release_lib.py`` there; it is
+loaded only transiently by ``verify_release_library``.
 
 Run it as ``python -I -S bootstrap.py --envelope E --package-root R --trusted-keys K --module M
 [-- args...]``: nothing from the package executes before the envelope and the whole installed
@@ -26,6 +27,8 @@ MODULES_NAME = "appsec_review_signing_modules"
 IMPORT_HOOK_NAME = "appsec_review_signing_import_hook"
 BOOTSTRAP_NAME = "appsec_review_signing_bootstrap"
 VERIFIER_FILES = ((CORE_NAME, "core.py"), (MODULES_NAME, "modules.py"), (IMPORT_HOOK_NAME, "import_hook.py"))
+RELEASE_LIB_NAME = "appsec_review_signing_release_lib"
+RELEASE_LIB_FILE = "release_lib.py"
 
 DEFAULT_PACKAGE = "appsec_review"
 SIGNATURE_ENV = "APPSEC_REVIEW_MODULE_SIGNATURE"
@@ -147,6 +150,30 @@ def activate(*, envelope, package_root, trusted_keys_dir, openssl=None, package=
     if site not in sys.path:
         sys.path.append(site)
     return finder
+
+
+def verify_release_library(*, envelope, library, trusted_keys_dir, openssl=None):
+    """Verify the signed third-party closure of a release ``lib/`` before it is placed on ``sys.path``.
+
+    ``release_lib.py`` is loaded from this directory under the transient name
+    ``appsec_review_signing_release_lib`` and always removed from ``sys.modules`` afterwards, so only
+    the four verifier modules stay registered. Returns ``{relpath: sha256}`` of the verified files.
+    """
+    sys.dont_write_bytecode = True
+    core = load_verifier(_verifier_directory())[0]
+    if RELEASE_LIB_NAME in sys.modules:
+        raise ImportError(f"{RELEASE_LIB_NAME} is already loaded")
+    try:
+        release_lib = load_source(RELEASE_LIB_NAME, _verifier_directory() / RELEASE_LIB_FILE)
+        verifier = core.OpenSSL(None if openssl is None else os.fspath(openssl))
+        verifier.self_test()
+        return release_lib.verify_release_lib(envelope, library, trusted_keys_dir, verifier)
+    except core.SignatureVerificationError:
+        raise
+    except Exception as error:
+        raise core.SignatureVerificationError(f"release library verification failed: {error}") from error
+    finally:
+        sys.modules.pop(RELEASE_LIB_NAME, None)
 
 
 def _environment_error(message):
