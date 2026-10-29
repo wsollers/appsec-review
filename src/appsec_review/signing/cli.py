@@ -55,6 +55,10 @@ def add_parser(commands: argparse._SubParsersAction) -> argparse.ArgumentParser:
     sign.add_argument("--all-pinned", action="store_true",
                       help="sign every enabled catalog image and configured image-ID pin that resolves "
                            "locally to exactly its pinned image")
+    sign.add_argument("--builder-service-config", type=Path, action="append", default=[], metavar="PATH",
+                      help="with --all-pinned, also sign the BuildKit worker, egress proxy and declared "
+                           "input image IDs pinned by this bounded builder service operator configuration "
+                           "(the file given to image_builder_service --config); may be repeated")
     sign.add_argument("--private-key", type=Path, required=True)
     sign.add_argument("--signatures-dir", type=Path,
                       help="envelope directory (default: [signing].image_signatures_dir)")
@@ -232,6 +236,31 @@ def configured_image_pins(config: Any) -> list[dict[str, Any]]:
     return pinned_images(images, json.loads(config.resolved_json))
 
 
+def builder_service_image_pins(path: Path) -> list[dict[str, Any]]:
+    """The image IDs a bounded builder service operator configuration pins, as ``pinned_images`` rows.
+
+    Covers the BuildKit ``worker_image_id``, the egress ``proxy_image_id`` when egress is
+    commissioned, and every declared ``[[image_builder_service.images]]`` input. The config gives
+    only IDs (an input's alias is a Dockerfile name, not a Docker tag), so each ``tag`` is ``None``
+    and the ID itself is inspected. Each row also names its ``config`` file.
+    """
+    from appsec_review.config.image_builder_service import load_image_builder_service
+
+    path = Path(os.path.abspath(path.expanduser()))
+    if not path.is_file():
+        raise ValueError(f"builder service configuration is not a file: {path}")
+    try:
+        service = load_image_builder_service(path)
+    except ValueError as error:
+        raise ValueError(f"invalid builder service configuration {path}: {error}") from error
+    entries = [("builder-service:worker", service.worker_image_id)]
+    if service.proxy_image_id is not None:
+        entries.append(("builder-service:proxy", service.proxy_image_id))
+    entries.extend((f"builder-service:input:{image.alias}", image.image_id) for image in service.images)
+    return [{"source": source, "tag": None, "image_id": image_id, "config": str(path)}
+            for source, image_id in entries]
+
+
 def _sign_all_pinned(openssl: OpenSSL, private_key: Path, signatures_dir: Path,
                      pins: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     resolved: dict[str, str | Exception] = {}
@@ -241,6 +270,8 @@ def _sign_all_pinned(openssl: OpenSSL, private_key: Path, signatures_dir: Path,
         tag, pinned = pin.get("tag"), pin.get("image_id")
         row: dict[str, Any] = {"source": pin["source"], "tag": tag, "image_id": pinned,
                                "resolved_image_id": None, "envelope": None, "error": None}
+        if "config" in pin:
+            row["config"] = pin["config"]
         results.append(row)
         if pinned is None:
             row["status"] = "skipped_unpinned"
@@ -274,6 +305,8 @@ def _sign_all_pinned(openssl: OpenSSL, private_key: Path, signatures_dir: Path,
 def _sign_image(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, bool]:
     if bool(args.references) == bool(args.all_pinned):
         raise ValueError("sign-image requires either REFERENCE... or --all-pinned, not both")
+    if args.builder_service_config and not args.all_pinned:
+        raise ValueError("--builder-service-config requires --all-pinned")
     private_key = args.private_key.expanduser()
     if not private_key.is_file():
         raise ValueError(f"private key is not a file: {private_key}")
@@ -281,7 +314,10 @@ def _sign_image(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[di
         else config().signing.image_signatures_dir
     openssl = _openssl(args, config)
     if args.all_pinned:
-        results = _sign_all_pinned(openssl, private_key, signatures_dir, configured_image_pins(config()))
+        builder_pins = [pin for path in dict.fromkeys(args.builder_service_config)
+                        for pin in builder_service_image_pins(path)]
+        pins = configured_image_pins(config()) + builder_pins
+        results = _sign_all_pinned(openssl, private_key, signatures_dir, pins)
         ok = all(row["status"] in {"signed", "skipped_unpinned"} for row in results)
         return {"signatures_dir": str(signatures_dir), "images": results}, ok
     results = []
@@ -419,5 +455,5 @@ _HANDLERS: dict[str, Callable[[argparse.Namespace, Callable[[], Any]], tuple[dic
 }
 
 
-__all__ = ["BOOTSTRAP_FILES", "DEFAULT_PRIVATE_KEY", "add_parser", "configured_image_pins",
-           "pinned_images", "run"]
+__all__ = ["BOOTSTRAP_FILES", "DEFAULT_PRIVATE_KEY", "add_parser", "builder_service_image_pins",
+           "configured_image_pins", "pinned_images", "run"]

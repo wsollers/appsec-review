@@ -330,6 +330,16 @@ Run these steps on the review host from the repository checkout, never during a 
    missing tag fails and is not signed. An
    unpinned catalog image is reported `skipped_unpinned`; sign it explicitly with
    `sign-image REFERENCE`.
+
+   On a bounded builder service host, add `--builder-service-config <operator service.toml>` (the
+   file given to `image_builder_service --config`; repeat it for several services). `--all-pinned`
+   then also signs that configuration's BuildKit `worker_image_id`, its egress `proxy_image_id` when
+   egress is commissioned, and every declared `[[image_builder_service.images]]` input ID, after
+   `docker image inspect` reports exactly that ID. Their report rows are labelled
+   `builder-service:worker`, `builder-service:proxy` and `builder-service:input:<alias>` and name the
+   `config` file. An ID already covered by another pin is signed once. A missing or invalid
+   configuration fails before anything is signed. There is no default path: the operator
+   configuration is never read unless named.
 3. **Sign modules for a native release or a manual deployment.** The output must lie outside the
    package tree. For a native release, also sign the assembled `lib/` (outside `appsec_review/`)
    after it is complete and before it is made read-only. Then export the bootstrap files into the

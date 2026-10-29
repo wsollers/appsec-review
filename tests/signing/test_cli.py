@@ -268,6 +268,126 @@ def test_sign_all_pinned_signs_the_pinned_cve_bin_tool_image_only_when_its_tag_m
     assert [path.name for path in (tmp_path / "signatures").iterdir()] == [f"{IMAGE_A.removeprefix('sha256:')}.json"]
 
 
+def _builder_service_config(path: Path, *, proxy: str | None = None, inputs: dict[str, str] | None = None,
+                            worker: str = IMAGE_B) -> Path:
+    lines = ["[image_builder_service]", 'endpoint = "/run/builder/builder.sock"',
+             'state_root = "/var/lib/builder"', 'release_id = "builder-release"',
+             f'worker_image_id = "{worker}"', 'worker_release_id = "buildkit-release"',
+             'host_cgroup = "/sys/fs/cgroup/builder-host"',
+             'worker_cgroup_parent = "/sys/fs/cgroup/builder-workers"',
+             'docker_endpoint = "/run/docker.sock"', 'docker_binary = "/usr/bin/docker"',
+             'skopeo_binary = "/usr/bin/skopeo"', 'docker_release_id = "docker-release"',
+             'skopeo_release_id = "skopeo-release"']
+    if proxy is not None:
+        lines += [f'network_id = "{"1" * 64}"', f'proxy_container_id = "{"2" * 64}"',
+                  f'proxy_image_id = "{proxy}"', 'proxy_release_id = "proxy-release"',
+                  'proxy_url = "http://172.30.0.2:3128"', 'ip_release_id = "iproute2-release"']
+    lines += ["[image_builder_service.admission]", 'metadata_root = "/srv/runs/metadata"',
+              "uid = 1000", "gid = 1000", f'lease_id = "{"3" * 32}"',
+              "[[image_builder_service.grants]]", "uid = 1000", 'tenant_id = "tenant"',
+              'project_id = "project"', 'run_id = "run-one"', 'run_root = "/srv/runs/run-one"',
+              'target_snapshot = "target-one"', f'namespace = "{"4" * 24}"',
+              'client_context_root = "/srv/runs/metadata/bounded-image-contexts"',
+              'service_context_root = "/srv/runs/metadata/bounded-image-contexts"']
+    for alias, image_id in (inputs or {}).items():
+        lines += ["[[image_builder_service.images]]", f'alias = "{alias}"', f'image_id = "{image_id}"',
+                  f'release_id = "{alias.replace(":", "-")}"']
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_builder_service_image_pins_list_worker_proxy_and_declared_inputs(tmp_path) -> None:
+    path = _builder_service_config(tmp_path / "service.toml", proxy=IMAGE_C,
+                                   inputs={"base:release": IMAGE_D, "tools:release": IMAGE_A})
+    assert signing_cli.builder_service_image_pins(path) == [
+        {"source": source, "tag": None, "image_id": image_id, "config": str(path)}
+        for source, image_id in (("builder-service:worker", IMAGE_B), ("builder-service:proxy", IMAGE_C),
+                                 ("builder-service:input:base:release", IMAGE_D),
+                                 ("builder-service:input:tools:release", IMAGE_A))]
+    without_proxy = _builder_service_config(tmp_path / "plain.toml", inputs={"base:release": IMAGE_D})
+    assert [pin["source"] for pin in signing_cli.builder_service_image_pins(without_proxy)] == [
+        "builder-service:worker", "builder-service:input:base:release"]
+
+
+def test_sign_all_pinned_signs_builder_service_images_and_dedups_ids(
+        tmp_path, capsys, key, config, local_images) -> None:
+    (config.runtime.repository_root / "containers" / "catalog.toml").write_text(
+        f'[[images]]\nid = "shared"\nstate = "enabled"\ntag = "fixture/shared:1"\nimage_id = "{IMAGE_A}"\n',
+        encoding="utf-8")
+    service = _builder_service_config(tmp_path / "service.toml", proxy=IMAGE_C,
+                                      inputs={"base:release": IMAGE_D, "shared:release": IMAGE_A})
+    local_images.update({"fixture/shared:1": IMAGE_A, "worker": IMAGE_B, "proxy": IMAGE_C, "base": IMAGE_D})
+    signed: list[str] = []
+    real_sign = signing_cli.sign_image
+
+    def counting_sign(openssl, private_key, image_id, directory):
+        signed.append(image_id)
+        return real_sign(openssl, private_key, image_id, directory)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(signing_cli, "sign_image", counting_sign)
+        code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private),
+                             "--builder-service-config", str(service),
+                             "--builder-service-config", str(service))
+    assert code == 0, report
+    rows = {row["source"]: row for row in report["images"]}
+    assert set(rows) == {"containers/catalog.toml images.shared.image_id", "builder-service:worker",
+                         "builder-service:proxy", "builder-service:input:base:release",
+                         "builder-service:input:shared:release"}
+    assert {row["status"] for row in rows.values()} == {"signed"}
+    assert rows["builder-service:worker"]["config"] == str(service)
+    assert rows["builder-service:worker"]["resolved_image_id"] == IMAGE_B
+    assert sorted(signed) == sorted([IMAGE_A, IMAGE_B, IMAGE_C, IMAGE_D])
+    code, report = _main(capsys, "verify-image", IMAGE_B, IMAGE_C, IMAGE_D, "fixture/shared:1")
+    assert code == 0, report
+
+
+def test_sign_all_pinned_refuses_a_missing_or_mismatched_builder_service_image(
+        tmp_path, capsys, key, config, local_images) -> None:
+    (config.runtime.repository_root / "containers" / "catalog.toml").write_text("", encoding="utf-8")
+    service = _builder_service_config(tmp_path / "service.toml", proxy=IMAGE_C,
+                                      inputs={"base:release": IMAGE_D})
+    local_images.update({"worker": IMAGE_B, "base": IMAGE_D})
+    real_runner = signing_cli._inspect_runner
+
+    def runner(command, **kwargs):
+        # The daemon reports another .Id for the pinned input ID, so the pin does not resolve exactly.
+        if command[-1] == IMAGE_D:
+            return subprocess.CompletedProcess(command, 0, IMAGE_A.encode() + b"\n", b"")
+        return real_runner(command, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(signing_cli, "_inspect_runner", runner)
+        code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private),
+                             "--builder-service-config", str(service))
+    assert code == 1
+    status = {row["source"]: row["status"] for row in report["images"]}
+    assert status == {"builder-service:worker": "signed", "builder-service:proxy": "inspect_failed",
+                      "builder-service:input:base:release": "mismatched"}
+    assert [path.name for path in (tmp_path / "signatures").iterdir()] == [f"{IMAGE_B.removeprefix('sha256:')}.json"]
+
+
+def test_builder_service_config_errors_are_clear_and_sign_nothing(tmp_path, capsys, key, config,
+                                                                   local_images) -> None:
+    (config.runtime.repository_root / "containers" / "catalog.toml").write_text(
+        f'[[images]]\nid = "shared"\nstate = "enabled"\ntag = "fixture/shared:1"\nimage_id = "{IMAGE_A}"\n',
+        encoding="utf-8")
+    local_images["fixture/shared:1"] = IMAGE_A
+    missing = tmp_path / "absent.toml"
+    code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private),
+                         "--builder-service-config", str(missing))
+    assert code == 1 and report == {"error": f"builder service configuration is not a file: {missing}"}
+    invalid = tmp_path / "invalid.toml"
+    invalid.write_text("[image_builder_service]\nunknown = true\n", encoding="utf-8")
+    code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private),
+                         "--builder-service-config", str(invalid))
+    assert code == 1 and report["error"].startswith(f"invalid builder service configuration {invalid}: ")
+    code, report = _main(capsys, "sign-image", "tool:1", "--private-key", str(key.private),
+                         "--builder-service-config", str(invalid))
+    assert code == 1 and report["error"] == "--builder-service-config requires --all-pinned"
+    assert not (tmp_path / "signatures").exists()
+
+
 PACKAGE = {"__init__.py": b"VALUE = 1\n", "core.py": b"def answer():\n    return 42\n",
            "sub/__init__.py": b"", "sub/leaf.py": b"LEAF = 'leaf'\n"}
 
