@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.signing import cli as signing_cli
-from appsec_review.signing import core
+from appsec_review.signing import core, images, modules
 from appsec_review.signing.core import SignatureVerificationError, WindowsAce
 from tests.signing._host import OPENSSL_BINARY
 
@@ -216,6 +216,61 @@ def test_private_key_directory_gets_an_acl_when_created_and_is_always_checked(si
     with pytest.raises(SignatureVerificationError, match="private key directory is not private"):
         signing_cli._private_parent(existing / "operator.pem")
     assert simulated.calls == [("check", existing)]
+
+
+@pytest.fixture
+def signing_key(simulated, monkeypatch, tmp_path) -> SimpleNamespace:
+    """A real key and OpenSSL on a simulated Windows host; ``signed`` records every OpenSSL sign call."""
+    if not os.path.isfile(OPENSSL_BINARY):
+        pytest.skip("system OpenSSL is required")
+    monkeypatch.setattr(core, "windows_host", lambda: os.name == "nt")
+    openssl = core.OpenSSL(OPENSSL_BINARY, temp_dir=str(tmp_path))
+    key = openssl.generate_private_key(tmp_path / "private" / "operator.pem")
+    monkeypatch.setattr(core, "windows_host", lambda: True)
+    state = SimpleNamespace(openssl=openssl, key=key, signed=[])
+    real_sign = openssl.sign
+    monkeypatch.setattr(openssl, "sign", lambda path, message: state.signed.append(path) or real_sign(path, message))
+    return state
+
+
+def _sign_paths(openssl, key: Path, root: Path) -> dict:
+    package = root / "pkg"
+    package.mkdir(exist_ok=True)
+    (package / "__init__.py").write_bytes(b"")
+    return {
+        "statement": lambda: core.sign_statement(openssl, key, core.make_statement("test", {"value": 1})),
+        "image": lambda: images.sign_image(openssl, key, "sha256:" + "a" * 64, root / "images"),
+        "modules": lambda: modules.sign_modules(openssl, key, package, root / "modules.json"),
+    }
+
+
+@pytest.mark.parametrize("path", ["statement", "image", "modules"])
+@pytest.mark.parametrize("target", ["key", "directory"])
+def test_signing_refuses_a_broadly_readable_private_key_before_openssl_runs(
+        signing_key, simulated, tmp_path, path, target) -> None:
+    broad = signing_key.key if target == "key" else signing_key.key.parent
+    simulated.acls[broad] = _owner_only() + [WindowsAce(0, 0, 0x00120089, EVERYONE)]
+    with pytest.raises(SignatureVerificationError, match=r"Everyone \(S-1-1-0\) FILE_READ_DATA"):
+        _sign_paths(signing_key.openssl, signing_key.key, tmp_path)[path]()
+    assert signing_key.signed == []
+    assert not (tmp_path / "images").exists() and not (tmp_path / "modules.json").exists()
+
+
+@pytest.mark.parametrize("path", ["statement", "image", "modules"])
+def test_signing_with_a_private_key_checks_its_directory_and_file(signing_key, simulated, tmp_path, path) -> None:
+    simulated.calls.clear()
+    _sign_paths(signing_key.openssl, signing_key.key, tmp_path)[path]()
+    assert simulated.calls == [("check", signing_key.key.parent), ("check", signing_key.key)]
+    assert signing_key.signed == [signing_key.key]
+
+
+@pytest.mark.skipif(not os.path.isfile(OPENSSL_BINARY), reason="system OpenSSL is required")
+def test_posix_signing_reads_no_windows_acl(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(core, "windows_host", lambda: False)
+    monkeypatch.setattr(core, "read_windows_security", lambda path: pytest.fail("Windows ACL read on POSIX"))
+    openssl = core.OpenSSL(OPENSSL_BINARY, temp_dir=str(tmp_path))
+    key = openssl.generate_private_key(tmp_path / "private" / "operator.pem")
+    core.sign_statement(openssl, key, core.make_statement("test", {"value": 1}))
 
 
 @pytest.mark.skipif(not os.path.isfile(OPENSSL_BINARY), reason="system OpenSSL is required")

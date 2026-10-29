@@ -770,8 +770,21 @@ def _check_envelope(envelope: Any) -> None:
         raise SignatureVerificationError("envelope must have exactly statement and signatures")
 
 
+def check_private_key_custody(private_key_path: str | os.PathLike[str]) -> None:
+    """On Windows, refuse a private key whose directory or file ACL lets a broad principal in.
+
+    POSIX hosts are unchanged: there only keygen checks the private key directory's mode.
+    """
+    if not windows_host():
+        return
+    key = Path(os.path.abspath(private_key_path))
+    check_windows_custody(key.parent, "private", "private key directory", directory=True)
+    check_windows_custody(key, "private", "private key", directory=False)
+
+
 def sign_statement(openssl: OpenSSL, private_key_path: str | os.PathLike[str], statement: dict) -> dict:
     message = _canonical_statement(statement)
+    check_private_key_custody(private_key_path)
     signature = openssl.sign(private_key_path, message)
     public_key_pem = openssl.public_key_pem(private_key_path)
     if not openssl.verify(public_key_pem, message, signature):
