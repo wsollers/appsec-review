@@ -82,7 +82,14 @@ services:
     pids_limit: 2048
     group_add:
       - "${APPSEC_DOCKER_GID:-0}"
+    # The in-container gate (appsec_review.signing.container_self_check) requires this container's own
+    # image to be exactly the launched ID and to verify against the mounted trust anchors, then execs
+    # the code server; on refusal the code location never becomes healthy (host.SELF_CHECK_COMMAND).
     command:
+      - python
+      - -m
+      - appsec_review.signing.container_self_check
+      - --
       - dagster
       - code-server
       - start
@@ -96,6 +103,7 @@ services:
       - appsec_review
     environment:
       <<: *dagster-environment
+      APPSEC_REVIEW_DAGSTER_IMAGE: ${APPSEC_REVIEW_DAGSTER_IMAGE:?APPSEC_REVIEW_DAGSTER_IMAGE must be a host-verified sha256 image id; start through deploy/dagster/bin/ops.py}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       HOME: /tmp
     depends_on:

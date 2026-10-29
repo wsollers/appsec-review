@@ -15,6 +15,10 @@ COPILOT_PROFILES = {"copilot-dev", "copilot-prod"}
 IMAGE_VARIABLE = "APPSEC_REVIEW_DAGSTER_IMAGE"
 # Every Compose service that runs IMAGE_VARIABLE; a unit test keeps this equal to the compose files.
 IMAGE_SERVICES = ("code-location", "webserver", "daemon")
+# The in-container gate that verifies the running image before the code server starts; the service's
+# command starts with it and the service receives IMAGE_VARIABLE (unit tests and smoke.py check both).
+SELF_CHECK_SERVICE = "code-location"
+SELF_CHECK_COMMAND = ("python", "-m", "appsec_review.signing.container_self_check", "--")
 # Fills the variable for Compose actions that never create containers (config, ps, logs, stop).
 UNVERIFIED_IMAGE = "sha256:" + "0" * 64
 # The webserver's loopback host port; compose.yaml publishes ${APPSEC_DAGSTER_WEB_PORT:-3000}.

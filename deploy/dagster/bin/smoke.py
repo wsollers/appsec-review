@@ -16,8 +16,9 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import (IMAGE_SERVICES, IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile,
-                  project_name, provider_overlay, reject_other_deployments, url_or_default, validate_deployment)
+from host import (IMAGE_SERVICES, IMAGE_VARIABLE, SELF_CHECK_COMMAND, SELF_CHECK_SERVICE, actual_platform,
+                  compose_environment, deployment_profile, project_name, provider_overlay, reject_other_deployments,
+                  url_or_default, validate_deployment)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -56,6 +57,12 @@ def check_signed_image(services: dict) -> None:
         for target in SIGNING_MOUNTS:
             if target not in mounts or not mounts[target].get("read_only"):
                 raise RuntimeError(f"{name} must mount {target} read-only")
+    gated = services[SELF_CHECK_SERVICE]
+    command = list(gated.get("command") or [])
+    if command[:len(SELF_CHECK_COMMAND)] != list(SELF_CHECK_COMMAND) or len(command) <= len(SELF_CHECK_COMMAND):
+        raise RuntimeError(f"{SELF_CHECK_SERVICE} must start through the in-container image self-check")
+    if (gated.get("environment") or {}).get(IMAGE_VARIABLE) != gated.get("image"):
+        raise RuntimeError(f"{SELF_CHECK_SERVICE} must receive {IMAGE_VARIABLE} equal to its image")
 
 
 def check_config(platform: str) -> dict:

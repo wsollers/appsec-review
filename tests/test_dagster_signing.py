@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -253,6 +254,27 @@ def test_every_dagster_image_reference_requires_the_verified_id_without_a_defaul
                 assert not {"image", "build", "pull_policy"} & set(service), (name, service_name)
 
 
+def test_code_location_runs_the_in_container_self_check_with_the_launched_image_id() -> None:
+    compose = _compose("compose.yaml")
+    services = compose["services"]
+    gated = services[host.SELF_CHECK_SERVICE]
+    gate = list(host.SELF_CHECK_COMMAND)
+    assert gated["command"][:len(gate)] == gate
+    assert gated["command"][len(gate):len(gate) + 3] == ["dagster", "code-server", "start"]
+    assert REQUIRED_IMAGE.fullmatch(gated["environment"][host.IMAGE_VARIABLE])
+    assert gated["environment"][host.IMAGE_VARIABLE] == gated["image"]
+    assert "/var/run/docker.sock:/var/run/docker.sock" in gated["volumes"]
+    for name in set(host.IMAGE_SERVICES) - {host.SELF_CHECK_SERVICE}:
+        assert services[name]["depends_on"][host.SELF_CHECK_SERVICE] == {"condition": "service_healthy"}
+    for overlay in COMPOSE_FILES:
+        if overlay != "compose.yaml":
+            service = (_compose(overlay).get("services") or {}).get(host.SELF_CHECK_SERVICE) or {}
+            assert "command" not in service and "entrypoint" not in service, overlay
+            assert host.IMAGE_VARIABLE not in (service.get("environment") or {}), overlay
+    assert importlib.util.find_spec(gate[2]) is not None
+    assert lifecycle.commands["reload"][-len(host.IMAGE_SERVICES):] == list(host.IMAGE_SERVICES)
+
+
 def test_image_services_constant_matches_the_compose_file() -> None:
     services = _image_services(_compose("compose.yaml"))
     assert set(host.IMAGE_SERVICES) == set(services) and len(host.IMAGE_SERVICES) == len(services)
@@ -286,7 +308,14 @@ def test_smoke_config_check_requires_the_signed_image_contract() -> None:
     resolved = {name: {**service, "image": SIGNED, "volumes": [
         item for item in service.get("volumes", []) if isinstance(item, dict)]}
         for name, service in services.items()}
+    gated = resolved[host.SELF_CHECK_SERVICE]
+    gated["environment"] = {**gated["environment"], host.IMAGE_VARIABLE: SIGNED}
     smoke.check_signed_image(resolved)
+    for broken, message in (({"environment": {**gated["environment"], host.IMAGE_VARIABLE: OTHER}},
+                             "must receive"),
+                            ({"command": gated["command"][len(host.SELF_CHECK_COMMAND):]}, "self-check")):
+        with pytest.raises(RuntimeError, match=message):
+            smoke.check_signed_image({**resolved, host.SELF_CHECK_SERVICE: {**gated, **broken}})
     resolved["daemon"] = {**resolved["daemon"], "image": OTHER}
     with pytest.raises(RuntimeError, match="share one verified image"):
         smoke.check_signed_image(resolved)

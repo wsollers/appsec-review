@@ -89,7 +89,7 @@ flowchart LR
     end
     subgraph verifiers["Verifiers: OpenSSL self-test, then verify"]
         hostv["Host: lifecycle.py and<br/>signing verify-image / verify-modules"]
-        imgv["Image launch: ContainerExecutor, BuildContainerExecutor,<br/>ProjectImageResolver, CodeQLImageResolver, cve-bin-tool build,<br/>BuildKitWorker, ImageBuilderService"]
+        imgv["Image launch: ContainerExecutor, BuildContainerExecutor,<br/>ProjectImageResolver, CodeQLImageResolver, cve-bin-tool build,<br/>BuildKitWorker, ImageBuilderService,<br/>Dagster code-location container_self_check"]
         modv["Module startup: bootstrap.py, sitecustomize shim,<br/>native root_entrypoint.py"]
     end
     keygen --> key
@@ -139,6 +139,7 @@ Every pinned image is verified when it is launched or reused, after its identity
 | cve-bin-tool database build (`jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`) | A pre-existing local `settings.image` (Docker path) or the approved preinstalled image (native path), after checking that it resolves to the optional `settings.image_id` pin. The image is launched by ID. |
 | `BuildKitWorker.prepare`, `_network` and `_inputs` (`container_runtime/buildkit_worker.py`) | The pinned `worker_image_id` after `docker image inspect` confirms that exact ID and before `docker container create` (the worker is created by ID); the pinned `proxy_image_id` of the running operator egress proxy whenever the isolated network is checked; each declared operator input image (`[[image_builder_service.images]]`) before Skopeo transports it. |
 | `ImageBuilderService._start_spec` (`container_runtime/image_builder_service.py`) | Every declared operator input image before a `start` request is accepted, so nothing is snapshotted or solved. |
+| `container_self_check.main` (`signing/container_self_check.py`), the Dagster code location's Compose command | The image its own container runs (`docker container inspect` `.Image`, which must equal `APPSEC_REVIEW_DAGSTER_IMAGE`) before `dagster code-server` is exec'd. |
 
 Same-run outputs that a later build in the bounded builder consumes are derived images. They are
 not signed: they are trusted through their verified pinned bases and the operator journal records
@@ -358,8 +359,16 @@ Run these steps on the review host from the repository checkout, never during a 
    `lifecycle.py build` (`scripts/stack-rebuild.sh`) signs and verifies modules, builds the final stage,
    and signs and verifies the image ID. `lifecycle.py start`/`reload` verify the image on the host,
    record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `deploy/dagster/.env` and launch exactly that
-   ID. If verification fails they exit 3, and the scripts report `refused`. Settings are described in
-   [Signed image](../../deploy/dagster/README.md#signed-image) and
+   ID. If verification fails they exit 3, and the scripts report `refused`. Inside the stack the code
+   location runs `python -m appsec_review.signing.container_self_check -- dagster code-server start ...`.
+   This gate inspects its own container through the mounted Docker socket, requires its `.Image` to
+   equal `APPSEC_REVIEW_DAGSTER_IMAGE` exactly, and verifies that ID against the mounted trust anchors
+   before it execs the code server. Otherwise it exits 3, so the code location never becomes healthy
+   and the webserver and daemon, which depend on it, do not start. With
+   `image_enforcement = "disabled"` it logs status `disabled` and starts unchecked. The gate is a
+   second check, not the authority: a malicious image can omit its own check (Docker socket access
+   is root-equivalent), and a webserver or daemon started with `--no-deps` may skip it. Settings are
+   described in [Signed image](../../deploy/dagster/README.md#signed-image) and
    [operator scripts](operator-scripts.md).
 
    ```mermaid
@@ -378,11 +387,25 @@ Run these steps on the review host from the repository checkout, never during a 
            record["record_image: APPSEC_REVIEW_DAGSTER_IMAGE=sha256:ID<br/>in deploy/dagster/.env (atomic, 0600)"]
            compose["docker compose up -d --wait with that exact ID<br/>reload: --no-deps --force-recreate code-location webserver daemon"]
        end
+       subgraph gate["code-location container: signing.container_self_check before dagster code-server"]
+           policy["default_image_verifier: [signing] of the image's appsec-review.toml"]
+           ownid["own container ID: /proc/self/mountinfo bind mounts of /etc/hostname, /etc/hosts, /etc/resolv.conf"]
+           inspectown["docker container inspect ID via /var/run/docker.sock<br/>.Id and .Config.Hostname match, .Image equals APPSEC_REVIEW_DAGSTER_IMAGE"]
+           verifyown["EnvelopeImageVerifier.verify(.Image) against the mounted anchors and envelopes"]
+           serve["status verified: exec dagster code-server start, becomes healthy,<br/>then webserver and daemon start"]
+           disabled["status disabled: exec unchecked"]
+       end
        failed["FAILED, exit 1: lifecycle build failed"]
        refused["REFUSED, exit 3: refusing to start or reload<br/>Compose is not run, ops.py reports refused"]
+       gaterefused["status refused, exit 3: code server never starts,<br/>code-location never healthy, webserver and daemon wait"]
        settings --> signmods --> verifymods --> dockerbuild --> signimg --> verifyimg
        verifyimg --> reference --> verify
        verify -- verified --> record --> compose
+       compose --> policy
+       direct["direct docker compose up<br/>with a recorded or hand-set ID"] --> policy
+       policy -- required --> ownid --> inspectown --> verifyown -- verified --> serve
+       policy -- "explicitly disabled" --> disabled
+       policy & ownid & inspectown & verifyown -- error --> gaterefused
        signmods & verifymods & dockerbuild & signimg & verifyimg -- error --> failed
        reference & verify -- SigningError --> refused
    ```

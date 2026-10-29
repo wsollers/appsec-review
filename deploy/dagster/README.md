@@ -182,8 +182,27 @@ leaves PostgreSQL running, so no service keeps an older image. Plain
 `docker compose ... exec` commands reuse the recorded ID. Read-only Compose actions (`config`, `status`,
 `logs`, `stop`) substitute an unlaunchable placeholder when no ID is recorded. The image variable has no
 default, so `docker compose up` without a recorded or exported ID fails. Do not run
-`docker compose up` directly or set `APPSEC_REVIEW_DAGSTER_IMAGE` by hand: Compose does not
+`docker compose up` directly or set `APPSEC_REVIEW_DAGSTER_IMAGE` by hand: Compose itself does not
 re-verify the ID it is given.
+
+The code location re-checks inside the container before it serves. Its Compose command is
+`python -m appsec_review.signing.container_self_check -- dagster code-server start ...`
+(`host.SELF_CHECK_COMMAND`), and it receives `APPSEC_REVIEW_DAGSTER_IMAGE`. The gate finds its own
+full container ID from the Docker bind mounts of `/etc/hostname`, `/etc/hosts` and
+`/etc/resolv.conf` in `/proc/self/mountinfo`, and runs `docker container inspect` by that ID through
+the mounted socket. It requires the reported `.Id` to be that ID, `.Config.Hostname` to be the
+container's host name, and `.Image` to equal `APPSEC_REVIEW_DAGSTER_IMAGE` exactly. It then verifies
+the image ID against the mounted trust anchors and envelopes with the configured `[signing]` policy.
+On success it prints a `container-image-self-check` JSON line with status `verified` and execs the
+code server. On any failure it prints status `refused` and exits 3, so the code location never
+becomes healthy and the webserver and daemon, which wait for it, are not started. With
+`image_enforcement = "disabled"` it prints status `disabled` and starts the server unchecked. The
+gate itself runs from verified modules, because the image's `sitecustomize.py` verifies the package
+first. `lifecycle.py reload` recreates the code location, so the gate runs again with the newly
+verified ID. The gate does not replace host verification: access to the Docker socket is
+root-equivalent, and a malicious image can simply omit its own check, so the host-side verification
+in `lifecycle.py` remains the authority. A webserver or daemon started with `--no-deps` may not wait
+for a healthy code location and then skips the gate.
 
 Inside the final stages every Python process runs the image's `sitecustomize.py` (a copy of
 `signing/sitecustomize_shim.py` in the interpreter's standard library directory). It loads the
