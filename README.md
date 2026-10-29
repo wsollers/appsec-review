@@ -276,6 +276,38 @@ visible to Linux processes or to the Dagster containers):
 claude --version
 ```
 
+Install GitHub CLI 2.17 or later inside the WSL distribution and sign in with the account whose
+access source-history GitHub enrichment should use. Whoever starts or restarts the stack,
+`deploy/dagster/bin/lifecycle.py` passes that login's `gh auth token` into the code location as
+`GITHUB_TOKEN` (see [source-history operations](docs/operations/source-history-analysis.md#github-identity-credentials-and-network-access)).
+Ubuntu 22.04's packaged `gh` 2.4 lacks `gh auth token`, so install it from GitHub's repository,
+following <https://github.com/cli/cli/blob/trunk/docs/install_linux.md> and checking the keyring's
+published SHA256:
+
+```bash
+(
+  set -euo pipefail
+  out=$(mktemp)
+  wget -nv -O "$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+  echo "6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b  $out" | sha256sum -c -
+  sudo mkdir -p -m 755 /etc/apt/keyrings /etc/apt/sources.list.d
+  sudo install -m 644 "$out" /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  rm -f "$out"
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+  sudo apt update
+  sudo apt install -y gh
+)
+hash -r
+gh --version
+gh auth status || gh auth login --hostname github.com
+gh auth token --hostname github.com >/dev/null && echo "gh auth token works"
+```
+
+If GitHub rotates its signing key, the checksum check fails; take the new value from the install
+page rather than skipping the check. Without a usable login, stack starts print why and runs record
+`github_credentials_missing`.
+
 Then follow the same clone and virtual-environment steps as Linux:
 
 ```bash
