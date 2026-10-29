@@ -103,8 +103,14 @@ Resume reuses accepted work only when configuration, accepted upstream handoffs,
 artifact hashes, parser/tool identity and parser bounds still match. A changed
 compiler target needs a new application run. Rebuilding with debug flags creates
 a different artifact and is not a substitute for matching the reviewed artifact.
-The producer's input-identity probe additionally binds reader implementation,
-launcher bytes, managed image pin, tool manifest and runtime policy. Artifact
+The execution-plan `/2` and decision `/2` contracts bind the declared reader
+release, managed image pin, parsed runtime policy and reader limits. The reader
+identity contract is `/3`. Supplied reader sources, launcher and manifest are
+not hashed as customer evidence. Operators bump `job_debug_symbol_indexing`
+(or its `platform` fallback) when changing those supplied components; an
+undeclared release explicitly disables reuse. Private launcher staging checks
+exact byte equality with the installed package before and after execution,
+without publishing platform payloads as evidence or content objects. Artifact
 decisions bind build-image provenance through the accepted language-build handoff.
 Exports use file-backed streams with a kernel file-size bound, a subprocess
 deadline and container resource limits; host stdout capture never buffers the

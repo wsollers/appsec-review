@@ -417,6 +417,7 @@ def _checkpoint_identity(unit: UnitContext, adapter: ToolAdapter, catalog: ScanC
     from appsec_review.config.assurance import ReviewPolicy
     policy = getattr(unit.job, "review_policy", ReviewPolicy())
     value = {
+        "publication_contract": "explicit-raw-artifacts/1",
         "tool_id": adapter.tool_id, "target_fingerprint": catalog.source_fingerprint,
         "catalog_handoff": catalog.handoff_sha256, "scope": _scope_identity(catalog, selection),
         "image_id": image_id, "adapter": adapter.adapter_identity, "parser": adapter.parser_identity,
@@ -494,6 +495,8 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
     envelope["not_applicable_inputs"] = not_applicable_summary(not_applicable)
     if source_inventory is not None:
         envelope["source_inventory"] = _artifact(unit.job.run_root, source_inventory)
+        if envelope["source_inventory"] not in envelope["raw_artifacts"]:
+            raise ValueError("source inventory is not an exact raw artifact")
     atomic_json(destination, envelope)
     if envelope["records"]:
         provenance_receipt = validate_observation_provenance(
@@ -1030,6 +1033,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             "checkpoint_identity": identity,
             "retry_count": max(outcome.attempt for outcome in outcomes),
             "native_outputs": [ref for outcome in outcomes for ref in outcome.native_outputs],
+            "raw_artifacts": envelope["raw_artifacts"],
             "provenance_receipt": envelope.get("provenance_receipt"),
         }
         if partitioned:

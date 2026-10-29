@@ -1544,15 +1544,20 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         job = str(record.get("job_id", "-"))
         job_bounds.setdefault(job, []).append(timestamp)
         event = str(record["event_type"])
-        family = event.split("_", 1)[0]
+        image_preparation = event in {
+            "PROJECT_IMAGE_BUILD_STARTED", "PROJECT_IMAGE_BUILD_FAILED", "PROJECT_IMAGE_BUILT",
+            "PROJECT_IMAGE_REUSED", "PROJECT_IMAGE_REPAIR_REUSED"}
+        family = "PROJECT_IMAGE_BUILD" if image_preparation else event.split("_", 1)[0]
         key = (family, job, str(record.get("step_id") or "-"), str(record.get("task_id") or "-"),
                str(record.get("attempt_id") or "-"),
                str(details.get("span_id") or details.get("model_invocation_id")
-                   or details.get("tool_invocation_id") or details.get("invocation_id") or "-"))
+                   or details.get("tool_invocation_id") or details.get("invocation_id")
+                   or (details.get("build_unit_id") if family == "PROJECT_IMAGE_BUILD" else None) or "-"))
         if event.endswith("STARTED"):
             starts.setdefault(key, []).append(timestamp)
-        elif event.endswith(("SUCCEEDED", "FAILED", "COMPLETED", "COMPLETED_WITH_GAPS",
-                             "CANCELED", "CANCELLED", "TIMED_OUT")):
+        elif (event.endswith(("SUCCEEDED", "FAILED", "COMPLETED", "COMPLETED_WITH_GAPS",
+                              "CANCELED", "CANCELLED", "TIMED_OUT"))
+              or image_preparation and event.endswith(("BUILT", "REUSED"))):
             if key in ambiguous_pairs:
                 continue
             pending = starts.get(key, [])
@@ -1594,6 +1599,16 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                 genuinely_running.append(state)
     critical = max(task_intervals, key=lambda item: item[3], default=None)
     return {"schema": RUN_METRICS_SCHEMA, "run_id": Path(run_root).name,
+            "project_image_builds": {
+                "started": event_counts["PROJECT_IMAGE_BUILD_STARTED"],
+                "built": event_counts["PROJECT_IMAGE_BUILT"],
+                "reused": event_counts["PROJECT_IMAGE_REUSED"] + event_counts["PROJECT_IMAGE_REPAIR_REUSED"],
+                "failed": event_counts["PROJECT_IMAGE_BUILD_FAILED"],
+                "failed_by_family": dict(sorted(Counter(
+                    str(record.get("details", {}).get("family", "unknown"))
+                    for record in records if record["event_type"] == "PROJECT_IMAGE_BUILD_FAILED"
+                ).items())),
+            },
             "event_count": len(records), "event_counts": dict(sorted(event_counts.items())),
             "raw_event_count": raw_event_count, "raw_event_counts": dict(sorted(raw_event_counts.items())),
             "duplicate_lifecycle_records": duplicate_lifecycle_records,

@@ -21,7 +21,7 @@ from appsec_review.debug_symbols.contract import (
     SymbolIntegrityError, record_fingerprint, selected_path,
 )
 from appsec_review.debug_symbols.execution import (
-    ContainerExporter, build_image_identity, execution_plan, reader_implementation_identity,
+    ContainerExporter, build_image_identity, execution_plan,
 )
 from appsec_review.jobs.job_artifact_indexing import (
     canonical_artifact_identity, load_accepted_artifact_index,
@@ -41,7 +41,7 @@ from .datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/debug-symbol-indexing/1"
-READER_IDENTITY = "appsec-review/offline-debug-symbol-readers/2"
+READER_IDENTITY = "appsec-review/offline-debug-symbol-readers/3"
 _TOPOLOGY = {"decide": ("target",), "extract": ("clang_dwarf", "msvc_pdb"),
              "acceptance": ("publish_handoff",)}
 _ARTIFACT_KINDS = {EntityKind.EXECUTABLE, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
@@ -91,7 +91,7 @@ def _artifact(unit: UnitContext, name: str, document: Mapping[str, Any]) -> dict
 
 def _reader_identity(extractor) -> str:
     if extractor is None:
-        return _digest({"contract": READER_IDENTITY, "implementation": reader_implementation_identity()})
+        return _digest({"contract": READER_IDENTITY})
     try:
         implementation = inspect.getsource(extractor)
     except (OSError, TypeError):
@@ -190,7 +190,8 @@ def _decision(unit: UnitContext, reader_identity: str, *, production: bool) -> M
     document = {"schema": DECISION_SCHEMA, "compiler_target": target.value,
                 "selected_lane": selected_path(target), "source_fingerprint": unit.job.source_fingerprint,
                 "reader_identity": reader_identity, "settings": settings,
-                "execution": execution_plan(unit.job.repository_root) if production else None, **inputs}
+                "execution": execution_plan(unit.job.repository_root, unit.job.review_policy.releases)
+                if production else None, **inputs}
     document["input_fingerprint"] = _digest(document)
     identity = _artifact(unit, "decision.json", document)
     _emit(unit, "DEBUG_SYMBOL_TARGET_SELECTED", target=target.value, lane=selected_path(target),
@@ -213,7 +214,8 @@ def _read_decision(unit: UnitContext, reader_identity: str) -> dict[str, Any]:
             or decision["selected_lane"] != selected_path(CompilerTarget(settings["compiler_target"]))):
         raise ValueError("debug-symbol decision does not match immutable inputs")
     if (decision.get("execution") is not None
-            and decision["execution"] != execution_plan(unit.job.repository_root)):
+            and decision["execution"] != execution_plan(
+                unit.job.repository_root, unit.job.review_policy.releases)):
         raise FrameworkIntegrityError("debug-symbol execution plan differs from frozen decision")
     return decision
 
@@ -710,7 +712,7 @@ def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
             run_root, document["reader_evidence"], "debug-symbol reader evidence").read_text())
         for item in evidence["artifacts"]:
             for attempt in item.get("reader_executions", ()):
-                for field in ("execution", "output", "diagnostics", "launcher"):
+                for field in ("execution", "output", "diagnostics"):
                     if field in attempt:
                         _verify(run_root, attempt[field], "debug-symbol " + field)
     decision = json.loads(_verify(run_root, document["decision"], "accepted debug-symbol decision").read_text())

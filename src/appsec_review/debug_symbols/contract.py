@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 INDEX_NAME = "debug_symbols"
 JOB_ID = "job_debug_symbol_indexing"
 RECORD_SCHEMA = "appsec-review/debug-symbol-records/1"
-DECISION_SCHEMA = "appsec-review/debug-symbol-decision/1"
+DECISION_SCHEMA = "appsec-review/debug-symbol-decision/2"
 QUERY_TOOL = "query_debug_symbols"
 MAX_LIMIT = 100
 

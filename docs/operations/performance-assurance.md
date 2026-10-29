@@ -195,7 +195,7 @@ Nested launches cannot exceed or outlive the enclosing reservation; concurrent n
 serialize rather than each spending its parent's allocation. Platform-maintenance calls outside
 review contexts are separate operator work and are not a claim of whole-host accounting.
 
-The bounded builder client is selected only by frozen `review_policy.image_builder` configuration,
+The image-builder client is selected only by frozen `review_policy.image_builder` configuration,
 with an explicit operator `project_id`. Without it, a required image miss remains
 `derived_image_preparation_unavailable` before staging or daemon mutation. An eligible declared
 prepared image or valid uncustomized baseline remains usable; a baseline never substitutes for
@@ -207,10 +207,38 @@ operator-private endpoint and authenticated peer UID, a bounded JSON request/res
 and fresh request nonces. Each build binds tenant, project, run, target snapshot, recipe, declared
 builder release, private context and output tag. The service must implement `prepare`, `start`,
 `status`, `cancel` and `cleanup`; each response repeats the binding and stable worker ID/start
-token. Before target staging, `prepare` must report private custody and positive, enforced CPU
+token. In the default `resource_mode = "bounded"`, before target staging, `prepare`
+must report private custody and positive, enforced CPU
 quota/period and memory ceilings for both worker and fixed host overhead. It must not execute
 target instructions until `start`. Image input aliases and output tags are namespace-private;
 the service must not pull images or expose a Docker control socket to target build instructions.
+
+The explicitly approved alternative is `resource_mode = "concurrency_only"` in **both**
+`[review_policy.image_builder]` and `[image_builder_service]`, with `max_concurrency = 1`.
+It removes builder-specific CPU/RAM caps for both worker and host helper groups; it does
+not change scanner, Dagster, native-execution or aggregate host limits. Kernel proof
+requires those builder groups to have `cpu.max = max` and `memory.max = max`, records
+inherited ancestor limits separately, and still proves effective zero swap. Receipts
+declare the mode and null builder CPU/RAM ceilings, never pretend bounded enforcement.
+The client rejects a receipt from the other policy. Deadlines, bounded protocol/output,
+authenticated run grants, durable sole-slot admission, cancellation, independent cleanup,
+private custody and builder/native engine interlock remain unchanged. An uncertain worker
+continues occupying the sole slot across restart.
+
+Concurrency-only build admission reserves the action budget remaining after the persistent
+host reservation, including staging, rather than advertising a small bounded worker.
+These are scheduling reservations, **not usage guarantees or kernel CPU/RAM caps**.
+The persistent lifetime reservation is not dropped or exempted: an eight-CPU CodeQL
+action still cannot coexist with a one-CPU persistent service inside an eight-CPU
+action budget. Retire that independently verified lifetime before such actions, or
+obtain an explicitly approved satisfiable lifecycle arrangement; raising budgets or
+silently freeing reservations is not a remedy.
+
+**TODO (deferred, not verified):** measure workloads and tune per-build CPU/RAM caps.
+One unbounded build can exhaust available memory or contend with services; concurrency
+one alone is not protection against OOM. Host ceilings are inherited ceilings, not
+proof that a builder has unlimited host capacity. This policy does not itself commission
+an engine, BuildKit image, Skopeo, private service/grants or isolated package egress.
 
 The shared host ledger reserves worker plus host CPU/RAM and staging memory before preparation,
 tracks build intent before contacting the service, and limits aggregate concurrent builds.
@@ -236,6 +264,7 @@ project_id = "operator-project"
 endpoint = "/run/user/1000/appsec-builder/control.sock"
 tenant_id = "operator-tenant"
 release_id = "commissioned-builder-release"
+resource_mode = "bounded"
 cpu = 1
 host_cpu = 1
 memory_mb = 4096
@@ -271,7 +300,8 @@ verified end of the reserved daemon/service work; stopping only the client or se
 not sufficient. The operator helper preserves the non-root ledger ownership rather than replacing
 it with root-owned files.
 
-The persistent reservation is one CPU and 512 MiB, even while idle. Active clients conservatively
+The persistent reservation is one CPU and 512 MiB, even while idle. In bounded mode,
+active clients conservatively
 retain their existing worker-plus-host reservation as well: an ordinary build therefore reserves
 three CPUs and 5,632 MiB in total including staging, although its worker/host execution caps remain
 one CPU/4,096 MiB and one CPU/512 MiB. This deliberate extra reservation reduces available
@@ -285,8 +315,9 @@ Dockerfile frontend. Package-network recipes additionally require an operator-pr
 isolated egress proxy/network; they cannot gain Docker control access. Unsupported or ambiguous
 recipe syntax fails explicitly, never by substituting a base image.
 
-This initial driver requires native, verifiable Linux daemon/process/cgroup topology, a sandboxed
-rootless BuildKit worker and independently capped host overhead. Translated Docker Desktop
+This driver requires native, verifiable Linux daemon/process/cgroup topology, a sandboxed
+rootless BuildKit worker and independently capped host overhead in bounded mode
+(explicit uncapped-group proof in concurrency-only mode). Translated Docker Desktop
 context mappings are rejected. Existing Docker availability or CPU affinity does not satisfy
 these prerequisites. Operator config, socket parents and journals require private custody.
 Client and service must share the exact mount, PID and user namespaces, and authorized

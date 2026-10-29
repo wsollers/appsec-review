@@ -8,7 +8,7 @@ from pathlib import Path
 import traceback
 import time
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, TypeVar
 
 from appsec_review.config import AppConfig
 from appsec_review.config.assurance import AssuranceMode
@@ -44,6 +44,9 @@ def _accepted_retrieval_manifest(run_root: Path, manifests: list[Mapping[str, An
         if document.get("schema") == RETRIEVAL_MANIFEST_SCHEMA:
             selected = manifest, manifest_path
     return selected
+
+
+_T = TypeVar("_T")
 
 
 class JobRunner:
@@ -84,6 +87,7 @@ class JobRunner:
         atomic_bytes(destination / "resolved.json", self.config.resolved_json)
         atomic_json(manifest_path, {
             "schema": "appsec-review/run-configuration/2",
+            "failure_finalization": "appsec-review/split-failure-finalization/1",
             "source_sha256": self.config.source_sha256,
             "resolved_sha256": self.config.resolved_sha256,
             "sources": [dict(layer) for layer in self.config.layers],
@@ -358,13 +362,12 @@ class JobRunner:
         raise KeyError(f"unknown job unit: {job.job_id}.{unit_id}")
 
     @staticmethod
-    def _with_lock(path: Path, operation) -> None:
+    def _with_lock(path: Path, operation: Callable[[], _T]) -> _T:
         deadline = time.monotonic() + 30
         while True:
             try:
                 with FileLock(path):
-                    operation()
-                return
+                    return operation()
             except LockUnavailable:
                 if time.monotonic() >= deadline:
                     raise
@@ -419,6 +422,16 @@ class JobRunner:
         self._with_lock(step_root / "lifecycle.lock", write)
 
     def execute_or_reuse_unit(self, job: Job, claim: Mapping[str, Any], unit_id: str) -> Mapping[str, Any]:
+        try:
+            return self._execute_or_reuse_unit(job, claim, unit_id)
+        except BaseException as exc:
+            try:
+                self.fail_attempt(job, claim, exc)
+            except Exception as finalization_error:
+                exc.add_note(f"failure finalization unavailable: {type(finalization_error).__name__}: {finalization_error}")
+            raise
+
+    def _execute_or_reuse_unit(self, job: Job, claim: Mapping[str, Any], unit_id: str) -> Mapping[str, Any]:
         context = self._context_from_claim(job, claim)
         if claim.get("reused"):
             result = json.loads((context.attempt_root / "result.json").read_text(encoding="utf-8"))
@@ -525,11 +538,49 @@ class JobRunner:
                                       "error": {"type": type(exc).__name__, "message": str(exc)}})
             context.events.write("TASK_FAILED", unit_id=unit_id, error_type=type(exc).__name__,
                                  duration_ms=duration)
-            if safety.active():
+            try:
+                self._fail_step(context, step_id, exc)
                 self._fail_attempt(context, claim, exc)
+            except Exception as finalization_error:
+                exc.add_note(f"failure finalization unavailable: {type(finalization_error).__name__}: {finalization_error}")
             raise
 
+    def _fail_step(self, context: JobContext, step_id: str, exc: BaseException) -> None:
+        root = context.attempt_root / "steps" / step_id
+        marker = root / "lifecycle.json"
+        def write() -> None:
+            current = json.loads(marker.read_bytes()) if marker.exists() else {}
+            if current.get("status") != "FAILED":
+                completed = datetime.now(timezone.utc).isoformat()
+                duration = max(0, int((datetime.fromisoformat(completed) -
+                    datetime.fromisoformat(current.get("started_at", completed))).total_seconds() * 1000))
+                current = {**current, "step_id": step_id, "status": "FAILED",
+                           "completed_at": completed, "duration_ms": duration,
+                           "error": {"type": type(exc).__name__, "message": str(exc)}}
+                atomic_json(marker, current)
+            if not self._failure_event_exists(context, "STEP_FAILED", step_id=step_id):
+                context.events.write("STEP_FAILED", unit_id=f"{step_id}.-", step_id=step_id,
+                                     error_type=current["error"]["type"], duration_ms=current["duration_ms"])
+        self._with_lock(root / "lifecycle.lock", write)
+
+    @staticmethod
+    def _failure_event_exists(context: JobContext, event: str, *, step_id: str | None = None) -> bool:
+        records, _ = PipelineLog(context.run_root).read()
+        return any(record["event_type"] == event and record["job_id"] == context.config.job_id
+                   and record["attempt_id"] == context.attempt_id
+                   and (step_id is None or record.get("step_id") == step_id) for record in records)
+
     def _fail_attempt(self, context: JobContext, claim: Mapping[str, Any], exc: BaseException) -> None:
+        def write() -> None:
+            marker = context.attempt_root / "failure-finalized.json"
+            if marker.exists():
+                return
+            self._write_failed_attempt(context, claim, exc)
+            atomic_json(marker, {"schema": "appsec-review/failed-attempt-finalization/1",
+                                 "status": "FAILED"})
+        self._with_lock(context.attempt_root / "failure.lock", write)
+
+    def _write_failed_attempt(self, context: JobContext, claim: Mapping[str, Any], exc: BaseException) -> None:
         failed = datetime.now(timezone.utc).isoformat()
         status = {"job_id": context.config.job_id, "run_id": context.run_id,
                   "attempt_id": context.attempt_id, "trigger": context.trigger,
@@ -538,11 +589,19 @@ class JobRunner:
                   "duration_ms": max(0, int((datetime.fromisoformat(failed) -
                       datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000)),
                   "error": {"type": type(exc).__name__, "message": str(exc)}}
-        atomic_json(context.attempt_root / "status.json", status)
-        (context.attempt_root / "logs" / "traceback.txt").parent.mkdir(parents=True, exist_ok=True)
-        (context.attempt_root / "logs" / "traceback.txt").write_text("".join(traceback.format_exception(exc)), encoding="utf-8")
-        context.events.write("JOB_FAILED", job_id=context.config.job_id, run_id=context.run_id,
-                             attempt_id=context.attempt_id, error_type=type(exc).__name__)
+        status_path = context.attempt_root / "status.json"
+        current = json.loads(status_path.read_bytes()) if status_path.exists() else {}
+        if current.get("status") != "FAILED":
+            atomic_json(status_path, status)
+        else:
+            status = current
+        trace = context.attempt_root / "logs" / "traceback.txt"
+        trace.parent.mkdir(parents=True, exist_ok=True)
+        if not trace.exists():
+            trace.write_text("".join(traceback.format_exception(exc)), encoding="utf-8")
+        if not self._failure_event_exists(context, "JOB_FAILED"):
+            context.events.write("JOB_FAILED", job_id=context.config.job_id, run_id=context.run_id,
+                                 attempt_id=context.attempt_id, error_type=status["error"]["type"])
         self._publish_rejection(context, claim, exc)
         write_run_metrics(context.run_root)
 
@@ -612,7 +671,9 @@ class JobRunner:
         handoff, handoff_ref, unit_count = None, None, 0
         try:
             root = context.run_root
-            outcomes = build_outcomes(
+            saved_outcomes = context.attempt_root / "rejected-outcomes.json"
+            saved_handoff = context.attempt_root / "rejected-handoff.json"
+            outcomes = json.loads(saved_outcomes.read_bytes()) if saved_outcomes.exists() else build_outcomes(
                 root, run_id=context.run_id, job_id=context.config.job_id, attempt_id=context.attempt_id,
                 target_snapshot=claim.get("evidence_target_snapshot", context.source_fingerprint),
                 unit_ids=claim["unit_ids"], diagnostic=True)
@@ -621,9 +682,10 @@ class JobRunner:
                                           + "/rejected-outcomes.json", canonical_json(outcomes))
             artifacts = collect_artifacts(
                 root, reference(root, context.attempt_root / "claim.json"), outcomes_ref, outcomes)
-            handoff = self._handoff_document(
+            handoff = json.loads(saved_handoff.read_bytes()) if saved_handoff.exists() else self._handoff_document(
                 context, claim, {}, outcomes, outcomes_ref, accepted=False,
-                completed=datetime.now(timezone.utc).isoformat(), artifacts=artifacts)
+                completed=json.loads((context.attempt_root / "status.json").read_bytes())["completed_at"],
+                artifacts=artifacts)
             from appsec_review.runtime.handoff import verify_handoff_integrity
             verify_handoff_integrity(root, handoff, accepted_only=False)
             handoff_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()
@@ -632,8 +694,9 @@ class JobRunner:
             original.add_note(f"rejected handoff unavailable: {type(diagnostic_error).__name__}")
             handoff = None
         try:
-            self._handoff_event(context, "HANDOFF_REJECTED", handoff, handoff_ref,
-                                max(0, int((time.monotonic() - started) * 1000)), unit_count)
+            if not self._failure_event_exists(context, "HANDOFF_REJECTED"):
+                self._handoff_event(context, "HANDOFF_REJECTED", handoff, handoff_ref,
+                                    max(0, int((time.monotonic() - started) * 1000)), unit_count)
         except Exception as event_error:
             original.add_note(f"handoff rejection telemetry unavailable: {type(event_error).__name__}")
 
@@ -644,6 +707,8 @@ class JobRunner:
 
     def finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
         context = self._context_from_claim(job, claim)
+        if json.loads((context.attempt_root / "status.json").read_bytes()).get("status") == "FAILED":
+            raise ValueError("failed attempt cannot publish an accepted handoff")
         if not claim.get("reused"):
             latest = safe_path(context.run_root, f"data/jobs/{job.job_id}/latest.json")
             if latest.is_file():
@@ -698,8 +763,12 @@ class JobRunner:
 
     def _publish_attempt(self, job: Job, context: JobContext, claim: Mapping[str, Any],
                          result: Mapping[str, Any]) -> Mapping[str, Any]:
-        with publication_scope(context), operation_span(context.events, "publication.handoff"):
-            return self._publish_attempt_scoped(job, context, claim, result)
+        def publish() -> Mapping[str, Any]:
+            if json.loads((context.attempt_root / "status.json").read_bytes()).get("status") == "FAILED":
+                raise ValueError("failed attempt cannot publish an accepted handoff")
+            with publication_scope(context), operation_span(context.events, "publication.handoff"):
+                return self._publish_attempt_scoped(job, context, claim, result)
+        return self._with_lock(context.attempt_root / "failure.lock", publish)
 
     def _publish_attempt_scoped(self, job: Job, context: JobContext, claim: Mapping[str, Any],
                                result: Mapping[str, Any]) -> Mapping[str, Any]:

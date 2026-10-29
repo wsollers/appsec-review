@@ -12,7 +12,9 @@ from dagster import (
     RunsFilter, SkipReason, job, op, run_status_sensor, sensor,
 )
 
-from appsec_review.storage import atomic_bytes
+from appsec_review.observability import PipelineLog, write_run_metrics
+from appsec_review.storage import FileLock, atomic_bytes, atomic_json
+from appsec_review.storage.shared import safe_path
 
 WAVE_JOB = "wave1_review"
 STEP_FAILURE_SENSOR = "wave1_step_failure_state"
@@ -58,8 +60,51 @@ def record_error_state(instance, source_run_id: str, runs_dir: Path) -> Path:
     if not events:
         lines.append("event=UNAVAILABLE step=- message=Dagster recorded no failure event")
     path = runs_dir / "metadata" / "dagster-error-state" / f"{source_run_id}.log"
-    atomic_bytes(path, ("\n".join(lines) + "\n").encode("utf-8"))
+    if not path.exists():
+        atomic_bytes(path, ("\n".join(lines) + "\n").encode("utf-8"))
+    _finalize_failed_run(source, runs_dir, path)
     return path
+
+
+def _finalize_failed_run(source, runs_dir: Path, error_path: Path) -> None:
+    application_id = source.tags.get("appsec/application_run_id")
+    if application_id is None:
+        return
+    root = safe_path(runs_dir, application_id)
+    manifest_path = root / "data/configuration/manifest.json"
+    if not manifest_path.is_file():
+        return
+    manifest = json.loads(manifest_path.read_bytes())
+    # Never backfill or mutate historical runs created before this lifecycle contract.
+    if manifest.get("failure_finalization") != "appsec-review/split-failure-finalization/1":
+        return
+    receipt = safe_path(root, f"data/orchestration/dagster/{source.run_id}.json")
+    with FileLock(receipt.with_suffix(".lock")):
+        if receipt.exists():
+            prior = json.loads(receipt.read_bytes())
+            if prior["status"] != source.status.value:
+                raise ValueError("terminal Dagster receipt conflicts with authoritative run status")
+            write_run_metrics(root)
+            return
+        log = PipelineLog(root)
+        details = {"dagster_run_id": source.run_id, "completion_status": source.status.value,
+                   "error_state_file": str(error_path)}
+        trigger = source.tags.get("appsec/trigger", "manual")
+        records, _ = log.read()
+        for event in ("GRAPH_FAILED" if source.status is DagsterRunStatus.FAILURE else "GRAPH_CANCELED",
+                      "RUN_COMPLETED"):
+            if not any(record["event_type"] == event and record.get("details", {}).get(
+                    "dagster_run_id") == source.run_id for record in records):
+                log.write(event, run_id=application_id, trigger=trigger,
+                          orchestrator="dagster", details=details)
+        atomic_json(receipt, {
+            "schema": "appsec-review/orchestration-receipt/1",
+            "status": source.status.value, "completion_status": source.status.value,
+            "application_run_id": application_id,
+            "orchestrator": {"system": "dagster", "run_id": source.run_id},
+            "error_state_file": str(error_path),
+        })
+        write_run_metrics(root)
 
 
 def step_failure_path(runs_dir: Path, dagster_run_id: str, step_key: str, attempt: int) -> Path:

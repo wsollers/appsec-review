@@ -128,10 +128,20 @@ unrelated query declarations do not. Supplied generator/Dockerfile payloads are 
 `dockerfile_sha256` remains null, and the owner must update the relevant release declaration when
 the generator or build environment changes. Missing declarations disable image reuse.
 Under review admission, creation of an unavailable derived image is a named
-`derived_image_preparation_unavailable` gap until the operator supplies a resource-bounded
-builder with confirmed cancellation. No such builder contract is currently approved. This does
+`derived_image_preparation_unavailable` gap until the operator supplies an authenticated
+builder with an explicit execution policy and confirmed cancellation/cleanup. The default
+`bounded` policy retains CPU/RAM enforcement. The opt-in `concurrency_only` policy allows
+exactly one image build, without builder-specific CPU/RAM caps, while retaining deadlines,
+zero swap, private custody, provenance, independent cleanup and durable engine exclusivity.
+Client and service must both declare that policy; approval does not provision its host assets.
+See [builder commissioning and policy semantics](performance-assurance.md).
+This does
 not silently substitute the baseline image when the recipe requires dependency preparation.
 Eligible declared prepared images remain usable; platform image preparation is separate work.
+
+**TODO (deferred, not verified):** tune per-build CPU/RAM limits using measured build workloads.
+Concurrency one bounds build count, not memory consumption or host contention; inherited
+host ceilings remain effective and must be reported truthfully.
 
 A repaired image that passes is accepted in
 `runs/metadata/project-build-repairs/<run-scoped-identity>/accepted.json`

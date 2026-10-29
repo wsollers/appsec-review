@@ -47,9 +47,13 @@ def _ref(root, path):
 
 
 def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=False,
-          binary_bytes=None, debug_bytes=None, source_path="src/main.cc", run_name="run"):
+          binary_bytes=None, debug_bytes=None, source_path="src/main.cc", run_name="run",
+          configuration=None):
     root = tmp_path / run_name
     root.mkdir()
+    if configuration is not None:
+        from appsec_review.runtime import JobRunner
+        JobRunner(configuration)._bind_configuration(root)
     artifacts = []
     for name, kind, content in [
         ("bin/private-program", "executable", binary_bytes if binary_bytes is not None else

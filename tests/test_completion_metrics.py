@@ -9,6 +9,49 @@ from appsec_review.observability import PipelineLog, aggregate_run_metrics, writ
 from appsec_review.observability.completion import completion_metrics
 
 
+def test_nested_image_builds_are_paired_by_build_unit_without_failing_tasks(tmp_path):
+    log = PipelineLog(tmp_path)
+    families = ["node"] * 12 + ["rust"] * 3 + ["java"] * 2 + ["dotnet", "python"]
+    for number in range(55):
+        details = {"build_unit_id": f"unit-{number}",
+                   "family": families[number] if number < 19 else "native"}
+        log.write("PROJECT_IMAGE_BUILD_STARTED", run_id=tmp_path.name,
+                  job_id="job_project_build", attempt_id="attempt_0001", details=details)
+    for number in reversed(range(55)):
+        details = {"build_unit_id": f"unit-{number}",
+                   "family": families[number] if number < 19 else "native"}
+        log.write("PROJECT_IMAGE_BUILD_FAILED" if number < 19 else "PROJECT_IMAGE_BUILT",
+                  run_id=tmp_path.name, job_id="job_project_build",
+                  attempt_id="attempt_0001", details=details)
+    report = aggregate_run_metrics(tmp_path)
+    assert report["event_counts"]["PROJECT_IMAGE_BUILD_FAILED"] == 19
+    assert report["event_counts"]["PROJECT_IMAGE_BUILT"] == 36
+    assert report["project_image_builds"] == {
+        "started": 55, "built": 36, "reused": 0, "failed": 19,
+        "failed_by_family": {"node": 12, "rust": 3, "java": 2, "dotnet": 1, "python": 1}}
+    assert not report["event_counts"].get("TASK_FAILED", 0)
+    assert report["genuinely_running"] == []
+
+
+def test_image_reuse_closes_preparation_but_unrelated_repair_failure_does_not(tmp_path):
+    log = PipelineLog(tmp_path)
+    for event, build_unit in (
+        ("PROJECT_IMAGE_BUILD_STARTED", "one"),
+        ("PROJECT_IMAGE_BUILD_STARTED", "two"),
+        ("PROJECT_IMAGE_REPAIR_FAILED", "one"),
+        ("PROJECT_IMAGE_REPAIR_REUSED", "two"),
+    ):
+        log.write(event, run_id=tmp_path.name, job_id="job_project_build", attempt_id="attempt_0001",
+                  details={"build_unit_id": build_unit})
+    report = aggregate_run_metrics(tmp_path)
+    assert len(report["genuinely_running"]) == 1
+    log.write("PROJECT_IMAGE_REUSED", run_id=tmp_path.name, job_id="job_project_build",
+              attempt_id="attempt_0001", details={"build_unit_id": "one"})
+    report = aggregate_run_metrics(tmp_path)
+    assert report["genuinely_running"] == []
+    assert report["project_image_builds"] == {
+        "started": 2, "built": 0, "reused": 2, "failed": 0, "failed_by_family": {}}
+
 def test_completion_metrics_track_stages_retries_outcomes_and_latency_without_content(tmp_path: Path) -> None:
     log = PipelineLog(tmp_path)
     secret = "protected source patch PoC or prompt content"

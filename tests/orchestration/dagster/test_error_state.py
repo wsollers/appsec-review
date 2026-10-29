@@ -8,7 +8,7 @@ import dagster
 import pytest
 
 from appsec_review.orchestration.dagster.error_state import (
-    STEP_FAILURE_SENSOR, build_error_state_definitions, record_step_failures, step_failure_path,
+    STEP_FAILURE_SENSOR, build_error_state_definitions, record_error_state, record_step_failures, step_failure_path,
 )
 
 
@@ -81,6 +81,25 @@ def test_step_failures_are_idempotent_across_cursor_loss(instance, tmp_path: Pat
     assert sorted(again) == sorted(written)
     assert {path: path.stat().st_mtime_ns for path in again} == before
     assert "application_run_id=unallocated" in written[0].read_text(encoding="utf-8")
+
+
+def test_legacy_terminal_run_is_not_backfilled_or_rewritten(instance, tmp_path: Path) -> None:
+    application_id = "2026-10-27-0001"
+    run_id = _failed_run(instance, wave_job, {"appsec/application_run_id": application_id})
+    root = tmp_path / application_id
+    manifest = root / "data/configuration/manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text('{"schema":"appsec-review/run-configuration/2"}\n')
+    error = tmp_path / "metadata/dagster-error-state" / f"{run_id}.log"
+    error.parent.mkdir(parents=True)
+    error.write_text("immutable historical error\n")
+    before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (manifest, error)}
+    assert record_error_state(instance, run_id, tmp_path) == error
+    assert record_error_state(instance, run_id, tmp_path) == error
+    assert before == {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (manifest, error)}
+    assert not (root / "data/orchestration").exists()
+    assert not (root / "data/logs").exists()
+    assert not (root / "data/telemetry").exists()
 
 
 def test_step_failure_sensor_ignores_inactive_and_other_runs(instance, tmp_path: Path) -> None:

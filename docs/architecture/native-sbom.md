@@ -110,6 +110,15 @@ handoff and its publication membership, verify source fingerprint and reference 
 then verify the nested referenced artifact before use. Do not trust a `latest.json` path by
 itself, arbitrary JSON embedded in a receipt, or an adjacent unaccepted file.
 
+The evidence-collection producer explicitly returns each verified original scanner
+`raw_artifacts` reference to common handoff publication, including the source Syft
+document named by its envelope. The consumer requires exact original path, SHA-256
+and size membership, plus matching run and snapshot. An envelope reference alone,
+or identical bytes at a different shared-store path, is not that membership.
+Scanner checkpoint identity includes `explicit-raw-artifacts/1`, so older
+checkpoints cannot silently reuse the incomplete publication contract. Shared
+retention/provenance checks remain additional requirements, not substitutes.
+
 Source inputs always come from catalog-listed files. Workspace inputs always come from an
 accepted workspace manifest and are hash-checked before copying selected bytes to a run-owned
 content object. Command evidence references the accepted protected-command artifact and row

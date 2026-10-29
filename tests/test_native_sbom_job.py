@@ -36,11 +36,13 @@ def _write(root: Path, name: str, document: dict) -> dict:
     return reference(root, path)
 
 
-def _framework(root: Path, job: str, outputs: dict, artifacts: list[dict]) -> dict:
-    path = root / "data" / "native-sbom-fixtures" / (job + ".json")
+def _framework(root: Path, job: str, outputs: dict, artifacts: list[dict], *,
+               snapshot: str = SNAPSHOT, canonical: bool = False) -> dict:
+    path = (root / "data/jobs" / job / "attempts/attempt_0001/handoff.json" if canonical else
+            root / "data" / "native-sbom-fixtures" / (job + ".json"))
     write_fixture_handoff(root, path, {
         "status": "ACCEPTED", "job_id": job,
-        "run_id": RUN_ID, "attempt_id": "attempt_0001", "source_fingerprint": SNAPSHOT,
+        "run_id": root.name, "attempt_id": "attempt_0001", "source_fingerprint": snapshot,
         "started_at": CREATED, "outputs": outputs, "artifacts": artifacts,
     })
     identity = reference(root, path)
@@ -49,20 +51,21 @@ def _framework(root: Path, job: str, outputs: dict, artifacts: list[dict]) -> di
     return identity
 
 
-def _manifest(root: Path, target: Path, name: str, *, observation: dict | None = None) -> tuple[dict, list[dict]]:
+def _manifest(root: Path, target: Path, name: str, *, observation: dict | None = None,
+              snapshot: str = SNAPSHOT) -> tuple[dict, list[dict]]:
     from dataclasses import asdict
     from appsec_review.retrieval import EntityRecord, LogicalIdentity
     path = root / "data" / "indices" / f"{name}.sqlite"
     builder = IndexBuilder(path, name="observations" if name == "observations" else "artifacts",
-                           fingerprint="a" * 64, target_snapshot=SNAPSHOT, shard_id=name)
+                           fingerprint="a" * 64, target_snapshot=snapshot, shard_id=name)
     if observation:
-        identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, SNAPSHOT, {"name": name})
+        identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {"name": name})
         builder.add_entity(EntityRecord(identity, "syft-1", "package", "zlib", observation))
     digest = builder.build()
     index = IndexIdentity(builder.name, "appsec-review/retrieval-index/2", digest, "a" * 64,
                           path.relative_to(root).as_posix(), {"producer": "tool-syft"}, (), name)
     manifest_path = root / "data" / "indices" / f"{name}-manifest.json"
-    write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target,
+    write_manifest(manifest_path, run_id=root.name, target_snapshot=snapshot, target_root=target,
                    indexes=(index,))
     return reference(root, manifest_path), [reference(root, path), reference(root, manifest_path)]
 
@@ -165,6 +168,106 @@ def test_accepts_buildless_catalog_and_bound_source_inventory(tmp_path: Path) ->
     assert loaded["source_syft"]["path"].endswith("syft.json")
     assert loaded["native_created"] == CREATED
     assert loaded["packages"][0]["version"] == "1.3.1"
+
+
+def _real_syft_publication(tmp_path):
+    from appsec_review.jobs.cataloging import source_fingerprint
+    from appsec_review.jobs.job_evidence_collection import build_job as evidence_job
+    from appsec_review.jobs.job_evidence_collection.job import _assemble_manifest
+    from appsec_review.runtime import Unit
+    from tests.test_evidence_collection_job import FakeExecutor
+    from tests.test_target_analysis_plan import _fixture, _run
+
+    config, target = _fixture(tmp_path, {
+        "third_party/zlib/zlib.h": '#define ZLIB_VERSION "1.3.1"\n',
+        "third_party/zlib/README": "Package: zlib\nVersion: 1.3.1\n",
+    })
+    config = replace(config, runtime=replace(config.runtime, repository_root=ROOT))
+    base, _ = _run(config, target)
+    root = config.runtime.runs_dir / base["run_id"]
+    snapshot = source_fingerprint(target)
+    language = _write(root, "language.json", {
+        "schema": "appsec-review/language-build-handoff/1", "source_fingerprint": snapshot,
+        "receipts": [], "gaps": []})
+    language_handoff = _framework(root, "job_language_build",
+        {"acceptance.publish_handoff": {"artifact": language}}, [language], snapshot=snapshot,
+        canonical=True)
+    manifest, members = _manifest(root, target, "artifact", snapshot=snapshot)
+    artifact = _write(root, "artifact-index.json", {
+        "schema": "appsec-review/artifact-indexing/1", "source_fingerprint": snapshot,
+        "target_artifacts": [], "gaps": [], "index_manifest": manifest})
+    artifact_handoff = _framework(root, "job_artifact_indexing",
+        {"acceptance.publish_handoff": {"artifact": artifact, "index_manifest": manifest}},
+        [artifact, *members], snapshot=snapshot, canonical=True)
+    calls = []
+    class SyftExecutor(FakeExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            atomic_json(request.scratch_root / "output.json", {
+                "artifacts": [], "artifactRelationships": [],
+                "descriptor": {"name": "syft", "version": "1.52.0"},
+                "source": {"id": "fixture", "type": "directory", "metadata": {"path": "/target"}},
+                "schema": {"version": "16.1.10"},
+            })
+            return result
+    job = evidence_job(executor_factory=lambda unit: SyftExecutor(ROOT, root, calls))
+    units = tuple(unit for unit in job.units if unit.unit_id.startswith("software_inventory."))
+    assembly = Unit("evidence_publication.assemble_manifest",
+                    lambda unit: _assemble_manifest(unit, ("software_inventory.syft_index",)),
+                    ("software_inventory.syft_index",))
+    publish = next(unit for unit in job.units if unit.unit_id == "evidence_publication.publish_handoff")
+    job = replace(job, units=(*units, assembly, publish), datasets=())
+    upstream = {job_id: outcome["handoff_sha256"] for job_id, outcome in base["jobs"].items()}
+    upstream.update(job_language_build=language_handoff["sha256"],
+                    job_artifact_indexing=artifact_handoff["sha256"])
+    result = JobRunner(config).run(job, run_id=root.name, target_root=target,
+                                   source_fingerprint=snapshot, upstream_handoffs=upstream)
+    assert calls == ["tool-syft"]
+    raw = result["result"]["outputs"]["software_inventory.syft_scan"]["raw_artifacts"]
+    source = next(ref for ref in raw if ref["path"].endswith("/output.json"))
+    assert source in result["handoff"]["artifacts"]
+    return config, root, target, snapshot, source, result
+
+
+@pytest.mark.parametrize("damage", [
+    None, "unbound", "tampered", "foreign-run", "foreign-snapshot", "wrong-size", "wrong-path",
+])
+def test_real_syft_producer_common_publication_and_native_consumer(tmp_path, damage):
+    from appsec_review.storage.shared import put_bytes
+
+    config, root, target, snapshot, source, produced = _real_syft_publication(tmp_path)
+    path = Path(produced["attempt_root"]) / "handoff.json"
+    handoff = json.loads(path.read_bytes())
+    if damage in {"unbound", "wrong-path"}:
+        handoff["artifacts"] = [ref for ref in handoff["artifacts"] if ref["path"] != source["path"]]
+        # Equal bytes retained elsewhere never authorize the missing original path.
+        shared = put_bytes(root, (root / source["path"]).read_bytes())
+        assert shared["sha256"] == source["sha256"] and shared["path"] != source["path"]
+        if shared not in handoff["artifacts"]:
+            handoff["artifacts"].append(shared)
+    elif damage == "tampered":
+        (root / source["path"]).write_bytes(b"tampered")
+    elif damage == "foreign-run":
+        handoff["run_id"] = "2026-10-28-9999"
+    elif damage == "foreign-snapshot":
+        handoff["target_snapshot"] = "0" * 64
+    elif damage == "wrong-size":
+        next(ref for ref in handoff["artifacts"] if ref["path"] == source["path"])["size_bytes"] += 1
+    if damage not in {None, "tampered"}:
+        atomic_json(path, handoff)
+        atomic_json(root / "data/jobs/job_evidence_collection/latest.json", {
+            "handoff_path": path.relative_to(root).as_posix(), "handoff_sha256": file_sha256(path)})
+    runner, job = JobRunner(config), build_job()
+    claim = runner.begin_attempt(job, run_id=root.name, target_root=target, source_fingerprint=snapshot)
+    if damage is None:
+        loaded = runner.execute_or_reuse_unit(job, claim, "inputs.load_accepted")
+        assert loaded["source_syft"] == source
+        assert loaded["native_files"]
+    else:
+        with pytest.raises((NativeInputIntegrityError, ValueError)):
+            runner.execute_or_reuse_unit(job, claim, "inputs.load_accepted")
+        assert json.loads((root / claim["attempt_path"] / "status.json").read_bytes())["status"] == "FAILED"
+        assert not (root / "data/jobs/job_dependency_intelligence/latest.json").exists()
 
 
 def test_catalog_membership_is_required_for_native_inputs(tmp_path: Path) -> None:

@@ -67,6 +67,79 @@ def test_failed_terminal_never_publishes_success_or_final_metrics(tmp_path, monk
     _execute_terminal_fixture(tmp_path, monkeypatch, failed_job="job_export")
 
 
+def test_real_split_failure_records_live_step_then_terminal_run_once(tmp_path):
+    import dagster
+    from appsec_review.runtime import JobRunner
+    from appsec_review.orchestration.dagster.error_state import record_error_state, record_step_failures
+    from appsec_review.storage import file_sha256
+
+    source = '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n' + build_capture_toml()
+    source += '\n[jobs.job_fixture]\nname = "fixture"\nworkers = 1\n'
+    for step, task in (("first", "fail"), ("second", "observe"), ("publish", "export")):
+        source += (f"\n[jobs.job_fixture.steps.{step}]\nworkers = 1\n"
+                   f"[jobs.job_fixture.steps.{step}.tasks.{task}]\nworkers = 1\n")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text(source)
+    config = load_config(config_path)
+    platform = tmp_path / "containers/tool.toml"
+    platform.parent.mkdir()
+    platform.write_text("supplied platform, not customer evidence")
+    runner = JobRunner(config)
+    accepted = runner.run(Job("job_fixture", "fixture", lambda _: {},
+                             units=(Unit("first.fail", lambda _: {}),)))
+    root = config.runtime.runs_dir / accepted["status"]["run_id"]
+    pointer = root / "data/jobs/job_fixture/latest.json"
+    before = pointer.read_bytes()
+    observed = []
+
+    def fail(unit):
+        file_sha256(platform)
+        pytest.fail("strict scope accepted platform payload")
+
+    with dagster.instance_for_test() as instance:
+        def observe(unit):
+            run_id = unit.job.orchestration["run_id"]
+            assert instance.get_run_by_id(run_id).status == dagster.DagsterRunStatus.STARTED
+            paths, _ = record_step_failures(instance, config.runtime.runs_dir, None)
+            assert len(paths) == 1
+            assert not (config.runtime.runs_dir / "metadata/dagster-error-state" / f"{run_id}.log").exists()
+            assert not (root / f"data/orchestration/dagster/{run_id}.json").exists()
+            observed.extend(paths)
+            return {"terminal_status": "SUCCEEDED"}
+
+        def forbidden(unit):
+            pytest.fail("publication ran after a failed prerequisite")
+
+        units = (Unit("first.fail", fail), Unit("second.observe", observe),
+                 Unit("publish.export", forbidden, ("first.fail",)))
+        job = Job("job_fixture", "fixture", lambda _: {}, units=units)
+        graph = adapter._build_dagster_graph("wave1_review", (job,), config, JobRunner)
+        result = graph.execute_in_process(instance=instance, raise_on_error=False,
+            tags={"appsec/application_run_id": root.name})
+        assert not result.success and len(observed) == 1
+        terminal = record_error_state(instance, result.run_id, config.runtime.runs_dir)
+        receipt = root / f"data/orchestration/dagster/{result.run_id}.json"
+        assert json.loads(receipt.read_bytes())["status"] == "FAILURE"
+        attempt = root / "data/jobs/job_fixture/attempts/attempt_0002"
+        assert json.loads((attempt / "status.json").read_bytes())["status"] == "FAILED"
+        assert json.loads((attempt / "steps/first/lifecycle.json").read_bytes())["status"] == "FAILED"
+        assert json.loads((attempt / "steps/second/lifecycle.json").read_bytes())["status"] == "SUCCEEDED"
+        assert not (attempt / "steps/publish").exists()
+        assert pointer.read_bytes() == before
+        assert (attempt / "rejected-handoff.json").is_file()
+        retained = {path: (path.read_bytes(), path.stat().st_mtime_ns)
+                    for path in (*observed, terminal, receipt)}
+        record_step_failures(instance, config.runtime.runs_dir, json.dumps({result.run_id: None}))
+        record_error_state(instance, result.run_id, config.runtime.runs_dir)
+        assert retained == {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in retained}
+        records, _ = PipelineLog(root).read()
+        current = [event for event in records
+                   if event.get("details", {}).get("dagster_run_id") == result.run_id]
+        assert sum(event["event_type"] == "GRAPH_FAILED" for event in current) == 1
+        assert sum(event["event_type"] == "RUN_COMPLETED" for event in current) == 1
+        assert not any(event["event_type"] == "GRAPH_SUCCEEDED" for event in current)
+
+
 def _execute_terminal_fixture(tmp_path, monkeypatch, *, gap_job=None, export_enabled=True, failed_job=None):
     job_ids = ("job_gate", "job_report", "job_export") if export_enabled else ("job_gate", "job_report")
     source = '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n' + build_capture_toml()

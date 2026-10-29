@@ -73,8 +73,11 @@ land beside it, as they do for `AcceptanceTest`.
   Claim-time input validators run there.
 - `complete` runs every unit through `execute_or_reuse_unit` in dependency order and finalizes
   with `finalize_attempt`, where output validators run. As in Dagster, a failed unit does not
-  stop independent units; its dependents are skipped, the job is not finalized, and the attempt
-  is marked FAILED with a `job reported partial failure: <units>` error.
+  stop independent units; its dependents are skipped and successful publication is blocked.
+  The shared split-unit boundary immediately records FAILED task, step and attempt state,
+  preserving the original error independently of optional safety monitoring. Locked,
+  replayable failure closure preserves prior accepted pointers and immutable rejected
+  diagnostics; an interrupted failure closure can finish without recounting its events.
 - `JobRunner.run`, which `GraphRunner` uses, is the same claim-units-finalize sequence.
   `_run_legacy` is deleted.
 
@@ -86,6 +89,14 @@ land beside it, as they do for `AcceptanceTest`.
   set the same way a tagged Dagster launch is verified.
 
 A local claim records `orchestration = {"system": "local"}`.
+
+Dagster's live step-failure sensor writes per-step error files before the overall
+run terminates. The terminal error-state job then records the authoritative failed
+or canceled orchestration receipt, graph/run terminal events and regenerated
+metrics, even when success-dependent finalizers never ran. This applies only to
+new run manifests declaring `split-failure-finalization/1`; historical runs are
+not backfilled. Sensor replay preserves existing error files and receipts. These
+files establish local recording, not external notifier delivery.
 
 ### 3. `stepwise.py parity --tag TAG --job JOB`
 
