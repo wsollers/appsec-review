@@ -28,10 +28,11 @@ import pytest
 
 from appsec_review.signing import OpenSSL, SignatureVerificationError, key_id
 from appsec_review.signing import cli as signing_cli
+from appsec_review.signing.core import default_openssl
 
 
 GATE = "APPSEC_REVIEW_SIGNING_INTEGRATION"
-OPENSSL_BINARY = "/usr/bin/openssl"
+OPENSSL_BINARY = default_openssl()
 BASE_IMAGE = "appsec-review/base-python:3.12-bookworm"
 TEST_REPOSITORY = "appsec-review-signing-test"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]

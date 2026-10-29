@@ -24,6 +24,7 @@ import sys
 
 import pytest
 
+from appsec_review.signing.core import windows_host
 from tests.integration.signing.conftest import (  # noqa: F401  (fixtures re-exported for this directory)
     BASE_IMAGE, OPENSSL_BINARY, REPOSITORY_ROOT, Docker, copy_package, docker, docker_environment, openssl,
     openssl_scratch,
@@ -51,7 +52,8 @@ def signing_config(path: Path, *, trusted_keys_dir: Path, image_signatures_dir: 
     section = text[start:end]
     for key, value in (("openssl", OPENSSL_BINARY), ("trusted_keys_dir", str(trusted_keys_dir)),
                        ("image_signatures_dir", str(image_signatures_dir)), ("image_enforcement", "required")):
-        section, count = re.subn(rf"^{key} = .*$", f"{key} = {json.dumps(value)}", section, flags=re.MULTILINE)
+        line = f"{key} = {json.dumps(value)}"
+        section, count = re.subn(rf"^{key} = .*$", lambda _match: line, section, flags=re.MULTILINE)
         assert count == 1, f"[signing].{key} not found exactly once in {CONFIG_SOURCE}"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text[:start] + section + text[end:], encoding="utf-8")
@@ -118,7 +120,8 @@ def operator_key(operator) -> str:
                                     "--trusted-keys-dir", str(operator.trusted_keys_dir))
     assert code == 0, report
     assert report["private_key"] == str(operator.private_key)
-    assert (operator.private_key.stat().st_mode & 0o077) == 0
+    if not windows_host():
+        assert (operator.private_key.stat().st_mode & 0o077) == 0
     anchor = Path(report["trusted_key"])
     assert anchor.parent == operator.trusted_keys_dir
     assert anchor.name == report["key_id"].removeprefix("sha256:") + ".pem"
