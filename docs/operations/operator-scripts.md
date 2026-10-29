@@ -363,16 +363,20 @@ required coverage as failure, and writes its result/logs/fixture runs only under
 `test/tmp/acceptance/` root. `--workers` (`-Workers`) defaults to 1 and permits at most 2.
 Staged review selects dependency-ready producer phases, frozen-input checkpoints and supervisor
 seals before fresh private consumers. Failed producers leave descendants explicitly blocked,
-not executed or successfully skipped. `review` has 13 core cases; `review-exhaustive` has 24
-cases; its first public run failed on individual/suite deadlines. Producer OUTPUT detachment
-is implemented after successful owned cleanup; strict checkpoints/seals/copies remain.
-Optimized Windows review passed 13/13 and completes
-its scoped Windows verification todo. All three two-worker quick warm runs passed 38/38
-under ten minutes; this is not serial-default proof. Corrected named portable process passed
-13/13 with one worker in 351.471 seconds at the same source. The exhaustive deadline gap still blocks full
-handoff; its split proposal is not approved/implemented. Tagged workers use their existing
-120-second exception internally; other lifecycle helper cases retain 60 seconds. This is not
-a global cap increase or final green gate.
+not executed or successfully skipped. At frozen `856300ca`, the approved series passed
+`review-report-integrity` 12/12, `review-outcomes` 10/10 and unchanged `review` 13/13 in that
+sequential order, with fresh invocations and two workers each. The 35 executions / 31 unique
+cases took 1138.249 seconds wrapper wall time; all 600-second profile and individual
+60/120-second caps passed, with collection/case cleanup zero and no production services
+touched. Exact results/hashes are in the [series receipt](bounded-acceptance.md#qualified-series-at-856300ca).
+
+Strict producer detachment/checkpoints/seals/private copies remain; new integrity consumers
+retain ordinary 60-second caps. Monolithic `review-exhaustive` has 31 cases, still capped at
+600 seconds and **not qualified**, not an umbrella alias for the series. Earlier monolithic
+and `086ded0a` failures remain recorded. Historical `a4ce5459` three quick warm passes and
+one-worker portable process pass are not new-source or serial-quick proof. Tagged workers
+use their existing 120-second exception internally; other lifecycle helper cases retain 60.
+No global cap increase or platform/provider-wide clearance is implied.
 `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` only lower profile caps.
 Legacy suites, arbitrary pytest arguments, `--parallel` and `--background` cannot be combined
 with acceptance; the known-failure exemption below does not apply.

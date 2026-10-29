@@ -853,19 +853,22 @@ Use the checkout's own virtual environment; process selections also need the Dag
 dependencies. Serial is the default, with at most two workers. All state, fixture runs and
 production-format telemetry stay beneath a unique `test/tmp/acceptance/` root, never production
 `runs/`, `data/` or `targets/`. This supports process/storage isolation beside a review, not
-zero shared CPU/I/O contention. `quick` targets under ten minutes with a twelve-minute hard cap;
-current acceptance is **not green**. Review now uses dependency-ready producer stages and
-invocation-specific seals before private readers. OUTPUT-only post-cleanup detachment is
-implemented; optimized public Windows review passed all 13 cases and completes the scoped
-Windows verification todo. At frozen source `a4ce5459`, all three two-worker quick warm runs
+zero shared CPU/I/O contention. Review uses dependency-ready producers, strict OUTPUT-only
+post-cleanup detachment and invocation-specific seals before fresh private readers.
+The approved bounded exhaustive series is **qualified at `856300ca`**, including main
+`a31d4249`: integrity 12/12, outcomes 10/10 and review 13/13, sequentially with two workers
+and distinct fresh invocations. Its 35 executions / 31 unique cases took **1138.249 seconds
+(18 minutes 58.249 seconds)** wrapper wall time, within every member's 600-second cap and
+all individual 60/120-second caps, with owned cleanup zero and no production services touched.
+This is not a monolithic `review-exhaustive` pass; that 31-case selection stays unqualified.
+
+`quick` targets under ten minutes with a twelve-minute hard cap. At historical frozen source
+`a4ce5459`, all three two-worker quick warm runs
 passed 38/38 in 559.626, 551.899 and 567.917 seconds, genuinely demonstrating the runtime goal
 of under ten minutes for two workers, not the serial default.
-Signals passed with two opted-in workers, not the serial default. Historical process/consumers
-passes remain revision-scoped; the corrected named portable process profile passed 13/13
-in 351.471 seconds with one worker at the same frozen source. The first 24-case exhaustive run
-failed on individual/suite deadlines;
-a per-vector/subprofile proposal is being prepared, not approved or implemented. Three-warm
-quick calibration and scoped Windows completion are done; overall handoff remains withheld.
+The named portable process profile passed 13/13 in 351.471 seconds with one worker at that
+same historical source; no new warm/portable or platform/provider proof is claimed at
+`856300ca`. Prior monolithic and `086ded0a` integrity failures remain recorded.
 Optional real-tool, deployed,
 provider, guidance, warm-CodeQL and native profiles currently fail as unimplemented rather
 than silently passing.

@@ -10,15 +10,20 @@ all inventory members or optional live profiles have executed.
 
 ## Current reconciliation checkpoint
 
-The current documentation branch incorporates exact parent
-`a4ce5459ab51727cb3793c0425894a7f56fc21dc`, including custody optimization `881b8709`,
-detachment `1d7d621a`, helper-budget consistency `85d39172` and inherited staged/frozen-main
-work. Optimized public Windows review passed 13/13 and completes the scoped Windows
-verification todo. All three two-worker quick warm runs at that frozen source passed 38/38
-under ten minutes. **Overall final acceptance is still withheld:** the first exhaustive
-profile failed on individual/suite deadlines; its new split proposal is not approved or
-implemented. Corrected named portable process now passed 13/13 at the same frozen source.
-Every result remains bound to its stated revision, not retrospectively to later merges.
+The approved bounded exhaustive series is **qualified** at exact tested source
+`856300cafdc1a4693608d24e93586cb88a7fb2bc`, including main `a31d4249`. Integrity 12/12,
+outcomes 10/10 and review 13/13 passed sequentially with two workers in three fresh
+invocations: **35 executed / 31 unique cases**, all case/profile caps met, in
+**1138.249 seconds wrapper wall time (18 minutes 58.249 seconds)**. Exact member results,
+source/invocation identities and result hashes are retained in the series receipt below.
+
+The documentation change is based on `dba23ad649389a708d6b94fab347e5784d5a23d0`; that is
+not the tested runtime revision. Historical
+`a4ce5459ab51727cb3793c0425894a7f56fc21dc` retains its scoped Windows review completion,
+three under-ten-minute two-worker quick warm passes and corrected one-worker portable pass.
+No new warm or platform/provider results are claimed at `856300ca`. Earlier monolithic and
+`086ded0a` integrity failures remain recorded. Monolithic 31-case `review-exhaustive` is
+**unqualified**, not an alias for the qualified series. Every result remains revision-bound.
 
 ### Actually integrated staged contract
 
@@ -41,9 +46,9 @@ Consumer execution writes separate current private streams and a
 history is explicitly `execution_evidence: false`, not freshly executed consumer work.
 Blocked descendants remain failed/unexecuted coverage, never successful skips.
 
-Core `review` now selects 13 staged cases; `review-exhaustive` retains 24 full integrity,
-same-length tamper, benign/blocked and core cases; its first public attempt failed as detailed
-below. Quick has 35 selectors
+At `856300ca`, core `review` selects 13 staged cases, report-integrity 12 and outcomes 10;
+monolithic `review-exhaustive` retains all 31 unique integrity/benign/blocked/core cases and
+is not qualified. Its earlier 24-case attempt failed as detailed below. Quick retains 35 selectors
 resolving to 38 cases including prerequisites. Caps are unchanged: quick 720 seconds,
 review/exhaustive 600, signals 240; ordinary/declared per-case caps and cleanup reserves still
 apply. Default workers are one, maximum two.
@@ -107,10 +112,131 @@ descendants. Root:
 - All native, CI-positive oracle and CI-benign full paths passed; CI-blocked prepare and
   review passed. Those passes do not satisfy the missing integrity/gate/report/consumer work.
 
-A narrow per-vector case/subprofile proposal is being prepared for user approval. **No new
-exhaustive change is approved or implemented.** The current source/inventory/caps stay as
-recorded; earlier staging/detachment approvals do not authorize this new change. Overall
-handoff stays blocked, while Windows completion and three-warm quick completion remain done.
+That failure is not erased by the subsequently qualified bounded series below. The historical
+scoped Windows/three-warm facts remain true; the monolithic profile stays unqualified.
+
+### Approved bounded exhaustive series
+
+The user selected verbatim **Approve bounded exhaustive series (Recommended)**. This
+approves eight independent exhaustive-only integrity cases plus these sequential members:
+
+| Member | Required selection | Cases | Timing status |
+| --- | --- | --- | --- |
+| `review` | Existing native/core selection unchanged | 13 | Passed at `856300ca`, 478.4067317 s |
+| `review-report-integrity` | Fresh CI-positive prepare/review/gate/report plus eight vectors | 12 | Passed at `856300ca`, 430.0222257 s |
+| `review-outcomes` | Complete CI-benign and CI-blocked chains, four phases plus one consumer each | 10 | Passed at `856300ca`, 223.4540428 s |
+
+Each member remains capped at 600 seconds with at most two workers. New integrity consumers
+retain ordinary 60-second caps; existing declared producer/job 60/120-second caps and cleanup
+reserves remain. The approval estimate was **18–20 minutes aggregate**; the measured qualified
+wrapper took 18 minutes 58.249 seconds. The three caps sum to 30 minutes. This is not a new
+600-second exhaustive benchmark.
+
+The exhaustive-only node in the new selection is
+`tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[ID]`;
+the [operator contract](../operations/bounded-acceptance.md#approved-bounded-exhaustive-series)
+lists all eight exact IDs. Replacing the combined integrity case with eight preserves every
+original vector and makes the monolithic selection 31 cases, still capped at 600 and
+not qualified. Its old 24-case/599.621-second result above remains unchanged.
+
+The qualified series executed **35 cases across three fresh invocations / 31 unique cases**,
+with four CI-positive producer phases deliberately repeated.
+No cross-invocation seeds are permitted.
+Required completion accounting retains exact ordered members, frozen source/environment,
+each full source-identity closure, distinct invocation IDs, exact selected/collected/executed
+cases, per-member result paths/SHA-256 hashes, caps/outcomes/cleanup/resources and measured
+aggregate plus member durations. Historical results cannot substitute for any member.
+
+Only test-module/inventory changes are assigned: no API, custody, scheduler or production
+changes. This documentation change remains based on `dba23ad6`; the runtime qualification
+below is explicitly bound to tested source `856300ca`, not this older checkout.
+Quick/review nodes are unchanged by this design; the historical three quick warm
+passes at `a4ce5459` are not new-revision evidence.
+
+### Failed first integrity qualification at `086ded0a`
+
+At exact source `086ded0afdbc82abd1be6da3acaa8f4e3b3e9129`, actual public
+`scripts\run-tests.ps1 -Acceptance review-report-integrity -Workers 2` **failed with 10/12
+passing in 429.065 seconds**. Ordinary 60-second execution deadlines stopped
+`identity-state-bucket` at **58.663 seconds** and `orphan-hit` at **58.740 seconds**.
+All six other vectors and four real producers passed. Cleanup confirmed zero survivors;
+`production_services_touched=false`. Evidence:
+`test/tmp/acceptance/acceptance-82a8878f33e545cda8a45f596c4d6885/review-report-integrity/result.json`.
+
+The sequential qualification started with integrity and **stopped on failure**. Outcomes and
+review were not run at that source. This does not establish 35 measured cases, an 18–20-minute
+aggregate, or a passing/complete series. The first failed member's duration is not a qualified
+runtime for the planning estimate. An unchanged retry is forbidden; the correction below
+removes only redundant fixture seed verification within the approved eight-case/60-second
+design, not repeated identity-oracle computation. At that checkpoint no revised passing
+measurements were available; the corrected-source qualification below does not erase this failure.
+
+After that stopped run, the coordinator incorporated frozen main `a31d4249` as
+`59f6a0e719f1d0c5a809936350d311f1535cae7d`: private-containerd/opt-in-ptrace changes, with no
+reported harness overlap. That later merge is **not** the source of the `086ded0a` receipt
+and supplies no series qualification evidence by itself. The qualified corrected source is
+`856300ca` below; this documentation change remains based on `dba23ad6`.
+
+### Corrected frozen source `856300ca`
+
+The next frozen implementation is exact `856300cafdc1a4693608d24e93586cb88a7fb2bc`, including
+main `a31d4249` and fix `1e0c6996`. The identity oracle was **already batched**. The new
+module's two heavy fixtures redundantly verified the original seed after the same-process
+guard had freshly verified the seal and whole private copy and installed the immutable-seed
+guard. `1e0c6996` removes only that redundant seed scan (about 6.7–6.9 seconds), requiring
+matching completed guard preflight, workspace and invocation. It leaves all driver/guard
+byte proofs and production validation untouched; it is not new oracle batching or a cap/vector
+change.
+
+Five persistent fail-closed guard-reuse unit cases were added to existing
+`tests/test_acceptance_review_stages.py`. Combined focused validation: **34 passed,
+12.75 seconds**; all **eight exact nodes collected in 1.77 seconds**. These are unit/
+collection results, not substitutes for public profile qualification. The same three
+profiles subsequently passed sequentially at this corrected frozen source as recorded
+below; the failed `086ded0a` qualification remains historical, not silently deleted.
+
+Separately, the incoming `a31d4249` native-unit command stopped with **two collection errors
+in 2.09 seconds**, both missing `fcntl` on native Windows. That explicit host gap is not part
+of the 34-unit passing scope and has no workaround here. No parent/source checkout was moved
+to produce this documentation change.
+
+### Qualified complete series at `856300ca`
+
+The public profile invocations ran in this sequential order, each with two workers and its
+own fresh invocation at the same frozen source/environment:
+
+| Actual member order | Result | Profile timer | Evidence root below `test/tmp/acceptance/` |
+| --- | --- | --- | --- |
+| 1. `review-report-integrity` | **12/12 passed** | **430.0222257 s** | `acceptance-e2ef45f64cd4477bbbb51b7a299b562b/review-report-integrity/` |
+| 2. `review-outcomes` | **10/10 passed** | **223.4540428 s** | `acceptance-eaf48cbd258346b6a3cad0511175f475/review-outcomes/` |
+| 3. `review` | **13/13 passed** | **478.4067317 s** | `acceptance-772c70e8de804a85adb76dc1e2d941cc/review/` |
+
+Full series receipt:
+`test/tmp/acceptance/series-0407a57ef3af4e57a449dcf5bbb8e115/series.json`.
+It retains exact member result paths and hashes. The profile timer sum is **1131.883 seconds**;
+measured sequential wrapper wall time is independently **1138.249 seconds
+(18 minutes 58.249 seconds)**. These are different measurements, not inferred fixture/setup
+breakdowns.
+
+All three 600-second profile caps and every individual 60/120-second cap passed. Collection
+and case cleanup confirmed **`remaining_processes=0`**; **`production_services_touched=false`**.
+Shared source identities agree; each member manifest/source is bound to
+`856300cafdc1a4693608d24e93586cb88a7fb2bc`. Invocation IDs are distinct and no artifacts/seeds
+were reused across members. The 35 executed cases / 31 unique cases include four repeated
+CI-positive producers; no historical `a4ce5459` pass was substituted for a member.
+
+The eight integrity-vector durations were **52.365 / 46.545 / 54.153 / 48.569 / 50.167 /
+55.410 / 46.961 / 44.564 seconds**; exact node mappings remain in the member result.
+The coordinator independently reconciled eight distinct private copy roots, one new
+consumer-telemetry lane per vector, both heavy-vector preflight spans against actual pytest
+guard receipts, seven mutation outcomes, source/private hashes and the same-length proof.
+The guard reuse was therefore observed in the real public route, not merely assumed from
+unit/collection results. Driver/guard byte proofs and production validation remain intact.
+
+This qualifies the **approved bounded series only**. Monolithic 31-case `review-exhaustive`
+remains unqualified; the old 24-case failure and first `086ded0a` split failure remain above.
+Historical quick three-warm and portable results stay at `a4ce5459`. There are no new warm,
+Linux/actual-WSL, tool/provider/CodeQL/native compatibility or genuine assessment results.
 
 ### Implemented fresh immutable-union optimization
 
@@ -703,13 +829,16 @@ Do not reconstruct unavailable setup metrics by subtracting unrelated test-body 
   review join remain unverified by the bounded qualification lane. Unknown original
   recorded-feed production cannot be claimed as a real live computation.
 - Three bounded W5 triage/referral/presentation nodes have exact-node guarded evidence above
-  and a later named `consumers` profile pass. Integrated quick calibration and the listed
-  specialist, renderer-selection, saturation and cross-lane obligations remain unverified.
+  and a later named `consumers` profile pass. The listed specialist, renderer-selection,
+  saturation and cross-lane obligations remain unverified; separate historical quick warm
+  evidence does not widen those three consumer obligations.
 - Historical `b72e79a9` passed the tiny candidate but timed out the all-in-one oracle.
   At `d6042ab9`, native-positive PoC timed out and blocked candidate/corruption consumers.
   The optimized Windows review now passes 13/13, and all three frozen quick warm runs pass
   38/38 under ten minutes with two workers; corrected named portable process passes 13/13.
-  Exhaustive deadlines still withhold final acceptance; the new split plan is not implemented.
+  The first split integrity qualification at `086ded0a` also failed. The approved bounded
+  series subsequently qualified at `856300ca`; monolithic `review-exhaustive` and named
+  platform/provider/assessment gaps remain outside that proof.
 - Two existing ELF catalog tests assert an exact gap count and fail after the new
   `delivery_fact_unavailable` gap. The dependency verifier error-wording discrepancy described
   above is also baseline. Neither is silently converted into passing acceptance.

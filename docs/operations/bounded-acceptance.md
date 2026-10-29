@@ -6,13 +6,12 @@ For revision-specific measurements and remaining work, see the
 [implementation record](../reviews/integration-live-test-implementation.md).
 These profiles are separate from the existing stepwise corpus and deployed-review acceptance tools.
 
-**Current status: not finally green.** Windows core review passed 13/13 and completes its
-scoped Windows verification todo. All three two-worker quick warm runs passed 38/38 under ten
-minutes, and corrected named portable process passed 13/13. The first exhaustive profile
-failed on deadlines; a new split proposal is not approved/implemented, so full handoff remains
-blocked. See
-[current measured status](#current-staged-status-not-green), not historical profile passes,
-before assessing coverage or budgets.
+**Current status: approved bounded exhaustive series qualified at `856300ca`.** All three
+fresh sequential members passed: 35 executed cases / 31 unique, within every profile/case
+cap, in 18 minutes 58.249 seconds wrapper wall time. This is not a monolithic
+`review-exhaustive` pass, new-revision quick warm proof, or platform/provider-wide clearance.
+See [qualified series](#qualified-series-at-856300ca) and
+[revision-bound calibration](#current-measured-status) before assessing coverage or budgets.
 
 ## What a passing profile means
 
@@ -68,7 +67,9 @@ Remove `-DryRun` / `--dry-run` to execute the inspected selection. Dry run print
 | `process-windows` | Actual PowerShell dispatch with an invocation-owned compiled transport | 60 s |
 | `controls` | Explicit OWASP qualification with document/catalog context and accepted Workbench retrieval; loopback HTTPS, including negative matrix | 240 s |
 | `review` | 13 core staged cases: native prepare/review/PoC and empty/corrupt consumers; CI prepare/review/gate/report and representative current-report reader | 600 s |
-| `review-exhaustive` | 24 staged cases retaining full current-report integrity, same-length tampering, benign/blocked and core vectors; first public run failed on individual/suite deadlines | 600 s |
+| `review-report-integrity` | Four fresh CI-positive producer phases plus eight independent integrity vectors | 600 s |
+| `review-outcomes` | Complete CI-benign and CI-blocked chains: four phases and one private consumer each | 600 s |
+| `review-exhaustive` | 31 staged cases retaining every integrity/benign/blocked/core vector; monolithic selection is not qualified | 600 s |
 | `consumers` | Real triage/admission, next-round referral repair/deduplication/convergence and accepted report HTML/LaTeX rendering | 360 s |
 
 This table summarizes the inventory, not a promise that every profile has passed. `quick` is
@@ -82,6 +83,124 @@ enrolled in `consumers`, not `quick`. OS-specific cases have their own selection
 Inspect the inventory at the commit under test for the exact selection; collection supplies
 the actual case count, not a fixed count copied from an older quick result. At `58387690`,
 quick has 35 selectors resolving to 38 cases; staged producer phases count in that denominator.
+
+### Approved bounded exhaustive series
+
+The user selected **Approve bounded exhaustive series (Recommended)**. The following
+selection contract is implemented and qualified at frozen
+`856300cafdc1a4693608d24e93586cb88a7fb2bc`, including main `a31d4249`. Approval alone was not
+proof: the first `086ded0a` attempt failed; the corrected-source results are recorded below.
+
+| Required member | Approved selection | Cases | Suite cap |
+| --- | --- | --- | --- |
+| `review` | Existing native/core CI review selection, unchanged | 13 | 600 s |
+| `review-report-integrity` | Fresh CI-positive prepare/review/gate/report plus eight independent integrity vectors | 12 | 600 s |
+| `review-outcomes` | Complete CI-benign and CI-blocked chains: four producer/report phases and one private consumer each | 10 | 600 s |
+
+Use the existing public PowerShell/Bash forms with each exact member as **sequential fresh
+invocations**, not a new umbrella CLI or one enlarged profile. Record the actual chosen
+order; do not run members concurrently. The qualified order was `review-report-integrity`,
+`review-outcomes`, then `review`, each at `856300ca` with a fresh invocation. The failed
+`086ded0a` attempt stopped after integrity; its unchanged retry was forbidden, not a way to
+manufacture passing proof.
+Each member permits at most two workers; the global default stays one.
+The eight new integrity consumers have ordinary 60-second caps; producer/job phases retain
+their existing declared 60/120-second caps and cleanup reserves. No API, custody, scheduler
+or production behavior change is part of this approved selection.
+
+The approved exhaustive-only node is
+`tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[ID]`,
+with exactly these eight IDs:
+
+- `identity-state-bucket`
+- `missing-current`
+- `orphan-hit`
+- `report-tamper`
+- `manifest-tamper`
+- `finding-tamper`
+- `handoff-tamper`
+- `same-length-report-tamper`
+
+All original vectors remain required. Replacing the one combined integrity case with eight
+makes the monolithic `review-exhaustive` selection **31 cases**, not a series alias:
+it retains its 600-second cap and remains **not qualified**. Its historical 24-case,
+599.621-second failure is preserved below. Quick and core review nodes are unchanged.
+
+The qualified series executed **35 cases across three fresh invocations / 31 unique cases** because
+four CI-positive producer phases repeat. Each invocation must produce its own authenticated
+seed; cross-invocation seed reuse is forbidden. Required series accounting identifies the
+exact ordered members, frozen source/environment and each full source-identity closure,
+distinct invocation IDs, selected/collected/executed cases, result paths and each final
+`result.json` SHA-256. Retain per-member caps, outcomes, resources and cleanup plus measured
+aggregate elapsed time and summed member durations. No member may disappear from the
+aggregate or be satisfied by historical output.
+
+The planning estimate was about 18–20 minutes, with three profile caps summing to 30 minutes.
+The measured qualified wrapper took 18 minutes 58.249 seconds; this is three bounded profiles,
+not a new 600-second exhaustive benchmark. Historical `a4ce5459` quick/portable passes remain
+their original-revision proof, not new `856300ca` warm runs or portable-profile results.
+
+### First series qualification: failed, not complete
+
+At exact source `086ded0afdbc82abd1be6da3acaa8f4e3b3e9129`, actual public
+`scripts\run-tests.ps1 -Acceptance review-report-integrity -Workers 2` **failed with 10/12
+passing in 429.065 seconds**. `identity-state-bucket` and `orphan-hit` reached their ordinary
+60-second case execution deadlines at **58.663 / 58.740 seconds**; all other six vectors and
+four real producers passed. Receipt times below the total cap do not erase execution
+timeouts/cleanup reserves. Owned cleanup confirmed zero survivors and
+`production_services_touched=false`.
+
+Evidence:
+`test/tmp/acceptance/acceptance-82a8878f33e545cda8a45f596c4d6885/review-report-integrity/result.json`.
+The series stopped on failure; outcomes and review did not run at that source. This is not
+35 executed cases, a measured 18–20-minute aggregate or a complete/passing series. The
+correction below changes only redundant fixture seed verification; it is not a new identity-
+oracle batching change, cap increase or passing result.
+
+### Corrected source and guard-preflight reuse
+
+Exact source `856300cafdc1a4693608d24e93586cb88a7fb2bc` includes main `a31d4249` and fix
+`1e0c6996`. The identity oracle was **already batched**. The two heavy fixtures redundantly
+scanned the original seed after the same-process guard had freshly verified its seal and
+the whole private copy, then installed the immutable-seed guard. The fix removes **only that
+duplicate seed scan** (about 6.7–6.9 seconds), requiring matching completed guard preflight,
+workspace and invocation. All driver/guard byte proofs and production validation remain.
+
+Five persistent fail-closed guard-reuse unit cases were added in existing
+`tests/test_acceptance_review_stages.py`. Combined focused validation passed 34 units in
+12.75 seconds; eight exact integrity nodes collected in 1.77 seconds. Those focused results
+were not substitutes for the subsequent public qualification. All eight vectors and
+60-second ordinary caps remain unchanged.
+
+### Qualified series at `856300ca`
+
+All three public members ran sequentially at the same frozen source/environment with two
+workers per member:
+
+| Actual order/member | Result | Profile timer | Evidence root below `test/tmp/acceptance/` |
+| --- | --- | --- | --- |
+| 1. `review-report-integrity` | **12/12 passed** | 430.0222257 s | `acceptance-e2ef45f64cd4477bbbb51b7a299b562b/review-report-integrity/` |
+| 2. `review-outcomes` | **10/10 passed** | 223.4540428 s | `acceptance-eaf48cbd258346b6a3cad0511175f475/review-outcomes/` |
+| 3. `review` | **13/13 passed** | 478.4067317 s | `acceptance-772c70e8de804a85adb76dc1e2d941cc/review/` |
+
+The full receipt is
+`test/tmp/acceptance/series-0407a57ef3af4e57a449dcf5bbb8e115/series.json`; it retains exact
+member result paths and hashes. Profile timers sum to **1131.883 seconds**; independently
+measured sequential wrapper wall time is **1138.249 seconds = 18 minutes 58.249 seconds**.
+Do not label the timer sum as wrapper time or infer unavailable setup breakdowns from it.
+
+All 600-second profile caps and individual 60/120-second caps passed. Collection and case
+cleanup confirmed `remaining_processes=0`; `production_services_touched=false`. Shared source
+identities agree, every member manifest/source is bound to `856300ca`, invocation IDs are
+distinct and no artifacts/seeds were reused between members. The 35 executions include
+four repeated CI-positive producers, giving 31 unique cases.
+
+The coordinator also reconciled eight distinct integrity copy roots with one new telemetry
+lane each, both heavy-vector preflight spans against actual pytest guard receipts, seven
+mutation outcomes and source/private hashes including the same-length proof. These are
+authentic private consumers, not copied producer history counted as fresh execution.
+Monolithic 31-case `review-exhaustive` remains **unqualified**; there are no new quick warm,
+Linux/actual-WSL, tool/provider/CodeQL/native or genuine assessment claims.
 
 The selectable `tools`, `deployed`, `provider`, `guidance`, `codeql-warm` and `native` profiles
 currently have no executable obligations. Actual invocation fails with `profile_not_implemented`;
@@ -180,6 +299,11 @@ Each invocation creates only a unique
 | `consumers/case-<ordinal>/` and sibling `.custody.json` | Fresh verified reader copy and materialization receipt |
 | `consumers/.../consumer-telemetry/<uuid>/` | Current consumer streams and `telemetry-origin.json`; copied producer history stays separate |
 | `home/`, `temporary/`, `dagster/` | Private HOME/profile, TEMP/TMP/TMPDIR and DAGSTER_HOME |
+
+The sequential series wrapper also retains a separate
+`test/tmp/acceptance/series-<uuid>/series.json` aggregate receipt with member result paths/
+hashes, source/invocation identities and measured accounting. It is not a shared producer seed
+or a replacement for any member's artifacts.
 
 The public command prints `acceptance: PASSED|FAILED; <N> cases; <seconds>s` and the path to
 `result.json`. Exit 0 requires all selected obligations to pass with confirmed cleanup;
@@ -300,9 +424,12 @@ The separate three-warm quick results below establish that bounded two-worker ru
 not the full `review-exhaustive` matrix. Splitting assertions alone is not evidence that every
 fresh public fixture fits.
 
-## Current staged status: not green
+## Current measured status
 
-The source checkpoint is exact parent `a4ce5459ab51727cb3793c0425894a7f56fc21dc`, including
+The approved series is qualified at `856300ca` as recorded above. The following calibration
+facts remain historical and are not retargeted to that newer source.
+
+The historical passing source checkpoint is `a4ce5459ab51727cb3793c0425894a7f56fc21dc`, including
 custody optimization `881b8709` and helper-budget correction `85d39172`.
 
 - Optimized public `scripts\run-tests.ps1 -Acceptance review -Workers 2` **passed 13/13 in
@@ -331,8 +458,10 @@ custody optimization `881b8709` and helper-budget correction `85d39172`.
   passed. The budget-stopped gate is uncompleted coverage, not a semantic gate failure or a
   passing gate claim. Root:
   `test/tmp/acceptance/acceptance-decde16e3a6141daaddf5522aa918449/review-exhaustive/`.
-  A narrow per-vector case/subprofile plan is being prepared for user approval; no new
-  exhaustive change is approved or implemented, and no deadline waiver is implied.
+  The bounded series above is now user-approved and its first selection implemented, but
+  the initial `086ded0a` integrity qualification failed as recorded above. The corrected
+  `856300ca` series subsequently passed; neither approval nor that series qualifies the
+  monolithic profile.
 - At `d6042ab9`, full portable `process` failed twice with 12/13 passing: two workers in
   191.015 seconds and one worker in 353.493 seconds. Tagged workers hit the helper's inner 55-second execution/
   60-second receipt cap on fresh resume despite the existing outer 120-second exception.
@@ -411,5 +540,6 @@ At that historical checkpoint, planner `81ada94f` had produced only a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
 The producer/reader machinery and fresh immutable-union optimization are now integrated;
 the timed Windows core-review gate passes. The historical proposal supplies neither a
-validation-cache shortcut nor a cap waiver. The exhaustive gate remains unresolved, so
-overall final acceptance is still withheld.
+validation-cache shortcut nor a cap waiver. The approved exhaustive series now has passing
+member/aggregate calibration at `856300ca`; monolithic and platform/provider gaps remain
+outside that qualified scope.
