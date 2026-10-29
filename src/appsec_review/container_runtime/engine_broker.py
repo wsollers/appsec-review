@@ -25,7 +25,7 @@ from uuid import uuid4
 from appsec_review.config.native_engine import absolute
 from appsec_review.container_runtime.buildkit_worker import (
     BuildKitWorker, CommandRunner, EnforcementUnavailable, KernelProof, OutcomeUnknown,
-    private_path, process_token,
+    native_docker_topology, private_path, process_token,
 )
 from appsec_review.container_runtime.builder_admission import service_contract
 from appsec_review.storage import atomic_json
@@ -324,12 +324,10 @@ class NativeExecutionDriver(BuildKitWorker):
         static_gate(self.config)
         private_path(Path(self.config.docker_binary), directory=False)
         info = json.loads(self._run(self._docker("info", "--format", "{{json .}}")))
-        if (info.get("ID") != self.config.native_engine.engine_id or info.get("OSType") != "linux"
-                or info.get("CgroupDriver") != "cgroupfs" or str(info.get("CgroupVersion")) != "2"
+        if (not native_docker_topology(info) or info.get("ID") != self.config.native_engine.engine_id
                 or info.get("Architecture") not in {
                     self.config.native_engine.architecture,
-                    {"x86_64": "amd64", "aarch64": "arm64"}[self.config.native_engine.architecture]}
-                or "desktop" in str(info).lower()):
+                    {"x86_64": "amd64", "aarch64": "arm64"}[self.config.native_engine.architecture]}):
             raise EnforcementUnavailable("native engine identity or topology differs")
 
     def inventory(self, record=None):

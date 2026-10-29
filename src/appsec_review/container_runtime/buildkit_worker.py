@@ -38,6 +38,22 @@ class OutcomeUnknown(RuntimeError):
     pass
 
 
+def native_docker_topology(info: dict) -> bool:
+    markers = (info.get("OperatingSystem", ""), info.get("KernelVersion", ""))
+    labels = info.get("Labels") or []
+    return (
+        info.get("CgroupDriver") == "cgroupfs"
+        and str(info.get("CgroupVersion")) == "2"
+        and info.get("OSType") == "linux"
+        and all(isinstance(value, str) and not any(
+            marker in value.lower() for marker in ("docker desktop", "dockerdesktop", "linuxkit")
+        ) for value in markers)
+        and isinstance(labels, list)
+        and all(isinstance(value, str)
+                and not value.lower().startswith("com.docker.desktop") for value in labels)
+    )
+
+
 def bounded_json(path: Path, maximum: int = MAX_METADATA_BYTES):
     with path.open("rb") as stream:
         data = stream.read(maximum + 1)
@@ -575,8 +591,7 @@ class BuildKitWorker:
             private_path(Path(binary), directory=False)
         host_limits = self.proof.host()
         info = json.loads(self._run(self._docker("info", "--format", "{{json .}}")))
-        if (info.get("CgroupDriver") != "cgroupfs" or str(info.get("CgroupVersion")) != "2"
-                or info.get("OSType") != "linux" or "desktop" in str(info).lower()):
+        if not native_docker_topology(info):
             raise EnforcementUnavailable("native local cgroupfs/v2 Docker is required")
         image = json.loads(self._run(self._docker("image", "inspect", config.worker_image_id)))[0]
         if image.get("Id") != config.worker_image_id:

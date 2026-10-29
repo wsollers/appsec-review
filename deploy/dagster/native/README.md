@@ -117,6 +117,14 @@ retain escaped/reparented helpers in custody; unrelated infrastructure is not mi
 for this engine. Omitting that scope preserves the older global helper check. The
 dedicated daemon must not share the existing socket, data-root, exec-root or image store.
 Source support is not a commissioned daemon.
+Native topology checks use server cgroup/OS/kernel/label fields, not the CLI's
+`ClientInfo` plugin inventory or a workstation hostname. A stale local Desktop plugin
+does not identify the daemon. Docker Desktop server markers still refuse, and actual
+kernel socket-peer, namespace, root, generation and helper-custody proofs remain required.
+The pinned Skopeo transport must negotiate the daemon's supported API. Ubuntu 22.04's
+Skopeo 1.4.1 hardcodes API 1.22 and cannot talk to Docker 29.1.3's minimum API 1.44;
+a command-local `DOCKER_API_VERSION` does not repair that hardcode. Provision a compatible
+pinned private transport rather than lowering the daemon's API requirement.
 Docker 29 may automatically use the existing `/run/containerd/containerd.sock` even with
 separate Docker roots. A dedicated-engine scope therefore also requires an explicit
 `docker_helper_scope.containerd_endpoint` beneath its private exec-root and the actual
