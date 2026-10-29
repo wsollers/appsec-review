@@ -35,6 +35,7 @@ SCHEMA = "appsec-review/native-engine/1"
 MAX_REQUEST_BYTES = 65536
 MAX_RESPONSE_BYTES = 256 * 1024
 MAX_LOG_PAGE = 65536
+CGROUP_ROOT = Path("/sys/fs/cgroup")
 BINDING_FIELDS = frozenset({
     "tenant_id", "project_id", "run_id", "target_snapshot", "configuration_id",
     "service_generation", "engine_id", "engine_generation", "lease_id",
@@ -562,7 +563,7 @@ class NativeExecutionDriver(BuildKitWorker):
             "--security-opt", "seccomp=" + str(seccomp), "--network",
             self.config.network_id if requested["network"] == "isolated" else "none",
             "--ipc", "private", "--cgroupns", "private",
-            "--cgroup-parent", str(group)[len("/sys/fs/cgroup/"):],
+            "--cgroup-parent", "/" + str(group.relative_to(CGROUP_ROOT)),
             "--cpus", str(requested["cpu"]), "--memory", f"{requested['memory_mb']}m",
             "--memory-swap", f"{requested['memory_mb']}m", "--pids-limit", str(requested["pids"]),
             "--log-driver", "none", "--workdir", requested["workdir"],

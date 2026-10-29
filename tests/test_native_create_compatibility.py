@@ -25,6 +25,7 @@ def test_native_gate_is_executable_under_private_service_umask_and_pid_mode_is_d
     policy = SimpleNamespace(**vars(native.config.native_engine))
     policy.execution_cgroup_parent = str(parent)
     config = SimpleNamespace(**{**vars(native.config), "native_engine": policy})
+    monkeypatch.setattr(engine, "CGROUP_ROOT", tmp_path)
     gate = tmp_path / "static-gate"
     gate.write_bytes(b"fixture only, never executed")
     monkeypatch.setattr(engine, "static_gate", lambda config: gate)
@@ -360,6 +361,7 @@ def mount_create(native, tmp_path, monkeypatch):
     policy = SimpleNamespace(**vars(native.config.native_engine))
     policy.execution_cgroup_parent = str(parent)
     config = SimpleNamespace(**{**vars(native.config), "native_engine": policy})
+    monkeypatch.setattr(engine, "CGROUP_ROOT", tmp_path)
     gate = tmp_path / "static-gate"
     gate.write_bytes(b"fixture only, never executed")
     monkeypatch.setattr(engine, "static_gate", lambda config: gate)
@@ -397,6 +399,40 @@ def mount_create(native, tmp_path, monkeypatch):
 
 def _bind_options(argv):
     return [argv[index + 1] for index, value in enumerate(argv) if value == "--mount"]
+
+
+def test_native_create_passes_absolute_cgroup_parent(mount_create, tmp_path):
+    record = mount_create.build(".")
+    with pytest.raises(_CreateReached):
+        mount_create.driver.create(record, lambda: None)
+    argv = mount_create.seen[0]
+    parent = argv[argv.index("--cgroup-parent") + 1]
+    assert parent.startswith("/")
+    assert parent == "/" + str(Path(record["driver"]["cgroup"]).relative_to(tmp_path))
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_native_proof_requires_exact_delegated_cgroup_not_engine_nested(native, monkeypatch, nested):
+    class LimitsReached(Exception):
+        pass
+
+    root = Path("/sys/fs/cgroup/appsecreview.slice")
+    parent = root / "appsecreview-actions.slice/appsec-executions/exec"
+    cid = "f" * 64
+    exact = parent / cid
+    escaped = root / "appsecreview-engine.slice" / exact.relative_to(root) if nested else exact
+    proof = engine.NativeProof(native.config)
+    monkeypatch.setattr(proof, "process_cgroup", lambda pid: escaped)
+
+    def limits(*args):
+        raise LimitsReached()
+
+    monkeypatch.setattr(proof, "limits", limits)
+    record = {"driver": {"cgroup": str(parent), "container_id": cid},
+              "payload": {"cpu": 1, "memory_mb": 64, "pids": 16}}
+    expected = engine.EnforcementUnavailable if nested else LimitsReached
+    with pytest.raises(expected):
+        proof.execution({"State": {"Pid": 424242}}, record)
 
 
 @pytest.mark.parametrize("relative", [".", "work", "work/nested"])
