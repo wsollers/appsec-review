@@ -3,8 +3,8 @@ from __future__ import annotations
 from appsec_review.interchange import decode_handoff
 
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
-from dataclasses import asdict
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -40,6 +40,15 @@ RELATION_NORMALIZER = "appsec-review/produced-artifact-relations/2"
 MAPPING_IDENTITY = "appsec-review/receipt-workspace-mapping/1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MAX_LINK_OBSERVATIONS = 500  # Retrieval payload sanitization keeps at most 500 list items.
+# Relations and member shards are persisted per build unit in deterministic bounded batches:
+# artifacts sorted by (workspace_path, sha256) are packed greedily until either limit would be
+# exceeded. A single artifact over the row limit gets its own shard. Both limits are bound into
+# the shard fingerprint.
+SHARD_LAYOUT = "build-unit-batch/1"
+MAX_ARTIFACTS_PER_SHARD = 5_000
+MAX_ROWS_PER_SHARD = 100_000  # Relations plus entities.
+_SHARD_ID = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+_LINKER_KINDS = frozenset({"linker", "linker-driver", "archiver", "compiler-driver-link"})
 _RECEIPT_SCHEMAS = {
     "appsec-review/language-build-receipt/1",
     "appsec-review/wasm-build-receipt/1",
@@ -183,23 +192,8 @@ def canonical_archive_member_identity(
     })
 
 
-def artifact_index_fingerprint(
-    *,
-    name: str,
-    target_snapshot: str,
-    receipt: Mapping[str, Any],
-    artifacts: Iterable[Mapping[str, Any]],
-    upstream_manifests: Iterable[str],
-    extractor_identity: str,
-    parser_identity: str,
-    normalizer_identity: str,
-    mapping_identity: str,
-) -> str:
-    artifact_values = []
-    for artifact in artifacts:
-        path, digest, kind = _artifact_fields(artifact)
-        artifact_values.append({"workspace_path": path, "sha256": digest,
-                                "size_bytes": artifact["size_bytes"], "format": kind})
+def _fingerprint_parts(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Receipt-wide fingerprint inputs, identical for every shard of one receipt."""
     actions = [{key: command.get(key) for key in
                 ("command_id", "argv_sha256", "image_id", "role", "tool_kind")}
                for command in receipt.get("commands", ()) if isinstance(command, Mapping)]
@@ -213,22 +207,17 @@ def artifact_index_fingerprint(
                     for output in invocation.get("outputs", ()) if isinstance(output, Mapping)],
         "package_integrity": invocation.get("package_integrity"),
     } for invocation in receipt.get("tool_invocations", ()) if isinstance(invocation, Mapping)]
-    dependency_identities = {
-        "receipt": receipt.get("fingerprint"),
-        "recipe": receipt.get("recipe_identity"),
-        "probe": receipt.get("probe_identity"),
-        "upstream_handoff": receipt.get("upstream_handoff_sha256"),
-        "upstream_builds": receipt.get("upstream_build_fingerprints", {}),
-    }
-    bound = {
-        "build_unit_id": receipt.get("build_unit_id"),
-        "artifact_family": sorted({artifact_family(str(item["format"])).value
-                                    for item in artifact_values}),
-        "artifacts": sorted(artifact_values, key=lambda item: (item["workspace_path"], item["sha256"])),
+    return {
         "producing_actions": sorted(actions, key=lambda item: (str(item.get("command_id")),
                                                                 str(item.get("argv_sha256")))),
         "producing_invocations": invocations,
-        "dependency_identities": dependency_identities,
+        "dependency_identities": {
+            "receipt": receipt.get("fingerprint"),
+            "recipe": receipt.get("recipe_identity"),
+            "probe": receipt.get("probe_identity"),
+            "upstream_handoff": receipt.get("upstream_handoff_sha256"),
+            "upstream_builds": receipt.get("upstream_build_fingerprints", {}),
+        },
         "image_toolchain": {
             "image": receipt.get("image"),
             "executor": receipt.get("executor_identity"),
@@ -236,9 +225,114 @@ def artifact_index_fingerprint(
             "family": receipt.get("family", receipt.get("source_family")),
             "producer": receipt.get("producer"),
         },
+    }
+
+
+@dataclass
+class _ReceiptContext:
+    """Lookups built once per receipt so per-artifact work is O(own invocations + own rows).
+
+    Scoped to one receipt inside one unit; never shared across receipts, units or attempts.
+    """
+
+    receipt: Mapping[str, Any]
+    target_snapshot: str
+    actions: dict[str, Mapping[str, Any]]
+    actions_by_argv: dict[str, list[str]]
+    invocations_by_output: dict[tuple[str, str], list[tuple[int, Mapping[str, Any]]]]
+    relationship_rows_by_sha: dict[str, list[Mapping[str, Any]]]
+    artifacts_by_path: dict[str, Mapping[str, Any]]
+    artifacts_by_hash: dict[str, Mapping[str, Any]]
+    fingerprint_parts: Mapping[str, Any]
+    _action_identities: dict[str, LogicalIdentity] = field(default_factory=dict)
+
+    @classmethod
+    def build(cls, receipt: Mapping[str, Any], target_snapshot: str) -> _ReceiptContext:
+        validated = receipt.get("validated_artifacts", ())
+        actions = {str(item.get("command_id")): item for item in receipt.get("commands", ())
+                   if isinstance(item, Mapping) and item.get("command_id")}
+        actions_by_argv: dict[str, list[str]] = defaultdict(list)
+        for command_id, action_row in actions.items():
+            if action_row.get("argv_sha256"):
+                actions_by_argv[str(action_row["argv_sha256"])].append(command_id)
+        invocations_by_output: dict[tuple[str, str], list[tuple[int, Mapping[str, Any]]]] = defaultdict(list)
+        for index, invocation in enumerate(receipt.get("tool_invocations", ())):
+            if not isinstance(invocation, Mapping) or not isinstance(invocation.get("outputs", ()), list):
+                continue
+            keys = dict.fromkeys(
+                (output.get("workspace_path"), output.get("sha256"))
+                for output in invocation.get("outputs", ())
+                if isinstance(output, Mapping) and isinstance(output.get("workspace_path"), str)
+                and isinstance(output.get("sha256"), str))
+            for key in keys:
+                invocations_by_output[key].append((index, invocation))
+        rows_by_sha: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for row in receipt.get("relationships", ()):
+            if isinstance(row, Mapping) and isinstance(row.get("artifact_sha256"), str):
+                rows_by_sha[row["artifact_sha256"]].append(row)
+        return cls(
+            receipt, target_snapshot, actions, dict(actions_by_argv), dict(invocations_by_output),
+            dict(rows_by_sha),
+            {str(item["workspace_path"]): item for item in validated},
+            {str(item["sha256"]): item for item in validated},
+            _fingerprint_parts(receipt),
+        )
+
+    def action_identity(self, command_id: str) -> LogicalIdentity:
+        identity = self._action_identities.get(command_id)
+        if identity is None:
+            identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, self.target_snapshot, {
+                "build_unit_id": self.receipt["build_unit_id"], "command_id": command_id})
+            self._action_identities[command_id] = identity
+        return identity
+
+
+def _shard_layout() -> dict[str, Any]:
+    return {"layout": SHARD_LAYOUT, "max_artifacts_per_shard": MAX_ARTIFACTS_PER_SHARD,
+            "max_rows_per_shard": MAX_ROWS_PER_SHARD}
+
+
+def artifact_index_fingerprint(
+    *,
+    name: str,
+    target_snapshot: str,
+    receipt: Mapping[str, Any],
+    artifacts: Iterable[Mapping[str, Any]],
+    upstream_manifests: Iterable[str],
+    extractor_identity: str,
+    parser_identity: str,
+    normalizer_identity: str,
+    mapping_identity: str,
+    receipt_context: _ReceiptContext | None = None,
+    shard_layout: Mapping[str, Any] | None = None,
+) -> str:
+    """Fingerprint one artifact shard.
+
+    ``receipt_context`` only reuses receipt-wide inputs already derived from ``receipt``; the
+    result is identical with or without it. ``shard_layout`` is bound for batched shards only.
+    """
+    if receipt_context is not None and receipt_context.receipt is not receipt:
+        raise ArtifactIndexIntegrityError("receipt context belongs to another receipt")
+    parts = receipt_context.fingerprint_parts if receipt_context is not None else _fingerprint_parts(receipt)
+    artifact_values = []
+    for artifact in artifacts:
+        path, digest, kind = _artifact_fields(artifact)
+        artifact_values.append({"workspace_path": path, "sha256": digest,
+                                "size_bytes": artifact["size_bytes"], "format": kind})
+    bound = {
+        "build_unit_id": receipt.get("build_unit_id"),
+        "artifact_family": sorted({artifact_family(str(item["format"])).value
+                                    for item in artifact_values}),
+        "artifacts": sorted(artifact_values, key=lambda item: (item["workspace_path"], item["sha256"])),
+        "producing_actions": parts["producing_actions"],
+        "producing_invocations": parts["producing_invocations"],
+        "dependency_identities": parts["dependency_identities"],
+        "image_toolchain": parts["image_toolchain"],
         "extractor": extractor_identity,
         "schema": INDEX_SCHEMA,
     }
+    if shard_layout is not None:
+        bound["shard_layout"] = dict(shard_layout)
     return index_fingerprint(
         name=name,
         target_snapshot=target_snapshot,
@@ -451,12 +545,14 @@ def _finish_shard(builder: IndexBuilder, path: Path) -> tuple[str, bool]:
 
 
 def _index_identity(unit: UnitContext, builder: IndexBuilder, path: Path,
-                    gaps: Iterable[str], family: str) -> tuple[dict[str, Any], bool]:
+                    gaps: Iterable[str], family: str,
+                    producer_extra: Mapping[str, Any] | None = None) -> tuple[dict[str, Any], bool]:
     sha, reused = _finish_shard(builder, path)
     identity = IndexIdentity(
         "artifacts", INDEX_SCHEMA, sha, builder.fingerprint,
         path.relative_to(unit.job.run_root).as_posix(),
-        {"job": "job_artifact_indexing", "unit": unit.unit_id, "family": family},
+        {"job": "job_artifact_indexing", "unit": unit.unit_id, "family": family,
+         **(producer_extra or {})},
         tuple(dict.fromkeys(str(gap) for gap in gaps)), builder.shard_id,
     )
     return asdict(identity), reused
@@ -473,6 +569,7 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
     identities: list[dict[str, Any]] = []
     reused = 0
     for receipt in loaded["receipts"]:
+        context = _ReceiptContext.build(receipt, unit.job.source_fingerprint)
         groups: dict[EntityKind, list[Mapping[str, Any]]] = defaultdict(list)
         for artifact in receipt["validated_artifacts"]:
             groups[artifact_family(str(artifact["kind"]))].append(artifact)
@@ -484,6 +581,7 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                 extractor_identity="none", parser_identity=unit.job.config.settings["catalog_parser_identity"],
                 normalizer_identity=unit.job.config.settings["normalizer_identity"],
                 mapping_identity=unit.job.config.settings["mapping_identity"],
+                receipt_context=context,
             )
             shard_id = f"catalog-{receipt['build_unit_id']}-{family.value}"
             path = _shard_path(unit, fingerprint, shard_id)
@@ -539,8 +637,123 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                                "SUCCEEDED" if identities else "NOT_APPLICABLE"}
 
 
+@dataclass
+class _ArtifactRows:
+    """One artifact's rows for a batched shard; per-artifact detail stays as rows."""
+
+    artifact: Mapping[str, Any]
+    entities: list[EntityRecord]
+    relations: list[RelationRecord]
+    gaps: list[str]
+
+    @property
+    def size(self) -> int:
+        return len(self.entities) + len(self.relations)
+
+
+def _sorted_artifacts(artifacts: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return sorted(artifacts, key=lambda item: (str(item["workspace_path"]), str(item["sha256"])))
+
+
+def _pack(rows: Iterable[_ArtifactRows]) -> Iterator[list[_ArtifactRows]]:
+    """Greedy deterministic packing; a lone artifact over the row limit gets its own batch."""
+    batch: list[_ArtifactRows] = []
+    size = 0
+    for row in rows:
+        if batch and (len(batch) + 1 > MAX_ARTIFACTS_PER_SHARD or size + row.size > MAX_ROWS_PER_SHARD):
+            yield batch
+            batch, size = [], 0
+        batch.append(row)
+        size += row.size
+    if batch:
+        yield batch
+
+
+def _batch_shard_id(prefix: str, build_unit_id: str, batch: int) -> str:
+    shard_id = f"{prefix}-{build_unit_id}-{batch:04d}"
+    if not _SHARD_ID.fullmatch(shard_id):
+        raise ArtifactIndexIntegrityError(f"artifact index shard id is invalid: {shard_id!r}")
+    return shard_id
+
+
+def _write_batches(unit: UnitContext, context: _ReceiptContext, *, prefix: str, family: str,
+                   rows: Iterable[_ArtifactRows], extractor_identity: str,
+                   parser_identity: str) -> tuple[list[dict[str, Any]], int]:
+    """Persist one build unit's rows as sequential, deterministic, bounded batch shards.
+
+    Build units and batches are indexed sequentially. A future bounded worker pool across build
+    units must run each task under ``contextvars.copy_context().run(...)`` (use
+    ``storage.shared.PublicationThreadPoolExecutor``): the attempt owner (``storage.shared``
+    ``current()``), the validation scope and ``operation_span`` are ContextVars, so in a plain
+    thread ``current()`` returns None and ``IndexBuilder.build()`` silently skips custody
+    registration and loses ``count_work`` telemetry. Such a pool must sort results by
+    ``(build_unit_id, family, batch)`` and may index completed immutable receipts in parallel,
+    never shard builds of one receipt.
+    """
+    receipt = context.receipt
+    build_unit_id = str(receipt["build_unit_id"])
+    settings = unit.job.config.settings
+    identities: list[dict[str, Any]] = []
+    reused = 0
+    for batch_index, batch in enumerate(_pack(rows)):
+        artifacts = [item.artifact for item in batch]
+        fingerprint = artifact_index_fingerprint(
+            name="artifacts", target_snapshot=unit.job.source_fingerprint, receipt=receipt,
+            artifacts=artifacts, upstream_manifests=_manifest_entries(receipt, artifacts),
+            extractor_identity=extractor_identity, parser_identity=parser_identity,
+            normalizer_identity=settings["normalizer_identity"],
+            mapping_identity=settings["mapping_identity"],
+            receipt_context=context, shard_layout=_shard_layout(),
+        )
+        shard_id = _batch_shard_id(prefix, build_unit_id, batch_index)
+        path = _shard_path(unit, fingerprint, shard_id)
+        builder = IndexBuilder(path, name="artifacts", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
+        shard_gaps: list[str] = []
+        for item in batch:
+            for entity in item.entities:
+                builder.add_entity(entity)
+            for relation in item.relations:
+                builder.add_relation(relation)
+            builder.add_coverage(str(item.artifact["workspace_path"]),
+                                 "partial" if item.gaps else "complete",
+                                 item.gaps[0] if item.gaps else None)
+            shard_gaps.extend(item.gaps)
+        identity, was_reused = _index_identity(
+            unit, builder, path, shard_gaps, family,
+            {"build_unit_id": build_unit_id, "batch": batch_index})
+        identities.append(identity)
+        reused += int(was_reused)
+    for identity in identities:
+        identity["producer"]["batch_count"] = len(identities)
+    return identities, reused
+
+
+def _member_rows(unit: UnitContext, artifact: Mapping[str, Any],
+                 rows: list[Mapping[str, Any]]) -> _ArtifactRows:
+    gaps = [] if rows else [f"{artifact['workspace_path']}: archive member manifest unavailable"]
+    parent = LogicalIdentity.parse(str(artifact["canonical_identity"]))
+    extractor = unit.job.config.settings["member_extractor_identity"]
+    entities: list[EntityRecord] = []
+    relations: list[RelationRecord] = []
+    seen: set[str] = set()
+    for row in sorted(rows, key=lambda item: str(item.get("member", ""))):
+        member = canonical_archive_member_identity(unit.job.source_fingerprint, parent, row)
+        if member.value in seen:
+            raise ArtifactIndexIntegrityError("archive member manifest contains a duplicate identity")
+        seen.add(member.value)
+        member_path = _member_path(str(row["member"]))
+        entities.append(EntityRecord(member, member_path, PurePosixPath(member_path).name,
+            member_path, {"member_path": member_path, "size_bytes": row["size_bytes"],
+                          "sha256": row.get("sha256"), "parent_artifact": parent.value,
+                          "extractor_identity": extractor}))
+        relations.append(RelationRecord(RelationKind.CONTAINS, parent.value, member.value, True, 1.0))
+    return _ArtifactRows(artifact, entities, relations, gaps)
+
+
 def _members(unit: UnitContext) -> Mapping[str, Any]:
     loaded = unit.output("load.accepted_builds")
+    settings = unit.job.config.settings
     identities: list[dict[str, Any]] = []
     gaps: list[str] = []
     reused = 0
@@ -550,167 +763,135 @@ def _members(unit: UnitContext) -> Mapping[str, Any]:
             if not isinstance(row, Mapping):
                 raise ArtifactIndexIntegrityError("package member manifest row is invalid")
             rows_by_path[normalize_relative_path(str(row.get("package_path", "")))].append(row)
-        for artifact in receipt["validated_artifacts"]:
-            if artifact_family(str(artifact["kind"])) != EntityKind.PACKAGE:
-                continue
-            rows = rows_by_path.get(str(artifact["workspace_path"]), [])
-            artifact_gaps = [] if rows else [f"{artifact['workspace_path']}: archive member manifest unavailable"]
-            gaps.extend(artifact_gaps)
-            fingerprint = artifact_index_fingerprint(
-                name="artifacts", target_snapshot=unit.job.source_fingerprint, receipt=receipt,
-                artifacts=(artifact,), upstream_manifests=_manifest_entries(receipt, (artifact,)),
-                extractor_identity=unit.job.config.settings["member_extractor_identity"],
-                parser_identity=unit.job.config.settings["member_parser_identity"],
-                normalizer_identity=unit.job.config.settings["normalizer_identity"],
-                mapping_identity=unit.job.config.settings["mapping_identity"],
-            )
-            shard_id = f"members-{str(artifact['canonical_identity']).rsplit(':', 1)[-1][:24]}"
-            path = _shard_path(unit, fingerprint, shard_id)
-            builder = IndexBuilder(path, name="artifacts", fingerprint=fingerprint,
-                                   target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
-            parent = LogicalIdentity.parse(str(artifact["canonical_identity"]))
-            seen: set[str] = set()
-            for row in sorted(rows, key=lambda item: str(item.get("member", ""))):
-                member = canonical_archive_member_identity(unit.job.source_fingerprint, parent, row)
-                if member.value in seen:
-                    raise ArtifactIndexIntegrityError("archive member manifest contains a duplicate identity")
-                seen.add(member.value)
-                member_path = _member_path(str(row["member"]))
-                builder.add_entity(EntityRecord(member, member_path, PurePosixPath(member_path).name,
-                    member_path, {"member_path": member_path, "size_bytes": row["size_bytes"],
-                                  "sha256": row.get("sha256"), "parent_artifact": parent.value,
-                                  "extractor_identity": unit.job.config.settings["member_extractor_identity"]}))
-                builder.add_relation(RelationRecord(RelationKind.CONTAINS, parent.value,
-                                                     member.value, True, 1.0))
-            builder.add_coverage(str(artifact["workspace_path"]),
-                                 "partial" if artifact_gaps else "complete",
-                                 artifact_gaps[0] if artifact_gaps else None)
-            identity, was_reused = _index_identity(unit, builder, path, artifact_gaps, "members")
-            identities.append(identity)
-            reused += int(was_reused)
+        packages = _sorted_artifacts(
+            artifact for artifact in receipt["validated_artifacts"]
+            if artifact_family(str(artifact["kind"])) == EntityKind.PACKAGE)
+        if not packages:
+            continue
+        context = _ReceiptContext.build(receipt, unit.job.source_fingerprint)
+
+        def rows(packages=packages, rows_by_path=rows_by_path) -> Iterator[_ArtifactRows]:
+            for artifact in packages:
+                item = _member_rows(unit, artifact, rows_by_path.get(str(artifact["workspace_path"]), []))
+                gaps.extend(item.gaps)
+                yield item
+
+        built, was_reused = _write_batches(
+            unit, context, prefix="members", family="members", rows=rows(),
+            extractor_identity=settings["member_extractor_identity"],
+            parser_identity=settings["member_parser_identity"])
+        identities.extend(built)
+        reused += was_reused
     return {"indexes": identities, "shard_count": len(identities), "reused_count": reused,
             "gaps": list(dict.fromkeys(gaps)),
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
                                "SUCCEEDED" if identities else "NOT_APPLICABLE"}
 
 
+def _artifact_relations(context: _ReceiptContext, artifact: Mapping[str, Any]) -> _ArtifactRows:
+    """One artifact's producer and link relations; O(own invocations + own relationship rows)."""
+    receipt = context.receipt
+    actions = context.actions
+    artifact_gaps: list[str] = []
+    relations: list[RelationRecord] = []
+    target = str(artifact["canonical_identity"])
+    mapped_actions: set[str] = set()
+    link_relations: dict[str, RelationRecord] = {}
+    link_observations: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in context.relationship_rows_by_sha.get(str(artifact["sha256"]), ()):
+        if str(row.get("command_id", "")) not in actions:
+            continue
+        command_id = str(row["command_id"])
+        confidence = float(row.get("confidence", 0.5))
+        relations.append(RelationRecord(RelationKind.GENERATED_FROM, target,
+            context.action_identity(command_id).value, False, confidence,
+            "producer supplied bounded build attribution", {"mapping": row.get("mapping")}))
+        mapped_actions.add(command_id)
+    key = (str(artifact["workspace_path"]), str(artifact["sha256"]))
+    for invocation_index, invocation in context.invocations_by_output.get(key, ()):
+        parent = str(invocation.get("parent_command_id", ""))
+        if parent not in actions:
+            matches = context.actions_by_argv.get(str(invocation.get("argv_sha256", "")), ())
+            parent = matches[0] if len(matches) == 1 else ""
+        if parent in actions:
+            exact = invocation.get("mapping_confidence") == 1.0
+            relations.append(RelationRecord(RelationKind.GENERATED_FROM, target,
+                context.action_identity(parent).value, exact,
+                1.0 if exact else float(invocation.get("mapping_confidence", 0.5)),
+                None if exact else "tool invocation output mapping was heuristic"))
+            mapped_actions.add(parent)
+        if str(invocation.get("tool_kind", "")) in _LINKER_KINDS:
+            for input_index, raw_input in enumerate(invocation.get("inputs", ())):
+                if not isinstance(raw_input, Mapping):
+                    continue
+                source = context.artifacts_by_path.get(str(raw_input.get("workspace_path", "")))
+                if source is None and raw_input.get("sha256"):
+                    source = context.artifacts_by_hash.get(str(raw_input["sha256"]))
+                if source is not None:
+                    exact = raw_input.get("mapping_confidence") == 1.0
+                    relation = RelationRecord(RelationKind.LINKS_INTO,
+                        str(source["canonical_identity"]), target, exact,
+                        1.0 if exact else float(raw_input.get("mapping_confidence", 0.5)),
+                        None if exact else "link input mapping was heuristic")
+                    previous = link_relations.get(relation.relation_id)
+                    if previous is None or relation.confidence > previous.confidence:
+                        link_relations[relation.relation_id] = relation
+                    link_observations[relation.relation_id].append({
+                        "invocation_index": invocation_index, "input_index": input_index,
+                        "origin": str(invocation.get("origin", "")),
+                        "tool": str(invocation.get("tool", "")),
+                        "confidence": relation.confidence,
+                    })
+    for relation_id in sorted(link_relations):
+        relation = link_relations[relation_id]
+        observations = link_observations[relation_id]
+        if len(observations) > _MAX_LINK_OBSERVATIONS:
+            artifact_gaps.append(
+                f"{artifact['workspace_path']}: link provenance exceeds "
+                f"{_MAX_LINK_OBSERVATIONS} observations for {relation_id}")
+        relations.append(RelationRecord(
+            relation.kind, relation.source_id, relation.target_id, relation.exact,
+            relation.confidence, relation.ambiguity,
+            {"build_unit_id": receipt["build_unit_id"],
+             "observation_count": len(observations),
+             "observations": observations[:_MAX_LINK_OBSERVATIONS]},
+        ))
+    if not mapped_actions and actions:
+        # Unattributed outputs fan out to every command of the unit (O(outputs x commands));
+        # batching bounds the shard size, and the semantics are deliberately unchanged.
+        ambiguity = "receipt did not attribute the artifact to a unique producing action"
+        for command_id in sorted(actions):
+            relations.append(RelationRecord(RelationKind.GENERATED_FROM, target,
+                                            context.action_identity(command_id).value, False, 0.25,
+                                            ambiguity))
+        artifact_gaps.append(f"{artifact['workspace_path']}: producing action mapping is ambiguous")
+    elif not actions:
+        artifact_gaps.append(f"{artifact['workspace_path']}: producing action receipt unavailable")
+    return _ArtifactRows(artifact, [], relations, artifact_gaps)
+
+
 def _relationships(unit: UnitContext) -> Mapping[str, Any]:
     loaded = unit.output("load.accepted_builds")
+    settings = unit.job.config.settings
     identities: list[dict[str, Any]] = []
     gaps: list[str] = []
     reused = 0
     for receipt in loaded["receipts"]:
-        artifacts_by_path = {str(item["workspace_path"]): item for item in receipt["validated_artifacts"]}
-        artifacts_by_hash = {str(item["sha256"]): item for item in receipt["validated_artifacts"]}
-        actions = {str(item.get("command_id")): item for item in receipt.get("commands", ())
-                   if isinstance(item, Mapping) and item.get("command_id")}
-        actions_by_argv: dict[str, list[str]] = defaultdict(list)
-        for command_id, action_row in actions.items():
-            if action_row.get("argv_sha256"):
-                actions_by_argv[str(action_row["argv_sha256"])].append(command_id)
-        for artifact in receipt["validated_artifacts"]:
-            artifact_gaps: list[str] = []
-            fingerprint = artifact_index_fingerprint(
-                name="artifacts", target_snapshot=unit.job.source_fingerprint, receipt=receipt,
-                artifacts=(artifact,), upstream_manifests=_manifest_entries(receipt, (artifact,)),
-                extractor_identity="none", parser_identity=unit.job.config.settings["relationship_parser_identity"],
-                normalizer_identity=unit.job.config.settings["normalizer_identity"],
-                mapping_identity=unit.job.config.settings["mapping_identity"],
-            )
-            shard_id = f"relations-{str(artifact['canonical_identity']).rsplit(':', 1)[-1][:24]}"
-            path = _shard_path(unit, fingerprint, shard_id)
-            builder = IndexBuilder(path, name="artifacts", fingerprint=fingerprint,
-                                   target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
-            target = str(artifact["canonical_identity"])
-            mapped_actions: set[str] = set()
-            link_relations: dict[str, RelationRecord] = {}
-            link_observations: dict[str, list[dict[str, Any]]] = defaultdict(list)
-            for row in receipt.get("relationships", ()):
-                if (not isinstance(row, Mapping) or row.get("artifact_sha256") != artifact["sha256"] or
-                        str(row.get("command_id", "")) not in actions):
-                    continue
-                command_id = str(row["command_id"])
-                action = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
-                    {"build_unit_id": receipt["build_unit_id"], "command_id": command_id})
-                confidence = float(row.get("confidence", 0.5))
-                builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM, target,
-                    action.value, False, confidence, "producer supplied bounded build attribution",
-                    {"mapping": row.get("mapping")}))
-                mapped_actions.add(command_id)
-            for invocation_index, invocation in enumerate(receipt.get("tool_invocations", ())):
-                if not isinstance(invocation, Mapping):
-                    continue
-                outputs = invocation.get("outputs", ())
-                if not isinstance(outputs, list) or not any(
-                        isinstance(item, Mapping) and item.get("workspace_path") == artifact["workspace_path"] and
-                        item.get("sha256") == artifact["sha256"] for item in outputs):
-                    continue
-                parent = str(invocation.get("parent_command_id", ""))
-                if parent not in actions:
-                    matches = actions_by_argv.get(str(invocation.get("argv_sha256", "")), ())
-                    parent = matches[0] if len(matches) == 1 else ""
-                if parent in actions:
-                    action = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
-                        {"build_unit_id": receipt["build_unit_id"], "command_id": parent})
-                    exact = invocation.get("mapping_confidence") == 1.0
-                    builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM, target,
-                        action.value, exact, 1.0 if exact else float(invocation.get("mapping_confidence", 0.5)),
-                        None if exact else "tool invocation output mapping was heuristic"))
-                    mapped_actions.add(parent)
-                if str(invocation.get("tool_kind", "")) in {"linker", "linker-driver", "archiver",
-                                                                 "compiler-driver-link"}:
-                    for input_index, raw_input in enumerate(invocation.get("inputs", ())):
-                        if not isinstance(raw_input, Mapping):
-                            continue
-                        source = artifacts_by_path.get(str(raw_input.get("workspace_path", "")))
-                        if source is None and raw_input.get("sha256"):
-                            source = artifacts_by_hash.get(str(raw_input["sha256"]))
-                        if source is not None:
-                            exact = raw_input.get("mapping_confidence") == 1.0
-                            relation = RelationRecord(RelationKind.LINKS_INTO,
-                                str(source["canonical_identity"]), target, exact,
-                                1.0 if exact else float(raw_input.get("mapping_confidence", 0.5)),
-                                None if exact else "link input mapping was heuristic")
-                            previous = link_relations.get(relation.relation_id)
-                            if previous is None or relation.confidence > previous.confidence:
-                                link_relations[relation.relation_id] = relation
-                            link_observations[relation.relation_id].append({
-                                "invocation_index": invocation_index, "input_index": input_index,
-                                "origin": str(invocation.get("origin", "")),
-                                "tool": str(invocation.get("tool", "")),
-                                "confidence": relation.confidence,
-                            })
-            for relation_id in sorted(link_relations):
-                relation = link_relations[relation_id]
-                observations = link_observations[relation_id]
-                if len(observations) > _MAX_LINK_OBSERVATIONS:
-                    artifact_gaps.append(
-                        f"{artifact['workspace_path']}: link provenance exceeds "
-                        f"{_MAX_LINK_OBSERVATIONS} observations for {relation_id}")
-                builder.add_relation(RelationRecord(
-                    relation.kind, relation.source_id, relation.target_id, relation.exact,
-                    relation.confidence, relation.ambiguity,
-                    {"build_unit_id": receipt["build_unit_id"],
-                     "observation_count": len(observations),
-                     "observations": observations[:_MAX_LINK_OBSERVATIONS]},
-                ))
-            if not mapped_actions and actions:
-                ambiguity = "receipt did not attribute the artifact to a unique producing action"
-                for command_id in sorted(actions):
-                    action = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
-                        {"build_unit_id": receipt["build_unit_id"], "command_id": command_id})
-                    builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM, target,
-                                                        action.value, False, 0.25, ambiguity))
-                artifact_gaps.append(f"{artifact['workspace_path']}: producing action mapping is ambiguous")
-            elif not actions:
-                artifact_gaps.append(f"{artifact['workspace_path']}: producing action receipt unavailable")
-            gaps.extend(artifact_gaps)
-            builder.add_coverage(str(artifact["workspace_path"]),
-                                 "partial" if artifact_gaps else "complete",
-                                 artifact_gaps[0] if artifact_gaps else None)
-            identity, was_reused = _index_identity(unit, builder, path, artifact_gaps, "relationships")
-            identities.append(identity)
-            reused += int(was_reused)
+        if not receipt["validated_artifacts"]:
+            continue
+        context = _ReceiptContext.build(receipt, unit.job.source_fingerprint)
+
+        def rows(context=context) -> Iterator[_ArtifactRows]:
+            for artifact in _sorted_artifacts(context.receipt["validated_artifacts"]):
+                item = _artifact_relations(context, artifact)
+                gaps.extend(item.gaps)
+                yield item
+
+        built, was_reused = _write_batches(
+            unit, context, prefix="relations", family="relationships", rows=rows(),
+            extractor_identity="none", parser_identity=settings["relationship_parser_identity"])
+        identities.extend(built)
+        reused += was_reused
     return {"indexes": identities, "shard_count": len(identities), "reused_count": reused,
             "gaps": list(dict.fromkeys(gaps)),
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps else

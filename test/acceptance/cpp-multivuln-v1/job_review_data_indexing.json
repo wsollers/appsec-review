@@ -106,7 +106,7 @@
   },
   {
    "count": 2,
-   "gap": "artifacts/relations-2fbb7fdb7eb815a992d32f13: build/compile_commands.json: partial: build/compile_commands.json: producing action mapping is ambiguous",
+   "gap": "artifacts/relations-build-unit-b9c931fa551e02bd12b2-0000: build/compile_commands.json: partial: build/compile_commands.json: producing action mapping is ambiguous",
    "unit": "precompute.artifact_inventory"
   },
   {

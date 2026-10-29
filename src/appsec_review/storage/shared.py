@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
+import errno
 import hashlib
 import json
 import os
@@ -20,7 +21,10 @@ import tempfile
 from typing import Any, Mapping, TYPE_CHECKING
 
 from .atomic import canonical_json, file_sha256
-from .validation import current_validation, validation_operation, validation_scope, verified_digest
+from .validation import (
+    current_validation, observed_digest, remember_digest, validation_operation, validation_scope,
+    verified_digest,
+)
 
 if TYPE_CHECKING:
     from appsec_review.runtime.job import JobContext
@@ -78,7 +82,7 @@ def reference(root: Path, path: Path, *, expected_sha256: str | None = None) -> 
             raise ValueError("shared object path differs from expected identity")
         expected_sha256 = identity
     digest = (verified_digest(root, path, _hash(expected_sha256)) if expected_sha256 is not None
-              else file_sha256(path))
+              else observed_digest(root, path))
     return {"path": relative, "sha256": digest, "size_bytes": path.stat().st_size}
 
 
@@ -94,6 +98,7 @@ def immutable_bytes(root: Path, relative: str, payload: bytes) -> dict[str, Any]
     """Publish complete, fsynced bytes with an atomic no-replace link."""
     path = safe_path(root, relative)
     path.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(payload).hexdigest()
     descriptor, temporary = tempfile.mkstemp(prefix=".publish-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "wb") as stream:
@@ -106,7 +111,8 @@ def immutable_bytes(root: Path, relative: str, payload: bytes) -> dict[str, Any]
         except FileExistsError:
             if not path.is_file() or path.is_symlink() or path.read_bytes() != payload:
                 raise ValueError(f"immutable shared artifact conflicts: {relative}") from None
-        return reference(root, path)
+        remember_digest(root, path, digest)
+        return reference(root, path, expected_sha256=digest)
     finally:
         os.unlink(temporary)
 
@@ -145,14 +151,23 @@ def put_file(root: Path, source: Path) -> dict[str, Any]:
         os.unlink(temporary)
 
 
+def _conflict_free(root: Path, path: Path, relative: str, digest: str) -> None:
+    """Confirm an existing immutable path holds ``digest`` (hashed once per validation context)."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"immutable shared artifact conflicts: {relative}")
+    try:
+        verified_digest(root, path, digest)
+    except ValueError:
+        raise ValueError(f"immutable shared artifact conflicts: {relative}") from None
+
+
 def _link(root: Path, source: Path, relative: str, digest: str) -> dict[str, Any]:
     path = safe_path(root, relative)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.link(source, path)
     except FileExistsError:
-        if path.is_symlink() or not path.is_file() or file_sha256(path) != digest:
-            raise ValueError(f"immutable shared artifact conflicts: {relative}") from None
+        _conflict_free(root, path, relative, digest)
     ref = reference(root, path)
     if ref["sha256"] != digest:
         raise ValueError("immutable source changed during publication")
@@ -162,6 +177,31 @@ def _link(root: Path, source: Path, relative: str, digest: str) -> dict[str, Any
 def put_private_file(root: Path, source: Path) -> dict[str, Any]:
     """Detach publication from a builder's potentially writable aliases."""
     return put_file(root, source)
+
+
+def adopt_private_file(root: Path, source: Path, digest: str) -> dict[str, Any]:
+    """Publish a builder's closed, fsynced private file as ``objects/<digest>`` without copying.
+
+    The caller must already have hashed ``source`` (``digest``) and must not write it again; its
+    private directory is removed after publication, so the object keeps no writable builder alias.
+    Across filesystems (EXDEV) this falls back to the copying ``put_file`` path.
+    """
+    safe_path(root, source.relative_to(root).as_posix())
+    relative = f"{OBJECTS}/{_hash(digest)}"
+    path = safe_path(root, relative)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source, path)
+    except FileExistsError:
+        _conflict_free(root, path, relative, digest)
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise
+        return put_file(root, source)
+    else:
+        from appsec_review.observability.spans import count_work
+        count_work("custody_alias_objects")
+    return reference(root, path, expected_sha256=digest)
 
 
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
