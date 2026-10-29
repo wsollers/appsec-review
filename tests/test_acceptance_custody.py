@@ -432,3 +432,173 @@ def test_publication_shared_prefix_requires_one_exact_production_binding(
             producer, receipt_path, producer_result=completed, frozen_inputs=inputs)
         assert receipt["outcome"] == "detached" and receipt["replaced_files"] == 6
         assert custody.snapshot_tree(producer.work_root) == before
+
+
+def immutable_fixture(tmp_path: Path, *, reverse: bool = False):
+    producer, consumer = seed(tmp_path)
+    root = producer.work_root
+    for name in ("target/nested/empty", "inputs", "runs/unchanged-run-id/data/configuration/nested"):
+        (root / name).mkdir(parents=True)
+    (root / "target/nested/source.py").write_bytes(b"nested = 1\r\n")
+    (root / "inputs/selected.txt").write_bytes(b"one selected leaf, not its parent\n")
+    (root / "inputs/mutable.txt").write_bytes(b"unselected sibling\n")
+    (root / "runs/unchanged-run-id/data/configuration/nested/state.json").write_bytes(b'{"nested":true}\n')
+    paths = (
+        "target/nested/source.py", "target/nested", "target", "empty",
+        "runs/unchanged-run-id/data/configuration/nested",
+        "runs/unchanged-run-id/data/configuration", "inputs/selected.txt",
+        "fixture-state.json", "custody-input.json", "appsec-review.toml", "overlay.toml")
+    if reverse:
+        paths = tuple(reversed(paths))
+    (root / "custody-input.json").write_text(json.dumps(SeedInputs("micro", paths).record()), encoding="utf-8")
+    expected = custody._inputs_from_tree(producer, custody.snapshot_tree(root), paths)
+    return producer, consumer, expected
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_immutable_only_capture_matches_filtered_full_snapshot_without_mutable_reads(
+        tmp_path: Path, monkeypatch, reverse: bool) -> None:
+    producer, consumer, expected = immutable_fixture(tmp_path, reverse=reverse)
+    root = producer.work_root
+    read_record, open_file, scandir = custody._file_record, Path.open, os.scandir
+    hashes = []
+    selected_files = {root / name for name in expected["files"]}
+    selected_directories = {root / name for name in expected["directories"]}
+
+    def fresh_hash(path):
+        assert path in selected_files, f"hashed unrelated output: {path}"
+        hashes.append(path)
+        return read_record(path)
+
+    def immutable_open(path, *args, **kwargs):
+        assert path in selected_files, f"read unrelated output: {path}"
+        return open_file(path, *args, **kwargs)
+
+    def immutable_scandir(path):
+        assert path in selected_directories, f"enumerated unrelated output: {path}"
+        return scandir(path)
+
+    monkeypatch.setattr(custody, "_file_record", fresh_hash)
+    monkeypatch.setattr(Path, "open", immutable_open)
+    monkeypatch.setattr(custody.os, "scandir", immutable_scandir)
+    assert custody.capture_inputs(producer) == expected
+    assert custody.capture_inputs(consumer) == expected
+    custody.verify_inputs(producer, expected)
+    assert len(hashes) == 3 * len(selected_files)
+    assert all(hashes.count(path) == 3 for path in selected_files)
+
+
+@pytest.mark.parametrize("damage", [
+    "same-size", "extra-file", "missing-file", "extra-dir", "missing-dir", "missing-root", "declaration",
+])
+def test_immutable_only_verification_detects_fresh_content_and_membership_changes(tmp_path: Path, damage: str) -> None:
+    producer, _consumer, expected = immutable_fixture(tmp_path)
+    root = producer.work_root
+    leaf = root / "target/nested/source.py"
+    if damage == "same-size":
+        metadata = leaf.stat()
+        leaf.write_bytes(b"nested = 2\r\n")
+        os.utime(leaf, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+    elif damage == "extra-file":
+        (root / "target/nested/new.py").write_bytes(b"extra immutable child")
+    elif damage == "missing-file":
+        (root / "target/source.py").unlink()
+    elif damage == "extra-dir":
+        (root / "target/new-empty").mkdir()
+    elif damage == "missing-dir":
+        (root / "target/nested/empty").rmdir()
+    elif damage == "missing-root":
+        (root / "empty").rmdir()
+    else:
+        declaration = json.loads((root / "custody-input.json").read_bytes())
+        declaration["read_only_paths"].reverse()
+        (root / "custody-input.json").write_text(json.dumps(declaration), encoding="utf-8")
+    with pytest.raises(custody.CustodyError):
+        custody.verify_inputs(producer, expected)
+
+
+@pytest.mark.parametrize("limit,reason", [
+    ("MAX_FILES", "file_limit"), ("MAX_ENTRIES", "entry_limit"),
+    ("MAX_BYTES", "byte_limit"), ("MAX_DEPTH", "depth_limit"),
+])
+def test_immutable_only_limits_are_cumulative_and_do_not_double_count_overlaps(
+        tmp_path: Path, monkeypatch, limit: str, reason: str) -> None:
+    producer, _consumer, expected = immutable_fixture(tmp_path)
+    entries = [*expected["files"], *expected["directories"]]
+    limits = {
+        "MAX_FILES": len(expected["files"]),
+        "MAX_ENTRIES": len(entries),
+        "MAX_BYTES": sum(record["size"] for record in expected["files"].values()),
+        "MAX_DEPTH": max(len(Path(name).parts) for name in entries),
+    }
+    for name, value in limits.items():
+        monkeypatch.setattr(custody, name, value)
+    assert custody.capture_inputs(producer) == expected
+    monkeypatch.setattr(custody, limit, limits[limit] - 1)
+    with pytest.raises(custody.CustodyError, match=reason):
+        custody.capture_inputs(producer)
+
+
+@pytest.mark.parametrize("kind", ["hardlink", "symlink", "redirected-parent", "special-file"])
+def test_immutable_only_capture_retains_ordinary_file_and_ancestor_protection(tmp_path: Path, kind: str) -> None:
+    producer, _consumer, expected = immutable_fixture(tmp_path)
+    root = producer.work_root
+    source = root / "inputs/selected.txt"
+    if kind == "hardlink":
+        os.link(source, root / "inputs/shared.txt")
+    else:
+        original = source.read_bytes()
+        source.unlink()
+        try:
+            if kind == "symlink":
+                source.symlink_to(root / "inputs/mutable.txt")
+            elif kind == "redirected-parent":
+                outside = tmp_path / "outside-inputs"
+                outside.mkdir()
+                (outside / source.name).write_bytes(original)
+                (root / "inputs/mutable.txt").unlink()
+                source.parent.rmdir()
+                source.parent.symlink_to(outside, target_is_directory=True)
+            elif hasattr(os, "mkfifo"):
+                os.mkfifo(source)
+            else:
+                pytest.skip("host cannot create a FIFO")
+        except OSError as error:
+            pytest.skip(f"host cannot create {kind}: {error}")
+    with pytest.raises(custody.CustodyError, match="hardlinked|redirected|not_ordinary"):
+        custody.verify_inputs(producer, expected)
+
+
+def test_immutable_only_capture_preserves_exact_logical_case(tmp_path: Path) -> None:
+    producer, _consumer = seed(tmp_path)
+    paths = ("TARGET/source.py", "custody-input.json")
+    (producer.work_root / "custody-input.json").write_text(
+        json.dumps(SeedInputs("micro", paths).record()), encoding="utf-8")
+    with pytest.raises(custody.CustodyError, match="immutable_input_missing"):
+        custody._inputs_from_tree(producer, custody.snapshot_tree(producer.work_root), paths)
+    with pytest.raises(custody.CustodyError):
+        custody.capture_inputs(producer)
+
+
+def test_immutable_only_verification_leaves_full_mutable_checkpoint_and_seal_hashing_intact(tmp_path: Path) -> None:
+    producer, consumer = seed(tmp_path)
+    expected = custody.capture_inputs(producer)
+    checkpoint = tmp_path / "custody/before-mutable-change.json"
+    checkpoint_hash = custody.checkpoint_seed(producer, checkpoint)
+    output = producer.work_root / "runs/unchanged-run-id/output/evidence.txt"
+    output.write_bytes(b"changed mutable evidence\r\n")
+    custody.verify_inputs(producer, expected)
+    with pytest.raises(custody.CustodyError, match="predecessor_tree_changed"):
+        custody.verify_checkpoint(producer, checkpoint, checkpoint_hash)
+    with pytest.raises(custody.CustodyError, match="sealed_tree_changed"):
+        custody.verify_seed(consumer)
+    new_seal = tmp_path / "custody/after-mutable-change.json"
+    custody.seal_seed(producer, new_seal)
+    assert json.loads(new_seal.read_bytes())["tree"]["files"][
+        output.relative_to(producer.work_root).as_posix()]["sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
+    os.link(output, output.with_name("shared-output.txt"))
+    custody.verify_inputs(producer, expected)
+    with pytest.raises(custody.CustodyError, match="hardlinked"):
+        custody.checkpoint_seed(producer, tmp_path / "custody/invalid-checkpoint.json")
+    with pytest.raises(custody.CustodyError, match="hardlinked"):
+        custody.seal_seed(producer, tmp_path / "custody/invalid-seal.json")

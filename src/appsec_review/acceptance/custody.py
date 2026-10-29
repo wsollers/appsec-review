@@ -169,6 +169,57 @@ def snapshot_tree(root: Path) -> dict[str, Any]:
             "file_count": len(files), "total_bytes": total}
 
 
+def _snapshot_input_paths(root: Path, paths: tuple[str, ...]) -> dict[str, Any]:
+    """Freshly inspect only the immutable union; overlaps count and hash once."""
+    ordinary_path(root)
+    if not root.is_dir():
+        raise CustodyError("custody_root_not_directory")
+    files, directories, names, pending = {}, [], {}, []
+    total = 0
+
+    def schedule(path: Path, relative: str) -> None:
+        _check_deadline()
+        relative = _logical(relative)
+        if len(PurePosixPath(relative).parts) > MAX_DEPTH:
+            raise CustodyError("custody_depth_limit")
+        key = relative.casefold() if os.name == "nt" else relative
+        if key in names:
+            if names[key] != relative:
+                raise CustodyError("custody_ambiguous_path")
+            return
+        if len(names) >= MAX_ENTRIES:
+            raise CustodyError("custody_entry_limit")
+        names[key] = relative
+        pending.append((path, relative))
+
+    for name in paths:
+        path = root / _logical(name)
+        ordinary_path(path)
+        # Full snapshots use actual entry names. Preserve their exact logical case,
+        # including rejecting differently cased declarations on Windows.
+        path = path.resolve()
+        schedule(path, path.relative_to(root).as_posix())
+    while pending:
+        _check_deadline()
+        path, relative = pending.pop()
+        ordinary_path(path)
+        if path.is_dir():
+            directories.append(relative)
+            with os.scandir(path) as children:
+                for entry in children:
+                    schedule(path / entry.name, relative + "/" + entry.name)
+        else:
+            if len(files) >= MAX_FILES:
+                raise CustodyError("custody_file_limit")
+            record = _file_record(path)
+            total += record["size"]
+            if total > MAX_BYTES:
+                raise CustodyError("custody_byte_limit")
+            files[relative] = record
+    return {"files": dict(sorted(files.items())), "directories": sorted(directories),
+            "file_count": len(files), "total_bytes": total}
+
+
 def _object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     value: dict[str, Any] = {}
     for name, item in pairs:
@@ -510,7 +561,7 @@ def detach_producer_outputs(context: StageContext, receipt_path: Path, *, produc
 
 
 def capture_inputs(context: StageContext) -> dict[str, Any]:
-    """Pin PREPARE's declared immutable paths and declaration itself, using actual bytes."""
+    """Hash only declared immutable paths; checkpoints/seals separately gate the whole tree."""
     root = context.work_root if context.kind is StageKind.PRODUCER else context.seed_root
     assert root is not None
     _verify_source_manifest(context)
@@ -521,10 +572,10 @@ def capture_inputs(context: StageContext) -> dict[str, Any]:
         raise CustodyError("custody_invalid_seed_inputs") from error
     if selected.variant != context.variant:
         raise CustodyError("custody_input_variant_mismatch")
-    tree = snapshot_tree(root)
     if len(selected.read_only_paths) > MAX_ENTRIES:
         raise CustodyError("custody_immutable_path_limit")
     paths = tuple(dict.fromkeys((*selected.read_only_paths, CUSTODY_INPUT_FILE)))
+    tree = _snapshot_input_paths(root, paths)
     for name in paths:
         if name not in tree["files"] and name not in tree["directories"]:
             raise CustodyError(f"custody_immutable_input_missing:{name}")
