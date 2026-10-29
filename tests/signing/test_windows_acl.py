@@ -265,6 +265,7 @@ def test_signing_with_a_private_key_checks_its_directory_and_file(signing_key, s
 
 
 @pytest.mark.skipif(not os.path.isfile(OPENSSL_BINARY), reason="system OpenSSL is required")
+@pytest.mark.skipif(os.name == "nt", reason="asserts POSIX signing; real Windows OpenSSL needs the Windows environment")
 def test_posix_signing_reads_no_windows_acl(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(core, "windows_host", lambda: False)
     monkeypatch.setattr(core, "read_windows_security", lambda path: pytest.fail("Windows ACL read on POSIX"))

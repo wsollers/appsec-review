@@ -309,6 +309,27 @@ def test_builder_service_image_pins_list_worker_proxy_and_declared_inputs(tmp_pa
         "builder-service:worker", "builder-service:input:base:release"]
 
 
+def test_builder_service_linux_paths_are_judged_as_posix_on_a_windows_operator_host(tmp_path,
+                                                                                   monkeypatch) -> None:
+    from pathlib import PureWindowsPath
+    from appsec_review.config import assurance, image_builder_service
+
+    for module in (assurance, image_builder_service):
+        monkeypatch.setattr(module, "Path", PureWindowsPath)
+    path = _builder_service_config(tmp_path / "service.toml", inputs={"base:release": IMAGE_D})
+    service = image_builder_service.load_image_builder_service(path)
+    assert service.endpoint == "/run/builder/builder.sock"
+    assert service.client_policy.endpoint == service.endpoint
+    for endpoint in ("run/builder/builder.sock", r"C:\run\builder.sock"):
+        with pytest.raises(ValueError, match="absolute operator-owned Unix socket"):
+            assurance.ImageBuilderConfig(endpoint, "builder-release", "tenant")
+    relative = path.read_text(encoding="utf-8").replace(
+        'endpoint = "/run/builder/builder.sock"', 'endpoint = "run/builder/builder.sock"')
+    path.write_text(relative, encoding="utf-8")
+    with pytest.raises(ValueError, match="canonical absolute Linux path"):
+        image_builder_service.load_image_builder_service(path)
+
+
 def test_sign_all_pinned_signs_builder_service_images_and_dedups_ids(
         tmp_path, capsys, key, config, local_images) -> None:
     (config.runtime.repository_root / "containers" / "catalog.toml").write_text(
