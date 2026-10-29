@@ -224,7 +224,7 @@ run event. A span with no progress record has `last_progress_at: null`. `operati
 the top 20 completed spans by `duration_ms`, with `stage`, `unit_id`, `duration_ms`,
 `thread_off_cpu_ratio`, `d_state_ratio`, `top_wait_channel`, `dominant_phase` (largest phase
 `wall_ms`) and per-item rates (for example `duration_ms` per `artifacts_processed`, `fsync_calls` per
-shard) when those counters exist. Ratios and rates are null when an input is unavailable.
+shard) when those counters exist.
 Operational diagnosis is described in
 [metrics operations](../operations/metrics.md#diagnosing-a-slow-or-stuck-step).
 
