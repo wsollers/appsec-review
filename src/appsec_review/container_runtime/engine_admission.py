@@ -17,7 +17,9 @@ import re
 import time
 
 from appsec_review.config.assurance import ResourceBudget
-from appsec_review.container_runtime.buildkit_worker import EnforcementUnavailable, KernelProof, private_path
+from appsec_review.container_runtime.buildkit_worker import (
+    EnforcementUnavailable, KernelProof, private_path, recorded_identity,
+)
 from appsec_review.runtime.resources import Reservation, ResourceAdmission
 
 
@@ -127,7 +129,7 @@ class EngineDomainAdmission:
         if boot_id is None:
             from appsec_review.container_runtime.builder_admission import current_boot_id as boot_id
         self.config, self.request, self.boot_id = config, request, boot_id
-        self.baseline_receipt = None
+        self.baseline_receipt = self.ledger_rebinding = None
         domain = config.engine_domain
         self.binding = (engine_control_binding(config)
                         if domain.control_lifetime_id is not None else binding)
@@ -137,16 +139,21 @@ class EngineDomainAdmission:
             domain.cpu - request.cpu, domain.memory_mb - request.memory_mb, io_slots=0)
         self.proof = proof or EngineDomainProof(config)
 
-    def _ledger(self, identity=None):
+    def _ledger(self, identity=None, *, allow_device_renumber=False):
         metadata = Path(self.config.engine_domain.metadata_root)
         private_path(metadata)
         admission = ResourceAdmission(metadata, self.budget)
         if identity is None:
             admission.root.mkdir(mode=0o700, exist_ok=True)
         private_path(admission.root)
-        info = admission.root.stat()
-        if identity is not None and [info.st_dev, info.st_ino] != identity:
-            raise EnforcementUnavailable("engine-domain admission ledger was rebound")
+        if allow_device_renumber and admission.root != metadata / "resource-admission":
+            raise EnforcementUnavailable("engine-domain admission ledger is not at its configured path")
+        info = admission.root.lstat()
+        if identity is not None:
+            receipt = recorded_identity(info, identity, "engine-domain admission ledger was rebound",
+                                        allow_device_renumber=allow_device_renumber)
+            if receipt is not None:
+                self.ledger_rebinding = dict(receipt, path=str(admission.root))
         return admission
 
     def _baseline_binding(self):
@@ -199,8 +206,12 @@ class EngineDomainAdmission:
 
     def release(self, identity, *, previous_boot=False):
         """Release this lifetime's lease; a previous-boot release skips the stale baseline check
-        and drops that baseline when nothing else remains. Returns the drop receipt, if any."""
-        admission = self._ledger(identity)
+        and drops that baseline when nothing else remains. Returns the drop receipt, if any.
+
+        Only a previous-boot release accepts a ledger whose device was renumbered by the
+        restart (same inode); ``ledger_rebinding`` then records the observed change."""
+        self.ledger_rebinding = None
+        admission = self._ledger(identity, allow_device_renumber=previous_boot)
         if not previous_boot:
             admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
         admission._release_persistent(self.config.admission.lease_id, self.request, self.binding)

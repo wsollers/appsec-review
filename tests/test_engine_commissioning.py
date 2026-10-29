@@ -11,9 +11,10 @@ from appsec_review.container_runtime import image_builder_service as services
 from appsec_review.container_runtime.builder_admission import (
     BuilderAdmission, LifetimeProof, open_operator_journal, service_contract,
 )
+from appsec_review.container_runtime.builder_admission import _ledger as builder_ledger
 from appsec_review.container_runtime.buildkit_worker import EnforcementUnavailable, KernelProof
 from tests.test_bounded_image_build_service import (
-    BASE, FakeLifetimeProof, configuration, forbid_real_execution,  # noqa: F401
+    BASE, FakeLifetimeProof, Harness, configuration, forbid_real_execution,  # noqa: F401
 )
 from tests.test_native_engine_broker import native  # noqa: F401
 
@@ -300,6 +301,71 @@ def test_previous_boot_lifetime_releases_despite_recreated_cgroups(provisional):
     assert set(leases) == {"existing-engine-services", following.config.admission.lease_id}
     assert leases["existing-engine-services"]["persistent"]["groups"] == RebootedDomainProof().groups()
     assert "engine_baseline_release" not in json.loads(following.path.read_text())
+
+
+def renumber_ledger(owner, *, device=16, inode=0, state=None):
+    """Record the engine ledger identity as a host restart that renumbered its disk would."""
+    anchor = json.loads(owner.path.read_text())
+    recorded = anchor["ledger_identity"]
+    anchor["ledger_identity"] = [recorded[0] + device, recorded[1] + inode]
+    if state is not None:
+        anchor["state"] = state
+        anchor["release"] = {"basis": "previous_boot", "recorded_boot_ids": [OLD_BOOT]}
+    owner.path.write_text(json.dumps(anchor))
+    return recorded
+
+
+@pytest.mark.parametrize("state", [None, "RELEASING"])
+def test_previous_boot_release_accepts_a_renumbered_ledger_device(provisional, state):
+    live = renumber_ledger(provisional, state=state)
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    owner.release()
+    anchor = json.loads(owner.path.read_text())
+    assert anchor["state"] == "RELEASED" and anchor["release"]["current_boot_id"] == CURRENT_BOOT
+    rebinding = anchor["release"]["ledger_rebinding"]
+    assert rebinding["basis"] == "previous_boot_device_renumber"
+    assert (rebinding["recorded_device"], rebinding["observed_device"], rebinding["inode"]) == (
+        live[0] + 16, live[0], live[1])
+    assert rebinding["path"] == str(bank(owner).parent)
+    assert json.loads(bank(owner).read_text())["leases"] == {}
+    assert anchor["release"]["engine_baseline"]["basis"] == "previous_boot"
+
+
+def test_same_boot_release_still_refuses_a_renumbered_ledger_device(provisional):
+    renumber_ledger(provisional)
+    before = bank(provisional).read_bytes()
+    with pytest.raises(EnforcementUnavailable, match="ledger was rebound"):
+        provisional.release()
+    assert bank(provisional).read_bytes() == before
+    assert "release" not in json.loads(provisional.path.read_text())
+
+
+def test_previous_boot_release_still_refuses_a_different_ledger_inode(provisional):
+    renumber_ledger(provisional, device=16, inode=1)
+    owner = rebooted(provisional, [{"pid": 1, "start_token": f"{OLD_BOOT}:5"}])
+    before = bank(owner).read_bytes()
+    with pytest.raises(EnforcementUnavailable, match="ledger was rebound"):
+        owner.release()
+    assert bank(owner).read_bytes() == before
+    assert json.loads(owner.path.read_text())["state"] == "RELEASING"
+
+
+def test_client_ledger_device_renumber_is_accepted_only_when_explicitly_allowed(tmp_path):
+    harness = Harness(tmp_path, require_worker_reservation=True)
+    try:
+        info = (Path(harness.context.metadata_root).resolve() / "resource-admission").lstat()
+        renumbered_identity = [info.st_dev + 16, info.st_ino]
+        with pytest.raises(EnforcementUnavailable, match="rebound"):
+            builder_ledger(harness.config, expected_identity=renumbered_identity)
+        with pytest.raises(EnforcementUnavailable, match="rebound"):
+            builder_ledger(harness.config, expected_identity=[info.st_dev + 16, info.st_ino + 1],
+                           renumbered=[])
+        receipts = []
+        builder_ledger(harness.config, expected_identity=renumbered_identity, renumbered=receipts)
+        assert [(item["recorded_device"], item["observed_device"], item["inode"]) for item in receipts] == [
+            (info.st_dev + 16, info.st_dev, info.st_ino)]
+    finally:
+        harness.service.close()
 
 
 def test_reserve_drops_sole_baseline_retained_from_a_previous_boot(provisional):

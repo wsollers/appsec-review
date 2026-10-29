@@ -44,7 +44,7 @@ import time
 
 from appsec_review.config.image_builder_service import ImageBuilderServiceConfig
 from appsec_review.container_runtime.buildkit_worker import (
-    EnforcementUnavailable, KernelProof, bounded_json, private_path, process_token,
+    EnforcementUnavailable, KernelProof, bounded_json, private_path, process_token, recorded_identity,
 )
 from appsec_review.runtime.resources import Reservation, ResourceAdmission, ResourceCapacityInfeasible
 from appsec_review.storage import atomic_json, bounded_file_lock
@@ -213,7 +213,9 @@ def _as_client(config: ImageBuilderServiceConfig, operation):
             os.waitpid(pid, 0)
 
 
-def _ledger(config: ImageBuilderServiceConfig, *, create=False, expected_identity=None) -> ResourceAdmission:
+def _ledger(config: ImageBuilderServiceConfig, *, create=False, expected_identity=None,
+            renumbered: list | None = None) -> ResourceAdmission:
+    """``renumbered`` (previous-boot release only) admits a same-inode ledger on a renumbered device."""
     identity = config.admission
     if os.geteuid() != identity.uid:
         raise PermissionError("client ledger operations require its actual owner UID")
@@ -232,8 +234,11 @@ def _ledger(config: ImageBuilderServiceConfig, *, create=False, expected_identit
         root.chmod(0o700)
     elif info.st_mode & 0o077:
         raise PermissionError("client admission directory is not owner-private")
-    if expected_identity is not None and [info.st_dev, info.st_ino] != expected_identity:
-        raise EnforcementUnavailable("client admission directory was rebound")
+    if expected_identity is not None:
+        receipt = recorded_identity(info, expected_identity, "client admission directory was rebound",
+                                    allow_device_renumber=renumbered is not None)
+        if receipt is not None:
+            renumbered.append(dict(receipt, path=str(root)))
     for name in ("admission.lock", "leases.json"):
         path = root / name
         try:
@@ -803,15 +808,22 @@ class BuilderAdmission:
             self._write_anchor(anchor)
 
             def release():
-                admission = _ledger(self.config, expected_identity=anchor["ledger_identity"])
+                # A host restart may renumber the ledger's device; only previous-boot release accepts it.
+                renumbered = [] if previous_boot else None
+                admission = _ledger(self.config, expected_identity=anchor["ledger_identity"],
+                                    renumbered=renumbered)
                 admission._release_persistent(self.config.admission.lease_id, self.request, self.binding)
+                return renumbered[0] if renumbered else None
             if self.engine_admission is None:
-                _as_client(self.config, release)
+                rebinding = _as_client(self.config, release)
             else:
                 # The shared baseline lease binds live cgroup inodes, recreated by a reboot.
                 baseline = self.engine_admission.release(anchor["ledger_identity"],
                                                          previous_boot=previous_boot is not None)
+                rebinding = self.engine_admission.ledger_rebinding
                 if baseline is not None:
                     anchor["release"]["engine_baseline"] = baseline
+            if rebinding is not None:
+                anchor["release"]["ledger_rebinding"] = rebinding
             anchor["state"] = "RELEASED"
             self._write_anchor(anchor)

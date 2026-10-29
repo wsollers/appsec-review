@@ -76,6 +76,24 @@ def private_path(path: Path, *, uid: int | None = None, directory: bool = True) 
         raise EnforcementUnavailable("private directory is missing")
 
 
+def recorded_identity(info: os.stat_result, recorded, message: str, *,
+                      allow_device_renumber: bool = False) -> dict | None:
+    """Require the recorded [st_dev, st_ino]; return a receipt only for an allowed renumbered device.
+
+    A host restart may renumber a virtual disk while keeping its inodes. Only previous-boot
+    release, on a path already custody-checked by the caller, may accept that; the inode must match.
+    """
+    observed = [info.st_dev, info.st_ino]
+    if observed == recorded:
+        return None
+    if (allow_device_renumber and isinstance(recorded, list) and len(recorded) == 2
+            and type(recorded[0]) is int and type(recorded[1]) is int and recorded[1] == info.st_ino):
+        return {"basis": "previous_boot_device_renumber", "inode": info.st_ino,
+                "recorded_device": recorded[0], "observed_device": info.st_dev,
+                "observed_at": time.time()}
+    raise EnforcementUnavailable(message)
+
+
 def process_token(pid: int) -> str | None:
     try:
         value = Path(f"/proc/{pid}/stat").read_text()
