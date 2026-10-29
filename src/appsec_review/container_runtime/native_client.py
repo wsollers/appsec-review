@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 import json
 import os
@@ -67,7 +67,8 @@ class NativeClientContract:
     host_cpu: int = 1
     host_memory_mb: int = 512
     host_namespaces: Mapping[str, str] | None = None
-
+    # Operator-attested release pin -> private engine image commissioned from it.
+    image_sources: Mapping[str, str] = field(default_factory=dict)
     @classmethod
     def load(cls, path: Path) -> "NativeClientContract":
         private_path(path, uid=0, directory=False)
@@ -105,6 +106,12 @@ class NativeClientContract:
                 or any(not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value)
                        for value in self.image_ids)):
             raise ValueError("native image preflight identities are invalid")
+        if (not isinstance(self.image_sources, Mapping) or len(self.image_sources) > 128
+                or any(not isinstance(source, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", source)
+                       or source in self.image_ids or private not in self.image_ids
+                       for source, private in self.image_sources.items())
+                or len(set(self.image_sources.values())) != len(self.image_sources)):
+            raise ValueError("native image source map must be one-to-one onto granted private images")
         if self.host_cgroup is not None:
             absolute(self.host_cgroup)
             if not Path(self.host_cgroup).is_relative_to("/sys/fs/cgroup"):
@@ -251,7 +258,8 @@ class NativeClient:
             raise PermissionError("native executable is not in the operator alias map")
         size = command.tmpfs.rsplit("size=", 1)[1]
         return {
-            "execution_id": uuid4().hex, "name": command.name, "image_id": command.image_id,
+            "execution_id": uuid4().hex, "name": command.name,
+            "image_id": self.contract.image_sources.get(command.image_id, command.image_id),
             "executable": executable, "arguments": list(command.arguments), "cpu": int(cpu),
             "memory_mb": command.memory_mb, "pids": command.pids,
             "network": "isolated" if command.network == "bridge" else "none",
@@ -300,10 +308,20 @@ class NativeClient:
         deadline = time.monotonic() + timeout
         if isinstance(command, NativeControl):
             if command.operation == "image.inspect":
-                result = self._until(command.operation, {"reference": command.reference}, deadline)
+                sources = self.contract.image_sources
+                result = self._until(command.operation, {
+                    "reference": sources.get(command.reference, command.reference)}, deadline)
                 if result.get("state") != "PRESENT":
                     raise RuntimeError("native approved image is unavailable")
-                return 0, (result["image_id"] + "\n").encode(), b"", False
+                image_id = result["image_id"]
+                if command.reference in sources:
+                    if image_id != sources[command.reference]:
+                        raise RuntimeError("native image differs from its commissioned source")
+                    image_id = command.reference
+                elif not command.reference.startswith("sha256:"):
+                    pins = [source for source, private in sources.items() if private == image_id]
+                    image_id = pins[0] if len(pins) == 1 else image_id
+                return 0, (image_id + "\n").encode(), b"", False
             control = self._control(command.reference)
             if self.executions[command.reference]["state"] == "REMOVED":
                 if command.operation == "execution.remove":

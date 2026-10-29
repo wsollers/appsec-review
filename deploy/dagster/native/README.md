@@ -279,6 +279,23 @@ the host and engine identity checks, and then performs only the ordinary restart
 under the prior frozen contract. It never serves, publishes contracts, releases the lifetime or
 rebinds a lease; unconfirmed removals remain quarantined.
 
+Host restart recovery: a reboot recreates the lifetime's cgroups with new inodes, so the strict
+group match can never succeed again. `release-lifetime` and `release-prior-lifetime` instead
+release a lifetime whose every recorded member start token carries a boot ID that differs from
+`/proc/sys/kernel/random/boot_id`. A missing or unparseable boot ID, a member from the current
+boot, or any configuration difference keeps the strict check. The journal, client-context,
+stopped-scope (a not-yet-recreated cgroup counts as empty) and engine-retirement proofs still
+apply, and the shared engine baseline lease is left unverified. The `RELEASED` anchor records
+`release.basis = "previous_boot"` with the recorded and current boot IDs and the recorded groups.
+Serving and reconciliation operations remain strict.
+The baseline lease (`existing-engine-services`) binds the pre-restart engine cgroup inodes too.
+It is dropped only while it is the shared engine ledger's sole lease and an otherwise exact
+baseline whose creator boot ID (from the lease's recorded `process_identity`) differs from the
+current boot: by that previous-boot release (`release.engine_baseline`), or by the next lifetime's
+`reserve-lifetime` (`engine_baseline_release` in its anchor), which then records a fresh baseline.
+A legacy baseline without a recorded creator is dropped only by a previous-boot release. A
+same-boot baseline, an unparseable creator, or any remaining lifetime lease keeps the strict
+check; the ledger keeps the last 32 drop receipts under `dropped_persistent`.
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.
 A separate shared-journal/lease sequence covers builder -> derived-image tool -> removal -> next
@@ -301,3 +318,34 @@ Real worker/tool availability, native cgroup enforcement, root daemon/helper acc
 UID access, approved egress, stopped-container cleanup and storage/scheduler ownership remain
 commissioning prerequisites. Observed host capacity is not a dedicated reservation. Fake tests
 and prepared configuration do not establish those operational properties.
+
+## Integration and acceptance tests
+
+`tests/integration/test_native_broker_mounts.py` (run-root subdirectory bind mount; broker
+rejection of a `,` subpath and of a symlinked subpath), `tests/integration/test_native_image_sources_live.py`
+(each contract `image_sources` pin inspects as the pin and runs an allowlisted command created with
+the pin; skipped when the contract maps no pins) and `tests/acceptance/test_native_tiny_build.py`
+(the frozen `tiny-build` command compiles and runs `hello.c` under strace process-tree capture)
+drive a real commissioned broker through the public `NativeClient`. They never commission, start
+or reconfigure anything, and skip with the unmet precondition named unless:
+
+- `APPSEC_NATIVE_INTEGRATION=1` (integration) or `APPSEC_NATIVE_ACCEPTANCE=1` (acceptance) is set;
+- the published contract (`APPSEC_NATIVE_CLIENT_CONTRACT`, default
+  `/run/appsec-review-f370/client-v9/contracts/grant-0.json`) loads and its `native.sock` exists;
+- the process runs as the contract's uid/gid (1000) inside its host cgroup, i.e. the
+  `appsecreview-services-appsecf370.slice`;
+- the worktree's client modules equal the installed release copies (`APPSEC_NATIVE_RELEASE`,
+  default `/opt/appsec-review/releases/a78696b8-native19`);
+- for acceptance, `build-driver.sh`, `capture/` and `wrappers/` are staged in the granted run root.
+
+Root launches them as uid 1000 in the services slice (only while no Dagster run is nonterminal):
+
+```
+systemd-run --wait --pipe --collect --slice=appsecreview-services-appsecf370.slice \
+  --property=User=wsollers --property=Group=wsollers --property=MemorySwapMax=0 \
+  --property=WorkingDirectory=/home/wsollers/projects/appsec-review-native-broker \
+  --setenv=APPSEC_NATIVE_INTEGRATION=1 --setenv=APPSEC_NATIVE_ACCEPTANCE=1 -- \
+  /home/wsollers/projects/appsec-review-native-broker/.venv/bin/python -m pytest -q -p no:cacheprovider -rs --basetemp=test/tmp/native-live \
+  tests/integration/test_native_broker_mounts.py tests/integration/test_native_image_sources_live.py \
+  tests/acceptance/test_native_tiny_build.py
+```

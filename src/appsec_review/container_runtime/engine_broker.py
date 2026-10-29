@@ -35,6 +35,7 @@ SCHEMA = "appsec-review/native-engine/1"
 MAX_REQUEST_BYTES = 65536
 MAX_RESPONSE_BYTES = 256 * 1024
 MAX_LOG_PAGE = 65536
+CGROUP_ROOT = Path("/sys/fs/cgroup")
 BINDING_FIELDS = frozenset({
     "tenant_id", "project_id", "run_id", "target_snapshot", "configuration_id",
     "service_generation", "engine_id", "engine_generation", "lease_id",
@@ -249,6 +250,41 @@ class EngineInterlock:
         self.store.connection.execute("DELETE FROM engine_interlock WHERE slot=1")
 
 
+def contained_identity(root, destination):
+    """Resolve an absolute destination beneath root (path or fd) without following any symlink."""
+    if not isinstance(destination, str) or not destination.startswith("/"):
+        raise EnforcementUnavailable("native mount destination is not absolute")
+    parts = destination[1:].split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise EnforcementUnavailable("native mount destination is not normalized")
+    opened = []
+    try:
+        descriptor = (root if isinstance(root, int)
+                      else os.open(root, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC))
+        if not isinstance(root, int):
+            opened.append(descriptor)
+        for index, part in enumerate(parts):
+            flags = os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC | (os.O_DIRECTORY if index < len(parts) - 1 else 0)
+            descriptor = os.open(part, flags, dir_fd=descriptor)
+            opened.append(descriptor)
+            # O_PATH|O_NOFOLLOW opens a final symlink itself rather than failing.
+            if stat.S_ISLNK(os.fstat(descriptor).st_mode):
+                raise EnforcementUnavailable("native mount destination traverses a symlink")
+        value = os.fstat(descriptor)
+        return [value.st_dev, value.st_ino]
+    except OSError as error:
+        raise EnforcementUnavailable("native mount destination does not resolve without symlinks") from error
+    finally:
+        for descriptor in reversed(opened):
+            os.close(descriptor)
+
+
+def mount_points(mountinfo):
+    """Decoded mount-point field (5) of a /proc/<pid>/mountinfo text, relative to that process root."""
+    return {re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), line.split(" ")[4])
+            for line in mountinfo.splitlines() if len(line.split(" ")) > 4}
+
+
 class NativeProof(KernelProof):
     def host(self):
         limits = super().host()
@@ -300,9 +336,11 @@ class NativeProof(KernelProof):
                 or values.get("NoNewPrivs", "").strip() != "1"
                 or values.get("Seccomp", "").strip() != "2"):
             raise EnforcementUnavailable("native UID, capabilities, NNP or seccomp are unproved")
+        mounted = mount_points(Path(f"/proc/{pid}/mountinfo").read_text())
         for mount in record["driver"]["mounts"]:
-            observed = os.stat(f"/proc/{pid}/root{mount['destination']}")
-            if [observed.st_dev, observed.st_ino] != mount["identity"]:
+            if mount["destination"] not in mounted:
+                raise EnforcementUnavailable("native bind destination is not a mount point")
+            if contained_identity(f"/proc/{pid}/root", mount["destination"]) != mount["identity"]:
                 raise EnforcementUnavailable("native bind mount identity changed")
         if requested["fsize_bytes"] is not None:
             line = next((line for line in Path(f"/proc/{pid}/limits").read_text().splitlines()
@@ -311,6 +349,12 @@ class NativeProof(KernelProof):
                 raise EnforcementUnavailable("native kernel file-size bound is unproved")
         return {**limits, "pids_max": requested["pids"], "pid": pid, "start_token": process_token(pid),
                 "process_tree_trace": tracing, "pid_namespace": os.readlink(f"/proc/{pid}/ns/pid")}
+
+
+def _mount_option_safe(value):
+    # Docker parses --mount as CSV key=value fields; quoting would let a path inject options.
+    return isinstance(value, str) and not any(
+        char in ',"=' or ord(char) < 32 or ord(char) == 127 for char in value)
 
 
 def _security_options_match(options, profile_path):
@@ -441,7 +485,12 @@ class NativeExecutionDriver(BuildKitWorker):
                 raise EnforcementUnavailable("native source is a socket or special file")
             if stat.S_ISREG(value.st_mode) and value.st_nlink != 1:
                 raise EnforcementUnavailable("native file source has external hard links")
-            return descriptor, [value.st_dev, value.st_ino]
+            # dockerd shares the broker's mount, PID and user namespaces, so the real host path
+            # resolves to the same object; runc cannot bind a /proc/<pid>/fd magic link.
+            source = str(root) if relative == "." else str(root / relative)
+            if not _mount_option_safe(source):
+                raise EnforcementUnavailable("native mount source is unsafe for a bind option")
+            return descriptor, [value.st_dev, value.st_ino], source
         except BaseException:
             os.close(descriptor)
             raise
@@ -496,10 +545,12 @@ class NativeExecutionDriver(BuildKitWorker):
                    "read_only": True, "identity": [info.st_dev, info.st_ino]}]
         handles = self.handles.setdefault(record["execution_id"], [])
         for mount in record["mount_policies"]:
-            descriptor, identity = self._pin_mount(mount, mount["relative_path"], record["peer"]["uid"])
+            descriptor, identity, source = self._pin_mount(mount, mount["relative_path"], record["peer"]["uid"])
             handles.append(descriptor)
-            mounts.append({"source": f"/proc/{os.getpid()}/fd/{descriptor}", "destination": mount["destination"],
+            mounts.append({"source": source, "destination": mount["destination"],
                            "read_only": mount["read_only"], "identity": identity})
+        if not all(_mount_option_safe(mount["destination"]) for mount in mounts):
+            raise EnforcementUnavailable("native mount destination is unsafe for a bind option")
         record["driver"].update(mounts=mounts, seccomp=str(seccomp), create_pending=True)
         save()
         argv = self._docker(
@@ -512,7 +563,7 @@ class NativeExecutionDriver(BuildKitWorker):
             "--security-opt", "seccomp=" + str(seccomp), "--network",
             self.config.network_id if requested["network"] == "isolated" else "none",
             "--ipc", "private", "--cgroupns", "private",
-            "--cgroup-parent", str(group)[len("/sys/fs/cgroup/"):],
+            "--cgroup-parent", "/" + str(group.relative_to(CGROUP_ROOT)),
             "--cpus", str(requested["cpu"]), "--memory", f"{requested['memory_mb']}m",
             "--memory-swap", f"{requested['memory_mb']}m", "--pids-limit", str(requested["pids"]),
             "--log-driver", "none", "--workdir", requested["workdir"],
@@ -526,6 +577,11 @@ class NativeExecutionDriver(BuildKitWorker):
         if requested["fsize_bytes"] is not None:
             argv.extend(("--ulimit", f"fsize={requested['fsize_bytes']}:{requested['fsize_bytes']}"))
         argv.append(requested["image_id"])
+        for mount, pinned in zip(record["mount_policies"], mounts[1:]):
+            descriptor, identity, source = self._pin_mount(mount, mount["relative_path"], record["peer"]["uid"])
+            os.close(descriptor)
+            if identity != pinned["identity"] or source != pinned["source"]:
+                raise EnforcementUnavailable("native mount source changed before create")
         cid = self._run(argv).decode().strip()
         if not re.fullmatch(r"[0-9a-f]{64}", cid):
             raise OutcomeUnknown("native create returned no immutable container ID")
@@ -585,33 +641,53 @@ class NativeExecutionDriver(BuildKitWorker):
         self.captures[record["execution_id"]] = capture
         for name in ("stdout", "stderr"):
             capture[name] = (Path(record["directory"]) / name).open("xb")
-        command = self.runner.start(self._docker("container", "start", "--attach",
-                                                 record["driver"]["container_id"]), capture_limit=0)
-        capture["command"] = command
-        record["driver"]["launcher"] = self.runner.launcher(command)
-        record["driver"]["launch_pending"] = False
-        save()
-        while True:
-            self._drain(record, save)
-            inspection = self._inspect_native(record)
-            if inspection is not None and inspection["State"].get("Running"):
-                break
-            if time.monotonic() >= self.deadline:
-                raise OutcomeUnknown("native pre-execution gate did not become observable")
-            time.sleep(0.01)
-        record["driver"]["started_at"] = inspection["State"]["StartedAt"]
-        record["enforcement"] = self.proof.execution(inspection, record)
-        self._network(record if record["payload"]["network"] == "isolated" else None)
-        record["driver"]["release_pending"] = True
-        save()
         release = Path(record["directory"]) / "gate" / "release.token"
         pending = release.with_suffix(".pending")
-        pending.write_text(record["execution_token"])
-        pending.chmod(0o444)
+        try:
+            command = self.runner.start(self._docker("container", "start", "--attach",
+                                                     record["driver"]["container_id"]), capture_limit=0)
+            capture["command"] = command
+            record["driver"]["launcher"] = self.runner.launcher(command)
+            record["driver"]["launch_pending"] = False
+            save()
+            while True:
+                self._drain(record, save)
+                inspection = self._inspect_native(record)
+                if inspection is not None and inspection["State"].get("Running"):
+                    break
+                if time.monotonic() >= self.deadline:
+                    raise OutcomeUnknown("native pre-execution gate did not become observable")
+                time.sleep(0.01)
+            record["driver"]["started_at"] = inspection["State"]["StartedAt"]
+            record["enforcement"] = self.proof.execution(inspection, record)
+            self._network(record if record["payload"]["network"] == "isolated" else None)
+            record["driver"]["release_pending"] = True
+            save()
+            pending.write_text(record["execution_token"])
+            pending.chmod(0o444)
+        except BaseException:
+            self._abort_gated(record)
+            try:
+                pending.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
         pending.replace(release)
         release.chmod(0o444)
         record["driver"].update(released=True, release_pending=False)
         save()
+
+    def _abort_gated(self, record):
+        # The gate never received its token; stop it now rather than leaving it until gate timeout.
+        # Pinned descriptors and records settle only through the confirmed removal path.
+        self.deadline = time.monotonic() + self.config.cleanup_timeout_seconds
+        container = record["driver"]["container_id"]
+        for argv in (("container", "kill", "--signal", "KILL", container),
+                     ("container", "rm", "--force", container)):
+            try:
+                self._run(self._docker(*argv))
+            except Exception:
+                pass
 
     def status(self, record, save):
         self._begin(record)
@@ -873,8 +949,8 @@ class EngineBroker:
                 raise PermissionError("native mount is not granted")
             relative = value["relative_path"]
             path = PurePosixPath(relative)
-            if (not relative or len(relative) > 1024 or "\x00" in relative or path.is_absolute()
-                    or ".." in path.parts or str(path) != relative):
+            if (not relative or len(relative) > 1024 or not _mount_option_safe(relative)
+                    or path.is_absolute() or ".." in path.parts or str(path) != relative):
                 raise PermissionError("native mount subpath is not normalized")
             policy = next(m for m in self.native.mounts if m.mount_id == value["mount_id"])
             mounts.append({**asdict(policy), "relative_path": relative})

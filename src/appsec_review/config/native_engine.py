@@ -101,10 +101,17 @@ class NativeImage:
     allow_isolated_network: bool = False
     aliases: tuple[str, ...] = ()
     allow_derived: bool = False
+    # Operator-attested release identity this private copy was commissioned from; never engine-proven.
+    source_image_id: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.image_id, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_id):
             raise ValueError("native images require pre-provisioned immutable IDs")
+        if self.source_image_id is not None and (
+                not isinstance(self.source_image_id, str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.source_image_id)
+                or self.source_image_id == self.image_id):
+            raise ValueError("native image source identity must be a distinct immutable ID")
         identifier(self.release_id)
         if not isinstance(self.user, str) or not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", self.user):
             raise ValueError("native images require a fixed non-root UID:GID")
@@ -262,6 +269,10 @@ class NativeEngineConfig:
         }) != len(self.grants):
             raise ValueError("native grants are excessive or ambiguous")
         image_ids, command_ids = {i.image_id for i in self.images}, {c.command_id for c in self.commands}
+        sources = [i.source_image_id for i in self.images if i.source_image_id is not None]
+        references = image_ids | {alias for i in self.images for alias in i.aliases}
+        if len(sources) != len(set(sources)) or set(sources) & references:
+            raise ValueError("native image source identities must be unique and not name a private image")
         mount_ids = {m.mount_id for m in self.mounts}
         if any(set(i.command_ids) - command_ids for i in self.images) or any(
                 set(g.image_ids) - image_ids or set(g.mount_ids) - mount_ids for g in self.grants):

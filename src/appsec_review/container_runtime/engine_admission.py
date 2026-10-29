@@ -1,8 +1,11 @@
 """Count dedicated control and existing engine consumers in one unchanged host domain.
 
 The shared ancestor is a hard ceiling, not a per-builder cap. Baseline capacity
-remains reserved after the dedicated service retires. Application and action work
-must use their own domains; this ledger cannot authorize either.
+remains reserved after the dedicated service retires. A reboot recreates the
+baseline cgroups, so a baseline lease created in another boot is dropped (with a
+previous_boot receipt) only while it is the ledger's sole lease; reserve then
+records a fresh one. Application and action work must use their own domains;
+this ledger cannot authorize either.
 """
 from __future__ import annotations
 
@@ -10,13 +13,21 @@ import os
 from dataclasses import asdict
 import json
 from pathlib import Path
+import re
+import time
 
 from appsec_review.config.assurance import ResourceBudget
-from appsec_review.container_runtime.buildkit_worker import EnforcementUnavailable, KernelProof, private_path
+from appsec_review.container_runtime.buildkit_worker import (
+    EnforcementUnavailable, KernelProof, private_path, recorded_identity,
+)
 from appsec_review.runtime.resources import Reservation, ResourceAdmission
 
 
 BASELINE_LEASE = "existing-engine-services"
+BASELINE_KIND = "appsec-review/engine-domain-baseline/1"
+# ResourceAdmission records the creating process as "<boot_id>:<start_time>".
+BOOT_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+LEASE_PROCESS = re.compile("(" + BOOT_ID.pattern + "):[0-9]+")
 COMMISSIONING_FIELDS = frozenset({
     "grants", "images", "native_engine", "network_id", "proxy_container_id",
     "proxy_image_id", "proxy_release_id", "proxy_url", "ip_release_id", "lifecycle_stage",
@@ -114,8 +125,11 @@ class EngineDomainProof:
 
 
 class EngineDomainAdmission:
-    def __init__(self, config, binding, request, *, proof=None):
-        self.config, self.request = config, request
+    def __init__(self, config, binding, request, *, proof=None, boot_id=None):
+        if boot_id is None:
+            from appsec_review.container_runtime.builder_admission import current_boot_id as boot_id
+        self.config, self.request, self.boot_id = config, request, boot_id
+        self.baseline_receipt = self.ledger_rebinding = None
         domain = config.engine_domain
         self.binding = (engine_control_binding(config)
                         if domain.control_lifetime_id is not None else binding)
@@ -125,24 +139,60 @@ class EngineDomainAdmission:
             domain.cpu - request.cpu, domain.memory_mb - request.memory_mb, io_slots=0)
         self.proof = proof or EngineDomainProof(config)
 
-    def _ledger(self, identity=None):
+    def _ledger(self, identity=None, *, allow_device_renumber=False):
         metadata = Path(self.config.engine_domain.metadata_root)
         private_path(metadata)
         admission = ResourceAdmission(metadata, self.budget)
         if identity is None:
             admission.root.mkdir(mode=0o700, exist_ok=True)
         private_path(admission.root)
-        info = admission.root.stat()
-        if identity is not None and [info.st_dev, info.st_ino] != identity:
-            raise EnforcementUnavailable("engine-domain admission ledger was rebound")
+        if allow_device_renumber and admission.root != metadata / "resource-admission":
+            raise EnforcementUnavailable("engine-domain admission ledger is not at its configured path")
+        info = admission.root.lstat()
+        if identity is not None:
+            receipt = recorded_identity(info, identity, "engine-domain admission ledger was rebound",
+                                        allow_device_renumber=allow_device_renumber)
+            if receipt is not None:
+                self.ledger_rebinding = dict(receipt, path=str(admission.root))
         return admission
 
     def _baseline_binding(self):
-        return {"kind": "appsec-review/engine-domain-baseline/1", "groups": self.proof.groups()}
+        return {"kind": BASELINE_KIND, "groups": self.proof.groups()}
+
+    def _previous_boot_baseline(self, *, legacy):
+        """Receipt for an otherwise exact baseline created in another boot, else None.
+
+        ``legacy`` accepts a baseline without a recorded creator; only a lifetime
+        release that just proved its own generation belonged to a previous boot passes it.
+        """
+        current = self.boot_id()
+
+        def assess(entry):
+            binding = entry.get("persistent")
+            if (not BOOT_ID.fullmatch(current) or not isinstance(binding, dict)
+                    or binding.get("kind") != BASELINE_KIND
+                    or entry.get("reservation") != asdict(self.baseline_request)
+                    or entry.get("action") != "image.builder.service"
+                    or entry.get("containers") != [] or entry.get("builds") != []
+                    or entry.get("quarantine")):
+                return None
+            creator = entry.get("process_identity")
+            match = LEASE_PROCESS.fullmatch(creator) if isinstance(creator, str) else None
+            if match is None and (creator is not None or not legacy):
+                return None
+            recorded = None if match is None else match.group(1)
+            if recorded == current:
+                return None
+            return {"basis": "previous_boot", "lease_id": BASELINE_LEASE,
+                    "recorded_boot_id": recorded, "current_boot_id": current,
+                    "recorded_groups": binding.get("groups"), "observed_at": time.time()}
+        return assess
 
     def reserve(self):
         self.proof.live()
         admission = self._ledger()
+        self.baseline_receipt = admission._release_sole_persistent(
+            BASELINE_LEASE, self._previous_boot_baseline(legacy=False))
         admission.reserve_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
         admission.reserve_persistent(self.config.admission.lease_id, self.request, self.binding)
         info = admission.root.stat()
@@ -154,7 +204,18 @@ class EngineDomainAdmission:
         admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
         admission.verify_persistent(self.config.admission.lease_id, self.request, self.binding)
 
-    def release(self, identity):
-        admission = self._ledger(identity)
-        admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
+    def release(self, identity, *, previous_boot=False):
+        """Release this lifetime's lease; a previous-boot release skips the stale baseline check
+        and drops that baseline when nothing else remains. Returns the drop receipt, if any.
+
+        Only a previous-boot release accepts a ledger whose device was renumbered by the
+        restart (same inode); ``ledger_rebinding`` then records the observed change."""
+        self.ledger_rebinding = None
+        admission = self._ledger(identity, allow_device_renumber=previous_boot)
+        if not previous_boot:
+            admission.verify_persistent(BASELINE_LEASE, self.baseline_request, self._baseline_binding())
         admission._release_persistent(self.config.admission.lease_id, self.request, self.binding)
+        if not previous_boot:
+            return None
+        return admission._release_sole_persistent(
+            BASELINE_LEASE, self._previous_boot_baseline(legacy=True))
