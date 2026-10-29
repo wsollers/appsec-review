@@ -95,6 +95,7 @@ class CodeQLCustomQuerySettings:
 _EXPORT_RULES_ROOT = ("rules", "codeql-graph-export")
 # Languages that may carry a graph export pack (rules/codeql-graph-export/<language>/). A language is
 # enabled only by its export_queries entry, whose hash pins require the pack to exist.
+_PREINSTALLED_UNDECLARED = frozenset({"fail", "derive"})
 _EXPORT_LANGUAGES = frozenset({"cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "swift"})
 EXPORT_MODES = ("seeded", "whole_program")
 # Hard ceiling of ``max_seed_depth``: deeper neighborhoods approach the whole program.
@@ -295,6 +296,9 @@ class CodeQLAnalysisSettings:
     languages: Mapping[str, CodeQLLanguageSettings]
     export_queries: CodeQLExportSettings = field(default_factory=CodeQLExportSettings)
     preinstalled_runtimes: tuple[CodeQLPreinstalledRuntime, ...] = ()
+    # "fail": an environment without a declaration is an error once any declaration exists.
+    # "derive": a wholly undeclared environment uses the bounded derived-image path.
+    preinstalled_undeclared: str = "fail"
 
     @property
     def export_timeout_seconds(self) -> int:
@@ -370,6 +374,8 @@ class CodeQLAnalysisSettings:
             if binding in bindings:
                 raise ValueError("CodeQL preinstalled runtime has a duplicate environment/user binding")
             bindings.add(binding)
+        if self.preinstalled_undeclared not in _PREINSTALLED_UNDECLARED:
+            raise ValueError("CodeQL preinstalled_undeclared must be fail or derive")
 
 
 def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
@@ -379,7 +385,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         "concurrency", "inventory_timeout_seconds", "database_timeout_seconds",
         "query_timeout_seconds", "output_bytes", "database_file_limit", "database_bytes_limit",
         "sarif_bytes_limit", "result_limit", "threads", "ram_mb", "max_paths", "languages",
-        "export_queries", "preinstalled_runtimes",
+        "export_queries", "preinstalled_runtimes", "preinstalled_undeclared",
     }
     unknown = set(value) - allowed
     if unknown:
@@ -476,7 +482,14 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         languages=MappingProxyType(languages),
         export_queries=_export_settings(value.get("export_queries")),
         preinstalled_runtimes=_preinstalled_runtimes(value.get("preinstalled_runtimes", [])),
+        preinstalled_undeclared=_preinstalled_undeclared(value.get("preinstalled_undeclared", "fail")),
     )
+
+
+def _preinstalled_undeclared(value: object) -> str:
+    if not isinstance(value, str) or value not in _PREINSTALLED_UNDECLARED:
+        raise ValueError("CodeQL preinstalled_undeclared must be fail or derive")
+    return value
 
 
 def _preinstalled_runtimes(value: object) -> tuple[CodeQLPreinstalledRuntime, ...]:

@@ -185,10 +185,14 @@ class CodeQLImageResolver:
         if not declarations:
             return None
         effective_user = application_runtime_user(runtime_user)
-        matches = [item for item in declarations
-                   if item.build_image_id == build_image_id and item.runtime_user == effective_user]
+        for_image = [item for item in declarations if item.build_image_id == build_image_id]
+        matches = [item for item in for_image if item.runtime_user == effective_user]
+        if not for_image and getattr(self.settings, "preinstalled_undeclared", "fail") == "derive":
+            return None
         if len(matches) != 1:
-            raise ValueError("CodeQL preinstalled runtime requires one exact environment/user declaration")
+            raise ValueError(
+                "CodeQL preinstalled runtime requires one exact environment/user declaration "
+                f"(build_image_id={build_image_id}, effective_user={effective_user})")
         selected = matches[0]
         if selected.runner_source == "application" and native_execution_requested():
             raise ValueError("application-supplied CodeQL runner is unsupported with native execution")
