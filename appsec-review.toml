@@ -1614,8 +1614,17 @@ max_paths = 4
 # Graph export step (docs/architecture/code-graph-precomputation.md section 7.1). The bounds equal
 # the GraphSettings contract defaults: rows decoded per export query, total export bytes per scope,
 # and the runner `export` action timeout.
-# This review host has preinstalled inventory and C/C++ runtimes. Other accepted
-# dependency environments require an explicit compatible mapping; there is no fallback.
+
+# This review host has preinstalled inventory (source image) and C/C++ (native profile) runtimes,
+# declared below. A declared environment always uses its declared preinstalled runtime, and a
+# declared environment without exactly one matching declaration for the effective user fails;
+# there is no fallback for it. preinstalled_undeclared governs wholly undeclared environments,
+# including every other build profile and per-run customized project images (whose IDs cannot be
+# declared statically): "derive" layers CodeQL onto them through containers/tools/codeql/Dockerfile
+# with the bounded image builder on first use; "fail" (the typed default, and the value of frozen
+# run configurations that predate this key) refuses them. See docs/operations/codeql-analysis.md.
+preinstalled_undeclared = "derive"
+
 [[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
 source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
 build_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
@@ -1634,9 +1643,9 @@ codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
 runner_release_id = "appsec-codeql-runner-89568569"
 runner_source = "application"
 
-# The Rust/wasm build environment (audit-buildenv-rust-wasm:local, pinned above) has no preinstalled
-# declaration: the resolver derives its CodeQL runtime from containers/tools/codeql/Dockerfile on
-# first use, on any host that built that environment from its Dockerfile.
+# Undeclared environments, such as the Rust/wasm build environment (audit-buildenv-rust-wasm:local,
+# pinned above), derive their CodeQL runtime from containers/tools/codeql/Dockerfile on first use
+# under preinstalled_undeclared = "derive", on any host that built that environment.
 
 [jobs.job_codeql_analysis.settings.export_queries]
 enabled = true

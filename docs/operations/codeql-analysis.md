@@ -61,10 +61,37 @@ logs.
 ### Explicit preinstalled runtimes
 
 An operator may configure `jobs.job_codeql_analysis.settings.preinstalled_runtimes` as an array
-of at most 128 exact declarations. This selects preinstalled-only resolution: every requested
-build-environment/user pair must have one declaration. Missing, duplicate or conflicting mappings
-fail rather than using a different tag or silently preparing a layer. With the array absent or
-empty, the existing bounded-layer preparation path is unchanged.
+of at most 128 exact declarations. With the array absent or empty, the bounded-layer preparation
+path is unchanged and `preinstalled_undeclared` has no effect. Once any declaration exists,
+resolution of a requested (build environment image, effective user) pair follows these rules:
+
+- **Declared environment.** When at least one declaration names the requested `build_image_id`,
+  exactly one of those declarations must match the effective user, and it is used. Missing,
+  duplicate or conflicting mappings for a declared environment fail with
+  `CodeQL preinstalled runtime requires one exact environment/user declaration` rather than using
+  a different tag or silently preparing a layer; `preinstalled_undeclared` never applies to it.
+- **Wholly undeclared environment.** When no declaration names the requested `build_image_id`,
+  the string setting `jobs.job_codeql_analysis.settings.preinstalled_undeclared` decides:
+  - `"fail"` (the typed default) refuses it with the same error (preinstalled-only resolution);
+  - `"derive"` uses the bounded derived-image path: `containers/tools/codeql/Dockerfile` layers the
+    pinned `/opt/codeql` payload and `codeql_runner.py` onto the accepted build image and runs as
+    its non-root runtime user. This needs the commissioned
+    [bounded image builder](performance-assurance.md#scheduling-and-limits) and costs build time
+    and image disk on first use of each environment/user pair. Later resolutions reuse that image
+    only when `review_policy.releases` declares `codeql` and `codeql_runner`.
+
+Any other value is a configuration error. The shipped `appsec-review.toml` sets
+`preinstalled_undeclared = "derive"`: the source (inventory) image and the native C/C++ image
+use their declared preinstalled runtimes, and every other build profile, including per-run
+customized project images produced by `job_project_build` image repair (whose IDs cannot be
+declared statically), derives. `CODEQL_RUNTIME_RESOLVED` records which path each scope took as
+`preparation_kind = "preinstalled"` or `"derived"`, with `image_build_performed` and
+`checkpoint_reused`.
+
+The setting is frozen with the rest of the resolved run configuration. A frozen configuration
+that predates the key resolves to the `"fail"` default, so resuming such a run keeps refusing
+undeclared environments; for example run `2026-10-29-0002`, which faulted on undeclared
+environments, cannot be resumed into `"derive"`. Start a fresh run to apply the shipped policy.
 
 Each declaration has six required string fields: `source_image_id`, `build_image_id`,
 `runtime_image_id`, `runtime_user`, `codeql_release_id`, and `runner_release_id`. The only optional
@@ -86,6 +113,10 @@ placeholders with operator-approved installed IDs/releases and the actual applic
 [review_policy.releases]
 codeql = "operator-codeql-release"
 codeql_runner = "operator-runner-release"
+
+[jobs.job_codeql_analysis.settings]
+# "fail" (default) or "derive"; applies only to environments no declaration names.
+preinstalled_undeclared = "fail"
 
 [[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
 source_image_id = "sha256:<64-hex-source-id>"
@@ -109,8 +140,10 @@ runner_source = "application"
 The second mapping must match the image in the actual accepted build receipt and the effective
 application user selected from its nominal user, including its dependency
 environment; a generic C++ image is not authorization for a different dependency-bearing image.
-Inventory always needs the source-environment mapping. Additional accepted environments need
-their own entries. A source-only runtime does not establish compiled CodeQL coverage.
+Under `preinstalled_undeclared = "fail"`, inventory needs the source-environment mapping and every
+additional accepted environment needs its own entry. Under `"derive"`, an environment without any
+entry derives its runtime instead; an entry for the image but not the effective user still fails.
+A source-only runtime does not establish compiled CodeQL coverage.
 
 Resolution inspects source/build tag bindings and the selected runtime by immutable ID each
 time, and execution independently inspects that ID again. It does not scan installed payloads,
@@ -466,7 +499,8 @@ hash from the event's `query_metrics` field, or a `query_metrics_gap` reason:
 The analyze timing source needs a runner that writes `query-timings.json`. The declared runner
 release `review_policy.releases.codeql_runner = "appsec-codeql-runner-89568569"` does: derived
 images copy the repository's `codeql_runner.py`, and the shipped `preinstalled_runtimes` declare
-`runner_source = "application"` with that release. A runtime that still carries an older runner yields
+`runner_source = "application"` with that release; environments they do not name derive under the
+shipped `preinstalled_undeclared = "derive"`. A runtime that still carries an older runner yields
 analyze rows with the gap "runner wrote no query-timings.json". If an exception escapes after an action's
 `COMPLETED` event, the isolated wrapper also emits `CODEQL_ACTION_FAILED`, so that action is counted
 twice.
