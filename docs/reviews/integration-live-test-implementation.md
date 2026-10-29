@@ -10,14 +10,87 @@ all inventory members or optional live profiles have executed.
 
 ## Current reconciliation checkpoint
 
-The initial documentation checkout was `bfe7f38b`. The current documentation branch contains
-exact parent `1ff865561cc79171d56e389ead1c961975234a11` and frozen main `a8883acc`,
-including source-history/OpenVEX changes, the `09cbf227` inventory/harness, W5 consumers
-`06a4ea6c`, W3 qualification `e50b5a3e` and tiny performance follow-up `b72e79a9`.
-W0/W2/W3/W4 and authentic review/oracle implementations are integrated. The named process
-and consumers profiles now have revision-bound public passes, but overall acceptance remains **not green**.
-Quick is red, authentic oracle timing is unresolved, and the signals serial budget is not
-proved. Do not describe the under-ten-minute target as achieved from older measurements.
+The current documentation branch incorporates exact parent
+`f4a04b298c0f472f8350f17004b2c42ace1c3620` and frozen main
+`f6f0fbbd674080552d607b773bc30e140c443ceb`. It preserves staged chunks `938a9117` /
+`f21aff31` plus `9a80453b` and coordinator corrections `58387690`; the earlier native-inventory
+patch landed separately. Public measurements below remain bound to `58387690`, not the later
+source merge. Staged execution is now implemented. **Overall acceptance remains
+not green:** no complete staged chain, final quick, three-warm or exhaustive proof exists.
+Historical process/consumers passes below are not current-source proofs.
+
+### Actually integrated staged contract
+
+The public driver schedules only dependency-ready producer phases. Prepare freezes actual
+configuration/overlay, target and fixture inputs; subsequent producers verify immutable-input
+receipts and predecessor tree checkpoints. A terminal producer is sealed by the supervisor
+only after successful process exit and confirmed owned cleanup. The protocol is invocation
+specific: `appsec-review/acceptance-invocation-seed/1`, **not** the operator
+`appsec-review/acceptance-seed/1`.
+
+The source manifest binds all staged Python under `src/`, the local helper import closure,
+selected tests/driver/configuration/static inputs, all `docs/schemas/` files and all `pipeline/`
+bytes. Consumers verify exact invocation/variant/commit/source/tree identities and receive
+fresh ordinary private copies with materialization receipts. Reader run/runs loci relocate
+without rewriting authenticated source/configuration paths, accepted bytes or hashes.
+Mutation vectors get independent copies and production validation scopes.
+
+Consumer execution writes separate current private streams and a
+`appsec-review/acceptance-consumer-telemetry/1` origin sidecar. Retained copied producer
+history is explicitly `execution_evidence: false`, not freshly executed consumer work.
+Blocked descendants remain failed/unexecuted coverage, never successful skips.
+
+Core `review` now selects 13 staged cases; `review-exhaustive` retains 24 full integrity,
+same-length tamper, benign/blocked and core cases, uncalibrated. Quick has 35 selectors
+resolving to 38 cases including prerequisites. Caps are unchanged: quick 720 seconds,
+review/exhaustive 600, signals 240; ordinary/declared per-case caps and cleanup reserves still
+apply. Default workers are one, maximum two.
+
+### Latest actual public results at `58387690`
+
+| Public route | Actual result | Evidence |
+| --- | --- | --- |
+| `scripts\run-tests.ps1 -Acceptance review -Workers 2` | **Failed**, 13 selected, 24.4064413 s: 3 prepare failures, 10 correctly blocked descendants | `test/tmp/acceptance/acceptance-88a0d85707f7442f80d2765174e3f3c2/review/result.json` |
+| `scripts\run-tests.ps1 -Acceptance signals -Workers 2` | **Passed 3/3**, 145.353 s, below 240 s | `test/tmp/acceptance/acceptance-cb32192d91924fdbb4d3bc5d6e8259e1/signals/result.json` |
+
+Review failed on real `IndexBuilder` atomic `os.link` publication denied by the staged guard.
+Owned cleanup confirmed zero survivors and `production_services_touched` was false. No
+descendant consumer executed or established a staged chain. The signals pass resolves the
+timing concern for this measured **two-worker** invocation only; serial-default feasibility
+is not proved, and the earlier projected serial sum is not an actual integrated failure.
+
+Integrated runner/custody validation reported **79 passed, one skip, two failures in
+344.73 seconds**. Both failures were corrected by `58387690`; affected/core/fixture/inventory
+validation then reported **72 passed, one host skip in 56.53 seconds**. These are distinct
+runs, not a new single full-suite green result. Linux guardian, actual WSL/tool/provider/
+CodeQL/native validation, genuine assessment/source-bound review, specialist/renderer-selection/
+saturation/cross-lane consumer cases and unselected record/replay/sensor variant matrices
+remain named gaps.
+
+### Current custody blocker and approved, unimplemented detachment
+
+Legitimate persistent named/content-addressed aliases also conflict with the current strict
+ordinary-file `st_nlink == 1` contract. Merely allowing `os.link` would not produce a valid
+checkpoint or seal. Current bounded path/link/type/byte/mode checks must not be silently relaxed.
+
+The new proposed correction is bounded, fully-contained producer **OUTPUT-only** detachment
+after cleanup and before checkpoints, preserving bytes, paths, hashes and modes while
+retaining every ordinary-file seal/copy check. The user has now approved this bounded
+correction and requested a todo to ensure Windows support. The coordinator added that explicit
+Windows verification completion todo and assigned harness owner `ad52f90d`; work is
+approved/assigned in progress, **not implemented yet**.
+
+Real Windows publisher behavior and public staged-review proof are required and not
+demonstrated. The ordinary checkpoint/seal/private-copy policy remains strict. This approval
+is separate from the now-integrated staging implementation and earlier planner proposal;
+it supplies no budget waiver, shared main landing, restart, push or production service/build
+authorization. The final gate remains not green.
+
+Windows `WinError 5` remains uncertain: a bounded ten-transaction probe completed in 4.055
+seconds without explaining it. No production runs/services were inspected or mutated.
+Path/process/metrics isolation does not guarantee zero shared CPU/I/O contention.
+
+## Historical pre-staging reconciliation
 
 Framework fixtures now use `tests.handoff_fixture.write_fixture_handoff` for `handoff/2`.
 The current review domain is `/3`, while gate/report domains remain `/2`; these are independent
@@ -327,12 +400,13 @@ actual new integrated failure or proof that the full profile fits. Windows `WinE
 remains unresolved; genuine assessment and actual live/provider/native/Linux validation
 remain gaps. No quick/oracle cap waiver is claimed.
 
-Planner `81ada94f` produced a read-only
+At that historical checkpoint, planner `81ada94f` had produced a read-only
 `staged-authentic-producer/private-verified-materialization` proposal.
-It is not implemented and awaits user review; it cannot be cited
-as accepted prerequisite reuse, timing proof or permission to share validation caches.
-The separate named consumers pass above does not implement that proposal or clear the
-quick/oracle/signals scheduling blockers.
+It was not yet implemented and could not be cited as accepted prerequisite reuse, timing
+proof or permission to share validation caches. The staged machinery has since been integrated,
+as recorded at the top; output detachment is separately approved but remains unimplemented
+and Windows-unverified.
+The historical named consumers pass does not clear the current staged custody blocker.
 
 ## Shared decisions
 
