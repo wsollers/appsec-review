@@ -97,6 +97,7 @@ class ImageBuilderConfig:
     max_concurrency: int = 1
     cleanup_timeout_seconds: int = 60
     resource_mode: str = "bounded"
+    lifetime_domain: str = "actions"
 
     def __post_init__(self) -> None:
         if not isinstance(self.endpoint, str) or not Path(self.endpoint).is_absolute():
@@ -114,6 +115,9 @@ class ImageBuilderConfig:
             raise ValueError("image builder resource_mode must be bounded or concurrency_only")
         if self.resource_mode == "concurrency_only" and self.max_concurrency != 1:
             raise ValueError("concurrency-only image preparation requires exactly one build")
+        if not isinstance(self.lifetime_domain, str) or self.lifetime_domain not in {"actions", "engine"} or (
+                self.lifetime_domain == "engine" and self.resource_mode != "concurrency_only"):
+            raise ValueError("engine-domain lifetime requires explicit concurrency-only policy")
 
     @property
     def requested_limits(self) -> dict[str, Any]:
@@ -121,12 +125,17 @@ class ImageBuilderConfig:
                   "host_cpu": self.host_cpu, "host_overhead_bytes": self.host_overhead_mb * 1024**2,
                   "max_log_bytes": 64 * 1024}
         if self.resource_mode == "concurrency_only":
-            return {**{key: None for key in limits if key != "max_log_bytes"},
-                    "max_log_bytes": limits["max_log_bytes"], "resource_mode": self.resource_mode}
+            result = {**{key: None for key in limits if key != "max_log_bytes"},
+                      "max_log_bytes": limits["max_log_bytes"], "resource_mode": self.resource_mode}
+            if self.lifetime_domain == "engine":
+                result["lifetime_domain"] = "engine"
+            return result
         return limits
 
     def build_reservation(self, budget: ResourceBudget) -> tuple[int, int]:
         if self.resource_mode == "concurrency_only":
+            if self.lifetime_domain == "engine":
+                return budget.cpu, budget.memory_mb - budget.staging_memory_mb
             return (budget.cpu - self.host_cpu,
                     budget.memory_mb - self.host_overhead_mb - budget.staging_memory_mb)
         return self.cpu + self.host_cpu, self.memory_mb + self.host_overhead_mb

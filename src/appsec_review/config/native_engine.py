@@ -203,6 +203,9 @@ class NativeEngineConfig:
     max_records: int = 256
     max_requests_per_execution: int = 1024
     max_fsize_bytes: int = 1024 * 1024 * 1024
+    application_cgroup: str | None = None
+    application_cpu: int = 4
+    application_memory_mb: int = 5120
 
     def __post_init__(self):
         absolute(self.endpoint)
@@ -213,6 +216,10 @@ class NativeEngineConfig:
         absolute(self.runtime_root)
         if self.client_contract_root is not None:
             absolute(self.client_contract_root)
+        if self.application_cgroup is not None:
+            absolute(self.application_cgroup)
+            if not self.application_cgroup.startswith("/sys/fs/cgroup/"):
+                raise ValueError("native application requires a canonical cgroup-v2 parent")
         identifier(self.runtime_release_id)
         if not self.execution_cgroup_parent.startswith("/sys/fs/cgroup/"):
             raise ValueError("native executions require a canonical cgroup-v2 parent")
@@ -225,6 +232,7 @@ class NativeEngineConfig:
         for name, maximum in (("cpu", 8), ("memory_mb", 9216), ("pids", 65536),
                               ("max_execution_seconds", 86400), ("owner_idle_seconds", 3600),
                               ("max_records", 256), ("max_requests_per_execution", 1024),
+                              ("application_cpu", 4), ("application_memory_mb", 5120),
                               ("max_fsize_bytes", 4 * 1024**3)):
             bounded(getattr(self, name), maximum)
         identifiers(self.syscall_allowlist)

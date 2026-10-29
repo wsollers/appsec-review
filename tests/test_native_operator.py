@@ -22,6 +22,34 @@ from tests.test_native_engine_broker import native, create_payload  # noqa: F401
 from tests.test_bounded_image_build_service import forbid_real_execution  # noqa: F401
 
 
+def test_separate_application_cap_is_published_and_required_for_retirement(native):
+    from appsec_review.container_runtime.builder_admission import LifetimeProof
+    from appsec_review.container_runtime.native_contracts import client_contracts
+
+    policy = replace(native.config.native_engine,
+                     application_cgroup="/sys/fs/cgroup/application-private")
+    config = replace(native.config, native_engine=policy, resource_mode="concurrency_only")
+    contract, = client_contracts(config)
+    assert (contract.host_cgroup, contract.host_cpu, contract.host_memory_mb) == (
+        policy.application_cgroup, 4, 5120)
+    assert Path(policy.application_cgroup) in LifetimeProof(config)._roots()
+    assert config.host_cgroup != contract.host_cgroup
+    assert config.client_policy.requested_limits["host_cpu"] is None
+
+
+@pytest.mark.parametrize("field,value", [
+    ("application_cgroup", "/sys/fs/cgroup/builder-host"),
+    ("application_cgroup", "/sys/fs/cgroup/builder-workers/nested"),
+    ("application_cgroup", "/sys/fs/cgroup/native-executions/nested"),
+    ("application_cpu", 5),
+    ("application_memory_mb", 5121),
+])
+def test_application_separation_cannot_overlap_or_raise_caps(native, field, value):
+    with pytest.raises(ValueError):
+        policy = replace(native.config.native_engine, **{field: value})
+        replace(native.config, native_engine=policy)
+
+
 @pytest.mark.parametrize("failure", [None, "engine-cleanup", "database-health"])
 def test_registered_operator_reaches_run_child_broker_and_owned_cleanup(native, tmp_path, monkeypatch, failure):
     import dagster

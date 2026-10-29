@@ -303,6 +303,17 @@ class ResourceAdmission:
         if any(value + used[name] > limits[name] for name, value in asdict(request).items()):
             raise ResourceCapacityInfeasible(request, used, limits)
 
+    def initialize(self) -> None:
+        with bounded_file_lock(self.root / "admission.lock", 30):
+            path = self.root / "leases.json"
+            if path.exists():
+                state = json.loads(path.read_text())
+                if state.get("schema") != "appsec-review/resource-leases/1":
+                    raise ValueError("unsupported host resource lease schema")
+            else:
+                atomic_json(path, {"schema": "appsec-review/resource-leases/1", "leases": {}})
+                self._sync_persistent_directory()
+
     def reserve_persistent(self, lease_id: str, request: Reservation, binding: dict) -> None:
         """Acquire/adopt counted capacity, never tied to the creating process's life.
 

@@ -255,6 +255,66 @@ class KernelProof:
             return
         raise EnforcementUnavailable("an engine helper escapes the bounded topology")
 
+    def _process(self, pid: int) -> tuple[int, list[str]]:
+        root = Path("/proc") / str(pid)
+        status = (root / "stat").read_text()
+        parent = int(status[status.rfind(")") + 2:].split()[1])
+        with (root / "cmdline").open("rb") as stream:
+            data = stream.read(32769)
+        if len(data) > 32768:
+            raise EnforcementUnavailable("engine helper arguments exceed the custody bound")
+        return parent, [os.fsdecode(value) for value in data.rstrip(b"\0").split(b"\0")]
+
+    @staticmethod
+    def _option(arguments: list[str], name: str) -> str | None:
+        values = []
+        for index, value in enumerate(arguments):
+            if value == name and index + 1 < len(arguments):
+                values.append(arguments[index + 1])
+            elif value.startswith(name + "="):
+                values.append(value[len(name) + 1:])
+        if len(values) > 1:
+            raise EnforcementUnavailable("engine helper has ambiguous custody arguments")
+        return values[0] if values else None
+
+    def _owned_helper(self, executable: str, pid: int, daemon: int, group: Path) -> bool:
+        scope = self.config.docker_helper_scope
+        if scope is None or pid == daemon:
+            return True
+        roots = [self.config.host_cgroup, self.config.worker_cgroup_parent]
+        if self.config.native_engine is not None:
+            roots.append(self.config.native_engine.execution_cgroup_parent)
+        if any(group.is_relative_to(root) for root in roots):
+            return True
+        parent, arguments = self._process(pid)
+        flags = {"containerd": ("--config", "-c", "--state", "--root"),
+                 "containerd-shim-runc-v2": ("-address", "--address"),
+                 "runc": ("--root",)}.get(executable, ())
+        for flag in flags:
+            value = self._option(arguments, flag)
+            if value is not None and Path(value).is_absolute() and any(
+                    Path(value).is_relative_to(root) for root in (scope.exec_root, scope.data_root)):
+                return True
+        # Also retain live descendants before they acquire their runtime-root
+        # arguments. Private root arguments identify reparented helpers.
+        seen = {pid}
+        for _ in range(64):
+            if parent == daemon:
+                return True
+            if parent <= 1 or parent in seen:
+                return False
+            seen.add(parent)
+            parent_group = self.process_cgroup(parent)
+            if any(parent_group.is_relative_to(root) for root in roots):
+                return True
+            parent, parent_arguments = self._process(parent)
+            for flag in ("--root", "--config", "--state", "-address", "--address", "--exec-root"):
+                value = self._option(parent_arguments, flag)
+                if value is not None and Path(value).is_absolute() and any(
+                        Path(value).is_relative_to(root) for root in (scope.exec_root, scope.data_root)):
+                    return True
+        raise EnforcementUnavailable("engine helper ancestry exceeds its custody bound")
+
     def host(self) -> dict:
         config = self.config
         if not any(" - cgroup2 " in line and line.split()[4] == "/sys/fs/cgroup"
@@ -277,6 +337,18 @@ class KernelProof:
         if uid != 0 or not self.process_cgroup(pid).is_relative_to(host):
             raise EnforcementUnavailable("Docker daemon overhead is not locally capped")
         self._same_host(pid)
+        generation = process_token(pid)
+        if generation is None:
+            raise EnforcementUnavailable("Docker daemon generation is missing")
+        if config.docker_helper_scope is not None:
+            scope = config.docker_helper_scope
+            for root in (scope.data_root, scope.exec_root):
+                private_path(Path(root))
+            _, arguments = self._process(pid)
+            if (Path(os.readlink(f"/proc/{pid}/exe")).name != "dockerd"
+                    or self._option(arguments, "--data-root") != scope.data_root
+                    or self._option(arguments, "--exec-root") != scope.exec_root):
+                raise EnforcementUnavailable("Docker daemon does not own the declared private roots")
         listening = set()
         for table in ("tcp", "tcp6"):
             for line in Path(f"/proc/{pid}/net/{table}").read_text().splitlines()[1:]:
@@ -289,8 +361,8 @@ class KernelProof:
                     raise EnforcementUnavailable("Docker control is exposed on a TCP listener")
             except FileNotFoundError:
                 continue
-        # Docker's containerd/runc helpers may otherwise escape the host overhead
-        # reservation via a separately commissioned systemd service.
+        # Dedicated-engine scope excludes unrelated infrastructure, not escaped
+        # descendants or reparented helpers with this engine's private roots.
         for entry in Path("/proc").iterdir():
             if not entry.name.isdecimal():
                 continue
@@ -298,11 +370,20 @@ class KernelProof:
                 executable = Path(os.readlink(entry / "exe")).name
                 if executable not in {"dockerd", "containerd", "containerd-shim-runc-v2", "runc"}:
                     continue
-                group = self.process_cgroup(int(entry.name))
+                helper_pid = int(entry.name)
+                group = self.process_cgroup(helper_pid)
+                owned = self._owned_helper(executable, helper_pid, pid, group)
             except (FileNotFoundError, ProcessLookupError):
                 continue
-            self._helper_group(executable, group)
-        return {f"host_{key}": value for key, value in limits.items()}
+            if owned:
+                self._helper_group(executable, group)
+        if process_token(pid) != generation:
+            raise EnforcementUnavailable("Docker daemon generation changed during helper inventory")
+        result = {f"host_{key}": value for key, value in limits.items()}
+        if config.engine_domain is not None:
+            from appsec_review.container_runtime.engine_admission import EngineDomainProof
+            result["engine_domain"] = EngineDomainProof(config).live()
+        return result
 
     def worker(self, inspection: dict, record: dict) -> dict:
         config = self.config

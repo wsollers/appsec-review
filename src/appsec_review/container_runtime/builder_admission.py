@@ -236,6 +236,9 @@ class LifetimeProof:
         if self.config.native_engine is not None:
             native = self.config.native_engine
             groups.append(("executions", native.execution_cgroup_parent, native.cpu, native.memory_mb))
+            if native.application_cgroup is not None:
+                groups.append(("application", native.application_cgroup,
+                               native.application_cpu, native.application_memory_mb))
         for name, path, cpu, memory in groups:
             root = Path(path)
             if name in {"host", "workers"}:
@@ -244,6 +247,9 @@ class LifetimeProof:
                 kernel.limits(root, cpu, memory * 1024 * 1024)
             info = root.stat()
             output[name] = {"path": path, "device": info.st_dev, "inode": info.st_ino}
+        if self.config.engine_domain is not None:
+            from appsec_review.container_runtime.engine_admission import EngineDomainProof
+            output.update(EngineDomainProof(self.config).groups())
         return output
 
     def members(self) -> list[dict]:
@@ -273,6 +279,8 @@ class LifetimeProof:
         roots = [Path(self.config.host_cgroup), Path(self.config.worker_cgroup_parent)]
         if self.config.native_engine is not None:
             roots.append(Path(self.config.native_engine.execution_cgroup_parent))
+            if self.config.native_engine.application_cgroup is not None:
+                roots.append(Path(self.config.native_engine.application_cgroup))
         return roots
 
     def stopped(self, members: list[dict]) -> bool:
@@ -411,6 +419,10 @@ class BuilderAdmission:
         self.contract = service_contract(config)
         self.binding = {"kind": LIFETIME_SCHEMA, "service_contract": self.contract}
         self.request = Reservation(config.host_cpu, config.host_overhead_mb, io_slots=0)
+        self.engine_admission = None
+        if config.engine_domain is not None:
+            from appsec_review.container_runtime.engine_admission import EngineDomainAdmission
+            self.engine_admission = EngineDomainAdmission(config, self.binding, self.request)
 
     def _write_anchor(self, anchor: dict):
         atomic_json(self.path, anchor)
@@ -450,18 +462,28 @@ class BuilderAdmission:
 
             def acquire():
                 admission = _ledger(self.config, create=True)
-                admission.reserve_persistent(self.config.admission.lease_id, self.request, self.binding)
+                if self.engine_admission is None:
+                    admission.reserve_persistent(self.config.admission.lease_id, self.request, self.binding)
+                else:
+                    admission.initialize()
                 info = admission.root.stat()
                 return [info.st_dev, info.st_ino]
 
             ledger_identity = _as_client(self.config, acquire)
-            self._write_anchor({
+            anchor = {
                 "schema": LIFETIME_SCHEMA, "state": "RESERVED", "service_contract": self.contract,
                 "groups": groups, "ledger_identity": ledger_identity, "members": [],
-            })
+            }
+            if self.engine_admission is not None:
+                anchor["action_ledger_identity"] = ledger_identity
+                anchor["ledger_identity"] = self.engine_admission.reserve()
+            self._write_anchor(anchor)
             return self.config.admission.lease_id
 
     def _verify_ledger(self, anchor: dict):
+        if self.engine_admission is not None:
+            self.engine_admission.verify(anchor["ledger_identity"])
+            return
         def verify():
             admission = _ledger(self.config, expected_identity=anchor["ledger_identity"])
             admission.verify_persistent(self.config.admission.lease_id, self.request, self.binding)
@@ -493,13 +515,16 @@ class BuilderAdmission:
             anchor = self._anchor()
             if anchor.get("state") != "RESERVED":
                 raise EnforcementUnavailable("builder lifetime is not active")
+            self._verify_ledger(anchor)
 
             def verify():
-                admission = _ledger(self.config, expected_identity=anchor["ledger_identity"])
+                admission = _ledger(self.config, expected_identity=anchor.get(
+                    "action_ledger_identity", anchor["ledger_identity"]))
                 with bounded_file_lock(admission.root / "admission.lock", 30):
                     state = json.loads((admission.root / "leases.json").read_text())
-                    admission._check_persistent(
-                        state, self.config.admission.lease_id, self.request, self.binding)
+                    if self.engine_admission is None:
+                        admission._check_persistent(
+                            state, self.config.admission.lease_id, self.request, self.binding)
                     matches = []
                     cpu, memory_mb = self.config.client_policy.build_reservation(self.config.resources)
                     required = {
@@ -550,7 +575,8 @@ class BuilderAdmission:
                 native_confirmation = EngineCleanupConfirmation(self.config)
 
             def reconcile():
-                admission = _ledger(self.config, expected_identity=anchor["ledger_identity"])
+                identity = anchor.get("action_ledger_identity", anchor["ledger_identity"])
+                admission = _ledger(self.config, expected_identity=identity)
                 removed = admission.reconcile(
                     lambda name: False, confirmed_cleanup=confirmation.confirmed_cleanup,
                     confirmed_build_stopped=confirmation.confirmed_build_stopped,
@@ -571,11 +597,14 @@ class BuilderAdmission:
             anchor = self._anchor()
             if anchor.get("state") != "RESERVED":
                 raise EnforcementUnavailable("native engine lifetime is not active")
+            self._verify_ledger(anchor)
             def verify():
-                admission = _ledger(self.config, expected_identity=anchor["ledger_identity"])
+                admission = _ledger(self.config, expected_identity=anchor.get(
+                    "action_ledger_identity", anchor["ledger_identity"]))
                 with bounded_file_lock(admission.root / "admission.lock", 30):
                     state = json.loads((admission.root / "leases.json").read_text())
-                    admission._check_persistent(state, self.config.admission.lease_id, self.request, self.binding)
+                    if self.engine_admission is None:
+                        admission._check_persistent(state, self.config.admission.lease_id, self.request, self.binding)
                     entry = state["leases"].get(binding["lease_id"], {})
                     expected = {**binding, "resource_budget": self.config.resources.view()}
                     if (entry.get("pid") != peer["pid"] or entry.get("process_identity") != peer["start_token"]
@@ -623,6 +652,9 @@ class BuilderAdmission:
             def release():
                 admission = _ledger(self.config, expected_identity=anchor["ledger_identity"])
                 admission._release_persistent(self.config.admission.lease_id, self.request, self.binding)
-            _as_client(self.config, release)
+            if self.engine_admission is None:
+                _as_client(self.config, release)
+            else:
+                self.engine_admission.release(anchor["ledger_identity"])
             anchor["state"] = "RELEASED"
             self._write_anchor(anchor)

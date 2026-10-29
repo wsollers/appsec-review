@@ -225,7 +225,7 @@ authenticated run grants, durable sole-slot admission, cancellation, independent
 private custody and builder/native engine interlock remain unchanged. An uncertain worker
 continues occupying the sole slot across restart.
 
-Concurrency-only build admission reserves the action budget remaining after the persistent
+Default concurrency-only build admission reserves the action budget remaining after the persistent
 host reservation, including staging, rather than advertising a small bounded worker.
 These are scheduling reservations, **not usage guarantees or kernel CPU/RAM caps**.
 The persistent lifetime reservation is not dropped or exempted: an eight-CPU CodeQL
@@ -233,6 +233,20 @@ action still cannot coexist with a one-CPU persistent service inside an eight-CP
 action budget. Retire that independently verified lifetime before such actions, or
 obtain an explicitly approved satisfiable lifecycle arrangement; raising budgets or
 silently freeing reservations is not a remedy.
+
+The explicitly commissioned alternative `lifetime_domain = "engine"` retains a real
+persistent control lease in a separate root-controlled ledger inside the existing
+2-CPU/2-GiB engine envelope, alongside a counted baseline for all existing engine
+consumers. The client and service must both select it; the service additionally
+requires exact typed `engine_domain` and dedicated `docker_helper_scope` declarations.
+One build reserves the whole action budget including staging. A subsequent 8-CPU action
+does not delete, migrate or borrow the control lease: that lease remains counted until
+independently verified actual shutdown, and the baseline remains reserved afterwards.
+This intentionally replaces retire-before-CodeQL only in the new explicit mode.
+Unknown/non-engine consumers and insufficient engine memory headroom fail closed.
+Application/controller work stays separately capped and accounted in the service
+domain. See `deploy/dagster/native/README.md` for the separation and commissioning gates.
+Offline policy/admission tests do not certify physical coexistence or service capacity.
 
 **TODO (deferred, not verified):** measure workloads and tune per-build CPU/RAM caps.
 One unbounded build can exhaust available memory or contend with services; concurrency
@@ -291,7 +305,8 @@ authorized; newly built images do not require editing the frozen static allowlis
 
 `[image_builder_service.admission]` requires the shared `metadata_root`, its non-root `uid`/`gid`
 and a fixed `lease_id`. The supplied `--reserve-lifetime` command records the service's persistent
-host reservation in the same admission ledger before startup; normal service startup verifies
+host reservation in the action admission ledger by default (or the explicitly selected
+root-controlled engine-domain ledger) before startup; normal service startup verifies
 that real reservation and each client's matching active build reservation. `--reconcile-admission`
 uses the private service journal to match the complete build binding, endpoint, worker generation
 and service contract before clearing abandoned client leases. Missing, unknown or rebound work,
