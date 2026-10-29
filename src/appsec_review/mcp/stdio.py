@@ -47,11 +47,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     adapter = RetrievalMcpAdapter(RetrievalCore(args.runs_dir, args.run_id,
                                                 manifest_sha256=args.manifest_sha256))
     for line in sys.stdin:
+        request = None
         try:
             request = json.loads(line)
             if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
                 raise ValueError("invalid JSON-RPC request")
             response = dispatch(adapter, request)
+        except json.JSONDecodeError as exc:
+            response = {"jsonrpc": "2.0", "id": None,
+                        "error": {"code": -32700, "message": str(exc)[:1024]}}
         except Exception as exc:
             response = {"jsonrpc": "2.0", "id": request.get("id") if isinstance(request, dict) else None,
                         "error": {"code": -32602, "message": str(exc)[:1024]}}

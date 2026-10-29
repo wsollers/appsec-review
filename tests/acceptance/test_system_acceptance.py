@@ -103,10 +103,14 @@ def _publish(run_root: Path, job: str, output_name: str, output: dict) -> None:
     attempt = run_root / "data" / "jobs" / job / "attempts" / "attempt_0001"
     attempt.mkdir(parents=True)
     (attempt / "result.json").write_text(json.dumps({"outputs": {output_name: output}}), encoding="utf-8")
-    (attempt / "handoff.json").write_text(json.dumps({"status": "ACCEPTED", "completion_status": "SUCCEEDED"}),
-                                          encoding="utf-8")
+    (attempt / "handoff.json").write_text(json.dumps({
+        "schema": "appsec-review/job-handoff/1", "job_id": job, "status": "ACCEPTED",
+        "completion_status": "SUCCEEDED", "outputs": {output_name: output},
+        "artifacts": [output["artifact"]] if "artifact" in output else output.get("artifacts", [])}),
+        encoding="utf-8")
     (attempt.parent.parent / "latest.json").write_text(json.dumps({
-        "handoff_path": (attempt / "handoff.json").relative_to(run_root).as_posix()}), encoding="utf-8")
+        "handoff_path": (attempt / "handoff.json").relative_to(run_root).as_posix(),
+        "handoff_sha256": hashlib.sha256((attempt / "handoff.json").read_bytes()).hexdigest()}), encoding="utf-8")
 
 
 def _final_artifacts(tmp_path: Path) -> Path:
@@ -121,12 +125,14 @@ def _final_artifacts(tmp_path: Path) -> Path:
         "package_directory": "data/review-packages/p1", "content_sha256": "c" * 64,
         "artifacts": [{"path": "data/review-packages/p1/page-0001.json",
                        "sha256": hashlib.sha256(page.read_bytes()).hexdigest()}]})
-    ledger_digest = "d" * 64
-    ledger = run_root / "data" / "document-issues" / ledger_digest / "ledger.json"
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text(json.dumps({"content_sha256": ledger_digest, "candidates": []}), encoding="utf-8")
-    _publish(run_root, LEDGER_JOB, "analysis.map_and_adjudicate", {
-        "artifact": {"path": ledger.relative_to(run_root).as_posix()}})
+    from appsec_review.retrieval.model import canonical_json as content_json
+    from appsec_review.storage import canonical_json
+    from appsec_review.storage.shared import put_bytes
+
+    body = {"candidates": []}
+    ledger_digest = hashlib.sha256(content_json(body)).hexdigest()
+    artifact = put_bytes(run_root, canonical_json({**body, "content_sha256": ledger_digest}))
+    _publish(run_root, LEDGER_JOB, "analysis.map_and_adjudicate", {"artifact": artifact})
     return run_root
 
 
@@ -139,7 +145,7 @@ def test_missing_empty_or_changed_final_artifacts_are_reported(tmp_path: Path) -
     (run_root / "data/review-packages/p1/page-0001.json").write_text('{"items": [1]}', encoding="utf-8")
     (run_root / "data/review-packages/p1/manifest.json").write_text(
         json.dumps({"content_sha256": "x", "packages": []}), encoding="utf-8")
-    ledger = next(run_root.glob("data/document-issues/*/ledger.json"))
+    ledger = next(run_root.glob("data/shared/objects/*"))
     ledger.write_text(json.dumps({"content_sha256": "other"}), encoding="utf-8")
     paths = {item.path for item in final_artifact_problems(run_root, tmp_path)}
     assert {"manifest.packages", "manifest.content_sha256", "artifact data/review-packages/p1/page-0001.json",

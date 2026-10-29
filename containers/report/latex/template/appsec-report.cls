@@ -28,6 +28,7 @@
 \RequirePackage{microtype}
 \RequirePackage[hidelinks,bookmarksnumbered=false,pdfusetitle=false]{hyperref}
 \RequirePackage{rerunfilecheck}
+\RequirePackage{tikz}
 %% The cover TOC can change pagination without changing the last-page label.
 \RerunFileCheck{\jobname.toc}{%
   \@ifundefined{tf@toc}{}{\immediate\closeout\tf@toc}%
@@ -65,6 +66,7 @@
 \define@key{report}{run}{\def\report@run{#1}}
 \define@key{report}{status}{\def\report@status{#1}}
 \define@key{report}{head}{\def\report@head{#1}}
+\define@key{report}{headlabel}{\def\report@headlabel{#1}}
 \define@key{report}{renderer}{\def\report@renderer{#1}}
 \define@key{report}{pdftitle}{\def\report@pdftitle{#1}}
 \newcommand{\reportsetup}[1]{\setkeys{report}{#1}%
@@ -75,6 +77,7 @@
 \providecommand{\report@run}{}
 \providecommand{\report@status}{}
 \providecommand{\report@head}{}
+\providecommand{\report@headlabel}{ledger head}
 \providecommand{\report@renderer}{}
 \providecommand{\report@pdftitle}{Security review report}
 
@@ -93,10 +96,10 @@
 \renewcommand{\headrule}{\hbox to\headwidth{\color{rule}\leaders\hrule height \headrulewidth\hfill}}
 \fancyhead[L]{\scriptsize\bfseries\color{brand}appsec-review}
 \fancyhead[R]{\scriptsize\color{muted}run \report@run}
-\fancyfoot[L]{\scriptsize\color{faint}ledger head \texttt{\report@head}}
+\fancyfoot[L]{\scriptsize\color{faint}\report@headlabel\ \texttt{\report@head}}
 \fancyfoot[R]{\scriptsize\color{muted}page \thepage\ of \pageref{LastPage}}
 \fancypagestyle{plain}{\fancyhf{}\renewcommand{\headrulewidth}{0pt}%
-  \fancyfoot[L]{\scriptsize\color{faint}ledger head \texttt{\report@head}}%
+  \fancyfoot[L]{\scriptsize\color{faint}\report@headlabel\ \texttt{\report@head}}%
   \fancyfoot[R]{\scriptsize\color{muted}page \thepage\ of \pageref{LastPage}}}
 
 %% -- Headings -------------------------------------------------------------------------------------
@@ -119,22 +122,30 @@
 \newcommand{\badge}[2]{\tcbox[on line,nobeforeafter,size=fbox,arc=1.8pt,boxrule=0pt,boxsep=0pt,
   left=3.8pt,right=3.8pt,top=1.9pt,bottom=1.9pt,colback=verdict-#1,colupper=white,
   fontupper=\fontsize{6.8}{7.2}\selectfont\bfseries\addfontfeatures{LetterSpace=6}]{#2}}
+%% A badge in a table cell shrinks to the column width instead of overrunning the next column.
+\newsavebox{\appsec@cellbox}
+\newcommand{\cellbadge}[1]{\sbox{\appsec@cellbox}{#1}\ifdim\wd\appsec@cellbox>\linewidth
+  \resizebox{\linewidth}{!}{\usebox{\appsec@cellbox}}\else\usebox{\appsec@cellbox}\fi}
 
 %% -- Boxes: one per kind of content ---------------------------------------------------------------
 %% \begin{abox}{kind}{CHIP}{title}{meta}{badges} ... \end{abox}; the gap box is dashed.
 \newcommand{\boxhead}[5]{%
   \noindent\chip{#1}{#2}\enspace{\bfseries #3}\ifstrempty{#5}{}{\enspace #5}\par\nopagebreak
   \ifstrempty{#4}{}{{\scriptsize\color{muted}#4}\par\nopagebreak}\vspace{1pt}}
-\tcbset{abox base/.style={enhanced jigsaw,breakable,boxrule=0pt,frame hidden,before=\needspace{8\baselineskip},
+\tcbset{abox base/.style={enhanced jigsaw,breakable,boxrule=0pt,frame hidden,
   left=11pt,right=9pt,top=7pt,bottom=7pt,before skip=7pt,after skip=7pt,
   fontupper=\small,parskip=2pt,
   before upper={\setlength{\parskip}{2pt}\raggedright}}}
-\NewTColorBox{abox}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
+\NewTColorBox{abox@box}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
   borderline west={2.6pt}{0pt}{#1-accent},
   before upper={\boxhead{#1}{#2}{#3}{#4}{#5}}}
-\NewTColorBox{gapbox}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
+\NewTColorBox{gapbox@box}{m m m m m}{abox base,arc=1.6pt,outer arc=1.6pt,colback=#1-fill,colframe=#1-accent,
   boxrule=0.7pt,frame style={dashed},borderline west={0pt}{0pt}{#1-accent},
   before upper={\boxhead{#1}{#2}{#3}{#4}{#5}}}
+%% The title must not be stranded at a page foot. tcolorbox's `before skip` rewrites `before`, so
+%% the space is reserved here, outside the box, rather than in the box style.
+\NewDocumentEnvironment{abox}{m m m m m}{\par\needspace{8\baselineskip}\begin{abox@box}{#1}{#2}{#3}{#4}{#5}}{\end{abox@box}}
+\NewDocumentEnvironment{gapbox}{m m m m m}{\par\needspace{8\baselineskip}\begin{gapbox@box}{#1}{#2}{#3}{#4}{#5}}{\end{gapbox@box}}
 
 %% Key/value line (breakable: a hanging paragraph, not a table).
 \newlength{\kvwidth}\setlength{\kvwidth}{36mm}
@@ -168,6 +179,25 @@
   {\large\bfseries\color{ink}#2}\end{tcolorbox}\end{minipage}}
 \newcommand{\statrow}[1]{\par\vspace{5pt}\noindent#1\par}
 
+%% Charts: horizontal bar charts and timelines. The renderer computes every coordinate (x as a
+%% fraction of \linewidth, y in millimetres); TeX only draws. A chart is one unbreakable minipage.
+\colorlet{chart-track}{rule!45!white}
+\tikzset{
+  charttrack/.style={fill=chart-track,rounded corners=1pt},
+  chartbar/.style={rounded corners=1pt},
+  chartgrid/.style={draw=rule,line width=0.4pt},
+  chartlabel/.style={anchor=west,inner sep=0pt,font=\fontsize{7.4}{9}\selectfont,text=ink},
+  chartvalue/.style={anchor=west,inner sep=0pt,font=\fontsize{7.2}{9}\selectfont\bfseries,text=ink},
+  chartnote/.style={anchor=west,inner sep=0pt,font=\fontsize{7}{9}\selectfont,text=muted},
+  charttick/.style={anchor=base,inner sep=0pt,font=\fontsize{6.4}{8}\selectfont,text=muted},
+  chartseg/.style={anchor=west,inner sep=0pt,font=\fontsize{6}{7}\selectfont\bfseries,text=white}}
+\newenvironment{reportchart}[2]{\par\vspace{6pt}\noindent\begin{minipage}{\linewidth}\setlength{\parskip}{0pt}%
+  \noindent{\small\bfseries\color{brand}#1}\ifstrempty{#2}{}{\enspace{\scriptsize\color{muted}#2}}\par
+  \vspace{2pt}{\color{rule}\rule{\linewidth}{0.5pt}}\par\vspace{4pt}}%
+  {\end{minipage}\par\vspace{6pt}}
+\newcommand{\chartcaption}[1]{\par\vspace{4pt}\noindent{\scriptsize\color{muted}#1}\par}
+\newcommand{\chartempty}[1]{\par\noindent{\small\itshape\color{muted}#1}\par}
+
 %% Legend rows.
 \newcommand{\legendrow}[4]{\par\noindent\hangindent=40mm\hangafter=1\makebox[27mm][l]{\chip{#1}{#2}}%
   \hex{#3}\hspace{3.5mm}{\small #4}\par\vspace{4pt}}
@@ -189,7 +219,7 @@
   \noindent\begin{tabular}{@{}l@{\hspace{8mm}}l@{}}
     {\scriptsize\color{muted}RUN} & {\ttfamily\small \report@run}\\[5pt]
     {\scriptsize\color{muted}STATUS} & \report@status\\[5pt]
-    {\scriptsize\color{muted}LEDGER HEAD} & \hex{\report@head}\\[5pt]
+    {\scriptsize\color{muted}\expandafter\MakeUppercase\expandafter{\report@headlabel}} & \hex{\report@head}\\[5pt]
     {\scriptsize\color{muted}RENDERER} & \hex{\report@renderer}
   \end{tabular}\par
   \vspace{8pt}}

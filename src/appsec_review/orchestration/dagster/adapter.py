@@ -27,6 +27,7 @@ from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import Job, job_is_enabled, plan_jobs
 from appsec_review.runtime.launch import begin as launch_begin, configured_target, launch_inputs
 from appsec_review.observability import PipelineLog, write_run_metrics
+from appsec_review.reporting.telemetry_finalize import finalize_telemetry_report
 from appsec_review.storage import atomic_json
 from appsec_review.orchestration.topology import (
     gate_dependencies, gate_ids, launch_upstream_handoffs, wave1_dependencies)
@@ -343,6 +344,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
             "decisions": ordered_decisions, "handoff_sha256": merged["completed_handoffs"],
         })
         write_run_metrics(run_root)
+        finalize_telemetry_report(run_root, config.telemetry_report, repository_root=config.runtime.repository_root)
         return {"run_id": run_id, "trigger": trigger, **merged, "completion_status": completion,
                 "graph_started_at": started.isoformat(), "resume_decisions": ordered_decisions}
 
@@ -432,7 +434,9 @@ def build_definitions(
         wave_job = _build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                         job_dependencies=wave_dependencies)
         jobs.append(wave_job)
-        error_job, error_sensors = build_error_state_definitions(wave_job, config.runtime.runs_dir)
+        error_job, error_sensors = build_error_state_definitions(
+            wave_job, config.runtime.runs_dir, telemetry_report=config.telemetry_report,
+            repository_root=config.runtime.repository_root)
         jobs.append(error_job)
         sensors.extend(error_sensors)
     if {"job_model_connectivity", "job_review_intake", "job_target_catalog",

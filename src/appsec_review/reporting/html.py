@@ -145,7 +145,7 @@ def _badge(state: str, label: str | None = None) -> str:
 
 def _field(row: Field) -> str:
     if row.badge:
-        value = _badge(row.badge)
+        value = _badge(row.badge, row.badge_label)
     elif row.mono:
         value = f"<code>{esc_line(row.value)}</code>"
     else:
@@ -160,7 +160,7 @@ def _table(item: Table) -> str:
         cells = []
         for cell in row:
             if cell.badge:
-                cells.append(f"<td>{_badge(cell.badge)}</td>")
+                cells.append(f"<td>{_badge(cell.badge, cell.badge_label)}</td>")
             elif cell.mono:
                 cells.append(f"<td><code>{esc_line(cell.text)}</code></td>")
             else:

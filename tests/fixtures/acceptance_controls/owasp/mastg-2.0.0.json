@@ -1,0 +1,17 @@
+{
+  "schema": "appsec-review/owasp-catalog/1",
+  "family": "MASTG",
+  "version": "2.0.0",
+  "authority": "supporting_test",
+  "fixture": true,
+  "upstream": {
+    "repository": "https://github.com/OWASP/owasp-mastg",
+    "ref": "v2.0.0",
+    "commit": "990472dbcffe126f5556045d60270c4ffdfdde72",
+    "license": "CC-BY-SA-4.0"
+  },
+  "records": [
+    {"id": "MASTG-TEST-0001", "title": "Storage procedure", "text": "Fixture supporting procedure for mobile storage evidence.", "supports": ["MASVS-STORAGE-1"]},
+    {"id": "MASTG-TEST-0002", "title": "Network procedure", "text": "Fixture supporting procedure for mobile network evidence.", "supports": ["MASVS-NETWORK-1"]}
+  ]
+}

@@ -12,7 +12,9 @@ from dagster import (
     RunsFilter, SkipReason, job, op, run_status_sensor, sensor,
 )
 
+from appsec_review.config.telemetry_report import TelemetryReportSettings
 from appsec_review.observability import PipelineLog, write_run_metrics
+from appsec_review.reporting.telemetry_finalize import finalize_telemetry_report
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json
 from appsec_review.storage.shared import safe_path
 
@@ -37,8 +39,13 @@ def _event_message(entry) -> str:
     return _one_line(error.message if error is not None else entry.message)
 
 
-def record_error_state(instance, source_run_id: str, runs_dir: Path) -> Path:
-    """Summarize a failed or canceled wave from bounded Dagster event records."""
+def record_error_state(instance, source_run_id: str, runs_dir: Path, *,
+                       telemetry_report: TelemetryReportSettings | None = None,
+                       repository_root: Path | None = None) -> Path:
+    """Summarize a failed or canceled wave from bounded Dagster event records.
+
+    With ``telemetry_report`` settings, a finalized run also gets its best-effort telemetry report
+    after its terminal metrics are written (outside the receipt lock)."""
     source = instance.get_run_by_id(source_run_id)
     if source is None or source.job_name != "wave1_review":
         raise ValueError(f"unknown wave1_review run: {source_run_id}")
@@ -62,22 +69,25 @@ def record_error_state(instance, source_run_id: str, runs_dir: Path) -> Path:
     path = runs_dir / "metadata" / "dagster-error-state" / f"{source_run_id}.log"
     if not path.exists():
         atomic_bytes(path, ("\n".join(lines) + "\n").encode("utf-8"))
-    _finalize_failed_run(source, runs_dir, path)
+    root = _finalize_failed_run(source, runs_dir, path)
+    if root is not None and telemetry_report is not None:
+        finalize_telemetry_report(root, telemetry_report, repository_root=repository_root)
     return path
 
 
-def _finalize_failed_run(source, runs_dir: Path, error_path: Path) -> None:
+def _finalize_failed_run(source, runs_dir: Path, error_path: Path) -> Path | None:
+    """Record the terminal status and metrics; returns the run root when its metrics were written."""
     application_id = source.tags.get("appsec/application_run_id")
     if application_id is None:
-        return
+        return None
     root = safe_path(runs_dir, application_id)
     manifest_path = root / "data/configuration/manifest.json"
     if not manifest_path.is_file():
-        return
+        return None
     manifest = json.loads(manifest_path.read_bytes())
     # Never backfill or mutate historical runs created before this lifecycle contract.
     if manifest.get("failure_finalization") != "appsec-review/split-failure-finalization/1":
-        return
+        return None
     receipt = safe_path(root, f"data/orchestration/dagster/{source.run_id}.json")
     with FileLock(receipt.with_suffix(".lock")):
         if receipt.exists():
@@ -85,7 +95,7 @@ def _finalize_failed_run(source, runs_dir: Path, error_path: Path) -> None:
             if prior["status"] != source.status.value:
                 raise ValueError("terminal Dagster receipt conflicts with authoritative run status")
             write_run_metrics(root)
-            return
+            return root
         log = PipelineLog(root)
         details = {"dagster_run_id": source.run_id, "completion_status": source.status.value,
                    "error_state_file": str(error_path)}
@@ -105,6 +115,7 @@ def _finalize_failed_run(source, runs_dir: Path, error_path: Path) -> None:
             "error_state_file": str(error_path),
         })
         write_run_metrics(root)
+    return root
 
 
 def step_failure_path(runs_dir: Path, dagster_run_id: str, step_key: str, attempt: int) -> Path:
@@ -174,11 +185,14 @@ def record_step_failures(instance, runs_dir: Path, cursor: str | None) -> tuple[
     return written, json.dumps(next_state, sort_keys=True, separators=(",", ":"))
 
 
-def build_error_state_definitions(wave_job, runs_dir: Path) -> tuple[object, list[object]]:
+def build_error_state_definitions(wave_job, runs_dir: Path, *,
+                                  telemetry_report: TelemetryReportSettings | None = None,
+                                  repository_root: Path | None = None) -> tuple[object, list[object]]:
     @op(name="record_wave1_error_state")
     def record(context) -> str:
         source_run_id = context.dagster_run.tags["appsec/source_dagster_run_id"]
-        path = record_error_state(context.instance, source_run_id, runs_dir)
+        path = record_error_state(context.instance, source_run_id, runs_dir,
+                                  telemetry_report=telemetry_report, repository_root=repository_root)
         context.add_output_metadata({"source_dagster_run_id": source_run_id,
                                      "error_state_file": str(path)})
         return str(path)

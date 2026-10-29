@@ -35,7 +35,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 | `review-status.sh` / `.ps1` | List recent runs and the active run's current steps. |
 | `review-stop.sh` / `.ps1` | End the current review (every non-terminal run) with `SAFE_TERMINATE`; `--now` cancels at once. |
 | `review-stop-id.sh` / `.ps1` | End one review by Dagster run id or application run id. |
-| `render-report.sh` / `.ps1` | Render a finished run's report to PDF or single-page HTML (`--format pdf\|html`); output goes to `runs/reports/` by default. Details: [`docs/operations/report-rendering.md`](../docs/operations/report-rendering.md). |
+| `render-report.sh` / `.ps1` | Render a finished run's review report to PDF or single-page HTML (`--format pdf\|html`), or with `--kind telemetry` (`-Kind telemetry`) its end-of-run telemetry report (`--format pdf\|tex`; a PDF goes to `runs/<id>/data/telemetry/report/`); other output goes to `runs/reports/` by default. Details: [`docs/operations/report-rendering.md`](../docs/operations/report-rendering.md), [`docs/operations/telemetry-report.md`](../docs/operations/telemetry-report.md). |
 
 ## CodeQL
 
@@ -47,7 +47,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `run-tests.sh` / `.ps1` | Run a named pytest suite with a unique base temp under `test/tmp/` and a log file; reports failures listed in `known-failures.txt` as known. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-tests). |
+| `run-tests.sh` / `.ps1` | Run a named pytest suite with a unique base temp under `test/tmp/` and a log file; legacy suites report `known-failures.txt` entries as known. `--acceptance PROFILE` / `-Acceptance PROFILE` selects strict isolated acceptance (default one, maximum two workers), including dependency-ready producers, verified post-cleanup OUTPUT detachment, fresh immutable-union checks and private consumers; whole checkpoints/seals remain strict and blocked descendants never count as executed. No known-failure exemptions. The approved three-member exhaustive series qualified at `856300ca` in fresh sequential two-worker invocations (35 executions / 31 unique); monolithic `review-exhaustive` remains unqualified, not an umbrella alias or cap increase. Selection/results: [acceptance guide](../docs/operations/bounded-acceptance.md); CLI details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-tests). |
 | `clean-temp.sh` / `.ps1` | Remove disposable state under `test/tmp/` (dry run unless `--yes`). Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#clean-temp). |
 
 ## Support files

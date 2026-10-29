@@ -17,6 +17,7 @@ from urllib.parse import unquote, urlparse
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
 from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
+from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
@@ -563,6 +564,7 @@ class AppConfig:
     # (``appsec_review.config.run_selection``). Recorded in a run's configuration manifest; not hashed.
     selection_source: str = "environment"
     compiler_target: CompilerTarget = CompilerTarget.CLANG
+    telemetry_report: TelemetryReportSettings = TelemetryReportSettings()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -878,6 +880,15 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
     target_acquisition = parse_target_acquisition(document.get("target_acquisition"), repository_root)
     banned_functions = parse_banned_functions(document.get("banned_functions"))
+    reporting_value = document.get("reporting", {})
+    if not isinstance(reporting_value, dict):
+        raise ValueError("[reporting] must be a table")
+    if set(reporting_value) - {"telemetry_report"}:
+        raise ValueError("[reporting] has unknown sections: "
+                         + ", ".join(sorted(set(reporting_value) - {"telemetry_report"})))
+    telemetry_report = parse_telemetry_report(reporting_value.get("telemetry_report"))
+    if "reporting" in document:
+        resolved_document["reporting"]["telemetry_report"] = telemetry_report.view()
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
     runtime_value = document.get("runtime")
@@ -1239,4 +1250,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         banned_functions=banned_functions,
         review_policy=review_policy,
         compiler_target=selected_compiler,
+        telemetry_report=telemetry_report,
     )
