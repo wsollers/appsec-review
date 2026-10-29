@@ -44,7 +44,9 @@ def client_contracts(config) -> tuple[NativeClientContract, ...]:
             grant.image_ids, native.application_cgroup or config.host_cgroup,
             native.application_cpu if native.application_cgroup else config.host_cpu,
             native.application_memory_mb if native.application_cgroup else config.host_overhead_mb,
-            {name: os.readlink(f"/proc/self/ns/{name}") for name in ("mnt", "pid", "user")}))
+            {name: os.readlink(f"/proc/self/ns/{name}") for name in ("mnt", "pid", "user")},
+            image_sources={image.source_image_id: image.image_id for image in native.images
+                           if image.image_id in grant.image_ids and image.source_image_id is not None}))
     return tuple(result)
 
 
