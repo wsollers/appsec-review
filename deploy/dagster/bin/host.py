@@ -26,20 +26,22 @@ def compose_environment(environ: dict[str, str] | None = None) -> dict[str, str]
     if GITHUB_TOKEN in environment:
         return environment
     gh = shutil.which("gh")
-    token = ""
+    token, reason = "", "gh is not installed"
     if gh is not None:
         lookup = {key: value for key, value in environment.items() if key not in GH_OVERRIDES}
         try:
             completed = subprocess.run([gh, "auth", "token", "--hostname", "github.com"], env=lookup,
                                        capture_output=True, text=True, timeout=30, check=False)
             token = completed.stdout.strip() if completed.returncode == 0 else ""
+            reason = ("gh has no github.com login" if "unknown" not in completed.stderr
+                      else "gh is too old for `gh auth token` (2.17 or later is required)")
         except (OSError, subprocess.TimeoutExpired):
-            token = ""
+            reason = "gh auth token did not complete"
     if token:
         environment[GITHUB_TOKEN] = token
         print("GITHUB_TOKEN: using this shell's gh login for source-history GitHub enrichment", file=sys.stderr)
     else:
-        print("GITHUB_TOKEN: unset and no gh login; source-history GitHub enrichment will record "
+        print(f"GITHUB_TOKEN: unset and {reason}; source-history GitHub enrichment will record "
               "github_credentials_missing", file=sys.stderr)
     return environment
 

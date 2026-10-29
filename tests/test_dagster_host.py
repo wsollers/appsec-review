@@ -102,7 +102,11 @@ def test_compose_environment_without_gh_login_leaves_github_token_unset(monkeypa
     monkeypatch.setattr(host.subprocess, "run",
                         lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "not logged in"))
     assert "GITHUB_TOKEN" not in host.compose_environment({"PATH": "/usr/bin"})
-    assert "github_credentials_missing" in capsys.readouterr().err
+    assert "no github.com login" in capsys.readouterr().err
+    monkeypatch.setattr(host.subprocess, "run",
+                        lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "unknown flag: --hostname"))
+    assert "GITHUB_TOKEN" not in host.compose_environment({"PATH": "/usr/bin"})
+    assert "2.17 or later" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(("action", "supplied"), [("start", True), ("reload", True), ("stop", False), ("build", False)])

@@ -144,7 +144,9 @@ In the Dagster deployment, jobs run in the `code-location` container, which rece
 `stack-restart`, and `stack-rebuild`, whoever runs them) supplies it automatically: when the
 creating shell has no `GITHUB_TOKEN`, it takes `gh auth token --hostname github.com` from the `gh`
 login stored where the lifecycle runs (inside WSL for a WSL stack), ignoring ambient `GH_TOKEN`
-overrides. Sign in once there with the account whose access the enrichment should use:
+overrides. Sign in once there, with `gh` 2.17 or later (Ubuntu 22.04's packaged 2.4 lacks
+`gh auth token`; install from GitHub's apt repository), using the account whose access the
+enrichment should use:
 
 ```bash
 gh auth login --hostname github.com   # in the WSL distribution that runs the stack
