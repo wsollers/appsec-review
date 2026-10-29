@@ -5,7 +5,8 @@ naming what is missing, when the system OpenSSL, the Docker daemon or the local 
 unavailable. Keys are ephemeral Ed25519 keys under the pytest base directory. Docker images are
 built with ``--network none`` from the local ``appsec-review/base-python`` image only (never
 pulled), tagged ``appsec-review-signing-test:<name>-<unique>``, and removed after each test by the
-image IDs that test created.
+image IDs that test created; containers a test starts are named ``appsec-review-signing-test-*``
+and removed by their IDs first.
 
     APPSEC_REVIEW_SIGNING_INTEGRATION=1 python -m pytest -p no:cacheprovider -rs \
         tests/integration/signing --basetemp=test/tmp/signing-integration
@@ -110,11 +111,12 @@ def signing_key(openssl, tmp_path_factory) -> SigningKey:
 
 @dataclass
 class Docker:
-    """Builds, tags and runs only ``appsec-review-signing-test`` images; removes what it built."""
+    """Builds, tags and runs only ``appsec-review-signing-test`` images; removes what it built and started."""
 
     environment: dict[str, str]
     suffix: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     created: list[str] = field(default_factory=list)
+    containers: list[str] = field(default_factory=list)
 
     def __call__(self, *args: str, timeout: float = 300) -> subprocess.CompletedProcess[str]:
         return subprocess.run(["docker", *args], env=self.environment, stdin=subprocess.DEVNULL,
@@ -151,7 +153,28 @@ class Docker:
         return self("run", "--rm", "--name", name, "--network", "none", *options, image_id, *argv,
                     timeout=timeout)
 
+    def start(self, image_id: str, *argv: str) -> str:
+        """Start a detached ``--network none`` container of a test image; return its full ID."""
+        assert image_id in self.created
+        name = f"{TEST_REPOSITORY}-{self.suffix}-{uuid.uuid4().hex[:8]}"
+        completed = self("run", "--detach", "--name", name, "--network", "none", image_id, *argv)
+        assert completed.returncode == 0, completed.stderr
+        container_id = completed.stdout.strip()
+        assert re.fullmatch(r"[0-9a-f]{64}", container_id), container_id
+        self.containers.append(container_id)
+        return container_id
+
+    def remove_image(self, image_id: str) -> None:
+        """Remove one image this helper built, so its ID no longer exists in the daemon."""
+        assert image_id in self.created
+        completed = self("image", "rm", "--force", image_id)
+        assert completed.returncode == 0, completed.stderr
+        self.created.remove(image_id)
+
     def remove_created(self) -> None:
+        for container_id in reversed(self.containers):
+            self("container", "rm", "--force", "--volumes", container_id)
+        self.containers.clear()
         for image_id in reversed(self.created):
             self("image", "rm", "--force", image_id)
         self.created.clear()

@@ -571,8 +571,13 @@ The focused unit tests use real OpenSSL and ephemeral keys:
 
 The integration tests need `/usr/bin/openssl`, Docker with buildx and the local
 `appsec-review/base-python:3.12-bookworm` image, which is never pulled. They build only
-`appsec-review-signing-test:*` images and remove only those images. The acceptance tests drive the
-operator CLI end to end. Both suites are manual validation that the user owns:
+`appsec-review-signing-test:*` images, start only `appsec-review-signing-test-*` containers, and
+remove only those. Besides signed launch and module enforcement they cover `sign-image --all-pinned
+--builder-service-config` against real image IDs, the container self-check judged on the host
+against real containers' mount tables, host names and `.Image` (the gate itself does not run inside
+the tiny test images), and, on native Windows only, NTFS custody of real `keygen` output widened
+with `icacls`. The acceptance tests drive the operator CLI end to end, including
+`--builder-service-config`. Both suites are manual validation that the user owns:
 
 ```bash
 APPSEC_REVIEW_SIGNING_INTEGRATION=1 python -m pytest -p no:cacheprovider -rs \
