@@ -84,11 +84,13 @@ agents that inspect or change the repository. It is not a prompt for review work
   completion-triggered, serialized local integration over periodic merge polling. Conflicts,
   dirty integration checkouts, and active-run source freezes require explicit resolution, not
   blind merges or automatic conflict resolution.
-- Reuse supported source/script mounts and reload only the affected application processes for
-  source-only changes. Rebuild only images whose baked-in files, dependencies, or binaries changed;
-  do not rebuild unrelated tooling. Keep mounted source fixed for an active review and record the
-  source identity separately from the binary image identity. If the deployment still bakes in the
-  changed source, report that coupling rather than claiming a mount has updated the running code.
+- For job/task-script changes, reuse supported script mounts and reload only the affected
+  application processes. The intended mount holds job/task scripts, not the entire application
+  source/package; do not describe that deployment as implemented without verifying it. Rebuild
+  only images whose baked-in files, dependencies, or binaries changed; do not rebuild unrelated
+  tooling. Keep mounted scripts fixed for an active review and record their source identity
+  separately from the binary image identity. If the deployment still bakes in the changed scripts,
+  report that coupling rather than claiming a mount has updated the running code.
 - Other agent sessions work on this repository at the same time. Follow
   `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
   testing on a shared host, and when handing work to another session.
@@ -102,19 +104,35 @@ agents that inspect or change the repository. It is not a prompt for review work
 
 ## Verification
 
-- Verify code changes by running focused unit tests for the area changed and directly affected
-  behavior. Add or update quick unit tests to reproduce breakage and prevent regressions; prefer
-  seconds-scale checks suitable for the repair loop.
+- Verify code changes with fast, accurate, efficient unit regressions for the changed area and
+  directly affected behavior. Exercise the real behavior and root cause; fake external boundaries
+  only where appropriate, never the behavior under test. Preserve meaningful assertions.
+- Prefer seconds-scale focused checks suitable for the repair loop, not a hard universal timeout.
+  Do not weaken correctness or assertions, silently skip coverage, enlarge timeouts, or relabel
+  heavyweight integration tests as unit tests merely to meet a timing goal. Report slow checks
+  and genuine coverage gaps honestly.
 - Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
   default. Apply the same scope after merging changes from another branch.
+- Required collection behavior: exclude known integration/live paths from implicit default
+  collection (`pytest` or pathless `pytest -k ...`), while preserving explicit on-demand paths.
+  Focused unit selectors remain preferred; explicit selection does not authorize heavyweight
+  execution.
+- Documentation-only changes need documentation checks, not automatic test execution.
 - Integration tests, acceptance tests, and live tests/review runs (including Dagster) are manual
   validation owned by the user and execute only at the user's explicit request. Do not run them
   as automatic repair, merge, or completion gates. A request to fix code, add tests, merge work, or
   proceed is not by itself permission to execute these validations. An explicitly requested
   review/restart cycle authorizes that cycle, not unrelated integration or acceptance suites.
-- Record the unit-test commands and results, including failures or coverage gaps. Identify any
-  integration, acceptance, or live Dagster validation still needed; passing unit tests does not
-  establish that those checks passed.
+- Record each focused unit-test command, elapsed time, and result, including failures and coverage
+  gaps. Identify any integration, acceptance, or live Dagster validation still needed; passing
+  unit tests does not establish that those checks passed.
+
+## Deferred work
+
+- TODO (deferred): design container-image signing and eventual Python distribution/artifact
+  signing. Signature format, verification/trust model, and key ownership remain future design
+  decisions. This is not a restart, merge, or test gate and does not authorize implementation or
+  provisioning.
 
 ## Workspace hygiene
 
