@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -60,12 +59,12 @@ def live_codeql_runtime(tmp_path_factory: pytest.TempPathFactory):
         else:
             profile = profiles[profile_name]
             tag, image_id = profile.tag, profile.image_id
-        # Environments without a preinstalled declaration take the derived-image path, as the job's
-        # resolver would on a host that declares none.
-        declared = any(item.build_image_id == image_id for item in settings.preinstalled_runtimes)
+        # The shipped configuration is used unmodified: declared environments resolve to their
+        # preinstalled runtime and undeclared ones take the derived path under the shipped
+        # preinstalled_undeclared policy, exactly as the job's resolver does.
         resolver = CodeQLImageResolver(
             repository_root=ROOT, metadata_root=metadata_root, timeout_seconds=1800, releases=releases,
-            settings=settings if declared else replace(settings, preinstalled_runtimes=()))
+            settings=settings)
         if profile_name not in images:
             images[profile_name] = resolver.resolve(
                 build_image_tag=tag, build_image_id=image_id,
