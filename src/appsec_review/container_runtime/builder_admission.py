@@ -651,7 +651,8 @@ class BuilderAdmission:
             native_confirmation = None
             if self.config.native_engine is not None:
                 from appsec_review.container_runtime.engine_broker import EngineCleanupConfirmation
-                native_confirmation = EngineCleanupConfirmation(self.config)
+                native_confirmation = EngineCleanupConfirmation(
+                    self.config, retired=anchor["state"] == "RELEASED")
 
             def reconcile():
                 identity = anchor.get("action_ledger_identity", anchor["ledger_identity"])

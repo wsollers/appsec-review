@@ -230,6 +230,19 @@ must be followed by exact container-absence evidence. Unknown cleanup retains it
 reconciliation cannot substitute stopped-only evidence. The explicit native entrypoint uses this
 mode; existing Compose cleanup behavior is unchanged.
 
+If a native create was rejected before intent publication, its uncertain client reservation stays
+fenced while the engine is live. Operator admission reconciliation can recover that exact native
+scope only after normal lifetime release has proved empty execution/application/helper cgroups,
+dead generations and no daemon listener. It additionally requires a dedicated, private Docker
+container-metadata directory with no entries, no retained engine owner or unresolved execution,
+a dead client generation, and exact run/configuration/engine/budget binding. A stopped container,
+a missing journal alone, or a foreign scope cannot release capacity. Existing intents still require
+their ordinary independently confirmed removal records; no removal receipt is fabricated.
+
+Rootless-worker inspection accepts Docker's equivalent `SETUID`/`SETGID` and
+`CAP_SETUID`/`CAP_SETGID` spellings only as the same exact pair. The kernel capability bounding
+set, zero effective capabilities and all remaining isolation checks are unchanged.
+
 Fake integration drives the registered operator through supervisor, simulated Dagster child,
 common launch, default executor and restricted broker to confirmed owned-container cleanup.
 A separate shared-journal/lease sequence covers builder -> derived-image tool -> removal -> next

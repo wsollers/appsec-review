@@ -4,7 +4,9 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.container_runtime import engine_broker
-from appsec_review.container_runtime.buildkit_worker import EnforcementUnavailable, native_docker_topology
+from appsec_review.container_runtime.buildkit_worker import (
+    EnforcementUnavailable, KernelProof, native_docker_topology,
+)
 from tests.test_bounded_image_build_service import (
     forbid_real_execution, real_driver_harness,  # noqa: F401
 )
@@ -15,6 +17,37 @@ NATIVE = {
     "CgroupDriver": "cgroupfs", "CgroupVersion": "2", "OSType": "linux",
     "OperatingSystem": "Ubuntu 22.04.5 LTS", "KernelVersion": "6.6.87.2-microsoft-standard-WSL2",
 }
+
+
+@pytest.mark.parametrize("capabilities,accepted", [
+    (["SETUID", "SETGID"], True), (["CAP_SETGID", "CAP_SETUID"], True),
+    ([], False), (None, False), (["CAP_SETUID"], False),
+    (["CAP_SETUID", "CAP_SETGID", "CAP_SYS_ADMIN"], False),
+    (["SETUID", "SETGID", "SYS_PTRACE"], False),
+    (["CAP_SETUID", "SETGID"], False),
+])
+def test_real_docker_worker_capability_spellings_preserve_exact_envelope(capabilities, accepted):
+    class KernelChecksReached(Exception):
+        pass
+
+    config = SimpleNamespace(worker_image_id="sha256:" + "a" * 64, worker_uid=1000, network_id=None)
+    proof = KernelProof(config)
+    proof.process_cgroup = lambda pid: (_ for _ in ()).throw(KernelChecksReached())
+    inspection = {
+        "Id": "b" * 64, "Image": config.worker_image_id,
+        "Config": {"User": "1000:1000", "Labels": {"appsec.builder.token": "generation"}},
+        "HostConfig": {
+            "Privileged": False, "PidMode": "", "IpcMode": "private", "NetworkMode": "none",
+            "CapAdd": capabilities, "CapDrop": ["ALL"], "ReadonlyRootfs": True,
+        }, "State": {"Pid": 1234},
+    }
+    record = {"driver": {"container_id": inspection["Id"]}, "worker": {"start_token": "generation"}}
+    if accepted:
+        with pytest.raises(KernelChecksReached):
+            proof.worker(inspection, record)
+    else:
+        with pytest.raises(EnforcementUnavailable, match="worker isolation"):
+            proof.worker(inspection, record)
 
 
 def test_client_plugins_and_hostname_do_not_identify_the_server():

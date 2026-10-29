@@ -448,7 +448,9 @@ class KernelProof:
                 or host.get("Privileged") or host.get("PidMode") == "host"
                 or host.get("IpcMode") != "private"
                 or host.get("NetworkMode") != (config.network_id or "none")
-                or set(host.get("CapAdd") or []) != {"SETUID", "SETGID"} or host.get("CapDrop") != ["ALL"]
+                or set(host.get("CapAdd") or []) not in (
+                    {"SETUID", "SETGID"}, {"CAP_SETUID", "CAP_SETGID"})
+                or host.get("CapDrop") != ["ALL"]
                 or not host.get("ReadonlyRootfs")):
             raise EnforcementUnavailable("worker isolation differs from the requested sandbox")
         if settings.get("Labels", {}).get("appsec.builder.token") != record["worker"]["start_token"]:

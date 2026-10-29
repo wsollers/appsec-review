@@ -1119,10 +1119,12 @@ def _operator_records(config):
 
 class EngineCleanupConfirmation:
     """Construct as operator; use all three callbacks together for native-only reconciliation."""
-    def __init__(self, config):
+    def __init__(self, config, *, retired=False):
         self.config, self.contract = config, service_contract(config)
         self.records = {}
-        records, _ = _operator_records(config)
+        records, owners = _operator_records(config)
+        self.known_names = {record["payload"]["name"] for record in records}
+        self.retired_empty = False
         for record in records:
             expected = {
                 "confirmed_removed": True, "binding": record["binding"], "peer": record["peer"],
@@ -1136,6 +1138,13 @@ class EngineCleanupConfirmation:
                     and record["peer"]["uid"] == config.admission.uid
                     and record["peer"]["gid"] == config.admission.gid):
                 self.records[record["payload"]["name"]] = record
+        if (retired and config.docker_helper_scope is not None and not owners
+                and len(self.records) == len(records)):
+            # The caller has proved a RELEASED lifetime, empty cgroups, dead
+            # generations and no daemon listener. Stopped containers still count.
+            containers = Path(config.docker_helper_scope.data_root) / "containers"
+            private_path(containers)
+            self.retired_empty = next(containers.iterdir(), None) is None
 
     def lease_matches(self, entry):
         names = entry.get("containers", [])
@@ -1144,10 +1153,36 @@ class EngineCleanupConfirmation:
         return all(name in self.records and entry.get("native_engine_scope") == {
             **self.records[name]["binding"], "resource_budget": self.config.resources.view(),
         } and entry.get("pid") == self.records[name]["peer"]["pid"]
-            and entry.get("process_identity") == self.records[name]["peer"]["start_token"] for name in names)
+            and entry.get("process_identity") == self.records[name]["peer"]["start_token"]
+            for name in names) or self._absent_lease(entry)
+
+    def _absent_name(self, name):
+        return (self.retired_empty and isinstance(name, str) and name not in self.known_names
+                and re.fullmatch(r"(appsec-[0-9a-f]{20}|appsec-review-[a-zA-Z0-9_-]{1,120})", name)
+                is not None)
+
+    def _absent_lease(self, entry):
+        scope = entry.get("native_engine_scope")
+        if (not self.retired_empty or "persistent" in entry
+                or type(entry.get("pid")) is not int or entry["pid"] <= 0
+                or not isinstance(entry.get("process_identity"), str) or not entry["process_identity"]
+                or process_token(entry["pid"]) == entry["process_identity"]
+                or not isinstance(scope, dict) or set(scope) != BINDING_FIELDS | {"resource_budget"}
+                or not uuid(scope.get("lease_id"))
+                or scope["resource_budget"] != self.config.resources.view()
+                or entry.get("limits") != {key: getattr(self.config.resources, key)
+                                           for key in ("cpu", "memory_mb", "io_slots")}
+                or any(scope.get(key) != getattr(self.config.native_engine, key)
+                       for key in ("service_generation", "engine_id", "engine_generation"))):
+            return False
+        grants = [grant for grant in self.config.native_engine.grants
+                  if grant.uid == self.config.admission.uid and all(
+                      scope[key] == getattr(grant, key) for key in (
+                          "tenant_id", "project_id", "run_id", "target_snapshot", "configuration_id"))]
+        return len(grants) == 1 and all(self._absent_name(name) for name in entry["containers"])
 
     def confirmed_removed(self, name):
-        return name in self.records
+        return name in self.records or self._absent_name(name)
 
     def confirmed_cleanup(self, entry):
         return (entry.get("quarantine") in {None, "native_engine_removal_unconfirmed", "container_death_unconfirmed"}
