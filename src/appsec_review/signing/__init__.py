@@ -26,18 +26,24 @@ from .images import (
     inspect_image_id,
     sign_image,
 )
+from .modules import MODULES_KIND, VerifiedManifest, build_manifest, sign_modules, verify_modules
 
 __all__ = [
     "ALGORITHM",
     "IMAGE_ID_KIND",
     "IMAGE_KIND",
+    "MODULES_KIND",
     "DisabledImageVerifier",
     "EnvelopeImageVerifier",
     "ImageSignatureVerifier",
+    "VerifiedManifest",
+    "build_manifest",
     "image_envelope_path",
     "image_statement",
     "inspect_image_id",
     "sign_image",
+    "sign_modules",
+    "verify_modules",
     "STATEMENT_SCHEMA",
     "OpenSSL",
     "SignatureVerificationError",
