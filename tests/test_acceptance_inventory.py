@@ -121,7 +121,9 @@ def test_review_quick_representatives_and_exhaustive_variants_keep_strict_caps()
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     profiles = inventory["profiles"]
     assert profiles["quick"]["deadline_seconds"] == 720
-    assert profiles["review"]["deadline_seconds"] == profiles["review-exhaustive"]["deadline_seconds"] == 600
+    for name in ("review", "review-report-integrity", "review-outcomes", "review-exhaustive"):
+        assert profiles[name]["deadline_seconds"] == 600
+        assert profiles[name]["case_deadline_seconds"] == 120
     quick = set(profiles["quick"]["obligations"])
     exhaustive = set(profiles["review-exhaustive"]["obligations"])
     assert {"review-candidate", "current-report-oracle"} <= quick
@@ -129,7 +131,7 @@ def test_review_quick_representatives_and_exhaustive_variants_keep_strict_caps()
     assert {"review-empty", "review-corrupt", "review-benign", "review-blocked",
             "current-report-integrity"} <= exhaustive
     for name, profile in profiles.items():
-        if name != "review-exhaustive":
+        if name not in ("review-exhaustive", "review-outcomes"):
             assert not any(item.startswith(("ci-benign-", "ci-blocked-"))
                            for item in profile["obligations"])
     obligations = {item["id"]: item for item in inventory["obligations"]}
@@ -137,6 +139,66 @@ def test_review_quick_representatives_and_exhaustive_variants_keep_strict_caps()
         "identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper",
         "finding-tamper", "handoff-tamper", "same-length-report-tamper"}
     assert not any("stage" in obligations[name] for name in profiles["consumers"]["obligations"])
+
+
+def test_exhaustive_series_conserves_vectors_nodes_and_dependencies() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    profiles = inventory["profiles"]
+    obligations = {item["id"]: item for item in inventory["obligations"]}
+    integrity = obligations["current-report-integrity"]
+    vectors = [
+        "identity-state-bucket", "missing-current", "orphan-hit", "report-tamper",
+        "manifest-tamper", "finding-tamper", "handoff-tamper", "same-length-report-tamper",
+    ]
+    assert integrity["variants"] == vectors
+    assert integrity["nodes"] == [
+        f"tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[{vector}]"
+        for vector in vectors
+    ]
+    assert integrity["case_deadline_seconds"] == 60
+    assert integrity["stage"] == {
+        "kind": "consumer", "variant": "ci-positive", "depends_on": ["ci-positive-report"],
+    }
+    positive = ["ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report"]
+    assert profiles["review-report-integrity"]["obligations"] == [*positive, "current-report-integrity"]
+    outcomes = [
+        "ci-benign-prepare", "ci-benign-review", "ci-benign-gate", "ci-benign-report", "review-benign",
+        "ci-blocked-prepare", "ci-blocked-review", "ci-blocked-gate", "ci-blocked-report", "review-blocked",
+    ]
+    assert profiles["review-outcomes"]["obligations"] == outcomes
+
+    def selected_nodes(profile: str) -> set[str]:
+        return {node for name in profiles[profile]["obligations"] for node in obligations[name]["nodes"]}
+
+    members = ("review", "review-report-integrity", "review-outcomes")
+    assert [len(selected_nodes(name)) for name in members] == [13, 12, 10]
+    assert set().union(*(selected_nodes(name) for name in members)) == selected_nodes("review-exhaustive")
+    assert len(selected_nodes("review-exhaustive")) == 31
+    assert selected_nodes("review") & selected_nodes("review-report-integrity") == {
+        node for name in positive for node in obligations[name]["nodes"]
+    }
+    assert selected_nodes("review-outcomes").isdisjoint(
+        selected_nodes("review") | selected_nodes("review-report-integrity"))
+    assert "unqualified" in profiles["review-exhaustive"]["deferral"].lower()
+
+
+def test_exhaustive_split_preserves_calibrated_representative_selections() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    profiles = inventory["profiles"]
+    positive = ["ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report"]
+    native = ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate"]
+    assert profiles["quick"]["obligations"] == [
+        "harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift",
+        "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli",
+        "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run",
+        "control-source-evidence", "feed-tls", *native, *positive, "current-report-oracle",
+    ]
+    assert profiles["review"]["obligations"] == [
+        *native, "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty",
+        *positive, "current-report-oracle",
+    ]
+    assert profiles["quick"]["case_deadline_seconds"] == 120
+    assert profiles["quick"]["deadline_seconds"] == 720
 
 
 def test_duplicate_detector_preserves_class_and_async_scope(tmp_path: Path) -> None:

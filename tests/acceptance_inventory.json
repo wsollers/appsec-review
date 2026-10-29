@@ -7,7 +7,7 @@
       "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
       "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli", "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "control-source-evidence", "feed-tls", "native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle"],
-      "deferral": "Representative connected hermetic gate. Full report-integrity/empty/corrupt/benign/blocked variants execute in review-exhaustive. Full signal-integrity, helper-input, TLS, submission-barrier, MCP-integrity, consumer, replay/sensor and OS-specific matrices have separate bounded profiles; genuine OWASP assessment and live tools/providers/native remain unverified."
+      "deferral": "Representative connected hermetic gate. Full report-integrity/empty/corrupt/benign/blocked variants use the explicit sequential review, review-report-integrity and review-outcomes series; monolithic review-exhaustive remains unqualified. Full signal-integrity, helper-input, TLS, submission-barrier, MCP-integrity, consumer, replay/sensor and OS-specific matrices have separate bounded profiles; genuine OWASP assessment and live tools/providers/native remain unverified."
     },
     "signals": {
       "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
@@ -46,13 +46,25 @@
       "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
       "obligations": ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle"],
-      "deferral": "Scripted external model boundary and actual bounded jobs. Full current-report integrity, benign and blocked variants execute only in review-exhaustive; no compiler or paid provider."
+      "deferral": "Scripted external model boundary and actual bounded jobs. Full current-report integrity, benign and blocked variants have separate review-report-integrity and review-outcomes series members; no compiler or paid provider."
+    },
+    "review-report-integrity": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-integrity"],
+      "deferral": "Eight independent integrity vectors each use a fresh driver-owned private consumer copy and a 60-second ordinary-case cap. Run sequentially with review and review-outcomes for the complete review matrix; no cross-invocation seed reuse or guarantee of timing."
+    },
+    "review-outcomes": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["ci-benign-prepare", "ci-benign-review", "ci-benign-gate", "ci-benign-report", "review-benign", "ci-blocked-prepare", "ci-blocked-review", "ci-blocked-gate", "ci-blocked-report", "review-blocked"],
+      "deferral": "Complete independent benign and blocked review/gate/report/consumer chains. Run sequentially with review and review-report-integrity for the complete review matrix; all three member invocations must pass with their own authenticated prerequisites."
     },
     "review-exhaustive": {
       "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
       "obligations": ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle", "current-report-integrity", "ci-benign-prepare", "ci-benign-review", "ci-benign-gate", "ci-benign-report", "review-benign", "ci-blocked-prepare", "ci-blocked-review", "ci-blocked-gate", "ci-blocked-report", "review-blocked"],
-      "deferral": "Every original current-report/empty/corrupt/benign/blocked vector, plus same-length tampering, retains independent validation. No cap inflation or guarantee that this uncalibrated profile fits 600 seconds."
+      "deferral": "Unqualified monolithic selection: the prior grouped 24-case invocation at a4ce5459 failed at 599.621 seconds. This selection retains all original vectors with eight independent integrity cases but no 600-second timing guarantee. Use the explicit sequential review, review-report-integrity and review-outcomes series without enlarging any member cap."
     },
     "consumers": {
       "tier": "hermetic", "deadline_seconds": 360, "case_deadline_seconds": 120,
@@ -428,10 +440,19 @@
       "prerequisites": [], "deferrals": ["Scanner detection is distinct from current final-report survival"]
     },
     {
-      "id": "current-report-integrity", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 120,
+      "id": "current-report-integrity", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 60,
       "stage": {"kind": "consumer", "variant": "ci-positive", "depends_on": ["ci-positive-report"]},
-      "nodes": ["tests/integration/test_current_report_acceptance.py::test_current_report_bound_oracle_matrix"],
-      "boundary": "Full original current report oracle matrix, with one new materialization and fresh production validation per mutation",
+      "nodes": [
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[identity-state-bucket]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[missing-current]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[orphan-hit]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[report-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[manifest-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[finding-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[handoff-tamper]",
+        "tests/integration/test_current_report_integrity_cases.py::test_current_report_integrity_vector[same-length-report-tamper]"
+      ],
+      "boundary": "Full original current report oracle matrix as eight independently collected driver-private consumers, with one mutation and fresh production validation scope per mutation case",
       "variants": ["identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper", "finding-tamper", "handoff-tamper", "same-length-report-tamper"],
       "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
     },
