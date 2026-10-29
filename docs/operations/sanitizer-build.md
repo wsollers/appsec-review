@@ -53,7 +53,11 @@ For every receipt of the accepted language build whose family is `native`, the j
    program the build itself runs inside the capability-dropped container;
 5. catalogues the produced objects, executables and shared libraries (build-system probe programs
    such as CMake's compiler identification are counted under `excluded_bookkeeping`, not listed),
-   and reads each one's ELF for the sanitizer runtime.
+   and reads each one's ELF for the sanitizer runtime. Before cataloguing, the job replays the
+   accepted language build's `build_output_dispositions` roots (all except `per_file` ones) onto
+   the identical rebuild layout and applies the current `[build_outputs]` rules. Dependency trees
+   are pruned entirely, including the linked outputs the language build kept, because they are not
+   part of the target's instrumentation verdict. The job does not rediscover the layout.
 
 The compiler is the one the accepted recipe resolves. In `audit-buildenv-cpp:local` that is
 `/usr/bin/c++`, GCC 13.3, whose `libasan` and `libubsan` are present. The image also carries
@@ -121,13 +125,14 @@ reads them: the C/C++ analysis, CodeQL and the Clang jobs keep seeing exactly th
 
 The handoff schema is `appsec-review/sanitizer-build-handoff/1`. Its top level carries `counts`
 (`planned_units`, `instrumented_units`, `instrumented_outputs`, `not_applicable_units`,
-`omitted_units`, `gap_count`), `flags`, `gaps`, and:
+`omitted_units`, `gap_count`), `flags`, `build_outputs_policy` (the `[build_outputs]` policy
+identity), `gaps`, and:
 
 - `units[]`: one per planned native unit, with `terminal_status` (`SUCCEEDED`,
   `COMPLETED_WITH_GAPS` or `FAILED`), the boolean `instrumented`, the accepted `recipe_identity`,
   `image`, `network_required` as the accepted recipe recorded it, the replayed `commands` (argv
-  hash, exit code, stream hashes), the `workspace` and its manifest hash, `outputs_sha256`, and
-  `gaps`;
+  hash, exit code, stream hashes), the `workspace` and its manifest hash, `outputs_sha256`,
+  `build_output_dispositions` (the replayed roots and configured exclusions), and `gaps`;
 - `units[].outputs[]`: `path` and `workspace_path`, `sha256`, `size_bytes`, `kind`
   (`executable`, `shared-library`, `object`), the boolean `instrumented`, `evidence`
   (`sanitizers.address|undefined.runtime_referenced`, up to eight symbol names, runtime libraries,

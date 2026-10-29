@@ -313,6 +313,34 @@ pattern and scope that excluded it. This is a declared scope decision, not a cov
 fingerprint still covers every byte. Both tables are frozen into the run's resolved
 configuration, so changing an exclusion changes the run's configuration identity.
 
+### Named build-output exclusions
+
+`[exclusions]` acts on the target's source tree. Build outputs have their own top-level table,
+`[build_outputs]` (`src/appsec_review/config/build_outputs.py`), read only by
+`job_project_build`, `job_language_build` and `job_sanitizer_build`:
+
+```toml
+[build_outputs]                               # the three build jobs
+heuristic_min_confidence = "medium"
+
+[[build_outputs.exclusions]]
+name = "cmake-fetchcontent-subbuild"
+reason = "FetchContent download sub-builds are CMake bookkeeping, not dependency or target output"
+patterns = ["*-subbuild/"]
+families = ["native"]
+```
+
+Each rule is named and has a reason. Its patterns use the `[exclusions]` semantics above, matched
+against the workspace-relative path, and `families` limits the build families it applies to. A
+`jobs.<id>.build_outputs` table fails at load. Each excluded path is recorded once under the
+receipt's `build_output_dispositions.configured_exclusions` with its name, pattern and scope
+`build_outputs`, as a declared scope decision rather than a gap. The table also bounds native
+build-layout discovery, which routes created dependency trees to the `supply_chain` lane. It is
+frozen into the resolved configuration, and its policy identity is part of the language-build and
+probe checkpoint identities and is recorded in the sanitizer summary. See
+[`native-build-output-discovery.md`](native-build-output-discovery.md) and the
+[language-build settings](../operations/language-build.md#build_outputs).
+
 ## NVD synchronization
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official

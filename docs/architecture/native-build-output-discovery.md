@@ -1,8 +1,9 @@
 # Native build-output discovery and named build-output exclusions
 
-Status: design, agreed with the neighbouring design sessions listed under
-[Ownership](#ownership). Not yet implemented. The line numbers below refer to base commit
-`38c934d9`.
+Status: implemented on the native build-output implementation branch; see
+[Implementation notes](#implementation-notes) for where the code differs from this design. The
+design was agreed with the neighbouring design sessions listed under [Ownership](#ownership). The
+line numbers below refer to base commit `38c934d9`.
 
 ## Problem
 
@@ -475,7 +476,12 @@ Recorded by the implementation where the code refined or deviated from the desig
 - **Misplaced tables.** `jobs.<id>.build_outputs` and `jobs.<id>.settings.build_outputs` fail at
   load.
 - **Unused hook.** `node.catalog` and `php.catalog` accept the `dispositions=` keyword and
-  ignore it until the installer-record classifiers use it.
+  ignore it until the installer-record classifiers use it. Until then, a Node or PHP language-build
+  unit applies no `[build_outputs]` rule: the shipped `node-bundler-cache` rule takes effect only in
+  project-build probes, and those units' `configured_exclusions`, `roots` and
+  `BUILD_OUTPUT_CLASSIFIED` counts (except `target_rows`) are empty.
+- **`bookkeeping` document key.** `document()` also carries the `bookkeeping` projection beside
+  `schema`, `policy_identity`, `layout_sources`, `roots` and `configured_exclusions`.
 
 ### Chunks B and C (layout readers, capture attribution)
 
@@ -484,7 +490,12 @@ Recorded by the implementation where the code refined or deviated from the desig
   `status`, MSBuild project properties and Conan generator output. Each source read is recorded in
   `layout_sources` as `{kind, path, sha256}`. The kinds are `cmake-cache`, `cmake-file-api-index`,
   `cmake-file-api-codemodel`, `meson-info`, `meson-intro-projects`, `meson-intro-targets`, `ninja`,
-  `vcpkg-status`, `msbuild-project` and `conan-generator`.
+  `vcpkg-status`, `vcpkg-info`, `msbuild-project` and `conan-generator`.
+- **Static `build.ninja` is read only when there is neither a CMake cache nor `meson-info`**
+  (`discover` in `native_layout.py`).
+- **Reader gaps.** A layout source that exceeds `max_layout_source_bytes`, cannot be read, does not
+  parse, or falls beyond `max_layout_sources` is named
+  `build-output-layout-source-bound-exceeded`, `-unreadable`, `-malformed` or `-limit`.
 - **MSBuild output directories are read but not consumed.** `read_msbuild_dirs` resolves
   `OutDir` and `IntDir` into `LayoutFacts.output_directories` and names unresolved values
   `build-output-msbuild-directory-unresolved`. No caller passes `msbuild_properties` yet, because
@@ -493,6 +504,10 @@ Recorded by the implementation where the code refined or deviated from the desig
 - Static Ninja edges and capture attribution (`output_attribution.py`) add a root only where no
   fact root already covers it. Linked outputs a dependency produces into a mixed directory are
   tagged per file as `dependency-sourced-output`, not rooted.
+- **Heuristic names.** `HEURISTIC_NAMES` in `native_layout.py` is its own set, not
+  `job_dependency_intelligence`'s `_VENDOR`. It adds `vendors` and `dependencies` to the names
+  in the source table above. A candidate root is a build-created child of a directory whose own
+  name matches the set, compared case-insensitively.
 
 ### Chunk D (language-build integration)
 
@@ -507,7 +522,10 @@ Recorded by the implementation where the code refined or deviated from the desig
 - **Configured exclusions take precedence.** `register` skips a discovered root that a
   configured `[build_outputs]` directory rule already names (`configured_directory`). The
   FetchContent sub-build therefore appears once, as a configured exclusion, never as a gap.
-- **`BUILD_OUTPUT_CLASSIFIED`** is written for every unit of every family, not only native ones.
+- **`BUILD_OUTPUT_CLASSIFIED`** is written for every unit of every family that the generic
+  executor (`_execute_one`) catalogues, not only native ones. The JVM and WebAssembly adapters
+  do not use the walk and write no such event, and neither do the early blocked, platform and
+  Node-gap receipts.
   Its keys are `supply_chain_trees`, `excluded_trees`, `excluded_files`, `kept_rows`,
   `heuristic_dispositions`, `conflicts`, `layout_sources_read`, `target_rows` and `duration_ms`.
   `target_rows` counts catalogue rows in the `target` analysis lane, so objects, which take the
@@ -526,14 +544,19 @@ Recorded by the implementation where the code refined or deviated from the desig
 
 - **Sanitizer build.** `job_sanitizer_build` does not rediscover layout. It replays the accepted
   language receipt's `build_output_dispositions.roots` (all except `per_file` roots) with
-  `classify_tree`, then walks with the current `[build_outputs]` policy. It adds
+  `classify_tree`, then walks with the current `[build_outputs]` policy. The replay does not pass
+  `keep_linked`, and the catalogue skips kept rows, so dependency trees are pruned entirely from
+  the sanitizer catalogue. It adds
   `build_output_dispositions` to each unit result and `build_outputs_policy` to the summary.
   `excluded_bookkeeping` is the dispositions' bookkeeping projection.
 - **Project build.** `job_project_build` `_outputs` walks the dispositions. Native probes call
   `native_outputs.register` with no captures and no file API query, so a probe classifies from
-  the cache, Meson introspection and static Ninja alone. The probe receipt gains
+  the CMake cache, Meson introspection, static Ninja (when neither is present), vcpkg and Conan
+  records and the name heuristic. The probe receipt gains
   `build_output_dispositions` and `build_output_gaps`. Classification gaps go into
-  `build_output_gaps`, not `gaps`, so probe acceptance and repair are unchanged. The
+  `build_output_gaps`, not `gaps`, so probe acceptance and repair are unchanged.
+  `build_output_gaps` holds the reader, summarised-content and heuristic gaps; the
+  `named_gaps()` conflict and bound gaps are not added to it. The
   `[build_outputs]` policy identity joins the probe checkpoint identity. The project
   `EXECUTOR_IDENTITY` is unchanged.
 
