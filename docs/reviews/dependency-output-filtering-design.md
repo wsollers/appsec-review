@@ -387,19 +387,23 @@ No chunk edits `job_artifact_indexing/*`, `retrieval/index.py`, `storage/*` or
 `config/loader.py`, so there is no ordering constraint with the telemetry or throughput
 implementations beyond normal rebases.
 
-## 6. Open questions (for the coordinator and user)
+## 6. Resolved questions (user decisions, 2026-10-29)
 
-1. **Prod dependency lane.** This design sends npm prod-tree packages to supply_chain
-   (`RUNTIME_DEPENDENCY`), not to per-file target review. Should prod dependencies of a
-   server-side workspace, such as northwinds `backend`, get per-file target review, for example
-   when the review scope includes "code we run"? The default here is supply-chain only.
-2. **Uncovered `node_modules` caches.** Tooling caches such as `node_modules/.cache` and
-   `node_modules/.vite` are not covered by any installer record. They stay per-file in the
-   target lane and are counted in the D6(a) suffix. Should the shipped `appsec-review.toml`
-   include default `[build_outputs]` exclusions for them? The native design owns the defaults.
-3. **Deferred ecosystem priority.** The recommended order is Go `vendor/modules.txt`, then
-   Composer, then .NET, then Rust, then pnpm/yarn, then Python, then JVM. Should a Rust and a
-   .NET run's catalog role mix be measured first to confirm this order?
-4. **Reuse invalidation.** Bumping `SCOPE_VERSION` invalidates review-policy-keyed reuse once.
-   Is that acceptable for the next review cycle, or should the bump be deferred until no
-   resumable runs remain?
+These questions were open in the first draft. The user's answers are now binding decisions.
+
+1. **Prod dependency lane (confirms D4).** Prod dependencies of server-side workspaces, such
+   as northwinds `backend`, get supply-chain review only: `RUNTIME_DEPENDENCY` in the
+   supply_chain lane. They do not get per-file target review.
+2. **Uncovered `node_modules` caches (no change here).** Whether the shipped
+   `appsec-review.toml` gets default `[build_outputs]` exclusions for `node_modules/.cache`
+   and `node_modules/.vite` is decided by the Native build output design session (D7). The
+   coordinator has passed the suggestion on. Until that session adds defaults, these files
+   stay per-file in the target lane and are counted in the D6(a) suffix.
+3. **Deferred ecosystem order (confirms D1).** npm is implemented now. Go
+   `vendor/modules.txt` is next, then Composer, .NET, Rust, pnpm/yarn, Python, and JVM, in that
+   order. No Rust or .NET role-mix measurement is required first.
+4. **Reuse invalidation (confirms D9).** The one-time loss of policy-keyed reuse caused by
+   bumping `SCOPE_VERSION` (to `delivered-scope/2`) and the delivery `POLICY_IDENTITY` (to
+   `delivery-propagation/2`) is accepted. The bumps land with chunk A and are not deferred.
+
+There are no open questions.
