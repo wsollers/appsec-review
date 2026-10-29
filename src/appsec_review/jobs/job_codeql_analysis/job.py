@@ -16,6 +16,7 @@ from appsec_review.applicability import (
     resolved_configuration_identity,
 )
 from appsec_review.container_runtime.identity import application_runtime_user, grant_runtime_user
+from appsec_review.container_runtime.project_images import derived_base_image_id
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql import execution_metrics
 from appsec_review.codeql.runtime import (
@@ -491,7 +492,8 @@ def _emit_unexecuted(unit: UnitContext, event_type: str, scope: CodeQLScope, *, 
 
 
 def _resolve_image(unit: UnitContext, *, build_image_tag: str, build_image_id: str,
-                   runtime_user: str, scope_id: str | None = None) -> tuple[CodeQLImage, bytes, bytes]:
+                   runtime_user: str, scope_id: str | None = None,
+                   build_image_derived_from: str | None = None) -> tuple[CodeQLImage, bytes, bytes]:
     settings = _settings(unit)
     with operation_span(unit.job.events, "codeql.runtime_resolution",
                         unit_id=unit.unit_id, scope_id=scope_id) as span:
@@ -500,7 +502,7 @@ def _resolve_image(unit: UnitContext, *, build_image_tag: str, build_image_id: s
             settings=settings, timeout_seconds=settings.database_timeout_seconds,
             output_bytes=settings.output_bytes, releases=_policy(unit).releases)
         result = resolver.resolve(build_image_tag=build_image_tag, build_image_id=build_image_id,
-                                  runtime_user=runtime_user)
+                                  runtime_user=runtime_user, build_image_derived_from=build_image_derived_from)
         image = result[0]
         if image.preinstalled:
             span.count("preinstalled_runtimes")
@@ -568,7 +570,8 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         raise FrameworkIntegrityError("CodeQL environment image identity is unavailable")
     image, _stdout, _stderr = _resolve_image(unit,
         build_image_tag=str(image_value["image_tag"]), build_image_id=str(image_value["image_id"]),
-        runtime_user=str(image_value.get("user") or settings.runtime_user), scope_id=scope.scope_id)
+        runtime_user=str(image_value.get("user") or settings.runtime_user), scope_id=scope.scope_id,
+        build_image_derived_from=derived_base_image_id(image_value))
     root = unit.job.run_root / "data" / "codeql" / "scopes" / scope.scope_id
     root.mkdir(parents=True, exist_ok=True)
     image_artifact = _json_artifact(unit.job.run_root, root / "image.json", asdict(image))

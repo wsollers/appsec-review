@@ -23,6 +23,9 @@ from appsec_review.config.codeql import CodeQLPreinstalledRuntime
 from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
 from appsec_review.runtime import execution_safety as safety
+from appsec_review.signing.core import SignatureVerificationError
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.policy import default_image_verifier
 
 
 IMAGE_SCHEMA = "appsec-review/codeql-derived-image/3"
@@ -148,7 +151,8 @@ class CodeQLImageResolver:
 
     def __init__(self, *, repository_root: Path, metadata_root: Path, settings: RuntimeSettings,
                  timeout_seconds: int = 1800, output_bytes: int = 8 * 1024 * 1024,
-                 runner: Runner | None = None, releases: ComponentReleases | None = None) -> None:
+                 runner: Runner | None = None, releases: ComponentReleases | None = None,
+                 image_verifier: ImageSignatureVerifier | None = None) -> None:
         self.repository_root = repository_root
         self.metadata_root = metadata_root
         self.settings = settings
@@ -156,6 +160,16 @@ class CodeQLImageResolver:
         self.output_bytes = output_bytes
         self.runner = runner or _run
         self.releases = releases or ComponentReleases()
+        # None defers to the process-wide default, resolved at first use rather than construction.
+        self._image_verifier = image_verifier
+
+    def _verify(self, image_id: str, reference: str, purpose: str) -> None:
+        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
+        try:
+            verifier.verify(image_id, reference=reference)
+        except SignatureVerificationError as error:
+            raise SignatureVerificationError(
+                f"refusing to use {purpose} {reference} ({image_id}): {error}") from error
 
     def _inspect(self, reference: str) -> str | None:
         code, stdout, _stderr, timed_out = self.runner(
@@ -198,11 +212,21 @@ class CodeQLImageResolver:
             raise ValueError("CodeQL preinstalled runtime source or release declaration conflicts with frozen policy")
         return selected
 
-    def resolve(self, *, build_image_tag: str, build_image_id: str,
-                runtime_user: str) -> tuple[CodeQLImage, bytes, bytes]:
+    def resolve(self, *, build_image_tag: str, build_image_id: str, runtime_user: str,
+                build_image_derived_from: str | None = None) -> tuple[CodeQLImage, bytes, bytes]:
+        """Resolve the CodeQL runtime once every pinned input image is identity- and signature-verified.
+
+        ``build_image_derived_from`` names the pinned base of a runtime-derived (unsigned) project
+        build image, as recorded by ``project_images.derived_base_image_id``; that base's signature
+        is required in place of the derived image's.
+        """
         from appsec_review.container_runtime.image_builder import (
             bounded_image_preparation, builder_namespace, verify_builder_receipt,
         )
+        if build_image_derived_from is not None and (
+                not re.fullmatch(r"sha256:[0-9a-f]{64}", build_image_derived_from)
+                or build_image_derived_from == build_image_id):
+            raise ValueError("CodeQL environment image derived base id is invalid")
         identity = self.declared_identity(build_image_id=build_image_id, runtime_user=runtime_user)
         source_at_tag = self._inspect(self.settings.source_image_tag)
         if source_at_tag != self.settings.source_image_id:
@@ -214,10 +238,18 @@ class CodeQLImageResolver:
             if self._inspect(build_image_id) is None:
                 raise RuntimeError("accepted CodeQL environment image is unavailable")
             raise ValueError("accepted CodeQL environment image tag changed identity")
+        self._verify(self.settings.source_image_id, self.settings.source_image_tag, "licensed CodeQL source image")
+        if build_image_derived_from is not None:
+            self._verify(build_image_derived_from, f"base of {build_image_tag}",
+                         "CodeQL environment image base")
+        elif build_image_id != self.settings.source_image_id:
+            self._verify(build_image_id, build_image_tag, "CodeQL environment image")
         preinstalled = self._preinstalled(build_image_id=build_image_id, runtime_user=runtime_user)
         if preinstalled is not None:
             if self._inspect(preinstalled.runtime_image_id) != preinstalled.runtime_image_id:
                 raise ValueError("CodeQL preinstalled runtime image is missing or differs from its immutable ID")
+            self._verify(preinstalled.runtime_image_id, f"preinstalled runtime for {build_image_tag}",
+                         "CodeQL preinstalled runtime image")
             manifest_path = self.metadata_root / "codeql-preinstalled-images" / f"{identity}.json"
             image = CodeQLImage(
                 PREINSTALLED_IMAGE_SCHEMA, identity, self.settings.source_image_id, build_image_id,

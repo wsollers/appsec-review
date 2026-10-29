@@ -11,6 +11,9 @@ from typing import Any
 
 from appsec_review.storage import FileLock, atomic_json, bounded_file_lock, canonical_json, file_sha256
 from appsec_review.config.assurance import ComponentReleases
+from appsec_review.signing.core import SignatureVerificationError
+from appsec_review.signing.images import ImageSignatureVerifier
+from appsec_review.signing.policy import default_image_verifier
 
 from .build_executor import BuildProfile, Runner, _run
 
@@ -387,7 +390,8 @@ class ProjectImageResolver:
 
     def __init__(self, *, metadata_root: Path, target_root: Path, timeout_seconds: int = 1800,
                  output_bytes: int = 8 * 1024 * 1024, runner: Runner | None = None,
-                 releases: ComponentReleases | None = None, run_root: Path | None = None) -> None:
+                 releases: ComponentReleases | None = None, run_root: Path | None = None,
+                 image_verifier: ImageSignatureVerifier | None = None) -> None:
         self.metadata_root = metadata_root
         self.target_root = target_root
         self.timeout_seconds = timeout_seconds
@@ -395,6 +399,23 @@ class ProjectImageResolver:
         self.runner = runner or _run
         self.releases = releases or ComponentReleases()
         self.cache_namespace = hashlib.sha256(str((run_root or target_root).resolve()).encode()).hexdigest()[:24]
+        # None defers to the process-wide default, resolved at first use rather than construction.
+        self._image_verifier = image_verifier
+
+    def _verify_base(self, profile: BuildProfile) -> None:
+        """Require a valid signature for the pinned base before deriving from or reusing over it.
+
+        A derived project image is unsigned; it is trusted only through this check and its recorded
+        identity. A profile that is itself derived has its declared pinned base verified instead.
+        """
+        base = profile.derived_from_image_id or profile.image_id
+        verifier = self._image_verifier if self._image_verifier is not None else default_image_verifier()
+        try:
+            verifier.verify(base, reference=profile.tag)
+        except SignatureVerificationError as error:
+            raise SignatureVerificationError(
+                f"refusing to derive a project image from build profile {profile.name} base "
+                f"{profile.tag} ({base}): {error}") from error
 
     def _inspect(self, reference: str) -> str | None:
         code, stdout, _stderr, timed_out = self.runner(
@@ -471,6 +492,7 @@ class ProjectImageResolver:
             return ProjectImage(SCHEMA, identity, profile.name, profile.image_id, profile.tag,
                                 profile.image_id, None, False, False, hashes,
                                 cache_disposition="NOT_APPLICABLE"), b"", b""
+        self._verify_base(profile)
         namespace = builder_namespace() or self.cache_namespace
         cache_root = self.metadata_root / "project-images" / namespace / identity
         manifest_path = cache_root / "manifest.json"

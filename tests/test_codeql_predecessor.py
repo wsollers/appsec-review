@@ -56,7 +56,7 @@ def fixture(tmp_path, monkeypatch, request):
                        None, None, "fixture-environment", False)
     calls = []
 
-    def resolve(self, *, build_image_tag, build_image_id, runtime_user):
+    def resolve(self, *, build_image_tag, build_image_id, runtime_user, build_image_derived_from=None):
         image = CodeQLImage(
             IMAGE_SCHEMA, self.declared_identity(build_image_id=build_image_id, runtime_user=runtime_user),
             self.settings.source_image_id, build_image_id, build_image_tag, build_image_id,
