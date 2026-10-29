@@ -167,10 +167,14 @@ order and on the host:
 `APPSEC_REVIEW_DAGSTER_IMAGE` in the process environment) against the host trust anchors before any
 Compose command. If verification fails they exit 3 without starting anything, and the operator
 scripts report `refused`. On success they record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `.env`
-and Compose launches exactly that ID (`pull_policy: never`, no `build:` section). Plain
+and Compose launches exactly that ID (`pull_policy: never`, no `build:` section). `reload` recreates
+every service that runs the image (`code-location`, `webserver`, `daemon`; `host.IMAGE_SERVICES`) and
+leaves PostgreSQL running, so no service keeps an older image. Plain
 `docker compose ... exec` commands reuse the recorded ID. Read-only Compose actions (`config`, `status`,
-`logs`, `stop`) substitute an unlaunchable placeholder when no ID is recorded. Do not run
-`docker compose up` directly: it skips the host verification.
+`logs`, `stop`) substitute an unlaunchable placeholder when no ID is recorded. The image variable has no
+default, so `docker compose up` without a recorded or exported ID fails. Do not run
+`docker compose up` directly or set `APPSEC_REVIEW_DAGSTER_IMAGE` by hand: Compose does not
+re-verify the ID it is given.
 
 Inside the final stages every Python process runs the image's `sitecustomize.py` (a copy of
 `signing/sitecustomize_shim.py` in the interpreter's standard library directory). It loads the
@@ -202,8 +206,8 @@ Run the offline packaging regression tests with
 These tests stage catalog assets through the build-context exclusion rules and exercise the same
 catalog-loading command used by the image build; they do not build or restart the deployment.
 
-Rebuild and reload only the code location after an application change, then prove that the
-workspace reconnected:
+Rebuild and reload the image services (code location, webserver and daemon) after an application
+change, then prove that the workspace reconnected:
 
 ```bash
 python deploy/dagster/bin/lifecycle.py build

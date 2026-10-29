@@ -102,7 +102,7 @@ several sessions share one Docker daemon and one Dagster stack.
 | --- | --- |
 | `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
-| `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`. |
+| `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`, which verifies the image and recreates `code-location`, `webserver` and `daemon` without restarting PostgreSQL. |
 | `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` (sign modules, build, sign and verify the image) then `start`, which recreates containers whose image changed. |
 | `stack-status` | One screen: containers and health, compose files, image tag and age, deployment settings, active runs, last application run, Dagster URL, free disk of `runs/` and `test/tmp`. Exit 1 when a service is missing or unhealthy. |
 | `stack-logs [service] [--tail N] [--follow]` | `docker logs` for one service, or every service without `--follow`. |

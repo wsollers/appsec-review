@@ -11,6 +11,8 @@ PLATFORMS = {"windows", "wsl", "linux"}
 COPILOT_PROFILES = {"copilot-dev", "copilot-prod"}
 # Compose launches the application services only by this exact, host-verified image ID.
 IMAGE_VARIABLE = "APPSEC_REVIEW_DAGSTER_IMAGE"
+# Every Compose service that runs IMAGE_VARIABLE; a unit test keeps this equal to the compose files.
+IMAGE_SERVICES = ("code-location", "webserver", "daemon")
 # Fills the variable for Compose actions that never create containers (config, ps, logs, stop).
 UNVERIFIED_IMAGE = "sha256:" + "0" * 64
 

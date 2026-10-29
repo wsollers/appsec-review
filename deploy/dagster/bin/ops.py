@@ -1028,7 +1028,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_deploy_options(start)
     restart = add("stack-restart", cmd_stack_restart, "Stop and start the stack (volumes kept).", dry_run=True, force=True)
     restart.add_argument("--no-probe", action="store_true", help="skip the model connectivity probe")
-    restart.add_argument("--code-location-only", action="store_true", help="recreate only the code-location container")
+    restart.add_argument("--code-location-only", action="store_true",
+                         help="reload: verify the image and recreate the code-location, webserver and daemon "
+                         "containers, keeping PostgreSQL running")
     add_deploy_options(restart)
     rebuild = add("stack-rebuild", cmd_stack_rebuild, "Build the image and recreate the stack with the overlay.",
                   dry_run=True, force=True)

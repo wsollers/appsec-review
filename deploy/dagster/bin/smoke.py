@@ -16,8 +16,8 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import (IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile, project_name,
-                  provider_overlay, reject_other_deployments, validate_deployment)
+from host import (IMAGE_SERVICES, IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile,
+                  project_name, provider_overlay, reject_other_deployments, validate_deployment)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -26,7 +26,7 @@ LOCK = ROOT / "runs" / "metadata" / "dagster-smoke.lock"
 TERMINAL = {"SUCCESS", "FAILURE", "CANCELED"}
 FEEDS = {"nvd_sync", "osv_sync", "mitre_sync", "kev_sync", "epss_sync", "cve_bin_tool_db_build"}
 SIGNING_MOUNTS = ("/etc/appsec-review/signing/trusted-keys", "/var/lib/appsec-review/signing/images")
-APPLICATION_SERVICES = ("code-location", "webserver", "daemon")
+APPLICATION_SERVICES = IMAGE_SERVICES
 
 
 def compose(platform: str) -> list[str]:

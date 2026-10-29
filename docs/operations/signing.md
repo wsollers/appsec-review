@@ -336,7 +336,7 @@ Run these steps on the review host from the repository checkout, never during a 
            reference["APPSEC_REVIEW_DAGSTER_IMAGE from the process environment, else the local tag"]
            verify["signing verify-image of that reference"]
            record["record_image: APPSEC_REVIEW_DAGSTER_IMAGE=sha256:ID<br/>in deploy/dagster/.env (atomic, 0600)"]
-           compose["docker compose up -d --wait with that exact ID<br/>reload: --no-deps --force-recreate code-location"]
+           compose["docker compose up -d --wait with that exact ID<br/>reload: --no-deps --force-recreate code-location webserver daemon"]
        end
        failed["FAILED, exit 1: lifecycle build failed"]
        refused["REFUSED, exit 3: refusing to start or reload<br/>Compose is not run, ops.py reports refused"]
@@ -405,10 +405,12 @@ evidence that they are verified.
   `sitecustomize`. The re-hash at activation catches changed `appsec_review` sources but not
   bytecode that a standard loader already executed. In the Dagster image this code is covered only
   by the signed image. In the native release it is covered only by root ownership and `-I -S`.
-- **A direct `docker compose up`** skips host verification. Compose requires a recorded image ID,
-  but nothing re-verifies that ID.
-- **`lifecycle.py reload`** verifies the image and then recreates only `code-location`. The other
-  services keep running the image that they started with.
+- **A direct `docker compose up`** skips host verification. Every service that runs the Dagster image
+  requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default (`${APPSEC_REVIEW_DAGSTER_IMAGE:?...}`) and
+  `pull_policy: never`, so Compose never falls back to a tag, a build or a pull. Compose still accepts
+  any value that the operator sets by hand or that `.env` records. The recorded ID is content
+  addressed and was verified at the last `start` or `reload`, but nothing re-verifies it against the
+  current trust anchors (for example after a key is revoked), and a hand-set ID is not verified at all.
 
 ## Planned work
 
@@ -420,7 +422,7 @@ have no work scheduled on this branch.
 | --- | --- | --- |
 | Windows host support | In progress on this branch | The code supports a native Windows host (see [Windows hosts](#windows-hosts)). The unit tests and the Dagster signed build and start flow still need validation on Windows with Docker Desktop. |
 | Native release third-party dependency manifest | Done on this branch | `sign-release-lib` / `verify-release-lib` and the root entrypoint verify the native release `lib/` closure outside `appsec_review` (see [Release library](#release-library)). Dagster container dependencies are covered by the image signature. |
-| Compose bypass and reload | In progress on this branch | Re-verify the recorded image ID when Compose is started directly, and make `lifecycle.py reload` cover every service, not only `code-location`. |
+| Compose bypass and reload | Done on this branch | Every Dagster image service requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default and `pull_policy: never`, and `lifecycle.py reload` verifies the image and recreates every service that runs it (`host.IMAGE_SERVICES`, kept equal to the compose files by a unit test). Residual: a direct `docker compose up` with a hand-set or previously recorded ID is not re-verified (see [Named gaps](#named-gaps)). |
 | cve-bin-tool pin | In progress on this branch | Pin the locally built cve-bin-tool image and cover it with `--all-pinned`, so that no run launches it unverified. |
 | BuildKit worker and image builder service verification | In progress on this branch | Verify the worker, egress proxy and input images in `buildkit_worker.py` and the allowed and aliased images in `image_builder_service.py`. |
 | Engine broker | Deferred | Verify images in `engine_broker.py` (`DockerEngine.image`, `_image_policies`, `_reference`). This overlaps the native-broker-process branch and waits for it. |

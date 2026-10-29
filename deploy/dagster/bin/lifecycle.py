@@ -3,7 +3,8 @@
 ``build`` signs ``src/appsec_review`` into the module envelope, builds the final image stage, signs the
 image ID with the operator key and verifies it. ``start`` and ``reload`` verify the image on the host
 first and refuse (exit 3) without touching Compose unless a trusted key signed it; Compose then
-launches that exact image ID, which is recorded in ``.env`` for later ``exec`` commands.
+launches that exact image ID, which is recorded in ``.env`` for later ``exec`` commands. ``reload``
+recreates every service in ``IMAGE_SERVICES`` and leaves PostgreSQL running.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ import sys
 import tempfile
 from typing import Mapping
 
-from host import (IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile, image_tag,
-                  image_target, provider_overlay, read_environment, reject_native_environment,
+from host import (IMAGE_SERVICES, IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile,
+                  image_tag, image_target, provider_overlay, read_environment, reject_native_environment,
                   reject_other_deployments, validate_deployment)
 from image_signing import Runner, SigningError, SigningSettings, sign_image, sign_modules, verify_image
 
@@ -30,7 +31,8 @@ commands = {
     "config": ["config"],
     "build": [],
     "start": ["up", "-d", "--wait"],
-    "reload": ["up", "-d", "--no-deps", "--force-recreate", "--wait", "code-location"],
+    # Recreates every service that runs the image, so none keeps an older one; PostgreSQL is untouched.
+    "reload": ["up", "-d", "--no-deps", "--force-recreate", "--wait", *IMAGE_SERVICES],
     "status": ["ps"],
     "logs": ["logs", "--tail", "100"],
     "stop": ["stop"],

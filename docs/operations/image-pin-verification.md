@@ -114,8 +114,9 @@ rebuild moves tags on the shared daemon that a live run may be using.
    `[signing] image_enforcement = "required"` an unsigned pinned image is refused at launch (see
    [Container image and Python module signing](signing.md)).
 
-3. **Rebuild and reload the Dagster code location**, so the packaged image carries the new pins and
-   the gate checks against them, then prove the workspace reconnected:
+3. **Rebuild and reload the Dagster image services** (code location, webserver and daemon), so the
+   packaged image carries the new pins and the gate checks against them, then prove the workspace
+   reconnected:
 
    ```bash
    python deploy/dagster/bin/lifecycle.py build

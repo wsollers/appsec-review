@@ -16,9 +16,10 @@ x-dagster-environment: &dagster-environment
   APPSEC_REVIEW_PROFILE: ${APPSEC_REVIEW_PROFILE:-dev}
 
 x-dagster-service: &dagster-service
-  # The exact image ID that lifecycle.py start verified on this host against the trusted keys;
-  # never a mutable tag and never an implicit build or pull.
-  image: ${APPSEC_REVIEW_DAGSTER_IMAGE:?Start the stack with deploy/dagster/bin/lifecycle.py start, which verifies the signed image}
+  # The exact image ID that lifecycle.py start/reload verified on this host against the trusted keys;
+  # never a mutable tag, never a default, and never an implicit build or pull. Every service that uses
+  # this image must keep this form (host.IMAGE_SERVICES; tests/test_dagster_signing.py enforces it).
+  image: ${APPSEC_REVIEW_DAGSTER_IMAGE:?APPSEC_REVIEW_DAGSTER_IMAGE must be a host-verified sha256 image id; start through deploy/dagster/bin/ops.py}
   pull_policy: never
   user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
   cgroup_parent: appsecreview-services.slice

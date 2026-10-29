@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
@@ -171,7 +172,7 @@ def test_explicit_image_is_verified_by_id(env_file: Path) -> None:
     assert lifecycle.run_action("reload", "wsl", "copilot-dev", environ, runner=runner) == lifecycle.OK
     assert runner.calls[0][0][runner.calls[0][0].index("verify-image") + 1] == SIGNED
     (command, kwargs), = runner.compose_calls()
-    assert command[-1] == "code-location" and "--force-recreate" in command
+    assert command[-len(host.IMAGE_SERVICES):] == list(host.IMAGE_SERVICES) and "--force-recreate" in command
     assert command[command.index("-f", command.index("-f") + 1) + 1].endswith("compose.copilot.yaml")
     assert kwargs["env"][host.IMAGE_VARIABLE] == SIGNED
 
@@ -223,6 +224,59 @@ def test_compose_launches_only_the_verified_image_with_read_only_signing_mounts(
     for overlay in ("compose.copilot.yaml", "compose.windows.yaml", "compose.claude.yaml"):
         for name, service in (_compose(overlay).get("services") or {}).items():
             assert "image" not in service and "build" not in service, (overlay, name)
+
+
+COMPOSE_FILES = sorted(path.name for path in DEPLOYMENT.glob("compose*.yaml"))
+REQUIRED_IMAGE = re.compile(r"\$\{APPSEC_REVIEW_DAGSTER_IMAGE:\?APPSEC_REVIEW_DAGSTER_IMAGE must be a "
+                            r"host-verified sha256 image id; start through deploy/dagster/bin/ops\.py\}")
+
+
+def _image_services(document: dict) -> dict[str, dict]:
+    return {name: service for name, service in (document.get("services") or {}).items()
+            if host.IMAGE_VARIABLE in str(service.get("image", ""))}
+
+
+def test_every_dagster_image_reference_requires_the_verified_id_without_a_default() -> None:
+    assert {"compose.yaml", "compose.windows.yaml", "compose.copilot.yaml", "compose.claude.yaml"} <= set(
+        COMPOSE_FILES)
+    for name in COMPOSE_FILES:
+        text = (DEPLOYMENT / name).read_text(encoding="utf-8")
+        references = re.findall(r"\$\{?" + host.IMAGE_VARIABLE + r"[^}\s]*\}?[^\n]*", text)
+        assert all(REQUIRED_IMAGE.fullmatch(item) for item in references), (name, references)
+        for service_name, service in _image_services(yaml.safe_load(text)).items():
+            assert REQUIRED_IMAGE.fullmatch(service["image"]), (name, service_name)
+            assert service.get("pull_policy") == "never" and "build" not in service, (name, service_name)
+        if name != "compose.yaml":
+            for service_name, service in (yaml.safe_load(text).get("services") or {}).items():
+                assert not {"image", "build", "pull_policy"} & set(service), (name, service_name)
+
+
+def test_image_services_constant_matches_the_compose_file() -> None:
+    services = _image_services(_compose("compose.yaml"))
+    assert set(host.IMAGE_SERVICES) == set(services) and len(host.IMAGE_SERVICES) == len(services)
+    assert smoke.APPLICATION_SERVICES == host.IMAGE_SERVICES
+    for overlay in COMPOSE_FILES:
+        assert set(_compose(overlay).get("services") or {}) <= set(_compose("compose.yaml")["services"]), overlay
+
+
+def test_env_example_provides_no_launchable_image() -> None:
+    path = DEPLOYMENT / ".env.example"
+    assert host.IMAGE_VARIABLE not in host.read_environment(path)
+    active = [line for line in path.read_text(encoding="utf-8").splitlines()
+              if host.IMAGE_VARIABLE in line and not line.lstrip().startswith("#")]
+    assert active == []
+
+
+def test_reload_verifies_then_recreates_every_image_service_but_not_postgres(env_file: Path) -> None:
+    runner = FakeRunner()
+    assert lifecycle.run_action("reload", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.OK
+    assert runner.steps() == ["verify-image", "docker compose"]
+    (command, kwargs), = runner.compose_calls()
+    up = command.index("up")
+    assert command[up:up + 5] == ["up", "-d", "--no-deps", "--force-recreate", "--wait"]
+    assert set(command[up + 5:]) == set(_image_services(_compose("compose.yaml")))
+    assert "postgres" not in command
+    assert kwargs["env"][host.IMAGE_VARIABLE] == SIGNED
 
 
 def test_smoke_config_check_requires_the_signed_image_contract() -> None:
