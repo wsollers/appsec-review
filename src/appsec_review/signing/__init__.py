@@ -26,6 +26,7 @@ from .images import (
     inspect_image_id,
     sign_image,
 )
+from .import_hook import VerifiedFinder, install_verified_import_hook
 from .modules import MODULES_KIND, VerifiedManifest, build_manifest, sign_modules, verify_modules
 
 __all__ = [
@@ -36,11 +37,13 @@ __all__ = [
     "DisabledImageVerifier",
     "EnvelopeImageVerifier",
     "ImageSignatureVerifier",
+    "VerifiedFinder",
     "VerifiedManifest",
     "build_manifest",
     "image_envelope_path",
     "image_statement",
     "inspect_image_id",
+    "install_verified_import_hook",
     "sign_image",
     "sign_modules",
     "verify_modules",
