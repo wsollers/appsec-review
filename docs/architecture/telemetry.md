@@ -93,6 +93,8 @@ deployed runtime has been rebuilt or accepted.
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
 events remain authoritative; the summary is a regenerable operator view.
+The [end-of-review telemetry report](../operations/telemetry-report.md) renders both, read-only,
+into one LaTeX/PDF rollup per run.
 
 The additive `project_image_builds` view reports preparation starts, fresh builds,
 reuse, failures and failures by language family. Image preparation is paired by

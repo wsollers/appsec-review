@@ -138,6 +138,7 @@ their frozen configuration.
 | Joern CPG analysis | `jobs.job_cpg_analysis.settings.enabled = false` | Deprecated, not required for the code-graph index. Leave disabled unless deliberately opting into that producer; see [C++ index jobs](cpp-index-jobs.md). |
 | Test coverage and execution profiles | Ingestion jobs are in the review graph. | Supply supported reports through accepted build receipts. There is no startup flag that runs tests or profiles the target. See [coverage ingestion](test-coverage-ingestion.md) and [profile ingestion](profile-data.md). |
 | Reduced repeated evidence verification | `review_policy.mode = "strict"` | `first_party_managed` is an explicit operator approval with project, target-root and custody requirements, not a speed flag. See [assurance policy](performance-assurance.md). |
+| End-of-review telemetry PDF | `reporting.telemetry_report.enabled = true`; `render_pdf = true` | No opt-in needed. Written best effort to `runs/<id>/data/telemetry/report/` on every terminal path; a rendering failure is a receipt gap, not a run failure. See [telemetry report](telemetry-report.md). |
 | Pre-run third-party binary decompilation | No configured binaries by default. | Configure authorized binaries under `binary_decompilation.binaries`, then run `appsec-review binary-decompile` **before submission**. This is separate from the graph; see [binary decompilation](binary-decompilation.md). |
 
 Optional manual PoC generation uses the application id and the run's matching configuration.

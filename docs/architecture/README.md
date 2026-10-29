@@ -22,6 +22,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`native-sbom.md`](native-sbom.md) — bounded vendored/header-only discovery, evidence-backed identity claims, SPDX 2.3 enrichment, and metric correctness.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
+- [`../operations/telemetry-report.md`](../operations/telemetry-report.md) — the end-of-review telemetry LaTeX/PDF rollup, one per run.
 - [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.
 - [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
   runtime skills: which consumer reaches the data how.

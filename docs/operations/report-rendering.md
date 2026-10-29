@@ -25,6 +25,9 @@ see the [acceptance ledger](../reviews/evidence-completion-documentation-invento
 The older sample below is not acceptance of that new path.
 [Dossier data inventory](../architecture/dossier-data-inventory.md) records inputs and visibility.
 
+The end-of-review **telemetry** rollup (runtimes, usage and data quality, one PDF per run) reuses
+this image and template; see [telemetry report](telemetry-report.md).
+
 ## What it renders
 
 The loader (`src/appsec_review/reporting/loader.py`) reads a run directory read-only and builds one
