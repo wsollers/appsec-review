@@ -238,7 +238,8 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
                           reason="patch_scope_not_covered_by_native_adapter")
             return
         try:
-            profile = BuildProfile("native", build.image_tag, build.image_id, build.image_user)
+            profile = BuildProfile("native", build.image_tag, build.image_id, build.image_user,
+                                   derived_from_image_id=build.image_derived_from)
         except ValueError:
             checks["build"] = _check("unsafe", "accepted build facts do not commission a pinned native profile")
             result.update(status=Status.MANUAL_VALIDATION_REQUIRED.value,

@@ -66,3 +66,70 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         name = marker.args[0]
         if not (_REPOSITORY_ROOT / "targets" / name).is_dir():
             pytest.skip(f"local review target checkout is absent: targets/{name}")
+
+
+class AcceptingRecordingImageVerifier:
+    """Unit-test-only image verifier: accepts every image and records each verification."""
+
+    enforced = False
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+
+    def verify(self, image_id: str, *, reference: str | None = None) -> None:
+        self.calls.append((image_id, reference))
+
+
+_REAL_IMAGE_POLICY_DIRECTORIES = frozenset({"live", "integration", "acceptance"})
+
+
+def _uses_real_image_policy(path: Path) -> bool:
+    """Live, integration, and acceptance tests launch real images under the configured policy."""
+    try:
+        relative = path.resolve().relative_to(_REPOSITORY_ROOT / "tests")
+    except ValueError:
+        return False
+    return (relative.parts[0] in _REAL_IMAGE_POLICY_DIRECTORIES
+            or relative.name.startswith("test_live_") or "_live" in relative.stem)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _unit_test_module_image_verifier(request: pytest.FixtureRequest):
+    """Install an accepting process-wide image verifier for unit tests that fake ``docker inspect``.
+
+    Module scope, so module-scoped fixtures that launch fake builds also see it. Unit tests
+    fabricate image IDs that no trust anchor has signed. Tests of signature enforcement must pass
+    explicit verifiers (or install their own default) rather than rely on this one. Live,
+    integration, and acceptance tests are left to the configured signing policy.
+    """
+    from appsec_review.signing.policy import set_default_image_verifier
+
+    if _uses_real_image_policy(Path(str(request.node.path))):
+        yield None
+        return
+    verifier = AcceptingRecordingImageVerifier()
+    set_default_image_verifier(verifier)
+    try:
+        yield verifier
+    finally:
+        set_default_image_verifier(None)
+
+
+@pytest.fixture(autouse=True)
+def _unit_test_accepting_image_verifier(_unit_test_module_image_verifier):
+    """Reinstall the module's accepting verifier for each test, with a fresh call record.
+
+    A test that clears or replaces the process-wide default cannot leak that into later tests.
+    """
+    from appsec_review.signing.policy import set_default_image_verifier
+
+    verifier = _unit_test_module_image_verifier
+    if verifier is None:
+        yield None
+        return
+    verifier.calls.clear()
+    set_default_image_verifier(verifier)
+    try:
+        yield verifier
+    finally:
+        set_default_image_verifier(verifier)

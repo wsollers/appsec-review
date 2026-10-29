@@ -16,7 +16,7 @@ from typing import Any
 from appsec_review.config.assurance import ComponentReleases
 from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope, scope_fields
-from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
+from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, derived_base_image_id
 from appsec_review.jobs.build_discovery import jvm_build_command_errors
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity,
@@ -739,7 +739,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     environment, trace = _environment(
         {**recipe, "build_system": dispatch.get("build_system")}, workspace, settings,
         instrumentation_root=instrumentation_root, evidence_root=evidence_root)
-    profile = BuildProfile(image_profile, str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
+    profile = BuildProfile(image_profile, str(image["image_tag"]), str(image["image_id"]), str(image["user"]),
+                           derived_from_image_id=derived_base_image_id(image))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))

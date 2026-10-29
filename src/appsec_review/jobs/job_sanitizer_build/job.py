@@ -23,7 +23,7 @@ import shutil
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
+from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, derived_base_image_id
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions, bookkeeping_reason
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.engineering_contracts import SANITIZER_BUILD_HANDOFF_SCHEMA
@@ -285,7 +285,7 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
         return gap(f"the accepted source exceeds the workspace file bound: {exc}")
     try:
         profile = BuildProfile(str(receipt.get("family")), str(image["image_tag"]), str(image["image_id"]),
-                               str(image["user"]))
+                               str(image["user"]), derived_from_image_id=derived_base_image_id(image))
         executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
             profile, timeout_seconds=settings.command_timeout_seconds, output_bytes=settings.output_bytes)
         executor.resolve()

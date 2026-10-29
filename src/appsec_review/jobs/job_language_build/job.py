@@ -28,7 +28,9 @@ from appsec_review.container_runtime import (
     verify_capture_record,
 )
 from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS
-from appsec_review.container_runtime.project_images import node_dependency_root, project_recipe_identity
+from appsec_review.container_runtime.project_images import (
+    derived_base_image_id, node_dependency_root, project_recipe_identity,
+)
 from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, SCOPE_FIELDS, apply_scope
@@ -945,7 +947,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     "checkpoint_reused": False, "executor_identity": EXECUTOR_IDENTITY,
                     "capture_identity": python.CAPTURE_IDENTITY}
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
-    profile = BuildProfile(family, str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
+    profile = BuildProfile(family, str(image["image_tag"]), str(image["image_id"]), str(image["user"]),
+                           derived_from_image_id=derived_base_image_id(image))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))

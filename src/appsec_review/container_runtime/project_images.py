@@ -49,6 +49,22 @@ class ProjectImage:
     preparation_receipt: Mapping[str, Any] | None = None
 
 
+def derived_base_image_id(image: Mapping[str, Any] | None) -> str | None:
+    """Return the pinned base image ID when ``image`` records an image ProjectImageResolver built.
+
+    Only a recorded ``ProjectImage`` (this schema) with ``customized`` true and an image ID other
+    than its base qualifies; such an image is derived at runtime and unsigned. Anything else is
+    treated as the pinned image itself, so its own signature is required.
+    """
+    if not isinstance(image, Mapping) or image.get("schema") != SCHEMA or image.get("customized") is not True:
+        return None
+    base, image_id = image.get("base_image_id"), image.get("image_id")
+    if (not isinstance(base, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", base)
+            or not isinstance(image_id, str) or base == image_id):
+        return None
+    return base
+
+
 def _safe_dependency(target_root: Path, relative: str) -> Path:
     logical = PurePosixPath(relative)
     if not logical.parts or logical.is_absolute() or ".." in logical.parts:
