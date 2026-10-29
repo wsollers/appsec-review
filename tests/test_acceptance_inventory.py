@@ -6,6 +6,7 @@ from pathlib import Path
 import tomllib
 
 from appsec_review.inference import MODEL_CHECKS, PROVIDERS
+from appsec_review.acceptance.staging import StageDeclaration, StageKind
 from appsec_review.mcp.schema import TOOLS
 
 
@@ -82,6 +83,60 @@ def test_no_untracked_duplicate_test_definitions() -> None:
         "Untracked duplicate definitions, or repaired gaps requiring inventory reconciliation", actual, known)
     assert all(entry["status"] == "unverified" and entry["gap_id"] and entry["reason"]
                for entry in inventory["known_duplicate_definitions"])
+
+
+def test_staged_review_inventory_has_explicit_complete_compatible_prerequisites() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    obligations = {item["id"]: item for item in inventory["obligations"]}
+    stages = {name: StageDeclaration.from_mapping(item["stage"])
+              for name, item in obligations.items() if "stage" in item}
+    producer_nodes = []
+    for name, stage in stages.items():
+        if stage.kind is StageKind.PRODUCER:
+            nodes = obligations[name]["nodes"]
+            assert len(nodes) == 1 and nodes[0].endswith(f"[{stage.variant}]")
+            producer_nodes.extend(nodes)
+            assert obligations[name].get("case_deadline_seconds", 60) == (
+                60 if name.endswith("-prepare") else 120)
+        for predecessor in stage.depends_on:
+            assert predecessor in stages
+            parent = stages[predecessor]
+            assert parent.kind is StageKind.PRODUCER and parent.variant == stage.variant
+            assert parent.seals is (stage.kind is StageKind.CONSUMER)
+    assert len(producer_nodes) == len(set(producer_nodes))
+    for profile in inventory["profiles"].values():
+        selected = set(profile["obligations"])
+
+        def visit(name, ancestors=()):
+            assert name not in ancestors
+            for parent in stages[name].depends_on:
+                assert parent in selected, (name, parent)
+                visit(parent, (*ancestors, name))
+
+        for name in selected & stages.keys():
+            visit(name)
+
+
+def test_review_quick_representatives_and_exhaustive_variants_keep_strict_caps() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    profiles = inventory["profiles"]
+    assert profiles["quick"]["deadline_seconds"] == 720
+    assert profiles["review"]["deadline_seconds"] == profiles["review-exhaustive"]["deadline_seconds"] == 600
+    quick = set(profiles["quick"]["obligations"])
+    exhaustive = set(profiles["review-exhaustive"]["obligations"])
+    assert {"review-candidate", "current-report-oracle"} <= quick
+    assert "current-report-integrity" not in quick
+    assert {"review-empty", "review-corrupt", "review-benign", "review-blocked",
+            "current-report-integrity"} <= exhaustive
+    for name, profile in profiles.items():
+        if name != "review-exhaustive":
+            assert not any(item.startswith(("ci-benign-", "ci-blocked-"))
+                           for item in profile["obligations"])
+    obligations = {item["id"]: item for item in inventory["obligations"]}
+    assert set(obligations["current-report-integrity"]["variants"]) == {
+        "identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper",
+        "finding-tamper", "handoff-tamper", "same-length-report-tamper"}
+    assert not any("stage" in obligations[name] for name in profiles["consumers"]["obligations"])
 
 
 def test_duplicate_detector_preserves_class_and_async_scope(tmp_path: Path) -> None:

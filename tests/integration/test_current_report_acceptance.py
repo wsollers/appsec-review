@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import json
 import sqlite3
 
@@ -9,18 +10,26 @@ import pytest
 
 from appsec_review.acceptance.answer_key import Defect, evaluate, evaluate_current_report, observations_from_run
 from appsec_review.jobs.bound_artifacts import read_bound_json
+from appsec_review.storage.validation import validation_scope
+from tests.acceptance_review_stages import consumer_chain, fresh_chain
 from tests.final_report_support import REPORT, report_job, run_job
 from tests.integration.test_authentic_poc_contract import ROOT, acceptance_lane, authentic_chain
 
 
 @pytest.fixture(scope="module")
 def current():
-    lane = acceptance_lane("current-report")
-    with lane.span("accepted-report"):
-        chain = authentic_chain(lane, ci_only=True)
-        outcome = run_job(chain.config, report_job(), chain.fixture.run_id,
-                          chain.upstream("job_final_publication_gate"), chain.env)
-        report = read_bound_json(chain.run_root, outcome["handoff"]["outputs"]["report.assemble"]["artifact"])
+    staged = consumer_chain("ci-positive")
+    if staged is None:
+        lane = acceptance_lane("current-report")
+        with lane.span("accepted-report"):
+            chain = authentic_chain(lane, ci_only=True)
+            run_job(chain.config, report_job(), chain.fixture.run_id,
+                    chain.upstream("job_final_publication_gate"), chain.env)
+    else:
+        lane, chain = staged
+    with validation_scope(chain.run_root):
+        report = read_bound_json(
+            chain.run_root, chain.handoff(REPORT)["outputs"]["report.assemble"]["artifact"])
     assert len(report["findings"]) == 1
     finding = report["findings"][0]
     defect = Defect("untrusted-ci", "CWE-829", ".github/workflows/ci.yml", 1, "", (),
@@ -42,7 +51,7 @@ def _assert_identity_matrix(current, *, additional=()):
         replace(defect, id="wrong-state", state="supported"),
         replace(defect, id="wrong-bucket", bucket="verification_backlog"),
     ]
-    with lane.span("answer-key"):
+    with lane.span("answer-key"), validation_scope(chain.run_root):
         result = evaluate_current_report([defect, *changed, *additional], chain.run_root, schema_root=ROOT)
     assert not result.gaps, result.as_dict()
     assert set(result.found) == {defect.id}, result.as_dict()
@@ -52,15 +61,16 @@ def _assert_identity_matrix(current, *, additional=()):
 
 
 def test_missing_current_report_is_a_gap_not_scanner_success(current):
-    _lane, chain, defect, _report = current
+    lane, chain, defect, _report = current
+    chain = fresh_chain(chain, "missing-current-report")
     path = chain.run_root / "data" / "jobs" / REPORT / "latest.json"
-    original = path.read_bytes()
-    try:
-        path.unlink()
+    path.unlink()
+    with validation_scope(chain.run_root):
         result = evaluate_current_report([defect], chain.run_root, schema_root=ROOT)
-        assert result.failed and result.missed == [defect.id] and result.gaps
-    finally:
-        path.write_bytes(original)
+    assert result.failed and result.missed == [defect.id] and result.gaps
+    lane.emit("ACCEPTANCE_MUTATION_VALIDATED", vector="missing-current",
+              run_root=str(chain.run_root), path=path.relative_to(chain.run_root).as_posix(),
+              validator="evaluate_current_report", outcome="rejected", gaps=list(result.gaps))
 
 
 def _orphan_scanner_hit(chain):
@@ -79,16 +89,20 @@ def _orphan_scanner_hit(chain):
 
 def test_stale_or_orphan_scanner_hit_cannot_satisfy_current_report(current):
     lane, chain, _defect, _report = current
+    chain = fresh_chain(chain, "orphan-scanner-hit")
     defect = _orphan_scanner_hit(chain)
-    with lane.span("stale-only-hit"):
+    with lane.span("stale-only-hit"), validation_scope(chain.run_root):
         result = evaluate_current_report([defect], chain.run_root, schema_root=ROOT)
     assert result.failed and result.missed == ["stale-only"] and not result.gaps
+    lane.emit("ACCEPTANCE_MUTATION_VALIDATED", vector="orphan-hit",
+              run_root=str(chain.run_root), validator="evaluate_current_report", outcome="missed-not-gap")
 
 
-@pytest.mark.parametrize("part", ["report", "manifest", "finding", "handoff"])
+@pytest.mark.parametrize("part", ["report", "manifest", "finding", "handoff", "report-same-size"])
 def test_changed_accepted_bytes_fail_closed(current, part):
     lane, chain, defect, report = current
-    if part == "report":
+    chain = fresh_chain(chain, "tamper-" + part)
+    if part in {"report", "report-same-size"}:
         path = chain.unit_file(REPORT, "report.assemble", "final-report.json")
     elif part == "manifest":
         pointer = json.loads((chain.run_root / "data" / "indices" / "accepted.json").read_text())
@@ -99,33 +113,54 @@ def test_changed_accepted_bytes_fail_closed(current, part):
         pointer = json.loads((chain.run_root / "data" / "jobs" / REPORT / "latest.json").read_text())
         path = chain.run_root / pointer["handoff_path"]
     original = path.read_bytes()
-    try:
-        path.write_bytes(original + b" ")
-        with lane.span("tamper-" + part):
-            result = evaluate_current_report([defect], chain.run_root, schema_root=ROOT)
-        assert result.failed and result.gaps and not result.found
-    finally:
-        path.write_bytes(original)
+    changed = (b"[" + original[1:]) if part == "report-same-size" else original + b" "
+    assert changed != original
+    if part == "report-same-size":
+        assert len(changed) == len(original)
+    path.write_bytes(changed)
+    with lane.span("tamper-" + part), validation_scope(chain.run_root):
+        result = evaluate_current_report([defect], chain.run_root, schema_root=ROOT)
+    assert result.failed and result.gaps and not result.found
+    lane.emit("ACCEPTANCE_MUTATION_VALIDATED", vector=part, run_root=str(chain.run_root),
+              path=path.relative_to(chain.run_root).as_posix(),
+              before_sha256=hashlib.sha256(original).hexdigest(),
+              after_sha256=hashlib.sha256(changed).hexdigest(), same_size=len(original) == len(changed),
+              validator="evaluate_current_report", outcome="rejected", gaps=list(result.gaps))
+
+
+def test_current_report_quick_contract(current):
+    """Positive identity/state/bucket proof plus one independent integrity rejection."""
+    _assert_identity_matrix(current)
+    test_changed_accepted_bytes_fail_closed(current, "report")
+    current[0].emit("ACCEPTANCE_CASE_FINISHED", case="quick-oracle", tamper_vectors=1)
 
 
 def test_current_report_bound_oracle_matrix(current):
-    """Reuse one authentic chain for bounded identity, stale and corruption vectors."""
-    orphan = _orphan_scanner_hit(current[1])
-    _assert_identity_matrix(current, additional=(orphan,))
+    """Each mutation gets a fresh copy and a validation scope opened after mutation."""
+    lane, chain, defect, report = current
+    private = fresh_chain(chain, "matrix-orphan")
+    orphan = _orphan_scanner_hit(private)
+    _assert_identity_matrix((lane, private, defect, report), additional=(orphan,))
     test_missing_current_report_is_a_gap_not_scanner_success(current)
-    for part in ("report", "manifest", "finding", "handoff"):
+    for part in ("report", "manifest", "finding", "handoff", "report-same-size"):
         test_changed_accepted_bytes_fail_closed(current, part)
-    current[0].emit("ACCEPTANCE_CASE_FINISHED", case="bound-oracle-matrix", tamper_vectors=4)
+    lane.emit("ACCEPTANCE_CASE_FINISHED", case="bound-oracle-matrix", tamper_vectors=5)
 
 
 @pytest.mark.parametrize("blocked", [False, True], ids=["benign", "blocked"])
 def test_benign_and_blocked_real_reports_never_promote_scanner_detection(blocked):
-    lane = acceptance_lane("current-blocked" if blocked else "current-benign")
-    with lane.span("accepted-report"):
-        chain = authentic_chain(lane, ci_only=True, benign=not blocked, blocked=blocked)
-        outcome = run_job(chain.config, report_job(), chain.fixture.run_id,
-                          chain.upstream("job_final_publication_gate"), chain.env)
-        report = read_bound_json(chain.run_root, outcome["handoff"]["outputs"]["report.assemble"]["artifact"])
+    staged = consumer_chain("ci-blocked" if blocked else "ci-benign")
+    if staged is None:
+        lane = acceptance_lane("current-blocked" if blocked else "current-benign")
+        with lane.span("accepted-report"):
+            chain = authentic_chain(lane, ci_only=True, benign=not blocked, blocked=blocked)
+            run_job(chain.config, report_job(), chain.fixture.run_id,
+                    chain.upstream("job_final_publication_gate"), chain.env)
+    else:
+        lane, chain = staged
+    with lane.span("validate-report"), validation_scope(chain.run_root):
+        report = read_bound_json(
+            chain.run_root, chain.handoff(REPORT)["outputs"]["report.assemble"]["artifact"])
         assert report["findings"] == [] and report["verification_backlog"] == []
         defect = Defect("untrusted-ci", "CWE-829", ".github/workflows/ci.yml", 1, "", ())
         result = evaluate_current_report([defect], chain.run_root, schema_root=ROOT)
