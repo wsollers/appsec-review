@@ -7,11 +7,15 @@ from uuid import uuid4
 import pytest
 
 from appsec_review.config.image_builder_service import DockerHelperScope, EngineDomainConfig
-from appsec_review.container_runtime.builder_admission import BuilderAdmission, LifetimeProof, open_operator_journal
+from appsec_review.container_runtime import image_builder_service as services
+from appsec_review.container_runtime.builder_admission import (
+    BuilderAdmission, LifetimeProof, open_operator_journal, service_contract,
+)
 from appsec_review.container_runtime.buildkit_worker import EnforcementUnavailable, KernelProof
 from tests.test_bounded_image_build_service import (
     BASE, FakeLifetimeProof, configuration, forbid_real_execution,  # noqa: F401
 )
+from tests.test_native_engine_broker import native  # noqa: F401
 
 
 class CommissioningProof(FakeLifetimeProof):
@@ -428,3 +432,93 @@ def test_only_previous_boot_proof_treats_missing_cgroups_as_empty(provisional, t
     assert proof.empty(missing_ok=True)
     with pytest.raises(FileNotFoundError):
         proof.empty()
+
+
+def recovery_runtime(config):
+    """The operator config rebuilt for the installed release, pointing at the prior lifetime."""
+    return replace(config, native_engine=replace(
+        config.native_engine, runtime_root="/recovery-operator/lib", runtime_release_id="recovery-runtime"))
+
+
+class RecreatedEngineDomain:
+    def __init__(self, config):
+        self.config = config
+
+    def groups(self):
+        return {"engine": {"path": self.config.engine_domain.cgroup, "device": 1, "inode": 999}}
+
+    def live(self):
+        pass
+
+
+def restarted_admission(config):
+    """Real admission after a host restart: new boot ID, recreated lifetime and engine cgroups."""
+    result = BuilderAdmission(config, proof=CommissioningProof(config), boot_id=lambda: CURRENT_BOOT)
+    result.proof.generation += 1
+    result.engine_admission.proof = RecreatedEngineDomain(config)
+    return result
+
+
+def restart_prior_lifetime(native):
+    native.service.close()
+    anchor = json.loads(native.lifetime.path.read_text())
+    anchor["members"] = [{"pid": 27386, "start_token": f"{OLD_BOOT}:7668879"}]
+    native.lifetime.path.write_text(json.dumps(anchor))
+    return anchor["groups"]
+
+
+@pytest.mark.parametrize("native", ["engine-domain"], indirect=True)
+def test_recovery_runtime_releases_prior_lifetime_reserved_in_a_previous_boot(native, monkeypatch):
+    prior = native.config
+    recorded_groups = restart_prior_lifetime(native)
+    opened = []
+    monkeypatch.setattr(services, "BuilderAdmission",
+                        lambda config: opened.append(restarted_admission(config)) or opened[-1])
+    services.release_prior_runtime(recovery_runtime(prior), prior)
+    assert [owner.config for owner in opened] == [prior]
+    owner = opened[0]
+    assert owner.proof.stopped_calls == [True]
+    anchor = json.loads(owner.path.read_text())
+    assert anchor["state"] == "RELEASED" and anchor["service_contract"] == service_contract(prior)
+    release = anchor["release"]
+    assert (release["basis"], release["recorded_boot_ids"], release["current_boot_id"]) == (
+        "previous_boot", [OLD_BOOT], CURRENT_BOOT)
+    assert release["recorded_groups"] == recorded_groups != owner.proof.groups()
+    baseline = release["engine_baseline"]
+    assert baseline["basis"] == "previous_boot" and baseline["lease_id"] == "existing-engine-services"
+    assert (baseline["recorded_boot_id"], baseline["current_boot_id"]) == (REAL_BOOT, CURRENT_BOOT)
+    ledger = json.loads(bank(owner).read_text())
+    assert ledger["leases"] == {} and ledger["dropped_persistent"] == [baseline]
+    before = owner.path.read_bytes(), bank(owner).read_bytes()
+    services.release_prior_runtime(recovery_runtime(prior), prior)
+    assert (owner.path.read_bytes(), bank(owner).read_bytes()) == before
+
+
+@pytest.mark.parametrize("native", ["engine-domain"], indirect=True)
+def test_recovery_runtime_cannot_reserve_serve_or_release_the_prior_lifetime(native):
+    restart_prior_lifetime(native)
+    recovery = restarted_admission(recovery_runtime(native.config))
+    before = recovery.path.read_bytes(), bank(recovery).read_bytes()
+    for operation in (recovery.reserve, recovery.verify, recovery.release):
+        with pytest.raises(EnforcementUnavailable, match="configuration or cgroups changed"):
+            operation()
+    assert (recovery.path.read_bytes(), bank(recovery).read_bytes()) == before
+    assert json.loads(recovery.path.read_text())["state"] == "RESERVED"
+
+
+@pytest.mark.parametrize("native", ["engine-domain"], indirect=True)
+@pytest.mark.parametrize("field", ["state_root", "gate_binary"])
+def test_recovery_runtime_cannot_also_rebind_prior_state_or_gate(native, monkeypatch, tmp_path, field):
+    restart_prior_lifetime(native)
+    current = recovery_runtime(native.config)
+    if field == "state_root":
+        state = tmp_path / "recovery-operator"
+        state.mkdir(mode=0o700)
+        current = replace(current, state_root=str(state))
+    else:
+        current = replace(current, native_engine=replace(current.native_engine, gate_binary="/foreign"))
+    monkeypatch.setattr(services, "BuilderAdmission", lambda config: pytest.fail("rebound policy used"))
+    before = native.lifetime.path.read_bytes(), bank(native.lifetime).read_bytes()
+    with pytest.raises(EnforcementUnavailable, match="cannot change"):
+        services.release_prior_runtime(current, native.config)
+    assert (native.lifetime.path.read_bytes(), bank(native.lifetime).read_bytes()) == before
