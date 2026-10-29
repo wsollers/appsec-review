@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -46,6 +47,18 @@ class RuntimeConfig:
     runs_dir: Path
     data_dir: Path
     metadata_dir: Path
+    operation_progress_interval_seconds: float = 60.0
+    operation_sample_interval_seconds: float = 1.0
+
+
+def _interval_seconds(value: Any, field: str, default: float) -> float:
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a number of seconds")
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{field} must be finite and non-negative")
+    return float(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -903,6 +916,12 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             runtime_value.get("metadata_dir", "runs/metadata"),
             "runtime.metadata_dir",
         ),
+        operation_progress_interval_seconds=_interval_seconds(
+            runtime_value.get("operation_progress_interval_seconds"),
+            "runtime.operation_progress_interval_seconds", 60.0),
+        operation_sample_interval_seconds=_interval_seconds(
+            runtime_value.get("operation_sample_interval_seconds"),
+            "runtime.operation_sample_interval_seconds", 1.0),
     )
     if runtime.metadata_dir != runtime.runs_dir / "metadata":
         raise ValueError("runtime.metadata_dir must be the runs/metadata host metadata area")

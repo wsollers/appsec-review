@@ -247,6 +247,80 @@ def _operations(inputs: TelemetryInputs) -> Box:
               (0.52, 0.10, 0.12, 0.13, 0.13), omitted),))
 
 
+def _span_label(item: Mapping[str, Any]) -> str:
+    stage = clean(item.get("stage") or "-")
+    unit = clean(item.get("unit_id") or "")
+    return _short(f"{stage} [{unit}]" if unit else stage)
+
+
+def _completion(item: Mapping[str, Any]) -> str:
+    work = item.get("work") if isinstance(item.get("work"), Mapping) else {}
+    expected = item.get("expected") if isinstance(item.get("expected"), Mapping) else {}
+    ratios = item.get("completion_ratio") if isinstance(item.get("completion_ratio"), Mapping) else {}
+    parts = [f"{clean(name)} {fmt.count(work.get(name, 0))}/{fmt.count(total)} ({fmt.percent(ratios.get(name))})"
+             for name, total in sorted(expected.items(), key=lambda pair: clean(pair[0]))]
+    return _short("; ".join(parts)) if parts else fmt.NA
+
+
+def _progress(inputs: TelemetryInputs) -> Box:
+    records = _records(inputs.summary, "operation_progress")
+    title = "Operations in progress"
+    if records is None:
+        return Box(BoxKind.GAP, title, items=(
+            Para("In-progress operation state is unavailable: the metrics summary predates heartbeats."),))
+    if not records:
+        return Box(BoxKind.RESULT, title, chip="TIME", items=(
+            Para("Every started operation span recorded a completion."),))
+    ordered = sorted(records, key=lambda item: (clean(item.get("state")) != "lost",
+                                                clean(item.get("started_at")), clean(item.get("span_id"))))
+    shown, omitted = _cap(ordered, OPERATION_LIMIT)
+    rows = tuple((Cell(_span_label(item), mono=True), Cell(_short(item.get("state") or fmt.NA, 16)),
+                  Cell(fmt.duration(item.get("elapsed_ms")) if item.get("elapsed_ms") is not None else fmt.NA),
+                  Cell(_short(item.get("last_progress_at") or "none", 40)),
+                  Cell(_completion(item)),
+                  Cell(_short(" ".join(clean(value) for value in (item.get("thread_state_now"),
+                                                                   item.get("wait_channel_now")) if value)
+                              or fmt.NA, 48), mono=True)) for item in shown)
+    lost = sum(1 for item in records if clean(item.get("state")) == "lost")
+    return Box(BoxKind.GAP if lost else BoxKind.RESULT, title, meta=f"{fmt.count(lost)} lost",
+               chip="TIME", items=(
+        Table(("Operation [unit]", "State", "Elapsed", "Last heartbeat", "Progress vs expected",
+               "Thread now"), rows, (0.26, 0.08, 0.10, 0.18, 0.26, 0.12), omitted),
+        Para("A lost span started but never completed: its attempt closed or its heartbeats stopped. "
+             "The last heartbeat is its last known state; n/a means not recorded.", muted=True)))
+
+
+def _hotspots(inputs: TelemetryInputs) -> Box:
+    records = _records(inputs.summary, "operation_hotspots")
+    title = "Operation hotspots"
+    if records is None:
+        return Box(BoxKind.GAP, title, items=(
+            Para("Operation hotspots are unavailable: the metrics summary predates them."),))
+    if not records:
+        return Box(BoxKind.RESULT, title, chip="TIME", items=(Para("No completed operation spans were timed."),))
+    shown, omitted = _cap(list(records), OPERATION_LIMIT)
+    rows = []
+    for item in shown:
+        rates = []
+        if item.get("ms_per_artifact") is not None:
+            rates.append(f"{fmt.duration(item.get('ms_per_artifact'))}/artifact")
+        if item.get("fsync_calls_per_shard") is not None:
+            rates.append(f"{_number(item.get('fsync_calls_per_shard')) or 0:.1f} fsync/shard")
+        rows.append((Cell(_span_label(item), mono=True), Cell(fmt.duration(item.get("duration_ms"))),
+                     Cell(fmt.percent(item.get("thread_off_cpu_ratio")) if item.get("thread_off_cpu_ratio")
+                          is not None else fmt.NA),
+                     Cell(fmt.percent(item.get("d_state_ratio")) if item.get("d_state_ratio") is not None
+                          else fmt.NA),
+                     Cell(_short(item.get("top_wait_channel") or fmt.NA, 40), mono=True),
+                     Cell(_short(item.get("dominant_phase") or fmt.NA, 40), mono=True),
+                     Cell(_short(", ".join(rates) or fmt.NA, 48))))
+    return Box(BoxKind.RESULT, title, meta="longest completed spans", chip="TIME", items=(
+        Table(("Operation [unit]", "Duration", "Off-CPU", "D state", "Top wait", "Dominant phase", "Per item"),
+              tuple(rows), (0.24, 0.10, 0.09, 0.09, 0.16, 0.16, 0.16), omitted),
+        Para("Off-CPU is span-thread wall time not spent on CPU; D state is the share of 1 s thread samples "
+             "in uninterruptible (usually I/O) sleep. n/a means not recorded.", muted=True)))
+
+
 # --- run-wide usage ----------------------------------------------------------------------------
 
 def _token_cell(values: list[float | None]) -> str:
@@ -391,6 +465,8 @@ def overview_sections(inputs: TelemetryInputs) -> tuple[Block, ...]:
         _time_fields(inputs),
         _job_bars(inputs),
         _operations(inputs),
+        _progress(inputs),
+        _hotspots(inputs),
         Heading(2, "Run-wide usage", anchor("telemetry", "usage")),
         _models(inputs),
         _tools(inputs),

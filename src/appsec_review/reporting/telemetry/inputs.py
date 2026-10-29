@@ -1,7 +1,7 @@
 """Read-only inputs of the run telemetry report.
 
 ``load_inputs`` reads ``data/logs/pipeline.jsonl`` (authoritative) and ``data/telemetry/summary.json``
-(``appsec-review/run-metrics/5``). A missing, unreadable or mismatched summary is recomputed in
+(``appsec-review/run-metrics/6``). A missing, unreadable or mismatched summary is recomputed in
 memory with :func:`aggregate_run_metrics` and never written back. Anything that cannot be read is a
 named gap; it is never reported as zero work or as a clean run.
 """
@@ -52,7 +52,7 @@ class JobSpan:
 @dataclass(frozen=True, slots=True)
 class TelemetryInputs:
     run_id: str
-    summary: Mapping[str, Any]        # run-metrics/5 document, or {} when unavailable
+    summary: Mapping[str, Any]        # run-metrics/6 document, or {} when unavailable
     summary_source: str               # "summary.json" | "recomputed" | "unavailable"
     summary_sha256: str | None        # of the summary bytes on disk (summary.json source only)
     events: tuple[Mapping[str, Any], ...]
