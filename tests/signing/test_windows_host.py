@@ -186,7 +186,11 @@ def test_windows_private_key_directory_skips_posix_modes_but_not_links(windows, 
     directory = tmp_path / "private"
     directory.mkdir(mode=0o777)
     os.chmod(directory, 0o777)
+    checked = []
+    clean = ("S-1-5-18", [core.WindowsAce(0, 0, 0x1F01FF, "S-1-5-18")])
+    monkeypatch.setattr(core, "read_windows_security", lambda path: checked.append(Path(path)) or clean)
     signing_cli._private_parent(directory / "operator.pem")
+    assert checked == [directory]
     monkeypatch.setattr(core, "is_link_or_reparse_point", lambda info: True)
     with pytest.raises(ValueError, match="real directory"):
         signing_cli._private_parent(directory / "operator.pem")

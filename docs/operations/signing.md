@@ -60,8 +60,9 @@ the gaps listed under [Named gaps](#named-gaps).
   test fixture. Tests generate ephemeral keys under `test/tmp/` at run time.
 - **Trust anchors** are public-key PEM files named `<key_id hex>.pem` (without `sha256:`) in
   `trusted_keys_dir`, default `/etc/appsec-review/signing/trusted-keys`. They must be root-owned and
-  not writable by group or others. The native release checks this with `trusted_path`. Elsewhere it
-  is an installation duty, because `TrustedKeys.load` checks names and key types but not ownership.
+  not writable by group or others. The native release checks this with `trusted_path`. Elsewhere on
+  POSIX it is an installation duty, because `TrustedKeys.load` checks names and key types but not
+  ownership; on Windows `TrustedKeys.load` checks the NTFS ACLs (see [Windows hosts](#windows-hosts)).
   A missing or empty directory trusts no key, so every verification fails.
 - **Image signatures** are stored as `<image id hex>.json` in `image_signatures_dir`, default
   `/var/lib/appsec-review/signing/images`. Envelopes are self-authenticating, so the operator who
@@ -404,11 +405,37 @@ A native Windows operator host signs and verifies with the same envelopes as Lin
   Any other drive-less path fails configuration loading. The Dagster `lifecycle.py` reads the same
   defaults for unset `APPSEC_SIGNING_*` variables and passes the verified directories to Compose
   as bind-mount sources.
-- **Custody.** Windows has no POSIX owner or mode bits, so the private-key directory and trust
-  anchors are not mode-checked there. Their privacy comes from NTFS ACLs: keep the private key under
-  the user profile (`%USERPROFILE%\.config\appsec-review\signing\private`) and make
-  `%ProgramData%\appsec-review\signing` writable only by Administrators. Symbolic links, junctions
-  and other reparse points are still refused.
+- **Custody.** Windows has no POSIX owner or mode bits, so NTFS ACLs are checked instead, through
+  `GetNamedSecurityInfoW` (advapi32, via `ctypes`). The broad principals are Everyone (`S-1-1-0`),
+  LOCAL (`S-1-2-0`), DIALUP (`S-1-5-1`), NETWORK (`S-1-5-2`), INTERACTIVE (`S-1-5-4`), ANONYMOUS LOGON
+  (`S-1-5-7`), Authenticated Users (`S-1-5-11`), TERMINAL SERVER USER (`S-1-5-13`), REMOTE INTERACTIVE
+  LOGON (`S-1-5-14`), BUILTIN\Users (`S-1-5-32-545`), BUILTIN\Guests (`S-1-5-32-546`), ALL
+  APPLICATION PACKAGES (`S-1-15-2-1`), ALL RESTRICTED APPLICATION PACKAGES (`S-1-15-2-2`), and Domain
+  Users and Domain Guests (`S-1-5-21-…-513` and `-514`). Generic rights are mapped to file rights;
+  inherit-only entries are ignored because they do not apply to the object itself, and deny entries
+  never excuse an allow entry. A NULL DACL, a broad owner, an allow entry whose SID cannot be parsed,
+  and a callback or object allow entry that names a broad principal are refused. Any API failure
+  refuses too.
+  - The **private-key directory** (`keygen`) and the new **private key** must give no broad principal
+    any read or write right: `FILE_READ_DATA`, `FILE_WRITE_DATA`, `FILE_APPEND_DATA`, `FILE_READ_EA`,
+    `FILE_WRITE_EA`, `FILE_DELETE_CHILD`, `FILE_WRITE_ATTRIBUTES`, `DELETE`, `WRITE_DAC` or
+    `WRITE_OWNER` (mask `0xD015F`). `keygen` gives a directory it creates, and the key, a protected ACL
+    that grants full control only to the current user, SYSTEM (`S-1-5-18`) and Administrators
+    (`S-1-5-32-544`), so a fresh key passes.
+  - The **trust-anchor directory** and every **anchor** file (`TrustedKeys.load`, on every verifier
+    path) must give no broad principal a right to modify them: the same rights without
+    `FILE_READ_DATA` and `FILE_READ_EA` (mask `0xD0156`). Reading is allowed. A trusted-keys directory
+    that `keygen` creates gets full control for the current user, SYSTEM and Administrators plus
+    read and execute for BUILTIN\Users. The image-signature directory is not checked, as on POSIX.
+
+  A refusal names the path, the principal and the rights, and prints the `icacls` fix, for example
+  `icacls "<path>" /inheritance:r /remove:g *S-1-1-0 /grant:r "%USERNAME%:F" "*S-1-5-18:F" "*S-1-5-32-544:F"`
+  (with `(OI)(CI)` on a directory; anchors get `"*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"
+  "*S-1-5-32-545:(OI)(CI)RX"`). Note that `%ProgramData%` grants BUILTIN\Users write on new
+  subdirectories, so a trust-anchor directory created there by hand is refused until it is
+  restricted. Keep the private key under the user profile
+  (`%USERPROFILE%\.config\appsec-review\signing\private`). Symbolic links, junctions and other
+  reparse points are still refused.
 - **Manifests.** Manifest paths are always `/`-separated and package-relative, so a manifest signed
   in WSL verifies on Windows and the reverse. Hashes cover raw bytes: a checkout that converts line
   endings (`core.autocrlf`) changes them. The repository's `.gitattributes` pins LF for source files.
@@ -419,7 +446,12 @@ Run these from PowerShell in the Windows checkout, with Docker Desktop running:
 
 1. **Key and anchor.** Name Git's OpenSSL explicitly if it is not at the default path:
    `appsec-review signing keygen --openssl "C:\Program Files\Git\mingw64\bin\openssl.exe" --trusted-keys-dir "$env:ProgramData\appsec-review\signing\trusted-keys"`.
-   Then restrict `%ProgramData%\appsec-review\signing` to Administrators with NTFS ACLs.
+   `keygen` restricts the private-key directory, the key and a trusted-keys directory it creates
+   (see Custody above). For a trusted-keys directory that already existed, restrict it from an
+   elevated shell before verifying, or every verification is refused:
+   `icacls "$env:ProgramData\appsec-review\signing\trusted-keys" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"`.
+   Restrict an existing private-key directory the same way with `"${env:USERNAME}:(OI)(CI)F"` in place
+   of the BUILTIN\Users grant.
 2. **Overrides.** Set any non-default `APPSEC_SIGNING_OPENSSL`, `APPSEC_SIGNING_TRUSTED_KEYS_DIR`,
    `APPSEC_SIGNING_IMAGE_SIGNATURES_DIR`, `APPSEC_SIGNING_PRIVATE_KEY` or `APPSEC_SIGNING_PYTHON` in
    `deploy/dagster/.env`; the process environment wins over `.env`.

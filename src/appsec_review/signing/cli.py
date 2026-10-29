@@ -137,16 +137,21 @@ def _private_parent(path: Path) -> None:
     """Create the private key directory 0700, or require an existing one to be owned and private.
 
     Windows has no POSIX owner or mode bits: there the directory must still be a real directory (no
-    link or reparse point) and its privacy comes from the user profile's inherited ACL.
+    link or reparse point), a new one gets a protected owner-only ACL, and its ACL must pass the
+    ``"private"`` custody check (no broad principal may read or write it).
     """
     parent = path.parent
-    if not os.path.lexists(parent):
+    created = not os.path.lexists(parent)
+    if created:
         parent.mkdir(mode=0o700, parents=True)
         os.chmod(parent, 0o700)
     info = os.lstat(parent)
     if _core.is_link_or_reparse_point(info) or not stat.S_ISDIR(info.st_mode):
         raise ValueError(f"private key directory must be a real directory: {parent}")
     if _core.windows_host():
+        if created:
+            _core.apply_windows_acl(parent, "private", directory=True)
+        _core.check_windows_custody(parent, "private", "private key directory", directory=True)
         return
     if hasattr(os, "getuid") and info.st_uid != os.getuid():
         raise ValueError(f"private key directory is not owned by the current user: {parent}")
@@ -161,6 +166,9 @@ def _keygen(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, 
     openssl = _openssl(args, config)
     _private_parent(private_key)
     openssl.generate_private_key(private_key)
+    if _core.windows_host():
+        _core.apply_windows_acl(private_key, "private", directory=False)
+        _core.check_windows_custody(private_key, "private", "private key", directory=False)
     public_key_pem = openssl.public_key_pem(private_key)
     identity = key_id(openssl.public_key_der(public_key_pem))
     report: dict[str, Any] = {"key_id": identity, "private_key": str(private_key), "trusted_key": None}
@@ -169,6 +177,8 @@ def _keygen(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, 
         if not os.path.lexists(directory):
             directory.mkdir(mode=0o755, parents=True)
             os.chmod(directory, 0o755)
+            if _core.windows_host():
+                _core.apply_windows_acl(directory, "anchor", directory=True)
         elif _core.is_link_or_reparse_point(os.lstat(directory)) or not directory.is_dir():
             raise ValueError(f"trusted keys directory must be a real directory: {directory}")
         trusted = directory / f"{identity.removeprefix('sha256:')}.pem"
