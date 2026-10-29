@@ -37,14 +37,18 @@ measurement into evidence for newly added cases.
 
 ## Integrated staging and custody
 
-The documentation branch incorporates exact parent `a4ce5459`, including detachment
-`1d7d621a`, immutable-check optimization `881b8709` and helper-budget consistency `85d39172`.
-Optimized public Windows review passed all 13 core cases, including native candidate,
-fresh corruption/empty readers and the CI review/gate/report/oracle private consumer chain.
-All three two-worker quick warm runs at that frozen source passed 38/38, demonstrating the
-runtime target for that concurrency only. Corrected named portable process passed 13/13 with
-one worker in 351.471 seconds at the same frozen source. The first exhaustive profile failed on individual/
-suite deadlines, so overall acceptance is not finally green.
+The approved bounded exhaustive series is qualified at exact source
+`856300cafdc1a4693608d24e93586cb88a7fb2bc`, including main `a31d4249`. Integrity 12/12,
+outcomes 10/10 and review 13/13 passed in sequential fresh invocations with two workers:
+35 executions / 31 unique cases, within every declared case/profile cap, in 1138.249 seconds
+wrapper wall time. This is not a monolithic `review-exhaustive` pass or blanket platform/
+provider proof.
+
+Historical `a4ce5459` retains the three under-ten-minute two-worker quick warm passes and
+one-worker portable-process pass; those are not new-source warm/platform results.
+Detachment `1d7d621a`, immutable-check optimization `881b8709` and helper-budget consistency
+`85d39172` remain part of the integrated path. Earlier monolithic and `086ded0a` integrity
+failures stay recorded rather than being recast as passes.
 
 Variant-specific producers run prepare -> review -> PoC for native-positive, prepare ->
 review for native-empty, and prepare -> review -> gate -> report for CI variants. Each
@@ -105,6 +109,42 @@ Mutable outputs are not rehashed for every immutable check. Whole producer inspe
 checkpoints, seals and full source checks remain; this is neither a cross-call proof cache
 nor a cap increase or omission of full custody checks.
 
+### Approved exhaustive selection boundary
+
+The approved member set runs sequentially: unchanged `review` (13 cases),
+`review-report-integrity` (four fresh CI-positive producer phases plus eight independent
+integrity consumers, 12 cases), and `review-outcomes` (complete benign and blocked chains,
+10 cases). Each member retains 600 seconds/max two workers; the eight new integrity cases
+use ordinary 60-second caps and producer/job exceptions remain as declared. This requires
+only test/inventory selection changes, not API, custody, scheduler or production changes.
+
+Each member owns a fresh invocation and authenticated seed; no cross-invocation seed reuse
+or validation cache is allowed. The qualified series accounted for 35 executions / 31 unique
+cases, including four deliberately repeated CI-positive producers. Actual order was integrity,
+outcomes, review at the same frozen `856300ca`; distinct invocation IDs, agreeing shared
+source identities, bound member manifests and result hashes establish the full series,
+not reuse of historical proof. Summed profile timers are 1131.883 seconds; independently
+measured wrapper wall time is 1138.249 seconds (18 minutes 58.249 seconds).
+
+All original vectors remain: the approved new integrity node/IDs are listed in the
+[operator selection contract](../operations/bounded-acceptance.md#approved-bounded-exhaustive-series).
+Replacing one combined case with eight makes monolithic `review-exhaustive` 31 cases;
+that selection stays capped at 600 seconds and **not qualified**, never a silent alias for
+the three-member series. The first implemented integrity selection at `086ded0a` timed out
+`identity-state-bucket` / `orphan-hit` at 58.663 / 58.740 seconds under ordinary 60-second
+case limits; four real producers and six vectors passed, cleanup was confirmed empty and no
+production services were touched. Fix `1e0c6996` in frozen `856300ca` removes only a duplicate
+original-seed scan from the two heavy fixtures after completed same-process guard preflight
+already freshly verified seal/whole private copy and installed the immutable-seed guard.
+Matching workspace/invocation/preflight are required. The identity oracle was already
+batched; driver/guard byte proofs and production validation are untouched. The revised public
+series subsequently passed without changing caps/vectors. Coordinator reconciliation
+confirmed eight distinct integrity copy roots/new telemetry lanes, both heavy preflight
+spans against actual guard receipts, seven mutation outcomes and source/private hash and
+same-length proofs. All collection/case cleanup had zero survivors and no production services
+were touched. This is a source-corrected qualification, not an unchanged retry-to-green.
+The earlier 24-case failure and `a4ce5459` warm results remain revision-scoped.
+
 ## Authentic joins and explicit substitutions
 
 | Seam | Application behavior exercised | Boundary not established by that evidence |
@@ -137,12 +177,14 @@ tool/daemon compatibility proof.
 Inventory revision `09cbf227` separates representative `quick` from full signals, graphs,
 process, controls and review matrices without removing negative variants. It enrolls the
 three consumer nodes in a separate `consumers` profile. The ordinary 60-second limit and
-explicit 15/30/120-second obligation caps remain distinct from suite caps; process startup/replay
-has explicit 120-second allowances within its 480-second suite.
-The current staged inventory further separates 13 core `review` cases from 24
-`review-exhaustive` cases (full integrity/benign/blocked variants). Both retain 600-second
-suite ceilings; exhaustive calibration is unproved. Current `quick` has 35 selectors resolving
-to 38 cases, including its staged prerequisites, without increasing its 720-second cap.
+explicit 15/30/120-second obligation caps remain distinct from suite caps; tagged-worker
+startup/resume has its declared 120-second exception within the 480-second process suite,
+while other lifecycle helper cases retain 60 seconds.
+The `856300ca` selection separates 13 core `review`, 12 integrity and 10 outcome cases from
+31 monolithic `review-exhaustive` cases. Each profile retains its 600-second ceiling; the
+qualified series is not an alias or qualification of that monolithic profile. Quick and
+core review nodes are unchanged; historical quick has 35 selectors resolving to 38 cases,
+including staged prerequisites, without increasing its 720-second cap.
 
 The application supports genuine OWASP assessment mode, but this bounded control fixture
 explicitly uses `QUALIFICATION` with worker/reviewer inference disabled and five pinned
@@ -240,10 +282,12 @@ pass. Planner `81ada94f`'s read-only
 staged implementation now exists as described above. Output detachment is now separately
 implemented and has a complete timed Windows core-review pass. Its scoped verification todo
 and three-warm two-worker quick calibration are done; corrected named portable process also
-passes. The exhaustive gate remains: its failure includes an own-deadline integrity timeout
-and a gate stopped by remaining suite budget; its blocked report/consumer are unexecuted coverage, not
-semantic gate failures. A narrow per-vector/subprofile proposal awaits approval and is not
-implemented. No prior approval grants a budget or validation waiver for that new proposal.
+passes. The historical monolithic failure included an own-deadline integrity timeout and a
+gate stopped by remaining suite budget; its blocked report/consumer were unexecuted coverage,
+not semantic gate failures. The bounded series is now qualified at corrected `856300ca` with
+complete member/aggregate accounting; those earlier failures remain historical. The
+31-case monolithic profile and named platform/provider/assessment gaps remain unqualified.
+No existing-case cap increase or cross-invocation seed reuse was introduced.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.
