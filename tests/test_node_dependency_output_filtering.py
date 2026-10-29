@@ -207,8 +207,7 @@ def test_dispositions_record_verified_trees_and_nested_unverified_carve_out(tmp_
         ("node_modules/a", {
             "disposition": "supply_chain", "basis": "installer-record", "name": "npm-installed-package",
             "reason": "verified against installed manifest",
-            "evidence_ref": {"kind": "npm-installed-record", "workspace_path": "node_modules/.package-lock.json",
-                             "sha256": record, "entry": "node_modules/a"},
+            "evidence_ref": "node_modules/.package-lock.json#node_modules/a",
             "confidence": "fact", "scope_role": "runtime_dependency",
             "keep": ("node_modules/a/package.json", "node_modules/a/build/Release/addon.node")}),
         ("node_modules/a/node_modules/c", {
@@ -219,6 +218,8 @@ def test_dispositions_record_verified_trees_and_nested_unverified_carve_out(tmp_
                     if row["workspace_path"].startswith("node_modules/a/node_modules/c/"))
     assert len(carved) == 24 and all(path.endswith(".js") for path in carved)
     assert not any(row["workspace_path"].startswith("node_modules/a/lib/") for row in rows)
+    anchor, = (row for row in rows if row["workspace_path"] == "node_modules/a/package.json")
+    assert anchor["delivery_evidence"]["sha256"] == record
     assert ("node_modules/a/node_modules/c: installed package does not match npm installer record "
             "(manifest-missing); cataloged per-file") in gaps
 

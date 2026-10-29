@@ -594,7 +594,7 @@ def _record_dispositions(dispositions: Any, coverage: _InstalledCoverage,
             dispositions.classify_tree(
                 install_path, disposition="supply_chain", basis="installer-record",
                 name="npm-installed-package", reason="verified against installed manifest",
-                evidence_ref=_installed_evidence(record, package), confidence="fact",
+                evidence_ref=f"{record.record.workspace_path}#{package.entry}", confidence="fact",
                 scope_role=_installed_role(package),
                 keep=(package.manifest.workspace_path, *retained_paths.get(install_path, ())))
             continue
