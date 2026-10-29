@@ -42,7 +42,8 @@ def release_paths(entrypoint: Path) -> tuple[Path, Path]:
     return root, library
 
 
-def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operation: str = "serve") -> dict:
+def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operation: str = "serve",
+                prior_configuration: Path | None = None) -> dict:
     """Pure launch specification; it neither installs nor starts privileged software."""
     trusted_path(python)
     if not python.stat().st_mode & 0o111:
@@ -52,11 +53,19 @@ def launch_spec(python: Path, entrypoint: Path, configuration: Path, *, operatio
     if configuration.stat().st_mode & 0o077:
         raise PermissionError("root service configuration must be private")
     if operation not in {"serve", "reserve-lifetime", "reconcile-admission", "release-lifetime",
-                         "finalize-commissioning"}:
+                         "finalize-commissioning", "reconcile-retired-admission"}:
         raise ValueError("unsupported root lifecycle operation")
+    if (operation == "reconcile-retired-admission") != (prior_configuration is not None):
+        raise ValueError("retired reconciliation requires its separate prior configuration")
+    if prior_configuration is not None:
+        trusted_path(prior_configuration)
+        if prior_configuration.stat().st_mode & 0o077:
+            raise PermissionError("prior root configuration must be private")
     argv = (str(python), "-I", "-S", str(entrypoint), "--config", str(configuration))
     if operation != "serve":
         argv += ("--operation", operation)
+    if prior_configuration is not None:
+        argv += ("--prior-config", str(prior_configuration))
     return {
         "argv": argv,
         "cwd": str(root),
@@ -70,10 +79,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--operation", choices=("serve", "reserve-lifetime", "reconcile-admission",
-                                               "release-lifetime", "finalize-commissioning"), default="serve")
+                                               "release-lifetime", "finalize-commissioning",
+                                               "reconcile-retired-admission"), default="serve")
+    parser.add_argument("--prior-config", type=Path)
     args = parser.parse_args(argv)
     specification = launch_spec(Path(sys.executable), Path(__file__).absolute(), args.config,
-                                operation=args.operation)
+                                operation=args.operation, prior_configuration=args.prior_config)
     _, library = release_paths(Path(__file__).absolute())
     standard_library = list(sys.path)
     for value in standard_library:
@@ -87,7 +98,9 @@ def main(argv: list[str] | None = None) -> None:
     # -S prevents editable-install .pth hooks; only the installed release is added.
     sys.path[:] = [str(library), *standard_library]
     sys.argv[:] = ["appsec-review-image-builder", "--config", str(args.config)]
-    if args.operation != "serve":
+    if args.operation == "reconcile-retired-admission":
+        sys.argv.extend(("--reconcile-retired-admission", str(args.prior_config)))
+    elif args.operation != "serve":
         sys.argv.append("--" + args.operation)
     runpy.run_module("appsec_review.container_runtime.image_builder_service", run_name="__main__")
 

@@ -1,11 +1,13 @@
 """Fake process/custody controls, real retired-scope matching; no host operations."""
 from copy import deepcopy
+from dataclasses import replace
 import json
 from types import SimpleNamespace
 
 import pytest
 
 from appsec_review.container_runtime import engine_broker as engine
+from appsec_review.container_runtime import image_builder_service as services
 from appsec_review.runtime.resources import ResourceAdmission
 from appsec_review.storage import atomic_json
 from tests.test_bounded_image_build_service import forbid_real_execution  # noqa: F401
@@ -167,3 +169,74 @@ def test_lifetime_reconciliation_never_enables_absence_before_release(native, mo
     with pytest.raises(engine.EnforcementUnavailable, match="confirmed stopped"):
         native.lifetime.reconcile()
     assert enabled == []
+
+
+def test_new_runtime_reconciles_unchanged_retired_contract_not_current_contract(native, monkeypatch):
+    current = replace(native.config, native_engine=replace(
+        native.config.native_engine, runtime_root="/new-operator/lib", runtime_release_id="new-operator"))
+    seen = []
+    monkeypatch.setattr(services, "BuilderAdmission", lambda config: SimpleNamespace(
+        reconcile_retired=lambda: seen.append(config) or ["reclaimed"]))
+    assert services.reconcile_retired_runtime(current, native.config) == ["reclaimed"]
+    assert seen == [native.config]
+    assert native.config.native_engine.runtime_root == "/operator/lib"
+
+
+@pytest.mark.parametrize("field", [
+    "engine_id", "engine_generation", "endpoint", "runtime_python", "gate_binary",
+    "application_cpu", "resource-budget",
+])
+def test_new_operator_cannot_rebind_other_prior_policy(native, monkeypatch, field):
+    if field == "resource-budget":
+        current = replace(native.config, resources=replace(native.config.resources, cpu=7))
+    else:
+        if field == "application_cpu":
+            value = 1
+        elif field in {"endpoint", "runtime_python", "gate_binary"}:
+            value = "/foreign"
+        else:
+            value = "foreign"
+        current = replace(native.config, native_engine=replace(
+            native.config.native_engine, **{field: value}))
+    monkeypatch.setattr(services, "BuilderAdmission", lambda config: pytest.fail("rebound policy used"))
+    with pytest.raises(engine.EnforcementUnavailable, match="cannot change"):
+        services.reconcile_retired_runtime(current, native.config)
+
+
+def test_cross_release_reconciliation_requires_actual_prior_release(native):
+    with pytest.raises(BlockingIOError):
+        native.lifetime.reconcile_retired()
+    native.service.close()
+    with pytest.raises(engine.EnforcementUnavailable, match="retired lifetime"):
+        native.lifetime.reconcile_retired()
+    native.lifetime.release()
+    assert native.lifetime.reconcile_retired() == []
+
+
+def test_retired_operator_cli_verifies_current_runtime_before_prior_reconciliation(
+        native, monkeypatch, capsys):
+    import sys
+    current = replace(native.config, native_engine=replace(
+        native.config.native_engine, runtime_root="/new-operator/lib", runtime_release_id="new-operator"))
+    seen = []
+    monkeypatch.setattr(sys, "argv", [
+        "operator", "--config", "/current.toml", "--reconcile-retired-admission", "/prior.toml"])
+    monkeypatch.setattr(services.os, "umask", lambda value: 0)
+    monkeypatch.setattr(services, "private_path", lambda *args, **kwargs: None)
+    monkeypatch.setattr(services, "load_image_builder_service",
+                        lambda path: current if str(path) == "/current.toml" else native.config)
+    monkeypatch.setattr(engine, "verify_runtime", lambda config: seen.append(("verified", config)))
+    monkeypatch.setattr(services, "reconcile_retired_runtime",
+                        lambda config, prior: seen.append(("reconcile", config, prior)) or ["reclaimed"])
+    services.main()
+    assert seen == [("verified", current), ("reconcile", current, native.config)]
+    assert json.loads(capsys.readouterr().out) == ["reclaimed"]
+
+
+@pytest.mark.parametrize("current_missing", [True, False])
+def test_retired_runtime_operation_cannot_skip_native_runtime_identity(native, current_missing):
+    missing = replace(native.config, native_engine=None)
+    with pytest.raises(engine.EnforcementUnavailable, match="native runtime identities"):
+        services.reconcile_retired_runtime(
+            missing if current_missing else native.config,
+            native.config if current_missing else missing)

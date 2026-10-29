@@ -670,6 +670,13 @@ class BuilderAdmission:
                 return removed
             return _as_client(self.config, reconcile)
 
+    def reconcile_retired(self) -> list[str]:
+        """A new operator release may reconcile prior bindings, never restart or rebind them."""
+        with operator_lock(self.root, "service.lock"):
+            if self._anchor().get("state") != "RELEASED":
+                raise EnforcementUnavailable("cross-release recovery requires a retired lifetime")
+            return self.reconcile()
+
     def verify_native_execution(self, binding: dict, peer: dict, *, name=None, cpu=1, memory_mb=1,
                                 allow_quarantine=False) -> None:
         """Only a real removed-only lease with an independently stored native run scope authorizes work."""

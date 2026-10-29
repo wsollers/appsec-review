@@ -114,3 +114,27 @@ def test_installed_root_lifecycle_preserves_isolated_launch_boundary(installed_r
 def test_installed_root_lifecycle_is_not_an_arbitrary_command_entrypoint(installed_release):
     with pytest.raises(ValueError, match="unsupported"):
         entrypoint.launch_spec(*installed_release, operation="docker run --privileged")
+
+
+def test_retired_recovery_separates_current_and_prior_private_configurations(installed_release):
+    python, bootstrap, config = installed_release
+    prior = config.with_name("prior.toml")
+    prior.write_text("# unchanged retired operator fixture")
+    prior.chmod(0o600)
+    spec = entrypoint.launch_spec(
+        python, bootstrap, config, operation="reconcile-retired-admission", prior_configuration=prior)
+    assert spec["argv"][-4:] == (
+        "--operation", "reconcile-retired-admission", "--prior-config", str(prior))
+    prior.chmod(0o644)
+    with pytest.raises(PermissionError, match="prior.*private"):
+        entrypoint.launch_spec(
+            python, bootstrap, config, operation="reconcile-retired-admission", prior_configuration=prior)
+
+
+@pytest.mark.parametrize("operation", ["serve", "reconcile-admission", "reconcile-retired-admission"])
+def test_prior_configuration_cannot_be_ignored_or_implicitly_assumed(installed_release, operation):
+    python, bootstrap, config = installed_release
+    with pytest.raises(ValueError, match="separate prior"):
+        entrypoint.launch_spec(
+            python, bootstrap, config, operation=operation,
+            prior_configuration=None if operation == "reconcile-retired-admission" else config)

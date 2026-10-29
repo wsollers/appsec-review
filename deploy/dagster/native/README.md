@@ -239,6 +239,15 @@ a dead client generation, and exact run/configuration/engine/budget binding. A s
 a missing journal alone, or a foreign scope cannot release capacity. Existing intents still require
 their ordinary independently confirmed removal records; no removal receipt is fabricated.
 
+If the recovery fix is in a newer installed release, use its isolated root entrypoint with
+`--config <current-runtime.toml> --operation reconcile-retired-admission
+--prior-config <retired-lifetime.toml>`. The current configuration declares the new installed
+`runtime_root` and `runtime_release_id`; every other host, policy, budget and admission field
+must equal the unchanged prior configuration. The new operator's runtime is verified normally,
+then reconciliation uses the prior configuration and its original frozen contract. The prior
+lifetime must already be `RELEASED`, its service lock must be free, and the full independent
+retirement/removal proof still applies. This operation cannot serve, restart, or rebind a lifetime.
+
 Rootless-worker inspection accepts Docker's equivalent `SETUID`/`SETGID` and
 `CAP_SETUID`/`CAP_SETGID` spellings only as the same exact pair. The kernel capability bounding
 set, zero effective capabilities and all remaining isolation checks are unchanged.
