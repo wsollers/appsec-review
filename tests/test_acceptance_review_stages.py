@@ -218,3 +218,34 @@ def test_direct_negative_copies_are_independent_and_each_validation_is_fresh(pre
         assert current_validation(private.run_root) is None
     assert scopes[0] is not scopes[1]
     assert original.read_bytes() == initial
+
+
+@pytest.mark.parametrize("failure", [
+    "missing-plugin", "missing-preflight", "unfinished-preflight", "foreign-workspace", "foreign-invocation",
+])
+def test_exhaustive_preflight_reuse_refuses_absent_or_foreign_guard(tmp_path, monkeypatch, failure):
+    from types import SimpleNamespace
+
+    from tests.integration import test_current_report_integrity_cases as vectors
+
+    workspace = tmp_path.resolve()
+    context = StageContext(
+        StageKind.CONSUMER, "ci-positive", "current-report-integrity", "acceptance-staged", "1" * 40,
+        {"tests/fixture.py": "2" * 64}, workspace, workspace / "consumer",
+        workspace / "producer", workspace / "sealed.json", "3" * 64)
+    owner = SimpleNamespace(root=workspace, invocation_id=context.invocation_id)
+    preflight = {"span_id": "completed", "duration_seconds": 1.0}
+    if failure == "foreign-workspace":
+        owner.root = workspace / "other"
+    elif failure == "foreign-invocation":
+        owner.invocation_id = "another-invocation"
+    elif failure == "missing-preflight":
+        preflight = None
+    elif failure == "unfinished-preflight":
+        preflight = {}
+    plugin = None if failure == "missing-plugin" else SimpleNamespace(_workspace=owner, _preflight=preflight)
+    manager = SimpleNamespace(get_plugin=lambda name: plugin if name == "tests.acceptance_plugin" else None)
+    request = SimpleNamespace(config=SimpleNamespace(pluginmanager=manager))
+    monkeypatch.setattr(vectors, "context_for", lambda *_args: context)
+    with pytest.raises(ValueError, match="completed guarded consumer preflight"):
+        vectors._reuse_guarded_consumer(request)
