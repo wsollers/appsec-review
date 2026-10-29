@@ -210,8 +210,9 @@ path is then linked atomically and without replacement. Custody registration is 
 only after the shard is durable, hashed, linked and registered; publication is never deferred to a
 background task. Identical inputs produce byte-identical shards, so matching existing bytes are
 reused and a mismatching named path is a conflict. The builder records its digest in the
-validation digest cache, which recognizes hard-link aliases of one file, so a published shard is
-hashed about once rather than once per path.
+validation digest cache, which recognizes hard-link aliases of one file (same device, inode, size
+and modification time) within one validation context, so a published shard is hashed about once
+rather than once per path. Trust in the cached digest never crosses attempts.
 
 Job execution binds the current attempt explicitly at its validator/handler/finalizer boundary.
 The participating parallel producer pools propagate this context; no filesystem-wide write

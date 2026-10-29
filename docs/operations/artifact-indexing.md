@@ -84,7 +84,7 @@ than 1 MB of target source.
 Known limitation: an artifact that no invocation or producer-supplied relationship uniquely
 attributes still receives a 0.25-confidence `GENERATED_FROM` edge to every command of its unit.
 That is O(outputs × commands) rows for weakly attributed units; batching bounds the rows per
-shard, not the total. A follow-up issue tracks this.
+shard, not the total. Reducing these edges is a pending follow-up.
 
 ### Deferred: parallel build units
 
