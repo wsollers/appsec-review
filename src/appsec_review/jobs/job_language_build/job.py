@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from appsec_review.interchange import decode_handoff
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
@@ -46,8 +46,9 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 from appsec_review.swift_policy import reject_swift_derived, swift_enabled_from_run
 
-from . import capture as captured_build, dotnet, elf, go, gradle_provenance, jvm, native, native_components, node, php, python, rust
+from . import capture as captured_build, dotnet, elf, go, gradle_provenance, jvm, native, native_components, native_outputs, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
+from .native_layout import write_cmake_file_api_query
 from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
@@ -286,11 +287,13 @@ def _kind(path: Path, family: str = "native", *, relative: str = "",
 def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
              build_unit_id: str, family: str = "native",
              exclusions: BookkeepingExclusions | None = None, *,
-             dispositions: BuildOutputDispositions | None = None) -> tuple[list[dict[str, Any]], list[str]]:
+             dispositions: BuildOutputDispositions | None = None,
+             tagged_outputs: Collection[str] | None = None) -> tuple[list[dict[str, Any]], list[str]]:
     """Catalog changed build outputs from the disposition walk.
 
     Build bookkeeping is counted in ``exclusions``, configured ``[build_outputs]`` exclusions and
-    classified trees in ``dispositions``; neither is listed per file.
+    classified trees in ``dispositions``; neither is listed per file. ``tagged_outputs`` names
+    dependency-sourced outputs in mixed directories when native classification ran.
     """
     if family == "node":
         return node.catalog(run_root, workspace, before, limit, build_unit_id, dispositions=dispositions)
@@ -335,6 +338,8 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
             gaps.append("artifact catalog truncated at configured count bound")
             break
     gaps.extend(dispositions.named_gaps())
+    if tagged_outputs is not None:
+        native_outputs.tag_and_promote(artifacts, tagged_outputs)
     gaps.extend(apply_scope(artifacts))
     return artifacts, gaps
 
@@ -448,6 +453,27 @@ def _mapped_files(workspace: Path, directory: str, values: list[Any]) -> list[di
             row.update(mapping="declared-path-unresolved", mapping_confidence=0.5)
         mapped.append(row)
     return mapped
+
+
+def _apply_native_link_metadata(rows: Sequence[dict[str, Any]], workspace: Path, source_dir: str,
+                                build_dir: str) -> list[str]:
+    """Replace captured rows' inputs and outputs with exactly matching build-system metadata."""
+    _compile_metadata, compile_gaps = _compile_rows(workspace, source_dir, build_dir)
+    link_metadata, link_gaps = _link_rows(workspace, build_dir)
+    link_metadata_by_argv = {
+        (Path(str(row["argv"][0])).name, tuple(str(value) for value in row["argv"][1:])): row
+        for row in link_metadata
+    }
+    for row in rows:
+        argv = row.get("argv", ())
+        if not argv:
+            continue
+        metadata = link_metadata_by_argv.get((Path(str(argv[0])).name, tuple(str(value) for value in argv[1:])))
+        if metadata is not None:
+            row["inputs"] = list(metadata["inputs"])
+            row["outputs"] = list(metadata["outputs"])
+            row["metadata_origin"] = metadata["origin"]
+    return [*compile_gaps, *link_gaps]
 
 
 def _link_rows(workspace: Path, build_dir: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -955,6 +981,11 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     "gaps": [*python_metadata_gaps, *recipe_gaps], "terminal_status": "BLOCKED",
                     "checkpoint_reused": False, "executor_identity": EXECUTOR_IDENTITY,
                     "capture_identity": python.CAPTURE_IDENTITY}
+    file_api_query: str | None = None
+    if (family == "native" and dispatch.get("build_system") == "cmake"
+            and _build_output_policy(unit).discovery.cmake_file_api):
+        # A stateless client query CMake answers on configure; it is a job-prepared input.
+        file_api_query = write_cmake_file_api_query(workspace, str(recipe["build_dir"]))
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     profile = BuildProfile(family, str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
@@ -1117,6 +1148,23 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         raise FrameworkIntegrityError("target changed during generic language-build execution")
     bookkeeping = BookkeepingExclusions()
     dispositions = BuildOutputDispositions(_build_output_policy(unit), family=family, bookkeeping=bookkeeping)
+    classify_started = time.monotonic()
+    descriptor = CAPTURE_DESCRIPTORS.get(family)
+    reconciled = None
+    native_metadata_gaps: list[str] = []
+    native_classification: native_outputs.NativeClassification | None = None
+    if family == "native" and descriptor is not None:
+        # FOLLOW-UP(7dcc7b20): run this inside operation_phase("build.output_classify") and add the
+        # name to _PHASES once the span telemetry change lands on main.
+        reconciled = reconcile_captured_build(captures, workspace, str(recipe["source_dir"]), descriptor)
+        native_metadata_gaps = _apply_native_link_metadata(
+            reconciled.rows, workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
+        native_classification = native_outputs.register(
+            dispositions, workspace, build_dir=str(recipe["build_dir"]), source_dir=str(recipe["source_dir"]),
+            build_system=dispatch.get("build_system"), preexisting_files=before,
+            captures=(list(capture.events()) for _ordinal, capture in captures), rows=reconciled.rows,
+            capture_complete=not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not reconciled.gaps,
+            file_api_query=file_api_query)
     if family == "php":
         artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
             int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
@@ -1131,8 +1179,16 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     else:
         artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
                                            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family,
-                                           bookkeeping, dispositions=dispositions)
+                                           bookkeeping, dispositions=dispositions,
+                                           tagged_outputs=(native_classification.tagged_outputs
+                                                           if native_classification is not None else None))
     gaps.extend([*python_metadata_gaps, *php_metadata_gaps, *catalog_gaps])
+    if native_classification is not None:
+        gaps.extend([*native_outputs.gaps(dispositions), *native_classification.gaps])
+    output_counts = {**dispositions.summary(),
+                     "target_rows": sum(1 for item in artifacts if item.get("analysis_lane") == "target")}
+    unit.job.events.write("BUILD_OUTPUT_CLASSIFIED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
+                          **output_counts, duration_ms=int((time.monotonic() - classify_started) * 1000))
     # The unit's own build compiled its native_components under this same capture.
     native_database, native_gaps = native_components.publish(
         root, unit.job.run_root, dispatch=dispatch, workspace=workspace, captures=captures)
@@ -1164,10 +1220,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             rows, archive_gaps = python.package_contents(unit.job.run_root / artifact["path"], workspace)
             package_members.extend(rows)
             gaps.extend(archive_gaps)
-    descriptor = CAPTURE_DESCRIPTORS.get(family)
     if descriptor is not None:
-        reconciled = reconcile_captured_build(
-            captures, workspace, str(recipe["source_dir"]), descriptor)
+        if reconciled is None:
+            reconciled = reconcile_captured_build(
+                captures, workspace, str(recipe["source_dir"]), descriptor)
         compile_rows = list(reconciled.rows)
         capture_facts = dict(reconciled.facts)
         provenance_gaps = list(reconciled.gaps)
@@ -1186,26 +1242,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             provenance_gaps.append(gap)
 
         if family == "native":
-            # Build-system metadata is exact-match enrichment, never execution authority.
-            _compile_metadata, compile_gaps = _compile_rows(
-                workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
-            _link_metadata, link_gaps = _link_rows(workspace, str(recipe["build_dir"]))
-            gaps.extend([*compile_gaps, *link_gaps])
-            link_metadata_by_argv = {
-                (Path(str(row["argv"][0])).name,
-                 tuple(str(value) for value in row["argv"][1:])): row
-                for row in _link_metadata
-            }
-            for row in compile_rows:
-                argv = row.get("argv", ())
-                if not argv:
-                    continue
-                metadata = link_metadata_by_argv.get(
-                    (Path(str(argv[0])).name, tuple(str(value) for value in argv[1:])))
-                if metadata is not None:
-                    row["inputs"] = list(metadata["inputs"])
-                    row["outputs"] = list(metadata["outputs"])
-                    row["metadata_origin"] = metadata["origin"]
+            # Build-system metadata is exact-match enrichment, never execution authority; it was
+            # applied to these rows before output classification.
+            gaps.extend(native_metadata_gaps)
             normalized_links = _normalized_links(
                 captured_link_rows(compile_rows, descriptor), str(recipe["build_dir"]))
         elif family == "rust":
@@ -1317,6 +1356,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "checkpoint_reused": False, "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(), "duration_ms": int((time.monotonic()-started)*1000),
         "executor_identity": EXECUTOR_IDENTITY, "capture_identity": CAPTURE_IDENTITIES[family]}
+    if file_api_query is not None:
+        receipt["prepared_inputs"] = [{"path": file_api_query, "sha256": before.get(file_api_query),
+                                       "purpose": "cmake-file-api-query"}]
     if family == "go":
         receipt["module_metadata"] = go.module_metadata(workspace, str(recipe["source_dir"]))
         receipt["package_relationships"] = package_relationships
@@ -1357,7 +1399,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     unit.job.events.write("LANGUAGE_BUILD_COMPLETED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
                           disposition=status, result_count=len(artifacts), gap_count=len(receipt["gaps"]),
                           command_count=len(commands), link_relationship_count=len(normalized_links),
-                          checkpoint_reused=False, duration_ms=receipt["duration_ms"])
+                          checkpoint_reused=False, **output_counts, duration_ms=receipt["duration_ms"])
     return receipt
 
 

@@ -211,6 +211,10 @@ class BuildOutputDispositions:
     def add_layout_source(self, kind: str, path: str, sha256: str) -> None:
         self._layout_sources.append({"kind": str(kind), "path": str(path), "sha256": str(sha256)})
 
+    def configured_directory(self, root: str | PurePosixPath) -> bool:
+        """Whether a configured ``[build_outputs]`` exclusion already names this directory."""
+        return self._rule(_normalize(root), directory=True) is not None
+
     def record_bookkeeping(self, reason: BookkeepingReason, relative: str) -> None:
         self.bookkeeping.record(reason, relative)
 
