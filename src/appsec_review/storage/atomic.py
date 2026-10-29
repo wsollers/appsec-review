@@ -9,10 +9,19 @@ import tempfile
 from typing import Any
 
 
+def timed_fsync(descriptor: int) -> None:
+    """fsync counted and timed into the innermost operation span (no-op accounting without one)."""
+    from appsec_review.observability.spans import count_work, operation_phase
+    with operation_phase("storage.fsync"):
+        os.fsync(descriptor)
+    count_work("fsync_calls")
+
+
 def copy_file(source: str | Path, destination: str | Path) -> str | Path:
     """Preserve copy2 semantics and count completed logical file copies, not physical I/O."""
-    copied = shutil.copy2(source, destination)
-    from appsec_review.observability.spans import count_work
+    from appsec_review.observability.spans import count_work, operation_phase
+    with operation_phase("storage.copy"):
+        copied = shutil.copy2(source, destination)
     count_work("copy_bytes", Path(copied).stat().st_size)
     count_work("copy_objects")
     return copied
@@ -32,7 +41,7 @@ def atomic_bytes(path: Path, payload: bytes) -> None:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
             stream.flush()
-            os.fsync(stream.fileno())
+            timed_fsync(stream.fileno())
         os.replace(temporary, path)
     except BaseException:
         try:
@@ -59,7 +68,7 @@ def protected_json(path: Path, value: Any) -> None:
     with path.open("xb") as stream:
         stream.write(canonical_json(value))
         stream.flush()
-        os.fsync(stream.fileno())
+        timed_fsync(stream.fileno())
     try:
         path.chmod(0o600)
     except OSError:

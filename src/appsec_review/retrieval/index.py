@@ -134,23 +134,31 @@ class IndexBuilder:
         return [unique[key] for key in sorted(unique)], len(self.relations) - len(unique)
 
     def build(self) -> str:
+        from appsec_review.observability.spans import count_work, operation_phase
         from appsec_review.storage.shared import current, put_private_file, safe_path, verify_reference
         owner = current()
         if owner is not None:
             safe_path(owner.run_root, self.path.relative_to(owner.run_root).as_posix())
-        entities = self._unique_entities()
-        relations, merged_relations = self._unique_relations()
+        with operation_phase("index.prepare"):
+            entities = self._unique_entities()
+            relations, merged_relations = self._unique_relations()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(prefix=".building-", dir=self.path.parent) as directory:
             temporary = Path(directory) / "shard.sqlite"
             self._write_database(temporary, entities, relations, merged_relations)
-            digest = file_sha256(temporary)
+            count_work("shards_built")
+            count_work("entities_written", len(entities))
+            count_work("relations_written", len(relations))
+            with operation_phase("index.digest"):
+                digest = file_sha256(temporary)
             source = temporary
             if owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices"):
-                source = verify_reference(owner.run_root, put_private_file(owner.run_root, temporary))
+                with operation_phase("index.publish"):
+                    source = verify_reference(owner.run_root, put_private_file(owner.run_root, temporary))
             try:
                 # A same-filesystem link publishes complete bytes without replacing another writer.
-                os.link(source, self.path)
+                with operation_phase("index.link"):
+                    os.link(source, self.path)
             except FileExistsError:
                 if (self.path.is_symlink() or not self.path.is_file()
                         or file_sha256(self.path) != digest):
@@ -159,13 +167,16 @@ class IndexBuilder:
                         f"{self.name}/{self.shard_id}"
                     ) from None
             if owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices"):
-                owner.named("index-shard", self.path, computed=True, computation={
-                    "fingerprint": self.fingerprint, "name": self.name, "shard_id": self.shard_id,
-                    "target_snapshot": self.target_snapshot, "schema": INDEX_SCHEMA})
+                with operation_phase("index.custody_bind"):
+                    owner.named("index-shard", self.path, computed=True, computation={
+                        "fingerprint": self.fingerprint, "name": self.name, "shard_id": self.shard_id,
+                        "target_snapshot": self.target_snapshot, "schema": INDEX_SCHEMA})
             return digest
 
     def _write_database(self, temporary: Path, entities: list[EntityRecord],
                         relations: list[RelationRecord], merged_relations: int) -> None:
+        from appsec_review.observability.spans import operation_phase
+        writing = operation_phase("index.sqlite_write").__enter__()
         database = sqlite3.connect(temporary)
         try:
             database.executescript("""
@@ -248,8 +259,11 @@ class IndexBuilder:
                 from appsec_review.retrieval.debug_symbol_index import build_lookup
                 build_lookup(database, entities)
             database.commit()
-            database.execute("VACUUM")
+            writing.__exit__(None, None, None)
+            with operation_phase("index.sqlite_vacuum"):
+                database.execute("VACUUM")
         finally:
+            writing.__exit__(None, None, None)
             database.close()
 
 

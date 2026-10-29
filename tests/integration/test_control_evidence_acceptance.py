@@ -218,7 +218,7 @@ def test_configured_control_evidence_preserves_document_intent_and_reports_missi
         assert not any(row["event_type"] == "MODEL_CALL_STARTED" for row in events)
         metrics = json.loads((run_root / "data" / "telemetry" / "summary.json").read_text(
             encoding="utf-8"))
-        assert metrics["schema"] == "appsec-review/run-metrics/5" and metrics["event_count"] > 0
+        assert metrics["schema"] == "appsec-review/run-metrics/6" and metrics["event_count"] > 0
         assert any(row["event_type"] == "OWASP_ASSESSMENT_RECORDED" for row in events)
         assert any(row["event_type"] == "RETRIEVAL_QUERY" for row in events)
         workspace.emit("ACCEPTANCE_NAMED_GAP", gap_id="G-C9",
