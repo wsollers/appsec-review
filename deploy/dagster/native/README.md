@@ -312,11 +312,11 @@ or reconfigure anything, and skip with the unmet precondition named unless:
 
 - `APPSEC_NATIVE_INTEGRATION=1` (integration) or `APPSEC_NATIVE_ACCEPTANCE=1` (acceptance) is set;
 - the published contract (`APPSEC_NATIVE_CLIENT_CONTRACT`, default
-  `/run/appsec-review-f370/client-v8/contracts/grant-0.json`) loads and its `native.sock` exists;
+  `/run/appsec-review-f370/client-v9/contracts/grant-0.json`) loads and its `native.sock` exists;
 - the process runs as the contract's uid/gid (1000) inside its host cgroup, i.e. the
   `appsecreview-services-appsecf370.slice`;
 - the worktree's client modules equal the installed release copies (`APPSEC_NATIVE_RELEASE`,
-  default `/opt/appsec-review/releases/460682bf-native18`);
+  default `/opt/appsec-review/releases/a78696b8-native19`);
 - for acceptance, `build-driver.sh`, `capture/` and `wrappers/` are staged in the granted run root.
 
 Root launches them as uid 1000 in the services slice (only while no Dagster run is nonterminal):

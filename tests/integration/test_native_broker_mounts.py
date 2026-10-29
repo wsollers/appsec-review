@@ -126,7 +126,8 @@ def test_symlinked_mount_subpath_is_rejected_by_broker(session, scratch, monkeyp
                 rejected = error
                 replies = [body for body in responses if body.get("execution_id") == payload["execution_id"]]
                 if replies:
-                    session.client.executions[name] = replies[-1]
+                    # Copy: client cleanup rewrites the stored record's state in place.
+                    session.client.executions[name] = dict(replies[-1])
             else:
                 session.client.executions[name] = created
         finally:

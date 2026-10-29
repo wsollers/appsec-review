@@ -24,9 +24,9 @@ from appsec_review.runtime.resources import Reservation, ResourceAdmission
 
 
 CONTRACT_ENV = "APPSEC_NATIVE_CLIENT_CONTRACT"
-DEFAULT_CONTRACT = "/run/appsec-review-f370/client-v8/contracts/grant-0.json"
+DEFAULT_CONTRACT = "/run/appsec-review-f370/client-v9/contracts/grant-0.json"
 RELEASE_ENV = "APPSEC_NATIVE_RELEASE"
-DEFAULT_RELEASE = "/opt/appsec-review/releases/460682bf-native18"
+DEFAULT_RELEASE = "/opt/appsec-review/releases/a78696b8-native19"
 INTEGRATION_ENV = "APPSEC_NATIVE_INTEGRATION"
 ACCEPTANCE_ENV = "APPSEC_NATIVE_ACCEPTANCE"
 # Modules whose wire behaviour must equal the installed release the broker runs.
