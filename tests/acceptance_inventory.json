@@ -6,8 +6,8 @@
       "deadline_seconds": 720,
       "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
-      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli", "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "control-source-evidence", "feed-tls", "review-candidate", "current-report-oracle"],
-      "deferral": "Representative connected hermetic gate. Full signal-integrity, helper-input, TLS, submission-barrier, MCP-integrity, consumer, replay/sensor, benign/blocked and OS-specific matrices have separate bounded profiles; genuine OWASP assessment and live tools/providers/native remain unverified."
+      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery", "graph-consumer", "helper-cli", "process-configuration", "worker-recovery", "submission-recovery", "mcp-accepted-run", "control-source-evidence", "feed-tls", "native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle"],
+      "deferral": "Representative connected hermetic gate. Full report-integrity/empty/corrupt/benign/blocked variants execute in review-exhaustive. Full signal-integrity, helper-input, TLS, submission-barrier, MCP-integrity, consumer, replay/sensor and OS-specific matrices have separate bounded profiles; genuine OWASP assessment and live tools/providers/native remain unverified."
     },
     "signals": {
       "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
@@ -44,8 +44,15 @@
     },
     "review": {
       "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
-      "prerequisites": ["python:pytest"], "obligations": ["review-candidate", "review-empty-corrupt", "current-report-oracle", "review-benign-blocked"],
-      "deferral": "Scripted external model boundary, real application jobs and unchanged domain schemas; no compiler or paid provider."
+      "prerequisites": ["python:pytest"],
+      "obligations": ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle"],
+      "deferral": "Scripted external model boundary and actual bounded jobs. Full current-report integrity, benign and blocked variants execute only in review-exhaustive; no compiler or paid provider."
+    },
+    "review-exhaustive": {
+      "tier": "hermetic", "deadline_seconds": 600, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["native-positive-prepare", "native-positive-review", "native-positive-poc", "review-candidate", "review-corrupt", "native-empty-prepare", "native-empty-review", "review-empty", "ci-positive-prepare", "ci-positive-review", "ci-positive-gate", "ci-positive-report", "current-report-oracle", "current-report-integrity", "ci-benign-prepare", "ci-benign-review", "ci-benign-gate", "ci-benign-report", "review-benign", "ci-blocked-prepare", "ci-blocked-review", "ci-blocked-gate", "ci-blocked-report", "review-blocked"],
+      "deferral": "Every original current-report/empty/corrupt/benign/blocked vector, plus same-length tampering, retains independent validation. No cap inflation or guarantee that this uncalibrated profile fits 600 seconds."
     },
     "consumers": {
       "tier": "hermetic", "deadline_seconds": 360, "case_deadline_seconds": 120,
@@ -254,7 +261,141 @@
       "prerequisites": [], "deferrals": []
     },
     {
+      "id": "native-positive-prepare", "gap_ids": ["G-C1", "G-H3"],
+      "stage": {"kind": "producer", "variant": "native-positive", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[native-positive]"],
+      "boundary": "Freeze tiny native configuration before accepted upstream fixtures and source-resolving graph",
+      "variants": ["native-positive"], "substitutions": ["Recorded bounded source/graph upstream fixtures"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-positive-review", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "native-positive", "depends_on": ["native-positive-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[native-positive]"],
+      "boundary": "Actual inference review JobRunner with upstream hash binding and eligible PoC basis",
+      "variants": ["native-positive"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-positive-poc", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "native-positive", "depends_on": ["native-positive-review"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_poc_stage[native-positive]"],
+      "boundary": "Actual PoC JobRunner planning before sealing; forbidden model/compiler callbacks and no-build refusal",
+      "variants": ["native-positive"], "substitutions": ["No compiler or provider dispatch"],
+      "prerequisites": [], "deferrals": ["The supervisor seals only after pytest exit and confirmed cleanup"]
+    },
+    {
+      "id": "native-empty-prepare", "gap_ids": ["G-C1", "G-H3"],
+      "stage": {"kind": "producer", "variant": "native-empty", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[native-empty]"],
+      "boundary": "Freeze independent native-empty fixture configuration and source-resolving graph",
+      "variants": ["native-empty"], "substitutions": ["Recorded bounded source/graph upstream fixtures"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "native-empty-review", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "native-empty", "depends_on": ["native-empty-prepare"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[native-empty]"],
+      "boundary": "Actual inference review without PoC basis; authentic empty candidates",
+      "variants": ["native-empty"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "ci-positive-prepare", "gap_ids": ["G-C2", "G-H3"],
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[ci-positive]"],
+      "boundary": "Freeze independent tiny CI configuration before authentic bounded CI upstream fixtures",
+      "variants": ["ci-positive"], "substitutions": ["Recorded CI upstream; no native graph"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-positive-review", "gap_ids": ["G-C2"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": ["ci-positive-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[ci-positive]"],
+      "boundary": "Actual CI inference review JobRunner and accepted upstream binding",
+      "variants": ["ci-positive"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-positive-gate", "gap_ids": ["G-C2"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": ["ci-positive-review"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_gate_stage[ci-positive]"],
+      "boundary": "Actual publication gate JobRunner with current review handoff binding",
+      "variants": ["ci-positive"], "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-positive-report", "gap_ids": ["G-C2"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-positive", "depends_on": ["ci-positive-gate"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_report_stage[ci-positive]"],
+      "boundary": "Actual final report JobRunner with current gate handoff binding",
+      "variants": ["ci-positive"], "substitutions": [], "prerequisites": [],
+      "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "ci-benign-prepare", "gap_ids": ["G-C4", "G-H3"],
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[ci-benign]"],
+      "boundary": "Freeze independent benign CI fixture configuration and bounded upstream",
+      "variants": ["ci-benign"], "substitutions": ["Recorded CI upstream; no native graph"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-benign-review", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": ["ci-benign-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[ci-benign]"],
+      "boundary": "Actual benign inference review JobRunner",
+      "variants": ["ci-benign"], "substitutions": ["Scripted external Infer only"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-benign-gate", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": ["ci-benign-review"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_gate_stage[ci-benign]"],
+      "boundary": "Actual benign publication gate JobRunner",
+      "variants": ["ci-benign"], "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-benign-report", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-benign", "depends_on": ["ci-benign-gate"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_report_stage[ci-benign]"],
+      "boundary": "Actual benign report JobRunner",
+      "variants": ["ci-benign"], "substitutions": [], "prerequisites": [],
+      "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
+      "id": "ci-blocked-prepare", "gap_ids": ["G-C4", "G-H3"],
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": [], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_prepare_stage[ci-blocked]"],
+      "boundary": "Freeze independent blocked CI fixture configuration and bounded upstream",
+      "variants": ["ci-blocked"], "substitutions": ["Recorded CI upstream; no native graph"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-blocked-review", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": ["ci-blocked-prepare"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_review_stage[ci-blocked]"],
+      "boundary": "Actual inference review JobRunner with failed worker roles, never clean success",
+      "variants": ["ci-blocked"], "substitutions": ["Scripted external Infer role failures"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-blocked-gate", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": ["ci-blocked-review"], "seals": false},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_gate_stage[ci-blocked]"],
+      "boundary": "Actual failed-worker publication gate JobRunner",
+      "variants": ["ci-blocked"], "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "ci-blocked-report", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "producer", "variant": "ci-blocked", "depends_on": ["ci-blocked-gate"], "seals": true},
+      "nodes": ["tests/integration/test_review_stage_acceptance.py::test_report_stage[ci-blocked]"],
+      "boundary": "Actual failed-worker report JobRunner",
+      "variants": ["ci-blocked"], "substitutions": [], "prerequisites": [],
+      "deferrals": ["Supervisor-owned sealing after confirmed cleanup"]
+    },
+    {
       "id": "review-candidate", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "native-positive", "depends_on": ["native-positive-poc"]},
       "nodes": ["tests/integration/test_authentic_poc_contract.py::test_real_review_and_poc_planning_use_authoritative_contracts"],
       "boundary": "Actual unmodified accepted review -> candidate verification/brief -> no-build planning, independent of publication gate",
       "variants": ["eligible", "resolved-entry-path", "evidence-identity", "strict-risk", "dispatch-refused-without-build"],
@@ -262,28 +403,52 @@
       "prerequisites": [], "deferrals": ["Actual current compiler compatibility is not exercised; existing detailed compile tests are preserved"]
     },
     {
-      "id": "review-empty-corrupt", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
-      "nodes": [
-        "tests/integration/test_authentic_poc_contract.py::test_authentic_empty_candidates_are_not_a_missing_field",
-        "tests/integration/test_authentic_poc_contract.py::test_corrupt_review_is_rejected_before_dispatch"
-      ],
-      "boundary": "Actual legitimate empty review candidate publication and accepted-byte corruption before dispatch",
-      "variants": ["empty-not-missing", "corrupt-before-dispatch"],
+      "id": "review-corrupt", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "native-positive", "depends_on": ["native-positive-poc"]},
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_corrupt_review_is_rejected_before_dispatch"],
+      "boundary": "Actual accepted-byte corruption in a fresh private copy is rejected before dispatch",
+      "variants": ["corrupt-before-dispatch"],
+      "substitutions": ["Scripted model only"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-empty", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "native-empty", "depends_on": ["native-empty-review"]},
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_authentic_empty_candidates_are_not_a_missing_field"],
+      "boundary": "Actual legitimate empty review candidate publication, not a missing candidate field",
+      "variants": ["empty-not-missing"],
       "substitutions": ["Scripted model only"], "prerequisites": [], "deferrals": []
     },
     {
       "id": "current-report-oracle", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 120,
-      "nodes": ["tests/integration/test_current_report_acceptance.py::test_current_report_bound_oracle_matrix"],
+      "stage": {"kind": "consumer", "variant": "ci-positive", "depends_on": ["ci-positive-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_current_report_quick_contract"],
       "boundary": "Actual accepted report -> current gate/review/manifest/evidence source resolution, never historical shard discovery",
-      "variants": ["identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper", "finding-tamper", "handoff-tamper"],
+      "variants": ["identity-state-bucket", "report-tamper"],
       "substitutions": ["Scripted model and recorded upstream observation; all publication application-owned"],
       "prerequisites": [], "deferrals": ["Scanner detection is distinct from current final-report survival"]
     },
     {
-      "id": "review-benign-blocked", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
-      "nodes": ["tests/integration/test_current_report_acceptance.py::test_benign_and_blocked_real_reports_never_promote_scanner_detection"],
-      "boundary": "Actual benign/failed-worker review -> gate -> accepted report without promoting scanner hits",
-      "variants": ["benign", "blocked", "unavailable-worker-is-not-clean-success"],
+      "id": "current-report-integrity", "gap_ids": ["G-C2", "G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "ci-positive", "depends_on": ["ci-positive-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_current_report_bound_oracle_matrix"],
+      "boundary": "Full original current report oracle matrix, with one new materialization and fresh production validation per mutation",
+      "variants": ["identity-state-bucket", "missing-current", "orphan-hit", "report-tamper", "manifest-tamper", "finding-tamper", "handoff-tamper", "same-length-report-tamper"],
+      "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-benign", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "ci-benign", "depends_on": ["ci-benign-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_benign_and_blocked_real_reports_never_promote_scanner_detection[benign]"],
+      "boundary": "Actual benign review -> gate -> accepted report without promoting scanner hits",
+      "variants": ["benign"],
+      "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "review-blocked", "gap_ids": ["G-C4"], "case_deadline_seconds": 120,
+      "stage": {"kind": "consumer", "variant": "ci-blocked", "depends_on": ["ci-blocked-report"]},
+      "nodes": ["tests/integration/test_current_report_acceptance.py::test_benign_and_blocked_real_reports_never_promote_scanner_detection[blocked]"],
+      "boundary": "Actual failed-worker review -> gate -> accepted report without promoting scanner hits",
+      "variants": ["blocked", "unavailable-worker-is-not-clean-success"],
       "substitutions": ["Scripted external model"], "prerequisites": [], "deferrals": []
     },
     {
@@ -372,7 +537,9 @@
       "nodes": [
         "tests/test_acceptance_inventory.py::test_inventory_matches_active_catalogs",
         "tests/test_acceptance_inventory.py::test_inventory_selections_and_dispositions",
-        "tests/test_acceptance_inventory.py::test_no_untracked_duplicate_test_definitions"
+        "tests/test_acceptance_inventory.py::test_no_untracked_duplicate_test_definitions",
+        "tests/test_acceptance_inventory.py::test_staged_review_inventory_has_explicit_complete_compatible_prerequisites",
+        "tests/test_acceptance_inventory.py::test_review_quick_representatives_and_exhaustive_variants_keep_strict_caps"
       ],
       "boundary": "Configured job table, MCP TOOLS, model catalogs/transports, and AST test-definition uniqueness",
       "variants": ["all-configured-jobs", "all-public-MCP-tools", "all-provider-families"],

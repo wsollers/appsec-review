@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import json
 import os
 
@@ -15,11 +16,11 @@ from appsec_review.jobs.job_poc_generation.inputs import verify_inputs
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage.validation import validation_scope
-from tests.final_report_support import GATE, REPORT, Chain, environment, job_tables, run_job, gate_job, report_job
-from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay
-from tests.fixtures.inference_review.builder import RUN_ID, build_accepted_index_set
+from tests.acceptance_review_stages import (
+    consumer_chain, fresh_chain, prepare_chain, run_gate, run_poc_planning, run_review,
+)
+from tests.fixtures.inference_review.acceptance import JOB
 from tests.fixtures.inference_review.fake_infer import ScriptedInfer
-from tests.poc_chain import poc_tables
 
 ROOT = Path(__file__).resolve().parents[2]
 ENTRY = "asr:entry_point:" + "a" * 64
@@ -136,47 +137,19 @@ class BasisInfer(ScriptedInfer):
 
 def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=False, ci_only=False,
                     publish_gate=True):
-    from appsec_review.config import load_config
-    from appsec_review.runtime import JobRunner
-
-    config = write_config(
-        lane.root, lane.runs_dir,
-        overrides={"budget_team_packages": 1, "hunt_max_units": 0, "max_rounds": 1,
-                   "red_per_team": 1, "blue_per_team": 1, "verifier_per_team": 1},
-        extra=job_tables("job_review_data_indexing") + job_tables("job_third_party_data_sync")
-              + job_tables(GATE) + job_tables(REPORT)
-              + poc_tables(max_candidates=2))
-    env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(lane.root, 1))}
-    with environment(env):
-        JobRunner(load_config(config))._bind_configuration(lane.runs_dir / RUN_ID)
-    omit = ("semgrep", "opengrep", "codeql", "osv", "priority", "history", "tags", "scanner_correlation",
-            "dependency_advisories", "gitleaks")
-    fixture = build_accepted_index_set(lane.root / "data", runs_dir=lane.runs_dir,
-                                       omit=omit + (("components", "build", "reference_intelligence")
-                                                    if ci_only else ("ci",)),
-                                       omit_feeds=("osv", "nvd", "kev", "epss") + (("mitre",) if ci_only else ()))
-    assert fixture.runs_dir == lane.runs_dir
-    if not ci_only:
-        attach_call_chain(fixture)
-    (fixture.run_root / "data" / "jobs" / JOB / "cells").mkdir(parents=True, exist_ok=True)
-    infer = BasisInfer({"ids": fixture.ids, "basis": basis, "benign": benign,
-                        "trace": str(lane.root / "scripted-turns.jsonl"),
-                        **({"fail_roles": ["red_team_analyst", "hypothesis_hunter"]} if blocked else {})})
-    from appsec_review.jobs.job_inference_security_review import build_job
-
-    chain = Chain(lane.root, fixture, config, env)
-    index_pointer = json.loads((fixture.run_root / "data" / "indices" / "accepted.json").read_text())
-    with lane.span("review"):
-        run_job(config, build_job(infer=infer, repository_root=ROOT), fixture.run_id,
-                {"job_review_data_indexing": index_pointer["handoff_sha256"]}, env)
+    options = dict(basis=basis, benign=benign, blocked=blocked, ci_only=ci_only)
+    chain = prepare_chain(lane, **options)
+    run_review(lane, chain, **options)
     if publish_gate:
-        with lane.span("gate"):
-            run_job(config, gate_job(), fixture.run_id, chain.upstream(JOB), env)
+        run_gate(lane, chain)
     return chain
 
 
 @pytest.fixture(scope="module")
 def authentic():
+    staged = consumer_chain("native-positive")
+    if staged is not None:
+        return staged
     lane = acceptance_lane("authentic-poc-contract")
     with lane.span("chain"):
         chain = authentic_chain(lane, publish_gate=False)
@@ -212,14 +185,12 @@ def test_current_review_producer_is_read_by_poc_consumer() -> None:
     assert candidate.state == "supported"
 
 
-def test_real_review_and_poc_planning_use_authoritative_contracts(authentic):
-    from appsec_review.jobs.job_poc_generation import build_job
+def assert_poc_candidates(lane, chain):
     from appsec_review.jobs.job_poc_generation.brief import build_brief
     from appsec_review.jobs.job_poc_generation.inputs import load_package, retrieval_core, sink_of
     from appsec_review.review.package_view import ViewLimits, build_view
     from tests import poc_support
 
-    lane, chain = authentic
     from appsec_review.jobs.bound_artifacts import read_bound_json
     with lane.span("verify-poc-contract"), validation_scope(chain.run_root):
         inputs = verified(chain)
@@ -242,26 +213,48 @@ def test_real_review_and_poc_planning_use_authoritative_contracts(authentic):
                 view=view, sink=sink_of(package), unit=None, headers=None, settings=poc_support.settings())
             assert not any(gap.startswith("poc_basis label") for gap in brief.gaps)
             assert set(candidate.poc_basis.entry + candidate.poc_basis.path) <= set(brief.document["poc_basis_labels"])
+    return inputs
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("no model or compiler may be dispatched by the planning lane")
 
-    job = build_job(infer=forbidden, executor_factory=forbidden, repository_root=ROOT)
-    with lane.span("poc-planning"):
-        outcome = run_job(chain.config, job, chain.fixture.run_id, chain.upstream(JOB), chain.env)
-    assert outcome["handoff"]["completion_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
-    summary = chain.read("job_poc_generation", "publish.publish_handoff", "poc-generation.json")
-    assert summary["counts"]["candidates"] == len(inputs.candidates)
-    assert all(row["status"] == "not_applicable" for row in summary["candidates"])
-    assert all("accepted language build" in row["reason"] for row in summary["candidates"])
-    assert summary["execution_policy"] == "nothing is linked into an executable and nothing is run"
-    lane.emit("ACCEPTANCE_CASE_FINISHED", case="eligible-no-build", candidates=len(inputs.candidates))
+def assert_poc_output(chain, candidates):
+    from appsec_review.indexing.store import accepted_handoff
+    from appsec_review.jobs.bound_artifacts import read_bound_json
+
+    with validation_scope(chain.run_root):
+        accepted = accepted_handoff(chain.run_root, "job_poc_generation")
+        assert accepted is not None
+        assert accepted.handoff["upstream_handoff_sha256"][JOB] == chain.pointer_sha(JOB)
+        summary = read_bound_json(
+            chain.run_root, accepted.handoff["outputs"]["publish.publish_handoff"]["artifact"])
+        SchemaSet(ROOT / "docs" / "schemas" / "poc-generation").validate("poc-generation", summary)
+        assert summary["counts"]["candidates"] == candidates
+        assert all(row["status"] == "not_applicable" for row in summary["candidates"])
+        assert all("accepted language build" in row["reason"] for row in summary["candidates"])
+        assert summary["execution_policy"] == "nothing is linked into an executable and nothing is run"
+
+
+def test_real_review_and_poc_planning_use_authoritative_contracts(authentic):
+    from appsec_review.acceptance.staging import stage_context
+
+    lane, chain = authentic
+    if stage_context() is None:
+        candidate_count = run_poc_planning(lane, chain)
+    else:
+        inputs = assert_poc_candidates(lane, chain)
+        candidate_count = len(inputs.candidates)
+        assert_poc_output(chain, candidate_count)
+    lane.emit("ACCEPTANCE_CASE_FINISHED", case="eligible-no-build", candidates=candidate_count)
 
 
 def test_authentic_empty_candidates_are_not_a_missing_field():
-    lane = acceptance_lane("authentic-poc-empty")
-    with lane.span("chain"):
-        chain = authentic_chain(lane, basis=False, publish_gate=False)
+    staged = consumer_chain("native-empty")
+    if staged is None:
+        lane = acceptance_lane("authentic-poc-empty")
+        with lane.span("chain"):
+            chain = authentic_chain(lane, basis=False, publish_gate=False)
+    else:
+        lane, chain = staged
+    with lane.span("verify-empty"):
         inputs = verified(chain)
         assert inputs.candidates == ()
     lane.emit("ACCEPTANCE_CASE_FINISHED", case="legitimate-empty")
@@ -269,14 +262,18 @@ def test_authentic_empty_candidates_are_not_a_missing_field():
 
 def test_corrupt_review_is_rejected_before_dispatch(authentic):
     lane, chain = authentic
+    chain = fresh_chain(chain, "corrupt-review")
     inputs = verified(chain)
     path = chain.run_root / inputs.review_handoff["path"]
     original = path.read_bytes()
-    try:
-        path.write_bytes(original + b" ")
-        with lane.span("corruption"):
-            with pytest.raises((IntegrityError, ValueError), match="changed|integrity|provenance"):
-                verified(chain)
-    finally:
-        path.write_bytes(original)
+    changed = original + b" "
+    path.write_bytes(changed)
+    with lane.span("corruption"):
+        with pytest.raises((IntegrityError, ValueError), match="changed|integrity|provenance"):
+            verified(chain)
+    lane.emit("ACCEPTANCE_MUTATION_VALIDATED", vector="review-handoff",
+              run_root=str(chain.run_root), path=path.relative_to(chain.run_root).as_posix(),
+              before_sha256=hashlib.sha256(original).hexdigest(),
+              after_sha256=hashlib.sha256(changed).hexdigest(),
+              validator="verify_inputs", outcome="rejected")
     lane.emit("ACCEPTANCE_CASE_FINISHED", case="corrupt-before-dispatch")
