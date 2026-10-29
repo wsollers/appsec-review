@@ -39,7 +39,9 @@ def provisional(tmp_path):
     config = replace(
         config, lifecycle_stage="provisioning", resource_mode="concurrency_only",
         lifetime_domain="engine", host_cgroup="/sys/fs/cgroup/engine-private/control",
-        docker_helper_scope=DockerHelperScope("/var/lib/builder-private", "/run/builder-private"),
+        docker_helper_scope=DockerHelperScope(
+            "/var/lib/builder-private", "/run/builder-private",
+            "/run/builder-private/containerd/containerd.sock"),
         engine_domain=EngineDomainConfig(
             str(metadata), "/sys/fs/cgroup/engine-private",
             ("/sys/fs/cgroup/engine-private/docker.service",),
@@ -168,3 +170,62 @@ def test_empty_owned_cgroups_do_not_hide_an_escaped_provisioning_helper(provisio
     monkeypatch.setattr(KernelProof, "owned_helper_groups",
                         lambda self: iter([("runc", Path("/sys/fs/cgroup/escaped"))]))
     assert not proof.stopped([])
+
+
+@pytest.mark.parametrize("arguments", [
+    ["dockerd"],
+    ["dockerd", "--containerd=/run/containerd/containerd.sock"],
+    ["dockerd", "--containerd=/run/other-private/containerd.sock"],
+])
+def test_private_docker_roots_never_imply_private_containerd(provisional, arguments):
+    with pytest.raises(EnforcementUnavailable, match="explicit private containerd"):
+        KernelProof(provisional.config)._private_containerd(arguments)
+
+
+@pytest.mark.parametrize("defect", [
+    None, "uid", "group", "executable", "namespace", "root", "state", "address", "generation",
+])
+def test_real_private_containerd_proof_requires_socket_peer_store_and_generation(
+        provisional, monkeypatch, defect):
+    from types import SimpleNamespace
+    from appsec_review.container_runtime import buildkit_worker as workers
+    import stat
+    import struct
+
+    endpoint = provisional.config.docker_helper_scope.containerd_endpoint
+    proof = KernelProof(provisional.config)
+    class Socket:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def settimeout(self, value):
+            pass
+        def connect(self, path):
+            assert path == endpoint
+        def getsockopt(self, *args):
+            return struct.pack("3i", 501, 1000 if defect == "uid" else 0, 0)
+    monkeypatch.setattr(workers.socket, "socket", lambda *args: Socket())
+    monkeypatch.setattr(workers, "private_path", lambda *args, **kwargs: None)
+    monkeypatch.setattr(Path, "lstat", lambda self: SimpleNamespace(st_mode=stat.S_IFSOCK))
+    tokens = iter(["boot:1", "boot:2" if defect == "generation" else "boot:1"])
+    monkeypatch.setattr(workers, "process_token", lambda pid: next(tokens))
+    monkeypatch.setattr(workers.os, "readlink",
+                        lambda path: "/usr/bin/" + ("foreign" if defect == "executable" else "containerd"))
+    monkeypatch.setattr(proof, "process_cgroup", lambda pid: Path(
+        "/sys/fs/cgroup/escaped" if defect == "group" else provisional.config.host_cgroup + "/containerd"))
+    def namespaces(pid):
+        if defect == "namespace":
+            raise EnforcementUnavailable("containerd namespace differs")
+    monkeypatch.setattr(proof, "_same_host", namespaces)
+    arguments = ["containerd", "--root=/var/lib/builder-private/containerd",
+                 "--state=/run/builder-private/containerd", "--address=" + endpoint]
+    if defect in {"root", "state", "address"}:
+        arguments = [f"--{defect}=/shared/infra" if value.startswith(f"--{defect}=") else value
+                     for value in arguments]
+    monkeypatch.setattr(proof, "_process", lambda pid: (1, arguments))
+    if defect:
+        with pytest.raises(EnforcementUnavailable):
+            proof._private_containerd(["dockerd", "--containerd=" + endpoint])
+    else:
+        proof._private_containerd(["dockerd", "--containerd=" + endpoint])

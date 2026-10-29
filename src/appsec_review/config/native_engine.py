@@ -70,10 +70,13 @@ class NativeCommand:
     arguments: tuple[NativeArgument, ...] = ()
     environment_keys: tuple[str, ...] = ()
     workdir_roots: tuple[str, ...] = ("/scratch",)
+    allow_process_tree_trace: bool = False
 
     def __post_init__(self):
         identifier(self.command_id)
         absolute(self.executable)
+        if type(self.allow_process_tree_trace) is not bool:
+            raise ValueError("process-tree tracing requires explicit operator command policy")
         if (not isinstance(self.prefix, tuple) or len(self.prefix) > 16
                 or any(not isinstance(value, str) or "\x00" in value or len(value.encode()) > 1024
                        for value in self.prefix)

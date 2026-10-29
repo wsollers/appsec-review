@@ -148,6 +148,7 @@ class EngineDomainConfig:
 class DockerHelperScope:
     data_root: str
     exec_root: str
+    containerd_endpoint: str | None = None
 
     def __post_init__(self):
         for value in (self.data_root, self.exec_root):
@@ -157,6 +158,10 @@ class DockerHelperScope:
         if (Path(self.data_root).is_relative_to(self.exec_root)
                 or Path(self.exec_root).is_relative_to(self.data_root)):
             raise ValueError("Docker data and execution roots must be separate")
+        if self.containerd_endpoint is not None:
+            absolute(self.containerd_endpoint)
+            if not Path(self.containerd_endpoint).is_relative_to(self.exec_root):
+                raise ValueError("dedicated containerd endpoint must remain under the private execution root")
 
 
 @dataclass(frozen=True)
@@ -246,6 +251,10 @@ class ImageBuilderServiceConfig:
             domain = self.engine_domain
             if domain.control_lifetime_id not in {None, self.admission.lease_id}:
                 raise ValueError("engine control lifetime must retain its original admission lease")
+            if domain.control_lifetime_id is not None and (
+                    self.docker_helper_scope is None
+                    or self.docker_helper_scope.containerd_endpoint is None):
+                raise ValueError("engine commissioning requires an explicit private containerd endpoint")
             if (self.docker_helper_scope is None or self.host_cpu >= domain.cpu
                     or self.host_overhead_mb >= domain.memory_mb
                     or self.host_cgroup == domain.cgroup

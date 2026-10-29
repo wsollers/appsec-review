@@ -28,6 +28,20 @@ permissions. The bounded privileged operation broker is wired into the explicit 
 validated with fake dependencies only; there is no generic Docker byte relay or socket-custody bypass. The native
 guards reject unowned launches and unsupported commands; no native failure falls back to Compose.
 
+Required build capture uses `strace` and needs the operator command's explicit
+`allow_process_tree_trace = true`. It defaults to false and cannot be requested by a
+client or added to the global syscall allowlist. Only that immutable command's execution
+gets `ptrace`; other commands retain default denial. Before releasing the static launch
+gate, kernel proof requires a separate PID namespace with the gate as its namespace init,
+the exact non-root UID/GID, zero capabilities, no-new-privileges and enforced seccomp.
+Host PID/network/mount namespace sharing, namespace creation/entry and cross-process VM
+syscalls remain blocked. Tracing is confined to processes visible within that execution's
+private PID namespace; it does not grant host tracing or `CAP_SYS_PTRACE`. The operator
+must provision the pinned capture image/helper and its normal runtime syscall allowlist,
+and commission actual capture plus host/foreign-process denial on the real backend.
+Changing this policy changes the sealed service contract; it cannot reconfigure a live
+lifetime in place. Offline policy tests do not establish that actual capture succeeded.
+
 The privileged broker must **not** use the non-root application's editable checkout or virtual
 environment. `root_entrypoint.py` is a prepared installation asset, not a command to run from
 this checkout as root. An operator must install it with the complete non-editable application
@@ -103,6 +117,15 @@ retain escaped/reparented helpers in custody; unrelated infrastructure is not mi
 for this engine. Omitting that scope preserves the older global helper check. The
 dedicated daemon must not share the existing socket, data-root, exec-root or image store.
 Source support is not a commissioned daemon.
+Docker 29 may automatically use the existing `/run/containerd/containerd.sock` even with
+separate Docker roots. A dedicated-engine scope therefore also requires an explicit
+`docker_helper_scope.containerd_endpoint` beneath its private exec-root and the actual
+daemon's matching `--containerd` argument. Kernel proof authenticates that Unix peer,
+its root UID, same-host namespaces, control cgroup and stable generation, and requires
+the helper's explicit `--root DATA_ROOT/containerd`, `--state EXEC_ROOT/containerd` and
+`--address ENDPOINT` arguments. Private Docker arguments or an empty container list alone
+do not establish a separate containerd image store. Existing infrastructure containerd
+must never be adopted, reconfigured or stopped for this arrangement.
 
 The opt-in `lifetime_domain = "engine"` additionally requires a typed `engine_domain`
 with a private root-controlled metadata directory, exact existing shared cgroup ceiling

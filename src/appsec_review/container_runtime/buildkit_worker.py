@@ -332,6 +332,37 @@ class KernelProof:
             if owned:
                 yield executable, group
 
+    def _private_containerd(self, arguments: list[str]) -> None:
+        scope = self.config.docker_helper_scope
+        endpoint = scope.containerd_endpoint
+        if endpoint is None or self._option(arguments, "--containerd") != endpoint:
+            raise EnforcementUnavailable("dedicated Docker requires its explicit private containerd endpoint")
+        path = Path(endpoint)
+        private_path(path, directory=False)
+        if not stat.S_ISSOCK(path.lstat().st_mode):
+            raise EnforcementUnavailable("dedicated containerd endpoint is not a socket")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(self.config.command_timeout_seconds)
+            channel.connect(endpoint)
+            pid, uid, _ = struct.unpack(
+                "3i", channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        generation = process_token(pid)
+        if (uid != 0 or generation is None
+                or not self.process_cgroup(pid).is_relative_to(self.config.host_cgroup)
+                or Path(os.readlink(f"/proc/{pid}/exe")).name != "containerd"):
+            raise EnforcementUnavailable("dedicated containerd helper custody is unproved")
+        self._same_host(pid)
+        _, helper_arguments = self._process(pid)
+        for flag, value in (("--root", str(Path(scope.data_root) / "containerd")),
+                            ("--state", str(Path(scope.exec_root) / "containerd")),
+                            ("--address", endpoint)):
+            if self._option(helper_arguments, flag) != value:
+                raise EnforcementUnavailable("containerd does not own its declared private store and state")
+            if flag != "--address":
+                private_path(Path(value))
+        if process_token(pid) != generation:
+            raise EnforcementUnavailable("dedicated containerd generation changed during custody proof")
+
     def host(self) -> dict:
         config = self.config
         if not any(" - cgroup2 " in line and line.split()[4] == "/sys/fs/cgroup"
@@ -366,6 +397,7 @@ class KernelProof:
                     or self._option(arguments, "--data-root") != scope.data_root
                     or self._option(arguments, "--exec-root") != scope.exec_root):
                 raise EnforcementUnavailable("Docker daemon does not own the declared private roots")
+            self._private_containerd(arguments)
         listening = set()
         for table in ("tcp", "tcp6"):
             for line in Path(f"/proc/{pid}/net/{table}").read_text().splitlines()[1:]:
