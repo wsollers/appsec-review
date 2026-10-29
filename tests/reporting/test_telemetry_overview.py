@@ -99,6 +99,16 @@ def test_model_usage_marks_missing_tokens_unavailable(tmp_path: Path) -> None:
     assert rows[hostile][:2] == ["1", "1"]                      # the failed call is counted
 
 
+def test_failure_counts_follow_producer_statuses(tmp_path: Path) -> None:
+    """Tools report a disposition and model calls may end ACCEPTED; neither is a failure."""
+    blocks = _blocks(build_telemetry_run(tmp_path))
+    models = _box(blocks, "Model usage").items[0]
+    assert {row[1].text: row[3].text for row in models.rows if row[0].text == MODEL}["blue"] == "0"
+    tools = {row[0].text: row[2].text for row in _box(blocks, "Tool calls").items[0].rows}
+    hostile = next(name for name in tools if name != "cppcheck")
+    assert tools == {"cppcheck": "0", hostile: "1"}                  # only the FAILED tool counts
+
+
 def test_hostile_strings_are_cleaned_and_bounded(tmp_path: Path) -> None:
     blocks = _blocks(build_telemetry_run(tmp_path))
     strings = list(_strings(blocks))

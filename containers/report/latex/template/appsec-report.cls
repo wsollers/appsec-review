@@ -122,6 +122,10 @@
 \newcommand{\badge}[2]{\tcbox[on line,nobeforeafter,size=fbox,arc=1.8pt,boxrule=0pt,boxsep=0pt,
   left=3.8pt,right=3.8pt,top=1.9pt,bottom=1.9pt,colback=verdict-#1,colupper=white,
   fontupper=\fontsize{6.8}{7.2}\selectfont\bfseries\addfontfeatures{LetterSpace=6}]{#2}}
+%% A badge in a table cell shrinks to the column width instead of overrunning the next column.
+\newsavebox{\appsec@cellbox}
+\newcommand{\cellbadge}[1]{\sbox{\appsec@cellbox}{#1}\ifdim\wd\appsec@cellbox>\linewidth
+  \resizebox{\linewidth}{!}{\usebox{\appsec@cellbox}}\else\usebox{\appsec@cellbox}\fi}
 
 %% -- Boxes: one per kind of content ---------------------------------------------------------------
 %% \begin{abox}{kind}{CHIP}{title}{meta}{badges} ... \end{abox}; the gap box is dashed.

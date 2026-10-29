@@ -64,7 +64,7 @@ def _tool(log: _Log, start: float, seconds: float, job: str, attempt: str, invoc
         tool_invocation_id=invocation, tool_id=tool)
     log(start + seconds, "TOOL_INVOCATION_COMPLETED", job=job, attempt=attempt, step="scan", task=invocation,
         tool_invocation_id=invocation, tool_id=tool, duration_ms=int(seconds * 1000),
-        terminal_status=status, result_count=3)
+        disposition=status, result_count=3)  # producers record a tool's outcome as its disposition
 
 
 def _job(log: _Log, start: float, end: float, job: str, attempt: str, terminal: str | None,
@@ -101,7 +101,8 @@ def build_telemetry_run(parent: Path, *, run_id: str = RUN_ID, outcome: str = "C
     review_end = 900 if outcome != "RUNNING" else None
     _job(log, 64, review_end or 0, review, "a1", None if outcome == "RUNNING" else "JOB_SUCCEEDED", 900)
     _model(log, 80, 12.5, review, "a1", "m-red-1", role="red")
-    _model(log, 95, 8.0, review, "a1", "m-blue-1", role="blue", tokens=(5400, 900, 4096))
+    _model(log, 95, 8.0, review, "a1", "m-blue-1", role="blue", tokens=(5400, 900, 4096),
+           status="ACCEPTED")
     _model(log, 110, 20.0, review, "a1", "m-verify-1", role="verifier", tokens=None)
     _model(log, 140, 3.0, review, "a1", "m-red-2", role="red", model=HOSTILE, tokens=(10, 0, 0),
            status="failed", error_class=HOSTILE)

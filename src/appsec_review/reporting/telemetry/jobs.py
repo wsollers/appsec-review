@@ -24,7 +24,7 @@ MAX_GAPS = 12
 LABEL_CHARS = 96
 ERROR_CHARS = 120
 STILL_RUNNING = "still running"
-_SUCCESS = {"SUCCEEDED", "SUCCESS", "COMPLETED", "REUSED", "BUILT"}
+_SUCCESS = {"SUCCEEDED", "SUCCESS", "COMPLETED", "REUSED", "BUILT", "ACCEPTED"}
 _TERMINAL_SUFFIXES = ("SUCCEEDED", "FAILED", "COMPLETED_WITH_GAPS", "COMPLETED", "CANCELED", "CANCELLED",
                       "TIMED_OUT", "REUSED", "SKIPPED")
 _ALIASES = {"CANCELED": "CANCELLED", "SUCCESS": "SUCCEEDED", "FAILURE": "FAILED"}
@@ -135,7 +135,7 @@ def _tools(events: list[Event]) -> list[dict[str, Any]]:
         state["tool"] = state["tool"] or details.get("tool_id")
         terminal = _terminal(kind, "TOOL_INVOCATION_")
         if terminal:
-            state["status"] = _status(details.get("terminal_status") or terminal)
+            state["status"] = _status(details.get("terminal_status") or details.get("disposition") or terminal)
             state["duration"] = _int(details.get("duration_ms"))
             state["results"] = _int(details.get("result_count"))
     return list(tools.values())
@@ -249,14 +249,14 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
     if steps:
         blocks.append(Box(kind=BoxKind.PROVENANCE, chip="TASKS", title="Steps and tasks",
                           meta=plural(len(steps), "step or task", "steps and tasks"),
-                          items=(_rows_table(("Task", "Step", "Status", "Duration"), (.4, .2, .2, .2), steps),)))
+                          items=(_rows_table(("Task", "Step", "Status", "Duration"), (.36, .18, .28, .18), steps),)))
     if calls:
         failed = sum(1 for call in calls if _status(call.get("terminal_status") or "UNKNOWN") not in _SUCCESS)
         blocks.append(Box(kind=BoxKind.RESPONSE, chip="MODEL", title="Model calls",
                           meta=f"{plural(len(calls), 'call')}, {count(failed)} not succeeded; n/a: not recorded",
                           items=(_rows_table(
                               ("Invocation", "Role", "Model", "Duration", "In", "Out", "Cache", "Status", "Error"),
-                              (.12, .10, .14, .09, .08, .08, .08, .13, .18), _model_rows(calls)),)))
+                              (.15, .09, .13, .09, .08, .08, .08, .13, .17), _model_rows(calls)),)))
     if tools:
         blocks.append(Box(kind=BoxKind.RESULT, chip="TOOLS", title="Tool invocations",
                           meta=plural(len(tools), "invocation"),

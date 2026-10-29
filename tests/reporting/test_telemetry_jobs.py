@@ -94,7 +94,7 @@ def _check_model_calls(blocks) -> None:
     review = _job(blocks, JOBS[2])
     calls = _table(review, "Model calls")
     assert [r[0].text for r in calls.rows] == ["m-red-1", "m-blue-1", "m-verify-1", "m-red-2"]
-    assert [c.text for c in _row(calls, "m-blue-1")[3:8]] == ["8.0 s", "5,400", "900", "4,096", "Succeeded"]
+    assert [c.text for c in _row(calls, "m-blue-1")[3:8]] == ["8.0 s", "5,400", "900", "4,096", "Accepted"]
     assert [c.text for c in _row(calls, "m-verify-1")[4:7]] == ["n/a"] * 3
     failed = _row(calls, "m-red-2")
     assert (failed[7].badge, failed[7].badge_label, failed[7].text) == ("contradicted", "FAILED", "FAILED")

@@ -145,6 +145,8 @@ def test_badge_label_overrides_the_tone_words_in_both_renderers() -> None:
         Table(("Task",), ((Cell("x", badge="contradicted", badge_label="FAILED"),),), (1.0,)))))
     body = _body(document)
     assert r"\badge{contradicted}{TIMED OUT}" in body and r"\badge{contradicted}{FAILED}" in body
+    assert r"\cellbadge{\badge{contradicted}{FAILED}}" in body           # table badges fit their column
+    assert r"\cellbadge{\badge{contradicted}{TIMED OUT}}" not in body
     assert "CONTRADICTED" not in body
     html = render_html(document)
     assert '<span class="badge" data-state="contradicted">TIMED OUT</span>' in html

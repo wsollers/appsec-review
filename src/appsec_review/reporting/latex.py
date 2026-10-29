@@ -68,7 +68,7 @@ def _table(item: Table) -> list[str]:
     for row in item.rows:
         cells = []
         for cell in row:
-            cells.append(badge(cell.badge, cell.badge_label) if cell.badge
+            cells.append(rf"\cellbadge{{{badge(cell.badge, cell.badge_label)}}}" if cell.badge
                          else (tex_mono(cell.text) if cell.mono else tex(cell.text)))
         lines.append(" & ".join(cells) + r" \\")
     lines.append(r"\end{tabular}\par")

@@ -27,7 +27,7 @@ LABEL_CHARS = 64
 CELL_CHARS = 96
 VALUE_CHARS = 220
 FAILED = {"FAILED", "TIMED_OUT"}
-_OK_TERMINALS = {"succeeded", "success", "completed"}
+_OK_TERMINALS = {"succeeded", "success", "completed", "accepted"}
 
 
 def _number(value: Any) -> float | None:
@@ -296,7 +296,7 @@ def _tools(inputs: TelemetryInputs) -> Box:
         details = event.get("details") if isinstance(event.get("details"), Mapping) else {}
         tool = clean(details.get("tool_id") or details.get("mcp_tool") or "unknown")
         entry = stats.setdefault(tool, {"failed": 0, "ms": 0, "timed": 0})
-        if clean(details.get("terminal_status")).lower() not in _OK_TERMINALS:
+        if clean(details.get("terminal_status") or details.get("disposition")).lower() not in _OK_TERMINALS:
             entry["failed"] += 1
         if _number(details.get("duration_ms")) is not None:
             entry["ms"] += int(details["duration_ms"])

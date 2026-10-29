@@ -41,7 +41,8 @@ hash is labelled *metrics summary sha256* (`unavailable` when the summary was re
   `job_family_wall_span_ms`, else from event-log spans); the critical-path candidate and its share
   of wall time; wall versus summed task time; queue delays; the slowest operations by p95.
 - **Run-wide usage** — model usage by model and role, tool calls by tool, project image builds and
-  finding-lifecycle transitions.
+  finding-lifecycle transitions. A call counts as failed unless its `terminal_status` (or, for a
+  tool, its `disposition`) is `SUCCEEDED`, `COMPLETED` or `ACCEPTED`.
 - **Data quality** — summary source (`summary.json`, `recomputed` or `unavailable`), lifecycle
   accounting, event-log presence, torn tail, named gaps, lifecycle gaps and genuinely running work.
 
