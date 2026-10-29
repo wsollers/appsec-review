@@ -57,7 +57,10 @@ the gaps listed under [Named gaps](#named-gaps).
   `~/.config/appsec-review/signing/private/operator.pem`, created by `appsec-review signing keygen`.
   The directory is `0700` and owned by the operator, and the key is `0600`. Keys are never
   overwritten or printed. They never enter the repository, an image, a build context, `runs/` or a
-  test fixture. Tests generate ephemeral keys under `test/tmp/` at run time.
+  test fixture. Tests generate ephemeral keys under `test/tmp/` at run time. On POSIX `keygen`
+  checks the directory's owner and mode; signing does not re-check them. On Windows the NTFS ACLs of
+  the key directory and the key are checked at `keygen` and again before every signing use (see
+  [Windows hosts](#windows-hosts)).
 - **Trust anchors** are public-key PEM files named `<key_id hex>.pem` (without `sha256:`) in
   `trusted_keys_dir`, default `/etc/appsec-review/signing/trusted-keys`. They must be root-owned and
   not writable by group or others. The native release checks this with `trusted_path`. Elsewhere on
@@ -76,7 +79,9 @@ flowchart LR
     subgraph host["Operator host: signing side"]
         keygen["appsec-review signing keygen"]
         key["Private key, 0600 in a 0700 dir<br/>~/.config/appsec-review/signing/private/operator.pem"]
-        signer["appsec-review signing<br/>sign-image / sign-modules"]
+        keyacl{{"Windows only, at keygen and before every signing use:<br/>NTFS ACLs of the key dir and key (private rule)"}}
+        signer["appsec-review signing<br/>sign-image / sign-modules / sign-release-lib"]
+        svcconf["Bounded builder service.toml<br/>--builder-service-config (optional, repeatable)"]
     end
     subgraph anchors["Root-owned, not group or other writable"]
         trusted["trusted_keys_dir<br/>/etc/appsec-review/signing/trusted-keys/KEYID.pem"]
@@ -85,21 +90,26 @@ flowchart LR
         images["Pinned local images<br/>Docker image ID sha256:..."]
         sigs["image_signatures_dir<br/>/var/lib/appsec-review/signing/images/IMAGEID.json"]
         tree["appsec_review package tree"]
-        manifest["python-modules envelope<br/>deploy/dagster/signing/python-modules.json (Dagster image)<br/>or RELEASE/signing/python-modules.json (native release)"]
+        manifest["python-modules envelope<br/>deploy/dagster/signing/python-modules.json (Dagster image)<br/>or RELEASE/signing/python-modules.json (native release),<br/>plus RELEASE/signing/python-release-lib.json over lib/"]
     end
     subgraph verifiers["Verifiers: OpenSSL self-test, then verify"]
+        anchoracl{{"TrustedKeys.load: name equals key ID, Ed25519 only,<br/>Windows only: NTFS ACLs of the dir and every anchor (anchor rule)"}}
         hostv["Host: lifecycle.py and<br/>signing verify-image / verify-modules"]
         imgv["Image launch: ContainerExecutor, BuildContainerExecutor,<br/>ProjectImageResolver, CodeQLImageResolver, cve-bin-tool build,<br/>BuildKitWorker, ImageBuilderService,<br/>Dagster code-location container_self_check"]
         modv["Module startup: bootstrap.py, sitecustomize shim,<br/>native root_entrypoint.py"]
     end
     keygen --> key
     keygen -- "public key, installed by root" --> trusted
-    key --> signer
-    images -- "image ID" --> signer
+    key --> keyacl
+    keyacl -- "passes, or POSIX" --> signer
+    keyacl -- "broad principal" --> keyrefused["SignatureVerificationError with the icacls fix<br/>OpenSSL never reads the key"]
+    images -- "image ID (--all-pinned: equals its pin)" --> signer
+    svcconf -- "worker, egress proxy and input image IDs (--all-pinned)" --> signer
     tree -- "file SHA-256 values" --> signer
     signer -- "container-image envelope" --> sigs
-    signer -- "python-modules envelope" --> manifest
-    trusted -. "read-only" .-> hostv & imgv & modv
+    signer -- "python-modules and python-release-lib envelopes" --> manifest
+    trusted -. "read-only" .-> anchoracl
+    anchoracl -. "trusted keys" .-> hostv & imgv & modv
     sigs -. "read-only" .-> hostv & imgv
     images --> hostv & imgv
     manifest -. "read-only" .-> hostv & modv
@@ -439,10 +449,12 @@ A native Windows operator host signs and verifies with the same envelopes as Lin
   never excuse an allow entry. A NULL DACL, a broad owner, an allow entry whose SID cannot be parsed,
   and a callback or object allow entry that names a broad principal are refused. Any API failure
   refuses too.
-  - The **private-key directory** (`keygen`) and the new **private key** must give no broad principal
-    any read or write right: `FILE_READ_DATA`, `FILE_WRITE_DATA`, `FILE_APPEND_DATA`, `FILE_READ_EA`,
+  - The **private-key directory** and the **private key** must give no broad principal any read or
+    write right: `FILE_READ_DATA`, `FILE_WRITE_DATA`, `FILE_APPEND_DATA`, `FILE_READ_EA`,
     `FILE_WRITE_EA`, `FILE_DELETE_CHILD`, `FILE_WRITE_ATTRIBUTES`, `DELETE`, `WRITE_DAC` or
-    `WRITE_OWNER` (mask `0xD015F`). `keygen` gives a directory it creates, and the key, a protected ACL
+    `WRITE_OWNER` (mask `0xD015F`). They are checked at `keygen` and again before every signing use
+    (`core.sign_statement`, so `sign-image`, `sign-modules` and `sign-release-lib`), before OpenSSL
+    reads the key. `keygen` gives a directory it creates, and the key, a protected ACL
     that grants full control only to the current user, SYSTEM (`S-1-5-18`) and Administrators
     (`S-1-5-32-544`), so a fresh key passes.
   - The **trust-anchor directory** and every **anchor** file (`TrustedKeys.load`, on every verifier
@@ -474,7 +486,8 @@ Run these from PowerShell in the Windows checkout, with Docker Desktop running:
    elevated shell before verifying, or every verification is refused:
    `icacls "$env:ProgramData\appsec-review\signing\trusted-keys" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"`.
    Restrict an existing private-key directory the same way with `"${env:USERNAME}:(OI)(CI)F"` in place
-   of the BUILTIN\Users grant.
+   of the BUILTIN\Users grant, and an existing key file without `(OI)(CI)`; every signing command
+   refuses a key whose directory or file is not private.
 2. **Overrides.** Set any non-default `APPSEC_SIGNING_OPENSSL`, `APPSEC_SIGNING_TRUSTED_KEYS_DIR`,
    `APPSEC_SIGNING_IMAGE_SIGNATURES_DIR`, `APPSEC_SIGNING_PRIVATE_KEY` or `APPSEC_SIGNING_PYTHON` in
    `deploy/dagster/.env`; the process environment wins over `.env`.
@@ -503,32 +516,43 @@ exit 3), and a Compose configuration without the verified ID (fails with the `:?
 These areas are not covered by signing. Do not read their absence from a failure report as
 evidence that they are verified.
 
-- **The native engine broker does not verify signatures yet.** The follow-up locations are as
-  follows (line numbers at commit `b0cb93407`); see [Planned work](#planned-work):
+- **The native engine broker does not verify signatures yet.** It launches the images declared under
+  `native_engine.images` of the bounded builder service configuration unverified. The follow-up
+  locations are as follows (line numbers at commit `b0cb93407`); see [Planned work](#planned-work):
   `container_runtime/engine_broker.py`: `DockerEngine.image` (~368), `_image_policies` (~806) and
   `_reference` (~824) (deferred).
 - **The native bounded-builder service resolves its image verifier from the application
   configuration.** `ImageBuilderService` and `BuildKitWorker` use `default_image_verifier`, so the
   operator service needs a readable `appsec-review.toml` (or `APPSEC_REVIEW_CONFIG`) with `[signing]`,
   trust anchors and envelopes for its pinned images, including in a native release. Without them
-  every build is refused with `ImageSignatureRefused`; the service keeps running.
-  `sign-image --all-pinned` does not read the operator service configuration, so its
-  `worker_image_id`, `proxy_image_id` and declared input images are signed by naming them
-  (`sign-image <image ID or tag>`).
-- **Windows key privacy relies on NTFS ACLs.** On a Windows host the private key and trust anchors
-  get no owner or mode checks (see [Windows hosts](#windows-hosts)); only reparse points are refused.
+  every build is refused with `ImageSignatureRefused`; the service keeps running. The service's
+  `worker_image_id`, `proxy_image_id` and declared input images are signed by
+  `sign-image --all-pinned --builder-service-config <service.toml>`. Images declared under
+  `native_engine.images` of that configuration are neither signed by `--all-pinned` nor verified
+  when the engine broker launches them (see the engine broker gap above); sign them by naming them
+  (`sign-image <image ID>`).
+- **Windows key custody relies on NTFS ACLs, with checks only at named points.** On a Windows host
+  there are no owner or mode checks; instead the ACL check (see [Windows hosts](#windows-hosts))
+  covers the private key directory and the private key at `keygen` and before every signing use,
+  and the trust-anchor directory and every anchor whenever anchors are loaded. Reparse points are
+  refused. The image-signature directory is not ACL-checked, mirroring POSIX, where it is not
+  mode-checked either: envelopes are self-authenticating. POSIX hosts check the private key
+  directory's owner and mode only at `keygen`; the key file is not re-checked at signing time.
 - **Third-party packages are not covered by an import hook.** In the Dagster image,
   `site-packages` dependencies and their native libraries are covered only by the signed image. In a
   native release, the `python-release-lib` manifest is verified once at startup; afterwards
   dependencies are imported by the standard finders from the read-only release, and empty
   directories are not part of the manifest.
 - **Derived images are unsigned.** They rely on verified inputs and recorded identities.
-- **The cve-bin-tool image is pinned only optionally.** Its step settings accept an `image_id` pin.
-  When it is set, the tag must resolve to exactly that ID (otherwise the launch is refused), the
-  step never builds the image, and `sign-image --all-pinned` signs it. The repository configuration
-  leaves it unset until the review host records the ID of the image it built. Unset, on the first
-  Docker-path run with `settings.image` absent, the image is built from its context and launched
-  unverified; later runs verify whatever the tag resolves to, so they fail until the operator runs
+- **The cve-bin-tool image is pinned only optionally, and the repository pin is unset.** Its step
+  settings accept an `image_id` pin. When it is set, the tag must resolve to exactly that ID
+  (otherwise the launch is refused), the step never builds the image, and `sign-image --all-pinned`
+  signs it. The pin value is owner-recorded: only the review-host session that builds the image sets
+  it. Pending owner action: build and smoke the image on the review host, read
+  `docker image inspect --format '{{.Id}}' <settings.image>`, set `image_id` in
+  `appsec-review.toml`, then run `sign-image --all-pinned`. Until then, on the first Docker-path run
+  with `settings.image` absent, the image is built from its context and launched unverified; later
+  runs verify whatever the tag resolves to, so they fail until the operator runs
   `sign-image <settings.image>`, and any signed image retagged as `settings.image` is accepted.
 - **Data read through `__file__` paths** instead of `importlib.resources` is covered only by the
   startup tree verification. The deployed trees are read-only or image-pinned.
@@ -541,24 +565,32 @@ evidence that they are verified.
 - **A direct `docker compose up`** skips host verification. Every service that runs the Dagster image
   requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default (`${APPSEC_REVIEW_DAGSTER_IMAGE:?...}`) and
   `pull_policy: never`, so Compose never falls back to a tag, a build or a pull. Compose still accepts
-  any value that the operator sets by hand or that `.env` records. The recorded ID is content
-  addressed and was verified at the last `start` or `reload`, but nothing re-verifies it against the
-  current trust anchors (for example after a key is revoked), and a hand-set ID is not verified at all.
+  any value that the operator sets by hand or that `.env` records. The code location's
+  `container_self_check` gate then verifies that its own container runs exactly that ID and that the
+  ID is signed by a current trust anchor each time `dagster code-server` starts, so a hand-set unsigned
+  ID or a revoked key keeps the code location unhealthy and the webserver and daemon waiting.
+  Residuals: the gate is a second check, not the authority, because a malicious image can omit its
+  own check (Docker socket access is root-equivalent), so host-side verification in `lifecycle.py`
+  remains authoritative; a webserver or daemon started with `--no-deps` does not wait for the code
+  location and skips the gate; and with `image_enforcement = "disabled"` the gate starts unchecked.
 
 ## Planned work
 
 Each gap has a status. "Done on this branch" items were closed on the `container-module-signing`
-branch; their residuals stay in [Named gaps](#named-gaps). "Deferred" items have no work scheduled
-on this branch.
+branch, and items marked `signing-gap-closure` on that follow-up branch, which also narrowed the
+residuals of earlier items. Residuals stay in [Named gaps](#named-gaps). "Deferred" items have no
+work scheduled on these branches.
 
 | Gap | Status | Remaining work |
 | --- | --- | --- |
-| Windows host support | Done on this branch | A native Windows host signs, verifies, builds and starts the signed Dagster stack (see [Windows hosts](#windows-hosts), validated on Windows 11 with Docker Desktop). Residual: key and anchor privacy relies on NTFS ACLs (see [Named gaps](#named-gaps)). |
+| Windows host support | Done on this branch | A native Windows host signs, verifies, builds and starts the signed Dagster stack (see [Windows hosts](#windows-hosts), validated on Windows 11 with Docker Desktop). Residual: key and anchor custody relies on the NTFS ACL check (see Windows ACL custody below and [Named gaps](#named-gaps)). |
+| Windows ACL custody | Done on this branch (`signing-gap-closure`) | The private key directory and the private key are ACL-checked at `keygen` and before every signing use (`core.sign_statement`), and the trust-anchor directory and every anchor whenever anchors load. Residual: the image-signature directory is not ACL-checked (mirroring POSIX), and POSIX hosts check the private key directory only at `keygen` (see [Named gaps](#named-gaps)). |
 | Native release third-party dependency manifest | Done on this branch | `sign-release-lib` / `verify-release-lib` and the root entrypoint verify the native release `lib/` closure outside `appsec_review` (see [Release library](#release-library)). Dagster container dependencies are covered by the image signature. |
-| Compose bypass and reload | Done on this branch | Every Dagster image service requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default and `pull_policy: never`, and `lifecycle.py reload` verifies the image and recreates every service that runs it (`host.IMAGE_SERVICES`, kept equal to the compose files by a unit test). Residual: a direct `docker compose up` with a hand-set or previously recorded ID is not re-verified (see [Named gaps](#named-gaps)). |
-| cve-bin-tool pin | Done on this branch | The cve-bin-tool step accepts an optional `image_id` pin; when set, the tag must resolve to it, the image is never built by the step, and `sign-image --all-pinned` covers it (it walks enabled jobs' step settings too). Residual: the repository configuration leaves the pin unset until the review host records it (see [Named gaps](#named-gaps)). |
-| BuildKit worker and image builder service verification | Done on this branch | `BuildKitWorker` verifies the pinned worker image before creating the worker by ID, the pinned egress proxy image whenever the isolated network is checked, and each declared input image before transport; `ImageBuilderService._start_spec` verifies the declared input images before accepting a solve. Same-run derived outputs are trusted through their verified bases, and an unloadable signing policy refuses each build without stopping the service. Residual: the service resolves its verifier from the application configuration, and `sign-image --all-pinned` does not read the operator service configuration (see [Named gaps](#named-gaps)). |
-| Engine broker | Deferred | Verify images in `engine_broker.py` (`DockerEngine.image`, `_image_policies`, `_reference`). This overlaps the native-broker-process branch and waits for it. |
+| Compose bypass and reload | Done on this branch | Every Dagster image service requires `APPSEC_REVIEW_DAGSTER_IMAGE` with no default and `pull_policy: never`, and `lifecycle.py reload` verifies the image and recreates every service that runs it (`host.IMAGE_SERVICES`, kept equal to the compose files by a unit test). A direct `docker compose up` is now covered by the code-location self-check gate (next row). Residual: see that row. |
+| Compose self-check gate | Done on this branch (`signing-gap-closure`) | The code location runs `signing.container_self_check` before `dagster code-server`: it requires its own container's `.Image` to equal `APPSEC_REVIEW_DAGSTER_IMAGE` and verifies that ID against the current trust anchors, otherwise it exits 3 and the webserver and daemon wait. Accepted residual: a malicious image can omit its own check (Docker socket access is root-equivalent), so host-side `lifecycle.py` verification remains authoritative; a webserver or daemon started with `--no-deps` skips the gate (see [Named gaps](#named-gaps)). |
+| cve-bin-tool pin | Done on this branch; pin value pending its owner | The cve-bin-tool step accepts an optional `image_id` pin; when set, the tag must resolve to it, the image is never built by the step, and `sign-image --all-pinned` covers it (it walks enabled jobs' step settings too). The pin value is owner-recorded and still unset (no branch records one as of 2026-10-29): the review-host session that builds the image must smoke it, set `image_id` from `docker image inspect --format '{{.Id}}'`, and run `sign-image --all-pinned` (see [Named gaps](#named-gaps)). |
+| BuildKit worker and image builder service verification | Done on this branch | `BuildKitWorker` verifies the pinned worker image before creating the worker by ID, the pinned egress proxy image whenever the isolated network is checked, and each declared input image before transport; `ImageBuilderService._start_spec` verifies the declared input images before accepting a solve. Same-run derived outputs are trusted through their verified bases, and an unloadable signing policy refuses each build without stopping the service. `sign-image --all-pinned --builder-service-config <service.toml>` (`signing-gap-closure`) signs the worker, proxy and declared input image pins. Residual: the service resolves its verifier from the application configuration, and images under `native_engine.images` are neither signed by `--all-pinned` nor verified at launch (Engine broker row; see [Named gaps](#named-gaps)). |
+| Engine broker | Deferred | Verify images in `engine_broker.py` (`DockerEngine.image`, `_image_policies`, `_reference`), including the `native_engine.images` it launches. The native-broker-process and native-broker-jobs branches (other sessions, active and unmerged as of 2026-10-29) own `engine_broker.py`, so this waits for them. |
 
 ## Tests
 

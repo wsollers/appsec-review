@@ -612,8 +612,9 @@ tag resolves to on the local daemon after a host rebuild; see
 [`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)) and the
 `appsec-review signing` group: `keygen` (an Ed25519 operator key, by default
 `~/.config/appsec-review/signing/private/operator.pem`, optionally installing its public key as a
-`<key id>.pem` trust anchor), `sign-image REFERENCE... | --all-pinned` (signs local image IDs;
-`--all-pinned` signs only pinned images whose local ID equals the pin), `verify-image`,
+`<key id>.pem` trust anchor), `sign-image REFERENCE... | --all-pinned [--builder-service-config FILE]`
+(signs local image IDs; `--all-pinned` signs only pinned images whose local ID equals the pin, plus
+the named bounded builder service configuration's pins), `verify-image`,
 `sign-modules`/`verify-modules` (signed `appsec_review` package manifests) and `export-bootstrap DIR`
 (copies the standalone module-verification bootstrap). Each prints JSON, never private key material,
 and exits nonzero on any failure; `[signing]` in `appsec-review.toml` supplies the OpenSSL binary,
