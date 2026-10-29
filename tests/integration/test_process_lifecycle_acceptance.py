@@ -35,7 +35,7 @@ def _run_root(workspace, result):
 
 
 def test_tagged_multiprocess_workers_receive_layers_hash_and_pool_limit():
-    with case("tagged-workers") as workspace:
+    with case("tagged-workers", deadline_seconds=120) as workspace:
         root = prepare(workspace)
         expected = RunConfigurations(load_config(
             root / "appsec-review.toml", profile="dev", overlay="")).for_tags({

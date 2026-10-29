@@ -54,16 +54,18 @@ def working_directory(root):
 
 
 @contextmanager
-def case(name):
+def case(name, *, deadline_seconds=60):
+    if type(deadline_seconds) is not int or deadline_seconds not in {60, 120}:
+        raise ValueError("process cases require an explicit 60s or 120s budget")
     outer = os.environ.get("APPSEC_ACCEPTANCE_ROOT")
     parent = Path(outer).resolve() if outer else CHECKOUT
     if outer and not parent.is_relative_to(CHECKOUT / "test" / "tmp"):
         raise ValueError("outer acceptance workspace must belong to this checkout's test/tmp")
     workspace = LaneWorkspace.create(parent, "process-lifecycle")
     started = time.monotonic()
-    deadline_token = _DEADLINE.set(started + 55)
+    deadline_token = _DEADLINE.set(started + deadline_seconds - 5)
     status = "FAILED"
-    workspace.emit("ACCEPTANCE_CASE_STARTED", case=name, deadline_seconds=60)
+    workspace.emit("ACCEPTANCE_CASE_STARTED", case=name, deadline_seconds=deadline_seconds)
     try:
         with workspace.span(name):
             yield workspace
@@ -78,7 +80,7 @@ def case(name):
                 check=True, timeout=5).stdout.strip()
         atomic_json(workspace.root / "measurement.json", {
             "case": name, "status": status, "elapsed_seconds": elapsed,
-            "deadline_seconds": 60, "tested_commit": commit,
+            "deadline_seconds": deadline_seconds, "tested_commit": commit,
             "supervisor_workspace": outer,
             "commit_unavailable_reason": None if commit else "identity_recorded_by_outer_supervisor",
             "platform": sys.platform, "pid": os.getpid(),
@@ -91,7 +93,7 @@ def case(name):
                        elapsed_seconds=elapsed)
         write_run_metrics(workspace.driver_root)
         print(f"\n{name}: {elapsed:.3f}s artifacts={workspace.root}", flush=True)
-        assert elapsed < 60, f"{name} exceeded its 60s budget including cleanup"
+        assert elapsed < deadline_seconds, f"{name} exceeded its {deadline_seconds}s budget including cleanup"
 
 
 def prepare(workspace, name="checkout"):

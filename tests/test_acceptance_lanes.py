@@ -26,6 +26,27 @@ def test_lane_contract_bounds_selection_and_workers() -> None:
             LaneSpec(**{"name": spec.name, "nodes": spec.nodes, **changes})
 
 
+@pytest.mark.parametrize("seconds", [60, 120])
+def test_process_case_deadline_and_receipt_honor_explicit_budget(tmp_path: Path, monkeypatch, seconds: int) -> None:
+    from tests.fixtures.process_lifecycle import support
+
+    monkeypatch.setenv("APPSEC_ACCEPTANCE_ROOT", str(tmp_path))
+    before = support._DEADLINE.get()
+    with support.case("deadline-contract", deadline_seconds=seconds) as workspace:
+        assert seconds - 6 < support.remaining(1000) <= seconds - 5
+    assert support._DEADLINE.get() == before
+    assert support.read(workspace.root / "measurement.json")["deadline_seconds"] == seconds
+
+
+@pytest.mark.parametrize("seconds", [0, 60.0, True, 121])
+def test_process_case_refuses_undeclared_budgets(seconds) -> None:
+    from tests.fixtures.process_lifecycle import support
+
+    with pytest.raises(ValueError, match="explicit 60s or 120s"):
+        with support.case("invalid-budget", deadline_seconds=seconds):
+            pytest.fail("invalid process case entered")
+
+
 def test_control_fixture_selects_only_explicitly_pinned_abridged_catalogs(tmp_path: Path) -> None:
     from appsec_review.owasp_workbench.standards import load_catalogs
     from tests.integration.test_control_evidence_acceptance import ROOT, _prepare
