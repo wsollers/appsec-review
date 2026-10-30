@@ -453,6 +453,14 @@ Recorded by the implementation where the code refined or deviated from the desig
   dependency roots pass it, and Conan generator output does not. `keep` remains the explicit
   path list that the npm classifier uses. `classify_tree` returns `False` when
   `max_layout_roots` is exhausted, and the root then stays per-file.
+- **`classify_tree` gains `bound_group=None`** (user decision). `max_layout_roots` does not
+  limit the number of npm packages. Every root registered with the same `bound_group`, which is a
+  workspace directory containing the root, counts once against the bound. The npm classifier
+  passes the installer prefix (the `node_modules` directory holding `.package-lock.json`), so one
+  prefix uses one of the 512, however many verified packages it records, and no
+  `build-output-root-bound-exceeded` gap results. Ungrouped roots keep the 512 bound. A root
+  outside its group is a `ValueError`. Root documents carry `bound_group` only when it is set, and
+  the sanitizer replay passes it through.
 - **A configured exclusion wins over everything beneath it,** including deeper registered roots
   and their `keep` paths. Configured file rules also apply inside classified roots.
 - **Rank merging.** For one root, a configured exclusion outranks fact bases, and fact bases

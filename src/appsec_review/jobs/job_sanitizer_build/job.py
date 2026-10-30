@@ -159,7 +159,7 @@ def _dispositions(receipt: Mapping[str, Any], policy: BuildOutputPolicy | None,
             str(root["root"]), disposition=str(root["disposition"]), basis=str(root["basis"]),
             confidence=str(root["confidence"]), name=str(root["name"]), reason=str(root["reason"]),
             evidence_ref=root.get("evidence_ref"), pattern=root.get("pattern"), scope=root.get("scope"),
-            scope_role=root.get("scope_role"))
+            scope_role=root.get("scope_role"), bound_group=root.get("bound_group"))
     return dispositions
 
 
