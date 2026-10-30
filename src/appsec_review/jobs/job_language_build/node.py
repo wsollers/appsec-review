@@ -11,13 +11,14 @@ import tarfile
 from typing import Any
 
 from appsec_review.config.assurance import ScopeRole
+from appsec_review.jobs.build_output_scope import BuildOutputDispositions, summarized_content_gap
 from appsec_review.jobs.delivery_scope import apply_scope
-from appsec_review.jobs.job_language_build import node_scripts
+from appsec_review.jobs.job_language_build import node_installed, node_scripts
 from appsec_review.jobs.job_project_build.job import node_installer_command
 from appsec_review.storage import canonical_json, file_sha256
 
 
-CAPTURE_IDENTITY = "appsec-review/node-build-capture/2"
+CAPTURE_IDENTITY = "appsec-review/node-build-capture/3"
 LOCKFILES = {
     "package-lock.json": "npm", "npm-shrinkwrap.json": "npm",
     "pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn",
@@ -64,7 +65,12 @@ def is_profile_exchange_path(path: str | Path) -> bool:
 _SOURCE_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
 _GENERATED_SUFFIXES = _SOURCE_SUFFIXES | {".d.ts", ".d.mts", ".d.cts"}
 _PACKAGE_METADATA = {"package.json"}
-_RESOLVED_DEPENDENCY_METADATA = {*LOCKFILES, ".pnp.cjs", ".pnp.loader.mjs"}
+_RESOLVED_DEPENDENCY_METADATA = {*LOCKFILES, ".pnp.cjs", ".pnp.loader.mjs", node_installed.RECORD_NAME}
+# Install-time native code and archives stay visible to supply-chain scanners.
+_RETAINED_DEPENDENCY_KINDS = {"native-addon", "shared-library", "native-symbols", "package"}
+_MAX_UNVERIFIED_GAPS = 50
+_MAX_PACK_FACTS = 256
+_MAX_PACK_MEMBERS = 4096
 _NATIVE_SYMBOL_SUFFIXES = {".pdb", ".debug", ".dwo", ".dwp", ".sym"}
 _PACKAGE_SUFFIXES = {".tgz", ".zip"}
 _INTEGRITY_SUFFIXES = (".integrity", ".sha1", ".sha256", ".sha512", ".shasum")
@@ -276,21 +282,141 @@ def _symbol_addon(relative: str, addons: Mapping[str, str]) -> tuple[str, str] |
     return None
 
 
+class _InstalledCoverage:
+    """Installer-record coverage of a workspace; the deepest recorded install path decides."""
+
+    def __init__(self, workspace: Path) -> None:
+        prefixes, discovery_gaps = node_installed.discover_prefixes(workspace)
+        self.records = [node_installed.parse_installed_record(workspace, prefix) for prefix in prefixes]
+        self.roots: dict[str, tuple[node_installed.InstalledRecord, node_installed.InstalledPackage | None]] = {}
+        self.domains: dict[str, node_installed.InstalledRecord] = {}
+        self.unverified_reasons: dict[str, str] = {}
+        self.record_paths = {record.record.workspace_path for record in self.records
+                             if record.available and record.record is not None}
+        for record in (item for item in self.records if item.available):
+            self.domains.setdefault(_modules_root(node_installed.record_path(record.prefix)), record)
+            for package in record.packages:
+                self.domains.setdefault(_modules_root(package.install_path), record)
+                self.roots.setdefault(package.install_path, (record, package))
+            for unverified in record.unverified:
+                self.domains.setdefault(_modules_root(unverified.install_path), record)
+                self.roots.setdefault(unverified.install_path, (record, None))
+                self.unverified_reasons.setdefault(unverified.install_path, unverified.reason)
+        self.gaps = list(discovery_gaps)
+        for record in self.records:
+            modules = PurePosixPath(record.prefix, "node_modules").as_posix()
+            # A nested prefix without its own record is described by its parent's record.
+            if record.available or (record.reason == "missing" and modules in self.domains):
+                continue
+            self.gaps.append(f"{modules}: npm installer record unavailable ({record.reason}); "
+                             "dependency files cataloged per-file in the target lane")
+        unverified_items = [item for record in self.records for item in record.unverified]
+        self.gaps.extend(f"{item.install_path}: installed package does not match npm installer record "
+                         f"({item.reason}); cataloged per-file"
+                         for item in unverified_items[:_MAX_UNVERIFIED_GAPS])
+        if len(unverified_items) > _MAX_UNVERIFIED_GAPS:
+            self.gaps.append(f"{len(unverified_items) - _MAX_UNVERIFIED_GAPS} further unverified npm "
+                             "packages cataloged per-file")
+
+    def owner(self, relative: str) -> tuple[node_installed.InstalledRecord,
+                                             node_installed.InstalledPackage | None] | None:
+        for parent in PurePosixPath(relative).parents:
+            found = self.roots.get(parent.as_posix())
+            if found is not None:
+                return found
+        return None
+
+    def domain(self, relative: str) -> node_installed.InstalledRecord | None:
+        root = _modules_root(relative)
+        return self.domains.get(root) if root is not None else None
+
+
+def _modules_root(relative: str) -> str | None:
+    parts = PurePosixPath(relative).parts
+    if "node_modules" not in parts:
+        return None
+    return PurePosixPath(*parts[:parts.index("node_modules") + 1]).as_posix()
+
+
+def _installed_evidence(record: node_installed.InstalledRecord,
+                        package: node_installed.InstalledPackage) -> dict[str, str]:
+    assert record.record is not None
+    return {"kind": "npm-installed-record", "workspace_path": record.record.workspace_path,
+            "sha256": record.record.sha256, "entry": package.entry}
+
+
+def _installed_role(package: node_installed.InstalledPackage) -> str:
+    return (ScopeRole.BUILD_DEPENDENCY if package.build_only else ScopeRole.RUNTIME_DEPENDENCY).value
+
+
+def _pack_members(workspace: Path, package_facts: Sequence[Mapping[str, Any]]) -> set[str]:
+    """Workspace paths named by accepted npm pack archives; never summarized.
+
+    Uses the bounds of ``_package_delivery``, which still decides each member's role.
+    """
+    members: set[str] = set()
+    for fact in package_facts[:_MAX_PACK_FACTS]:
+        logical = PurePosixPath(str(fact.get("workspace_path", "")))
+        source_dir = PurePosixPath(str(fact.get("source_dir", ".")))
+        if (not logical.parts or logical.is_absolute() or ".." in logical.parts or
+                source_dir.is_absolute() or ".." in source_dir.parts):
+            continue
+        archive_path = workspace / Path(*logical.parts)
+        try:
+            if (archive_path.is_symlink() or not archive_path.is_file() or
+                    artifact_kind(archive_path) != "package" or
+                    file_sha256(archive_path) != fact.get("sha256")):
+                continue
+            total = 0
+            with tarfile.open(archive_path, "r|gz") as archive:
+                for ordinal, member in enumerate(archive, 1):
+                    total += member.size
+                    if ordinal > _MAX_PACK_MEMBERS or total > _MAX_ARTIFACT_BYTES:
+                        break
+                    name = PurePosixPath(member.name)
+                    if (member.isfile() and not name.is_absolute() and ".." not in name.parts and
+                            len(name.parts) > 1 and name.parts[0] == "package"):
+                        members.add((source_dir / PurePosixPath(*name.parts[1:])).as_posix())
+        except (OSError, tarfile.TarError, EOFError):
+            continue
+    return members
+
+
 def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
             build_unit_id: str, *,
             package_facts: Sequence[Mapping[str, Any]] = (),
-            dispositions: Any = None) -> tuple[list[dict[str, Any]], list[str]]:
-    # ``dispositions`` (jobs/build_output_scope.py) is accepted for the npm installer-record
-    # integration that replaces ``_catalog_files`` with its walk; this catalogue ignores it.
+            dispositions: BuildOutputDispositions | None = None) -> tuple[list[dict[str, Any]], list[str]]:
+    """Catalog Node build rows; installer-verified dependency trees become package rows.
+
+    Verified install paths are registered in ``dispositions`` (the shared build-output
+    recorder, created here when the caller supplies none) before its walk, which prunes them
+    to their anchor and retained files and applies configured ``[build_outputs]`` exclusions.
+    """
+    if dispositions is None:
+        dispositions = BuildOutputDispositions(family="node")
     artifacts: list[dict[str, Any]] = []
     candidates, gaps = _catalog_files(workspace, max(1, limit) * 10)
+    coverage = _InstalledCoverage(workspace)
+    gaps.extend(coverage.gaps)
+    kept = _pack_members(workspace, package_facts)
+    retained_paths: dict[str, list[str]] = {}
+    # install path -> [retained rows, retained bytes]
+    retained_totals: dict[str, list[int]] = {}
+    package_rows: dict[str, dict[str, Any]] = {}
+    uncovered: dict[str, int] = {}
     archives: dict[str, str] = {}
     addons: dict[str, str] = {}
     for candidate in candidates:
         try:
             relative = candidate.relative_to(workspace).as_posix()
-            if (not candidate.is_file() or candidate.is_symlink()
-                    or candidate.stat().st_size > _MAX_ARTIFACT_BYTES):
+            if not candidate.is_file() or candidate.is_symlink():
+                continue
+            owner = coverage.owner(relative)
+            if owner is not None and (package := owner[1]) is not None and (
+                    relative == package.manifest.workspace_path or relative in kept or
+                    artifact_kind(candidate) in _RETAINED_DEPENDENCY_KINDS):
+                retained_paths.setdefault(package.install_path, []).append(relative)
+            if candidate.stat().st_size > _MAX_ARTIFACT_BYTES:
                 continue
             if candidate.suffix.lower() in _PACKAGE_SUFFIXES:
                 digest = file_sha256(candidate)
@@ -302,13 +428,26 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
                     addons[relative] = digest
         except OSError:
             continue
+    registered = _record_dispositions(dispositions, coverage, retained_paths)
+    walked = dict(dispositions.walk(workspace))
     for path in candidates:
+        relative = path.relative_to(workspace).as_posix()
+        decision = walked.get(relative)
+        if decision is None:
+            continue  # Pruned into a classified tree or excluded by a named [build_outputs] rule.
         try:
             if path.is_symlink() or not path.is_file():
                 continue
         except OSError:
             continue
-        relative = path.relative_to(workspace).as_posix()
+        owner = coverage.owner(relative)
+        package = owner[1] if owner is not None else None
+        if package is not None and not (decision.kept and decision.root == package.install_path):
+            package = None  # Unpruned (root bound or conflict, named by the recorder): stays per-file.
+        anchor = package is not None and relative == package.manifest.workspace_path
+        if (owner is None or owner[1] is None) and relative not in coverage.record_paths and (
+                domain := coverage.domain(relative)) is not None:
+            uncovered[domain.prefix] = uncovered.get(domain.prefix, 0) + 1
         kind = artifact_kind(path)
         if kind is None:
             continue
@@ -340,9 +479,14 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         if kind == "package-metadata":
             value["package_metadata"] = {"format": "package.json", "role": "package-manifest"}
         elif kind == "resolved-dependency-metadata":
-            manager = LOCKFILES.get(path.name.lower(), "yarn" if path.name.lower().startswith(".pnp") else None)
-            value["dependency_metadata"] = {"format": path.name, "manager": manager,
-                                              "role": "resolved-dependency-graph"}
+            if path.name == node_installed.RECORD_NAME:
+                value["dependency_metadata"] = {"format": path.name, "manager": "npm",
+                                                  "role": "installed-dependency-record"}
+            else:
+                manager = LOCKFILES.get(path.name.lower(),
+                                        "yarn" if path.name.lower().startswith(".pnp") else None)
+                value["dependency_metadata"] = {"format": path.name, "manager": manager,
+                                                  "role": "resolved-dependency-graph"}
         elif integrity_archive is not None:
             value["package_archive"] = {"workspace_path": integrity_archive[0],
                                         "sha256": integrity_archive[1]}
@@ -379,13 +523,106 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
                 }
             except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
                 gaps.append(f"{relative}: source-map provenance unavailable: {type(exc).__name__}")
+        if package is not None and owner is not None:
+            record = owner[0]
+            if anchor:
+                if digest != package.manifest.sha256:
+                    raise ValueError("installed npm package manifest changed during cataloging")
+                value.update(
+                    scope_role=_installed_role(package),
+                    delivery_evidence=_installed_evidence(record, package),
+                    package_metadata={
+                        "format": "package.json", "role": "installed-dependency-package",
+                        "ecosystem": "npm", "manager": "npm",
+                        "name": package.name, "version": package.version,
+                        "resolved": package.resolved, "integrity": package.integrity,
+                        "dev": package.dev, "optional": package.optional,
+                        "dev_optional": package.dev_optional,
+                        "install_path": package.install_path,
+                        "files": 0, "bytes": 0, "retained_files": 0,
+                    })
+                package_rows[package.install_path] = value
+            else:
+                if relative not in kept:
+                    value.update(scope_role=_installed_role(package),
+                                 delivery_evidence=_installed_evidence(record, package))
+                total = retained_totals.setdefault(package.install_path, [0, 0])
+                total[0] += 1
+                total[1] += size
         artifacts.append(value)
         if len(artifacts) >= limit:
             gaps.append("Node artifact catalog truncated at configured count bound")
             break
+    gaps.extend(_installed_summary(coverage, registered, dispositions.roots(), retained_totals,
+                                   package_rows, uncovered))
+    gaps.extend(dispositions.named_gaps())
     gaps.extend(_package_delivery(artifacts, run_root, package_facts))
     gaps.extend(apply_scope(artifacts))
     return artifacts, gaps
+
+
+def _installed_summary(coverage: _InstalledCoverage, registered: set[str],
+                       roots: Sequence[Mapping[str, Any]], retained_totals: Mapping[str, list[int]],
+                       package_rows: Mapping[str, dict[str, Any]],
+                       uncovered: Mapping[str, int]) -> list[str]:
+    """One D6(a) gap per available record from the walk's root counts; retained rows excluded."""
+    counted = {str(root["root"]): root for root in roots}
+    gaps = []
+    for record in coverage.records:
+        owned = [package for package in record.packages if package.install_path in registered
+                 and coverage.roots.get(package.install_path, (None, None))[1] is package]
+        if not record.available or record.record is None or not owned:
+            continue
+        files = size = 0
+        for package in owned:
+            root = counted[package.install_path]
+            retained, retained_bytes = retained_totals.get(package.install_path, (0, 0))
+            files += int(root["files"]) - retained
+            size += int(root["bytes"]) - retained_bytes
+            if (row := package_rows.get(package.install_path)) is not None:
+                row["package_metadata"].update(files=int(root["files"]), bytes=int(root["bytes"]),
+                                               retained_files=retained)
+        gap = summarized_content_gap(len(owned), "packages", files, size, record.record.workspace_path,
+                                     "supply_chain")
+        if uncovered_files := uncovered.get(record.prefix, 0):
+            gap += (f"; {uncovered_files} files under node_modules not covered by the installer record "
+                    "remain per-file")
+        gaps.append(gap)
+    return gaps
+
+
+def _installed_tree(install_path: str) -> str | None:
+    """The outermost ``node_modules`` directory holding a package; one root-bound slot per tree.
+
+    A root installer record can describe workspace-nested trees such as ``backend/node_modules``,
+    so the group is the package's own tree rather than the record's directory.
+    """
+    parts = PurePosixPath(install_path).parts
+    return "/".join(parts[:parts.index("node_modules") + 1]) if "node_modules" in parts else None
+
+
+def _record_dispositions(dispositions: BuildOutputDispositions, coverage: _InstalledCoverage,
+                         retained_paths: Mapping[str, Sequence[str]]) -> set[str]:
+    """Register installer-record trees before the walk; returns the verified roots accepted."""
+    registered: set[str] = set()
+    for install_path, (record, package) in sorted(coverage.roots.items()):
+        if package is not None:
+            assert record.record is not None
+            if dispositions.classify_tree(
+                    install_path, disposition="supply_chain", basis="installer-record",
+                    name="npm-installed-package", reason="verified against installed manifest",
+                    evidence_ref=f"{record.record.workspace_path}#{package.entry}", confidence="fact",
+                    scope_role=_installed_role(package), keep=retained_paths.get(install_path, ()),
+                    bound_group=_installed_tree(install_path)):
+                registered.add(install_path)
+            continue
+        parent = coverage.owner(install_path)
+        if parent is not None and parent[1] is not None:
+            dispositions.classify_tree(
+                install_path, disposition="per_file", basis="installer-record",
+                name="npm-unverified-package", reason=coverage.unverified_reasons[install_path],
+                confidence="fact")
+    return registered
 
 
 def _package_document(workspace: Path, source_dir: str) -> tuple[Path, Mapping[str, Any]] | None:
