@@ -28,7 +28,7 @@ from appsec_review.config import load_config
 from appsec_review.container_runtime import profiles_from_settings
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.jobs.delivery_scope import scope_fields
+from appsec_review.jobs.delivery_scope import analysis_scope, scope_fields
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
 from appsec_review.jobs.job_language_build.node_installed import discover_prefixes, parse_installed_record
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
@@ -45,6 +45,7 @@ LOCKFILES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 SUMMARY_GAP = "dependency-content-summarized: "
 PACKAGE_ROLE = "installed-dependency-package"
 RECORD_ROLE = "installed-dependency-record"
+NATIVE_KINDS = {"executable", "shared-library", "native-addon", "native-extension"}
 
 pytestmark = pytest.mark.requires_target("appsec-multi-vuln")
 
@@ -223,6 +224,13 @@ def _assert_installed_dependency_rows(workspace: Path, receipt: dict, unit: Unit
         tree = roots.get(install_path)
         assert tree is not None, f"{install_path}: installer-record tree is not recorded"
         assert (tree["disposition"], tree["name"]) == ("supply_chain", "npm-installed-package"), tree
+    for row in rows:
+        fields = scope_fields(row)
+        if fields["scope_role"] in {"runtime_dependency", "build_dependency"} and row.get("kind") in NATIVE_KINDS:
+            # Production dependency binaries get blint's binary review; build-only ones do not.
+            assert analysis_scope(row, "blint")[0] is (fields["scope_role"] == "runtime_dependency"), (
+                row["workspace_path"], fields["scope_role"])
+            assert analysis_scope(row, "native")[0] is False, row["workspace_path"]
 
     def covered(path: str) -> bool:
         owners = [root for root in (*verified, *unverified)

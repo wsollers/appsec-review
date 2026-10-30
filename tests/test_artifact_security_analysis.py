@@ -368,7 +368,8 @@ def test_configured_disabled_grype_never_calls_runner_and_publishes_gap(tmp_path
     assert "configured disabled" in accepted["capabilities"]["grype"]["gaps"][0]
 
 
-def test_runtime_dependency_rows_reach_packages_but_not_native_scanners(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_dependency_rows_reach_packages_and_only_their_binaries_reach_blint(
+        tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
     from appsec_review.jobs.job_artifact_security_analysis import job as security
@@ -376,29 +377,47 @@ def test_runtime_dependency_rows_reach_packages_but_not_native_scanners(tmp_path
     payload = tmp_path / "node_modules" / "express" / "package.json"
     payload.parent.mkdir(parents=True)
     payload.write_text('{"name":"express","version":"4.19.2"}')
+    addon = tmp_path / "node_modules" / "sharp" / "build" / "Release" / "sharp.node"
+    addon.parent.mkdir(parents=True)
+    addon.write_bytes(b"\x7fELF-native-addon")
+    evidence = {"kind": "npm-installed-record", "entry": "node_modules/express"}
     artifact = {"path": "node_modules/express/package.json", "workspace_path": "node_modules/express/package.json",
                 "kind": "package-metadata", "sha256": file_sha256(payload), "artifact_id": "runtime-dep",
-                "scope_role": "runtime_dependency",
-                "delivery_evidence": {"kind": "npm-installed-record", "entry": "node_modules/express"}}
-    scanned: list[str] = []
+                "scope_role": "runtime_dependency", "delivery_evidence": evidence}
+    binary = {"path": "node_modules/sharp/build/Release/sharp.node",
+              "workspace_path": "node_modules/sharp/build/Release/sharp.node", "kind": "native-addon",
+              "sha256": file_sha256(addon), "artifact_id": "runtime-addon", "scope_role": "runtime_dependency",
+              "delivery_evidence": {**evidence, "entry": "node_modules/sharp"}}
+    dev_binary = {**binary, "artifact_id": "dev-addon", "scope_role": "build_dependency"}
+    scanned: list[tuple[str, str]] = []
 
     def fake_scan(unit, row, capability, runner):
-        scanned.append(capability)
+        scanned.append((capability, row["artifact_id"]))
         return {"artifact": row, "gaps": [], "terminal_status": "SUCCEEDED"}
 
     original_scan = security._scan_one
-    monkeypatch.setattr(security, "classify", lambda *args, **kwargs: {"family": "node", "format": "json"})
+    monkeypatch.setattr(security, "classify", lambda path, row, **kwargs: (
+        {"family": "native", "format": "elf"} if row["kind"] == "native-addon" else
+        {"family": "node", "format": "json"}))
     monkeypatch.setattr(security, "_scan_one", fake_scan)
-    unit = SimpleNamespace(job=SimpleNamespace(run_root=tmp_path), output=lambda _: {"artifacts": [artifact]})
+    unit = SimpleNamespace(job=SimpleNamespace(run_root=tmp_path),
+                           output=lambda _: {"artifacts": [artifact, binary, dev_binary]})
     units = {item.unit_id: item for item in security.build_job(scanner_runner=lambda *args: None).units}
     packages = units["analyze.packages"].handler(unit)
     native = units["analyze.native"].handler(unit)
-    assert scanned == ["packages"]
+    blint = units["analyze.blint"].handler(unit)
+    assert scanned == [("packages", "runtime-dep"), ("blint", "runtime-addon")]
     assert packages["observation_count"] == 1 and packages["gaps"] == []
     assert native["observation_count"] == 0 and native["gaps"] == []
-    [refused] = native["scope_dispositions"]
+    assert {row["artifact_id"] for row in native["scope_dispositions"] if row["selected"]} == set()
+    refused = native["scope_dispositions"][0]
     assert refused["selected"] is False and refused["analysis_lane"] == "supply_chain"
     assert refused["reason"] == "accepted-runtime-dependency-review"
     assert refused["delivery_status"] == "not_established"
+    assert blint["observation_count"] == 1 and blint["gaps"] == []
+    assert {row["artifact_id"]: row["selected"] for row in blint["scope_dispositions"]} == {
+        "runtime-dep": False, "runtime-addon": True, "dev-addon": False}
     with pytest.raises(security.FrameworkIntegrityError, match="scope excludes native"):
         original_scan(unit, artifact, "native", None)
+    with pytest.raises(security.FrameworkIntegrityError, match="scope excludes blint"):
+        original_scan(unit, dev_binary, "blint", None)

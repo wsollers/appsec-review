@@ -349,12 +349,14 @@ def test_scanner_inputs_are_bounded_to_package_anchors_with_exact_counts(tmp_pat
     assert time.monotonic() - started < 2
     assert len(rows) == 69
     assert {capability: len(paths) for capability, paths in selected.items()} == {
-        "syft": 68, "inventory": 69, "osv": 0, "blint": 0}
+        "syft": 68, "inventory": 69, "osv": 0, "blint": 1}
     anchors = {row["workspace_path"] for row in rows
                if row.get("package_metadata", {}).get("role") == "installed-dependency-package"}
     assert len(anchors) == 38
     record = "node_modules/.package-lock.json"
     addon = "node_modules/prod-00/build/Release/addon.node"
+    # The verified production addon is the only binary review input; the lane policy admits it.
+    assert selected["blint"] == [addon]
     unverified = {"node_modules/mismatch/package.json", *_mismatch_rows()}
     for capability in ("syft", "inventory"):
         dependency = {path for path in selected[capability] if "node_modules" in PurePosixPath(path).parts}
@@ -368,5 +370,21 @@ def test_scanner_inputs_are_bounded_to_package_anchors_with_exact_counts(tmp_pat
     unbounded = _scanner_inputs(tmp_path, baseline, monkeypatch)
     assert {capability: len(paths) for capability, paths in unbounded.items()} == {
         "syft": 978, "inventory": 979, "osv": 0, "blint": 1}
-    # The verified addon is a supply_chain row above, which the lane policy keeps from blint.
     assert unbounded["blint"] == [addon]
+
+
+def test_dev_dependency_native_addon_stays_out_of_blint(tmp_path: Path, monkeypatch) -> None:
+    workspace, _ = _workspace(tmp_path)
+    record = workspace / "node_modules/.package-lock.json"
+    document = json.loads(record.read_bytes())
+    document["packages"]["node_modules/prod-00"]["dev"] = True
+    record.write_bytes(json.dumps(document).encode())
+    rows, _ = node.catalog(tmp_path, workspace, {}, 10_000, "node-unit", dispositions=_shipped_dispositions())
+
+    selected = _scanner_inputs(tmp_path, rows, monkeypatch)
+
+    addon = "node_modules/prod-00/build/Release/addon.node"
+    [row] = [row for row in rows if row["workspace_path"] == addon]
+    assert row["scope_role"] == "build_dependency" and row["analysis_lane"] == "supply_chain"
+    assert addon in selected["syft"] and addon in selected["inventory"]
+    assert selected["blint"] == []

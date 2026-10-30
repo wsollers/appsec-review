@@ -11,7 +11,13 @@ Before any payload access, each capability applies the artifact's
 [delivery scope lane](performance-assurance.md#delivery-scope-roles) and records a per-artifact
 scope disposition. Target-lane rows reach every capability. Supply-chain rows, including installed
 npm packages with role `runtime_dependency` or `build_dependency`, reach only `inventory`,
-`packages`, `syft`, `grype` and `osv`. Evidence-lane rows reach only `inventory`.
+`packages`, `syft`, `grype` and `osv`, with one exception: a `runtime_dependency` row of kind
+`executable`, `shared-library`, `native-addon` or `native-extension` also reaches `blint`. That is
+production dependency machine code, such as a retained npm `.node` addon or a shared library a
+target executable names in `DT_NEEDED`, which runs with the target. `build_dependency` binaries,
+including addons of dev-only npm packages, stay out of `blint`, and the builtin `native` capability
+still refuses every supply-chain row. blint's declared format gate then decides tool support as
+for any other row. Evidence-lane rows reach only `inventory`.
 A changed path, file, handoff, or index manifest is a framework-integrity
 failure and stops publication.
 

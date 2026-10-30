@@ -240,7 +240,9 @@ mapping:
 
 `runtime_dependency` (lane `supply_chain`, delivery `not_established`) is added to
 `config/assurance.py` and `jobs/delivery_scope.py` by the installer-record design. This design
-consumes it and does not edit those files. A static archive from a dependency tree is
+consumes it and does not edit those files. A `runtime_dependency` shared library is also admitted
+to `blint`'s binary review, because the target loads it at run time; `build_dependency` rows are
+not. A static archive from a dependency tree is
 `build_dependency`, because its code is reviewed inside the target binary that links it.
 
 Heuristics act only from `heuristic_min_confidence` (default `medium`) upward. Below that, the
