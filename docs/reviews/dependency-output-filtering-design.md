@@ -174,7 +174,8 @@ package_metadata          {"format": "package.json", "role": "installed-dependen
   pack membership. Being in npm's prod tree is not proof of delivery: bundlers inline it into
   `dist`, and server code needs it at run time.
 - **What the supply_chain lane allows.** It admits only `inventory`, `packages`, `syft`, `grype`
-  and `osv` (`delivery_scope.py:72-79`), which is the intended analysis.
+  and `osv` (`delivery_scope.py:72-79`), which is the intended analysis. A later user decision
+  adds `blint` for production binaries; see the deviation in section 7.
 - **`source_in_scope` is unchanged.** It still returns true for supply_chain rows
   (`delivery_scope.py:82-83`). Package rows are not source-bearing (D8), so this has no effect.
 - **Version bumps.** `SCOPE_VERSION` becomes `appsec-review/delivered-scope/2`
@@ -422,7 +423,7 @@ The current behavior is documented in
 | D1 (npm only) | Implemented. The other ecosystems are deferred in [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems). |
 | D2 (parser) | Implemented in `node_installed.py`, with the deviations below. |
 | D3 (package and record rows) | Implemented. |
-| D4 (roles and lanes) | Implemented: `runtime_dependency` and `build_dependency` in the supply_chain lane. |
+| D4 (roles and lanes) | Implemented: `runtime_dependency` and `build_dependency` in the supply_chain lane, with the `blint` exception below. |
 | D5 (shared disposition recording) | Implemented. `job_language_build/job.py` passes the unit's `BuildOutputDispositions` recorder to `node.catalog`, which registers the D5 roots and takes its rows from `walk()`. The receipt publishes them under `build_output_dispositions`. |
 | D6 (gaps) | Implemented with the exact texts in D6; (a) uses `summarized_content_gap`. The catalog also appends the recorder's `named_gaps()`. |
 | D7 (configurable exclusions) | Implemented by chunk N: `[build_outputs]` with named `[[build_outputs.exclusions]]` rules, documented in [native build-output discovery](../architecture/native-build-output-discovery.md#configuration). The shipped `node-bundler-cache` rule excludes `node_modules/.cache` and `node_modules/.vite`. |
@@ -465,12 +466,28 @@ The current behavior is documented in
 - The D5 example of uncovered files no longer applies under the shipped configuration:
   `node-bundler-cache` excludes `node_modules/.cache` and `node_modules/.vite` by name, so their
   files get no rows and are not counted in the D6(a) uncovered suffix.
+- **Production dependency binaries reach `blint` (user decision, 2026-10-29).** Routing verified
+  packages to the supply_chain lane also took their retained native addons away from `blint`,
+  which had scanned them while they were per-file target rows. The user's concern is code that
+  ships or runs on servers, so `analysis_scope` admits `blint` for a supply_chain row only when its
+  role is `runtime_dependency` and its kind is `executable`, `shared-library`, `native-addon` or
+  `native-extension`. `build_dependency` rows (dev-only npm packages and build-only native
+  dependency trees) stay excluded. blint's declared format gate still decides support, so pure
+  JavaScript never reaches it. The same rule admits shared libraries that native-output discovery
+  promotes to `runtime_dependency` because a target ELF names them in `DT_NEEDED`. Other native
+  capabilities are unchanged: the builtin `native`, `jvm`, `wasm` and `spotbugs` capabilities still
+  refuse every supply_chain row. `POLICY_IDENTITY` is not bumped: role and lane vocabulary are
+  unchanged, job reuse is keyed by declared component releases, analysis units are not reused,
+  and each blint shard is fingerprinted per artifact, so a newly admitted artifact has no stale
+  shard. A bump would only invalidate unaffected language-build, catalog and tree-sitter
+  identities. In the count regression `blint` now selects exactly the verified production addon;
+  a variant marking that package `dev` selects nothing.
 
 **Tests.** The unit tests below belong to the implementation. The docs session ran only
 documentation checks.
 
 - `tests/test_node_installed_dependencies.py`: 11 tests.
-- `tests/test_node_dependency_output_filtering.py`: 8 tests. They cover:
+- `tests/test_node_dependency_output_filtering.py`: 10 tests. They cover:
   - the count regression;
   - the removed record;
   - npm-pack precedence;
@@ -478,13 +495,18 @@ documentation checks.
   - the shipped `node-bundler-cache` rule;
   - a refused prefix under `max_layout_roots = 1`;
   - more than 512 verified packages under one prefix, all classified with no `build-output-` gap;
-  - a nested prefix with no `missing` gap.
+  - a nested prefix with no `missing` gap;
+  - artifact-security scanner inputs bounded to package anchors (`syft` 68, `inventory` 69,
+    `osv` 0, `blint` 1: the verified production addon);
+  - a dev-dependency addon that stays out of `blint`.
 
   The count regression yields 38 package rows (30 `build_dependency` and 8 `runtime_dependency`),
   1 record row, 1 retained `native-addon` row and a `dependency-content-summarized` gap of 949
   files.
-- `tests/test_delivery_scope_propagation.py`: 2 new tests.
-- `tests/test_artifact_security_analysis.py`: 1 new test.
+- `tests/test_delivery_scope_propagation.py`: 3 new tests (one parametrized over the `blint`
+  binary kinds).
+- `tests/test_artifact_security_analysis.py`: 1 new test; production addons reach `blint`, dev
+  addons and package metadata do not.
 - `tests/test_generated_source_pipeline.py`: 1 new test.
 - `tests/test_language_build_node.py`: fixture updates.
 - Chunk N's own unit tests, including `tests/test_build_output_scope.py`, are listed in the
@@ -492,8 +514,10 @@ documentation checks.
 
 These tests are written but **not run**:
 
-- `_assert_installed_dependency_rows` in `tests/integration/test_node_project_builds.py`.
-- `tests/acceptance/test_dependency_output_bounds.py`, 3 tests.
+- `_assert_installed_dependency_rows` in `tests/integration/test_node_project_builds.py`, which
+  also checks that real installed native binaries reach `blint` only for production packages.
+- `tests/acceptance/test_dependency_output_bounds.py`, 4 tests; the fourth checks the published
+  `blint` scope dispositions against the accepted artifacts.
 
 Both read the receipt's `build_output_dispositions` (schema
 `appsec-review/build-output-dispositions/1`), which `job.py` now writes. The integration,

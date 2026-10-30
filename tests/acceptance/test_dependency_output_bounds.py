@@ -25,6 +25,7 @@ DISPOSITIONS_SCHEMA = "appsec-review/build-output-dispositions/1"
 PACKAGE_ROLE = "installed-dependency-package"
 RECORD_ROLE = "installed-dependency-record"
 _INSTALLED_ROLES = {"build_dependency", "runtime_dependency", "shipped_dependency", "deliverable"}
+_NATIVE_KINDS = {"executable", "shared-library", "native-addon", "native-extension"}
 
 
 @pytest.fixture(scope="module")
@@ -128,3 +129,22 @@ def test_artifact_index_count_is_bounded_by_the_classified_catalog(run_root: Pat
                 classified["other"] += 1
     bound = sum(classified.values()) + len(index.get("target_artifacts", ()))
     assert index["artifact_count"] <= bound, (index["artifact_count"], classified)
+
+
+def test_blint_reviews_production_dependency_binaries_but_not_build_only_ones(run_root: Path) -> None:
+    """Production dependency machine code reaches blint; build-only dependency rows never do."""
+    from appsec_review.jobs.job_artifact_security_analysis import job as security
+
+    analysis = security.load_accepted_artifact_security_analysis(run_root)
+    dispositions = analysis["capabilities"]["blint"].get("scope_dispositions")
+    if dispositions is None:
+        pytest.skip("this run's artifact-security publication predates blint scope dispositions")
+    artifacts = {row["artifact_id"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}
+    wrong = []
+    for disposition in dispositions:
+        artifact = artifacts[disposition["artifact_id"]]
+        role, lane = disposition["scope_role"], disposition["analysis_lane"]
+        expected = lane == "target" or (role == "runtime_dependency" and artifact.get("kind") in _NATIVE_KINDS)
+        if disposition["selected"] is not expected:
+            wrong.append((artifact.get("workspace_path"), role, artifact.get("kind"), disposition["selected"]))
+    assert not wrong, wrong[:50]

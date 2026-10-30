@@ -20,6 +20,10 @@ _EVIDENCE = frozenset({
     "native-symbols", "package-integrity",
 })
 _BUILD_CHAIN = frozenset({"package-metadata", "resolved-dependency-metadata"})
+_SUPPLY_CHAIN_CAPABILITIES = frozenset({"inventory", "packages", "syft", "grype", "osv"})
+# Production dependencies run with the target, so their machine code also gets blint's binary
+# review. Build-only dependencies do not; blint's format gate still decides tool support.
+_RUNTIME_NATIVE_KINDS = frozenset({"executable", "shared-library", "native-addon", "native-extension"})
 _REASONS = {
     ScopeRole.TARGET_SOURCE: ("target-source-review", "target"),
     ScopeRole.DELIVERABLE: ("accepted-delivery-fact", "target"),
@@ -75,7 +79,10 @@ def analysis_scope(row: Mapping[str, Any], capability: str) -> tuple[bool, str]:
     fields = scope_fields(row)
     lane = fields["analysis_lane"]
     allowed = (lane == "target" or
-               lane == "supply_chain" and capability in {"inventory", "packages", "syft", "grype", "osv"} or
+               lane == "supply_chain" and capability in _SUPPLY_CHAIN_CAPABILITIES or
+               lane == "supply_chain" and capability == "blint" and
+               fields["scope_role"] == ScopeRole.RUNTIME_DEPENDENCY.value and
+               row.get("kind") in _RUNTIME_NATIVE_KINDS or
                lane == "evidence" and capability == "inventory")
     return allowed, fields["analysis_reason"]
 

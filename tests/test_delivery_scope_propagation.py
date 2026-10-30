@@ -54,10 +54,23 @@ def test_runtime_dependency_is_supply_chain_review_without_established_delivery(
     assert fields["delivery_status"] == "not_established"
     for capability in ("inventory", "packages", "syft", "grype", "osv"):
         assert analysis_scope(row, capability) == (True, "accepted-runtime-dependency-review")
-    for capability in ("native", "jvm", "wasm", "spotbugs"):
+    for capability in ("native", "jvm", "wasm", "spotbugs", "blint"):
         assert analysis_scope(row, capability)[0] is False
     assert delivery_gap(row) is None
     assert apply_scope([dict(row)]) == []
+
+
+@pytest.mark.parametrize("kind", ["native-addon", "shared-library", "executable", "native-extension"])
+def test_blint_reviews_runtime_dependency_native_binaries_only(kind):
+    runtime = {"scope_role": "runtime_dependency", "kind": kind,
+               "workspace_path": "node_modules/sharp/build/Release/sharp.node"}
+    assert analysis_scope(runtime, "blint") == (True, "accepted-runtime-dependency-review")
+    for capability in ("native", "jvm", "wasm", "spotbugs"):
+        assert analysis_scope(runtime, capability)[0] is False
+    for role in ("build_dependency", "build_chain", "supplied_platform", "intermediate_evidence"):
+        assert analysis_scope({**runtime, "scope_role": role}, "blint")[0] is False
+    for other in ("package-metadata", "package", "native-symbols", "generated-code", None):
+        assert analysis_scope({**runtime, "kind": other}, "blint")[0] is False
 
 
 def test_scope_and_delivery_policy_versions_reject_prior_role_vocabulary():

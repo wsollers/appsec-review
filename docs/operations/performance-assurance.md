@@ -47,7 +47,10 @@ the gap `<path>: delivery status is unknown (delivery_fact_unavailable)`.
 | `unknown` | `delivery-unknown-candidate-review` | target | `unknown` |
 
 The target lane admits every analysis capability. The supply_chain lane admits only `inventory`,
-`packages`, `syft`, `grype` and `osv`, and the evidence lane admits only `inventory`. The excluded
+`packages`, `syft`, `grype` and `osv`, plus `blint` for `runtime_dependency` rows whose kind is
+`executable`, `shared-library`, `native-addon` or `native-extension` (production dependency
+machine code; see [produced-artifact security analysis](artifact-security-analysis.md)). The
+evidence lane admits only `inventory`. The excluded
 lane admits nothing. `runtime_dependency` marks a package that npm's installer record lists outside
 its dev tree. That package belongs to the production dependency closure, but this does not prove it
 ships, so it is reviewed as supply chain rather than per file (see

@@ -400,7 +400,10 @@ catalog fails with `installed npm package manifest changed during cataloging`.
 
 Under a verified install path, `native-addon`, `shared-library`, `native-symbols` and `package`
 files keep their own rows with the package's role and evidence, so install-time native code (for
-example `node-gyp` output) stays visible to supply-chain scanners. Members of an accepted `npm pack`
+example `node-gyp` output) stays visible to supply-chain scanners. A retained `native-addon` or
+`shared-library` row of a production (`runtime_dependency`) package also reaches `blint`; the
+same row of a dev-only (`build_dependency`) package does not (see
+[produced-artifact security analysis](artifact-security-analysis.md)). Members of an accepted `npm pack`
 archive (at most 256 pack facts and 4,096 members per archive) are never summarized and keep their
 `shipped_dependency` or `deliverable` upgrade. Every other file under a verified install path gets
 no row, so summarized files do not use up the `artifact_count_limit` row bound. They still count
