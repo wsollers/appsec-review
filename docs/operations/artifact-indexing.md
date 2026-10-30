@@ -18,9 +18,32 @@ payload verification.
 The job publishes immutable `artifacts` SQLite/FTS shards in three independently fingerprinted
 groups:
 
-- catalog shards per build unit and canonical artifact family, plus the target-intake shard;
-- archive-member shards per package artifact and extractor identity; and
-- relationship shards per artifact.
+- catalog shards per build unit and canonical artifact family (`catalog-<build_unit_id>-<family>`),
+  plus the `catalog-target-intake` shard;
+- archive-member shards per build unit, in bounded batches (`members-<build_unit_id>-<NNNN>`); and
+- relationship shards per build unit, in bounded batches (`relations-<build_unit_id>-<NNNN>`).
+
+### Build-unit batch shards
+
+The accepted language-build receipt is the reuse and invalidation unit for the member and
+relationship indexes. Each step sorts the unit's artifacts it indexes (package artifacts for
+members, every validated artifact for relationships) by `(workspace_path, sha256)` and packs
+them into deterministic batches. A batch closes before it would exceed `MAX_ARTIFACTS_PER_SHARD`
+(5,000 artifacts) or `MAX_ROWS_PER_SHARD` (100,000 relations plus entities). An artifact that alone
+exceeds the row bound gets its own shard. `<NNNN>` is the zero-based, four-digit batch number
+within the unit (`0000` first). A shard ID outside `[A-Za-z0-9_.-]{1,128}` is an integrity
+failure. Earlier releases published one member shard per package artifact and one relationship
+shard per artifact; the `members-` and `relations-` prefixes are unchanged.
+
+Per-artifact and per-invocation detail stays in rows, not shards: relations, one coverage row per
+artifact keyed by its `workspace_path`, and that artifact's gaps. A shard's `IndexIdentity` gaps
+are the union of its artifacts' gaps. Its producer mapping records `job`, `unit`, `family`,
+`build_unit_id`, `batch` and `batch_count`.
+
+Member and relationship fingerprints bind the shard layout `build-unit-batch/1` and both batch
+limits, besides the receipt, the batch's artifacts and their upstream manifests. Older
+per-artifact shards therefore never satisfy a new fingerprint: the first run after an upgrade
+rebuilds these two groups once. Catalog shards keep their previous layout and fingerprints.
 
 The accepted composite manifest retains the previously accepted physical indexes and replaces the
 prior `artifacts` shard set atomically. Catalog fingerprints contain no scanner, retrieval transport,
@@ -30,15 +53,49 @@ change invalidates no physical shard.
 ## Recovery and integrity
 
 Restart the same application run normally. A completed shard whose deterministic path, SQLite
-integrity, metadata, and hash still verify is reused. A stale or corrupt shard is an integrity
-failure and stops publication; it is never silently overwritten. Changing one artifact changes its
-family catalog shard and its artifact-specific member or relationship shards without invalidating
+integrity, metadata, and hash still verify is reused; this includes every completed batch shard of
+a partially indexed build unit. A stale or corrupt shard is an integrity failure and stops
+publication; it is never silently overwritten. Changing one artifact changes its family catalog
+shard and the member and relationship batch shards of its build unit without invalidating
 unrelated build units or artifact families.
 
 An unavailable, failed, empty, truncated, or ambiguously mapped producer remains an explicit
 coverage gap. Raw artifact bytes, protected command arguments, and stdout/stderr never enter the
 SQLite/FTS payloads. The accepted summary and composite manifest are run-owned artifacts bound to
 the accepted job handoff.
+
+Every shard uses the common `IndexBuilder` durability contract described in
+[review-data indexing](review-data-indexing.md#index-shard-durability): a step returns a shard
+identity only after the shard is durable, hashed, linked into the shared object store and
+registered for custody.
+
+## Throughput
+
+Shard count, `fsync` count and hash count scale with build units and batches, not with artifact
+count. The relationship step indexes a receipt's tool invocations by output path once, so
+attributing one artifact no longer scans every invocation of its unit. Fewer shards also make the
+`acceptance.publish_handoff` manifest verification cheaper, and they make retrieval cheaper,
+because retrieval opens every shard listed in the accepted manifest.
+
+The motivating evidence is Dagster run `4824e750-9c47-4c28-bd64-aaeeee3652b0`. It spent 45.2
+minutes in `index.relationships`, writing 8,225 per-artifact shards (3.78 GB of writes) for less
+than 1 MB of target source.
+
+Known limitation: an artifact that no invocation or producer-supplied relationship uniquely
+attributes still receives a 0.25-confidence `GENERATED_FROM` edge to every command of its unit.
+That is O(outputs × commands) rows for weakly attributed units; batching bounds the rows per
+shard, not the total. Reducing these edges is a pending follow-up.
+
+### Deferred: parallel build units
+
+Build units and their batches are indexed sequentially. A future bounded worker pool across build
+units must run each task under `contextvars.copy_context().run(...)`, as
+`storage.shared.PublicationThreadPoolExecutor` does. The attempt owner, the validation scope and
+operation spans are `ContextVar` values: in a bare thread the owner is absent, so
+`IndexBuilder.build()` would skip custody registration and lose work telemetry without failing.
+Such a pool may index different completed receipts in parallel, never the batches of one receipt,
+and must sort results by `(build_unit_id, family, batch)` before publication, so handoffs stay
+deterministic.
 
 ## Node retention policy
 

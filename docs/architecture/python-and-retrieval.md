@@ -34,9 +34,11 @@ new write-capable interface is exposed.
 
 The produced-artifact indexer consumes only the accepted language-build handoff and verified
 workspace manifests. It publishes `artifacts` catalog shards per build unit and artifact family,
-member shards per package/extractor identity, and artifact-specific relationship shards. Artifact
+plus member and relationship shards per build unit in deterministic bounded batches (the
+language-build receipt is their reuse and invalidation unit). Artifact
 catalog fingerprints exclude scanners and MCP transport, so scanner changes cannot rebuild catalogs
-and transport changes rebuild nothing.
+and transport changes rebuild nothing. See
+[artifact indexing](../operations/artifact-indexing.md#build-unit-batch-shards).
 
 The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard, and
 binary/symbol shard per accepted case. The independent clangd job adds one symbol shard per accepted
