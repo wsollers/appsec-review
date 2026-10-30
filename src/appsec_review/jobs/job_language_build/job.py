@@ -52,6 +52,7 @@ from .native_layout import write_cmake_file_api_query
 from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
+from appsec_review.observability.spans import operation_phase
 from appsec_review.config.build_outputs import BuildOutputPolicy
 from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
@@ -1153,38 +1154,37 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     reconciled = None
     native_metadata_gaps: list[str] = []
     native_classification: native_outputs.NativeClassification | None = None
-    if family == "native" and descriptor is not None:
-        # FOLLOW-UP(7dcc7b20): run this inside operation_phase("build.output_classify") and add the
-        # name to _PHASES once the span telemetry change lands on main.
-        reconciled = reconcile_captured_build(captures, workspace, str(recipe["source_dir"]), descriptor)
-        native_metadata_gaps = _apply_native_link_metadata(
-            reconciled.rows, workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
-        native_classification = native_outputs.register(
-            dispositions, workspace, build_dir=str(recipe["build_dir"]), source_dir=str(recipe["source_dir"]),
-            build_system=dispatch.get("build_system"), preexisting_files=before,
-            captures=(list(capture.events()) for _ordinal, capture in captures), rows=reconciled.rows,
-            capture_complete=not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not reconciled.gaps,
-            file_api_query=file_api_query)
-    if family == "php":
-        artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
-            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
-            str(dispatch.get("build_system", "composer")), dispositions=dispositions)
-    elif family == "node":
-        artifacts, catalog_gaps = node.catalog(
-            unit.job.run_root, workspace, before,
-            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
-            package_facts=[fact for row in node_rows if row.get("origin") == "accepted-recipe"
-                           for fact in row.get("package_integrity", ())],
-            dispositions=dispositions)
-    else:
-        artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
-                                           int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family,
-                                           bookkeeping, dispositions=dispositions,
-                                           tagged_outputs=(native_classification.tagged_outputs
-                                                           if native_classification is not None else None))
-    gaps.extend([*python_metadata_gaps, *php_metadata_gaps, *catalog_gaps])
-    if native_classification is not None:
-        gaps.extend([*native_outputs.gaps(dispositions), *native_classification.gaps])
+    with operation_phase("build.output_classify"):
+        if family == "native" and descriptor is not None:
+            reconciled = reconcile_captured_build(captures, workspace, str(recipe["source_dir"]), descriptor)
+            native_metadata_gaps = _apply_native_link_metadata(
+                reconciled.rows, workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
+            native_classification = native_outputs.register(
+                dispositions, workspace, build_dir=str(recipe["build_dir"]), source_dir=str(recipe["source_dir"]),
+                build_system=dispatch.get("build_system"), preexisting_files=before,
+                captures=(list(capture.events()) for _ordinal, capture in captures), rows=reconciled.rows,
+                capture_complete=not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not reconciled.gaps,
+                file_api_query=file_api_query)
+        if family == "php":
+            artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
+                int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
+                str(dispatch.get("build_system", "composer")), dispositions=dispositions)
+        elif family == "node":
+            artifacts, catalog_gaps = node.catalog(
+                unit.job.run_root, workspace, before,
+                int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
+                package_facts=[fact for row in node_rows if row.get("origin") == "accepted-recipe"
+                               for fact in row.get("package_integrity", ())],
+                dispositions=dispositions)
+        else:
+            artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
+                                               int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
+                                               family, bookkeeping, dispositions=dispositions,
+                                               tagged_outputs=(native_classification.tagged_outputs
+                                                               if native_classification is not None else None))
+        gaps.extend([*python_metadata_gaps, *php_metadata_gaps, *catalog_gaps])
+        if native_classification is not None:
+            gaps.extend([*native_outputs.gaps(dispositions), *native_classification.gaps])
     output_counts = {**dispositions.summary(),
                      "target_rows": sum(1 for item in artifacts if item.get("analysis_lane") == "target")}
     unit.job.events.write("BUILD_OUTPUT_CLASSIFIED", unit_id=unit.unit_id, build_unit_id=build_unit_id,

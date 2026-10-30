@@ -43,7 +43,7 @@ _COUNTERS = frozenset({
 _PHASES = frozenset({
     "index.prepare", "index.sqlite_write", "index.sqlite_vacuum", "index.digest", "index.publish",
     "index.link", "index.custody_bind", "index.lock_wait", "index.reuse_verify",
-    "storage.fsync", "storage.copy",
+    "storage.fsync", "storage.copy", "build.output_classify",
 })
 MAX_SPAN_PHASES = 32
 MAX_SAMPLED_SPANS = 32

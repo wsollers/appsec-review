@@ -219,6 +219,7 @@ phase inside it, so phase times are not additive. The initial vocabulary is:
 | `index.reuse_verify` | artifact-indexing shard reuse verification |
 | `storage.fsync` | `timed_fsync` storage fsyncs |
 | `storage.copy` | storage copy paths that also count `copy_bytes` |
+| `build.output_classify` | language-build output classification and cataloguing in `unit.execute` |
 
 The closed `work` counter vocabulary adds `receipts_processed`, `artifacts_processed`,
 `shards_built`, `shards_reused`, `entities_written`, `relations_written`, `invocations_scanned` and

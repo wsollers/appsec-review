@@ -338,8 +338,8 @@ Each language-build, sanitizer-build and project-build probe receipt gains
   `heuristic_dispositions`, `conflicts`, `layout_sources_read` and `duration_ms`. The same counts
   are added to `LANGUAGE_BUILD_COMPLETED` (`job.py:1343`).
 - Classification runs inside `operation_phase("build.output_classify")` from the operation
-  telemetry design, accumulating into the existing `unit.execute` span. The name is added to
-  `_PHASES` when that change lands. No new span is created.
+  telemetry design, accumulating into the existing `unit.execute` span. The name is in `_PHASES`.
+  No new span is created.
 - Event detail keys avoid `file_count`, `artifact_count`, `size_bytes` and the other names that
   `aggregate_run_metrics` sums into `throughput_totals`.
 
@@ -539,9 +539,10 @@ Recorded by the implementation where the code refined or deviated from the desig
   `target_rows` counts catalogue rows in the `target` analysis lane, so objects, which take the
   evidence lane, are not counted. The same counts are added to `LANGUAGE_BUILD_COMPLETED`. None of
   the keys is summed by `aggregate_run_metrics`.
-- **Follow-up: `operation_phase("build.output_classify")`.** The span telemetry change
-  (7dcc7b20) is not on main, so the classification is not yet wrapped in that phase and `_PHASES`
-  is unchanged. A `FOLLOW-UP(7dcc7b20)` comment in `job_language_build/job.py` marks the place.
+- **`operation_phase("build.output_classify")`.** Resolved at integration with the operation
+  telemetry change: the name is in `_PHASES`, and `_execute_one` runs native discovery,
+  registration, cataloguing and the classification gaps inside that phase, which accumulates into
+  the `unit.execute` span.
 - **Follow-up: `ScopeRole.RUNTIME_DEPENDENCY`.** This role is owned by the dependency output
   filtering work (e9ae8d09), which is not on main. `native_outputs` resolves it with `getattr`.
   Until it lands, a dependency shared library that a target ELF loads stays `build_dependency`,

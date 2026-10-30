@@ -282,3 +282,8 @@ def test_language_build_receipt_classifies_a_fetchcontent_build(tmp_path: Path) 
                      if record["event_type"] == "BUILD_OUTPUT_CLASSIFIED"]
     assert classified["supply_chain_trees"] == 2 and classified["target_rows"] == 1  # app; objects take the evidence lane
     assert not _SUMMED & set(classified)
+    (completed,) = [record["details"] for record in records
+                    if record["event_type"] == "OPERATION_COMPLETED"
+                    and record["details"].get("operation_id") == "unit.execute"
+                    and record["details"].get("unit_id") == classified["unit_id"]]
+    assert completed["phases"]["build.output_classify"]["count"] == 1
