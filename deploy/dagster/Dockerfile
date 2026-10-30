@@ -59,7 +59,10 @@ ENV APPSEC_REVIEW_SIGNING_BOOTSTRAP_DIR=/opt/appsec-review/signing-bootstrap \
     APPSEC_REVIEW_MODULE_ROOT=/usr/local/lib/python3.12/site-packages/appsec_review \
     APPSEC_REVIEW_TRUSTED_KEYS_DIR=/etc/appsec-review/signing/trusted-keys \
     APPSEC_REVIEW_OPENSSL=/usr/bin/openssl
+# COPY --chmod also applies to the parent directories it creates, so the final stages' envelope
+# directory must already exist as 0755 or the non-root services cannot traverse to the envelope.
 RUN chmod 0755 /opt/appsec-review /opt/appsec-review/signing-bootstrap \
+    && install -d -o 0 -g 0 -m 0755 /opt/appsec-review/signing \
     && python -c "import os, sys; assert sys.modules['sitecustomize'].__file__ == '/usr/local/lib/python3.12/sitecustomize.py', 'site did not import the signing sitecustomize'" \
     && python -c "import os, appsec_review; assert os.path.dirname(appsec_review.__file__) == os.environ['APPSEC_REVIEW_MODULE_ROOT'], 'APPSEC_REVIEW_MODULE_ROOT is not the installed package'" \
     && /usr/bin/openssl version

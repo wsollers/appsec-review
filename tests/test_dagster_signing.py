@@ -360,6 +360,8 @@ def test_dockerfile_enforces_signed_modules_only_in_the_final_stages() -> None:
     assert base.index("pip install --no-cache-dir --no-build-isolation --no-deps .") < base.index("sitecustomize.py")
     assert "APPSEC_REVIEW_MODULE_SIGNATURE" not in base
     assert "    APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1\n" not in base
+    # The final stages' COPY --chmod=0644 would otherwise create the envelope directory as 0644.
+    assert "&& install -d -o 0 -g 0 -m 0755 /opt/appsec-review/signing \\\n" in base
     for name in ("runtime-copilot-base", "runtime-windows-base", "test"):
         assert "APPSEC_REVIEW_REQUIRE_SIGNED_MODULES" not in stages[name]
         assert "python-modules.json" not in stages[name]
