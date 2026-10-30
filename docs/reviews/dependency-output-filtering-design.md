@@ -1,9 +1,8 @@
 # Dependency output filtering: design
 
-Status: chunks A, B, C and D are implemented on branch
-`william-sollers-xbox-dependency-output-filtering-implementati` (ready commit `3080cf4b`). Chunk N,
-the native build-output disposition mechanism, is not implemented yet; see
-[section 7](#7-implementation-status).
+Status: implemented on branch `william-sollers-xbox-dependency-output-filtering-implementati`
+(ready commit `7fac4f7f`), which merges the native build-output disposition mechanism (chunk N,
+`13ef1ea9` and `3964a85b`). See [section 7](#7-implementation-status).
 
 Branch: `william-sollers-xbox-dependency-output-filtering-design`, based on `38c934d9`.
 
@@ -424,11 +423,11 @@ The current behavior is documented in
 | D2 (parser) | Implemented in `node_installed.py`, with the deviations below. |
 | D3 (package and record rows) | Implemented. |
 | D4 (roles and lanes) | Implemented: `runtime_dependency` and `build_dependency` in the supply_chain lane. |
-| D5 (shared disposition recording) | Partly implemented. `node.catalog` makes the D5 `classify_tree` calls on an optional `dispositions` recorder. `job_language_build/job.py` does not pass a recorder yet, and `build_output_scope.py`, the receipt's `build_output_dispositions` and `[build_outputs]` arrive with chunk N. |
-| D6 (gaps) | Implemented with the exact texts in D6. |
-| D7 (configurable exclusions) | Pending with chunk N. |
+| D5 (shared disposition recording) | Implemented. `job_language_build/job.py` passes the unit's `BuildOutputDispositions` recorder to `node.catalog`, which registers the D5 roots and takes its rows from `walk()`. The receipt publishes them under `build_output_dispositions`. |
+| D6 (gaps) | Implemented with the exact texts in D6; (a) uses `summarized_content_gap`. The catalog also appends the recorder's `named_gaps()`. |
+| D7 (configurable exclusions) | Implemented by chunk N: `[build_outputs]` with named `[[build_outputs.exclusions]]` rules, documented in [native build-output discovery](../architecture/native-build-output-discovery.md#configuration). The shipped `node-bundler-cache` rule excludes `node_modules/.cache` and `node_modules/.vite`. |
 | D8 (downstream consumers) | Implemented as designed; the D8 tests were added. |
-| D9 (version bumps) | Implemented: `delivered-scope/2`, `delivery-propagation/2`, `node-build-capture/3`. The receipt schema and executor identity bumps belong to chunk N. |
+| D9 (version bumps) | Implemented: `delivered-scope/2`, `delivery-propagation/2`, `node-build-capture/3`. Chunk N bumped `EXECUTOR_IDENTITY` to `generic-language-build-executor/4`; `RECEIPT_SCHEMA` stays `language-build-receipt/1` because `build_output_dispositions` is an added field. |
 | D10 (bounds) | Implemented. |
 
 **Deviations from this design.**
@@ -451,29 +450,51 @@ The current behavior is documented in
   `ValueError("installed npm package manifest changed during cataloging")` instead of reporting a
   gap.
 - npm-pack precedence is bounded: at most 256 pack facts and 4,096 members per archive.
-- The catalog computes coverage from the parser itself. The `dispositions` recorder is optional and
-  only receives the D5 calls. Its `evidence_ref` is the string `<record path>#<entry>`, and the
-  row's `delivery_evidence` keeps the record SHA-256.
+- The catalog computes coverage from the parser itself. When a caller passes no recorder,
+  `node.catalog` creates one with the default policy, which has no exclusions. The recorder's
+  `evidence_ref` is the string `<record path>#<entry>`, and the row's `delivery_evidence` keeps the
+  record SHA-256.
+- `classify_tree` gained `bound_group`, and each verified package passes its outermost
+  `node_modules` directory (for example `node_modules` or `backend/node_modules`).
+  `max_layout_roots` counts one slot per bound group, so an install tree of any size uses one
+  slot. The record's own `node_modules` cannot be the group: a root record describes workspace
+  members such as `backend/node_modules/x`, and a root outside its group raises `ValueError`.
+- A package that `classify_tree` refuses because the root bound is exhausted stays per-file, gets
+  no package row and is left out of D6(a). The recorder names it in
+  `build-output-root-bound-exceeded: <n> roots beyond max_layout_roots stay per-file target content`.
+- The D5 example of uncovered files no longer applies under the shipped configuration:
+  `node-bundler-cache` excludes `node_modules/.cache` and `node_modules/.vite` by name, so their
+  files get no rows and are not counted in the D6(a) uncovered suffix.
 
-**Tests.** The unit tests below were run by the implementation session. The docs session ran only
+**Tests.** The unit tests below belong to the implementation. The docs session ran only
 documentation checks.
 
 - `tests/test_node_installed_dependencies.py`: 11 tests.
-- `tests/test_node_dependency_output_filtering.py`: 5 tests. They cover the count regression, the
-  removed record, npm-pack precedence, D5 calls on a fake recorder, and a nested prefix with no
-  `missing` gap. The count regression yields 38 package rows (30 `build_dependency` and
-  8 `runtime_dependency`), 1 record row, 1 retained `native-addon` row and a
-  `dependency-content-summarized` gap of 949 files.
+- `tests/test_node_dependency_output_filtering.py`: 8 tests. They cover:
+  - the count regression;
+  - the removed record;
+  - npm-pack precedence;
+  - the D5 roots in a real recorder;
+  - the shipped `node-bundler-cache` rule;
+  - a refused prefix under `max_layout_roots = 1`;
+  - more than 512 verified packages under one prefix, all classified with no `build-output-` gap;
+  - a nested prefix with no `missing` gap.
+
+  The count regression yields 38 package rows (30 `build_dependency` and 8 `runtime_dependency`),
+  1 record row, 1 retained `native-addon` row and a `dependency-content-summarized` gap of 949
+  files.
 - `tests/test_delivery_scope_propagation.py`: 2 new tests.
 - `tests/test_artifact_security_analysis.py`: 1 new test.
 - `tests/test_generated_source_pipeline.py`: 1 new test.
 - `tests/test_language_build_node.py`: fixture updates.
+- Chunk N's own unit tests, including `tests/test_build_output_scope.py`, are listed in the
+  [native design](../architecture/native-build-output-discovery.md#implementation-breakdown).
 
 These tests are written but **not run**:
 
 - `_assert_installed_dependency_rows` in `tests/integration/test_node_project_builds.py`.
 - `tests/acceptance/test_dependency_output_bounds.py`, 3 tests.
 
-Both read `build_output_dispositions` (schema `appsec-review/build-output-dispositions/1`), so they
-cannot pass until chunk N lands and `job.py` passes the recorder. The integration, acceptance and
-live review validations remain the user's to run.
+Both read the receipt's `build_output_dispositions` (schema
+`appsec-review/build-output-dispositions/1`), which `job.py` now writes. The integration,
+acceptance and live review validations remain the user's to run.

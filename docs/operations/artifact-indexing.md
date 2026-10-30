@@ -85,7 +85,9 @@ only with its binary identity; GDB documents the debug-link/build-ID relationshi
 
 The collector walks the whole workspace without following symlinks, and directory names establish
 no scope. It enters a `node_modules` tree that a recipe's own install wrote. Files of a recognized
-kind there are kept even when unchanged, unless npm's installer record covers them. Each verified
+kind there are kept even when unchanged, unless npm's installer record covers them or a named
+`[build_outputs]` exclusion removes them; the shipped `node-bundler-cache` rule removes
+`node_modules/.cache` and `node_modules/.vite`. Each verified
 installed package becomes one supply-chain `package-metadata` row that carries its file and byte
 counts. Its native addons, shared libraries, native symbols and package archives keep their own
 rows, and the rest of the package is summarized in one `dependency-content-summarized` gap per

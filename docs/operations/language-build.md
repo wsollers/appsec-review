@@ -406,9 +406,10 @@ toward the workspace discovery walk, which stops at ten times that limit with
 
 - one gap per available record with at least one verified package:
   `dependency-content-summarized: <N> packages (<F> files, <B> bytes) recorded by <prefix>/node_modules/.package-lock.json routed to supply_chain review; per-file target review not performed`.
-  `F` and `B` cover every file under the verified install paths, anchors included, minus retained
-  per-file rows. When files under that `node_modules` are not covered by a verified entry, it
-  appends `; <U> files under node_modules not covered by the installer record remain per-file`;
+  `F` and `B` cover every file the walk counts under the verified install paths, anchors
+  included, minus retained per-file rows. When files under that `node_modules` are not covered
+  by a verified entry, it appends
+  `; <U> files under node_modules not covered by the installer record remain per-file`;
 - one gap per prefix whose record is unavailable:
   `<prefix>/node_modules: npm installer record unavailable (<reason>); dependency files cataloged per-file in the target lane`,
   where `<reason>` is `missing`, `unreadable`, `invalid-json`, `unsupported-lockfile-version:<v>`,
@@ -423,22 +424,55 @@ toward the workspace discovery walk, which stops at ten times that limit with
 - `npm installer record discovery bound reached; remaining prefixes cataloged per-file` past 32
   prefixes.
 
-Files that no verified entry covers keep per-file rows by artifact kind, as before. This includes
-files under unavailable records, files of unverified packages, and caches such as
-`node_modules/.cache`. Files under `node_modules` are kept even when the build did not change them.
+Files that no verified entry covers keep per-file rows by artifact kind, unless a configured
+`[build_outputs]` exclusion removes them (see below). This includes files under unavailable
+records, files of unverified packages, and `node_modules` files outside any package directory.
+Files under `node_modules` are kept even when the build did not change them.
 These rows get the default roles: most kinds are `unknown` in the target lane with a
 `delivery_fact_unavailable` gap, while manifests and lockfiles default to `build_chain`. The Node
 capture identity is `appsec-review/node-build-capture/3`. Only npm is covered; pnpm, Yarn and
 other ecosystems' installed trees stay per-file (see
 [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems)).
 
-Pending: the shared build-output disposition record (the receipt's `build_output_dispositions` and
-the `[build_outputs]` exclusion table) is designed but not implemented. `node.catalog` already
-accepts an optional recorder and, once the language build passes one, records each verified tree
-as `supply_chain` with basis `installer-record`, name `npm-installed-package` and `evidence_ref`
-`<record path>#<entry>`, and each unverified package nested in a verified one as `per_file`
-(`npm-unverified-package`). Until then the receipt accounts for summarized files only through the
-package rows' counts and the summary gap.
+**Build-output dispositions.** `node.catalog` takes its rows from the shared build-output
+disposition walk, `BuildOutputDispositions.walk()` in
+`src/appsec_review/jobs/build_output_scope.py`. The language build passes the unit's recorder,
+which carries the configured `[build_outputs]` policy. A caller that passes none gets a recorder
+with the default policy, which has no exclusions. Before the walk, the catalog registers each
+verified package with `classify_tree` as a root with:
+
+- disposition `supply_chain`, basis `installer-record`, confidence `fact`, name
+  `npm-installed-package` and reason `verified against installed manifest`;
+- the package's scope role;
+- `evidence_ref` `<record path>#<entry>`, for example
+  `node_modules/.package-lock.json#node_modules/a`. The record SHA-256 stays in the row's
+  `delivery_evidence`;
+- `keep` set to the anchor `package.json` and the retained files;
+- `bound_group` set to the package's outermost `node_modules` directory, for example
+  `node_modules` or `backend/node_modules`.
+
+`max_layout_roots` (512 by default) counts one slot per bound group, so an install tree of any size
+uses one slot. An unverified package inside a verified one is registered as a `per_file` root named
+`npm-unverified-package`, with its mismatch reason. The walk counts files under a `supply_chain`
+root with `stat` and does not hash them. It yields only the root's kept files, at most
+`max_kept_per_root` (256) per root. The package row's `files` and `bytes`, and the summary gap's
+counts, come from the walk's root counts.
+
+If `classify_tree` refuses a package because the root bound is exhausted, the package's files stay
+per-file target rows. The package gets no package row and is left out of the summary gap, and the
+recorder names
+`build-output-root-bound-exceeded: <n> roots beyond max_layout_roots stay per-file target content`.
+A root that a conflict between fact-level bases leaves `per_file` also stays per-file.
+
+The shipped `node-bundler-cache` exclusion removes `node_modules/.cache` and `node_modules/.vite`,
+at the workspace root and in nested workspace packages, by name. Those files get no rows and do not
+count toward the summary gap's uncovered-files suffix; the receipt records them under
+`configured_exclusions`. The catalog appends the recorder's `named_gaps()`, which name conflicts and
+kept-bound and root-bound overruns. The `[build_outputs]` table, the receipt's
+`build_output_dispositions` field and its `appsec-review/build-output-dispositions/1` document,
+including the optional `bound_group` key on root documents, are described in
+[native build-output discovery](../architecture/native-build-output-discovery.md#configuration)
+and its [receipt section](../architecture/native-build-output-discovery.md#receipt-and-telemetry).
 
 The Python adapter accepts package builds rooted by `pyproject.toml`, `setup.py`, or `setup.cfg`.
 Poetry, Pipfile, and requirements inputs may bind dependency resolution in the derived image;

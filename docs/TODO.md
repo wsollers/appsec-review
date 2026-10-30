@@ -333,8 +333,10 @@ packages. Order, from
 7. JVM: dependency jars copied into `target/` or `build/`. These need their own delivery decision,
    because in a WAR they really are shipped.
 
-Until then the pending native build-output disposition rules are the designed interim mechanism for
-these trees; they are not implemented yet.
+Until then, an operator can name such a tree in a `[[build_outputs.exclusions]]` rule (see
+[native build-output discovery](architecture/native-build-output-discovery.md#configuration)). The
+walk then counts its files under `configured_exclusions` instead of listing them, so the tree gets
+no per-file review and no supply-chain rows.
 
 ## Match OSV advisories against the snapshot's own index
 
