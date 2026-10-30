@@ -14,7 +14,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from appsec_review.config.assurance import AssuranceMode, VALIDATION_VERSION
-from .atomic import canonical_json, file_sha256
+from .atomic import canonical_json, file_sha256, timed_fsync
 from .lock import bounded_file_lock
 from .validation import current_validation, validation_scope, verified_digest
 
@@ -36,7 +36,7 @@ def _sync_directories(directories: set[Path], boundary: Path) -> None:
     for directory in sorted(parents, key=lambda value: (-len(value.parts), str(value))):
         descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            os.fsync(descriptor)
+            timed_fsync(descriptor)
         finally:
             os.close(descriptor)
 
@@ -52,7 +52,7 @@ def _sync_admission_artifacts(root: Path, paths: list[Path], detached: set[Path]
                 raise ValueError("admission artifact lost custody before durability barrier")
             identity = (metadata.st_dev, metadata.st_ino)
             if identity not in synced:
-                os.fsync(descriptor)
+                timed_fsync(descriptor)
                 synced.add(identity)
         finally:
             os.close(descriptor)
@@ -82,7 +82,7 @@ def _key(root: Path, *, create: bool) -> bytes:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(secrets.token_bytes(32))
                 stream.flush()
-                os.fsync(stream.fileno())
+                timed_fsync(stream.fileno())
             _sync_directories({directory}, root.parent)
         if path.is_symlink() or not path.is_file():
             raise ValueError("managed evidence admission key is unavailable")
@@ -374,15 +374,16 @@ def prepare_custody(root: Path, policy: Any) -> None:
 
 
 def _detach_payload(path: Path, expected: str, *, aliases: tuple[Path, ...] = ()) -> None:
-    from appsec_review.observability.spans import count_work
+    from appsec_review.observability.spans import count_work, operation_phase
 
     descriptor, temporary = tempfile.mkstemp(prefix=".admit-", dir=path.parent)
     pending = Path(temporary)
     try:
         with os.fdopen(descriptor, "wb") as destination, path.open("rb") as source:
-            shutil.copyfileobj(source, destination, 1024 * 1024)
+            with operation_phase("storage.copy"):
+                shutil.copyfileobj(source, destination, 1024 * 1024)
             destination.flush()
-            os.fsync(destination.fileno())
+            timed_fsync(destination.fileno())
         if file_sha256(pending) != expected:
             raise ValueError("evidence changed while detaching publication custody")
         mode = stat.S_IMODE(path.stat().st_mode) & ~0o222

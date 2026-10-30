@@ -7,11 +7,46 @@ from time import perf_counter
 
 import pytest
 
-from appsec_review.observability import aggregate_run_metrics
+from appsec_review.observability import PipelineLog, aggregate_run_metrics
 from appsec_review.observability import spans
+from appsec_review.observability.telemetry import RUN_METRICS_SCHEMA
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.review_packages import verify_review_packages
+from appsec_review.runtime import runner as runner_module
 from tests.test_target_document_pipeline import _run
+
+# Accelerated beyond the 60 s / 1 s defaults so heartbeats and thread-state sampling run inside
+# the fixture's few-second workload and are part of the measured overhead.
+PROGRESS_INTERVAL_SECONDS = 1.0
+SAMPLE_INTERVAL_SECONDS = 0.1
+HOTSPOT_KEYS = {"stage", "unit_id", "duration_ms", "thread_off_cpu_ratio", "d_state_ratio",
+                "top_wait_channel", "dominant_phase"}
+PROGRESS_KEYS = {"span_id", "stage", "unit_id", "state", "started_at", "last_progress_at",
+                 "elapsed_ms", "work", "expected", "completion_ratio", "phases", "thread_states"}
+
+
+def _assert_operation_sections(metrics, root, enabled):
+    """The summary exposes the gap-closing sections in their documented shapes."""
+    assert metrics["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/6"
+    records, torn = PipelineLog(root).read()
+    assert not torn
+    progress = [record for record in records if record["event_type"] == "OPERATION_PROGRESS"]
+    assert isinstance(metrics["operation_progress"], list) and len(metrics["operation_progress"]) <= 200
+    assert isinstance(metrics["operation_hotspots"], list) and len(metrics["operation_hotspots"]) <= 20
+    for row in metrics["operation_progress"]:
+        assert PROGRESS_KEYS <= set(row) and row["state"] in {"running", "lost"}
+    for row in metrics["operation_hotspots"]:
+        assert HOTSPOT_KEYS <= set(row) and row["duration_ms"] >= 0
+    if not enabled:
+        assert not progress and not metrics["operation_progress"] and not metrics["operation_hotspots"]
+        assert not spans._SAMPLER.entries
+        return
+    assert metrics["operation_progress"] == []                  # a completed run leaves no open span
+    assert metrics["operation_hotspots"]
+    for span in metrics["resource_spans"]:
+        assert {"phases", "expected", "thread_states", "progress_count"} <= set(span)
+    assert sum(span["progress_count"] or 0 for span in metrics["resource_spans"]) == len(progress)
+    assert any(span["phases"] for span in metrics["resource_spans"])
 
 
 def _verified_membership(config, target, outcome, root):
@@ -170,8 +205,18 @@ def test_three_repeat_operation_telemetry_overhead(tmp_path, monkeypatch):
     def without_operation_measurement(*args, **kwargs):
         yield None
 
-    samples, expected = [], None
+    samples = []
     original = spans.operation_span
+    monkeypatch.setattr(runner_module, "configure_operation_sampling", lambda **_: spans.configure_operation_sampling(
+        progress_interval_seconds=PROGRESS_INTERVAL_SECONDS, sample_interval_seconds=SAMPLE_INTERVAL_SECONDS))
+    try:
+        _measure_operation_telemetry(tmp_path, monkeypatch, without_operation_measurement, original, samples)
+    finally:
+        spans.configure_operation_sampling()
+
+
+def _measure_operation_telemetry(tmp_path, monkeypatch, without_operation_measurement, original, samples):
+    expected = None
     for repetition in range(3):
         order = (True, False) if repetition % 2 == 0 else (False, True)
         for enabled in order:
@@ -197,6 +242,7 @@ def test_three_repeat_operation_telemetry_overhead(tmp_path, monkeypatch):
             samples.append(sample)
             (tmp_path / "telemetry-samples.json").write_text(json.dumps(samples, indent=2))
             assert bool(metrics["resource_spans"]) is enabled
+            _assert_operation_sections(metrics, root, enabled)
             membership = _verified_membership(config, target, outcome, root)
             if expected is None:
                 expected = membership
@@ -216,7 +262,10 @@ def test_three_repeat_operation_telemetry_overhead(tmp_path, monkeypatch):
     overhead = 100 * (medians["enabled"] / medians["disabled"] - 1)
     (tmp_path / "telemetry-comparison.json").write_text(json.dumps({
         "schema": "appsec-review/fixture-telemetry-comparison/1",
-        "measurement_scope": "operation spans, their counters and resource sampling only",
+        "measurement_scope": ("operation spans, their counters, phases, expected totals, resource "
+                              "sampling, thread-state sampling and progress heartbeats only"),
+        "sampling_intervals_seconds": {"progress": PROGRESS_INTERVAL_SECONDS,
+                                       "sample": SAMPLE_INTERVAL_SECONDS},
         "retained_in_both": "ordinary lifecycle logs, evidence validation, publication and retrieval",
         "workload": "strict intake-catalog-indexing-packages; equal semantic membership, evidence and gaps",
         "cache_state": "fresh run stores; host filesystem cache uncontrolled; FTS disabled",

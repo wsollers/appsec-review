@@ -11,7 +11,7 @@ from typing import Any
 from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
 
 
-POLICY_IDENTITY = "appsec-review/delivery-propagation/1"
+POLICY_IDENTITY = "appsec-review/delivery-propagation/2"
 SCOPE_FIELDS = ("scope_version", "scope_role", "delivery_status", "artifact_origin",
                 "analysis_reason", "analysis_lane", "delivery_evidence")
 _EVIDENCE = frozenset({
@@ -24,6 +24,7 @@ _REASONS = {
     ScopeRole.TARGET_SOURCE: ("target-source-review", "target"),
     ScopeRole.DELIVERABLE: ("accepted-delivery-fact", "target"),
     ScopeRole.SHIPPED_DEPENDENCY: ("accepted-runtime-dependency-fact", "target"),
+    ScopeRole.RUNTIME_DEPENDENCY: ("accepted-runtime-dependency-review", "supply_chain"),
     ScopeRole.BUILD_CHAIN: ("target-build-chain-review", "supply_chain"),
     ScopeRole.BUILD_DEPENDENCY: ("accepted-build-dependency-review", "supply_chain"),
     ScopeRole.PLATFORM: ("supplied-platform-excluded", "excluded"),

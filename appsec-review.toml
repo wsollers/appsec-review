@@ -5,6 +5,33 @@
 [exclusions]
 patterns = [".gitignore"]
 
+# Named build-output exclusions and discovery bounds for the build cataloguers
+# (docs/architecture/native-build-output-discovery.md). Patterns use [exclusions] semantics on the
+# workspace-relative path; each excluded path is recorded by name, never reported as a gap.
+[build_outputs]
+heuristic_min_confidence = "medium"
+
+[build_outputs.discovery]
+cmake_file_api = true
+max_layout_sources = 64
+max_layout_source_bytes = 16777216
+max_layout_roots = 512
+max_ninja_edges = 200000
+max_kept_per_root = 256
+
+[[build_outputs.exclusions]]
+name = "cmake-fetchcontent-subbuild"
+reason = "FetchContent download sub-builds are CMake bookkeeping, not dependency or target output"
+patterns = ["*-subbuild/"]
+families = ["native"]
+
+[[build_outputs.exclusions]]
+name = "node-bundler-cache"
+reason = "Bundler and loader caches (babel-loader, terser, webpack, Vite dependency pre-bundling) are build bookkeeping, not target output or installer-recorded dependency content"
+patterns = ["node_modules/.cache/", "*/node_modules/.cache/",
+            "node_modules/.vite/", "*/node_modules/.vite/"]
+families = ["node"]
+
 [runtime]
 runs_dir = "runs"
 data_dir = "data"

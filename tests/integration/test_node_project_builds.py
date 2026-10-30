@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -27,7 +28,9 @@ from appsec_review.config import load_config
 from appsec_review.container_runtime import profiles_from_settings
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.jobs.delivery_scope import scope_fields
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
+from appsec_review.jobs.job_language_build.node_installed import discover_prefixes, parse_installed_record
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
@@ -39,6 +42,9 @@ from appsec_review.runtime import GraphRunner
 ROOT = Path(__file__).resolve().parents[2]
 PROJECTS = ROOT / "targets" / "appsec-multi-vuln" / "projects"
 LOCKFILES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")
+SUMMARY_GAP = "dependency-content-summarized: "
+PACKAGE_ROLE = "installed-dependency-package"
+RECORD_ROLE = "installed-dependency-record"
 
 pytestmark = pytest.mark.requires_target("appsec-multi-vuln")
 
@@ -179,6 +185,63 @@ def _probe_events(run_root: Path, probe: dict) -> list[dict]:
     return rows
 
 
+def _assert_installed_dependency_rows(workspace: Path, receipt: dict, unit: UnitExpectation) -> None:
+    """npm's own installer record, never a directory name, takes installed files off the target lane.
+
+    Every verified record entry is one supply-chain package row and one recorded installer-record
+    tree; target-lane rows under ``node_modules`` are limited to files no verified entry covers.
+    """
+    prefixes, discovery_gaps = discover_prefixes(workspace)
+    assert not discovery_gaps, discovery_gaps
+    rows = receipt["artifacts"]
+    package_rows = {row["package_metadata"]["install_path"]: row for row in rows
+                    if (row.get("package_metadata") or {}).get("role") == PACKAGE_ROLE}
+    roots = {item["root"]: item for item in
+             (receipt.get("build_output_dispositions") or {}).get("roots", ())
+             if item.get("basis") == "installer-record"}
+    verified, unverified = {}, set()
+    for prefix in prefixes:
+        record = parse_installed_record(workspace, prefix)
+        if not record.available:
+            continue
+        verified.update((package.install_path, package) for package in record.packages)
+        unverified.update(item.install_path for item in record.unverified)
+        record_rows = [row for row in rows if row["workspace_path"] == record.record.workspace_path]
+        assert [(row.get("dependency_metadata") or {}).get("role") for row in record_rows] == [
+            RECORD_ROLE], (unit.root, record.record.workspace_path)
+    assert set(package_rows) == set(verified), (
+        unit.root, sorted(set(package_rows) ^ set(verified))[:20])
+    for install_path, package in verified.items():
+        row = package_rows[install_path]
+        fields = scope_fields(row)
+        expected = "build_dependency" if package.build_only else "runtime_dependency"
+        assert fields["scope_role"] in {expected, "shipped_dependency"}, (install_path, fields)
+        assert row["workspace_path"] == f"{install_path}/package.json"
+        if fields["scope_role"] == expected:
+            assert row["delivery_evidence"]["kind"] == "npm-installed-record"
+            assert row["delivery_evidence"]["entry"] == package.entry
+        tree = roots.get(install_path)
+        assert tree is not None, f"{install_path}: installer-record tree is not recorded"
+        assert (tree["disposition"], tree["name"]) == ("supply_chain", "npm-installed-package"), tree
+
+    def covered(path: str) -> bool:
+        owners = [root for root in (*verified, *unverified)
+                  if PurePosixPath(path).is_relative_to(PurePosixPath(root))]
+        return bool(owners) and max(owners, key=lambda root: root.count("/")) in verified
+
+    dependency_files = [
+        Path(directory, name).relative_to(workspace).as_posix()
+        for directory, names, files in os.walk(workspace)
+        for name in files if "node_modules" in Path(directory).relative_to(workspace).parts]
+    uncovered = [path for path in dependency_files if not covered(path)]
+    target_dependency_rows = [row["workspace_path"] for row in rows
+                              if scope_fields(row)["analysis_lane"] == "target"
+                              and "node_modules" in PurePosixPath(row["workspace_path"]).parts]
+    assert not [path for path in target_dependency_rows if covered(path)], target_dependency_rows[:20]
+    assert len(target_dependency_rows) <= len(uncovered), (
+        unit.root, len(target_dependency_rows), len(uncovered))
+
+
 def _diagnostics(run_root: Path, receipt: dict) -> str:
     text = []
     for command in receipt.get("commands", ()):
@@ -240,7 +303,7 @@ def test_node_project_builds_through_the_pipeline(tmp_path: Path, case: NodeCase
         if unit.language_gap is not None:
             assert any(unit.language_gap in gap for gap in receipt["gaps"]), receipt["gaps"]
             continue
-        assert receipt["gaps"] == [], receipt["gaps"]
+        assert [gap for gap in receipt["gaps"] if not gap.startswith(SUMMARY_GAP)] == [], receipt["gaps"]
         assert receipt["commands"] and all(command["exit_code"] == 0 for command in receipt["commands"])
         assert all((command.get("execution_capture") or {}).get("complete") is True
                    for command in receipt["commands"]), "language build ran without complete capture"
@@ -252,7 +315,9 @@ def test_node_project_builds_through_the_pipeline(tmp_path: Path, case: NodeCase
             assert path.is_file() and path.stat().st_size > 0, f"missing build output {output}"
         assert set(unit.artifact_kinds) <= {item["kind"] for item in produced.values()}, produced
         if unit.compiler_artifacts == "SKIPPED_NA":
-            assert not [item for item in produced.values() if item["kind"] != "package-metadata"]
+            assert not [item for item in produced.values() if item["kind"] != "package-metadata"
+                        and (item.get("dependency_metadata") or {}).get("role") != RECORD_ROLE]
+        _assert_installed_dependency_rows(workspace, receipt, unit)
         if unit.native_compile is not None:
             # node-gyp's C++ compiles are captured for native analysis.
             compiles = [event for event in events if event.get("kind") == "process_exec"

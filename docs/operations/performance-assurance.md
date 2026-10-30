@@ -24,6 +24,36 @@ as `vendor`, `node_modules`, `build`, and `dist` do not establish platform owner
 Job construction does not enumerate application source trees to assemble an implementation
 identity; unused discovery left over from the former source-fingerprint path is removed.
 
+## Delivery scope roles
+
+Every accepted artifact row carries delivery-scope fields under scope version
+`appsec-review/delivered-scope/2`, normalized by the delivery policy
+`appsec-review/delivery-propagation/2` (`src/appsec_review/jobs/delivery_scope.py`). A row with any
+other scope version is rejected. The role comes only from an accepted producer fact. A row with no
+role defaults to `intermediate_evidence` for evidence kinds and to `build_chain` for
+`package-metadata` and `resolved-dependency-metadata`. Every other row defaults to `unknown` with
+the gap `<path>: delivery status is unknown (delivery_fact_unavailable)`.
+
+| `scope_role` | `analysis_reason` | `analysis_lane` | `delivery_status` |
+| --- | --- | --- | --- |
+| `target_source` | `target-source-review` | target | `unknown` |
+| `deliverable` | `accepted-delivery-fact` | target | `delivered` |
+| `shipped_dependency` | `accepted-runtime-dependency-fact` | target | `delivered` |
+| `runtime_dependency` | `accepted-runtime-dependency-review` | supply_chain | `not_established` |
+| `build_chain` | `target-build-chain-review` | supply_chain | `not_established` |
+| `build_dependency` | `accepted-build-dependency-review` | supply_chain | `not_established` |
+| `supplied_platform` | `supplied-platform-excluded` | excluded | `not_established` |
+| `intermediate_evidence` | `build-provenance-inventory` | evidence | `not_established` |
+| `unknown` | `delivery-unknown-candidate-review` | target | `unknown` |
+
+The target lane admits every analysis capability. The supply_chain lane admits only `inventory`,
+`packages`, `syft`, `grype` and `osv`, and the evidence lane admits only `inventory`. The excluded
+lane admits nothing. `runtime_dependency` marks a package that npm's installer record lists outside
+its dev tree. That package belongs to the production dependency closure, but this does not prove it
+ships, so it is reviewed as supply chain rather than per file (see
+[installed npm dependencies](language-build.md)). Only an accepted delivery fact, such as an
+`npm pack` member, makes a dependency `shipped_dependency`.
+
 ## Publication and consumption
 
 Strict consumers deduplicate expected-digest checks, receipt closure checks and shard validation
@@ -446,6 +476,22 @@ Preparation records bind the exact `scope_id`, query profile where applicable an
 `tool_invocation_id`. Nested preparation inherits its action's `resource_lease_id`, linking the
 work to eligibility/admission/release records without relying on concurrent log order.
 Aggregated `resource_spans` retain these links and each span's work counters.
+Spans also carry thread-scoped CPU/off-CPU time, context switches, block operations, syscall
+counts, sampled thread states, closed-vocabulary sub-phase timings and periodic
+`OPERATION_PROGRESS` records (see
+[telemetry architecture](../architecture/telemetry.md#operation-spans-progress-and-phases)).
+All of these attach to an active operation span, so the operation-telemetry comparison, which
+replaces `operation_span`, disables them too: they are inside its measured overhead and its 5%
+threshold. Their designed budget is one `getrusage` and one thread-clock read per span boundary,
+two clock reads per phase, at most 32 × 2 small `/proc` reads per second for sampling and at most
+one progress record per span per minute. That budget is a design bound, not a measured result;
+the earlier 4.290% comparison below predates this instrumentation and has not been remeasured.
+The performance acceptance comparison accelerates the cadences to a 1.0 s progress interval and a
+0.1 s sample interval (from the 60 s / 1 s defaults) so heartbeats and sampling run inside its
+few-second workload, and records them as `sampling_intervals_seconds` in
+`telemetry-comparison.json`. It also checks the run-metrics/6 `operation_progress`,
+`operation_hotspots` and span `phases`/`expected`/`thread_states`/`progress_count` shapes, and that
+the sections are empty when the instrumentation is disabled.
 `resource_admissions` retains per-lease queue delay and scope/profile for admission and timeout;
 an action that times out before admission has no execution span. Missing legacy fields stay null.
 Shared-object streaming publication also records its actual copied byte/object counts. These are

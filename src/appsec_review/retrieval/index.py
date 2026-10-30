@@ -134,80 +134,93 @@ class IndexBuilder:
         return [unique[key] for key in sorted(unique)], len(self.relations) - len(unique)
 
     def build(self) -> str:
-        from appsec_review.storage.shared import current, put_private_file, safe_path, verify_reference
+        """Build, make durable, hash once and publish one complete immutable shard.
+
+        Phases, in order: write (private temp file, no journal/sync) -> fsync (the single
+        durability point) -> hash -> adopt (hard-link into the content store) -> link (named
+        path) -> custody (binding/receipt/request records). Returns only after custody.
+        """
+        from appsec_review.observability.spans import count_work, operation_phase
+        from appsec_review.storage.atomic import timed_fsync
+        from appsec_review.storage.shared import adopt_private_file, current, safe_path
+        from appsec_review.storage.validation import remember_digest, validation_scope, verified_digest
         owner = current()
         if owner is not None:
             safe_path(owner.run_root, self.path.relative_to(owner.run_root).as_posix())
-        entities = self._unique_entities()
-        relations, merged_relations = self._unique_relations()
+        with operation_phase("index.prepare"):
+            entities = self._unique_entities()
+            relations, merged_relations = self._unique_relations()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        custody = owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices")
         with TemporaryDirectory(prefix=".building-", dir=self.path.parent) as directory:
             temporary = Path(directory) / "shard.sqlite"
             self._write_database(temporary, entities, relations, merged_relations)
-            digest = file_sha256(temporary)
-            source = temporary
-            if owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices"):
-                source = verify_reference(owner.run_root, put_private_file(owner.run_root, temporary))
+            count_work("shards_built")
+            count_work("entities_written", len(entities))
+            count_work("relations_written", len(relations))
+            if custody:
+                # Same private mode as the copying content-store path it replaces.
+                os.chmod(temporary, 0o600)
+            descriptor = os.open(temporary, os.O_RDONLY)
             try:
-                # A same-filesystem link publishes complete bytes without replacing another writer.
-                os.link(source, self.path)
-            except FileExistsError:
-                if (self.path.is_symlink() or not self.path.is_file()
-                        or file_sha256(self.path) != digest):
-                    raise ValueError(
-                        f"immutable index shard conflicts with existing bytes: "
-                        f"{self.name}/{self.shard_id}"
-                    ) from None
-            if owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices"):
-                owner.named("index-shard", self.path, computed=True, computation={
-                    "fingerprint": self.fingerprint, "name": self.name, "shard_id": self.shard_id,
-                    "target_snapshot": self.target_snapshot, "schema": INDEX_SCHEMA})
+                timed_fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            with operation_phase("index.digest"):
+                digest = file_sha256(temporary)
+            if not custody:
+                self._place(temporary, digest, None)
+                return digest
+            root = owner.run_root
+            with validation_scope(root):
+                remember_digest(root, temporary, digest)
+                with operation_phase("index.publish"):
+                    content = adopt_private_file(root, temporary, digest)
+                self._place(safe_path(root, content["path"]), digest,
+                            lambda: verified_digest(root, self.path, digest))
+                with operation_phase("index.custody_bind"):
+                    owner.named("index-shard", self.path, computed=True, expected_sha256=digest,
+                                computation={
+                                    "fingerprint": self.fingerprint, "name": self.name,
+                                    "shard_id": self.shard_id, "target_snapshot": self.target_snapshot,
+                                    "schema": INDEX_SCHEMA})
             return digest
+
+    def _place(self, source: Path, digest: str, verify: Any) -> None:
+        from appsec_review.observability.spans import operation_phase
+        try:
+            # A same-filesystem link publishes complete bytes without replacing another writer.
+            with operation_phase("index.link"):
+                os.link(source, self.path)
+        except FileExistsError:
+            matches = False
+            if not self.path.is_symlink() and self.path.is_file():
+                try:
+                    matches = (verify() if verify is not None else file_sha256(self.path)) == digest
+                except ValueError:
+                    matches = False
+            if not matches:
+                raise ValueError(
+                    f"immutable index shard conflicts with existing bytes: "
+                    f"{self.name}/{self.shard_id}"
+                ) from None
 
     def _write_database(self, temporary: Path, entities: list[EntityRecord],
                         relations: list[RelationRecord], merged_relations: int) -> None:
+        # The private file is unpublished until build() fsyncs and hashes it, so it needs no
+        # rollback journal, per-statement sync or VACUUM. Rows are inserted in sorted order and
+        # secondary indexes are created after the bulk inserts, so equal inputs give equal bytes.
+        from appsec_review.observability.spans import operation_phase
+        writing = operation_phase("index.sqlite_write").__enter__()
         database = sqlite3.connect(temporary)
         try:
-            database.executescript("""
-                PRAGMA journal_mode=DELETE;
-                PRAGMA synchronous=FULL;
-                PRAGMA page_size=4096;
-                CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
-                CREATE TABLE entities(
-                    identity TEXT PRIMARY KEY, kind TEXT NOT NULL, native_id TEXT NOT NULL,
-                    name TEXT NOT NULL, text TEXT NOT NULL, payload_json TEXT NOT NULL
-                ) WITHOUT ROWID;
-                CREATE TABLE locations(
-                    location_id TEXT NOT NULL, entity_id TEXT PRIMARY KEY,
-                    target_snapshot TEXT NOT NULL, path TEXT NOT NULL, file_sha256 TEXT NOT NULL,
-                    start_byte INTEGER NOT NULL, end_byte INTEGER NOT NULL,
-                    start_line INTEGER NOT NULL, end_line INTEGER NOT NULL,
-                    start_column INTEGER NOT NULL, end_column INTEGER NOT NULL,
-                    producer_location_json TEXT NOT NULL, mapping_method TEXT NOT NULL,
-                    confidence REAL NOT NULL, ambiguous INTEGER NOT NULL,
-                    FOREIGN KEY(entity_id) REFERENCES entities(identity)
-                ) WITHOUT ROWID;
-                CREATE TABLE relations(
-                    relation_id TEXT PRIMARY KEY, kind TEXT NOT NULL, source_id TEXT NOT NULL,
-                    target_id TEXT NOT NULL, exact INTEGER NOT NULL, confidence REAL NOT NULL,
-                    ambiguity TEXT, payload_json TEXT NOT NULL
-                ) WITHOUT ROWID;
-                CREATE INDEX relations_source ON relations(source_id, kind);
-                CREATE INDEX relations_target ON relations(target_id, kind);
-                CREATE TABLE coverage(
-                    area TEXT NOT NULL, status TEXT NOT NULL, gap TEXT,
-                    PRIMARY KEY(area, status, gap)
-                );
-                CREATE VIRTUAL TABLE search_fts USING fts5(
-                    identity UNINDEXED, name, path, text, tokenize='unicode61'
-                );
-            """)
-            if self.name == "analysis":
-                database.execute("""CREATE INDEX syntax_lookup ON entities(
-                    json_extract(payload_json, '$.syntax.source_identity'),
-                    json_extract(payload_json, '$.syntax.category'),
-                    json_extract(payload_json, '$.syntax.written_name')
-                ) WHERE kind='ast_node'""")
+            database.isolation_level = None
+            for pragma in ("PRAGMA page_size=4096", "PRAGMA journal_mode=OFF", "PRAGMA synchronous=OFF",
+                           "PRAGMA locking_mode=EXCLUSIVE"):
+                database.execute(pragma)
+            database.execute("BEGIN")
+            for statement in _SHARD_TABLES:
+                database.execute(statement)
             metadata = {
                 "schema": INDEX_SCHEMA, "name": self.name, "fingerprint": self.fingerprint,
                 "target_snapshot": self.target_snapshot, "shard_id": self.shard_id,
@@ -218,9 +231,10 @@ class IndexBuilder:
                 "relation_duplicates_merged": str(merged_relations),
             }
             database.executemany("INSERT INTO metadata VALUES (?, ?)", sorted(metadata.items()))
+            entity_rows, location_rows, search_rows = [], [], []
             for record in entities:
                 identity = record.identity.value
-                database.execute("INSERT INTO entities VALUES (?, ?, ?, ?, ?, ?)", (
+                entity_rows.append((
                     identity, record.identity.kind.value, record.native_id[:4096], record.name[:4096],
                     record.text[:131072], json.dumps(sanitize_producer_data(record.payload), sort_keys=True),
                 ))
@@ -228,29 +242,76 @@ class IndexBuilder:
                 if record.location is not None:
                     location = record.location
                     location_path = location.path
-                    database.execute("INSERT INTO locations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+                    location_rows.append((
                         location.location_id, identity, location.target_snapshot, location.path,
                         location.file_sha256, location.start_byte, location.end_byte,
                         location.start_line, location.end_line, location.start_column, location.end_column,
                         json.dumps(sanitize_producer_data(location.producer_location), sort_keys=True),
                         location.mapping_method, location.confidence, int(location.ambiguous),
                     ))
-                database.execute("INSERT INTO search_fts(identity, name, path, text) VALUES (?, ?, ?, ?)",
-                                 (identity, record.name, location_path, record.text))
-            for relation in relations:
-                database.execute("INSERT INTO relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
-                    relation.relation_id, relation.kind.value, relation.source_id, relation.target_id,
-                    int(relation.exact), relation.confidence, relation.ambiguity,
-                    json.dumps(sanitize_producer_data(relation.payload or {}), sort_keys=True),
-                ))
+                search_rows.append((identity, record.name, location_path, record.text))
+            database.executemany("INSERT INTO entities VALUES (?, ?, ?, ?, ?, ?)", entity_rows)
+            database.executemany(
+                "INSERT INTO locations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", location_rows)
+            database.executemany("INSERT INTO search_fts(identity, name, path, text) VALUES (?, ?, ?, ?)",
+                                 search_rows)
+            database.executemany("INSERT INTO relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(
+                relation.relation_id, relation.kind.value, relation.source_id, relation.target_id,
+                int(relation.exact), relation.confidence, relation.ambiguity,
+                json.dumps(sanitize_producer_data(relation.payload or {}), sort_keys=True),
+            ) for relation in relations])
             database.executemany("INSERT INTO coverage VALUES (?, ?, ?)", sorted(set(self.coverage)))
             if self.name == "debug_symbols":
                 from appsec_review.retrieval.debug_symbol_index import build_lookup
                 build_lookup(database, entities)
-            database.commit()
-            database.execute("VACUUM")
+            for statement in _SHARD_INDEXES:
+                database.execute(statement)
+            if self.name == "analysis":
+                database.execute(_SYNTAX_LOOKUP)
+            database.execute("COMMIT")
         finally:
+            writing.__exit__(None, None, None)
             database.close()
+
+
+_SHARD_TABLES = (
+    "CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID",
+    """CREATE TABLE entities(
+        identity TEXT PRIMARY KEY, kind TEXT NOT NULL, native_id TEXT NOT NULL,
+        name TEXT NOT NULL, text TEXT NOT NULL, payload_json TEXT NOT NULL
+    ) WITHOUT ROWID""",
+    """CREATE TABLE locations(
+        location_id TEXT NOT NULL, entity_id TEXT PRIMARY KEY,
+        target_snapshot TEXT NOT NULL, path TEXT NOT NULL, file_sha256 TEXT NOT NULL,
+        start_byte INTEGER NOT NULL, end_byte INTEGER NOT NULL,
+        start_line INTEGER NOT NULL, end_line INTEGER NOT NULL,
+        start_column INTEGER NOT NULL, end_column INTEGER NOT NULL,
+        producer_location_json TEXT NOT NULL, mapping_method TEXT NOT NULL,
+        confidence REAL NOT NULL, ambiguous INTEGER NOT NULL,
+        FOREIGN KEY(entity_id) REFERENCES entities(identity)
+    ) WITHOUT ROWID""",
+    """CREATE TABLE relations(
+        relation_id TEXT PRIMARY KEY, kind TEXT NOT NULL, source_id TEXT NOT NULL,
+        target_id TEXT NOT NULL, exact INTEGER NOT NULL, confidence REAL NOT NULL,
+        ambiguity TEXT, payload_json TEXT NOT NULL
+    ) WITHOUT ROWID""",
+    """CREATE TABLE coverage(
+        area TEXT NOT NULL, status TEXT NOT NULL, gap TEXT,
+        PRIMARY KEY(area, status, gap)
+    )""",
+    """CREATE VIRTUAL TABLE search_fts USING fts5(
+        identity UNINDEXED, name, path, text, tokenize='unicode61'
+    )""",
+)
+_SHARD_INDEXES = (
+    "CREATE INDEX relations_source ON relations(source_id, kind)",
+    "CREATE INDEX relations_target ON relations(target_id, kind)",
+)
+_SYNTAX_LOOKUP = """CREATE INDEX syntax_lookup ON entities(
+    json_extract(payload_json, '$.syntax.source_identity'),
+    json_extract(payload_json, '$.syntax.category'),
+    json_extract(payload_json, '$.syntax.written_name')
+) WHERE kind='ast_node'"""
 
 
 def _relation_rank(relation: RelationRecord) -> tuple[float, str]:

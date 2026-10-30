@@ -311,6 +311,33 @@ concurrency with partitioned resumability. Telemetry must report artifact/byte t
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
 
+## Summarize installed dependencies for the remaining ecosystems
+
+Only npm installed trees are summarized from the package manager's own installer record (see
+[installed npm dependencies](operations/language-build.md)). In other ecosystems, a recipe-run
+install that writes dependency files into the workspace still produces per-file target rows.
+Extend the same contract one ecosystem at a time. Scope must come only from the installer record,
+verified against the installed package. The new rows go to the supply_chain lane as
+`runtime_dependency` or `build_dependency`, with named gaps for unavailable records and unverified
+packages. Order, from
+[the design's deferred ecosystems](reviews/dependency-output-filtering-design.md#d1-scope-of-the-first-implementation):
+
+1. Go (next): `vendor/modules.txt` written by a recipe's `go mod vendor`.
+2. PHP Composer: `vendor/composer/installed.json`; also move `composer_metadata` production packages
+   from `unknown` to `runtime_dependency`.
+3. .NET: `obj/project.assets.json` for package assemblies copied into `bin/`.
+4. Rust: the receipt's `cargo_metadata` package sources for registry crates' `target/*/deps`
+   libraries; measure the volume first.
+5. pnpm and Yarn (classic and berry): their own install state, for example `node_modules/.pnpm`.
+6. Python: `*.dist-info/RECORD` for an in-workspace virtual environment.
+7. JVM: dependency jars copied into `target/` or `build/`. These need their own delivery decision,
+   because in a WAR they really are shipped.
+
+Until then, an operator can name such a tree in a `[[build_outputs.exclusions]]` rule (see
+[native build-output discovery](architecture/native-build-output-discovery.md#configuration)). The
+walk then counts its files under `configured_exclusions` instead of listing them, so the tree gets
+no per-file review and no supply-chain rows.
+
 ## Match OSV advisories against the snapshot's own index
 
 Match OSV advisories against the snapshot's own index/osv.sqlite so memory scales with a project's

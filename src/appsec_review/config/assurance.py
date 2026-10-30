@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 
-SCOPE_VERSION = "appsec-review/delivered-scope/1"
+SCOPE_VERSION = "appsec-review/delivered-scope/2"
 VALIDATION_VERSION = "appsec-review/admission/2"
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:+/-]{0,199}")
 
@@ -23,6 +23,8 @@ class ScopeRole(str, Enum):
     TARGET_SOURCE = "target_source"
     DELIVERABLE = "deliverable"
     SHIPPED_DEPENDENCY = "shipped_dependency"
+    # Installed for production use by an installer record; delivery is not established by it.
+    RUNTIME_DEPENDENCY = "runtime_dependency"
     BUILD_CHAIN = "build_chain"
     BUILD_DEPENDENCY = "build_dependency"
     PLATFORM = "supplied_platform"

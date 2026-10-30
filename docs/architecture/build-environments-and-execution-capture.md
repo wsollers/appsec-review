@@ -137,7 +137,11 @@ manifest, or more than 48 members is an inventory gap, and build capture records
 `node_modules` and re-points workspace links (links from `node_modules` into the project tree) at
 `/workspace`, where the build workspace holds member sources. The build links both the workspace
 root's and the unit's `node_modules` to the image. Installed `node_modules` links in a target
-checkout are never copied, so they are not build-source symlinks.
+checkout are never copied, so they are not build-source symlinks. A recipe that runs its own npm
+install instead writes a real `node_modules` into the workspace. The Node catalog scopes that tree
+only from npm's installer record, `node_modules/.package-lock.json`, and keeps one supply-chain row
+per verified package rather than one row per file (see
+[installed npm dependencies](../operations/language-build.md)).
 
 The project-image cache is keyed by the full recipe identity. Before deriving or reusing a project
 image, `ProjectImageResolver` verifies the pinned family base's signature; the derived image itself
@@ -842,8 +846,9 @@ The main implementation surfaces are:
 - `src/appsec_review/jobs/job_language_build/capture.py` — the typed descriptor and generic
   successful-exec reconciliation used by native, Rust, and .NET (Go reconciles in `go.py`);
 - `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`,
-  `dotnet.py`, `python.py`, `php.py`, `node.py`, `jvm.py`, `wasm.py`, and `native_components.py` —
-  shared routing plus language-specific recipes, classification, artifacts, and metadata;
+  `dotnet.py`, `python.py`, `php.py`, `node.py`, `node_installed.py`, `jvm.py`, `wasm.py`, and
+  `native_components.py` — shared routing plus language-specific recipes, classification,
+  artifacts, and metadata (`node_installed.py` parses and verifies npm installer records);
 - `src/appsec_review/jobs/build_discovery.py` (unit routing and recipe validation),
   `src/appsec_review/jobs/job_post_build_security_assessment/hardening.py` (per-family binary
   hardening expectations), and `containers/buildenv/*` (the family images);
@@ -854,7 +859,8 @@ The main implementation surfaces are:
   `tests/test_go_language_build.py`, `tests/test_rust_language_build.py`,
   `tests/test_go_build_facts.py`, `tests/test_elf_loader_facts.py`,
   `tests/test_language_build.py`, `tests/test_language_build_python.py`,
-  `tests/test_language_build_node.py`, `tests/test_jvm_language_build.py`,
+  `tests/test_language_build_node.py`, `tests/test_node_installed_dependencies.py`,
+  `tests/test_node_dependency_output_filtering.py`, `tests/test_jvm_language_build.py`,
   `tests/test_raw_trace_retention.py`, `tests/test_native_components.py`,
   `tests/test_family_binary_assessment.py`, `tests/test_live_build_toolchains.py`, and the
   real-image `tests/integration/test_{family,jvm_dotnet,node}_project_builds.py` — unit, live and

@@ -16,7 +16,12 @@ from appsec_review.jobs.job_artifact_indexing import (
     canonical_artifact_identity,
     load_accepted_artifact_index,
 )
-from appsec_review.jobs.job_artifact_indexing.job import _finish_shard, _validate_receipts
+from appsec_review.jobs.job_artifact_indexing.job import (
+    _finish_shard,
+    _manifest_entries,
+    _shard_layout,
+    _validate_receipts,
+)
 from appsec_review.retrieval import (
     INDEX_SCHEMA,
     EntityKind,
@@ -305,11 +310,14 @@ def test_repeated_link_observations_produce_one_relation_with_provenance(
     GraphRunner(config, [build_job()]).run(target_root=target, source_fingerprint=snapshot,
                                             run_id=RUN_ID)
     output_id = canonical_artifact_identity(snapshot, receipt["build_unit_id"], output).value
-    shard_id = f"relations-{output_id.rsplit(':', 1)[-1][:24]}"
+    shard_id = f"relations-{receipt['build_unit_id']}-0000"
     shard = next(item for item in RetrievalCore(config.runtime.runs_dir, RUN_ID).manifest["indexes"]
                  if item["shard_id"] == shard_id)
+    assert shard["producer"]["build_unit_id"] == receipt["build_unit_id"]
+    assert (shard["producer"]["batch"], shard["producer"]["batch_count"]) == (0, 1)
     with sqlite3.connect(run_root / shard["relative_path"]) as database:
-        rows = database.execute("SELECT payload_json FROM relations WHERE kind='LINKS_INTO'").fetchall()
+        rows = database.execute("SELECT payload_json FROM relations WHERE kind='LINKS_INTO' "
+                                "AND target_id=?", (output_id,)).fetchall()
         declared = json.loads(database.execute(
             "SELECT value FROM metadata WHERE key='relation_kind_counts'").fetchone()[0])
     assert len(rows) == declared["LINKS_INTO"] == 1
@@ -355,11 +363,11 @@ def test_node_catalog_payload_preserves_source_identity_and_exact_producing_acti
     assert result["results"][0]["payload"]["source_map"]["source_identities"][0][
         "workspace_path"] == "src/index.ts"
     relation_shard = next(item for item in RetrievalCore(config.runtime.runs_dir, RUN_ID).manifest["indexes"]
-                          if item["shard_id"].startswith("relations-")
-                          and item["shard_id"].endswith(identity.rsplit(":", 1)[-1][:24]))
+                          if item["shard_id"] == f"relations-{receipt['build_unit_id']}-0000")
     with sqlite3.connect(run_root / relation_shard["relative_path"]) as database:
         relation = database.execute(
-            "SELECT exact, confidence, ambiguity FROM relations WHERE kind='GENERATED_FROM'"
+            "SELECT exact, confidence, ambiguity FROM relations WHERE kind='GENERATED_FROM' "
+            "AND source_id=?", (identity,)
         ).fetchone()
     assert relation == (1, 1.0, None)
 
@@ -416,7 +424,8 @@ def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tm
     runner.finalize_attempt(job, claim)
 
     accepted = load_accepted_artifact_index(run_root)
-    assert accepted["artifact_count"] == 5 and accepted["artifact_shard_count"] == 11
+    # 5 catalogs, 1 members shard (one package unit) and 1 relations batch per build unit.
+    assert accepted["artifact_count"] == 5 and accepted["artifact_shard_count"] == 10
     core = RetrievalCore(config.runtime.runs_dir, RUN_ID)
     expected_kinds = {"object_file", "executable", "managed_assembly", "wasm_module", "package",
                       "archive_member"}
@@ -440,23 +449,16 @@ def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tm
     before = {item["shard_id"]: item["fingerprint"] for item in RetrievalCore(
               config.runtime.runs_dir, RUN_ID).manifest["indexes"] if item["name"] == "artifacts"}
     changed = receipts[0]["artifacts"][0]
-    old_relation_shard = next(key for key in before if key.startswith("relations-") and
-                              before[key] == artifact_index_fingerprint(
-                                  name="artifacts", target_snapshot=snapshot, receipt=receipts[0],
-                                  artifacts=[changed],
-                                  upstream_manifests=[__import__("hashlib").sha256(json.dumps({
-                                      "schema": "appsec-review/build-workspace-manifest/1",
-                                      "build_unit_id": receipts[0]["build_unit_id"],
-                                      "workspace_path": changed["workspace_path"],
-                                      "sha256": changed["sha256"],
-                                  }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()],
-                                  extractor_identity="none",
-                                  parser_identity=config.job("job_artifact_indexing").settings[
-                                      "relationship_parser_identity"],
-                                  normalizer_identity=config.job("job_artifact_indexing").settings[
-                                      "normalizer_identity"],
-                                  mapping_identity=config.job("job_artifact_indexing").settings[
-                                      "mapping_identity"]))
+    old_relation_shard = f"relations-{receipts[0]['build_unit_id']}-0000"
+    assert before[old_relation_shard] == artifact_index_fingerprint(
+        name="artifacts", target_snapshot=snapshot, receipt=receipts[0],
+        artifacts=receipts[0]["artifacts"],
+        upstream_manifests=_manifest_entries(receipts[0], receipts[0]["artifacts"]),
+        extractor_identity="none",
+        parser_identity=config.job("job_artifact_indexing").settings["relationship_parser_identity"],
+        normalizer_identity=config.job("job_artifact_indexing").settings["normalizer_identity"],
+        mapping_identity=config.job("job_artifact_indexing").settings["mapping_identity"],
+        shard_layout=_shard_layout())
     changed_path = run_root / changed["path"]
     changed_path.write_bytes(b"object-two")
     changed["sha256"] = file_sha256(changed_path)
@@ -525,10 +527,11 @@ def test_captured_invocation_parent_attributes_outputs_and_unproduced_artifacts_
     def relations(artifact):
         identity = canonical_artifact_identity(snapshot, receipt["build_unit_id"], artifact).value
         shard = next(item for item in manifest
-                     if item["shard_id"] == f"relations-{identity.rsplit(':', 1)[-1][:24]}")
+                     if item["shard_id"] == f"relations-{receipt['build_unit_id']}-0000")
         with sqlite3.connect(run_root / shard["relative_path"]) as database:
             return database.execute(
-                "SELECT exact, confidence, ambiguity FROM relations WHERE kind='GENERATED_FROM'").fetchall()
+                "SELECT exact, confidence, ambiguity FROM relations WHERE kind='GENERATED_FROM' "
+                "AND source_id=?", (identity,)).fetchall()
 
     assert relations(obj) == [(1, 1.0, None)]
     assert relations(executable) == [

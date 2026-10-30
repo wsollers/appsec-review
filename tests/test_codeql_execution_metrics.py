@@ -331,7 +331,7 @@ def test_views_aggregate_packs_languages_and_their_product_without_enumerating_l
         "action": "normalize", "language": "java", "scope_id": "scope-java", "reason": "ignored"})
 
     report = aggregate_run_metrics(tmp_path)
-    assert report["schema"] == "appsec-review/run-metrics/5"
+    assert report["schema"] == "appsec-review/run-metrics/6"
     codeql = report["codeql"]
     assert codeql["totals"]["count"] == 6
     assert codeql["totals"]["statuses"] == {"FAILED": 1, "REUSED": 1, "SKIPPED": 1, "SUCCEEDED": 2, "TIMED_OUT": 1}

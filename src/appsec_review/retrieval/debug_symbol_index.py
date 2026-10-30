@@ -37,21 +37,23 @@ def interval_prefixes(start: int, end: int) -> Iterable[str]:
 
 
 def build_lookup(database: sqlite3.Connection, entities: list[EntityRecord]) -> None:
-    database.executescript("""
-        CREATE TABLE debug_symbol_records(
+    # Individual statements: executescript() would implicitly commit the builder's transaction.
+    for statement in (
+        """CREATE TABLE debug_symbol_records(
             identity TEXT PRIMARY KEY, artifact_identity TEXT NOT NULL, record_kind TEXT NOT NULL,
             source_identity TEXT, native_key TEXT NOT NULL, parent_key TEXT
-        ) WITHOUT ROWID;
-        CREATE INDEX debug_symbol_artifact_kind ON debug_symbol_records(artifact_identity, record_kind, identity);
-        CREATE INDEX debug_symbol_kind ON debug_symbol_records(record_kind, identity);
-        CREATE INDEX debug_symbol_source ON debug_symbol_records(source_identity, record_kind, identity);
-        CREATE UNIQUE INDEX debug_symbol_native ON debug_symbol_records(artifact_identity, native_key);
-        CREATE INDEX debug_symbol_parent ON debug_symbol_records(artifact_identity, parent_key, record_kind, identity);
-        CREATE TABLE debug_symbol_addresses(
+        ) WITHOUT ROWID""",
+        "CREATE INDEX debug_symbol_artifact_kind ON debug_symbol_records(artifact_identity, record_kind, identity)",
+        "CREATE INDEX debug_symbol_kind ON debug_symbol_records(record_kind, identity)",
+        "CREATE INDEX debug_symbol_source ON debug_symbol_records(source_identity, record_kind, identity)",
+        "CREATE UNIQUE INDEX debug_symbol_native ON debug_symbol_records(artifact_identity, native_key)",
+        "CREATE INDEX debug_symbol_parent ON debug_symbol_records(artifact_identity, parent_key, record_kind, identity)",
+        """CREATE TABLE debug_symbol_addresses(
             artifact_identity TEXT NOT NULL, prefix TEXT NOT NULL, identity TEXT NOT NULL,
             PRIMARY KEY(artifact_identity, prefix, identity)
-        ) WITHOUT ROWID;
-    """)
+        ) WITHOUT ROWID""",
+    ):
+        database.execute(statement)
     lookup_rows = 0
     for entity in entities:
         data = entity.payload

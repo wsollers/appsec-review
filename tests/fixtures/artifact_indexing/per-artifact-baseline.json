@@ -1,0 +1,134 @@
+{
+ "catalogs": {
+  "catalog-build-unit-00000000000000000001-executable": "c9e89561f75cf231d25b543339d0d7fadf414621783caf29f570e58f29df3a13",
+  "catalog-build-unit-00000000000000000001-object_file": "fb78b1486067c0d6ec2aac2eaefba30e2a0151520ac107aed27b0cf57973b6de",
+  "catalog-build-unit-00000000000000000002-managed_assembly": "305eb11f97cbc95537f2721830f71b8974777cce09f009f8612e73c304c3bbc6",
+  "catalog-build-unit-00000000000000000003-wasm_module": "505b525622055ef36fe529eeb5fe7d8576c20ac2042c059c42a85e1da75c6fe9",
+  "catalog-build-unit-00000000000000000004-package": "481579952328397155526d2f485aa7705ea572ec16786d50a3ae93556782ec43"
+ },
+ "coverage": [
+  [
+   "members",
+   "dist/sample.whl",
+   "complete",
+   null
+  ],
+  [
+   "relations",
+   "bin/Sample.dll",
+   "partial",
+   "bin/Sample.dll: producing action mapping is ambiguous"
+  ],
+  [
+   "relations",
+   "build/app",
+   "partial",
+   "build/app: producing action mapping is ambiguous"
+  ],
+  [
+   "relations",
+   "build/main.o",
+   "partial",
+   "build/main.o: producing action mapping is ambiguous"
+  ],
+  [
+   "relations",
+   "dist/module.wasm",
+   "partial",
+   "dist/module.wasm: producing action mapping is ambiguous"
+  ],
+  [
+   "relations",
+   "dist/sample.whl",
+   "partial",
+   "dist/sample.whl: producing action mapping is ambiguous"
+  ]
+ ],
+ "gaps": [
+  "bin/Sample.dll: producing action mapping is ambiguous",
+  "build/app: producing action mapping is ambiguous",
+  "build/main.o: producing action mapping is ambiguous",
+  "dist/module.wasm: producing action mapping is ambiguous",
+  "dist/sample.whl: producing action mapping is ambiguous"
+ ],
+ "relations": [
+  [
+   "members",
+   "rel:21b9f32c52d273a19739378600f6b440c1bf81460df1a8eacbcc11abeda934ca",
+   "CONTAINS",
+   "asr:package:f8ce03e974dce66a007a9558f458cc52861c04be52397facbd8b58132a20acc0",
+   "asr:archive_member:31a81a5355b9a154bbe6113995da9867e0b1bace9d7ed4910f36ab0cace87a92",
+   1,
+   1.0,
+   null,
+   "{}"
+  ],
+  [
+   "members",
+   "rel:d75e8ec5b9b82fbd530914cedbd9fbbc77d56bc075cf281801360cb78c64d8e4",
+   "CONTAINS",
+   "asr:package:f8ce03e974dce66a007a9558f458cc52861c04be52397facbd8b58132a20acc0",
+   "asr:archive_member:1734e17b4224f104ae6eecba665f8c88d7270d5aed6ac329b986b523387a0e85",
+   1,
+   1.0,
+   null,
+   "{}"
+  ],
+  [
+   "relations",
+   "rel:3d98a5ecf6da2cdb9526f09ec83637f02755f32389f7666cf859bb2937f61643",
+   "GENERATED_FROM",
+   "asr:package:f8ce03e974dce66a007a9558f458cc52861c04be52397facbd8b58132a20acc0",
+   "asr:build_action:a6d344f22c7ea4dd00a59dca40de41a7f28b61d8e3cc583f172baa839cc70803",
+   0,
+   0.25,
+   "receipt did not attribute the artifact to a unique producing action",
+   "{}"
+  ],
+  [
+   "relations",
+   "rel:427e83e3a8bb9ce7704fb4f6e35f09a3750256f6a819bad840b64d10410caadf",
+   "GENERATED_FROM",
+   "asr:executable:2ffb024fe7582d587c5bb08d04ba626bc3da28f24581e8a6f0a89db220515405",
+   "asr:build_action:e4ffe5642428385f99e5787914b5a4f5c5c715be9153ab81a3fbc75cc5eaface",
+   0,
+   0.25,
+   "receipt did not attribute the artifact to a unique producing action",
+   "{}"
+  ],
+  [
+   "relations",
+   "rel:645bd7e67ebefff6a8f388a975e4481de913e4ecd1804b973bf67f30ea565215",
+   "GENERATED_FROM",
+   "asr:managed_assembly:c11d8b86f69f2683ab0f54e6fd8ba7f6ec8fdf4556328d9d211eb815a0e9d2c4",
+   "asr:build_action:c337bef2d8da2705140a23b3be8dfaeee1decb9460a39de436d2302f8522f805",
+   0,
+   0.25,
+   "receipt did not attribute the artifact to a unique producing action",
+   "{}"
+  ],
+  [
+   "relations",
+   "rel:9538c63ef6a1e3f52f1f2335633fa783fee741e0a302bf0f621e06538e1bb091",
+   "GENERATED_FROM",
+   "asr:object_file:d4e8f37a5dd1d90ab6fea05c3b3bbe5d903df3bf5de6c3abc144d172a1ae90ca",
+   "asr:build_action:e4ffe5642428385f99e5787914b5a4f5c5c715be9153ab81a3fbc75cc5eaface",
+   0,
+   0.25,
+   "receipt did not attribute the artifact to a unique producing action",
+   "{}"
+  ],
+  [
+   "relations",
+   "rel:e1d83f24c38773248fe777396270f3f1dc8bd73231572f8c235c4cdb32b19624",
+   "GENERATED_FROM",
+   "asr:wasm_module:7baf43814b832fa1ddf36c8d6dc1c741664f6916efc7a02f99c092ae985ee955",
+   "asr:build_action:1bb5023864ce31c0f2b1a681d5c6a49a9543ba1a4123647be423756103f029a3",
+   0,
+   0.25,
+   "receipt did not attribute the artifact to a unique producing action",
+   "{}"
+  ]
+ ],
+ "snapshot": "46a7a157ee7fd8b86e3f67ae2025f46a4b1312d58e80f8eb4c14cd0ab71aeb0d"
+}

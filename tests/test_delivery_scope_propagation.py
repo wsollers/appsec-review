@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from appsec_review.config.assurance import SCOPE_VERSION
+from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
 from appsec_review.jobs.delivery_scope import (
-    analysis_scope, apply_scope, delivery_gap, scope_fields,
+    POLICY_IDENTITY, analysis_scope, apply_scope, delivery_gap, scope_fields,
 )
 from appsec_review.jobs.job_language_build import node
 from appsec_review.jobs.job_tree_sitter_ast.model import plan_scopes
@@ -20,6 +20,7 @@ ROLES = [
     ("target_source", "target", True, False),
     ("deliverable", "target", True, False),
     ("shipped_dependency", "target", True, False),
+    ("runtime_dependency", "supply_chain", False, False),
     ("build_chain", "supply_chain", False, False),
     ("build_dependency", "supply_chain", False, False),
     ("supplied_platform", "excluded", False, False),
@@ -41,6 +42,32 @@ def test_scope_roles_are_independent_of_origin_and_directory(role, lane, native,
         assert analysis_scope(row, "inventory")[0] is (role != "supplied_platform")
         assert analysis_scope(row, "syft")[0] is (lane in {"target", "supply_chain"})
         assert bool(delivery_gap(row)) is unknown
+
+
+def test_runtime_dependency_is_supply_chain_review_without_established_delivery():
+    row = {"scope_role": "runtime_dependency", "artifact_origin": "build-output",
+           "workspace_path": "node_modules/express/package.json"}
+    fields = scope_fields(row)
+    assert ScopeRole.RUNTIME_DEPENDENCY.value == "runtime_dependency"
+    assert fields["analysis_reason"] == "accepted-runtime-dependency-review"
+    assert fields["analysis_lane"] == "supply_chain"
+    assert fields["delivery_status"] == "not_established"
+    for capability in ("inventory", "packages", "syft", "grype", "osv"):
+        assert analysis_scope(row, capability) == (True, "accepted-runtime-dependency-review")
+    for capability in ("native", "jvm", "wasm", "spotbugs"):
+        assert analysis_scope(row, capability)[0] is False
+    assert delivery_gap(row) is None
+    assert apply_scope([dict(row)]) == []
+
+
+def test_scope_and_delivery_policy_versions_reject_prior_role_vocabulary():
+    assert SCOPE_VERSION == "appsec-review/delivered-scope/2"
+    assert POLICY_IDENTITY == "appsec-review/delivery-propagation/2"
+    with pytest.raises(ValueError, match="unsupported delivery scope version"):
+        scope_fields({"scope_version": "appsec-review/delivered-scope/1", "scope_role": "unknown"})
+    with pytest.raises(ValueError, match="unsupported delivery scope version"):
+        apply_scope([{"scope_version": "appsec-review/delivered-scope/1",
+                      "scope_role": "runtime_dependency"}])
 
 
 @pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
@@ -87,14 +114,14 @@ def test_fresh_catalog_scope_gates_fake_scanner_before_payload_access(tmp_path, 
     units = {item.unit_id: item for item in security.build_job(scanner_runner=lambda *args: None).units}
     inventory = units["analyze.inventory"].handler(unit)
     native = units["analyze.native"].handler(unit)
-    assert inventory["observation_count"] == 7
+    assert inventory["observation_count"] == 8
     assert native["observation_count"] == 4
     assert {role for capability, role in scanned if capability == "native"} == {
         "target_source", "deliverable", "shipped_dependency", "unknown",
     }
     assert "supplied_platform" not in accesses
     assert any("delivery_fact_unavailable" in gap for gap in native["gaps"])
-    assert len(native["scope_dispositions"]) == 8
+    assert len(native["scope_dispositions"]) == 9
     assert all(row["analysis_reason"] for row in native["scope_dispositions"])
 
 
@@ -143,7 +170,13 @@ def test_accepted_package_members_retain_copied_sdk_and_addon_companion(tmp_path
         assert rows["web/" + relative]["scope_role"] == "deliverable"
     unknown = rows["web/node_modules/build-helper/index.js"]
     assert unknown["scope_role"] == "unknown"
-    assert gaps == [delivery_gap(unknown)]
+    assert sorted(gaps) == sorted([
+        delivery_gap(unknown),
+        "web/node_modules: npm installer record unavailable (missing); "
+        "dependency files cataloged per-file in the target lane",
+        "web/dist/node_modules: npm installer record unavailable (missing); "
+        "dependency files cataloged per-file in the target lane",
+    ])
 
 
 @pytest.mark.parametrize("mutation", ["no_fact", "digest_changed", "member_changed", "script_not_pack"])
@@ -261,7 +294,8 @@ def test_ast_scope_excludes_platform_but_not_generated_origin():
     scopes = plan_scopes({"files": files}, max_files_per_scope=2)
     retained = [row for scope in scopes for row in scope.files]
     assert {row["scope_role"] for row in retained} == {
-        "target_source", "deliverable", "shipped_dependency", "build_chain", "build_dependency", "unknown",
+        "target_source", "deliverable", "shipped_dependency", "runtime_dependency",
+        "build_chain", "build_dependency", "unknown",
     }
     assert all(len(scope.files) <= 2 for scope in scopes)
 

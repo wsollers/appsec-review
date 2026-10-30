@@ -200,7 +200,7 @@
     "sha256": "<sha256>",
     "size_bytes": "<size_bytes>"
    },
-   "item_count": 12,
+   "item_count": 4,
    "schema": "appsec-review/artifact-indexing/1",
    "terminal_status": "COMPLETED_WITH_GAPS"
   },
@@ -262,6 +262,9 @@
      "fingerprint": "<sha256>",
      "name": "artifacts",
      "producer": {
+      "batch": 0,
+      "batch_count": 1,
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
       "family": "relationships",
       "job": "job_artifact_indexing",
       "unit": "index.relationships"
@@ -269,115 +272,11 @@
      "relative_path": "data/indices/artifacts/<sha256>.sqlite",
      "schema": "appsec-review/retrieval-index/2",
      "sha256": "<sha256>",
-     "shard_id": "relations-4da9fd5e4a62888367ae3661"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-cc8efe043783c2121a67b62b"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-0d6baebe6eb59b1f95b55690"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-540516d133f5239cf7a84bde"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-250293a4aa9b283ebfcb39ea"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-0ed6a789ab75e16e96b3f820"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-23cf99276b6733ddb948c015"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-2fbb7fdb7eb815a992d32f13"
-    },
-    {
-     "fingerprint": "<sha256>",
-     "name": "artifacts",
-     "producer": {
-      "family": "relationships",
-      "job": "job_artifact_indexing",
-      "unit": "index.relationships"
-     },
-     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
-     "schema": "appsec-review/retrieval-index/2",
-     "sha256": "<sha256>",
-     "shard_id": "relations-11dda57a925152cf05e7bfc8"
+     "shard_id": "relations-build-unit-b9c931fa551e02bd12b2-0000"
     }
    ],
    "reused_count": 0,
-   "shard_count": 9,
+   "shard_count": 1,
    "terminal_status": "COMPLETED_WITH_GAPS"
   },
   "load.accepted_builds": {

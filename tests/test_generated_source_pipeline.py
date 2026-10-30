@@ -54,7 +54,7 @@ def _accepted(run, name, outputs):
     return reference
 
 
-def _fixture(tmp_path, *, build=True, target_source=False):
+def _fixture(tmp_path, *, build=True, target_source=False, dependency_rows=False):
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text((ROOT / "appsec-review.toml").read_text())
     config = load_config(config_path)
@@ -118,6 +118,23 @@ def _fixture(tmp_path, *, build=True, target_source=False):
         artifacts.append({"path": "platform/must-not-exist.js", "workspace_path": "platform/tool.js",
                           "kind": "generated-code", "scope_role": "supplied_platform", "sha256": "f" * 64,
                           "size_bytes": 10, "artifact_origin": "build-output"})
+        if dependency_rows:
+            evidence = {"kind": "npm-installed-record", "workspace_path": "node_modules/.package-lock.json",
+                        "sha256": "a" * 64, "entry": "node_modules/dep"}
+            for relative, kind, role in (("node_modules/dep/package.json", "package-metadata", "runtime_dependency"),
+                                         ("node_modules/dep/build/Release/addon.node", "native-addon",
+                                          "build_dependency")):
+                path = workspace / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{"name":"dep","version":"1.0.0"}\n')
+                manifest_files[relative] = file_sha256(path)
+                artifacts.append({
+                    "path": path.relative_to(run).as_posix(), "workspace_path": relative,
+                    "sha256": manifest_files[relative], "size_bytes": path.stat().st_size, "kind": kind,
+                    "scope_role": role, "delivery_evidence": evidence, "artifact_origin": "build-output",
+                    "build_unit_id": "fixture-build", "mapping": "exact-workspace-path",
+                    "mapping_confidence": 1.0,
+                })
         workspace_ref = _json(run, "fixture/workspace.json", {
             "schema": "appsec-review/build-workspace-manifest/1",
             "build_unit_id": "fixture-build", "files": manifest_files,
@@ -276,6 +293,15 @@ def test_generated_backing_rejects_mutations_and_cross_run_replay(tmp_path, muta
             run, f"data/treesitter/sources/{digest}.json", payload)}
     with pytest.raises(ValueError):
         read_source_bytes(run, target, target_snapshot=snapshot, path=path, sha256=row["sha256"], native=native)
+
+
+def test_dependency_package_and_retained_native_rows_are_not_generated_sources(tmp_path):
+    _, run, _, _, _ = _fixture(tmp_path, dependency_rows=True)
+    rows, gaps, _ = load_generated_sources(run, target_snapshot=SNAPSHOT, relevant=True,
+                                         max_files=10, max_file_bytes=4096, max_total_bytes=16384)
+    assert sorted(row["workspace_path"] for row in rows) == [
+        "dist/generated/app.js", "dist/node_modules/sdk/index.js", "dist/unknown.js"]
+    assert not any("node_modules/dep" in json.dumps(gap) for gap in gaps)
 
 
 def test_generated_lane_reports_missing_producer_and_bounds(tmp_path):

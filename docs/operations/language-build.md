@@ -129,7 +129,10 @@ identification, ABI detection, `try_compile` and Find-module probe trees (in eve
 for Rust, Cargo fingerprints, incremental caches, dependency-info files and build-script records.
 The receipt's `excluded_bookkeeping` (`appsec-review/build-bookkeeping-exclusions/1`) gives the
 count per typed reason with up to five example paths, and native compile databases omit CMake probe
-compiles the same way (`src/appsec_review/jobs/build_bookkeeping.py`).
+compiles the same way (`src/appsec_review/jobs/build_bookkeeping.py`). Files inside a configured
+`[build_outputs]` exclusion or a classified dependency tree are not bookkeeping-counted, so a
+FetchContent target reports lower CMake bookkeeping counts than before; see
+[Build-output dispositions](#build-output-dispositions).
 
 Captured tool rows name the command whose execution capture observed them (`parent_command_id`,
 from the row's `execution-capture:command-NNN` origin), and their relative output paths resolve
@@ -358,6 +361,122 @@ declarations, bundles and assets, source maps with bounded source relationships,
 addons, and native intermediates. Complex shell-composed scripts or tools that do not emit nested
 invocations produce explicit provenance gaps; they are never inferred as observed.
 
+**Installed npm dependencies.** A recipe that runs its own `npm install` writes a real
+`node_modules` tree into the workspace, and the catalog walks it. Scope for that tree comes only
+from npm's own installer record, never from directory names
+(`src/appsec_review/jobs/job_language_build/node_installed.py`). The catalog finds at most 32
+install prefixes, which are directories holding a real (non-symlink) `node_modules`. It does not
+descend into dependency trees. For each prefix it parses `node_modules/.package-lock.json`:
+
+- The record must be a regular file of at most 64 MiB holding a JSON object with
+  `lockfileVersion` 2 or 3 and at most 50,000 `packages` entries.
+- Every key must be a canonical relative path with no empty, `.` or `..` segment. The root entry
+  (`""`), `"link": true` entries, and keys with no `node_modules` segment (workspace folders, which
+  stay target source) are skipped.
+- In every other key, each `node_modules` segment must be followed by exactly one package name
+  (`name` or `@scope/name`). The entry needs a non-empty `version`, an optional valid `name`
+  (aliased installs), string `resolved` and `integrity` when present, and Boolean `dev`,
+  `optional` and `devOptional` when present. One invalid entry makes the whole record
+  unavailable; a partially trusted record is never used.
+- An entry is verified only when its install path is a real directory (not a symlink) whose regular
+  `package.json`, at most 4 MiB, parses to an object with the expected name and version.
+- The project `package-lock.json` describes intent rather than what was installed and is never
+  used for coverage.
+
+Each verified package becomes one `package-metadata` row anchored on its installed `package.json`.
+`package_metadata` has `role` `installed-dependency-package`, `ecosystem` and `manager` `npm`, the
+entry's `name`, `version`, `resolved`, `integrity`, `dev`, `optional` and `dev_optional`, its
+`install_path`, and `files`, `bytes` and `retained_files` counts (a nested install path with its own
+entry is counted by that entry). `delivery_evidence` is
+`{"kind": "npm-installed-record", "workspace_path": "<prefix>/node_modules/.package-lock.json",
+"sha256": "<record sha256>", "entry": "<key>"}`. Packages with `dev` or `devOptional` get scope role
+`build_dependency`; all others get `runtime_dependency`. Both are in the supply_chain lane with
+delivery `not_established`: being in npm's production tree does not prove that a package ships
+(see [delivery scope roles](performance-assurance.md#delivery-scope-roles)). The record itself is a
+`resolved-dependency-metadata` row whose `dependency_metadata` is
+`{"format": ".package-lock.json", "manager": "npm", "role": "installed-dependency-record"}`, in the
+supply_chain lane. If an installed manifest's digest changes between parsing and cataloging, the
+catalog fails with `installed npm package manifest changed during cataloging`.
+
+Under a verified install path, `native-addon`, `shared-library`, `native-symbols` and `package`
+files keep their own rows with the package's role and evidence, so install-time native code (for
+example `node-gyp` output) stays visible to supply-chain scanners. Members of an accepted `npm pack`
+archive (at most 256 pack facts and 4,096 members per archive) are never summarized and keep their
+`shipped_dependency` or `deliverable` upgrade. Every other file under a verified install path gets
+no row, so summarized files do not use up the `artifact_count_limit` row bound. They still count
+toward the workspace discovery walk, which stops at ten times that limit with
+`Node workspace discovery bound reached; delivery coverage incomplete`. The catalog reports:
+
+- one gap per available record with at least one verified package:
+  `dependency-content-summarized: <N> packages (<F> files, <B> bytes) recorded by <prefix>/node_modules/.package-lock.json routed to supply_chain review; per-file target review not performed`.
+  `F` and `B` cover every file the walk counts under the verified install paths, anchors
+  included, minus retained per-file rows. When files under that `node_modules` are not covered
+  by a verified entry, it appends
+  `; <U> files under node_modules not covered by the installer record remain per-file`;
+- one gap per prefix whose record is unavailable:
+  `<prefix>/node_modules: npm installer record unavailable (<reason>); dependency files cataloged per-file in the target lane`,
+  where `<reason>` is `missing`, `unreadable`, `invalid-json`, `unsupported-lockfile-version:<v>`,
+  `bound-exceeded:record-bytes`, `bound-exceeded:packages` or `entry-invalid:<key>` (target text
+  bounded to 200 characters). A nested prefix with no record of its own whose `node_modules` a
+  parent record describes gets no `missing` gap;
+- for the first 50 unverified packages,
+  `<install_path>: installed package does not match npm installer record (<reason>); cataloged per-file`,
+  where `<reason>` is `install-path-missing`, `manifest-missing`, `manifest-invalid`,
+  `name-mismatch` or `version-mismatch`, then `<n> further unverified npm packages cataloged per-file`
+  for the rest; and
+- `npm installer record discovery bound reached; remaining prefixes cataloged per-file` past 32
+  prefixes.
+
+Files that no verified entry covers keep per-file rows by artifact kind, unless a configured
+`[build_outputs]` exclusion removes them (see below). This includes files under unavailable
+records, files of unverified packages, and `node_modules` files outside any package directory.
+Files under `node_modules` are kept even when the build did not change them.
+These rows get the default roles: most kinds are `unknown` in the target lane with a
+`delivery_fact_unavailable` gap, while manifests and lockfiles default to `build_chain`. The Node
+capture identity is `appsec-review/node-build-capture/3`. Only npm is covered; pnpm, Yarn and
+other ecosystems' installed trees stay per-file (see
+[the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems)).
+
+**Build-output dispositions.** `node.catalog` takes its rows from the shared build-output
+disposition walk, `BuildOutputDispositions.walk()` in
+`src/appsec_review/jobs/build_output_scope.py`. The language build passes the unit's recorder,
+which carries the configured `[build_outputs]` policy. A caller that passes none gets a recorder
+with the default policy, which has no exclusions. Before the walk, the catalog registers each
+verified package with `classify_tree` as a root with:
+
+- disposition `supply_chain`, basis `installer-record`, confidence `fact`, name
+  `npm-installed-package` and reason `verified against installed manifest`;
+- the package's scope role;
+- `evidence_ref` `<record path>#<entry>`, for example
+  `node_modules/.package-lock.json#node_modules/a`. The record SHA-256 stays in the row's
+  `delivery_evidence`;
+- `keep` set to the anchor `package.json` and the retained files;
+- `bound_group` set to the package's outermost `node_modules` directory, for example
+  `node_modules` or `backend/node_modules`.
+
+`max_layout_roots` (512 by default) counts one slot per bound group, so an install tree of any size
+uses one slot. An unverified package inside a verified one is registered as a `per_file` root named
+`npm-unverified-package`, with its mismatch reason. The walk counts files under a `supply_chain`
+root with `stat` and does not hash them. It yields only the root's kept files, at most
+`max_kept_per_root` (256) per root. The package row's `files` and `bytes`, and the summary gap's
+counts, come from the walk's root counts.
+
+If `classify_tree` refuses a package because the root bound is exhausted, the package's files stay
+per-file target rows. The package gets no package row and is left out of the summary gap, and the
+recorder names
+`build-output-root-bound-exceeded: <n> roots beyond max_layout_roots stay per-file target content`.
+A root that a conflict between fact-level bases leaves `per_file` also stays per-file.
+
+The shipped `node-bundler-cache` exclusion removes `node_modules/.cache` and `node_modules/.vite`,
+at the workspace root and in nested workspace packages, by name. Those files get no rows and do not
+count toward the summary gap's uncovered-files suffix; the receipt records them under
+`configured_exclusions`. The catalog appends the recorder's `named_gaps()`, which name conflicts and
+kept-bound and root-bound overruns. The `[build_outputs]` table, the receipt's
+`build_output_dispositions` field and its `appsec-review/build-output-dispositions/1` document,
+including the optional `bound_group` key on root documents, are described in
+[native build-output discovery](../architecture/native-build-output-discovery.md#configuration)
+and its [receipt section](../architecture/native-build-output-discovery.md#receipt-and-telemetry).
+
 The Python adapter accepts package builds rooted by `pyproject.toml`, `setup.py`, or `setup.cfg`.
 Poetry, Pipfile, and requirements inputs may bind dependency resolution in the derived image;
 real builds may download declared dependencies and PEP 517 build-isolation dependencies.
@@ -422,12 +541,90 @@ identities, and dependency relationships.
 
 Build-unit dependencies execute in topological layers. A failed dependency blocks its dependents,
 but unrelated units continue in the configured worker pool. A checkpoint is reusable only when its
-target snapshot, recipe, dependency hashes, image, executor/capture identity, toolchain, probe, and
-upstream handoff are unchanged and every retained artifact still verifies. Checkpoint namespaces
+target snapshot, recipe, dependency hashes, image, executor/capture identity, toolchain, probe,
+`[build_outputs]` policy identity, and upstream handoff are unchanged and every retained artifact
+still verifies. Checkpoint namespaces
 are run-private and require operator-declared `platform`, `build_toolchain` and `validation`
 releases. A missing declaration emits `CHECKPOINT_MISSED` with `missing_release_identity` and
 reruns the applicable build; changing any required release invalidates the checkpoint without
 fingerprinting installed software. Unrelated query-pack declarations do not invalidate it.
+
+### Build-output dispositions
+
+C/C++ builds leave no reliable install record, so the generic executor classifies whole build-output
+trees once per unit, after the build, before it catalogues files
+(`src/appsec_review/jobs/build_output_scope.py`,
+`src/appsec_review/jobs/job_language_build/native_outputs.py`). The design is
+[`native-build-output-discovery.md`](../architecture/native-build-output-discovery.md). The walk
+covers the generic families (native, Go, .NET, Python, Rust); the JVM and WebAssembly adapters do
+not use it.
+
+**Configured exclusions.** Every `[[build_outputs.exclusions]]` rule whose `families` include the
+unit's family is applied by name. Each excluded path is recorded once under
+`configured_exclusions` as `{path, name, pattern, scope: "build_outputs", files}`. This is a
+declared scope decision, never a coverage gap. A directory rule wins over every root beneath it,
+and file rules also apply inside classified roots.
+
+**Native layout discovery.** For `native` units only, bounded readers read what the build already
+wrote. Nothing extra is executed (no `make -pn`, no `ninja -t`). In order of authority:
+
+1. the recipe's `build_dir`;
+2. execution capture: a directory whose build-system file a fetcher (`curl`, `wget`, `tar`, `unzip`,
+   `git`, `patch`, `cmake -P`/`-E tar`, `meson ... subprojects` and similar) wrote, and where most
+   created files were fetcher-written, plus the ExternalProject `-build`, `-stamp` and `tmp`
+   siblings beside it;
+3. `CMakeCache.txt`, and the CMake file API codemodel reply. For CMake units, the job writes a
+   stateless query to `<build_dir>/.cmake/api/v1/query/client-appsec-review/query.json` before
+   configure and records it on the receipt as
+   `prepared_inputs: [{path, sha256, purpose: "cmake-file-api-query"}]`;
+4. Meson `meson-info/` introspection;
+5. vcpkg `vcpkg/status` and `info/*.list` (an installer record);
+6. static `build.ninja` edges, read only when there is no CMake cache and no `meson-info`;
+7. MSBuild project properties and Conan generator directories;
+8. the directory-name heuristic, last.
+
+`compile_commands.json` only corroborates. MSBuild `OutDir`/`IntDir` are resolved but nothing
+consumes them on the Linux lanes. Only content created during the build is reclassified;
+committed vendored source stays target content.
+
+**Dispositions.** A classified root is `supply_chain` (one root per dependency tree), `excluded`,
+`evidence` (CMake FetchContent and ExternalProject bookkeeping) or `per_file`. Pruned roots are
+counted with `stat` and not hashed. A `supply_chain` root keeps only its linked outputs
+(executables, shared and static libraries), up to `max_kept_per_root`, as catalogue rows with
+`scope_role: build_dependency` and `build_output_root`. A dependency's linked output in a mixed
+directory is tagged `build_output_tag: dependency-sourced-output` instead of being rooted. When fact
+sources conflict on one root, its files stay `per_file` target rows and a gap is recorded. A
+heuristic root has basis `heuristic`, a `confidence` and always a `build-output-heuristic` gap: at
+or above `heuristic_min_confidence` (shipped `medium`) it becomes `supply_chain`; below it, its
+files stay per-file target rows. Pruning changes catalogue rows only; the workspace manifest
+stays complete.
+
+The receipt field `build_output_dispositions` (`appsec-review/build-output-dispositions/1`) has
+`schema`, `policy_identity`, `layout_sources[{kind, path, sha256}]`,
+`roots[{root, disposition, basis, confidence, name, reason, evidence_ref, pattern, scope,
+scope_role, files, bytes, kept, examples}]`, `configured_exclusions` and `bookkeeping`. `kept` is a
+list of workspace-relative paths. `excluded_bookkeeping` and the receipt schema
+`language-build-receipt/1` are unchanged. The executor identity is
+`appsec-review/generic-language-build-executor/4` plus the delivery-scope policy identity.
+
+Classification gaps:
+
+| Gap | Meaning |
+| --- | --- |
+| `dependency-content-summarized: ...` | one per evidence source: the dependency trees it recorded were routed to `supply_chain` review, not per-file target review |
+| `build-output-heuristic: <root> ...` | a root classified by directory name, with its confidence |
+| `build-output-classification-conflict: <root>` | fact sources disagreed; the files stay per-file target content |
+| `build-output-kept-bound-exceeded: ...` / `build-output-root-bound-exceeded: ...` | more linked files or roots than `max_kept_per_root` / `max_layout_roots`; the rest stay counted only, or per-file |
+| `cmake-file-api-reply-missing: ...` | a query was written but CMake left no reply; layout comes from the cache only |
+| `build-output-layout-source-bound-exceeded`, `-unreadable`, `-malformed`, `-limit` | a layout source over `max_layout_source_bytes`, unreadable, not parseable, or beyond `max_layout_sources` |
+| `build-output-ninja-edge-bound-exceeded` | `build.ninja` has more edges than `max_ninja_edges` |
+| `build-output-msbuild-directory-unresolved` | an MSBuild output directory could not be resolved |
+| `build-output-capture-incomplete: ...` | capture was incomplete, so capture-based classification is off; layout facts and the heuristic still apply |
+
+`node.catalog` and `php.catalog` accept the dispositions but do not walk them yet. Node and PHP
+units therefore apply no `[build_outputs]` rule in this job (the shipped `node-bundler-cache` rule
+takes effect in project-build probes only), and their dispositions and counts are empty. Their
+installer-record classifiers are separate work.
 
 ### Immutable retry publication
 
@@ -446,8 +643,13 @@ receipt's workspace reference rather than constructing a path from the latest at
 Existing `build_workspaces` protected dataset declarations cover these family trees.
 
 Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_COMPLETED`,
-`LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events intentionally contain identities,
-counts, dispositions, gap counts, and durations—not command text or environment values.
+`BUILD_OUTPUT_CLASSIFIED`, `LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events
+intentionally contain identities, counts, dispositions, gap counts, and durations—not command text
+or environment values. `BUILD_OUTPUT_CLASSIFIED` is written once per generic-executor unit that
+reaches cataloguing, with `supply_chain_trees`, `excluded_trees`, `excluded_files`, `kept_rows`,
+`heuristic_dispositions`, `conflicts`, `layout_sources_read`, `target_rows` (catalogue rows in the
+`target` analysis lane) and `duration_ms` (classification plus the catalogue walk). The same counts
+are added to `LANGUAGE_BUILD_COMPLETED`. `aggregate_run_metrics` does not sum them.
 
 ## Settings reference
 
@@ -483,6 +685,36 @@ it is 0-1 MiB for Go, Python, Rust, PHP, and Node and positive for JVM:
 The WebAssembly adapter reuses the job-level timeout, `output_bytes`, and `artifact_count_limit`.
 Project images, probes, and recipes come from `job_project_build`; see
 [`project-build.md`](project-build.md).
+
+### `[build_outputs]`
+
+A top-level table (`src/appsec_review/config/build_outputs.py`) shared by `job_project_build`,
+`job_language_build` and `job_sanitizer_build`. Unknown keys fail loading, and so does a
+`jobs.<id>.build_outputs` or `jobs.<id>.settings.build_outputs` table. Without the table, the
+discovery defaults apply with no exclusion rules. Its canonical SHA-256 is the policy identity:
+it is part of the language-build checkpoint fingerprint and the accepted-probe identity, and the
+sanitizer summary records it as `build_outputs_policy`.
+
+| Key | Shipped value | Meaning |
+| --- | --- | --- |
+| `heuristic_min_confidence` | `medium` | `high`, `medium`, `low` or `off`; a heuristic root below it stays per-file, and `off` lets no heuristic reclassify |
+| `discovery.cmake_file_api` | `true` | write the CMake file API query for native CMake units |
+| `discovery.max_layout_sources` | 64 | layout files read per unit |
+| `discovery.max_layout_source_bytes` | 16777216 | bytes read per layout file |
+| `discovery.max_layout_roots` | 512 | classified roots per unit |
+| `discovery.max_ninja_edges` | 200000 | `build.ninja` edges read |
+| `discovery.max_kept_per_root` | 256 | linked outputs kept per `supply_chain` root |
+
+Every `discovery` bound is a positive integer. Each `[[build_outputs.exclusions]]` rule has a
+unique `name` matching `[a-z0-9-]+`, a non-empty `reason`, at least one pattern in `patterns` with
+the same semantics as `[exclusions]` (matched against the workspace-relative path), and optional
+`families` (`native`, `go`, `dotnet`, `node`, `python`, `rust`, `php`, `java`, `wasm`; absent means
+every family). Shipped rules:
+
+| Name | Families | Patterns |
+| --- | --- | --- |
+| `cmake-fetchcontent-subbuild` | `native` | `*-subbuild/` |
+| `node-bundler-cache` | `node` | `node_modules/.cache/`, `*/node_modules/.cache/`, `node_modules/.vite/`, `*/node_modules/.vite/` |
 
 ## Live acceptance
 

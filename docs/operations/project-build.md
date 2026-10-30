@@ -161,7 +161,15 @@ dispatch document is under the attempt's `artifacts/project-build/`. A probe rec
 changed output with a role `kind` from the typed `ArtifactKind` vocabulary and its container
 `format` (`elf`, `ar`, `pe`, `macho`, `wasm`, `zip`, ...) separately, and counts CMake and Cargo
 build bookkeeping under `excluded_bookkeeping` instead of listing it (see
-[`language-build.md`](language-build.md)). A failed probe, a disabled or
+[`language-build.md`](language-build.md)). The probe also applies the `[build_outputs]` policy
+for the action's family. Its receipt carries `build_output_dispositions`
+(`appsec-review/build-output-dispositions/1`) and `build_output_gaps`. A native probe classifies
+dependency trees without execution capture or a file API query: from the CMake cache, Meson
+introspection, static `build.ninja`, vcpkg and Conan records and the directory-name heuristic.
+Other families apply only the configured exclusions. Classification gaps go into
+`build_output_gaps`, not `gaps`, so they never change probe acceptance or repair; the language
+build re-classifies its own workspace and owns the unit's coverage gaps. The `[build_outputs]`
+policy identity is part of the accepted-probe identity. A failed probe, a disabled or
 unavailable repair model, or exhausted repairs is a named gap and publishes no build dispatch for
 that unit; static dispatch and sibling units continue. Resume the same run: accepted probes are
 reused only when the release, target and run bindings, recipe identity and resolved image ID still

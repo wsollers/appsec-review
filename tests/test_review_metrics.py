@@ -20,7 +20,7 @@ def _receipt(root: Path, name: str, value: dict) -> dict[str, object]:
 
 def test_run_metrics_preserve_additive_domain_sections(tmp_path: Path) -> None:
     report = aggregate_run_metrics(tmp_path)
-    assert report["schema"] == "appsec-review/run-metrics/5"
+    assert report["schema"] == "appsec-review/run-metrics/6"
     assert {"interchange", "native_sbom", "debug_symbols", "owasp", "review_flow",
             "completion", "review", "codeql"} <= report.keys()
 
@@ -292,7 +292,7 @@ def test_interchange_metrics_receipt_authority_deduplication_reuse_and_redaction
     log.write("TASK_REUSED", **actor, details={"checkpoint_reused": True})
     report = aggregate_run_metrics(root)
     interchange = report["interchange"]
-    assert report["schema"] == "appsec-review/run-metrics/5"
+    assert report["schema"] == "appsec-review/run-metrics/6"
     assert interchange["schema"] == "appsec-review/interchange-metrics/1"
     assert interchange["native_outputs"] == {
         "reference_count": 1, "distinct_artifact_count": 1, "distinct_artifact_bytes": artifact["size_bytes"],
