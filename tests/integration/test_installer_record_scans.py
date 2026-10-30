@@ -320,7 +320,7 @@ def test_review_scans_the_installer_record_once_and_covers_its_anchors(
                    if item.get("input_reason_code") == COVERED}
         assert set(covered) == set(anchors), capability
         for artifact_id, item in covered.items():
-            assert item["input_disposition"] == "SKIPPED_NA"
+            assert item["input_disposition"] == "SKIPPED_NA" and "format" in item
             assert item["input_reason"] == reason
             assert item["input_covered_by"] == record["artifact_id"]
             assert item["input_evidence_ref"] == f"{RECORD}#{anchors[artifact_id]['delivery_evidence']['entry']}"
@@ -330,12 +330,9 @@ def test_review_scans_the_installer_record_once_and_covers_its_anchors(
             capability, entries)
     osv = analysis["capabilities"]["osv"]
     assert osv["observation_count"] == 1
-    [osv_entry] = osv["installer_records"]
-    assert {key: osv_entry[key] for key in ("artifact_id", "workspace_path", "sha256", "presentation",
-                                            "anchors_covered", "scan_outcome")} == {
-        **{key: expected_entry[key] for key in ("artifact_id", "workspace_path", "sha256", "presentation",
-                                                "scan_outcome")}, "anchors_covered": 0}
-    assert "anchors_reported" not in osv_entry
+    # osv skips no anchor (they stay format-skipped for it) but still counts the record's dev anchors.
+    assert osv["installer_records"] == [{**expected_entry, "anchors_covered": 0}], osv["installer_records"]
+    assert not [item for item in osv["scope_dispositions"] if item.get("input_reason_code") == COVERED]
 
     grype_dev_gap = (f"{record['artifact_id']}: grype: {dev_anchors} dev-only packages recorded by {RECORD} "
                      "are not vulnerability-matched by the pinned grype (npm dev entries excluded); "
@@ -360,11 +357,16 @@ def test_review_scans_the_installer_record_once_and_covers_its_anchors(
             continue
         attribution = payload.get("installed_package_attribution")
         assert attribution in {"verified-anchor", "unverified-record-entry"}, payload.get("subject")
+        # Attribution matches the finding's (package_name, package_version) to the record's anchors.
+        matched = {artifact_id for artifact_id, row in anchors.items()
+                   if (row["package_metadata"]["name"], row["package_metadata"]["version"]) ==
+                   (payload.get("package_name"), payload.get("package_version"))}
         if attribution == "unverified-record-entry":
+            assert not matched and "installed_packages" not in payload, payload.get("subject")
             assert targets == {record_entity}, payload.get("subject")
             continue
-        described = {item["artifact_id"] for item in payload["installed_packages"]}
-        assert described <= set(anchors)
-        assert {entity for entity, artifact_id in anchor_entities.items() if artifact_id in described} <= targets
-        assert all((anchors[item]["package_metadata"]["name"], anchors[item]["package_metadata"]["version"]) ==
-                   (payload["package_name"], payload["package_version"]) for item in described)
+        described = [item["artifact_id"] for item in payload["installed_packages"]]
+        # The fixture records 38 packages, below the 64-descriptor bound, so nothing is truncated.
+        assert set(described) == matched and len(described) == len(matched), payload.get("subject")
+        assert "installed_packages_truncated" not in payload
+        assert targets == {record_entity} | {_entity(anchors[item]["canonical_identity"]) for item in matched}

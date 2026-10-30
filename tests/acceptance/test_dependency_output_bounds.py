@@ -36,6 +36,7 @@ RECORD_PRESENTATION = "appsec-review/npm-installed-record-as-package-lock/1"
 COVERED = "INSTALLER_RECORD_COVERED"
 RECORD_SCANNERS = ("syft", "grype", "osv")
 ATTRIBUTIONS = {"verified-anchor", "unverified-record-entry"}
+INSTALLED_PACKAGES_BOUND = 64
 _INSTALLED_ROLES = {"build_dependency", "runtime_dependency", "shipped_dependency", "deliverable"}
 _NATIVE_KINDS = {"executable", "shared-library", "native-addon", "native-extension"}
 
@@ -173,8 +174,11 @@ def record_scans(run_root: Path) -> Mapping[str, Any]:
     if not capabilities:
         pytest.skip("this run's artifact-security publication predates installer_records")
     artifacts = {row["artifact_id"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}
-    records = {(_build_unit(row), row["workspace_path"], row["sha256"]): row for row in artifacts.values()
-               if row.get("dependency_metadata") == RECORD_METADATA}
+    # The job keys records and anchors exactly by build_unit_id; the first record in row order wins.
+    records: dict[tuple[Any, Any, Any], Mapping[str, Any]] = {}
+    for row in artifacts.values():
+        if row.get("dependency_metadata") == RECORD_METADATA:
+            records.setdefault((row.get("build_unit_id"), row.get("workspace_path"), row.get("sha256")), row)
     anchors: dict[str, tuple[Mapping[str, Any], Mapping[str, Any]]] = {}
     for row in artifacts.values():
         evidence = row.get("delivery_evidence")
@@ -182,16 +186,12 @@ def record_scans(run_root: Path) -> Mapping[str, Any]:
             continue
         if evidence.get("kind") != "npm-installed-record":
             continue
-        record = records.get((_build_unit(row), evidence.get("workspace_path"), evidence.get("sha256")))
+        record = records.get((row.get("build_unit_id"), evidence.get("workspace_path"), evidence.get("sha256")))
         if record is not None:
             anchors[row["artifact_id"]] = (row, record)
     return {"capabilities": capabilities, "artifacts": artifacts,
             "records": {row["artifact_id"]: row for row in records.values()}, "anchors": anchors,
             "observations": _observations(run_root, analysis)}
-
-
-def _build_unit(row: Mapping[str, Any]) -> str:
-    return str(row.get("build_unit_id") or (row.get("producer") or {}).get("build_unit_id") or "")
 
 
 def _observations(run_root: Path, analysis: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], set[str]]]:
@@ -242,6 +242,8 @@ def test_syft_and_grype_never_launch_on_an_anchor_whose_record_is_scanned(record
             item = dispositions.get(anchor_id)
             if item is None or not item.get("selected"):
                 continue  # The lane gate excluded it before the installer-record rule.
+            if item.get("input_reason_code") not in (None, COVERED):
+                continue  # Its declared input format was already SKIPPED_NA before the installer-record rule.
             if (item.get("input_reason_code") != COVERED or item.get("input_disposition") != "SKIPPED_NA"
                     or item.get("input_covered_by") != record["artifact_id"]
                     or item.get("input_evidence_ref") !=
@@ -283,6 +285,10 @@ def test_each_installer_record_is_scanned_at_most_once_and_summarized(record_sca
             if ("anchors_reported" in entry) is not (capability == "syft"):
                 problems.append((capability, record["workspace_path"], "anchors_reported presence"))
             matched = sum(1 for _, owner in record_scans["anchors"].values() if owner["artifact_id"] == record_id)
+            dev = sum(1 for anchor, owner in record_scans["anchors"].values()
+                      if owner["artifact_id"] == record_id and anchor["package_metadata"].get("dev") is True)
+            if entry["dev_anchors"] != dev:
+                problems.append((capability, record["workspace_path"], "dev_anchors", entry["dev_anchors"], dev))
             if entry["scan_outcome"] == "not_completed":
                 gap = (f"{record_id}: {capability}: installer record scan of {record['workspace_path']} did not "
                        f"complete; {matched} verified packages recorded there have no {capability} coverage")
@@ -317,14 +323,23 @@ def test_vulnerability_findings_at_an_installer_record_carry_attribution(record_
             continue
         own = {anchor_id for anchor_id, (_, owner) in record_scans["anchors"].items()
                if owner["artifact_id"] == record["artifact_id"]}
+        # Attribution matches (package_name, package_version) against every key-matched anchor (D5).
+        matched = sorted((anchor_id for anchor_id in own
+                          if (record_scans["anchors"][anchor_id][0]["package_metadata"].get("name"),
+                              record_scans["anchors"][anchor_id][0]["package_metadata"].get("version")) ==
+                          (payload.get("package_name"), payload.get("package_version"))),
+                         key=lambda anchor_id: str(record_scans["artifacts"][anchor_id]["canonical_identity"]))
         if attribution == "unverified-record-entry":
-            if "installed_packages" in payload or targets & {anchor_entities[item] for item in own}:
+            if matched or "installed_packages" in payload or targets & {anchor_entities[item] for item in own}:
                 wrong.append((*subject, "unverified entry attributed to an anchor"))
             continue
         described = [item.get("artifact_id") for item in payload.get("installed_packages") or ()]
-        if not described or not set(described) <= own:
-            wrong.append((*subject, "verified attribution names no anchor of this record"))
-        elif not {anchor_entities[item] for item in described} <= targets:
+        truncated = payload.get("installed_packages_truncated")
+        if not matched or described != matched[:INSTALLED_PACKAGES_BOUND]:
+            wrong.append((*subject, "installed_packages differ from the matched anchors"))
+        elif truncated != (len(matched) if len(matched) > INSTALLED_PACKAGES_BOUND else None):
+            wrong.append((*subject, "installed_packages_truncated", truncated, len(matched)))
+        elif not {anchor_entities[item] for item in matched} <= targets:
             wrong.append((*subject, "verified anchor lacks an OBSERVED_AT relation"))
     assert not wrong, wrong[:50]
 
@@ -334,8 +349,8 @@ def test_syft_launches_are_bounded_by_uncovered_rows_and_records(record_scans) -
         summary = record_scans["capabilities"].get(capability)
         if summary is None:
             continue
-        covered = sum(1 for _, record in record_scans["anchors"].values()
-                      if _covering(summary, record["artifact_id"]))
-        # Uncovered rows (records included) are the only rows left for a per-artifact launch.
+        covered = sum(1 for item in summary.get("scope_dispositions") or ()
+                      if item.get("input_reason_code") == COVERED)
+        # Covered anchors never launch; uncovered rows (records included) launch at most once each.
         bound = len(record_scans["artifacts"]) - covered
         assert summary["observation_count"] <= bound, (capability, summary["observation_count"], bound, covered)
