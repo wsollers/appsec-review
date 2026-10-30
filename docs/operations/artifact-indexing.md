@@ -104,9 +104,11 @@ retains each in-workspace `package.json` and the selected npm, pnpm, or Yarn res
 (`package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, or Yarn Plug'n'Play
 loader metadata). These files are retained even when unchanged because they define package entry
 points, dependency intent, exact resolutions, and integrity values. npm documents that a normal
-lockfile represents the dependency tree without requiring `node_modules`; its hidden
-`node_modules/.package-lock.json` is only an installation optimization and is deliberately not
-retained. See the [Node package contract](https://nodejs.org/api/packages.html),
+lockfile represents the dependency tree without requiring `node_modules`. Its hidden
+`node_modules/.package-lock.json` instead records what an install actually wrote. When a recipe's
+own install leaves one in the workspace, it is retained as `resolved-dependency-metadata` with role
+`installed-dependency-record`, and it is the only basis for summarizing that installed tree (see
+below). See the [Node package contract](https://nodejs.org/api/packages.html),
 [npm lockfile format](https://docs.npmjs.com/cli/v7/configuring-npm/package-lock-json/),
 [pnpm lockfile configuration](https://pnpm.io/settings#lockfile), and
 [Yarn install model](https://yarnpkg.com/cli/install).
@@ -138,12 +140,20 @@ exact retained archive without retaining raw command output. Separate native deb
 only with its binary identity; GDB documents the debug-link/build-ID relationship in
 [Separate Debug Files](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html).
 
-The collector does not enter `node_modules`, package-manager stores, `.yarn/cache`, generic build
-caches, or transient temporary directories. It does not retain object files, generic native
-libraries, logs, arbitrary checksum files, unchanged source modules, or other redundant
-intermediates. Dependency trees are represented by their manifests and lock metadata rather than
-thousands of mutable installed files. Yarn's own guidance identifies `.yarn/cache` as a package
-cache and `.yarn/install-state.gz` as an optimization
+The collector walks the whole workspace without following symlinks, and directory names establish
+no scope. It enters a `node_modules` tree that a recipe's own install wrote. Files of a recognized
+kind there are kept even when unchanged, unless npm's installer record covers them or a named
+`[build_outputs]` exclusion removes them; the shipped `node-bundler-cache` rule removes
+`node_modules/.cache` and `node_modules/.vite`. Each verified
+installed package becomes one supply-chain `package-metadata` row that carries its file and byte
+counts. Its native addons, shared libraries, native symbols and package archives keep their own
+rows, and the rest of the package is summarized in one `dependency-content-summarized` gap per
+record. Files that the record does not cover stay per-file with named gaps. The full contract,
+bounds and gap texts are in [installed npm dependencies](language-build.md). Apart from those
+dependency rows, the collector does not retain object files, generic native libraries, logs,
+arbitrary checksum files, unchanged source modules, or other redundant intermediates. Only npm
+installer records are used. Yarn's own guidance identifies `.yarn/cache` as a package cache and
+`.yarn/install-state.gz` as an optimization, and pnpm and Yarn trees are not summarized
 ([Yarn cache configuration](https://yarnpkg.com/configuration/yarnrc/#cacheFolder),
 [Yarn project files](https://yarnpkg.com/getting-started/qa#which-files-should-be-gitignored)).
 

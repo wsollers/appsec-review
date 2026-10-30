@@ -24,6 +24,36 @@ as `vendor`, `node_modules`, `build`, and `dist` do not establish platform owner
 Job construction does not enumerate application source trees to assemble an implementation
 identity; unused discovery left over from the former source-fingerprint path is removed.
 
+## Delivery scope roles
+
+Every accepted artifact row carries delivery-scope fields under scope version
+`appsec-review/delivered-scope/2`, normalized by the delivery policy
+`appsec-review/delivery-propagation/2` (`src/appsec_review/jobs/delivery_scope.py`). A row with any
+other scope version is rejected. The role comes only from an accepted producer fact. A row with no
+role defaults to `intermediate_evidence` for evidence kinds and to `build_chain` for
+`package-metadata` and `resolved-dependency-metadata`. Every other row defaults to `unknown` with
+the gap `<path>: delivery status is unknown (delivery_fact_unavailable)`.
+
+| `scope_role` | `analysis_reason` | `analysis_lane` | `delivery_status` |
+| --- | --- | --- | --- |
+| `target_source` | `target-source-review` | target | `unknown` |
+| `deliverable` | `accepted-delivery-fact` | target | `delivered` |
+| `shipped_dependency` | `accepted-runtime-dependency-fact` | target | `delivered` |
+| `runtime_dependency` | `accepted-runtime-dependency-review` | supply_chain | `not_established` |
+| `build_chain` | `target-build-chain-review` | supply_chain | `not_established` |
+| `build_dependency` | `accepted-build-dependency-review` | supply_chain | `not_established` |
+| `supplied_platform` | `supplied-platform-excluded` | excluded | `not_established` |
+| `intermediate_evidence` | `build-provenance-inventory` | evidence | `not_established` |
+| `unknown` | `delivery-unknown-candidate-review` | target | `unknown` |
+
+The target lane admits every analysis capability. The supply_chain lane admits only `inventory`,
+`packages`, `syft`, `grype` and `osv`, and the evidence lane admits only `inventory`. The excluded
+lane admits nothing. `runtime_dependency` marks a package that npm's installer record lists outside
+its dev tree. That package belongs to the production dependency closure, but this does not prove it
+ships, so it is reviewed as supply chain rather than per file (see
+[installed npm dependencies](language-build.md)). Only an accepted delivery fact, such as an
+`npm pack` member, makes a dependency `shipped_dependency`.
+
 ## Publication and consumption
 
 Strict consumers deduplicate expected-digest checks, receipt closure checks and shard validation
