@@ -149,7 +149,13 @@ installed package becomes one supply-chain `package-metadata` row that carries i
 counts. Its native addons, shared libraries, native symbols and package archives keep their own
 rows, and the rest of the package is summarized in one `dependency-content-summarized` gap per
 record. Files that the record does not cover stay per-file with named gaps. The full contract,
-bounds and gap texts are in [installed npm dependencies](language-build.md). Apart from those
+bounds and gap texts are in [installed npm dependencies](language-build.md). Artifact security
+analysis scans each record once with Syft, Grype and osv-scanner instead of launching Syft and
+Grype on every anchor. Each Grype or osv-scanner finding in a record that matches a verified
+anchor's name and version is linked to that anchor's artifact entity by an `OBSERVED_AT` relation
+in the observations shard. The finding also keeps its relation to the record (see
+[installed npm packages](artifact-security-analysis.md#installed-npm-packages-one-scan-per-installer-record)).
+Apart from those
 dependency rows, the collector does not retain object files, generic native libraries, logs,
 arbitrary checksum files, unchanged source modules, or other redundant intermediates. Only npm
 installer records are used. Yarn's own guidance identifies `.yarn/cache` as a package cache and

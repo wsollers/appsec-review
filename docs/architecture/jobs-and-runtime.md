@@ -266,6 +266,12 @@ that table **before launch**:
   `not_applicable_inputs` summary that is neither a gap nor a failure;
 - a tool whose every planned input is unsupported publishes `NOT_APPLICABLE` with
   `coverage_disposition: SKIPPED_NA` and no gap;
+- artifact security analysis also records a verified installed npm package as `SKIPPED_NA` before
+  launch, with reason code `INSTALLER_RECORD_COVERED`, for Syft and Grype when the same unit scans
+  that package's npm installer record once instead. The disposition names the covering record
+  (`input_covered_by`, `input_evidence_ref`). If no such record is scanned, the package is
+  launched as before (see
+  [installed npm packages](../operations/artifact-security-analysis.md#installed-npm-packages-one-scan-per-installer-record));
 - only where support cannot be decided exactly before launch is a tool's own documented
   "unsupported input" report accepted after the run (`TOOL_REPORTED_UNSUPPORTED_INPUT`): ShellCheck
   SC1071, Semgrep/OpenGrep skip reasons that mean no rule or language applies, and osv-scanner's

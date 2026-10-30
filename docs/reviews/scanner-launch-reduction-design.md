@@ -1,7 +1,9 @@
 # Scanner launch reduction: design
 
-Status: design, not implemented. See [section 5](#5-implementation-chunks-and-file-ownership) for
-the planned chunks.
+Status: implemented at `4d7bb1c1` on branch
+`william-sollers-xbox-scanner-launch-reduction-implementation`. The integration and acceptance tests
+are written on branch `william-sollers-xbox-scanner-launch-reduction-tests` but not run, and live
+validation is pending. See [section 8](#8-implementation-status).
 
 Branch: `william-sollers-xbox-scanner-launch-reduction-design`, based on local `main` `6d7ecfe9`.
 The implementation rebases or merges onto whatever local `main` is when it starts. In particular,
@@ -394,3 +396,42 @@ Open questions (out of scope; recorded for follow-up, not blocking):
 | `docs/reviews/dependency-output-filtering-design.md` | A pointer from its status or D8 note to this design. |
 | `docs/TODO.md` | Open questions 1-6 that are not already tracked. |
 | This file | The status line and an implementation-status section, as in the filtering design. |
+
+## 8. Implementation status
+
+Chunk I implemented D1-D7 at `4d7bb1c1` (based on local `main` `0218e1d4`, which includes the
+"Blint for production npm binaries" work). The operator-facing contract is in
+[installed npm packages](../operations/artifact-security-analysis.md#installed-npm-packages-one-scan-per-installer-record).
+
+Small differences from the text above:
+
+- Covering records are computed only for Syft, Grype and osv-scanner, the capabilities that scan
+  records. Only Syft and Grype skip anchors.
+- The Grype dev-only gap (D6.1) is reported whenever the record has dev anchors, including when
+  the Grype scan did not complete. In that case the incomplete-scan gap (D6.2) is reported too.
+- With `tools.disable_grype` (the repository default), the Grype unit returns before any record
+  logic. Its published `installer_records` is null, and no anchor is skipped for Grype.
+- `installed_packages_truncated` holds the total number of matched anchors, not the number
+  dropped.
+- Attribution in `index` requires the record to be in scope for Syft, Grype or osv-scanner. It does
+  not repeat the format-partition check.
+
+Tests:
+
+- Unit tests, run by chunk I: 10 new tests in `tests/test_artifact_security_analysis.py`,
+  `test_installer_record_coverage_is_the_only_added_skipped_na_reason` in
+  `tests/test_tool_input_support.py`, and the updated launch counts in
+  `tests/test_node_dependency_output_filtering.py` (Syft 30, Grype 30, inventory 69, osv-scanner
+  1, blint 1, and 38 `INSTALLER_RECORD_COVERED` decisions each for Syft and Grype).
+- Integration (written, **not run**): `tests/integration/test_installer_record_scans.py`, 6 tests.
+  They launch the pinned images on the staged record, and they skip, naming what is missing,
+  without Docker, the images or verified grype and osv (npm) feeds:
+  `python -m pytest -p no:cacheprovider tests/integration/test_installer_record_scans.py --basetemp=test/tmp/installer-record-scans`.
+- Acceptance (written, **not run**): four new tests in
+  `tests/acceptance/test_dependency_output_bounds.py` (8 in total). They read a completed run:
+  `APPSEC_ACCEPTANCE_RUN_ROOT=runs/<run-id> python -m pytest tests/acceptance/test_dependency_output_bounds.py --basetemp=test/tmp/dof-acceptance`.
+
+The integration, acceptance and live review validations remain the user's to run. In particular,
+the per-scanner coverage in D4 is read from the pinned scanners' code and has not yet been
+observed in a run. The open questions in section 6 are tracked in
+[the TODO](../TODO.md#follow-ups-from-the-scanner-launch-reduction).

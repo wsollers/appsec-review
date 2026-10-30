@@ -2,7 +2,10 @@
 
 Status: implemented on branch `william-sollers-xbox-dependency-output-filtering-implementati`
 (ready commit `7fac4f7f`), which merges the native build-output disposition mechanism (chunk N,
-`13ef1ea9` and `3964a85b`). See [section 7](#7-implementation-status).
+`13ef1ea9` and `3964a85b`). See [section 7](#7-implementation-status). Follow-up: artifact
+security analysis now scans each npm installer record once with Syft, Grype and osv-scanner and
+skips the per-package Syft and Grype launches
+([scanner launch reduction](scanner-launch-reduction-design.md)).
 
 Branch: `william-sollers-xbox-dependency-output-filtering-design`, based on `38c934d9`.
 
@@ -262,7 +265,7 @@ recorded as dispositions, never as gaps. That matches how target-file exclusions
 | `retrieval/source_resolution.py` | **No change.** It only resolves rows that were selected for source publication. |
 | Node build probe / `job_project_build` | **No change.** `_IGNORED` already skips `node_modules` (`job_project_build/job.py:56`). |
 | `job_artifact_indexing` | **No code change** (D3). Expected effect: row count drops from about 8,500 to about 650 for this run shape, so relationship shards drop by the same factor. |
-| `job_artifact_security_analysis` | **No code change.** It reads roles with `ScopeRole(...)` (`job.py:110`) and gates by `analysis_scope` (`job.py:205,483`), so the new role routes automatically. `_applicable` already enables `packages` for the node family (`job.py:175`). |
+| `job_artifact_security_analysis` | **No code change.** It reads roles with `ScopeRole(...)` (`job.py:110`) and gates by `analysis_scope` (`job.py:205,483`), so the new role routes automatically. `_applicable` already enables `packages` for the node family (`job.py:175`). Superseded for Syft, Grype and osv-scanner by the [scanner launch reduction](scanner-launch-reduction-design.md), which scans each installer record once in place of its package anchors. |
 | `job_target_catalog` | **No change.** It still uses declaration-based `unknown`/`build_dependency` for `package.json` sections (`job_target_catalog/job.py:233`). Those are declarations, not installer facts. |
 | `php.composer_metadata` | **No change now.** It moves to `RUNTIME_DEPENDENCY` with the PHP follow-up (D1). |
 
@@ -497,7 +500,9 @@ documentation checks.
   - more than 512 verified packages under one prefix, all classified with no `build-output-` gap;
   - a nested prefix with no `missing` gap;
   - artifact-security scanner inputs bounded to package anchors (`syft` 68, `inventory` 69,
-    `osv` 0, `blint` 1: the verified production addon);
+    `osv` 0, `blint` 1: the verified production addon). After the
+    [scanner launch reduction](scanner-launch-reduction-design.md) the same test pins `syft` 30,
+    `grype` 30, `inventory` 69, `osv` 1 (the installer record) and `blint` 1;
   - a dev-dependency addon that stays out of `blint`.
 
   The count regression yields 38 package rows (30 `build_dependency` and 8 `runtime_dependency`),
@@ -517,7 +522,8 @@ These tests are written but **not run**:
 - `_assert_installed_dependency_rows` in `tests/integration/test_node_project_builds.py`, which
   also checks that real installed native binaries reach `blint` only for production packages.
 - `tests/acceptance/test_dependency_output_bounds.py`, 4 tests; the fourth checks the published
-  `blint` scope dispositions against the accepted artifacts.
+  `blint` scope dispositions against the accepted artifacts. The scanner launch reduction adds
+  four installer-record tests to this file.
 
 Both read the receipt's `build_output_dispositions` (schema
 `appsec-review/build-output-dispositions/1`), which `job.py` now writes. The integration,

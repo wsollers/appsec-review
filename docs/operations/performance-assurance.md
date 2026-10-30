@@ -55,7 +55,11 @@ lane admits nothing. `runtime_dependency` marks a package that npm's installer r
 its dev tree. That package belongs to the production dependency closure, but this does not prove it
 ships, so it is reviewed as supply chain rather than per file (see
 [installed npm dependencies](language-build.md)). Only an accepted delivery fact, such as an
-`npm pack` member, makes a dependency `shipped_dependency`.
+`npm pack` member, makes a dependency `shipped_dependency`. In artifact security analysis, a
+verified installed npm package costs no Syft or Grype launch of its own. Syft, Grype and
+osv-scanner each scan the npm installer record that lists the package once, so the number of
+supply-chain launches grows with installer records rather than with installed packages (see
+[installed npm packages](artifact-security-analysis.md#installed-npm-packages-one-scan-per-installer-record)).
 
 ## Publication and consumption
 

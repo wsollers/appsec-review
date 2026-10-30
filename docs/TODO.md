@@ -338,6 +338,26 @@ Until then, an operator can name such a tree in a `[[build_outputs.exclusions]]`
 walk then counts its files under `configured_exclusions` instead of listing them, so the tree gets
 no per-file review and no supply-chain rows.
 
+## Follow-ups from the scanner launch reduction
+
+The [scanner launch reduction](reviews/scanner-launch-reduction-design.md#6-resolved-decisions-and-open-questions)
+scans each npm installer record once with Syft, Grype and osv-scanner in place of per-package Syft
+and Grype launches. Its open questions:
+
+1. Every artifact-security scan logs `CHECKPOINT_MISSED reason=missing_release_identity` when the
+   review policy has no release identity for its components, so a retry repeats completed scans.
+   On a retry, that costs more than the launches the reduction removed.
+2. Root, workspace and unverified-package `package.json` rows still get one Syft and one Grype
+   launch each, which finds nothing for the same cataloger reason. They are few per unit.
+3. Decide whether target-intake `package-lock.json` inputs should also get
+   `SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES=true`. Today only installer-record launches set it.
+4. Feeding Grype the Syft SBOM (`sbom:`) instead of a `file:` source would match npm dev entries
+   too and save Grype's own cataloging (see
+   [Optimize produced-artifact Grype](#optimize-produced-artifact-grype-without-reducing-coverage)).
+5. Installer records for the other ecosystems, Go next: see
+   [Summarize installed dependencies for the remaining ecosystems](#summarize-installed-dependencies-for-the-remaining-ecosystems).
+6. Run scanner launches in parallel.
+
 ## Match OSV advisories against the snapshot's own index
 
 Match OSV advisories against the snapshot's own index/osv.sqlite so memory scales with a project's
