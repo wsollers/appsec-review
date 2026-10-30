@@ -81,6 +81,9 @@ class ReasonCode(str, Enum):
     # where the declaration cannot be decided exactly before launch.
     INPUT_FORMAT_UNSUPPORTED = "INPUT_FORMAT_UNSUPPORTED"
     TOOL_REPORTED_UNSUPPORTED_INPUT = "TOOL_REPORTED_UNSUPPORTED_INPUT"
+    # An input whose packages are covered by one scan of its installer record (for example an
+    # installed npm package recorded by node_modules/.package-lock.json) is not launched separately.
+    INSTALLER_RECORD_COVERED = "INSTALLER_RECORD_COVERED"
 
 
 @dataclass(frozen=True, slots=True)

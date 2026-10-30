@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -31,9 +31,11 @@ from appsec_review.jobs.delivery_scope import (
     POLICY_IDENTITY, analysis_scope, delivery_gap, scope_fields,
 )
 
-from .findings import FINDING_NORMALIZER, RECORD_SCHEMA, scan_records
+from .findings import (FINDING_NORMALIZER, RECORD_KIND_FINDING, RECORD_SCHEMA, Record, scan_outcome,
+                       scan_records)
 from .formats import ArchiveLimits, builtin_observation, classify
-from .scanners import ADAPTERS, ContainerScannerRunner, native_result_count
+from .scanners import (ADAPTERS, INSTALLER_RECORD_PRESENTATION, ContainerScannerRunner, native_result_count,
+                       scanner_input)
 from appsec_review.config.evidence_collection import memory_limit
 from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES, DATASETS
 
@@ -156,9 +158,137 @@ def _support_key(capability: str) -> str | None:
 
 def _artifact_name(artifact: Mapping[str, Any]) -> str:
     """The run-owned file name the scanner is handed (path-declared tools decide by it)."""
+    presented = scanner_input(artifact)
+    if presented is not None:
+        return str(presented["name"])
     if artifact.get("artifact_origin") == "target-intake":
         return PurePosixPath(str(artifact["target_relative_path"])).name
     return PurePosixPath(str(artifact.get("path") or "")).name
+
+
+# Capabilities that scan a staged installer record once instead of each package it records.
+INSTALLER_RECORD_SKIP_CAPABILITIES = frozenset({"syft", "grype"})
+INSTALLER_RECORD_CAPABILITIES = INSTALLER_RECORD_SKIP_CAPABILITIES | {"osv"}
+INSTALLED_PACKAGES_BOUND = 64
+
+
+def _record_key(record: Mapping[str, Any]) -> tuple[Any, Any, Any]:
+    return (record.get("build_unit_id"), record.get("workspace_path"), record.get("sha256"))
+
+
+def _anchor_key(artifact: Mapping[str, Any]) -> tuple[Any, Any, Any] | None:
+    """The installer-record key of a verified installed-package anchor, else None."""
+    metadata, evidence = artifact.get("package_metadata"), artifact.get("delivery_evidence")
+    if (not isinstance(metadata, Mapping) or not isinstance(evidence, Mapping)
+            or metadata.get("role") != "installed-dependency-package"
+            or evidence.get("kind") != "npm-installed-record"):
+        return None
+    return (artifact.get("build_unit_id"), evidence.get("workspace_path"), evidence.get("sha256"))
+
+
+def _record_anchors(artifacts: Sequence[Mapping[str, Any]]) -> dict[tuple[Any, Any, Any], list[Mapping[str, Any]]]:
+    anchors: dict[tuple[Any, Any, Any], list[Mapping[str, Any]]] = {}
+    for artifact in artifacts:
+        if (key := _anchor_key(artifact)) is not None:
+            anchors.setdefault(key, []).append(artifact)
+    return anchors
+
+
+def _evidence_ref(record: Mapping[str, Any], anchor: Mapping[str, Any]) -> str:
+    return f"{record.get('workspace_path')}#{anchor['delivery_evidence'].get('entry')}"
+
+
+def _installed_package(record: Mapping[str, Any], anchor: Mapping[str, Any]) -> dict[str, Any]:
+    metadata = anchor["package_metadata"]
+    return {"canonical_identity": anchor.get("canonical_identity"), "artifact_id": anchor.get("artifact_id"),
+            "workspace_path": anchor.get("workspace_path"), "install_path": metadata.get("install_path"),
+            "evidence_ref": _evidence_ref(record, anchor), "dev": bool(metadata.get("dev")),
+            "dev_optional": bool(metadata.get("dev_optional")), "scope_role": anchor.get("scope_role")}
+
+
+def _installer_record_gaps(capability: str, record: Mapping[str, Any], anchors: Sequence[Mapping[str, Any]],
+                           result: Mapping[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """The named coverage gaps of one installer-record scan and its ``installer_records`` facts."""
+    where = record.get("workspace_path")
+    outcome = scan_outcome(result)
+    gaps: list[str] = []
+    facts: dict[str, Any] = {"scan_outcome": outcome}
+    dev = sum(1 for anchor in anchors if anchor["package_metadata"].get("dev") is True)
+    if capability == "grype" and dev:
+        gaps.append(f"grype: {dev} dev-only packages recorded by {where} are not vulnerability-matched by the "
+                    "pinned grype (npm dev entries excluded); osv-scanner scans the same record")
+    if outcome == "not_completed":
+        gaps.append(f"{capability}: installer record scan of {where} did not complete; {len(anchors)} verified "
+                    f"packages recorded there have no {capability} coverage")
+    if capability == "syft":
+        reported = set()
+        if outcome != "not_completed":
+            observation = result.get("observation")
+            for item in (observation.get("artifacts") if isinstance(observation, Mapping) else None) or ():
+                if isinstance(item, Mapping):
+                    reported.add((item.get("name"), item.get("version")))
+        found = sum(1 for anchor in anchors if (anchor["package_metadata"].get("name"),
+                                                anchor["package_metadata"].get("version")) in reported)
+        facts["anchors_reported"] = found
+        if outcome != "not_completed" and found < len(anchors):
+            gaps.append(f"syft: {len(anchors) - found} of {len(anchors)} verified packages recorded by {where} "
+                        "were not reported by the installer record scan")
+    return gaps, facts
+
+
+RecordPackages = dict[str, tuple[Mapping[str, Any], dict[tuple[Any, Any], list[Mapping[str, Any]]]]]
+
+
+def _record_packages(artifacts: Sequence[Mapping[str, Any]]) -> RecordPackages:
+    """Each installer record's canonical identity to its row and its verified anchors by (name, version)."""
+    anchors = _record_anchors(artifacts)
+    packages: RecordPackages = {}
+    for row in artifacts:
+        if (scanner_input(row) is None or str(row.get("canonical_identity") or "") in packages
+                or not any(analysis_scope(row, capability)[0] for capability in INSTALLER_RECORD_CAPABILITIES)):
+            continue
+        by_package: dict[tuple[Any, Any], list[Mapping[str, Any]]] = {}
+        for anchor in anchors.get(_record_key(row), ()):
+            metadata = anchor["package_metadata"]
+            by_package.setdefault((metadata.get("name"), metadata.get("version")), []).append(anchor)
+        for matched in by_package.values():
+            matched.sort(key=lambda anchor: str(anchor.get("canonical_identity")))
+        packages[str(row.get("canonical_identity"))] = (row, by_package)
+    return packages
+
+
+def _record_matches(record: Record, record_packages: RecordPackages) -> tuple[Mapping[str, Any], list[Mapping[str, Any]]] | None:
+    """The installer record row and matched anchors of a grype/osv finding at a record, else None."""
+    payload = record.payload
+    artifact = payload.get("artifact")
+    if (record.kind != RECORD_KIND_FINDING or payload.get("capability") not in {"grype", "osv"}
+            or not isinstance(artifact, Mapping)):
+        return None
+    entry = record_packages.get(str(artifact.get("canonical_identity") or ""))
+    if entry is None:
+        return None
+    row, by_package = entry
+    return row, by_package.get((payload.get("package_name"), payload.get("package_version")), [])
+
+
+def _matched_anchors(record: Record, record_packages: RecordPackages) -> list[Mapping[str, Any]]:
+    matches = _record_matches(record, record_packages)
+    return matches[1] if matches is not None else []
+
+
+def _attribute(record: Record, record_packages: RecordPackages) -> Record:
+    """Label a finding at an installer record with the verified installed packages it names (D5)."""
+    matches = _record_matches(record, record_packages)
+    if matches is None:
+        return record
+    row, anchors = matches
+    if not anchors:
+        return replace(record, payload={**record.payload, "installed_package_attribution": "unverified-record-entry"})
+    payload = {**record.payload, "installed_package_attribution": "verified-anchor",
+               "installed_packages": [_installed_package(row, anchor) for anchor in anchors[:INSTALLED_PACKAGES_BOUND]]}
+    if len(anchors) > INSTALLED_PACKAGES_BOUND:
+        payload["installed_packages_truncated"] = len(anchors)
+    return replace(record, payload=payload)
 
 
 def _applicable(capability: str, classification: Mapping[str, Any], name: str = "") -> bool:
@@ -226,6 +356,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
                               if capability in ADAPTERS and callable(identity_provider) else {})
     if not isinstance(resolved_tool_identity, Mapping):
         raise FrameworkIntegrityError("scanner identity provider returned an invalid identity")
+    # Only the record-scanning adapters stage a presented input; every other fingerprint is unchanged.
+    presented = scanner_input(artifact, capability) if capability in INSTALLER_RECORD_CAPABILITIES else None
     fingerprint = hashlib.sha256(canonical_json({"schema": OBSERVATION_SCHEMA,
         "artifact_sha256": artifact["sha256"],
         "delivery_scope": scope_fields(artifact),
@@ -235,6 +367,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "scanner": scanner_identity, "resolved_tool_identity": resolved_tool_identity,
         "component_releases": {key: policy.releases.values.get(key) for key in components},
         "parser": PARSER_IDENTITY, "normalizer": NORMALIZER_IDENTITY,
+        **({"scanner_input": presented} if presented is not None else {}),
         "configuration": {key: settings[key] for key in sorted(settings) if key != "scanner_identities"}})).hexdigest()
     checkpoint = unit.job.run_root / "data" / "artifact-security" / "shards" / capability / fingerprint / "result.json"
     if not reusable:
@@ -478,7 +611,30 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
             skipped: list[Mapping[str, Any]] = []
             skipped_scan_artifacts: list[Mapping[str, Any]] = []
             scope_dispositions: list[Mapping[str, Any]] = []
+            installer_records: list[dict[str, Any]] = []
             key = _support_key(capability)
+            classifications: dict[str, Mapping[str, Any]] = {}
+
+            def classified(artifact: Mapping[str, Any]) -> Mapping[str, Any]:
+                artifact_id = str(artifact["artifact_id"])
+                if artifact_id not in classifications:
+                    classifications[artifact_id] = classify(_safe_file(unit.job.run_root, artifact), artifact,
+                                                            name=_artifact_name(artifact))
+                return classifications[artifact_id]
+
+            # Installer records this capability scans once in place of the packages they record (D2).
+            covering: dict[tuple[Any, Any, Any], Mapping[str, Any]] = {}
+            anchors_by_record: dict[tuple[Any, Any, Any], list[Mapping[str, Any]]] = {}
+            covered_count: dict[str, int] = {}
+            if capability in INSTALLER_RECORD_CAPABILITIES and key is not None:
+                for row in loaded["artifacts"]:
+                    if scanner_input(row) is None or not analysis_scope(row, capability)[0]:
+                        continue
+                    if partition_artifacts(key, ((str(row["artifact_id"]), _artifact_name(row),
+                                                  classified(row).get("format")),)).not_applicable:
+                        continue
+                    covering.setdefault(_record_key(row), row)
+                anchors_by_record = _record_anchors(loaded["artifacts"]) if covering else {}
             for artifact in loaded["artifacts"]:
                 allowed, reason = analysis_scope(artifact, capability)
                 scope_dispositions.append({"artifact_id": artifact["artifact_id"],
@@ -488,8 +644,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                     continue
                 if gap := delivery_gap(artifact):
                     gaps.append(gap)
-                path = _safe_file(unit.job.run_root, artifact)
-                classification = classify(path, artifact, name=_artifact_name(artifact))
+                classification = classified(artifact)
                 if key is not None:
                     # Declared format support decides before launch; unsupported is SKIPPED_NA.
                     decision = partition_artifacts(key, ((str(artifact["artifact_id"]), _artifact_name(artifact),
@@ -504,21 +659,52 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                         continue
                 elif not _applicable(capability, classification):
                     continue
+                anchor_key = _anchor_key(artifact)
+                if (capability in INSTALLER_RECORD_SKIP_CAPABILITIES and anchor_key is not None
+                        and anchor_key in covering):
+                    record = covering[anchor_key]
+                    covered_reason = (f"{capability} covers this package through one scan of installer record "
+                                      f"{record.get('workspace_path')} (sha256 {str(record.get('sha256'))[:12]})")
+                    skipped.append(InputDecision(str(artifact["artifact_id"]), str(key),
+                                                 ReasonCode.INSTALLER_RECORD_COVERED, covered_reason).as_dict())
+                    scope_dispositions[-1] = {
+                        **scope_dispositions[-1], "format": classification.get("format"),
+                        "input_disposition": ProcessingDisposition.SKIPPED_NA.value,
+                        "input_reason_code": ReasonCode.INSTALLER_RECORD_COVERED.value,
+                        "input_reason": covered_reason, "input_covered_by": record["artifact_id"],
+                        "input_evidence_ref": _evidence_ref(record, artifact)}
+                    covered_count[str(record["artifact_id"])] = covered_count.get(str(record["artifact_id"]), 0) + 1
+                    continue
                 if effective_runner is None and capability in ADAPTERS:
                     effective_runner = ContainerScannerRunner(
                         unit.job.repository_root, unit.job.run_root, unit.unit_root,
                         osv_memory=str(unit.job.config.settings["osv_memory"]))
                 result = _scan_one(unit, artifact, capability, effective_runner)
+                record_gaps: list[str] = []
+                if scanner_input(artifact) is not None and covering.get(_record_key(artifact)) is artifact:
+                    anchors = anchors_by_record.get(_record_key(artifact), [])
+                    record_gaps, facts = _installer_record_gaps(capability, artifact, anchors, result)
+                    installer_records.append({
+                        "artifact_id": artifact["artifact_id"], "workspace_path": artifact.get("workspace_path"),
+                        "sha256": artifact.get("sha256"), "presentation": INSTALLER_RECORD_PRESENTATION,
+                        "anchors_covered": 0,
+                        "dev_anchors": sum(1 for anchor in anchors if anchor["package_metadata"].get("dev") is True),
+                        **facts})
                 if result.get("terminal_status") == "SKIPPED_NA" and result.get("not_applicable"):
                     skipped.append(result["not_applicable"])
                     skipped_scan_artifacts.append({key: result[key] for key in (
                         "result_artifact", "native_output", "native_reports", "execution_receipt")})
+                    gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in record_gaps)
                     continue
                 observations.append(result)
-                gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in result["gaps"])
+                gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in (*result["gaps"], *record_gaps))
+            # Anchors may follow their record in row order, so coverage is counted after every skip.
+            for entry in installer_records:
+                entry["anchors_covered"] = covered_count.get(str(entry["artifact_id"]), 0)
             return {"capability": capability, "observations": observations,
                     "observation_count": len(observations), "gaps": gaps,
                     "scope_dispositions": scope_dispositions,
+                    "installer_records": sorted(installer_records, key=lambda item: str(item["artifact_id"])),
                     "not_applicable_scan_artifacts": skipped_scan_artifacts,
                     "not_applicable_inputs": not_applicable_summary(skipped),
                     "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if observations else "NOT_APPLICABLE"}
@@ -537,6 +723,9 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         gaps = [*loaded["producer_gaps"], *[gap for capability in CAPABILITIES
                  for gap in unit.output(f"analyze.{capability}")["gaps"]]]
         records = [scan_records(row) for row in observations]
+        record_packages = _record_packages(loaded["artifacts"])
+        records = [(summary, tuple(_attribute(finding, record_packages) for finding in findings))
+                   for summary, findings in records]
         gaps = list(dict.fromkeys((*gaps, *(gap for summary, _ in records
                                            for gap in summary.payload["gaps"]))))
         if not path.is_file():
@@ -567,6 +756,16 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                                                     {**record.payload, **evidence}))
                     builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
                                                          artifact_id.value, True, 1.0))
+                    # A finding at an installer record is also observed at each verified package it names (D5).
+                    for anchor in _matched_anchors(record, record_packages):
+                        anchor_id = LogicalIdentity.parse(str(anchor["canonical_identity"]))
+                        if anchor_id.value not in artifact_entities:
+                            artifact_entities[anchor_id.value] = anchor_id.value
+                            builder.add_entity(EntityRecord(anchor_id, anchor["sha256"],
+                                PurePosixPath(str(anchor.get("workspace_path") or anchor["path"])).name,
+                                "produced artifact package-metadata", {**anchor, **scope_fields(anchor)}))
+                        builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
+                                                             anchor_id.value, True, 1.0))
             builder.add_coverage("produced-artifact-security", "partial" if gaps else "complete",
                                  gaps[0] if gaps else None)
             sha = builder.build()
@@ -600,7 +799,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         loaded, indexed = unit.output("load.accepted_artifacts"), unit.output("index.observations")
         capabilities = {capability: {key: unit.output(f"analyze.{capability}").get(key)
                         for key in ("observation_count", "gaps", "terminal_status", "not_applicable_inputs",
-                                    "scope_dispositions")}
+                                    "installer_records", "scope_dispositions")}
                         for capability in CAPABILITIES}
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
             "language_build_handoff_sha256": loaded["language_build_handoff_sha256"],

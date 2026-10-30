@@ -130,7 +130,8 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
 
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
              duplicate_artifact: bool = False, no_artifacts: bool = False,
-             name: str = "module.wasm", kind: str = "wasm-module", declared_releases: bool = True):
+             name: str = "module.wasm", kind: str = "wasm-module", declared_releases: bool = True,
+             artifacts_factory=None):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
@@ -151,6 +152,8 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
         "sha256": file_sha256(produced), "size_bytes": produced.stat().st_size, "kind": kind,
         "build_unit_id": "build-unit-fixture", "mapping": "exact-workspace-path", "mapping_confidence": 1.0}
     artifacts = [] if no_artifacts else [artifact]
+    if artifacts_factory is not None:
+        artifacts = artifacts_factory(run_root)
     if duplicate_artifact:
         duplicate = run_root / "data" / "build" / "wasm" / "module-copy.wasm"
         duplicate.write_bytes(payload)
@@ -421,3 +424,403 @@ def test_runtime_dependency_rows_reach_packages_and_only_their_binaries_reach_bl
         original_scan(unit, artifact, "native", None)
     with pytest.raises(security.FrameworkIntegrityError, match="scope excludes blint"):
         original_scan(unit, dev_binary, "blint", None)
+
+
+RECORD = "node_modules/.package-lock.json"
+RECORD_METADATA = {"format": ".package-lock.json", "manager": "npm", "role": "installed-dependency-record"}
+# (install path, name, version, dev): two installs share a name and version at different paths.
+INSTALLED = (("node_modules/a", "a", "1.0.0", False), ("node_modules/b", "b", "2.0.0", True),
+             ("node_modules/c/node_modules/a", "a", "1.0.0", False))
+
+
+def _installed_rows(root: Path, prefix: str = "data/build/node") -> list[dict]:
+    """An npm installer record row and the verified anchor rows it records, shaped as language-build emits them."""
+    record_file = root / prefix / RECORD
+    record_file.parent.mkdir(parents=True, exist_ok=True)
+    record_file.write_text(json.dumps({"name": "app", "lockfileVersion": 3, "packages": {
+        "": {"name": "app"}, "node_modules/mismatch": {"version": "1.0.0"},
+        **{path: {"version": version, **({"dev": True} if dev else {})} for path, _, version, dev in INSTALLED}}}))
+    common = {"build_unit_id": "build-unit-fixture", "mapping": "exact-workspace-path", "mapping_confidence": 1.0}
+    record = {**common, "path": record_file.relative_to(root).as_posix(), "workspace_path": RECORD,
+              "sha256": file_sha256(record_file), "size_bytes": record_file.stat().st_size,
+              "kind": "resolved-dependency-metadata", "scope_role": "runtime_dependency",
+              "dependency_metadata": dict(RECORD_METADATA)}
+    rows = [record]
+    for install_path, name, version, dev in INSTALLED:
+        manifest = root / prefix / install_path / "package.json"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps({"name": name, "version": version}))
+        rows.append({**common, "path": manifest.relative_to(root).as_posix(),
+            "workspace_path": f"{install_path}/package.json", "sha256": file_sha256(manifest),
+            "size_bytes": manifest.stat().st_size, "kind": "package-metadata",
+            "scope_role": "build_dependency" if dev else "runtime_dependency",
+            "delivery_evidence": {"kind": "npm-installed-record", "workspace_path": RECORD,
+                                  "sha256": record["sha256"], "entry": install_path},
+            "package_metadata": {"format": "package.json", "role": "installed-dependency-package",
+                                 "ecosystem": "npm", "manager": "npm", "name": name, "version": version,
+                                 "dev": dev, "optional": False, "dev_optional": False,
+                                 "install_path": install_path}})
+    return rows
+
+
+def _record_handlers(root: Path, rows: list[dict], monkeypatch, scan=None,
+                     capabilities=("syft", "grype", "osv")):
+    """Run the analyze handlers over hand-built rows with a stubbed scan; return outputs and launches."""
+    from types import SimpleNamespace
+
+    from appsec_review.jobs.delivery_scope import scope_fields
+    from appsec_review.jobs.job_artifact_security_analysis import job as security
+
+    artifacts = [{**row, **scope_fields(row), "artifact_id": f"artifact-{index:02d}",
+                  "canonical_identity": f"fixture:{row['workspace_path']}"} for index, row in enumerate(rows)]
+    launched: list[tuple[str, str]] = []
+
+    def fake_scan(unit, artifact, capability, runner):
+        launched.append((capability, artifact["workspace_path"]))
+        if scan is not None:
+            return {"artifact": artifact, "terminal_status": "SUCCEEDED", **scan(capability, artifact)}
+        return {"artifact": artifact, "gaps": [], "observation": {}, "terminal_status": "SUCCEEDED"}
+
+    monkeypatch.setattr(security, "_scan_one", fake_scan)
+    unit = SimpleNamespace(job=SimpleNamespace(run_root=root, tools=SimpleNamespace(disable_grype=False)),
+                           output=lambda _: {"artifacts": artifacts})
+    units = {item.unit_id: item for item in build_job(scanner_runner=lambda *args: None).units}
+    return {capability: units[f"analyze.{capability}"].handler(unit) for capability in capabilities}, launched
+
+
+def _covered_reason(capability: str, sha256: str) -> str:
+    return (f"{capability} covers this package through one scan of installer record {RECORD} "
+            f"(sha256 {sha256[:12]})")
+
+
+def test_installer_record_covers_its_verified_anchors_for_syft_and_grype(tmp_path: Path, monkeypatch) -> None:
+    rows = _installed_rows(tmp_path)
+    outputs, launched = _record_handlers(tmp_path, rows, monkeypatch)
+
+    assert launched == [("syft", RECORD), ("grype", RECORD), ("osv", RECORD)]
+    record_sha = rows[0]["sha256"]
+    for capability in ("syft", "grype"):
+        output = outputs[capability]
+        reason = _covered_reason(capability, record_sha)
+        assert output["not_applicable_inputs"]["by_reason"] == {reason: 3}
+        assert {(item["path"], item["tool"], item["reason_code"]) for item in output["not_applicable_inputs"]["items"]} == {
+            (f"artifact-{index:02d}", f"artifact:tool-{capability}", "INSTALLER_RECORD_COVERED") for index in (1, 2, 3)}
+        dispositions = {row["artifact_id"]: row for row in output["scope_dispositions"]}
+        assert "input_disposition" not in dispositions["artifact-00"]
+        for index, (install_path, *_rest) in enumerate(INSTALLED, start=1):
+            skipped = dispositions[f"artifact-{index:02d}"]
+            assert skipped["selected"] is True and skipped["input_disposition"] == "SKIPPED_NA"
+            assert skipped["input_reason_code"] == "INSTALLER_RECORD_COVERED"
+            assert skipped["input_reason"] == reason
+            assert skipped["input_covered_by"] == "artifact-00"
+            assert skipped["input_evidence_ref"] == f"{RECORD}#{install_path}"
+        assert output["observation_count"] == 1
+
+
+@pytest.mark.parametrize("change", ["absent", "sha256", "build_unit_id"])
+def test_anchor_without_a_matching_covering_record_is_scanned(tmp_path: Path, monkeypatch, change) -> None:
+    rows = _installed_rows(tmp_path)
+    if change == "absent":
+        rows = rows[1:]
+    elif change == "sha256":
+        record_file = tmp_path / rows[0]["path"]
+        record_file.write_text(record_file.read_text() + "\n")
+        rows[0] = {**rows[0], "sha256": file_sha256(record_file), "size_bytes": record_file.stat().st_size}
+    else:
+        rows[0] = {**rows[0], "build_unit_id": "other-build-unit"}
+    outputs, launched = _record_handlers(tmp_path, rows, monkeypatch)
+
+    anchors = {f"{install_path}/package.json" for install_path, *_rest in INSTALLED}
+    for capability in ("syft", "grype"):
+        assert anchors <= {path for scanned, path in launched if scanned == capability}
+        assert not [item for item in outputs[capability]["not_applicable_inputs"]["items"]
+                    if item["reason_code"] == "INSTALLER_RECORD_COVERED"]
+        assert outputs[capability]["installer_records"] == ([] if change == "absent" else [
+            {"artifact_id": "artifact-00", "workspace_path": RECORD, "sha256": rows[0]["sha256"],
+             "presentation": "appsec-review/npm-installed-record-as-package-lock/1", "anchors_covered": 0,
+             "dev_anchors": 0, "scan_outcome": "completed", **({"anchors_reported": 0} if capability == "syft" else {})}])
+
+
+def test_retained_native_addon_with_installer_evidence_is_not_covered(tmp_path: Path, monkeypatch) -> None:
+    rows = _installed_rows(tmp_path)
+    addon = tmp_path / "data/build/node/node_modules/a/build/Release/addon.node"
+    addon.parent.mkdir(parents=True)
+    addon.write_bytes(b"\x7fELF-native-addon")
+    rows.append({**{key: rows[1][key] for key in ("build_unit_id", "mapping", "mapping_confidence",
+                                                  "scope_role", "delivery_evidence")},
+                 "path": addon.relative_to(tmp_path).as_posix(),
+                 "workspace_path": "node_modules/a/build/Release/addon.node", "sha256": file_sha256(addon),
+                 "size_bytes": addon.stat().st_size, "kind": "native-addon"})
+    outputs, launched = _record_handlers(tmp_path, rows, monkeypatch, capabilities=("syft", "grype"))
+
+    assert launched == [("syft", RECORD), ("syft", "node_modules/a/build/Release/addon.node"),
+                        ("grype", RECORD), ("grype", "node_modules/a/build/Release/addon.node")]
+    assert all(output["not_applicable_inputs"]["count"] == 3 for output in outputs.values())
+
+
+def test_osv_selects_the_record_and_format_skips_its_anchors(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.jobs.job_artifact_security_analysis.job import _artifact_name
+
+    rows = _installed_rows(tmp_path)
+    outputs, launched = _record_handlers(tmp_path, rows, monkeypatch, capabilities=("osv",))
+
+    assert launched == [("osv", RECORD)]
+    osv = outputs["osv"]
+    assert {item["reason_code"] for item in osv["not_applicable_inputs"]["items"]} == {"INPUT_FORMAT_UNSUPPORTED"}
+    assert osv["not_applicable_inputs"]["count"] == 3
+    assert osv["installer_records"] == [{
+        "artifact_id": "artifact-00", "workspace_path": RECORD, "sha256": rows[0]["sha256"],
+        "presentation": "appsec-review/npm-installed-record-as-package-lock/1", "anchors_covered": 0,
+        "dev_anchors": 1, "scan_outcome": "completed"}]
+    assert _artifact_name(rows[0]) == "package-lock.json"
+    assert _artifact_name(rows[1]) == "package.json"
+    assert _artifact_name({**rows[0], "dependency_metadata": {**RECORD_METADATA, "manager": "yarn"}}) == (
+        ".package-lock.json")
+
+
+def test_installer_record_gaps_name_dev_shortfall_unreported_and_incomplete_scans(
+        tmp_path: Path, monkeypatch) -> None:
+    rows = _installed_rows(tmp_path)
+
+    def completed(capability, artifact):
+        return {"gaps": [], "observation": {"artifacts": [{"name": "a", "version": "1.0.0"}]}
+                if capability == "syft" else {"matches": []}}
+
+    outputs, _ = _record_handlers(tmp_path, rows, monkeypatch, scan=completed)
+    assert outputs["grype"]["gaps"] == [
+        f"artifact-00: grype: 1 dev-only packages recorded by {RECORD} are not vulnerability-matched by the "
+        "pinned grype (npm dev entries excluded); osv-scanner scans the same record"]
+    assert outputs["syft"]["gaps"] == [
+        f"artifact-00: syft: 1 of 3 verified packages recorded by {RECORD} were not reported by the "
+        "installer record scan"]
+    assert outputs["osv"]["gaps"] == []
+    assert outputs["syft"]["installer_records"][0]["anchors_reported"] == 2
+    assert [item["anchors_covered"] for item in (outputs[name]["installer_records"][0]
+                                                 for name in ("syft", "grype", "osv"))] == [3, 3, 0]
+
+    def timed_out(capability, artifact):
+        return {"gaps": [f"{capability} scanner timed out"]}
+
+    outputs, _ = _record_handlers(tmp_path, rows, monkeypatch, scan=timed_out)
+    for capability in ("syft", "grype", "osv"):
+        assert outputs[capability]["installer_records"][0]["scan_outcome"] == "not_completed"
+        assert f"artifact-00: {capability} scanner timed out" in outputs[capability]["gaps"]
+        assert (f"artifact-00: {capability}: installer record scan of {RECORD} did not complete; 3 verified "
+                f"packages recorded there have no {capability} coverage") in outputs[capability]["gaps"]
+    assert len(outputs["grype"]["gaps"]) == 3 and len(outputs["syft"]["gaps"]) == 2
+    assert outputs["syft"]["installer_records"][0]["anchors_reported"] == 0
+
+
+def test_installer_record_presentation_and_fingerprint_material() -> None:
+    from appsec_review.jobs.job_artifact_security_analysis.scanners import (
+        INSTALLER_RECORD_PRESENTATION, scanner_input)
+
+    record = {"dependency_metadata": dict(RECORD_METADATA)}
+    assert scanner_input(record, "syft") == {"name": "package-lock.json",
+        "presentation": INSTALLER_RECORD_PRESENTATION,
+        "environment": {"SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES": "true"}}
+    assert scanner_input(record, "grype")["environment"] == {} == scanner_input(record)["environment"]
+    assert scanner_input(record, "syft") != scanner_input(record, "grype")
+    assert scanner_input({"dependency_metadata": {**RECORD_METADATA, "role": "resolved-dependency-graph"}}) is None
+    assert scanner_input({"dependency_metadata": {**RECORD_METADATA, "extra": 1}}) is None
+    assert scanner_input({"package_metadata": {"role": "installed-dependency-package"}}) is None
+
+
+def test_scan_fingerprint_adds_scanner_input_only_for_record_scans(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.jobs.job_artifact_security_analysis import job as security
+
+    materials: list[tuple[str, dict]] = []
+    current: list[str] = []
+    original_json, original_scan = security.canonical_json, security._scan_one
+
+    def capture(value):
+        if isinstance(value, dict) and value.get("schema") == security.OBSERVATION_SCHEMA and "parser" in value:
+            materials.append((current[-1], value))
+        return original_json(value)
+
+    def scan(unit, artifact, capability, runner):
+        current.append(capability)
+        return original_scan(unit, artifact, capability, runner)
+
+    def rows_with_addon(root: Path) -> list[dict]:
+        rows = _installed_rows(root)
+        addon = root / "data/build/node/node_modules/a/build/Release/addon.node"
+        addon.parent.mkdir(parents=True)
+        addon.write_bytes(b"\x7fELF-native-addon")
+        return [*rows, {**{key: rows[1][key] for key in ("build_unit_id", "mapping", "mapping_confidence",
+                                                         "scope_role", "delivery_evidence")},
+                        "path": addon.relative_to(root).as_posix(), "kind": "native-addon",
+                        "workspace_path": "node_modules/a/build/Release/addon.node", "sha256": file_sha256(addon),
+                        "size_bytes": addon.stat().st_size}]
+
+    monkeypatch.setattr(security, "canonical_json", capture)
+    monkeypatch.setattr(security, "_scan_one", scan)
+    config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path, artifacts_factory=rows_with_addon)
+
+    def scanner(capability, path, artifact, timeout, limit):
+        return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
+                "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
+
+    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    rows = {row["workspace_path"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}
+    record_sha, addon_sha = rows[RECORD]["sha256"], rows["node_modules/a/build/Release/addon.node"]["sha256"]
+    by_scan = {(name, material["artifact_sha256"]): material for name, material in materials}
+    record_scans = {name: material for (name, sha), material in by_scan.items() if sha == record_sha}
+    assert record_scans["syft"]["scanner_input"]["environment"] == {"SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES": "true"}
+    assert record_scans["grype"]["scanner_input"]["environment"] == {}
+    assert record_scans["osv"]["scanner_input"]["name"] == "package-lock.json"
+    assert "inventory" in record_scans
+    assert {("syft", addon_sha), ("grype", addon_sha)} <= set(by_scan)
+    # Built-in record scans and every non-record scan keep their prior fingerprint material.
+    assert all("scanner_input" not in material for (name, sha), material in by_scan.items()
+               if sha != record_sha or name not in {"syft", "grype", "osv"})
+
+
+def test_installer_record_findings_are_attributed_to_verified_anchors(tmp_path: Path) -> None:
+    import sqlite3
+
+    from appsec_review.jobs.job_artifact_security_analysis import job as security
+
+    config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path, artifacts_factory=_installed_rows)
+    calls: list[tuple[str, str]] = []
+
+    def scanner(capability, path, artifact, timeout, limit):
+        calls.append((capability, artifact["workspace_path"]))
+        observation: dict = {}
+        if artifact["workspace_path"] == RECORD and capability == "grype":
+            observation = {"matches": [
+                {"vulnerability": {"id": check, "severity": "High"}, "artifact": {"name": name, "version": "1.0.0"}}
+                for check, name in (("GHSA-aaaa", "a"), ("GHSA-mmmm", "mismatch"))]}
+        elif artifact["workspace_path"] == RECORD and capability == "osv":
+            observation = {"results": [{"packages": [
+                {"package": {"name": name, "version": "1.0.0", "ecosystem": "npm"},
+                 "vulnerabilities": [{"id": check}]}
+                for check, name in (("GHSA-aaaa", "a"), ("GHSA-mmmm", "mismatch"))]}]}
+        elif artifact["workspace_path"] == RECORD and capability == "syft":
+            observation = {"artifacts": [{"name": name, "version": version} for _, name, version, _ in INSTALLED]}
+        return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": observation,
+                "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
+
+    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert sorted(calls) == [("grype", RECORD), ("osv", RECORD), ("syft", RECORD)]
+    rows = {row["workspace_path"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}
+    record = rows[RECORD]
+    anchors = sorted((rows[f"{path}/package.json"] for path, *_rest in INSTALLED if path.endswith("/a")),
+                     key=lambda row: row["canonical_identity"])
+
+    accepted = load_accepted_artifact_security_analysis(run_root)
+    capabilities = accepted["capabilities"]
+    expected = {"artifact_id": record["artifact_id"], "workspace_path": RECORD, "sha256": record["sha256"],
+                "presentation": "appsec-review/npm-installed-record-as-package-lock/1", "dev_anchors": 1}
+    assert [{key: entry[key] for key in expected} for entry in capabilities["grype"]["installer_records"]] == [expected]
+    assert capabilities["syft"]["installer_records"][0]["anchors_reported"] == 3
+    assert [capabilities[name]["installer_records"][0]["anchors_covered"] for name in ("syft", "grype", "osv")] == [
+        3, 3, 0]
+    assert capabilities["inventory"]["installer_records"] == []
+    assert not any("were not reported" in gap for gap in capabilities["syft"]["gaps"])
+    assert any("1 dev-only packages" in gap for gap in capabilities["grype"]["gaps"])
+
+    [index_path] = (run_root / "data" / "indices" / "observations").glob("artifact-security-*.sqlite")
+    with sqlite3.connect(index_path) as connection:
+        entities = {identity: (text, json.loads(payload)) for identity, text, payload in connection.execute(
+            "SELECT identity, text, payload_json FROM entities")}
+        relations = connection.execute("SELECT source_id, target_id, kind, confidence FROM relations").fetchall()
+    findings = {(payload["capability"], payload["rule_id"]): (identity, payload)
+                for identity, (_, payload) in entities.items() if payload.get("record_kind") == "finding"}
+    assert set(findings) == {(name, check) for name in ("grype", "osv") for check in ("GHSA-aaaa", "GHSA-mmmm")}
+    observed = {}
+    for source, target_id, kind, confidence in relations:
+        if kind == "OBSERVED_AT":
+            assert confidence == 1.0
+            observed.setdefault(source, set()).add(target_id)
+    for name in ("grype", "osv"):
+        identity, payload = findings[(name, "GHSA-aaaa")]
+        assert payload["installed_package_attribution"] == "verified-anchor"
+        assert payload["installed_packages"] == [
+            {"canonical_identity": anchor["canonical_identity"], "artifact_id": anchor["artifact_id"],
+             "workspace_path": anchor["workspace_path"], "install_path": anchor["package_metadata"]["install_path"],
+             "evidence_ref": f"{RECORD}#{anchor['package_metadata']['install_path']}", "dev": False,
+             "dev_optional": False, "scope_role": "runtime_dependency"} for anchor in anchors]
+        assert "installed_packages_truncated" not in payload
+        assert observed[identity] == {record["canonical_identity"], *(anchor["canonical_identity"] for anchor in anchors)}
+        identity, payload = findings[(name, "GHSA-mmmm")]
+        assert payload["installed_package_attribution"] == "unverified-record-entry"
+        assert "installed_packages" not in payload
+        assert observed[identity] == {record["canonical_identity"]}
+    for anchor in anchors:
+        assert anchor["canonical_identity"] in entities
+    summaries = [identity for identity, (_, payload) in entities.items() if payload.get("record_kind") == "summary"]
+    assert all(len(observed[identity]) == 1 for identity in summaries)
+
+
+def test_installer_record_attribution_is_bounded_and_keeps_finding_identity(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_artifact_security_analysis import job as security
+    from appsec_review.jobs.job_artifact_security_analysis.findings import RECORD_KIND_FINDING, Record
+
+    rows = _installed_rows(tmp_path)
+    record = {**rows[0], "canonical_identity": "fixture:record"}
+    template = rows[1]
+    anchors = [{**template, "canonical_identity": f"fixture:anchor-{index:03d}", "artifact_id": f"anchor-{index:03d}",
+                "package_metadata": {**template["package_metadata"], "install_path": f"node_modules/x{index}/node_modules/a"}}
+               for index in range(65)]
+    packages = security._record_packages([record, *anchors])
+    finding = Record(RECORD_KIND_FINDING, {"fingerprint": "f", "check": "GHSA-aaaa"}, "native", "GHSA-aaaa", "text",
+                     {"capability": "grype", "artifact": {"canonical_identity": "fixture:record"},
+                      "package_name": "a", "package_version": "1.0.0"})
+    attributed = security._attribute(finding, packages)
+    assert attributed.identity_key == finding.identity_key and attributed.native_id == finding.native_id
+    assert len(attributed.payload["installed_packages"]) == 64
+    assert attributed.payload["installed_packages_truncated"] == 65
+    assert [item["canonical_identity"] for item in attributed.payload["installed_packages"]] == [
+        f"fixture:anchor-{index:03d}" for index in range(64)]
+    syft = Record(RECORD_KIND_FINDING, {}, "native", "x", "text",
+                  {**finding.payload, "capability": "syft"})
+    assert security._attribute(syft, packages) is syft
+    elsewhere = Record(RECORD_KIND_FINDING, {}, "native", "x", "text",
+                       {**finding.payload, "artifact": {"canonical_identity": "fixture:other"}})
+    assert security._attribute(elsewhere, packages) is elsewhere
+
+
+@pytest.mark.parametrize("capability", ["syft", "grype", "osv"])
+def test_runner_stages_installer_record_as_read_only_package_lock(tmp_path: Path, monkeypatch, capability) -> None:
+    from appsec_review.container_runtime import ContainerExecutor
+    from appsec_review.jobs.job_artifact_security_analysis.scanners import ContainerScannerRunner
+
+    run_root = tmp_path / "run"
+    [record, *_anchors] = _installed_rows(run_root)
+    path = run_root / record["path"]
+    before = path.read_bytes()
+    requests = []
+
+    class Captured(Exception):
+        pass
+
+    def execute(self, request):
+        requests.append(request)
+        raise Captured
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    runner = ContainerScannerRunner(ROOT, run_root, run_root / "scratch")
+    monkeypatch.setattr(runner, "identity", lambda *args: {"scanner": "fixture"})
+    database = tmp_path / "database"
+    (database / "npm").mkdir(parents=True)
+    runner._feeds["grype"] = {"directory": str(database)}
+    runner._osv_ecosystems = {"npm": database / "npm"}
+    with pytest.raises(Captured):
+        runner(capability, path, {**record, "canonical_identity": "fixture:record"}, 30, 4096)
+
+    [request] = requests
+    staged = [mount for mount in request.extra_mounts if mount.target.startswith("/target/")]
+    assert [(mount.source, mount.target, mount.read_only) for mount in staged] == [
+        (path, "/target/package-lock.json", True)]
+    assert "/target/package-lock.json" in " ".join(request.argv)
+    assert request.target_root.parent == run_root / "scratch" / "installer-records"
+    assert "node_modules" not in request.target_root.parts
+    assert list(request.target_root.iterdir()) == [request.target_root / "package-lock.json"]
+    assert (request.target_root / "package-lock.json").stat().st_size == 0
+    assert path.read_bytes() == before
+    dev = {"SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES": "true"}
+    assert (dict(request.environment).items() >= dev.items()) is (capability == "syft")
+    assert "SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES" not in dict(request.environment) or capability == "syft"

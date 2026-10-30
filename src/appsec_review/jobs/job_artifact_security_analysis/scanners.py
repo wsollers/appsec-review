@@ -150,6 +150,26 @@ ADAPTERS = {item.capability: item for item in (
 )}
 
 
+# An npm installer record (node_modules/.package-lock.json) has the package-lock.json v3 format, but
+# syft, grype and osv-scanner select their npm lock parser by the exact file name, and syft's parser
+# ignores any lock file under a node_modules directory. The record is therefore presented to them as
+# /target/package-lock.json outside every node_modules path, mounted read-only and never rewritten.
+INSTALLER_RECORD_PRESENTATION = "appsec-review/npm-installed-record-as-package-lock/1"
+INSTALLER_RECORD_ENVIRONMENT: Mapping[str, Mapping[str, str]] = {
+    "syft": {"SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES": "true"}}
+_INSTALLER_RECORD_METADATA = {"format": ".package-lock.json", "manager": "npm",
+                              "role": "installed-dependency-record"}
+
+
+def scanner_input(artifact: Mapping[str, Any], capability: str | None = None) -> Mapping[str, Any] | None:
+    """The presented name and environment for a staged installer record, else None."""
+    metadata = artifact.get("dependency_metadata")
+    if not isinstance(metadata, Mapping) or dict(metadata) != _INSTALLER_RECORD_METADATA:
+        return None
+    return {"name": "package-lock.json", "presentation": INSTALLER_RECORD_PRESENTATION,
+            "environment": dict(INSTALLER_RECORD_ENVIRONMENT.get(capability or "", {}))}
+
+
 def _execution_token(capability: str, artifact: Mapping[str, Any]) -> str:
     """Keep scanner receipts distinct for equal-content artifacts at different identities."""
     canonical_identity = artifact.get("canonical_identity")
@@ -216,6 +236,7 @@ class ContainerScannerRunner:
         scratch.mkdir(parents=True, exist_ok=True)
         mounts: list[Mount] = []
         input_name, target_root = path.name, path.parent
+        presented = scanner_input(artifact, capability)
         if artifact.get("artifact_origin") == "target-intake":
             from appsec_review.retrieval.model import normalize_relative_path
             original = normalize_relative_path(str(artifact["target_relative_path"]))
@@ -224,7 +245,13 @@ class ContainerScannerRunner:
             target_root.mkdir(parents=True, exist_ok=True)
             (target_root / input_name).touch(exist_ok=True)
             mounts.append(Mount(path, f"/target/{input_name}", True))
-        environment: dict[str, str] = {}
+        elif presented is not None:
+            input_name = str(presented["name"])
+            target_root = self.scratch_root / "installer-records" / token
+            target_root.mkdir(parents=True, exist_ok=True)
+            (target_root / input_name).touch(exist_ok=True)
+            mounts.append(Mount(path, f"/target/{input_name}", True))
+        environment: dict[str, str] = dict(presented["environment"]) if presented is not None else {}
         memory = None
         if capability == "grype":
             snapshot = self._feeds[capability]
