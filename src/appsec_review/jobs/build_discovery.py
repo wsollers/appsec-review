@@ -663,6 +663,31 @@ def copied_source_symlink(source: Path, ignored: frozenset[str] | set[str]) -> P
     return None
 
 
+def ensure_declared_build_dir(workspace: Path, recipe: Any) -> str | None:
+    """Create an accepted recipe's absent ``build_dir`` inside a run-owned build workspace.
+
+    Recipes cannot run ``mkdir``, so a compiler writing ``-o build/x`` needs the declared
+    directory to exist. Returns the created relative path, or ``None`` when nothing was created.
+    """
+    build_dir = recipe.get("build_dir") if isinstance(recipe, Mapping) else None
+    if not _relative(build_dir) or build_dir == ".":
+        return None
+    root = workspace.resolve(strict=True)
+    current = root
+    for part in PurePosixPath(build_dir).parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError("declared build_dir traverses a symlink in the build workspace")
+        if current.exists() and not current.is_dir():
+            return None
+    if current.is_dir():
+        return None
+    current.mkdir(parents=True)
+    if root not in current.resolve(strict=True).parents:
+        raise ValueError("declared build_dir escaped the build workspace")
+    return PurePosixPath(build_dir).as_posix()
+
+
 def descriptor_inventory_paths(unit: Mapping[str, Any]) -> list[str]:
     """Every accepted descriptor path of a unit: its content documents and identity inventory."""
     package = unit.get("descriptor_package", {})

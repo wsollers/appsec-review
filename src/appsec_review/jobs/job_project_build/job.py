@@ -36,7 +36,9 @@ from appsec_review.jobs.build_bookkeeping import (
     BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
 )
 from appsec_review.config.build_outputs import BuildOutputPolicy
-from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
+from appsec_review.jobs.build_discovery import (
+    copied_source_symlink, ensure_declared_build_dir, validate_build_recipe,
+)
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
@@ -278,7 +280,8 @@ def _normalized_argv(recipe: Mapping[str, Any], argv: list[str]) -> tuple[str, .
     return tuple(result)
 
 
-def _validate_expected_outputs(workspace: Path, recipe: Mapping[str, Any]) -> list[str]:
+def _validate_expected_outputs(workspace: Path, recipe: Mapping[str, Any],
+                               created_build_dir: str | None = None) -> list[str]:
     gaps = []
     root = workspace.resolve()
     for relative in recipe.get("expected_outputs", ()):
@@ -286,6 +289,11 @@ def _validate_expected_outputs(workspace: Path, recipe: Mapping[str, Any]) -> li
         if path != root and root not in path.parents:
             raise ValueError("expected build output escaped the run-owned workspace")
         if not path.exists() or path.is_symlink():
+            gaps.append(f"required build output is missing: {relative}")
+            continue
+        if (created_build_dir is not None and PurePosixPath(str(relative)) == PurePosixPath(created_build_dir)
+                and path.is_dir() and not any(path.iterdir())):
+            # The probe created this directory; only build output inside it proves the build ran.
             gaps.append(f"required build output is missing: {relative}")
             continue
         if path.suffix.lower() != ".apk":
@@ -519,6 +527,10 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             unit.job.attempt_id / f"probe-{attempt_number:03d}")
     workspace = root / "workspace"
     workspace_adaptations = _copy_source(unit, action, workspace)
+    created_build_dir = ensure_declared_build_dir(workspace, recipe)
+    if created_build_dir is not None:
+        workspace_adaptations.append(
+            f"created the recipe's declared build_dir {created_build_dir} in the run-owned workspace")
     base["workspace_adaptations"] = workspace_adaptations
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     # The pre-build hashes double as the capture's snapshot: unchanged files are never rehashed.
@@ -622,7 +634,7 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
         bookkeeping)
     artifacts = _outputs(unit.job.run_root, workspace, before, int(unit.job.config.settings["artifact_count_limit"]),
                          bookkeeping, dispositions=dispositions)
-    output_gaps = _validate_expected_outputs(workspace, recipe)
+    output_gaps = _validate_expected_outputs(workspace, recipe, created_build_dir)
     gaps.extend(output_gaps)
     status = ("FAILED" if build_failed or output_gaps else
               "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")
@@ -888,9 +900,14 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                 "stdout": _retained_stream(unit.job.run_root, repair_root / "image-build.stdout", stdout, stream_limit),
                 "stderr": _retained_stream(unit.job.run_root, repair_root / "image-build.stderr", stderr, stream_limit),
             }
-            diagnostics = {"terminal_status": "FAILED", "error_class": type(exc).__name__,
-                           "stdout_tail": stdout[-32768:].decode("utf-8", "replace"),
-                           "stderr_tail": stderr[-32768:].decode("utf-8", "replace")}
+            if isinstance(exc, ProjectImageBuildError):
+                diagnostics = {"terminal_status": "FAILED", "error_class": type(exc).__name__,
+                               "stdout_tail": stdout[-32768:].decode("utf-8", "replace"),
+                               "stderr_tail": stderr[-32768:].decode("utf-8", "replace")}
+            else:
+                # A rejected proposal changed nothing: keep the probe failure the next repair must fix.
+                diagnostics = {**_probe_diagnostics(unit, last_probe), "repair_error": {
+                    "error_class": type(exc).__name__, "message": str(exc)[:4096]}}
             attempts.append({"attempt_number": repair_number + 1, "kind": "inference-repair",
                              "repair_number": repair_number, "terminal_status": "FAILED",
                              "error_class": type(exc).__name__, "gaps": [str(exc)[:4096]],

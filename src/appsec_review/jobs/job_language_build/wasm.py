@@ -15,6 +15,7 @@ from appsec_review.config.assurance import ComponentReleases
 from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, derived_base_image_id
+from appsec_review.jobs.build_discovery import ensure_declared_build_dir
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build.job import (
     _captured_command, _dispatches, _mapped_files, _probe_environment, _snapshot,
@@ -128,6 +129,7 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
     if any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("wasm build source contains an unsupported symlink")
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(".git", ".hg", ".svn", "build", "target"))
+    ensure_declared_build_dir(workspace, dispatch.get("recipe"))
 
 
 def _kind(path: Path) -> str | None:
