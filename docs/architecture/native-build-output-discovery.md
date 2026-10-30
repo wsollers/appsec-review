@@ -457,9 +457,11 @@ Recorded by the implementation where the code refined or deviated from the desig
 - **`classify_tree` gains `bound_group=None`** (user decision). `max_layout_roots` does not
   limit the number of npm packages. Every root registered with the same `bound_group`, which is a
   workspace directory containing the root, counts once against the bound. The npm classifier
-  passes the installer prefix (the `node_modules` directory holding `.package-lock.json`), so one
-  prefix uses one of the 512, however many verified packages it records, and no
-  `build-output-root-bound-exceeded` gap results. Ungrouped roots keep the 512 bound. A root
+  (`node._installed_tree`) passes each package's outermost `node_modules` directory, for example
+  `node_modules` or `backend/node_modules`, so one install tree uses one of the 512, however many
+  verified packages it holds, and no `build-output-root-bound-exceeded` gap results. The record's
+  own `node_modules` cannot be the group, because a root record describes workspace members such
+  as `backend/node_modules/x`, which would fall outside it. Ungrouped roots keep the 512 bound. A root
   outside its group is a `ValueError`. Root documents carry `bound_group` only when it is set, and
   the sanitizer replay passes it through.
 - **A configured exclusion wins over everything beneath it,** including deeper registered roots
