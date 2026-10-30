@@ -167,14 +167,15 @@ as a gap, never interpreted as proof that the omitted material is safe.
 
 The catalog, member and relationship units run inside operation spans. Each declares
 `expect_work("artifacts_processed", n)` up front and counts `artifacts_processed` and
-`receipts_processed` per item; the relationship unit also counts `invocations_scanned` per tool
-invocation it examines, which exposes the artifacts × invocations scan. Shard builds count
-`shards_built`, `entities_written` and `relations_written`; a verified reused shard counts
-`shards_reused`. Phases cover the shard build (`index.prepare`, `index.sqlite_write`,
-`index.sqlite_vacuum`, `index.digest`, `index.publish`, `index.link`, `index.custody_bind`), shard
-lock waits (`index.lock_wait`) and reuse verification (`index.reuse_verify`), plus `storage.fsync`
-and `storage.copy` with `fsync_calls`. `index.sqlite_vacuum` stays in the vocabulary but may go
-unused while `IndexBuilder.build` is restructured; an absent phase is not zero time. A long unit
+`receipts_processed` per item; the relationship unit also counts `invocations_scanned` once per
+receipt, for the tool invocations it indexes by output path, so the count grows with invocations,
+not with artifacts × invocations. Shard builds count `shards_built`, `entities_written` and
+`relations_written`; a verified reused shard counts `shards_reused`. A shard build records, in
+order, `index.prepare`, `index.sqlite_write`, `storage.fsync` (its one `timed_fsync`, also counted
+in `fsync_calls`), `index.digest`, `index.publish`, `index.link` and `index.custody_bind`. Shard
+lock waits record `index.lock_wait` and reuse verification `index.reuse_verify`; `storage.copy`
+appears only when adoption falls back to a cross-filesystem copy. `IndexBuilder.build` runs no
+`VACUUM`, so `index.sqlite_vacuum` is never recorded. A long unit
 writes `OPERATION_PROGRESS` with these counters
 while it runs. To investigate a slow unit, follow
 [diagnosing a slow or stuck step](metrics.md#diagnosing-a-slow-or-stuck-step).

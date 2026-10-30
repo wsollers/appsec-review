@@ -179,9 +179,9 @@ first with `appsec-review metrics --run-id <id>`; it is safe while the run is ac
    fsync-driven). A high `S` ratio points to locks, sleeps or child processes instead.
 4. **Which phase?** In `phases`, the phase with the largest `wall_ms`, and how much of it is
    `off_cpu_ms`, locates the cost (`dominant_phase` and `dominant_phase_wall_ms` in a hotspot row):
-   `index.sqlite_write` (and `index.sqlite_vacuum`, where still used) includes
-   SQLite-internal fsyncs, `storage.fsync` covers explicit storage fsyncs, and `index.lock_wait`
-   is shard lock contention. Remember nested phases are inclusive.
+   `index.sqlite_write` covers SQLite writes (`IndexBuilder` shards use `synchronous=OFF`, so it
+   includes no SQLite-internal fsyncs), `storage.fsync` covers explicit storage fsyncs, including
+   the single fsync per published shard, and `index.lock_wait` is shard lock contention. Remember nested phases are inclusive.
 5. **Per-item cost.** Compare `fsync_calls`, `write_syscalls`, `shards_built`/`shards_reused` and
    `invocations_scanned` with `artifacts_processed`; a hotspot row gives `ms_per_artifact` and
    `fsync_calls_per_shard` directly. A per-item fsync or an

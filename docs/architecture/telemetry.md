@@ -210,9 +210,9 @@ phase inside it, so phase times are not additive. The initial vocabulary is:
 | --- | --- |
 | `index.prepare` | `IndexBuilder.build` entity/relation deduplication |
 | `index.sqlite_write` | DDL, inserts and commit |
-| `index.sqlite_vacuum` | SQLite vacuum (may go unused while `IndexBuilder.build` is restructured; an absent phase is not zero time) |
+| `index.sqlite_vacuum` | reserved; `IndexBuilder.build` runs no `VACUUM` and never records it |
 | `index.digest` | shard SHA-256 |
-| `index.publish` | private publication and reference verification |
+| `index.publish` | `adopt_private_file` hard-link (or cross-filesystem copy) into the shared object store |
 | `index.link` | `os.link` of the published shard |
 | `index.custody_bind` | custody owner binding |
 | `index.lock_wait` | artifact-indexing shard lock wait |
