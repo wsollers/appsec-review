@@ -140,45 +140,58 @@ class IndexBuilder:
         durability point) -> hash -> adopt (hard-link into the content store) -> link (named
         path) -> custody (binding/receipt/request records). Returns only after custody.
         """
+        from appsec_review.observability.spans import count_work, operation_phase
+        from appsec_review.storage.atomic import timed_fsync
         from appsec_review.storage.shared import adopt_private_file, current, safe_path
         from appsec_review.storage.validation import remember_digest, validation_scope, verified_digest
         owner = current()
         if owner is not None:
             safe_path(owner.run_root, self.path.relative_to(owner.run_root).as_posix())
-        entities = self._unique_entities()
-        relations, merged_relations = self._unique_relations()
+        with operation_phase("index.prepare"):
+            entities = self._unique_entities()
+            relations, merged_relations = self._unique_relations()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         custody = owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices")
         with TemporaryDirectory(prefix=".building-", dir=self.path.parent) as directory:
             temporary = Path(directory) / "shard.sqlite"
             self._write_database(temporary, entities, relations, merged_relations)
+            count_work("shards_built")
+            count_work("entities_written", len(entities))
+            count_work("relations_written", len(relations))
             if custody:
                 # Same private mode as the copying content-store path it replaces.
                 os.chmod(temporary, 0o600)
             descriptor = os.open(temporary, os.O_RDONLY)
             try:
-                os.fsync(descriptor)
+                timed_fsync(descriptor)
             finally:
                 os.close(descriptor)
-            digest = file_sha256(temporary)
+            with operation_phase("index.digest"):
+                digest = file_sha256(temporary)
             if not custody:
                 self._place(temporary, digest, None)
                 return digest
             root = owner.run_root
             with validation_scope(root):
                 remember_digest(root, temporary, digest)
-                content = adopt_private_file(root, temporary, digest)
+                with operation_phase("index.publish"):
+                    content = adopt_private_file(root, temporary, digest)
                 self._place(safe_path(root, content["path"]), digest,
                             lambda: verified_digest(root, self.path, digest))
-                owner.named("index-shard", self.path, computed=True, expected_sha256=digest, computation={
-                    "fingerprint": self.fingerprint, "name": self.name, "shard_id": self.shard_id,
-                    "target_snapshot": self.target_snapshot, "schema": INDEX_SCHEMA})
+                with operation_phase("index.custody_bind"):
+                    owner.named("index-shard", self.path, computed=True, expected_sha256=digest,
+                                computation={
+                                    "fingerprint": self.fingerprint, "name": self.name,
+                                    "shard_id": self.shard_id, "target_snapshot": self.target_snapshot,
+                                    "schema": INDEX_SCHEMA})
             return digest
 
     def _place(self, source: Path, digest: str, verify: Any) -> None:
+        from appsec_review.observability.spans import operation_phase
         try:
             # A same-filesystem link publishes complete bytes without replacing another writer.
-            os.link(source, self.path)
+            with operation_phase("index.link"):
+                os.link(source, self.path)
         except FileExistsError:
             matches = False
             if not self.path.is_symlink() and self.path.is_file():
@@ -197,6 +210,8 @@ class IndexBuilder:
         # The private file is unpublished until build() fsyncs and hashes it, so it needs no
         # rollback journal, per-statement sync or VACUUM. Rows are inserted in sorted order and
         # secondary indexes are created after the bulk inserts, so equal inputs give equal bytes.
+        from appsec_review.observability.spans import operation_phase
+        writing = operation_phase("index.sqlite_write").__enter__()
         database = sqlite3.connect(temporary)
         try:
             database.isolation_level = None
@@ -255,6 +270,7 @@ class IndexBuilder:
                 database.execute(_SYNTAX_LOOKUP)
             database.execute("COMMIT")
         finally:
+            writing.__exit__(None, None, None)
             database.close()
 
 

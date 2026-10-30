@@ -7,6 +7,7 @@ import os
 import platform
 from pathlib import Path
 import re
+import threading
 import time
 from typing import Any, Mapping
 
@@ -186,6 +187,18 @@ class PipelineLog:
         return records, valid_length != len(payload)
 
 
+_EVENT_LOG_LOCK = threading.Lock()
+
+
+def _reset_event_log_lock() -> None:
+    global _EVENT_LOG_LOCK
+    _EVENT_LOG_LOCK = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_event_log_lock)
+
+
 class EventLog:
     """Local attempt log which mirrors every event through the central run log."""
 
@@ -201,9 +214,12 @@ class EventLog:
             "event": event,
             **fields,
         }
-        with self.path.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
-            stream.flush()
+        line = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
+        # The operation sampler thread appends progress beside job-thread events.
+        with _EVENT_LOG_LOCK:
+            with self.path.open("a", encoding="utf-8", newline="\n") as stream:
+                stream.write(line)
+                stream.flush()
         if self.pipeline:
             merged = {**self.base, **fields}
             unit_id = str(merged.get("unit_id", ""))

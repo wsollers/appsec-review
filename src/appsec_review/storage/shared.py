@@ -20,7 +20,7 @@ import shutil
 import tempfile
 from typing import Any, Mapping, TYPE_CHECKING
 
-from .atomic import canonical_json, file_sha256
+from .atomic import canonical_json, file_sha256, timed_fsync
 from .validation import (
     current_validation, observed_digest, remember_digest, validation_operation, validation_scope,
     verified_digest,
@@ -104,7 +104,7 @@ def immutable_bytes(root: Path, relative: str, payload: bytes) -> dict[str, Any]
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
             stream.flush()
-            os.fsync(stream.fileno())
+            timed_fsync(stream.fileno())
         safe_path(root, relative)
         try:
             os.link(temporary, path)
@@ -130,12 +130,13 @@ def put_file(root: Path, source: Path) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".publish-", dir=path.parent)
     try:
+        from appsec_review.observability.spans import count_work, operation_phase
         with os.fdopen(descriptor, "wb") as output, source.open("rb") as stream:
-            shutil.copyfileobj(stream, output)
+            with operation_phase("storage.copy"):
+                shutil.copyfileobj(stream, output)
             output.flush()
-            os.fsync(output.fileno())
+            timed_fsync(output.fileno())
             copied_bytes = output.tell()
-        from appsec_review.observability.spans import count_work
         count_work("copy_bytes", copied_bytes)
         count_work("copy_objects")
         if file_sha256(Path(temporary)) != digest:

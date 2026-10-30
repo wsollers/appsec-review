@@ -6,8 +6,8 @@ the target repository. All review-scope values resolve through receipt paths and
 recorded in the run telemetry stream.
 
 The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
-adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`) in
-`appsec-review/run-metrics/5`. It separates handoff admission, execution, coverage, native retention,
+adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`), introduced
+in `appsec-review/run-metrics/5` and retained in the current `/6`. It separates handoff admission, execution, coverage, native retention,
 and observation provenance. Historical `/4` summaries lack this section; absence is not zero
 provenance work. Do not copy claimed event counts into reports:
 retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
@@ -50,7 +50,11 @@ That zero describes avoided producer execution only. Read `resource_spans` and
 Scope/profile, resource lease and tool invocation identifiers correlate concurrent work;
 inclusive process resource samples must not be added across overlapping spans.
 
-The upgraded summary schema is `appsec-review/run-metrics/5` (historical summaries use `/4`).
+The current summary schema is `appsec-review/run-metrics/6`. `/6` adds `operation_progress`,
+`operation_hotspots` and the `resource_spans` `phases`, `expected`, `thread_states` and
+`progress_count` fields (see [operation progress and hotspots](#operation-progress-and-hotspots)).
+Historical `/5` summaries lack them, and their absence is not zero; `/4` summaries also lack
+`interchange`.
 Use the top-level `codeql` section for CodeQL
 execution telemetry: `by_query_pack`, `by_language`, `by_query_pack_language` (pack, then language)
 and `by_source_language` each report `count`, `statuses` (`SUCCEEDED`, `FAILED`, `TIMED_OUT`,
@@ -88,7 +92,9 @@ For comparison and interpretation limits, see
 The fixture comparisons preserve semantic package membership, resolving evidence and gaps,
 alternate trial order and report individual samples plus medians. The operation-telemetry
 comparison disables only added operation spans/counters/resource sampling, retaining ordinary
-lifecycle logs and evidence validation in both conditions. Its five-percent threshold and the
+lifecycle logs and evidence validation in both conditions. Thread-state sampling, progress
+records and phases attach to operation spans, so they sit inside that comparison.
+Its five-percent threshold and the
 strict/managed comparison's reduction threshold are reported outcomes, not assumed passes or
 production performance claims.
 
@@ -97,6 +103,99 @@ as missing coverage. A missing, changed, escaped, or malformed receipt is an int
 never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
+
+## Operation progress and hotspots
+
+[Operation spans](../architecture/telemetry.md#operation-spans-progress-and-phases) report where a
+unit's time went. Each `resource_spans` row has `duration_ms`, `resources`, `work` and:
+
+- `phases` — `{count, wall_ms, thread_cpu_ms, off_cpu_ms}` per closed phase name, such as
+  `index.sqlite_write` or `storage.fsync`. Nested phases are inclusive, so phase times are not
+  additive and need not sum to `duration_ms`.
+- `expected` — declared totals for work counters, for example `artifacts_processed`.
+- `thread_states` — sampled `R`/`S`/`D`/`other` counts for the span's thread and up to five
+  `top_wait_channels`. `samples: 0` means the span was shorter than one sample interval, not that
+  it never blocked.
+- `progress_count` — the number of `OPERATION_PROGRESS` records the span wrote.
+
+`resources` adds `read_syscalls`/`write_syscalls` (process-inclusive) and thread-scoped
+`thread_cpu_seconds`, `thread_off_cpu_seconds`, voluntary/involuntary context switches, block
+input/output operations and major page faults (`rusage_scope: "thread"`). Process-inclusive and
+thread-scoped values measure different things; do not add or subtract them, and do not add
+process-inclusive values across overlapping spans. A null value with an `*_unavailable_reason` was
+not measured; it is not zero.
+
+`operation_progress` (at most 200 rows) lists spans that started and have not completed, with their
+correlation (`run_id`, `job_id`, `attempt_id`, `span_id`, `parent_span_id`, `stage`, `unit_id`,
+`scope_id`) and last progress snapshot: `started_at`, `last_progress_at`, `progress_sequence`,
+`elapsed_ms`, cumulative `work`, `expected`, `completion_ratio` per expected counter, `phases`,
+`thread_states`, `thread_state_now` and `wait_channel_now`. `state` is `running`, or `lost` when the
+attempt has closed or the last progress is older than three progress intervals relative to the newest
+run event. A `lost` span's last snapshot is its last known state, not a completion.
+`last_progress_at: null` means no progress record was written: the span was younger than one
+progress interval, or the completion-side `progress_unavailable_reason` applies (`progress_disabled`,
+`sampling_disabled`, `active_span_limit` or `sampler_unavailable`).
+
+`operation_hotspots` ranks the 20 longest completed spans by `duration_ms` with `job_id`,
+`attempt_id`, `span_id`, `stage`, `unit_id`, `terminal_status`, `thread_off_cpu_ratio`,
+`d_state_ratio` (`D / samples`), `top_wait_channel`, `dominant_phase` and `dominant_phase_wall_ms`
+(the phase with the largest `wall_ms`), `ms_per_artifact` (`duration_ms / artifacts_processed`) and
+`fsync_calls_per_shard` (`fsync_calls / (shards_built + shards_reused)`). Ratios and rates are null
+when their inputs were not recorded or the denominator is zero.
+
+The cadences are configured in the frozen run configuration:
+
+```toml
+[runtime]
+operation_progress_interval_seconds = 60  # 0 disables OPERATION_PROGRESS
+operation_sample_interval_seconds = 1     # 0 disables thread-state sampling
+```
+
+Shorter intervals give finer progress and blocked-time estimates at higher overhead; the
+performance acceptance comparison measures that overhead at 1 s and 0.1 s.
+
+Progress records are excluded from lifecycle pairing, duration totals, `throughput_totals`,
+`dispositions` and `completed_work_count`, so they never inflate those figures. The
+[telemetry report](telemetry-report.md) shows running/lost operations in its "Operations in
+progress" box and the ranking in its "Operation hotspots" box.
+
+## Diagnosing a slow or stuck step
+
+Use this when a step runs far longer than expected or its worker was killed. Regenerate the summary
+first with `appsec-review metrics --run-id <id>`; it is safe while the run is active.
+
+1. **Still running or lost?** Find the step's spans in `operation_progress`. `running` with an
+   advancing `last_progress_at` is slow, not stuck. `lost` means the attempt closed or progress
+   stopped for three intervals; the worker likely died (for example, SIGKILL or OOM). For a
+   completed but slow step, start from `operation_hotspots` instead.
+2. **Last known state.** Read the latest `OPERATION_PROGRESS` record for the `span_id` in
+   `runs/<run-id>/data/logs/pipeline.jsonl`. It is fsynced, so it survives a killed worker. Compare
+   `work` with `expected` (`completion_ratio`) to see how far the unit progressed and its rate per
+   minute, and read `thread_state_now` and `wait_channel_now`.
+3. **On CPU or blocked?** A high `thread_off_cpu_ratio` (or `thread_off_cpu_seconds` close to wall)
+   with many voluntary context switches means the thread was mostly waiting. Then read
+   `thread_states`: a high `D / samples` ratio is uninterruptible I/O wait, and `top_wait_channels`
+   names the kernel function, for example `jbd2_log_wait_commit` (ext4 journal commit, typically
+   fsync-driven). A high `S` ratio points to locks, sleeps or child processes instead.
+4. **Which phase?** In `phases`, the phase with the largest `wall_ms`, and how much of it is
+   `off_cpu_ms`, locates the cost (`dominant_phase` and `dominant_phase_wall_ms` in a hotspot row):
+   `index.sqlite_write` (and `index.sqlite_vacuum`, where still used) includes
+   SQLite-internal fsyncs, `storage.fsync` covers explicit storage fsyncs, and `index.lock_wait`
+   is shard lock contention. Remember nested phases are inclusive.
+5. **Per-item cost.** Compare `fsync_calls`, `write_syscalls`, `shards_built`/`shards_reused` and
+   `invocations_scanned` with `artifacts_processed`; a hotspot row gives `ms_per_artifact` and
+   `fsync_calls_per_shard` directly. A per-item fsync or an
+   artifacts × invocations scan shows up as a rate that grows with the input.
+
+Example: in run `2026-10-29-0004` the artifact-indexing relationships step took 45 minutes. Its
+completed span showed only 2,711 s wall, 421 s CPU and 3.78 GB of physical writes; live `/proc`
+inspection was needed to find the worker in `D` state on `jbd2_log_wait_commit` with about 1.2 million
+write syscalls from per-shard fsyncs. With this telemetry the same diagnosis comes from
+`thread_states` (D-state ratio and top wait channel), the `index.*`/`storage.fsync` phases and
+`fsync_calls`, without live access to the host.
+
+Telemetry locates the cost; it does not prove a cause. Confirm with a focused reproduction before
+changing fsync, shard layout or SQLite settings.
 
 ## Interchange troubleshooting
 
@@ -130,7 +229,7 @@ requires PoC, chain, remediation, dossier and final-publication tracking from th
 implementation. The existing `metrics` command and summary path remain the operating surface;
 no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
 combined source `6975aef2` retained `completion-process-metrics/1` in `run-metrics/4`;
-the current `run-metrics/5` retains it alongside interchange and the other domain sections.
+`run-metrics/5` retained it alongside interchange and the other domain sections, as does the current `/6`.
 This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
 parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.

@@ -117,7 +117,7 @@ def _complete(workspace, started, **details):
     workspace.emit("ACCEPTANCE_CASE_COMPLETED", outcome="passed", duration_ms=elapsed * 1000,
                    **details)
     metrics = write_run_metrics(workspace.driver_root)
-    assert metrics["schema"] == "appsec-review/run-metrics/5" and metrics["event_count"] > 0
+    assert metrics["schema"] == "appsec-review/run-metrics/6" and metrics["event_count"] > 0
     records = [json.loads(line) for line in
                (workspace.driver_root / "data" / "logs" / "pipeline.jsonl").read_text(
                    encoding="utf-8").splitlines()]

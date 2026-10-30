@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.observability.spans import count_work, expect_work, operation_phase
 from appsec_review.retrieval import (
     INDEX_SCHEMA,
     EntityKind,
@@ -527,17 +528,35 @@ def _verify_shard(path: Path, *, name: str, fingerprint: str, shard_id: str,
     return file_sha256(path)
 
 
+def _acquire_shard_lock(lock: Path, deadline: float) -> FileLock:
+    with operation_phase("index.lock_wait"):
+        while True:
+            held = FileLock(lock)
+            try:
+                return held.__enter__()
+            except LockUnavailable:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+
+
 def _finish_shard(builder: IndexBuilder, path: Path) -> tuple[str, bool]:
     lock = path.with_suffix(path.suffix + ".lock")
     deadline = time.monotonic() + 30
     while True:
+        held = _acquire_shard_lock(lock, deadline)
         try:
-            with FileLock(lock):
+            try:
                 if path.exists():
-                    return _verify_shard(path, name=builder.name, fingerprint=builder.fingerprint,
-                                         shard_id=builder.shard_id,
-                                         target_snapshot=builder.target_snapshot), True
+                    with operation_phase("index.reuse_verify"):
+                        digest = _verify_shard(path, name=builder.name, fingerprint=builder.fingerprint,
+                                               shard_id=builder.shard_id,
+                                               target_snapshot=builder.target_snapshot)
+                    count_work("shards_reused")
+                    return digest, True
                 return builder.build(), False
+            finally:
+                held.__exit__(None, None, None)
         except LockUnavailable:
             if time.monotonic() >= deadline:
                 raise
@@ -568,7 +587,10 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
     loaded = unit.output("load.accepted_builds")
     identities: list[dict[str, Any]] = []
     reused = 0
+    expect_work("artifacts_processed", sum(len(receipt["validated_artifacts"]) for receipt in loaded["receipts"])
+                + len(loaded.get("target_artifacts", [])))
     for receipt in loaded["receipts"]:
+        count_work("receipts_processed")
         context = _ReceiptContext.build(receipt, unit.job.source_fingerprint)
         groups: dict[EntityKind, list[Mapping[str, Any]]] = defaultdict(list)
         for artifact in receipt["validated_artifacts"]:
@@ -602,6 +624,7 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                 builder.add_entity(EntityRecord(logical, str(artifact["sha256"]),
                     PurePosixPath(str(artifact["workspace_path"])).name,
                     f"{artifact['kind']} {artifact['workspace_path']}", payload))
+                count_work("artifacts_processed")
             builder.add_coverage(f"{receipt['build_unit_id']}:{family.value}", "complete")
             identity, was_reused = _index_identity(unit, builder, path, (), family.value)
             identities.append(identity)
@@ -625,6 +648,7 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                 f"target artifact {artifact['target_relative_path']}",
                 {**artifact, "artifact_family": artifact_family(artifact["kind"]).value,
                  "producer_family": "target-intake"}))
+            count_work("artifacts_processed")
         gaps = [f"{item['target_relative_path']}: target artifact delivery status is unknown"
                 for item in target_artifacts]
         builder.add_coverage("target-artifact-intake", "partial", gaps[0])
@@ -757,7 +781,9 @@ def _members(unit: UnitContext) -> Mapping[str, Any]:
     identities: list[dict[str, Any]] = []
     gaps: list[str] = []
     reused = 0
+    expect_work("artifacts_processed", sum(len(receipt["validated_artifacts"]) for receipt in loaded["receipts"]))
     for receipt in loaded["receipts"]:
+        count_work("receipts_processed")
         rows_by_path: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
         for row in receipt.get("package_members", ()):
             if not isinstance(row, Mapping):
@@ -766,12 +792,14 @@ def _members(unit: UnitContext) -> Mapping[str, Any]:
         packages = _sorted_artifacts(
             artifact for artifact in receipt["validated_artifacts"]
             if artifact_family(str(artifact["kind"])) == EntityKind.PACKAGE)
+        count_work("artifacts_processed", len(receipt["validated_artifacts"]) - len(packages))
         if not packages:
             continue
         context = _ReceiptContext.build(receipt, unit.job.source_fingerprint)
 
         def rows(packages=packages, rows_by_path=rows_by_path) -> Iterator[_ArtifactRows]:
             for artifact in packages:
+                count_work("artifacts_processed")
                 item = _member_rows(unit, artifact, rows_by_path.get(str(artifact["workspace_path"]), []))
                 gaps.extend(item.gaps)
                 yield item
@@ -876,13 +904,18 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
     identities: list[dict[str, Any]] = []
     gaps: list[str] = []
     reused = 0
+    expect_work("artifacts_processed", sum(len(receipt["validated_artifacts"]) for receipt in loaded["receipts"]))
     for receipt in loaded["receipts"]:
+        count_work("receipts_processed")
         if not receipt["validated_artifacts"]:
             continue
         context = _ReceiptContext.build(receipt, unit.job.source_fingerprint)
+        # The context indexes every invocation once per receipt; no per-artifact rescan remains.
+        count_work("invocations_scanned", len(receipt.get("tool_invocations", ())))
 
         def rows(context=context) -> Iterator[_ArtifactRows]:
             for artifact in _sorted_artifacts(context.receipt["validated_artifacts"]):
+                count_work("artifacts_processed")
                 item = _artifact_relations(context, artifact)
                 gaps.extend(item.gaps)
                 yield item

@@ -14,7 +14,7 @@ from appsec_review.config import AppConfig
 from appsec_review.config.assurance import AssuranceMode
 from appsec_review.inference.recording import unit_scope
 from appsec_review.observability import EventLog, PipelineLog, write_run_metrics
-from appsec_review.observability.spans import operation_span
+from appsec_review.observability.spans import configure_operation_sampling, operation_span
 from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
 from appsec_review.retrieval.core import materialize_attempt_input_manifest
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
@@ -53,6 +53,9 @@ class JobRunner:
     def __init__(self, config: AppConfig):
         self.config = config
         self.runs = RunStore(config.runtime.runs_dir)
+        configure_operation_sampling(
+            progress_interval_seconds=getattr(config.runtime, "operation_progress_interval_seconds", 60.0),
+            sample_interval_seconds=getattr(config.runtime, "operation_sample_interval_seconds", 1.0))
 
     def _bind_configuration(self, run_root) -> None:
         destination = run_root / "data" / "configuration"

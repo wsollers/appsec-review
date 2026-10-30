@@ -359,3 +359,15 @@ The low-level `publish_derived` builder still permits callers without a job cont
 legacy fixture/offline shards; it cannot assign attempt provenance. All production indexing-job
 call sites supply the shared-artifact context. This compatibility path also uses immutable
 no-replace publication and never removes a conflicting shard.
+
+## Telemetry
+
+Each step unit runs in a `unit.execute` operation span. Every shard built through
+`IndexBuilder.build` (link, product and inventory shards, via `publish_derived`) adds
+`shards_built`, `entities_written` and `relations_written` to that span and times the
+`index.prepare`, `index.sqlite_write`, `index.sqlite_vacuum`, `index.digest`, `index.publish`,
+`index.link` and `index.custody_bind` phases. Storage fsyncs add `fsync_calls` and the
+`storage.fsync` phase. Phases accumulate by phase name within the span, so a step that builds several shards
+reports their combined phase times; nested phases are inclusive and not additive. Units running
+longer than the progress interval write `OPERATION_PROGRESS`. See
+[metrics operations](metrics.md#diagnosing-a-slow-or-stuck-step) for reading them.

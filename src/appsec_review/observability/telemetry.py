@@ -23,7 +23,7 @@ FINDING_STATES = {"CANDIDATE", "REFUTED", "CONFIRMED"}
 TERMINAL_EVENTS = {"SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED",
                    "BLOCKED", "PARTIAL", "NOT_APPLICABLE"}
 METRICS_SEMANTICS = "appsec-review/review-metrics-semantics/1"
-RUN_METRICS_SCHEMA = "appsec-review/run-metrics/5"
+RUN_METRICS_SCHEMA = "appsec-review/run-metrics/6"
 CODEQL_METRICS_SEMANTICS = "appsec-review/codeql-execution-metrics/1"
 CODEQL_QUERY_METRICS_SCHEMA = "appsec-review/codeql-query-metrics/1"
 CODEQL_TOOLS = {"codeql", "codeql-graph-export", "codeql-graph-export-compile"}
@@ -1406,6 +1406,93 @@ def _native_sbom_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
     }
 
 
+_OPERATION_PROGRESS_LIMIT = 200
+_OPERATION_HOTSPOT_LIMIT = 20
+
+
+def _number(value: Any) -> float | None:
+    return value if type(value) in (int, float) and math.isfinite(value) else None
+
+
+def _ratio(numerator: Any, denominator: Any) -> float | None:
+    top, bottom = _number(numerator), _number(denominator)
+    return None if top is None or bottom is None or bottom <= 0 else round(top / bottom, 6)
+
+
+def _operation_progress(starts: Mapping[tuple[str, ...], Mapping[str, Any]],
+                        heartbeats: Mapping[tuple[str, ...], Mapping[str, Any]],
+                        finished: set[tuple[str, ...]], closed_attempts: set[tuple[str, str]],
+                        newest: datetime | None) -> list[dict[str, Any]]:
+    """Last known state of every span with a start and no completion (running or lost)."""
+    rows = []
+    for key, started in starts.items():
+        if key in finished:
+            continue
+        details = started.get("details", {})
+        heartbeat = heartbeats.get(key)
+        last = heartbeat.get("details", {}) if heartbeat else {}
+        last_at = datetime.fromisoformat(str(heartbeat["timestamp"])) if heartbeat else None
+        work = last.get("work") if isinstance(last.get("work"), Mapping) else {}
+        expected = last.get("expected") if isinstance(last.get("expected"), Mapping) else {}
+        interval = _number(last.get("progress_interval_ms"))
+        stale = (last_at is not None and newest is not None and interval is not None and interval > 0
+                 and (newest - last_at).total_seconds() * 1000 > 3 * interval)
+        lost = (str(started["job_id"]), str(started["attempt_id"])) in closed_attempts or stale
+        rows.append({
+            "run_id": started["run_id"], "job_id": started["job_id"], "attempt_id": started["attempt_id"],
+            "span_id": details.get("span_id"), "parent_span_id": details.get("parent_span_id"),
+            "stage": details.get("operation_id"), "unit_id": details.get("unit_id"),
+            "scope_id": details.get("scope_id"), "started_at": str(started["timestamp"]),
+            "last_progress_at": None if heartbeat is None else str(heartbeat["timestamp"]),
+            "progress_sequence": last.get("progress_sequence"), "elapsed_ms": last.get("elapsed_ms"),
+            "work": dict(work), "expected": dict(expected),
+            "completion_ratio": {name: _ratio(work.get(name, 0), total)
+                                 for name, total in sorted(expected.items())},
+            "phases": last.get("phases"), "thread_states": last.get("thread_states"),
+            "thread_state_now": last.get("thread_state_now"),
+            "wait_channel_now": last.get("wait_channel_now"),
+            "state": "lost" if lost else "running",
+        })
+    rows.sort(key=lambda row: (row["started_at"], str(row["span_id"])))
+    return rows[:_OPERATION_PROGRESS_LIMIT]
+
+
+def _operation_hotspots(spans: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Longest completed spans with where their time went (off-CPU, D state, phases, per-item)."""
+    timed = [span for span in spans if _number(span.get("duration_ms")) is not None]
+    timed.sort(key=lambda span: (-span["duration_ms"], str(span.get("span_id"))))
+    rows = []
+    for span in timed[:_OPERATION_HOTSPOT_LIMIT]:
+        resources = span.get("resources") if isinstance(span.get("resources"), Mapping) else {}
+        states = span.get("thread_states") if isinstance(span.get("thread_states"), Mapping) else {}
+        phases = span.get("phases") if isinstance(span.get("phases"), Mapping) else {}
+        work = span.get("work") if isinstance(span.get("work"), Mapping) else {}
+        duration = span["duration_ms"]
+        off_cpu = _number(resources.get("thread_off_cpu_seconds"))
+        channels = states.get("top_wait_channels") or []
+        dominant = max(((name, _number(value.get("wall_ms"))) for name, value in phases.items()
+                        if isinstance(value, Mapping) and _number(value.get("wall_ms")) is not None),
+                       key=lambda item: (item[1], item[0]), default=None)
+        shards = sum(int(work.get(name, 0)) for name in ("shards_built", "shards_reused")
+                     if type(work.get(name)) is int)
+        rows.append({
+            "job_id": span.get("job_id"), "attempt_id": span.get("attempt_id"),
+            "span_id": span.get("span_id"), "stage": span.get("stage"), "unit_id": span.get("unit_id"),
+            "terminal_status": span.get("terminal_status"), "duration_ms": duration,
+            "thread_off_cpu_ratio": None if off_cpu is None else _ratio(off_cpu * 1000, duration),
+            "d_state_ratio": _ratio(states.get("D"), states.get("samples")),
+            "top_wait_channel": (channels[0].get("symbol") if channels and isinstance(channels[0], Mapping)
+                                 else None),
+            "dominant_phase": None if dominant is None else dominant[0],
+            "dominant_phase_wall_ms": None if dominant is None else dominant[1],
+            "ms_per_artifact": (_ratio(duration, work.get("artifacts_processed"))
+                                if "artifacts_processed" in work else None),
+            "fsync_calls_per_shard": (_ratio(work.get("fsync_calls", 0), shards)
+                                      if shards and "fsync_calls" in work else None),
+        })
+    return rows
+
+
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     from appsec_review.jobs.job_openvex_export.metrics import aggregate_openvex_metrics
 
@@ -1429,6 +1516,9 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         if invocation:
             phase = "start" if event.endswith("STARTED") else "terminal" if event.endswith(
                 ("COMPLETED", "SUCCEEDED", "FAILED", "COMPLETED_WITH_GAPS", "CANCELLED", "TIMED_OUT")) else event
+            if event == "OPERATION_PROGRESS":
+                # Heartbeats share their span's identity; only a repeated sequence is a duplicate.
+                phase = f"progress:{details.get('progress_sequence')}"
             key = (str(record["run_id"]), str(record["job_id"]), str(record["attempt_id"]),
                    event.split("_", 1)[0], str(invocation), phase)
             if key in seen_invocations:
@@ -1459,6 +1549,9 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     reuse = Counter()
     work = Counter()
     measured_spans = []
+    operation_starts: dict[tuple[str, ...], Mapping[str, Any]] = {}
+    operation_heartbeats: dict[tuple[str, ...], Mapping[str, Any]] = {}
+    operation_finished: set[tuple[str, ...]] = set()
     resource_admissions = []
     model_usage = []
     lifecycle_gaps = []
@@ -1470,7 +1563,18 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     }
     for record in records:
         details = record.get("details", {})
+        span_key = (str(record["run_id"]), str(record["job_id"]), str(record["attempt_id"]),
+                    str(details.get("span_id")))
+        if record["event_type"] == "OPERATION_STARTED" and details.get("span_id"):
+            operation_starts.setdefault(span_key, record)
+        elif record["event_type"] == "OPERATION_PROGRESS" and details.get("span_id"):
+            prior = operation_heartbeats.get(span_key)
+            sequence = details.get("progress_sequence")
+            if prior is None or (type(sequence) is int
+                                 and sequence >= int(prior["details"].get("progress_sequence") or 0)):
+                operation_heartbeats[span_key] = record
         if record["event_type"] == "OPERATION_COMPLETED":
+            operation_finished.add(span_key)
             work.update(details.get("work", {}))
             measured_spans.append({
                 "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
@@ -1481,7 +1585,9 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                 "tool_invocation_id": details.get("tool_invocation_id"),
                 "stage": details.get("operation_id"), "terminal_status": details.get("terminal_status"),
                 "duration_ms": details.get("duration_ms"), "resources": details.get("resources"),
-                "work": details.get("work"),
+                "work": details.get("work"), "phases": details.get("phases"),
+                "expected": details.get("expected"), "thread_states": details.get("thread_states"),
+                "progress_count": details.get("progress_count"),
             })
         if record["event_type"] in {"RESOURCE_ADMITTED", "RESOURCE_TIMED_OUT"}:
             resource_admissions.append({
@@ -1625,6 +1731,10 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                     if not {"platform_hash_bytes", "platform_scan_invocations"} <= work.keys() else None),
             },
             "resource_spans": measured_spans,
+            "operation_progress": _operation_progress(
+                operation_starts, operation_heartbeats, operation_finished, closed_attempts,
+                max(timestamps) if timestamps else None),
+            "operation_hotspots": _operation_hotspots(measured_spans),
             "resource_admissions": resource_admissions,
             "resource_totals": None,
             "resource_totals_unavailable_reason": "inclusive_process_spans_must_not_be_summed",
