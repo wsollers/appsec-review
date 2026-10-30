@@ -4,13 +4,16 @@ from __future__ import annotations
 from collections import Counter
 import io
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tarfile
 import time
 import tomllib
+from types import SimpleNamespace
 
 from appsec_review.config.build_outputs import BuildOutputDiscovery, BuildOutputPolicy, parse_build_outputs
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
+from appsec_review.jobs.delivery_scope import scope_fields
+from appsec_review.jobs.job_artifact_security_analysis import job as security
 from appsec_review.jobs.job_language_build import node
 from appsec_review.storage import file_sha256
 
@@ -307,3 +310,63 @@ def test_nested_prefix_described_by_parent_record_has_no_missing_gap(tmp_path: P
         f"{sum(path.stat().st_size for path in (workspace / 'backend/node_modules/x').rglob('*') if path.is_file())}"
         " bytes) recorded by node_modules/.package-lock.json routed to supply_chain review; "
         "per-file target review not performed"]
+
+SCANNERS = ("syft", "inventory", "osv", "blint")
+
+
+def _shipped_dispositions() -> BuildOutputDispositions:
+    shipped = tomllib.loads((REPOSITORY / "appsec-review.toml").read_text(encoding="utf-8"))["build_outputs"]
+    return BuildOutputDispositions(parse_build_outputs(shipped), family="node")
+
+
+def _scanner_inputs(run_root: Path, rows: list[dict], monkeypatch) -> dict[str, list[str]]:
+    """Rows each artifact-security scanner would launch on, through the job's own handlers."""
+    artifacts = [{**row, **scope_fields(row), "artifact_id": f"artifact-{index:05d}",
+                  "canonical_identity": f"fixture:{row['workspace_path']}"}
+                 for index, row in enumerate(rows)]
+    launched: dict[str, list[str]] = {capability: [] for capability in SCANNERS}
+
+    def launch(unit, artifact, capability, runner):
+        launched[capability].append(artifact["workspace_path"])
+        return {"artifact": artifact, "gaps": [], "terminal_status": "SUCCEEDED"}
+
+    monkeypatch.setattr(security, "_scan_one", launch)
+    unit = SimpleNamespace(job=SimpleNamespace(run_root=run_root, tools=SimpleNamespace(disable_grype=False)),
+                           output=lambda _: {"artifacts": artifacts})
+    units = {item.unit_id: item for item in security.build_job(scanner_runner=lambda *args: None).units}
+    for capability in SCANNERS:
+        units[f"analyze.{capability}"].handler(unit)
+    return {capability: sorted(paths) for capability, paths in launched.items()}
+
+
+def test_scanner_inputs_are_bounded_to_package_anchors_with_exact_counts(tmp_path: Path, monkeypatch) -> None:
+    workspace, _ = _workspace(tmp_path)
+    rows, _ = node.catalog(tmp_path, workspace, {}, 10_000, "node-unit", dispositions=_shipped_dispositions())
+    started = time.monotonic()
+
+    selected = _scanner_inputs(tmp_path, rows, monkeypatch)
+
+    assert time.monotonic() - started < 2
+    assert len(rows) == 69
+    assert {capability: len(paths) for capability, paths in selected.items()} == {
+        "syft": 68, "inventory": 69, "osv": 0, "blint": 0}
+    anchors = {row["workspace_path"] for row in rows
+               if row.get("package_metadata", {}).get("role") == "installed-dependency-package"}
+    assert len(anchors) == 38
+    record = "node_modules/.package-lock.json"
+    addon = "node_modules/prod-00/build/Release/addon.node"
+    unverified = {"node_modules/mismatch/package.json", *_mismatch_rows()}
+    for capability in ("syft", "inventory"):
+        dependency = {path for path in selected[capability] if "node_modules" in PurePosixPath(path).parts}
+        # Each verified package reaches the scanner once, as its anchor; its summarized files never do.
+        assert dependency == anchors | {record, addon} | unverified
+    assert set(selected["inventory"]) - set(selected["syft"]) == {"frontend/dist/app.js.map"}
+
+    # Contrast: without the installer record every installed file is a per-file scanner input.
+    (workspace / record).unlink()
+    baseline, _ = node.catalog(tmp_path, workspace, {}, 10_000, "node-unit", dispositions=_shipped_dispositions())
+    unbounded = _scanner_inputs(tmp_path, baseline, monkeypatch)
+    assert {capability: len(paths) for capability, paths in unbounded.items()} == {
+        "syft": 978, "inventory": 979, "osv": 0, "blint": 1}
+    # The verified addon is a supply_chain row above, which the lane policy keeps from blint.
+    assert unbounded["blint"] == [addon]
