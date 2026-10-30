@@ -35,7 +35,9 @@ from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import (
     BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
 )
+from appsec_review.config.build_outputs import BuildOutputPolicy
 from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
+from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
@@ -203,31 +205,63 @@ def _kind(path: Path) -> tuple[str, str] | None:
 
 
 def _outputs(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
-             exclusions: BookkeepingExclusions | None = None) -> list[dict[str, Any]]:
-    """Changed probe outputs with a role ``kind``; build bookkeeping is counted, not listed."""
-    exclusions = exclusions if exclusions is not None else BookkeepingExclusions()
+             exclusions: BookkeepingExclusions | None = None, *,
+             dispositions: BuildOutputDispositions | None = None) -> list[dict[str, Any]]:
+    """Changed probe outputs with a role ``kind`` from the disposition walk.
+
+    Build bookkeeping is counted in ``exclusions``; configured ``[build_outputs]`` exclusions and
+    classified dependency trees are recorded in ``dispositions``. Neither is listed per file.
+    """
+    if dispositions is None:
+        dispositions = BuildOutputDispositions(bookkeeping=exclusions)
     profiles = cargo_profile_directories(workspace)
     values = []
-    for path in sorted(workspace.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
-        relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
-        if ".appsec-cache" in path.parts:
+    for relative, decision in dispositions.walk(workspace):
+        path = workspace / relative
+        if ".appsec-cache" in PurePosixPath(relative).parts:
             continue
         classified = _kind(path)
-        if classified is None or before.get(relative) == digest:
+        if classified is None:
+            continue
+        digest = file_sha256(path)
+        if before.get(relative) == digest:
             continue
         reason = bookkeeping_reason(relative, cargo=bool(profiles), cargo_profile_directories=profiles)
         if reason is not None:
-            exclusions.record(reason, relative)
+            dispositions.record_bookkeeping(reason, relative)
             continue
         kind, container = classified
-        values.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
-                       "sha256": digest, "size_bytes": path.stat().st_size,
-                       "kind": require_artifact_kind(kind), "format": container})
+        value = {"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
+                 "sha256": digest, "size_bytes": path.stat().st_size,
+                 "kind": require_artifact_kind(kind), "format": container}
+        if decision.scope_role is not None:
+            value.update(scope_role=decision.scope_role, build_output_root=decision.root)
+        values.append(value)
         if len(values) >= limit:
             break
     return values
+
+
+def _classify_probe_outputs(unit: UnitContext, workspace: Path, before: Mapping[str, str],
+                            recipe: Mapping[str, Any], family: str, build_system: str,
+                            bookkeeping: BookkeepingExclusions) -> tuple[BuildOutputDispositions, list[str]]:
+    """Register the probe workspace's configured exclusions and native dependency trees.
+
+    The probe has no reconciled build rows, so native classification uses layout facts and
+    heuristics only. Its gaps are returned separately: the language build re-classifies its own
+    workspace and owns the unit's coverage gaps, so they never change the probe's status.
+    """
+    policy = getattr(unit.job.config, "build_outputs", None) or BuildOutputPolicy()
+    dispositions = BuildOutputDispositions(policy, family=family, bookkeeping=bookkeeping)
+    if family != "native":
+        return dispositions, []
+    # Imported here: job_language_build imports this module at load time.
+    from appsec_review.jobs.job_language_build import native_outputs
+    classification = native_outputs.register(
+        dispositions, workspace, build_dir=str(recipe.get("build_dir") or "."),
+        source_dir=str(recipe.get("source_dir") or "."), build_system=build_system,
+        preexisting_files=before, captures=(), rows=(), capture_complete=True)
+    return dispositions, [*classification.gaps, *native_outputs.gaps(dispositions)]
 
 
 def _normalized_argv(recipe: Mapping[str, Any], argv: list[str]) -> tuple[str, ...]:
@@ -430,6 +464,7 @@ def _probe_cache(unit: UnitContext, recipe_identity: str,
         "limits": {key: unit.job.config.settings[key] for key in
                    ("command_timeout_seconds", "output_bytes", "artifact_count_limit")},
         "applicability": dict(applicability or {}),
+        "build_outputs": (getattr(unit.job.config, "build_outputs", None) or BuildOutputPolicy()).identity,
     })).hexdigest()
     return unit.job.metadata_root / "project-probes" / identity / "accepted.json"
 
@@ -571,8 +606,11 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed during isolated probe execution")
     bookkeeping = BookkeepingExclusions()
+    dispositions, build_output_gaps = _classify_probe_outputs(
+        unit, workspace, before, recipe, str(action["family"]), str(action.get("build_system") or ""),
+        bookkeeping)
     artifacts = _outputs(unit.job.run_root, workspace, before, int(unit.job.config.settings["artifact_count_limit"]),
-                         bookkeeping)
+                         bookkeeping, dispositions=dispositions)
     output_gaps = _validate_expected_outputs(workspace, recipe)
     gaps.extend(output_gaps)
     status = ("FAILED" if build_failed or output_gaps else
@@ -580,6 +618,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     receipt = {**base, "schema": SCHEMA, "executor_identity": EXECUTOR_IDENTITY,
                "recipe_identity": recipe_identity, "image_id": image["image_id"], "commands": command_receipts,
                "artifacts": artifacts, "excluded_bookkeeping": bookkeeping.document(),
+               "build_output_dispositions": dispositions.document(),
+               "build_output_gaps": build_output_gaps,
                "terminal_status": status,
                "probe_disposition": "FAILED" if status == "FAILED" else "PROBED", "gaps": gaps,
                "checkpoint_reused": False, "attempt_number": attempt_number}

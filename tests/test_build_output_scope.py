@@ -231,6 +231,64 @@ def test_kept_rows_and_registered_roots_are_bounded_with_named_gaps(tmp_path: Pa
     assert gaps[1].startswith("build-output-root-bound-exceeded: 1 roots")
 
 
+def _npm_package(dispositions: BuildOutputDispositions, prefix: str, package: str) -> bool:
+    return dispositions.classify_tree(
+        f"{prefix}/{package}", disposition="supply_chain", basis="installer-record",
+        name="npm-installed-package", reason="verified npm package", confidence="fact",
+        evidence_ref=f"{prefix}/.package-lock.json", scope_role="build_dependency", bound_group=prefix)
+
+
+def test_one_npm_installer_prefix_counts_once_against_max_layout_roots() -> None:
+    dispositions = BuildOutputDispositions(BuildOutputPolicy(), family="node")
+    assert all(_npm_package(dispositions, "node_modules", f"pkg-{index:04d}") for index in range(1200))
+    # The prefix used one of the 512; the other layout roots keep the remaining 511.
+    assert all(_fact(dispositions, f"other/{index}", "excluded") for index in range(511))
+    assert not _fact(dispositions, "other/overrun", "excluded")
+    assert not _npm_package(dispositions, "web/node_modules", "react")
+    assert _npm_package(dispositions, "node_modules", "late-package")
+    assert len([root for root in dispositions.roots() if root["name"] == "npm-installed-package"]) == 1201
+    assert dispositions.named_gaps() == [
+        "build-output-root-bound-exceeded: 2 roots beyond max_layout_roots stay per-file target content"]
+
+
+def test_grouped_npm_packages_are_all_classified_without_root_bound_gaps(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    for prefix in ("node_modules", "web/node_modules"):
+        for index in range(3):
+            _write(workspace, f"{prefix}/pkg-{index}/index.js", "module.exports = 1;\n")
+    _write(workspace, "web/src/app.js", "export default 1;\n")
+    policy = BuildOutputPolicy(discovery=BuildOutputDiscovery(max_layout_roots=2))
+    dispositions = BuildOutputDispositions(policy, family="node")
+    assert all(_npm_package(dispositions, prefix, f"pkg-{index}")
+               for prefix in ("node_modules", "web/node_modules") for index in range(3))
+
+    assert [path for path, _decision in dispositions.walk(workspace)] == ["web/src/app.js"]
+    roots = dispositions.roots()
+    assert len(roots) == 6 and all(root["files"] == 1 for root in roots)
+    assert {root["bound_group"] for root in roots} == {"node_modules", "web/node_modules"}
+    assert dispositions.named_gaps() == []
+    assert "bound_group" not in _classified().roots()[0]
+
+
+def test_bound_group_must_contain_its_root() -> None:
+    with pytest.raises(ValueError, match="outside its bound group"):
+        BuildOutputDispositions().classify_tree(
+            "web/node_modules/react", disposition="supply_chain", basis="installer-record", name="npm",
+            reason="r", confidence="fact", bound_group="node_modules")
+
+
+def test_sanitizer_replay_preserves_bound_groups() -> None:
+    from appsec_review.jobs.job_sanitizer_build.job import _dispositions
+
+    original = BuildOutputDispositions(BuildOutputPolicy(), family="node")
+    for index in range(3):
+        _npm_package(original, "node_modules", f"pkg-{index}")
+    policy = BuildOutputPolicy(discovery=BuildOutputDiscovery(max_layout_roots=1))
+    replayed = _dispositions({"build_output_dispositions": original.document()}, policy, BookkeepingExclusions())
+    assert [root["bound_group"] for root in replayed.roots()] == ["node_modules"] * 3
+    assert replayed.named_gaps() == []
+
+
 def test_walk_skips_symlinks_and_restarts_counts(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     _write(workspace, "dep/a.o", _elf(1))

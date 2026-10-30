@@ -591,6 +591,16 @@ def _installed_summary(coverage: _InstalledCoverage, registered: set[str],
     return gaps
 
 
+def _installed_tree(install_path: str) -> str | None:
+    """The outermost ``node_modules`` directory holding a package; one root-bound slot per tree.
+
+    A root installer record can describe workspace-nested trees such as ``backend/node_modules``,
+    so the group is the package's own tree rather than the record's directory.
+    """
+    parts = PurePosixPath(install_path).parts
+    return "/".join(parts[:parts.index("node_modules") + 1]) if "node_modules" in parts else None
+
+
 def _record_dispositions(dispositions: BuildOutputDispositions, coverage: _InstalledCoverage,
                          retained_paths: Mapping[str, Sequence[str]]) -> set[str]:
     """Register installer-record trees before the walk; returns the verified roots accepted."""
@@ -602,7 +612,8 @@ def _record_dispositions(dispositions: BuildOutputDispositions, coverage: _Insta
                     install_path, disposition="supply_chain", basis="installer-record",
                     name="npm-installed-package", reason="verified against installed manifest",
                     evidence_ref=f"{record.record.workspace_path}#{package.entry}", confidence="fact",
-                    scope_role=_installed_role(package), keep=retained_paths.get(install_path, ())):
+                    scope_role=_installed_role(package), keep=retained_paths.get(install_path, ()),
+                    bound_group=_installed_tree(install_path)):
                 registered.add(install_path)
             continue
         parent = coverage.owner(install_path)

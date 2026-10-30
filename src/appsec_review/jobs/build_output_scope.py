@@ -105,6 +105,7 @@ class _Tree:
     scope_role: str | None
     keep: set[str]
     keep_linked: bool
+    bound_group: str | None = None
     conflict: bool = False
     files: int = 0
     bytes: int = 0
@@ -113,11 +114,14 @@ class _Tree:
     examples: list[str] = field(default_factory=list)
 
     def document(self) -> dict[str, Any]:
-        return {"root": self.root, "disposition": self.disposition.value, "basis": self.basis.value,
-                "confidence": self.confidence.value, "name": self.name, "reason": self.reason,
-                "evidence_ref": self.evidence_ref, "pattern": self.pattern, "scope": self.scope,
-                "scope_role": self.scope_role, "files": self.files, "bytes": self.bytes,
-                "kept": list(self.kept), "examples": list(self.examples)}
+        document = {"root": self.root, "disposition": self.disposition.value, "basis": self.basis.value,
+                    "confidence": self.confidence.value, "name": self.name, "reason": self.reason,
+                    "evidence_ref": self.evidence_ref, "pattern": self.pattern, "scope": self.scope,
+                    "scope_role": self.scope_role, "files": self.files, "bytes": self.bytes,
+                    "kept": list(self.kept), "examples": list(self.examples)}
+        if self.bound_group is not None:
+            document["bound_group"] = self.bound_group
+        return document
 
 
 @dataclass(slots=True)
@@ -161,6 +165,8 @@ class BuildOutputDispositions:
         self._layout_sources: list[dict[str, str]] = []
         self._conflicts: list[str] = []
         self._root_overruns = 0
+        # What max_layout_roots counts: an ungrouped root, or one whole bound group.
+        self._bound_units: set[tuple[str, str]] = set()
         self._cargo_profiles: frozenset[str] = frozenset()
 
     # Registration -------------------------------------------------------------------------
@@ -169,13 +175,19 @@ class BuildOutputDispositions:
                       basis: str | Basis, name: str, reason: str, confidence: str | Confidence,
                       evidence_ref: str | None = None, pattern: str | None = None, scope: str | None = None,
                       scope_role: str | None = None, keep: Iterable[str] = (),
-                      keep_linked: bool = False) -> bool:
+                      keep_linked: bool = False, bound_group: str | PurePosixPath | None = None) -> bool:
         """Register one tree decision; returns False when the configured root bound is exhausted.
 
         A heuristic below ``heuristic_min_confidence`` is recorded but stays ``per_file``.
         ``keep_linked`` additionally yields the root's executables and libraries as kept rows.
+        ``bound_group`` is a workspace directory containing ``root``; every root registered with
+        the same group counts once against ``max_layout_roots`` (one npm installer prefix,
+        however many packages it records).
         """
         relative = _normalize(root)
+        group = _normalize(bound_group) if bound_group is not None else None
+        if group is not None and relative != group and not relative.startswith(group + "/"):
+            raise ValueError(f"build-output root {relative!r} is outside its bound group {group!r}")
         requested = Disposition(disposition)
         basis, confidence = Basis(basis), Confidence(confidence)
         if scope_role is not None:
@@ -184,12 +196,15 @@ class BuildOutputDispositions:
         if basis is Basis.HEURISTIC and not self.policy.heuristic_accepted(confidence.value):
             effective = Disposition.PER_FILE
         tree = _Tree(relative, effective, basis, confidence, str(name), str(reason), evidence_ref, pattern,
-                     scope, scope_role, {_normalize(item) for item in keep}, keep_linked)
+                     scope, scope_role, {_normalize(item) for item in keep}, keep_linked, group)
         existing = self._trees.get(relative)
         if existing is None:
-            if len(self._trees) >= self.policy.discovery.max_layout_roots:
-                self._root_overruns += 1
-                return False
+            unit = ("group", group) if group is not None else ("root", relative)
+            if unit not in self._bound_units:
+                if len(self._bound_units) >= self.policy.discovery.max_layout_roots:
+                    self._root_overruns += 1
+                    return False
+                self._bound_units.add(unit)
             self._trees[relative] = tree
             return True
         new_rank, old_rank = _BASIS_RANK[basis], _BASIS_RANK[existing.basis]
@@ -210,6 +225,10 @@ class BuildOutputDispositions:
 
     def add_layout_source(self, kind: str, path: str, sha256: str) -> None:
         self._layout_sources.append({"kind": str(kind), "path": str(path), "sha256": str(sha256)})
+
+    def configured_directory(self, root: str | PurePosixPath) -> bool:
+        """Whether a configured ``[build_outputs]`` exclusion already names this directory."""
+        return self._rule(_normalize(root), directory=True) is not None
 
     def record_bookkeeping(self, reason: BookkeepingReason, relative: str) -> None:
         self.bookkeeping.record(reason, relative)
