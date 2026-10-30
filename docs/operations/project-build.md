@@ -110,6 +110,10 @@ networked Node recipe whose configure phase already runs `npm ci`/`npm install`,
 package manager restores into the writable workspace and uses bounded `/tmp` caches. Node recipes
 without an explicit restore continue to receive the image-owned dependency view. The language
 build applies the same rule, so a recipe's own installer never meets the read-only image tree.
+When a recipe declares a `build_dir` that the copied source does not contain, project-build creates
+it in the workspace before configure runs and records the adaptation on the probe receipt; the
+language build (including wasm units) does the same. An empty directory created this way does not
+satisfy an expected output by itself.
 
 Recipe normalization marks a Node recipe `network_required` whenever the unit's own `package.json`
 declares `dependencies`, `devDependencies`, or `optionalDependencies`, even without a lockfile. The

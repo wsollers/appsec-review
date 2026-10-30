@@ -242,7 +242,10 @@ new counters as well. See
 their absence is not zero). It separates end-to-end wall time, per-job wall spans, summed
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
-events remain authoritative; the summary is a regenerable operator view.
+events remain authoritative; the summary is a regenerable operator view. Job publication does not
+refresh it, because it re-verifies every handoff in the run; run-level drivers write it once (the
+Dagster `complete` op and error-state handlers, `GraphRunner`, a standalone `launch`, and the
+standalone tree-sitter graph), so a summary read mid-run can trail the event stream.
 The [end-of-review telemetry report](../operations/telemetry-report.md) renders both, read-only,
 into one LaTeX/PDF rollup per run.
 

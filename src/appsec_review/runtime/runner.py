@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping, TypeVar
 from appsec_review.config import AppConfig
 from appsec_review.config.assurance import AssuranceMode
 from appsec_review.inference.recording import unit_scope
-from appsec_review.observability import EventLog, PipelineLog, write_run_metrics
+from appsec_review.observability import EventLog, PipelineLog
 from appsec_review.observability.spans import configure_operation_sampling, operation_span
 from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
 from appsec_review.retrieval.core import materialize_attempt_input_manifest
@@ -606,7 +606,6 @@ class JobRunner:
             context.events.write("JOB_FAILED", job_id=context.config.job_id, run_id=context.run_id,
                                  attempt_id=context.attempt_id, error_type=status["error"]["type"])
         self._publish_rejection(context, claim, exc)
-        write_run_metrics(context.run_root)
 
     def _handoff_document(self, context: JobContext, claim: Mapping[str, Any], result: Mapping[str, Any],
                           outcomes: Mapping[str, Any], outcomes_ref: Mapping[str, Any], *,
@@ -731,7 +730,6 @@ class JobRunner:
                 raise ValueError("reused handoff changed during Dagster execution")
             result = json.loads((context.attempt_root / "result.json").read_text(encoding="utf-8"))
             status = json.loads((context.attempt_root / "status.json").read_text(encoding="utf-8"))
-            write_run_metrics(context.run_root)
             return {"status": status, "result": result, "attempt_root": str(context.attempt_root),
                     "handoff": handoff, "handoff_sha256": claim["handoff_sha256"], "reused": True}
         receipts: dict[str, Mapping[str, Any]] = {}
@@ -842,7 +840,8 @@ class JobRunner:
                 completion_status=completion_status,
                 duration_ms=max(0, int((datetime.fromisoformat(completed) -
                     datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000)))
-            write_run_metrics(root)
+            # The run-wide summary re-verifies every published handoff, so refreshing it on each
+            # publication made finalize cost grow with the run. Run-level drivers write it once.
             self._handoff_event(context, "HANDOFF_ACCEPTED", handoff, handoff_ref, duration_ms, len(outcomes["units"]))
         except BaseException as original:
             for path, payload in previous.items():

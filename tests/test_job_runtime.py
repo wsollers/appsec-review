@@ -99,18 +99,16 @@ def test_failed_job_has_a_terminal_receipt(tmp_path: Path) -> None:
     assert status["error"]["type"] == "RuntimeError"
 
 
-@pytest.mark.parametrize("interruption", ("rejection", "metrics"))
 def test_failed_attempt_replay_completes_interrupted_finalization_without_rewriting_diagnostics(
-        tmp_path, monkeypatch, interruption):
+        tmp_path, monkeypatch):
     from appsec_review.observability import PipelineLog
-    import appsec_review.runtime.runner as runtime
 
     runner = JobRunner(load_config(write_config(tmp_path)))
     job = Job("job_fixture", "fixture", lambda _: {}, units=(Unit("work.only", lambda _: {}),))
     claim = runner.begin_attempt(job)
     context = runner._context_from_claim(job, claim)
     calls = 0
-    original = runner._publish_rejection if interruption == "rejection" else runtime.write_run_metrics
+    original = runner._publish_rejection
 
     def interrupt(*args, **kwargs):
         nonlocal calls
@@ -119,10 +117,7 @@ def test_failed_attempt_replay_completes_interrupted_finalization_without_rewrit
             raise OSError("interrupted failure finalization")
         return original(*args, **kwargs)
 
-    if interruption == "rejection":
-        monkeypatch.setattr(runner, "_publish_rejection", interrupt)
-    else:
-        monkeypatch.setattr(runtime, "write_run_metrics", interrupt)
+    monkeypatch.setattr(runner, "_publish_rejection", interrupt)
     with pytest.raises(OSError, match="interrupted"):
         runner.fail_attempt(job, claim, LookupError("original"))
     paths = [context.attempt_root / "status.json", context.attempt_root / "logs/traceback.txt",
@@ -138,6 +133,30 @@ def test_failed_attempt_replay_completes_interrupted_finalization_without_rewrit
     assert sum(record["event_type"] == "JOB_FAILED" for record in records) == 1
     assert sum(record["event_type"] == "HANDOFF_REJECTED" for record in records) == 1
     assert not (context.attempt_root.parent.parent / "latest.json").exists()
+
+
+def test_attempt_publication_and_failure_never_rebuild_run_wide_metrics(tmp_path, monkeypatch):
+    # The run summary re-verifies every handoff in the run; rebuilding it on each publication made
+    # serialized Dagster finalize ops grow with run progress. Only run-level drivers write it.
+    from appsec_review.observability import telemetry
+
+    def refuse(run_root):
+        raise AssertionError("attempt publication rebuilt run-wide metrics")
+
+    monkeypatch.setattr(telemetry, "aggregate_run_metrics", refuse)
+    runner = JobRunner(load_config(write_config(tmp_path)))
+    accepted = runner.run(Job("job_fixture", "fixture", lambda _: {},
+                              units=(Unit("work.only", lambda _: {}),)))
+    run_id = accepted["status"]["run_id"]
+
+    def fail(_):
+        raise RuntimeError("expected failure")
+
+    with pytest.raises(RuntimeError, match="expected failure"):
+        runner.run(Job("job_fixture", "fixture", lambda _: {}, units=(Unit("work.only", fail),)),
+                   run_id=run_id)
+    assert accepted["handoff"]["status"] == "ACCEPTED"
+    assert not (tmp_path / "runs" / run_id / "data/telemetry/summary.json").exists()
 
 
 def test_failed_step_replay_repairs_interrupted_event_without_rewriting_status(tmp_path, monkeypatch):
