@@ -311,7 +311,7 @@ def test_nested_prefix_described_by_parent_record_has_no_missing_gap(tmp_path: P
         " bytes) recorded by node_modules/.package-lock.json routed to supply_chain review; "
         "per-file target review not performed"]
 
-SCANNERS = ("syft", "inventory", "osv", "blint")
+SCANNERS = ("syft", "grype", "inventory", "osv", "blint")
 
 
 def _shipped_dispositions() -> BuildOutputDispositions:
@@ -319,7 +319,8 @@ def _shipped_dispositions() -> BuildOutputDispositions:
     return BuildOutputDispositions(parse_build_outputs(shipped), family="node")
 
 
-def _scanner_inputs(run_root: Path, rows: list[dict], monkeypatch) -> dict[str, list[str]]:
+def _scanner_inputs(run_root: Path, rows: list[dict], monkeypatch,
+                    outputs: dict[str, dict] | None = None) -> dict[str, list[str]]:
     """Rows each artifact-security scanner would launch on, through the job's own handlers."""
     artifacts = [{**row, **scope_fields(row), "artifact_id": f"artifact-{index:05d}",
                   "canonical_identity": f"fixture:{row['workspace_path']}"}
@@ -335,8 +336,15 @@ def _scanner_inputs(run_root: Path, rows: list[dict], monkeypatch) -> dict[str, 
                            output=lambda _: {"artifacts": artifacts})
     units = {item.unit_id: item for item in security.build_job(scanner_runner=lambda *args: None).units}
     for capability in SCANNERS:
-        units[f"analyze.{capability}"].handler(unit)
+        output = units[f"analyze.{capability}"].handler(unit)
+        if outputs is not None:
+            outputs[capability] = output
     return {capability: sorted(paths) for capability, paths in launched.items()}
+
+
+def _covered(output: dict) -> list[dict]:
+    return [item for item in output["not_applicable_inputs"]["items"]
+            if item["reason_code"] == "INSTALLER_RECORD_COVERED"]
 
 
 def test_scanner_inputs_are_bounded_to_package_anchors_with_exact_counts(tmp_path: Path, monkeypatch) -> None:
@@ -344,12 +352,13 @@ def test_scanner_inputs_are_bounded_to_package_anchors_with_exact_counts(tmp_pat
     rows, _ = node.catalog(tmp_path, workspace, {}, 10_000, "node-unit", dispositions=_shipped_dispositions())
     started = time.monotonic()
 
-    selected = _scanner_inputs(tmp_path, rows, monkeypatch)
+    outputs: dict[str, dict] = {}
+    selected = _scanner_inputs(tmp_path, rows, monkeypatch, outputs)
 
     assert time.monotonic() - started < 2
     assert len(rows) == 69
     assert {capability: len(paths) for capability, paths in selected.items()} == {
-        "syft": 68, "inventory": 69, "osv": 0, "blint": 1}
+        "syft": 30, "grype": 30, "inventory": 69, "osv": 1, "blint": 1}
     anchors = {row["workspace_path"] for row in rows
                if row.get("package_metadata", {}).get("role") == "installed-dependency-package"}
     assert len(anchors) == 38
@@ -357,20 +366,34 @@ def test_scanner_inputs_are_bounded_to_package_anchors_with_exact_counts(tmp_pat
     addon = "node_modules/prod-00/build/Release/addon.node"
     # The verified production addon is the only binary review input; the lane policy admits it.
     assert selected["blint"] == [addon]
+    # osv reads the installer record as a package-lock.json; anchors stay format-skipped for it.
+    assert selected["osv"] == [record]
     unverified = {"node_modules/mismatch/package.json", *_mismatch_rows()}
-    for capability in ("syft", "inventory"):
-        dependency = {path for path in selected[capability] if "node_modules" in PurePosixPath(path).parts}
-        # Each verified package reaches the scanner once, as its anchor; its summarized files never do.
-        assert dependency == anchors | {record, addon} | unverified
-    assert set(selected["inventory"]) - set(selected["syft"]) == {"frontend/dist/app.js.map"}
+    dependency = {capability: {path for path in selected[capability] if "node_modules" in PurePosixPath(path).parts}
+                  for capability in ("syft", "grype", "inventory")}
+    # Each verified package reaches syft and grype only through one scan of its installer record.
+    assert dependency["syft"] == dependency["grype"] == {record, addon} | unverified
+    # inventory still reads each verified package once, as its anchor; its summarized files never do.
+    assert dependency["inventory"] == anchors | {record, addon} | unverified
+    assert set(selected["inventory"]) - set(selected["syft"]) == {"frontend/dist/app.js.map"} | anchors
+    record_sha = next(row["sha256"] for row in rows if row["workspace_path"] == record)
+    for capability in ("syft", "grype"):
+        covered = _covered(outputs[capability])
+        assert len(covered) == 38
+        assert {item["reason"] for item in covered} == {
+            f"{capability} covers this package through one scan of installer record {record} "
+            f"(sha256 {record_sha[:12]})"}
+    assert not _covered(outputs["osv"]) and not _covered(outputs["inventory"])
 
     # Contrast: without the installer record every installed file is a per-file scanner input.
     (workspace / record).unlink()
     baseline, _ = node.catalog(tmp_path, workspace, {}, 10_000, "node-unit", dispositions=_shipped_dispositions())
-    unbounded = _scanner_inputs(tmp_path, baseline, monkeypatch)
+    unbounded_outputs: dict[str, dict] = {}
+    unbounded = _scanner_inputs(tmp_path, baseline, monkeypatch, unbounded_outputs)
     assert {capability: len(paths) for capability, paths in unbounded.items()} == {
-        "syft": 978, "inventory": 979, "osv": 0, "blint": 1}
+        "syft": 978, "grype": 978, "inventory": 979, "osv": 0, "blint": 1}
     assert unbounded["blint"] == [addon]
+    assert not any(_covered(output) for output in unbounded_outputs.values())
 
 
 def test_dev_dependency_native_addon_stays_out_of_blint(tmp_path: Path, monkeypatch) -> None:

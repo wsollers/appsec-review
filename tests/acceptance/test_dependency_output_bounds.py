@@ -1,7 +1,9 @@
 """Acceptance: npm dependency output stays bounded in a completed review run.
 
 Point ``APPSEC_ACCEPTANCE_RUN_ROOT`` at a completed run root (``runs/<run-id>``) and select this file
-explicitly; it skips when the variable is unset. It only reads accepted handoffs.
+explicitly; it skips when the variable is unset. It only reads accepted handoffs and the accepted
+artifact-security observations shard. Installer-record scan checks skip a run whose artifact-security
+publication predates ``installer_records``.
 
     APPSEC_ACCEPTANCE_RUN_ROOT=runs/<run-id> python -m pytest \
         tests/acceptance/test_dependency_output_bounds.py --basetemp=test/tmp/dof-acceptance
@@ -9,8 +11,11 @@ explicitly; it skips when the variable is unset. It only reads accepted handoffs
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from contextlib import closing
+import json
 import os
 from pathlib import Path, PurePosixPath
+import sqlite3
 from typing import Any
 
 import pytest
@@ -18,12 +23,20 @@ import pytest
 from appsec_review.jobs.delivery_scope import scope_fields
 from appsec_review.jobs.job_artifact_indexing.job import load_accepted_artifact_index
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.retrieval import EntityKind, LogicalIdentity, RelationKind
+from appsec_review.retrieval.index import load_verified_manifest
 
 
 RUN_ROOT_ENV = "APPSEC_ACCEPTANCE_RUN_ROOT"
 DISPOSITIONS_SCHEMA = "appsec-review/build-output-dispositions/1"
 PACKAGE_ROLE = "installed-dependency-package"
 RECORD_ROLE = "installed-dependency-record"
+RECORD_METADATA = {"format": ".package-lock.json", "manager": "npm", "role": RECORD_ROLE}
+RECORD_PRESENTATION = "appsec-review/npm-installed-record-as-package-lock/1"
+COVERED = "INSTALLER_RECORD_COVERED"
+RECORD_SCANNERS = ("syft", "grype", "osv")
+ATTRIBUTIONS = {"verified-anchor", "unverified-record-entry"}
+INSTALLED_PACKAGES_BOUND = 64
 _INSTALLED_ROLES = {"build_dependency", "runtime_dependency", "shipped_dependency", "deliverable"}
 _NATIVE_KINDS = {"executable", "shared-library", "native-addon", "native-extension"}
 
@@ -148,3 +161,196 @@ def test_blint_reviews_production_dependency_binaries_but_not_build_only_ones(ru
         if disposition["selected"] is not expected:
             wrong.append((artifact.get("workspace_path"), role, artifact.get("kind"), disposition["selected"]))
     assert not wrong, wrong[:50]
+
+
+@pytest.fixture(scope="module")
+def record_scans(run_root: Path) -> Mapping[str, Any]:
+    """Installer records, their D2-matched anchors, and the artifact-security observations."""
+    from appsec_review.jobs.job_artifact_security_analysis import job as security
+
+    analysis = security.load_accepted_artifact_security_analysis(run_root)
+    capabilities = {capability: analysis["capabilities"][capability] for capability in RECORD_SCANNERS
+                    if (analysis["capabilities"].get(capability) or {}).get("installer_records") is not None}
+    if not capabilities:
+        pytest.skip("this run's artifact-security publication predates installer_records")
+    artifacts = {row["artifact_id"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}
+    # The job keys records and anchors exactly by build_unit_id; the first record in row order wins.
+    records: dict[tuple[Any, Any, Any], Mapping[str, Any]] = {}
+    for row in artifacts.values():
+        if row.get("dependency_metadata") == RECORD_METADATA:
+            records.setdefault((row.get("build_unit_id"), row.get("workspace_path"), row.get("sha256")), row)
+    anchors: dict[str, tuple[Mapping[str, Any], Mapping[str, Any]]] = {}
+    for row in artifacts.values():
+        evidence = row.get("delivery_evidence")
+        if _role(row, "package_metadata") != PACKAGE_ROLE or not isinstance(evidence, Mapping):
+            continue
+        if evidence.get("kind") != "npm-installed-record":
+            continue
+        record = records.get((row.get("build_unit_id"), evidence.get("workspace_path"), evidence.get("sha256")))
+        if record is not None:
+            anchors[row["artifact_id"]] = (row, record)
+    return {"capabilities": capabilities, "artifacts": artifacts,
+            "records": {row["artifact_id"]: row for row in records.values()}, "anchors": anchors,
+            "observations": _observations(run_root, analysis)}
+
+
+def _observations(run_root: Path, analysis: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], set[str]]]:
+    """(payload, OBSERVED_AT targets) for every tool observation in the artifact-security shard."""
+    raw = analysis["index_manifest"]
+    manifest, _ = load_verified_manifest(run_root, run_root / raw["path"], raw["sha256"])
+    [shard] = [item for item in manifest["indexes"]
+               if item["name"] == "observations" and item.get("shard_id") == "artifact-security"]
+    path = run_root / shard["relative_path"]
+    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro&immutable=1", uri=True)) as database:
+        payloads = {identity: json.loads(payload) for identity, payload in database.execute(
+            "SELECT identity, payload_json FROM entities WHERE kind = ?", (EntityKind.TOOL_OBSERVATION.value,))}
+        targets: dict[str, set[str]] = {}
+        for source, target in database.execute(
+                "SELECT source_id, target_id FROM relations WHERE kind = ?", (RelationKind.OBSERVED_AT.value,)):
+            targets.setdefault(source, set()).add(target)
+    return [(payload, targets.get(identity, set())) for identity, payload in payloads.items()]
+
+
+def _scanned(record_scans: Mapping[str, Any], capability: str) -> list[str]:
+    """Canonical identities of the artifacts ``capability`` produced a scan summary for."""
+    return [str((payload.get("artifact") or {}).get("canonical_identity"))
+            for payload, _ in record_scans["observations"]
+            if payload.get("record_kind") == "scan_summary" and payload.get("capability") == capability]
+
+
+def _dispositions(summary: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    return {item["artifact_id"]: item for item in summary.get("scope_dispositions") or ()}
+
+
+def _covering(summary: Mapping[str, Any], record_id: str) -> bool:
+    """The record passed the capability's lane gate and format partition (design D2)."""
+    item = _dispositions(summary).get(record_id)
+    return bool(item and item.get("selected") and item.get("input_disposition") is None)
+
+
+def test_syft_and_grype_never_launch_on_an_anchor_whose_record_is_scanned(record_scans) -> None:
+    wrong, launched = [], []
+    for capability in ("syft", "grype"):
+        summary = record_scans["capabilities"].get(capability)
+        if summary is None:
+            continue
+        dispositions = _dispositions(summary)
+        scanned = set(_scanned(record_scans, capability))
+        for anchor_id, (anchor, record) in record_scans["anchors"].items():
+            if not _covering(summary, record["artifact_id"]):
+                continue  # Fail-open: an uncovered anchor is scanned as itself.
+            item = dispositions.get(anchor_id)
+            if item is None or not item.get("selected"):
+                continue  # The lane gate excluded it before the installer-record rule.
+            if item.get("input_reason_code") not in (None, COVERED):
+                continue  # Its declared input format was already SKIPPED_NA before the installer-record rule.
+            if (item.get("input_reason_code") != COVERED or item.get("input_disposition") != "SKIPPED_NA"
+                    or item.get("input_covered_by") != record["artifact_id"]
+                    or item.get("input_evidence_ref") !=
+                    f"{record['workspace_path']}#{anchor['delivery_evidence'].get('entry')}"):
+                wrong.append((capability, anchor["workspace_path"], item.get("input_reason_code")))
+            if anchor["canonical_identity"] in scanned:
+                launched.append((capability, anchor["workspace_path"]))
+    assert not wrong, wrong[:50]
+    assert not launched, launched[:50]
+
+
+def test_each_installer_record_is_scanned_at_most_once_and_summarized(record_scans) -> None:
+    problems = []
+    for capability, summary in record_scans["capabilities"].items():
+        entries = [entry for entry in summary["installer_records"]]
+        ids = [entry["artifact_id"] for entry in entries]
+        assert ids == sorted(set(ids)), (capability, ids)
+        by_id = dict(zip(ids, entries))
+        assert set(by_id) <= set(record_scans["records"]), (capability, sorted(set(by_id) - set(record_scans["records"])))
+        dispositions = _dispositions(summary)
+        scanned = _scanned(record_scans, capability)
+        for record_id, record in record_scans["records"].items():
+            launches = scanned.count(str(record["canonical_identity"]))
+            if launches > 1:
+                problems.append((capability, record["workspace_path"], f"{launches} scans"))
+            if not _covering(summary, record_id):
+                continue
+            entry = by_id.get(record_id)
+            if entry is None:
+                problems.append((capability, record["workspace_path"], "no installer_records entry"))
+                continue
+            if (entry["workspace_path"], entry["sha256"], entry["presentation"]) != (
+                    record["workspace_path"], record["sha256"], RECORD_PRESENTATION):
+                problems.append((capability, record["workspace_path"], "entry identity differs"))
+            covered = sum(1 for item in dispositions.values()
+                          if item.get("input_reason_code") == COVERED and item.get("input_covered_by") == record_id)
+            if entry["anchors_covered"] != (0 if capability == "osv" else covered):
+                problems.append((capability, record["workspace_path"], "anchors_covered", entry["anchors_covered"]))
+            if ("anchors_reported" in entry) is not (capability == "syft"):
+                problems.append((capability, record["workspace_path"], "anchors_reported presence"))
+            matched = sum(1 for _, owner in record_scans["anchors"].values() if owner["artifact_id"] == record_id)
+            dev = sum(1 for anchor, owner in record_scans["anchors"].values()
+                      if owner["artifact_id"] == record_id and anchor["package_metadata"].get("dev") is True)
+            if entry["dev_anchors"] != dev:
+                problems.append((capability, record["workspace_path"], "dev_anchors", entry["dev_anchors"], dev))
+            if entry["scan_outcome"] == "not_completed":
+                gap = (f"{record_id}: {capability}: installer record scan of {record['workspace_path']} did not "
+                       f"complete; {matched} verified packages recorded there have no {capability} coverage")
+                if gap not in summary["gaps"]:
+                    problems.append((capability, record["workspace_path"], "missing did-not-complete gap"))
+            elif entry["scan_outcome"] not in {"completed", "completed_with_gaps"}:
+                problems.append((capability, record["workspace_path"], entry["scan_outcome"]))
+            if capability == "grype" and entry["dev_anchors"]:
+                gap = (f"{record_id}: grype: {entry['dev_anchors']} dev-only packages recorded by "
+                       f"{record['workspace_path']} are not vulnerability-matched by the pinned grype "
+                       "(npm dev entries excluded); osv-scanner scans the same record")
+                if gap not in summary["gaps"]:
+                    problems.append((capability, record["workspace_path"], "missing dev-only gap"))
+    assert not problems, problems[:50]
+
+
+def test_vulnerability_findings_at_an_installer_record_carry_attribution(record_scans) -> None:
+    by_canonical = {str(row["canonical_identity"]): row for row in record_scans["records"].values()}
+    anchor_entities = {row["artifact_id"]: LogicalIdentity.parse(str(row["canonical_identity"])).value
+                       for row, _ in record_scans["anchors"].values()}
+    wrong = []
+    for payload, targets in record_scans["observations"]:
+        if payload.get("record_kind") != "finding" or payload.get("capability") not in {"grype", "osv"}:
+            continue
+        record = by_canonical.get(str((payload.get("artifact") or {}).get("canonical_identity")))
+        if record is None:
+            continue
+        subject = (payload["capability"], record["workspace_path"], payload.get("subject"))
+        attribution = payload.get("installed_package_attribution")
+        if attribution not in ATTRIBUTIONS:
+            wrong.append((*subject, attribution))
+            continue
+        own = {anchor_id for anchor_id, (_, owner) in record_scans["anchors"].items()
+               if owner["artifact_id"] == record["artifact_id"]}
+        # Attribution matches (package_name, package_version) against every key-matched anchor (D5).
+        matched = sorted((anchor_id for anchor_id in own
+                          if (record_scans["anchors"][anchor_id][0]["package_metadata"].get("name"),
+                              record_scans["anchors"][anchor_id][0]["package_metadata"].get("version")) ==
+                          (payload.get("package_name"), payload.get("package_version"))),
+                         key=lambda anchor_id: str(record_scans["artifacts"][anchor_id]["canonical_identity"]))
+        if attribution == "unverified-record-entry":
+            if matched or "installed_packages" in payload or targets & {anchor_entities[item] for item in own}:
+                wrong.append((*subject, "unverified entry attributed to an anchor"))
+            continue
+        described = [item.get("artifact_id") for item in payload.get("installed_packages") or ()]
+        truncated = payload.get("installed_packages_truncated")
+        if not matched or described != matched[:INSTALLED_PACKAGES_BOUND]:
+            wrong.append((*subject, "installed_packages differ from the matched anchors"))
+        elif truncated != (len(matched) if len(matched) > INSTALLED_PACKAGES_BOUND else None):
+            wrong.append((*subject, "installed_packages_truncated", truncated, len(matched)))
+        elif not {anchor_entities[item] for item in matched} <= targets:
+            wrong.append((*subject, "verified anchor lacks an OBSERVED_AT relation"))
+    assert not wrong, wrong[:50]
+
+
+def test_syft_launches_are_bounded_by_uncovered_rows_and_records(record_scans) -> None:
+    for capability in ("syft", "grype"):
+        summary = record_scans["capabilities"].get(capability)
+        if summary is None:
+            continue
+        covered = sum(1 for item in summary.get("scope_dispositions") or ()
+                      if item.get("input_reason_code") == COVERED)
+        # Covered anchors never launch; uncovered rows (records included) launch at most once each.
+        bound = len(record_scans["artifacts"]) - covered
+        assert summary["observation_count"] <= bound, (capability, summary["observation_count"], bound, covered)
