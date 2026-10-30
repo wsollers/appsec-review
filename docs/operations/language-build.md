@@ -398,6 +398,14 @@ delivery `not_established`: being in npm's production tree does not prove that a
 supply_chain lane. If an installed manifest's digest changes between parsing and cataloging, the
 catalog fails with `installed npm package manifest changed during cataloging`.
 
+Artifact security analysis presents that record to Syft, Grype and osv-scanner as
+`package-lock.json` and scans it once. Syft and Grype then skip each anchor that the scanned record
+lists, recording it as `SKIPPED_NA` with reason code `INSTALLER_RECORD_COVERED`, so these
+scanners launch once per record rather than once per package. Grype and osv-scanner findings in
+the record are attributed to the matching anchors (see
+[installed npm packages](artifact-security-analysis.md#installed-npm-packages-one-scan-per-installer-record)).
+The catalog row contract above is unchanged.
+
 Under a verified install path, `native-addon`, `shared-library`, `native-symbols` and `package`
 files keep their own rows with the package's role and evidence, so install-time native code (for
 example `node-gyp` output) stays visible to supply-chain scanners. A retained `native-addon` or

@@ -50,7 +50,10 @@ outside a scanner's support is never launched and is counted per capability in
 `not_applicable_inputs` as `SKIPPED_NA`, not as a gap; its row in that capability's
 `scope_dispositions` also carries `format`, `input_disposition: SKIPPED_NA`,
 `input_reason_code: INPUT_FORMAT_UNSUPPORTED`, and `input_reason`. A skipped artifact is never
-evidence that it is clean. Classification reads bounded member names: a jar holding only
+evidence that it is clean. Syft and Grype also skip a verified installed npm package whose installer
+record they scan, with reason code `INSTALLER_RECORD_COVERED` (see
+[installed npm packages](#installed-npm-packages-one-scan-per-installer-record)).
+Classification reads bounded member names: a jar holding only
 `classes.dex` is `dex-archive` and a jar with no `.class` member is `jvm-resource-archive`, so
 neither reaches SpotBugs (which would exit 1 with "No files to analyze could be opened"). Unix `ar`
 archives (`.a` static libraries, Rust `.rlib`) are `ar-archive`: their members are listed from GNU,
@@ -74,6 +77,142 @@ databases" report. Its exit-128 "No package sources found" report (an empty lock
 `SKIPPED_NA`; any other non-zero exit is a gap carrying the last bounded stderr line, as are
 timeouts and truncation.
 
+## Installed npm packages: one scan per installer record
+
+A verified installed npm package reaches this job as one supply-chain anchor row, its installed
+`package.json` (see [installed npm dependencies](language-build.md)). Syft and Grype find nothing
+in such an anchor: with a `file:` source Syft runs only its directory and file catalogers, and its
+npm lock cataloger accepts only lockfile names such as `package-lock.json` outside every
+`node_modules` directory. The install's own record, `<prefix>/node_modules/.package-lock.json`, has
+the `package-lock.json` v3 format. Syft, Grype and osv-scanner therefore scan each record once
+instead of each package it records (design:
+[scanner launch reduction](../reviews/scanner-launch-reduction-design.md)).
+
+**Staging.** A row whose `dependency_metadata` is exactly
+`{"format": ".package-lock.json", "manager": "npm", "role": "installed-dependency-record"}` is
+presented to Syft, Grype and osv-scanner as `package-lock.json` (`scanner_input` in
+`jobs/job_artifact_security_analysis/scanners.py`, presentation
+`appsec-review/npm-installed-record-as-package-lock/1`). The runner mounts the original record
+read-only at `/target/package-lock.json` over an empty placeholder in the unit's
+`installer-records/<token>/` scratch directory, outside every `node_modules` path. The record is
+never copied or rewritten, and the scanner argv is unchanged. Only the Syft launch adds the
+environment `SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES=true`. The presented name also drives the
+declared format partition, so osv-scanner selects the record as an npm lockfile.
+
+| Scanner | Launch per record | Expected coverage |
+| --- | --- | --- |
+| Syft | `file:/target/package-lock.json`, with dev dependencies included | Every non-`link` entry with a name, dev entries included. |
+| Grype | `file:/target/package-lock.json` | Non-dev entries with a version. Grype 0.119.0 catalogs with its embedded Syft defaults, which drop npm dev entries, and has no switch for a `file:` source. The shortfall is a named gap (below). |
+| osv-scanner | `--lockfile /target/package-lock.json`, only the npm offline database mounted | Every entry, dev included. A snapshot without npm gives the usual missing-ecosystem gap. |
+| inventory | unchanged | Each anchor and the record, as rows. |
+
+The expected coverage follows the pinned scanners' behavior. The integration test that launches
+them on a staged record has been written but not yet run (see [tests](#installer-record-tests)).
+
+**Skipped anchors.** Before its per-artifact loop, each Syft, Grype and osv-scanner unit collects
+the covering records: record rows that the capability's lane admits and its declared format
+partition supports, keyed by `(build_unit_id, workspace_path, sha256)`. In the Syft and Grype units,
+after the lane gate and the format partition,
+an anchor (`package_metadata.role` `installed-dependency-package` and `delivery_evidence.kind`
+`npm-installed-record`) whose `build_unit_id` and `delivery_evidence` `workspace_path` and `sha256`
+match a covering record is not launched. It is counted in `not_applicable_inputs` as `SKIPPED_NA`
+with reason code `INSTALLER_RECORD_COVERED` and one reason per record:
+
+`<capability> covers this package through one scan of installer record <record workspace_path> (sha256 <first 12 hex>)`
+
+Its `scope_dispositions` row carries `format`, `input_disposition: SKIPPED_NA`,
+`input_reason_code: INSTALLER_RECORD_COVERED`, `input_reason`, `input_covered_by` (the record's
+`artifact_id`) and `input_evidence_ref` (`<record workspace_path>#<entry>`). A skipped anchor is
+neither an observation nor a gap. An anchor with no covering record (record absent, outside the
+lane, a different digest or build unit) is scanned as before. osv-scanner still skips anchors with
+`INPUT_FORMAT_UNSUPPORTED`, and inventory still reads every anchor. Everything else is scanned per
+file as before: retained native addons, shared libraries, symbol files and package archives under
+a verified package, accepted `npm pack` members, root and workspace `package.json` files, project
+lockfiles, and every per-file row of an unverified package or an unavailable record. pnpm, Yarn and
+other ecosystems have no parsed installer record.
+
+**Gaps.** After a covering record's scan, the unit adds these gaps, prefixed with the record's
+`artifact_id` like other scan gaps. `<record>` is the record's `workspace_path`; counts are of the
+anchors matched to it:
+
+- Grype, when at least one matched anchor has `dev: true`:
+  `grype: <N> dev-only packages recorded by <record> are not vulnerability-matched by the pinned grype (npm dev entries excluded); osv-scanner scans the same record`.
+- Syft, Grype or osv-scanner, when the scan has gaps and no parsed result (`scan_outcome`
+  `not_completed`):
+  `<capability>: installer record scan of <record> did not complete; <M> verified packages recorded there have no <capability> coverage`.
+  The scan's own timeout, exit-status or missing-ecosystem gap is kept as well.
+- Syft, when a parsed scan does not report `K` of the `A` anchors' `(name, version)` pairs in its
+  `artifacts`:
+  `syft: <K> of <A> verified packages recorded by <record> were not reported by the installer record scan`.
+
+**Installer-record summary.** Each `analyze.<capability>` output, and each capability's summary in
+the published `accepted-analysis.json` next to `not_applicable_inputs`, has `installer_records`: one
+entry per covering record the unit scanned, sorted by `artifact_id`.
+
+```json
+{"artifact_id": "...", "workspace_path": "node_modules/.package-lock.json", "sha256": "...",
+ "presentation": "appsec-review/npm-installed-record-as-package-lock/1",
+ "anchors_covered": 38, "dev_anchors": 30, "scan_outcome": "completed", "anchors_reported": 38}
+```
+
+`anchors_covered` counts the anchors skipped with `INSTALLER_RECORD_COVERED`, so it is 0 for
+osv-scanner. `dev_anchors` counts matched anchors with `dev: true`. `scan_outcome` is `completed`,
+`completed_with_gaps` or `not_completed`. `anchors_reported` is present for Syft only. The list is
+empty for the other capabilities, and the key is null for a Grype unit disabled by
+`tools.disable_grype`. The coverage key `produced-artifact-security` and its partial/complete rule
+are unchanged.
+
+**Finding attribution.** In `index.observations`, a Grype or osv-scanner finding whose scanned
+artifact is an installer record is matched by `(package_name, package_version)` against that
+record's verified anchors.
+
+- On a match, the finding payload gets `installed_package_attribution: "verified-anchor"` and
+  `installed_packages`: at most 64 descriptors sorted by `canonical_identity`, each with
+  `canonical_identity`, `artifact_id`, `workspace_path`, `install_path`, `evidence_ref`, `dev`,
+  `dev_optional` and `scope_role`. Above 64, `installed_packages_truncated` holds the total number
+  of matches. The observation also gets one `OBSERVED_AT` relation (confidence 1.0) to every
+  matched anchor's artifact entity, besides its relation to the record. An anchor entity missing
+  from the shard is added with text `produced artifact package-metadata`.
+- Otherwise the payload gets `installed_package_attribution: "unverified-record-entry"` and no
+  extra relation. This covers an entry whose installed package failed verification, a `link`
+  entry, or a name the scanner normalized differently. The finding stays observed at the record.
+
+Nothing is attributed to per-file rows of unverified packages, and a record result never counts as
+their coverage. Syft scan summaries and other summary records get no anchor relations, and finding
+identity keys are unchanged.
+
+**Launch counts.** For each covering record, Syft and Grype launch once instead of once per
+matched anchor, and osv-scanner launches once on a record it previously could not read. In the
+unit regression fixture (69 rows, 38 verified anchors, one record and one production addon), Syft
+and Grype each launch 30 times instead of 68, inventory 69, osv-scanner 1 instead of 0, and blint 1.
+Without the record the same tree costs 978 Syft and 978 Grype launches.
+
+### Installer-record tests
+
+The unit tests are in `tests/test_artifact_security_analysis.py`,
+`tests/test_node_dependency_output_filtering.py` (the launch-count regression) and
+`tests/test_tool_input_support.py`. The integration and acceptance tests are manual and run only at
+the user's request:
+
+- `tests/integration/test_installer_record_scans.py` launches the pinned Syft, Grype and
+  osv-scanner images on the staged record of the dependency fixture. It also checks that Syft
+  reports nothing for the unstaged `node_modules/.package-lock.json`. It skips, naming what is
+  missing, without Docker, the cataloged `tool-syft`, `tool-grype` and `tool-osv-scanner` images,
+  or verified grype and osv feed snapshots with npm data:
+
+  ```bash
+  python -m pytest -p no:cacheprovider tests/integration/test_installer_record_scans.py \
+      --basetemp=test/tmp/installer-record-scans
+  ```
+
+- `tests/acceptance/test_dependency_output_bounds.py` reads a completed run. Its installer-record
+  checks skip a run whose artifact-security publication predates `installer_records`:
+
+  ```bash
+  APPSEC_ACCEPTANCE_RUN_ROOT=runs/<run-id> python -m pytest \
+      tests/acceptance/test_dependency_output_bounds.py --basetemp=test/tmp/dof-acceptance
+  ```
+
 ## Units, recovery, and invalidation
 
 Dagster exposes independent inventory, native, JVM, package, WebAssembly, SpotBugs, BLint, Syft,
@@ -83,6 +222,9 @@ fingerprinted by:
 - accepted artifact hash and detected format;
 - producer/build identity and accepted language-build handoff;
 - scanner, image, rules, parser, normalizer, and schema identities;
+- for a Syft, Grype or osv-scanner scan of an installer record only, the `scanner_input`
+  presentation (presented name, presentation identity and environment), so every other
+  fingerprint is unchanged;
 - the required upstream build-index manifest; and
 - analysis limits from central configuration.
 
@@ -115,7 +257,8 @@ The [interchange upgrade](../architecture/job-interchange.md) adds common observ
 and native-result references to this scanner lane. The implementation keeps
 `appsec-review/artifact-security-record/2` and `appsec-review/artifact-security-observation/1`,
 with additive common/provenance metadata. Finding normalization is
-`appsec-review/artifact-security-findings/2`, parser identity is
+`appsec-review/artifact-security-findings/3` (bumped for the installer-record attribution fields,
+which rebuilds the observations shard but keeps scan checkpoints reusable), parser identity is
 `appsec-review/artifact-security-parsers/3+<policy-identity>`, and normalization is
 `appsec-review/artifact-security-normalizer/2` for retained parser-input semantics.
 Keep original scanner result identity, parser, retained byte count/hash, selector, and completeness
