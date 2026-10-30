@@ -10,6 +10,7 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.config.assurance import ComponentReleases
+from appsec_review.config.build_outputs import BuildOutputPolicy, parse_build_outputs
 from appsec_review.container_runtime import BuildCommandResult, BuildProfile, ProjectImage
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
@@ -127,6 +128,10 @@ def test_processing_modes_change_language_build_checkpoint_identity() -> None:
             **declarations, component: "changed"})) != released
     assert _fingerprint(dispatch, accepted, settings, releases=ComponentReleases({
         **declarations, "queries_python": "unrelated-query-change"})) == released
+    assert _fingerprint(dispatch, accepted, settings, build_outputs=BuildOutputPolicy()) == baseline
+    policy = parse_build_outputs({"exclusions": [{
+        "name": "vendored-out", "patterns": ["vendor-out/"], "reason": "vendored build output"}]})
+    assert _fingerprint(dispatch, accepted, settings, build_outputs=policy) != baseline
 
 
 @pytest.mark.parametrize(("name", "argv", "expected"), [

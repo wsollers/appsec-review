@@ -20,6 +20,7 @@ from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisit
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
+from .build_outputs import BUILD_OUTPUT_JOBS, BuildOutputPolicy, parse_build_outputs, reject_misplaced
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 
@@ -496,6 +497,8 @@ class JobConfig:
     build_capture: BuildCaptureConfig | None = None
     # Global [exclusions] patterns followed by the job's own (config/exclusions.py).
     exclusions: PathExclusions = PathExclusions()
+    # The top-level [build_outputs] policy; set only on the three build jobs (config/build_outputs.py).
+    build_outputs: BuildOutputPolicy | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"job_[a-z][a-z0-9_]*", self.job_id):
@@ -930,10 +933,13 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     if not isinstance(jobs_value, dict) or not jobs_value:
         raise ValueError("[jobs] must contain at least one job")
     excluded_globally = global_exclusions(document)
+    build_output_policy = parse_build_outputs(document.get("build_outputs"))
+    resolved_document["build_outputs"] = build_output_policy.view()
     jobs: dict[str, JobConfig] = {}
     for job_id, value in jobs_value.items():
         if not isinstance(value, dict):
             raise ValueError(f"jobs.{job_id} must be a table")
+        reject_misplaced(job_id, value)
         schedule_value = value.get("schedule")
         schedule = None
         if schedule_value is not None:
@@ -1203,6 +1209,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             typed_settings=typed_settings,
             build_capture=resolved_capture,
             exclusions=job_exclusions(job_id, value, excluded_globally),
+            build_outputs=build_output_policy if job_id in BUILD_OUTPUT_JOBS else None,
         )
     openvex_job = jobs.get("job_openvex_export")
     if openvex_job is not None and openvex_job.settings["enabled"]:

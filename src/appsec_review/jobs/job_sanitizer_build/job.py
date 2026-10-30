@@ -23,14 +23,16 @@ import shutil
 import time
 from typing import Any, Callable, Mapping, Sequence
 
+from appsec_review.config.build_outputs import BuildOutputPolicy
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions, bookkeeping_reason
+from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.engineering_contracts import SANITIZER_BUILD_HANDOFF_SCHEMA
 from appsec_review.jobs.job_codeql_analysis.planning import replay_commands
 from appsec_review.jobs.job_language_build import elf as elf_reader
 from appsec_review.jobs.job_language_build import load_accepted_language_build
-from appsec_review.jobs.job_language_build.job import _copy_source, _kind, _snapshot
+from appsec_review.jobs.job_language_build.job import _build_output_policy, _copy_source, _kind, _snapshot
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, protected_json
 from .datasets import CONSUMES, DATASETS
@@ -141,19 +143,36 @@ def _compact(evidence: Mapping[str, Any]) -> dict[str, Any]:
                                        for name, item in evidence["sanitizers"].items()}}
 
 
+def _dispositions(receipt: Mapping[str, Any], policy: BuildOutputPolicy | None,
+                  exclusions: BookkeepingExclusions) -> BuildOutputDispositions:
+    """Replay the accepted language build's tree decisions onto the identical rebuild layout.
+
+    Dependency trees are not part of the target's instrumentation verdict, so their files are
+    pruned here without keeping linked outputs; per-file decisions stay ordinary content.
+    """
+    dispositions = BuildOutputDispositions(policy, family="native", bookkeeping=exclusions)
+    accepted = receipt.get("build_output_dispositions")
+    for root in accepted.get("roots", ()) if isinstance(accepted, Mapping) else ():
+        if not isinstance(root, Mapping) or root.get("disposition") == "per_file":
+            continue
+        dispositions.classify_tree(
+            str(root["root"]), disposition=str(root["disposition"]), basis=str(root["basis"]),
+            confidence=str(root["confidence"]), name=str(root["name"]), reason=str(root["reason"]),
+            evidence_ref=root.get("evidence_ref"), pattern=root.get("pattern"), scope=root.get("scope"),
+            scope_role=root.get("scope_role"), bound_group=root.get("bound_group"))
+    return dispositions
+
+
 def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], receipt: Mapping[str, Any],
-             settings: SanitizerBuildSettings, build_unit_id: str
-             ) -> tuple[list[dict[str, Any]], BookkeepingExclusions, list[str]]:
+             settings: SanitizerBuildSettings, build_unit_id: str, policy: BuildOutputPolicy | None = None
+             ) -> tuple[list[dict[str, Any]], BuildOutputDispositions, list[str]]:
     outputs: list[dict[str, Any]] = []
     gaps: list[str] = []
-    exclusions = BookkeepingExclusions()
-    for path in sorted(workspace.rglob("*")):
-        try:
-            if path.is_symlink() or not path.is_file():
-                continue
-        except OSError:
+    dispositions = _dispositions(receipt, policy, BookkeepingExclusions())
+    for relative, decision in dispositions.walk(workspace):
+        if decision.kept:
             continue
-        relative = path.relative_to(workspace).as_posix()
+        path = workspace / relative
         kind = _kind(path, "native", relative=relative, before=before)
         if kind not in CATALOGED_KINDS:
             continue
@@ -162,7 +181,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], receipt
             continue  # an accepted input that the rebuild did not produce
         reason = bookkeeping_reason(relative)
         if reason is not None:
-            exclusions.record(reason, relative)
+            dispositions.record_bookkeeping(reason, relative)
             continue
         evidence = runtime_evidence(path, kind)
         outputs.append({
@@ -174,7 +193,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], receipt
         if len(outputs) >= settings.artifact_count_limit:
             gaps.append("instrumented output catalog truncated at the configured count bound")
             break
-    return outputs, exclusions, gaps
+    return outputs, dispositions, gaps
 
 
 def _judge(outputs: list[dict[str, Any]], settings: SanitizerBuildSettings) -> list[str]:
@@ -231,6 +250,7 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
         "image": {key: image.get(key) for key in ("image_tag", "image_id")},
         "network_required": recipe.get("network_required"), "flags": list(settings.flags),
         "workspace": None, "commands": [], "outputs": [], "excluded_bookkeeping": None,
+        "build_output_dispositions": None,
         "instrumented": False, "gaps": [], "terminal_status": "COMPLETED_WITH_GAPS",
     }
 
@@ -321,9 +341,11 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise FrameworkIntegrityError("target changed during the sanitizer build")
     if result["terminal_status"] != "FAILED":
-        outputs, exclusions, catalog_gaps = _catalog(run_root, workspace, before, receipt, settings, build_unit_id)
+        outputs, dispositions, catalog_gaps = _catalog(run_root, workspace, before, receipt, settings,
+                                                       build_unit_id, _build_output_policy(unit))
         verdict_gaps = _judge(outputs, settings)
-        result.update(outputs=outputs, excluded_bookkeeping=exclusions.document(),
+        result.update(outputs=outputs, excluded_bookkeeping=dispositions.bookkeeping.document(),
+                      build_output_dispositions=dispositions.document(),
                       outputs_sha256=hashlib.sha256(canonical_json(
                           [[item["workspace_path"], item["sha256"]] for item in outputs])).hexdigest())
         result["gaps"] = _bounded([*catalog_gaps, *verdict_gaps])
@@ -412,7 +434,8 @@ def build_job(*, executor_factory: Callable[[UnitContext, BuildProfile], Any] | 
         atomic_json(summary, {
             "schema": SANITIZER_BUILD_HANDOFF_SCHEMA, "upstream": loaded["upstream"],
             "execution_policy": "build tools only; no produced binary was loaded or executed",
-            "flags": list(settings.flags), "settings": settings.identity(), "counts": counts,
+            "flags": list(settings.flags), "settings": settings.identity(),
+            "build_outputs_policy": _build_output_policy(unit).identity, "counts": counts,
             "units": built["units"], "not_applicable_units": loaded["not_applicable"],
             "omitted_units": loaded["omitted"], "gaps": built["gaps"]})
         return {"schema": SANITIZER_BUILD_HANDOFF_SCHEMA, "artifact": _artifact(unit.job.run_root, summary),

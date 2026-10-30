@@ -64,6 +64,72 @@ def test_build_capture_mode_changes_project_probe_checkpoint_identity(tmp_path: 
     assert changed != baseline
 
 
+def test_build_outputs_policy_changes_project_probe_checkpoint_identity(tmp_path: Path) -> None:
+    from appsec_review.config.build_outputs import parse_build_outputs
+    config = load_config(ROOT / "appsec-review.toml")
+    job = config.job("job_project_build")
+    assert job.build_outputs is not None
+    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run",
+                   source_fingerprint="target", review_policy=config.review_policy)
+    baseline = _probe_cache(SimpleNamespace(job=SimpleNamespace(**context, config=job)), "a" * 64)
+    view = job.build_outputs.view()
+    changed_job = replace(job, build_outputs=parse_build_outputs({**view, "exclusions": [
+        *view["exclusions"], {"name": "vendored-out", "reason": "vendored outputs",
+                              "patterns": ["out/"], "families": ["native"]}]}))
+    changed = _probe_cache(SimpleNamespace(job=SimpleNamespace(**context, config=changed_job)), "a" * 64)
+    same = _probe_cache(SimpleNamespace(job=SimpleNamespace(**context, config=replace(
+        job, build_outputs=parse_build_outputs(view)))), "a" * 64)
+    assert changed != baseline and same == baseline
+
+
+def test_probe_outputs_prune_native_dependency_trees_and_configured_exclusions(tmp_path: Path) -> None:
+    from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
+    from appsec_review.jobs.job_project_build.job import _classify_probe_outputs, _outputs
+    from tests.test_native_build_output_classification import POLICY, _before, _fetchcontent_build, _write
+    workspace = tmp_path / "workspace"
+    _write(workspace, "CMakeLists.txt", "project(app)\n")
+    _write(workspace, "main.cpp", "int main() { return 0; }\n")
+    _fetchcontent_build(workspace)
+    before = _before(workspace, "CMakeLists.txt", "main.cpp")
+    unit = SimpleNamespace(job=SimpleNamespace(config=SimpleNamespace(build_outputs=POLICY)))
+    bookkeeping = BookkeepingExclusions()
+    dispositions, gaps = _classify_probe_outputs(
+        unit, workspace, before, {"build_dir": "build", "source_dir": "."}, "native", "cmake", bookkeeping)
+    artifacts = {item["workspace_path"]: item
+                 for item in _outputs(tmp_path, workspace, before, 100, bookkeeping, dispositions=dispositions)}
+    assert set(artifacts) == {"build/app", "build/CMakeFiles/app.dir/main.cpp.o", "build/_deps/fmt-build/libfmt.a"}
+    roots = {root["root"]: root for root in dispositions.document()["roots"]}
+    kept = artifacts["build/_deps/fmt-build/libfmt.a"]
+    assert kept["build_output_root"] == "build/_deps/fmt-build"
+    assert kept["scope_role"] == roots["build/_deps/fmt-build"]["scope_role"] is not None
+    assert "scope_role" not in artifacts["build/app"]
+    assert roots["build/_deps/fmt-src"]["disposition"] == "supply_chain"
+    assert dispositions.document()["configured_exclusions"] == [{
+        "path": "build/_deps/fmt-subbuild", "name": "cmake-fetchcontent-subbuild", "pattern": "*-subbuild/",
+        "scope": "build_outputs", "files": 2}]
+    assert [gap for gap in gaps if gap.startswith("dependency-content-summarized:")] and not any(
+        "subbuild" in gap for gap in gaps)
+
+
+def test_probe_outputs_record_configured_node_cache_exclusion_without_native_discovery(tmp_path: Path) -> None:
+    from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
+    from appsec_review.jobs.job_project_build.job import _classify_probe_outputs, _outputs
+    config = load_config(ROOT / "appsec-review.toml")
+    workspace = tmp_path / "workspace"
+    for relative in ("node_modules/.cache/babel/entry.json", "dist/app.wasm"):
+        (workspace / relative).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / relative).write_bytes(b"\0asm\x01\0\0\0")
+    unit = SimpleNamespace(job=SimpleNamespace(config=config.job("job_project_build")))
+    bookkeeping = BookkeepingExclusions()
+    dispositions, gaps = _classify_probe_outputs(unit, workspace, {}, {"source_dir": "."}, "node", "npm",
+                                                 bookkeeping)
+    _outputs(tmp_path, workspace, {}, 100, bookkeeping, dispositions=dispositions)
+    document = dispositions.document()
+    assert gaps == [] and document["roots"] == [] and document["layout_sources"] == []
+    assert document["configured_exclusions"] == [{
+        "path": "node_modules/.cache", "name": "node-bundler-cache", "pattern": "node_modules/.cache/",
+        "scope": "build_outputs", "files": 1}]
+
 def test_probe_and_repair_identity_bind_relevant_releases_target_and_run(tmp_path: Path) -> None:
     from appsec_review.config.assurance import ComponentReleases
     from appsec_review.jobs.job_project_build.job import _repair_cache, _reuse_accepted_repair
