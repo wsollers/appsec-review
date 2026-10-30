@@ -277,12 +277,52 @@ def test_sanitizer_rebuild_publishes_a_hash_bound_instrumented_catalog(accepted_
     # The control: the normal build's file at the same path was read and does not reference the runtime.
     assert not executable["baseline"]["runtime_referenced"]
     assert unit["excluded_bookkeeping"]["counts"] == {"cmake-compiler-identification": 1}
+    assert unit["build_output_dispositions"]["schema"] == "appsec-review/build-output-dispositions/1"
+    assert unit["build_output_dispositions"]["bookkeeping"] == unit["excluded_bookkeeping"]
+    assert summary["build_outputs_policy"] == unit["build_output_dispositions"]["policy_identity"]
     assert unit["outputs_sha256"]
     for command in unit["commands"]:
         assert file_sha256(run_root / command["stdout"]["path"]) == command["stdout"]["sha256"]
     assert file_sha256(run_root / unit["workspace_manifest"]["path"]) == unit["workspace_manifest"]["sha256"]
     assert file_sha256(run_root / unit["replay"]["path"]) == unit["replay"]["sha256"]
 
+
+def test_catalog_prunes_replayed_dependency_trees_and_configured_exclusions(tmp_path: Path) -> None:
+    """The accepted language build's supply-chain root and the configured sub-build stay out of the verdict."""
+    from appsec_review.config.build_outputs import parse_build_outputs
+
+    policy = parse_build_outputs({"exclusions": [{
+        "name": "cmake-fetchcontent-subbuild", "reason": "FetchContent download sub-builds",
+        "patterns": ["*-subbuild/"], "families": ["native"]}]})
+    workspace = tmp_path / "workspace"
+    plain = elf_with_symbols(ET_REL, undefined=("puts",))
+    for relative, data in {
+        "native/build/sample": instrumented_elf(),
+        "native/build/_deps/fmt-build/CMakeFiles/fmt.dir/format.cc.o": plain,
+        "native/build/_deps/fmt-subbuild/CMakeFiles/probe.o": plain,
+    }.items():
+        (workspace / relative).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / relative).write_bytes(data)
+    receipt = {"build_output_dispositions": {"roots": [
+        {"root": "native/build/_deps/fmt-build", "disposition": "supply_chain", "basis": "build-system-fact",
+         "confidence": "high", "name": "fmt", "reason": "FetchContent binary directory",
+         "evidence_ref": "cmake-cache", "pattern": None, "scope": None, "scope_role": "build_dependency"},
+        {"root": "native/build/odd", "disposition": "per_file", "basis": "build-system-fact",
+         "confidence": "high", "name": "odd", "reason": "conflict", "evidence_ref": None,
+         "pattern": None, "scope": None, "scope_role": None}]}}
+    outputs, dispositions, gaps = sanitizer_job._catalog(
+        tmp_path, workspace, {}, receipt, _settings(), "unit", policy)
+    assert [item["workspace_path"] for item in outputs] == ["native/build/sample"]
+    assert gaps == [] and sanitizer_job._judge(outputs, _settings()) == []
+    document = dispositions.document()
+    assert document["schema"] == "appsec-review/build-output-dispositions/1"
+    assert document["policy_identity"] == policy.identity
+    assert [(root["root"], root["disposition"], root["files"], root["kept"]) for root in document["roots"]] == [
+        ("native/build/_deps/fmt-build", "supply_chain", 1, [])]
+    assert document["configured_exclusions"] == [{
+        "path": "native/build/_deps/fmt-subbuild", "name": "cmake-fetchcontent-subbuild",
+        "pattern": "*-subbuild/", "scope": "build_outputs", "files": 1}]
+    assert dispositions.named_gaps() == []
 
 def test_rebuild_replays_the_accepted_commands_with_the_flags_in_the_environment(
         accepted_base, tmp_path: Path) -> None:

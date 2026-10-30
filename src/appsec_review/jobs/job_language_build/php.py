@@ -143,7 +143,10 @@ def artifact_kind(path: Path, relative: str, before: Mapping[str, str]) -> str |
 
 
 def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
-            build_unit_id: str, build_system: str = "composer") -> tuple[list[dict[str, Any]], list[str]]:
+            build_unit_id: str, build_system: str = "composer", *,
+            dispositions: Any = None) -> tuple[list[dict[str, Any]], list[str]]:
+    # ``dispositions`` (jobs/build_output_scope.py) is accepted for the installer-record
+    # classifier that the dependency output filtering design adds; this catalogue ignores it.
     artifacts: list[dict[str, Any]] = []
     gaps: list[str] = []
     for path in sorted(workspace.rglob("*")):

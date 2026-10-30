@@ -91,18 +91,22 @@ def _patterns(value: Any, field: str) -> tuple[str, ...]:
         return ()
     if not isinstance(value, Mapping) or set(value) - {"patterns"}:
         raise ValueError(f"{field} must be a table with only a patterns list")
-    patterns = value.get("patterns", [])
+    return validate_patterns(value.get("patterns", []), f"{field}.patterns")
+
+
+def validate_patterns(patterns: Any, field: str) -> tuple[str, ...]:
+    """Validate one list of target-relative POSIX exclusion patterns; ``field`` names it in errors."""
     if not isinstance(patterns, list):
-        raise ValueError(f"{field}.patterns must be a list of strings")
-    result = []
+        raise ValueError(f"{field} must be a list of strings")
+    result: list[str] = []
     for pattern in patterns:
         if not isinstance(pattern, str) or not pattern.strip() or pattern != pattern.strip():
-            raise ValueError(f"{field}.patterns entries must be non-empty strings without surrounding space")
+            raise ValueError(f"{field} entries must be non-empty strings without surrounding space")
         parts = PurePosixPath(pattern.rstrip("/")).parts
         if pattern.startswith("/") or "\\" in pattern or not parts or ".." in parts or "." in parts:
-            raise ValueError(f"{field}.patterns entry must be a target-relative POSIX pattern: {pattern!r}")
+            raise ValueError(f"{field} entry must be a target-relative POSIX pattern: {pattern!r}")
         if pattern in result:
-            raise ValueError(f"{field}.patterns repeats {pattern!r}")
+            raise ValueError(f"{field} repeats {pattern!r}")
         result.append(pattern)
     return tuple(result)
 

@@ -14,6 +14,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   shared and project-derived build images, conditional capture control design, the pinned
   `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
 - [`../operations/language-build.md`](../operations/language-build.md) — generic real-build execution, protected provenance, and checkpoints.
+- [`native-build-output-discovery.md`](native-build-output-discovery.md) — design: native build-layout
+  discovery (CMake, Meson, Ninja, MSBuild, vcpkg, execution capture), dependency-tree
+  classification, and named `[build_outputs]` exclusions.
 - [`../operations/artifact-security-analysis.md`](../operations/artifact-security-analysis.md) — generic bounded security analysis of accepted produced artifacts.
 - [`engineering-security-signals.md`](engineering-security-signals.md) — end-to-end Clang,
   coverage, profile hotness, dependency identity and exposure, OpenSSF Scorecard, provenance,
