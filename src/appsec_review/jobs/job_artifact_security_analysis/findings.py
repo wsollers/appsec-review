@@ -31,7 +31,7 @@ from appsec_review.provenance import common_metadata, json_selector, select_nati
 RECORD_SCHEMA = "appsec-review/artifact-security-record/2"
 # Version of the scan-result -> record splitting below. It is part of the observations shard fingerprint, not of
 # the scan checkpoint fingerprint: scanner receipts stay reusable when only this normalization changes.
-FINDING_NORMALIZER = "appsec-review/artifact-security-findings/2"
+FINDING_NORMALIZER = "appsec-review/artifact-security-findings/3"
 MESSAGE_BOUND = 512
 FIELD_BOUND = 128
 FINDING_BOUND = 5_000          # findings kept per scan; a scan above it reports the truncation as a gap

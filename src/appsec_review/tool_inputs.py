@@ -159,8 +159,9 @@ class InputDecision:
         if self.disposition is not ProcessingDisposition.SKIPPED_NA:
             raise ValueError("an unsupported tool input is always SKIPPED_NA")
         if self.reason_code not in {ReasonCode.INPUT_FORMAT_UNSUPPORTED,
-                                    ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT}:
-            raise ValueError("an unsupported tool input requires an input-support reason code")
+                                    ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
+                                    ReasonCode.INSTALLER_RECORD_COVERED}:
+            raise ValueError("an unsupported tool input requires an input-support or installer-record reason code")
 
     def as_dict(self) -> dict[str, Any]:
         return {"path": self.path, "tool": self.tool, "disposition": self.disposition.value,
