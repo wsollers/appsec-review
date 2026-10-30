@@ -93,6 +93,18 @@ def test_only_the_documented_tool_reports_are_recognized() -> None:
     assert summary["count"] == 1 and summary["disposition"] == "SKIPPED_NA"
 
 
+def test_installer_record_coverage_is_the_only_added_skipped_na_reason() -> None:
+    covered = InputDecision("artifact-01", "artifact:tool-syft", ReasonCode.INSTALLER_RECORD_COVERED, "covered")
+    assert covered.as_dict()["reason_code"] == "INSTALLER_RECORD_COVERED"
+    assert not_applicable_summary([covered])["by_reason"] == {"covered": 1}
+    for code in (ReasonCode.POLICY_DISABLED, ReasonCode.PROCESSING_FAILED):
+        with pytest.raises(ValueError, match="installer-record reason code"):
+            InputDecision("artifact-01", "artifact:tool-syft", code, "not a skip reason")
+    with pytest.raises(ValueError, match="always SKIPPED_NA"):
+        InputDecision("artifact-01", "artifact:tool-syft", ReasonCode.INSTALLER_RECORD_COVERED, "covered",
+                      ProcessingDisposition.SKIPPED_POLICY)
+
+
 def test_semgrep_and_shellcheck_parsers_separate_unsupported_reports() -> None:
     semgrep = adapter_registry()["tool-semgrep"]
     records = semgrep.parse(json.dumps({"results": [], "errors": [], "paths": {"skipped": [
