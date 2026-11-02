@@ -419,6 +419,15 @@ def _discovery(discovery: DiscoveryResult, source_fingerprint: str) -> dict[str,
                 raise NativeInputIntegrityError(f"Unsupported corroborated claim: {identifier}")
         referenced = {ref for field in ("identity", "release", "upstream")
                       for ref in candidate[field]["evidence_ids"]} | set(candidate["evidence_ids"])
+        for claim in candidate["metadata"].get("sbom_claims", {}).values():
+            if claim.get("status") not in {"unknown", "inferred", "corroborated", "conflicted"}:
+                raise NativeInputIntegrityError(f"Unknown metadata claim status: {identifier}")
+            if claim["status"] == "corroborated" and (
+                    not isinstance(claim.get("value"), str) or not claim["value"]
+                    or not claim.get("evidence_ids")
+                    or not set(claim["evidence_ids"]) <= set(candidate["evidence_ids"])):
+                raise NativeInputIntegrityError(f"Unsupported corroborated metadata: {identifier}")
+            referenced.update(claim.get("evidence_ids", ()))
         if not referenced <= evidence.keys():
             raise NativeInputIntegrityError(f"Unknown native evidence reference: {identifier}")
         candidate["observations"] = _sorted_unique(candidate["observations"])
@@ -499,6 +508,43 @@ def _conflicts(candidate: NativeCandidate, package: Mapping[str, Any] | None) ->
     return result
 
 
+def _metadata_field_eligible(field: str, value: str) -> bool:
+    if not isinstance(value, str) or any(ord(char) < 32 for char in value):
+        return False
+    if field == "supplier":
+        return bool(re.fullmatch(r"(?:Person|Organization): \S.*", value)) or value == "NOASSERTION"
+    if field == "download_location":
+        try:
+            parsed = urlsplit(value)
+            return (parsed.scheme in {"https", "http", "ftp", "git", "git+https", "git+ssh"}
+                    and bool(parsed.hostname) and not parsed.username and not parsed.password
+                    and not any(char.isspace() for char in value))
+        except ValueError:
+            return False
+    known_licenses = {
+        "MIT", "MIT-0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib",
+        "BSL-1.0", "OpenSSL", "CC0-1.0", "MPL-2.0", "Unlicense", "NONE", "NOASSERTION",
+        "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later",
+        "LGPL-2.1-only", "LGPL-2.1-or-later", "LGPL-3.0-only", "LGPL-3.0-or-later",
+        "AGPL-3.0-only", "AGPL-3.0-or-later",
+    }
+    return field == "license_declared" and value in known_licenses
+
+
+def _corroborated_metadata_fields(candidate: NativeCandidate) -> dict[str, str]:
+    result = {}
+    claims = candidate["metadata"].get("sbom_claims", {})
+    for field, spdx_field in (("supplier", "supplier"), ("download_location", "downloadLocation"),
+                              ("license_declared", "licenseDeclared")):
+        claim = claims.get(field, {})
+        if (claim.get("status") == "corroborated" and claim.get("value")
+                and claim.get("evidence_ids")
+                and set(claim["evidence_ids"]) <= set(candidate["evidence_ids"])
+                and _metadata_field_eligible(field, claim["value"])):
+            result[spdx_field] = claim["value"]
+    return result
+
+
 def _native_package(candidate: NativeCandidate) -> dict[str, Any]:
     package: dict[str, Any] = {
         "SPDXID": "SPDXRef-Native-" + _digest(candidate["candidate_id"]),
@@ -511,6 +557,8 @@ def _native_package(candidate: NativeCandidate) -> dict[str, Any]:
             "identity": candidate["identity"]["status"], "release": candidate["release"]["status"],
             "upstream": candidate["upstream"]["status"],
             "provenance": "native-sbom-provenance.json",
+            "curation": candidate["metadata"].get("curation"),
+            "metadata_claims": candidate["metadata"].get("sbom_claims"),
         }).decode("utf-8").rstrip("\n"),
     }
     if candidate["release"]["status"] == "corroborated":
@@ -518,6 +566,7 @@ def _native_package(candidate: NativeCandidate) -> dict[str, Any]:
     if _valid_purl(candidate.get("purl")):
         package["externalRefs"] = [{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl",
                                     "referenceLocator": candidate["purl"]}]
+    package.update(_corroborated_metadata_fields(candidate))
     return package
 
 
@@ -730,6 +779,12 @@ def build_spdx(
                                   "Multiple baseline packages match; no ambiguous merge performed"))
         if candidate.get("purl") is not None and not _valid_purl(candidate["purl"]):
             conflicts.append(_gap("unsupported_metadata", candidate, "Invalid observed purl omitted"))
+        for field in ("supplier", "download_location", "license_declared"):
+            claim = candidate["metadata"].get("sbom_claims", {}).get(field, {})
+            if claim.get("status") == "corroborated" and not _metadata_field_eligible(
+                    field, claim["value"]):
+                conflicts.append(_gap("unsupported_metadata", candidate,
+                                      f"Observed {field} is not a supported SPDX field value"))
         decision = {
             "candidate_id": candidate["candidate_id"], "spdx_id": identifier,
             "decision": basis if package is None else (
@@ -753,6 +808,7 @@ def build_spdx(
         output = deepcopy(document)
         sidecar = deepcopy(provenance)
         output_gaps = list(gaps)
+        output_packages = {record["SPDXID"]: record for record in output["packages"]}
         for candidate, decision, conflicts, package in contributions:
             identifier = decision["spdx_id"]
             if package is not None:
@@ -761,6 +817,14 @@ def build_spdx(
                     "spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES",
                     "relatedSpdxElement": identifier,
                 })
+            else:
+                existing = output_packages[identifier]
+                for field, value in _corroborated_metadata_fields(candidate).items():
+                    if existing.get(field) in {None, "NOASSERTION"}:
+                        existing[field] = value
+                    elif existing[field] != value:
+                        output_gaps.append(_gap("identity_conflict", candidate,
+                                                f"Baseline {field} differs from native metadata; retained"))
             entry = sidecar["packages"].setdefault(identifier, {
                 "baseline_packages": [], "native_candidate_ids": [], "evidence_ids": [],
                 "merge_decisions": [], "conflicts": [],

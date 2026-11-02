@@ -2,8 +2,8 @@
 
 ## Status, scope, and decisions
 
-Implemented as an additive native discovery and SPDX publication path in
-`job_dependency_intelligence`. The starting baseline was
+Implemented as an additive native discovery, model-assisted curation/investigation, and SPDX
+publication path in `job_dependency_intelligence`. The deterministic starting baseline was
 `fcac43068d17f139a9d94393b03fe128c6127f12`. Three isolated implementation chunks cover discovery,
 SPDX algorithms, and metric aggregation; the coordinator owns job integration and acceptance.
 The [implementation record](../reviews/native-sbom-implementation.md) records the verified
@@ -30,9 +30,10 @@ commits, real-image result, and baseline/environment limitations. The
 5. **Evidence precedes identity.** Retain exact file/receipt hashes and locations for each claim.
    A path name, linker flag, copyright notice, filename version, or ABI suffix is not sufficient
    to establish an upstream package release.
-6. **Bounded deterministic parsers, not additional inference.** No new model call, target script
-   execution, compiler/preprocessor execution, directory walk during inference, network lookup,
-   archive expansion, or host SDK scan is part of this slice. Existing repository inference
+6. **Models propose; deterministic checks establish claims.** Bounded curation and root-scoped
+   metadata investigation use the existing `Infer` transport. No target script execution,
+   compiler/preprocessor execution, directory walk during inference, network lookup, archive
+   expansion, or host SDK scan is permitted by these stages. Existing repository inference
    remains review context and cannot upgrade package/version corroboration.
 7. **Partial is explicit.** Missing inputs, unsupported parsing, conflicting identities, skipped
    coverage, deterministic limits, conversion failures, and integrity failures have distinct
@@ -64,7 +65,61 @@ This table records the original gaps and extension points; the implemented path 
 | `runtime\runner.py` reuse events; `orchestration\topology.py::wave_dependencies` construction | Existing `JOB_REUSED`/`TASK_REUSED` accounting and dependency ordering. Do not add a new cache or rewrite runner reuse. Preserve topology unless a demonstrated acceptance test needs a narrowly scoped change. |
 
 `job_dependency_intelligence\inference.py` resolves a repository for one already-discovered
-candidate; it is not source discovery. No runtime skill or prompt needs modification or loading.
+candidate; it is not source discovery. The native inference extension below has separate,
+registered runtime guidance.
+
+## Model-assisted native extension
+
+The resolution order is `detect_dependencies` -> `curate_components` ->
+`investigate_components` -> `infer_repositories`. Deterministic discovery remains the initial
+input, and conservative originals survive unavailable, malformed, conflicting, or bounded
+inference. The handoff retains `raw_native_discovery`, `native_curation`, `native_metadata`,
+and the effective `native_discovery`; SPDX and retrieval use the effective evidence.
+
+`curation.py` submits bounded batches with integer `input_records`. A proposal identifies
+individual libraries/SDK components, rejected/uncertain candidates, and separate SDK families.
+Common prefixes alone do not prove a family: coherent package/path context is required.
+Families remain inferred relationships, never permission to merge separately vendored copies
+or propagate a parent SDK's version. Effective identities include source fingerprint, domain,
+root ID, package root, and name. Corroborated/conflicted claims and independently named originals
+cannot be discarded by model renaming. Inference limits cap additions, not conservative originals.
+
+`investigation.py` plans and investigates each physical `(domain, root_id, package_root)`
+independently. The model selects exact catalog paths and inert descriptive version hints.
+The host reads only bounded, custody-verified files; no filesystem MCP, shell, executable
+pattern, network lookup, or recursive search is exposed. Owner expansion permits an owning
+framework or name-matching package include root, not sibling or nested vendored libraries.
+Proposals cite exact path, line range, and text; identity-bound literal recognizers verify
+the current bytes before promoting a claim. Hashes, UTF-8 byte offsets, and original evidence
+remain intact. Catalog-only path evidence is not fabricated into a source span.
+
+Version, PURL, supplier, download location, declared license, and upstream have independent
+claim states. Supported literal package.json, Cargo.toml, pyproject.toml and XML Info.plist
+supplement header/document/pkg-config/CMake recognizers. Unsupported/dynamic documents,
+binary plists, ambiguous roots, unbound VERSION numbers and oversized whole-document
+citations stay unresolved with gaps. PURLs require observed valid values or deterministic,
+supported manifest coordinates, never a guessed ecosystem. Existing unsubstantiated PURLs
+are quarantined. `versionInfo` retains its corroborated, nonconflicting-release gate.
+
+The SPDX writer emits evidence-backed supplier values only in SPDX agent syntax and download
+locations only in supported URL forms. Declared licenses currently support a conservative
+set of common single SPDX identifiers; compound expressions, custom text and unresolved
+LicenseRefs remain `NOASSERTION` with `unsupported_metadata` gaps and retained claims.
+Existing baseline assertions are never overwritten by differing native metadata.
+
+`native_inference_runtime.py` uses only the existing `Infer`/`ModelRequest` interface and central
+model settings. It assembles the governing rules once, registers the `native_dependency_analyst`
+persona and `native_sbom_investigator` role, and loads `native-sbom-investigation` only through
+the runtime-skill loader. The curation and investigation tasks are snapshotted at first use
+and exact guidance bytes are pinned under the run's guidance store. Development guidance
+never reaches workers.
+
+Each physical model attempt retains exact request/response/attempt references, including
+failed schema attempts and served provider/model. Stage receipts bind results, effective
+discovery, artifact manifests, timing, semantic counters, physical calls, known tokens and
+unknown-usage counts. Acceptance verifies nested framework membership and exact stage/result
+bindings. Telemetry keeps cumulative work separate from accepted current inventory; retries
+and reuse do not multiply components. Missing or corrupt accounting is a gap, not zero.
 
 ## Existing image capability and verification
 

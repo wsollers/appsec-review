@@ -15,6 +15,49 @@ ambiguous matches and incompatible exact identities retain explicit gaps.
 See the [design](../architecture/native-sbom.md) and
 [operator guide](../operations/native-sbom.md).
 
+## Native inference extension
+
+The subsequent extension adds `curate_components` and `investigate_components` between
+deterministic discovery and repository normalization. Models propose component boundaries,
+packaging-aware SDK families, bounded file plans and separately cited metadata. Deterministic
+recognizers and exact, root-scoped evidence control promotion into SPDX; raw discovery is
+preserved alongside effective discovery, curation and investigation artifacts. Conservative
+originals survive unavailable or rejected inference. Existing Syft conversion remains sufficient;
+no dependency, image, tool pin or Dockerfile was added.
+
+Frozen shared inference contracts: `7b718b8f7b79606799967aa43b88154026252c55`.
+
+| Chunk | Implementation commit | Focused child verification |
+| --- | --- | --- |
+| Component curation | `06b6f930c2caeb7d17c46536619621fe134b86a2` | 61 passed in 1.80s (2.62s wall), authorized Windows worktree |
+| Root-scoped metadata investigation | `b2b228ea20b0b040c51b541b27fce90094409cab` | 105 passed in 1.16s (1.685s wall), own Linux checkout/venv |
+| Inference transport and registered guidance | `7014a63383364c91fc649ad4076ad387c1842efa` | Runtime and skill separation: 59 passed in 11.37s (11.90s wall), own Linux checkout/venv |
+
+Coordinator-owned wiring adds central bounds, ordered tasks, effective SPDX/retrieval inputs,
+strict nested-artifact acceptance, evidence-gated metadata serialization, stage receipts and
+receipt-backed telemetry. Work counters, physical retries, unknown usage and accepted current
+inventory remain distinct. The focused wiring tests exercise real handlers/validators with
+fake external transport only; no JobRunner acceptance, real model, network or container run
+is part of this extension's verification.
+
+Windows repair-loop record:
+
+- Curation/runtime/skill checks: 118 passed, 2 failed in 31.75s (34.58s wall).
+  Fixed the new runtime test's newline-normalizing expectation to compare exact guidance bytes.
+  The existing symlink-privilege failure remains a Linux verification requirement; no protection
+  was weakened.
+- Investigation/discovery/SPDX/native metrics: 387 passed, 2 skipped in 28.80s (30.57s wall).
+- First wiring/runtime check: 57 passed, 3 failed in 17.30s (18.80s wall); corrected a new
+  test fixture attempting to deepcopy the immutable settings mapping.
+- Expanded publication/telemetry check: 221 passed, 2 skipped, 2 failed in 37.30s (38.81s wall);
+  corrected new fake-boundary fixtures to use `ModelResult.proposal` and the real event API's
+  nonconflicting positional event argument.
+- Corrected wiring file: 24 passed in 15.37s (16.80s wall).
+
+The historical integration/image results below belong to the earlier deterministic feature,
+not this extension. Integration, acceptance, live-model, Docker and Dagster review validation
+of the inference extension are **not run by user direction**.
+
 ## Commit and ownership record
 
 Starting baseline: `fcac43068d17f139a9d94393b03fe128c6127f12`.

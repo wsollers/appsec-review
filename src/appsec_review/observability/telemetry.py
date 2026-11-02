@@ -1246,7 +1246,15 @@ def _native_sbom_accepted(run_root: Path, *,
     member(sbom.get("provenance"))
     if sbom.get("baseline") is not None:
         member(sbom["baseline"])
-    return {"document": document, "reference": metrics_ref, "handoff_sha256": handoff_ref["sha256"]}
+    inference_metrics = sbom.get("inference_metrics")
+    if "inference_metrics" in sbom:
+        from appsec_review.jobs.job_dependency_intelligence.native_inference_integration import (
+            validate_inference_publication,
+        )
+        validate_inference_publication(run_root, handoff, publication)
+    return {"document": document, "reference": metrics_ref, "handoff_sha256": handoff_ref["sha256"],
+            "inference_metrics": inference_metrics, "source_fingerprint": handoff["source_fingerprint"],
+            "attempt_id": attempt}
 
 
 def _native_sbom_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
@@ -1397,6 +1405,7 @@ def _native_sbom_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
     if (sources or reused_count) and selected is None:
         gaps.append("native SBOM current inventory has no accepted publication")
     complete = available and not gaps and all(row["accounting_complete"] for row in rows)
+    from .native_inference import aggregate_native_inference
     return {
         "availability": "partial" if gaps else "available" if available else "not_available",
         "accounting_complete": complete, "attempt_count": len(rows),
@@ -1404,6 +1413,7 @@ def _native_sbom_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
         "fresh_work": sum(row["fresh_work"] for row in rows),
         "reused_publication_count": reused_count, "attempts": rows,
         "current_inventory": inventory, "gaps": sorted(set(gaps)),
+        "inference": aggregate_native_inference(run_root, records, accepted=accepted),
     }
 
 

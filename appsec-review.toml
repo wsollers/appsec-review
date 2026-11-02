@@ -2427,6 +2427,18 @@ max_output_tokens = 4000
 timeout_seconds = 120
 retries = 1
 
+[jobs.job_dependency_intelligence.settings.native_inference]
+enabled = true
+batch_candidates = 32
+max_payload_bytes = 98304
+max_calls = 256
+component_limit = 10000
+group_limit = 2048
+files_per_root = 128
+bytes_per_file = 262144
+source_bytes_limit = 8388608
+field_bytes = 4096
+
 [jobs.job_dependency_intelligence.settings.scorecard]
 base_url = "https://api.securityscorecards.dev"
 allowed_hosts = ["api.securityscorecards.dev"]
@@ -2445,6 +2457,8 @@ workers = 1
 [jobs.job_dependency_intelligence.steps.resolution]
 workers = 2
 [jobs.job_dependency_intelligence.steps.resolution.tasks.detect_dependencies]
+[jobs.job_dependency_intelligence.steps.resolution.tasks.curate_components]
+[jobs.job_dependency_intelligence.steps.resolution.tasks.investigate_components]
 [jobs.job_dependency_intelligence.steps.resolution.tasks.infer_repositories]
 
 [jobs.job_dependency_intelligence.steps.repositories]

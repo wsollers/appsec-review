@@ -8,7 +8,8 @@ corroboration, conflict, and merge rules.
 
 ## Outputs and acceptance
 
-The existing dependency-intelligence handoff adds `native_discovery` and `sbom`. Resolve it
+The dependency-intelligence handoff retains `raw_native_discovery`, `native_curation`,
+`native_metadata`, effective `native_discovery`, and `sbom`. Resolve it
 through `load_accepted_dependency_intelligence(run_root)`, rather than searching attempt
 directories. The loader verifies accepted artifact membership, exact bytes, the pinned SPDX
 schema, package references, metrics, and native evidence bindings. Legacy handoffs without
@@ -21,6 +22,13 @@ The provenance maps emitted package SPDXIDs to source evidence and/or original b
 records. Only corroborated, nonconflicting native releases become `versionInfo`; unknown
 licenses, copyright, and download locations are `NOASSERTION`. ABI suffixes and filename
 versions are hints, not confirmed package releases.
+
+Between discovery and publication, model-assisted curation identifies libraries and separate
+inferred SDK families; root-scoped investigation selects bounded catalog files and proposes
+independently cited metadata. Models do not browse or execute search patterns. Deterministic
+literal checks, exact citations and input custody establish corroboration, not model confidence.
+Unavailable/invalid inference preserves conservative candidates and reports gaps. Versions
+are never propagated between bundled components or vendored copies.
 
 Accepted compiler/linker captures inside other build families, including Python extensions,
 also contribute evidence. Protected normalized command/artifact rows retain their original
@@ -51,6 +59,20 @@ fields, paths, accepted JSON input bytes, publication bytes, elements, and conve
 only after examining its omission counts and scoped gaps. Bounds are part of publication and
 index identity.
 
+`settings.native_inference` contains `enabled`, `batch_candidates`, `max_payload_bytes`,
+`max_calls`, `component_limit`, `group_limit`, `files_per_root`, `bytes_per_file`,
+`source_bytes_limit`, and `field_bytes`. All limits are positive typed integers. `max_calls`
+includes physical retries per stage; component limits never erase mandatory fallback records.
+Both native stages reuse `settings.model` provider/model/reasoning/token/timeout/retry settings.
+Disabling native inference retains deterministic discovery and explicitly unresolved coverage.
+There is no separate model SDK or new SBOM image.
+
+Only independently corroborated metadata becomes a new SPDX assertion. Supplier syntax and
+download URLs must be representable; the current license writer accepts common single SPDX
+identifiers, not general compound expressions or custom license text. Unsupported values stay
+in the claim records with a publication gap. Different existing baseline assertions are retained,
+not overwritten. Dynamic manifests, binary plists and ambiguous ownership remain named gaps.
+
 Reuse `appsec-review/tool-syft:1.52.0`. It already generates and converts SPDX; no additional
 SBOM image is required. Conversion uses the existing container executor, a catalog-resolved
 image, no network, an exact read-only source JSON mount, an empty target mount, and bounded
@@ -70,7 +92,7 @@ by native discovery. Unmapped absolute SDK paths are not read from the host.
 
 ## Telemetry and verification
 
-Operation spans `native-sbom.discovery`, `native-sbom.conversion`, and
+Operation spans `native-sbom.discovery`, `native-sbom.curation`, `native-sbom.metadata`, `native-sbom.conversion`, and
 `native-sbom.publication` retain duration, terminal disposition, and the existing process
 resource measurements. `NATIVE_SBOM_RESULT` references a hash/size-bound metrics receipt.
 `aggregate_run_metrics(run_root)["native_sbom"]` separates attempted work and outcomes from
@@ -78,15 +100,27 @@ the current accepted inventory. It reports candidates by claim state, coverage/o
 merges/conflicts, output counts, conversion/validation status, and gaps. No package names,
 source text, or full argv are metric dimensions.
 
+`native_sbom.inference` reports stage receipts, accepted stage inventories, fresh/reused work,
+curation/SDK counts, roots/files/bytes investigated, version/PURL claims and corroboration,
+conflicts, omissions, physical model calls/failures, known token usage and unknown-usage calls.
+Every attempt's request, response and usage receipt is hash-bound; unavailable usage is null
+in attempt records and `usage_complete` is false, not an asserted zero-token call.
+
 Retries do not sum inventories. Job/task reuse does not manufacture fresh work. Missing,
 corrupt, or contradictory receipts produce accounting gaps and unavailable counters, not
 successful zeros. Windows process I/O or resource timing that cannot be attributed remains
 unavailable; it is not reported as zero.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q tests\test_native_discovery.py tests\test_native_spdx.py tests\test_native_sbom_job.py tests\test_native_sbom_metrics.py tests\test_native_sbom_image.py --basetemp=test/tmp/native-sbom
+.\.venv\Scripts\python.exe -m pytest -q tests\test_native_component_curation.py tests\test_native_metadata_investigation.py tests\test_native_inference_runtime.py tests\test_native_inference_wiring.py tests\test_native_discovery.py tests\test_native_spdx.py tests\test_native_sbom_metrics.py tests\test_skill_separation.py --basetemp=test/tmp/native-sbom-unit
 ```
 
-The image test performs real offline Syft-to-SPDX conversion through the executor and then
+Use a checkout-local Linux/WSL environment for definitive checks, with the equivalent
+`.venv/bin/python -m pytest` command. The new wiring tests exercise focused handlers and
+validators with a fake external model boundary, not a full pipeline/review.
+Integration, acceptance, live-model, real-image and Dagster review validation are separate,
+manual user-owned checks; the inference extension has not run them.
+
+When explicitly requested, `tests/test_native_sbom_image.py` performs real offline Syft-to-SPDX conversion through the executor and then
 validates enrichment against the pinned official SPDX schema. Missing Docker/image produces
 an explicit skip, not a passed image claim.

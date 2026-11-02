@@ -395,6 +395,17 @@ def test_task_reuse_does_not_count_other_dependency_tasks(run_root: Path) -> Non
     assert summary["current_inventory"]["counters"]["output_packages"] == 2
 
 
+def test_legacy_job_reuse_does_not_invent_missing_native_inference_stages(run_root: Path) -> None:
+    case = _case(run_root)
+    handoff = _accept(run_root, case)
+    PipelineLog(run_root).write("JOB_REUSED", run_id=run_root.name, job_id=JOB,
+        attempt_id="attempt_0001", details={"handoff_sha256": handoff["sha256"]})
+    inference = _summary(run_root)["inference"]
+    assert inference["availability"] == "not_available"
+    assert inference["attempts"] == [] and inference["current_inventory"] == {}
+    assert not inference["gaps"]
+
+
 def test_historical_reuse_and_latest_inventory_are_separate(run_root: Path) -> None:
     first = _case(run_root)
     old_handoff = _accept(run_root, first)

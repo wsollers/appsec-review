@@ -76,9 +76,16 @@ root-scoped evidence and independent identity/release/upstream claim states. Fil
 versions remain hints; only corroborated releases become asserted SPDX versions. The existing
 Syft image converts its accepted source inventory to SPDX 2.3 JSON before deterministic
 enrichment, official-schema/semantic validation, provenance, and telemetry publication.
+Between deterministic discovery and repository normalization, bounded model-assisted component
+curation preserves independently vendored copies and identifies inferred SDK families.
+Root-scoped metadata investigation selects exact catalog files and proposes separately cited
+version/PURL/supplier/license/download/upstream claims; deterministic literal checks, not model
+confidence, control promotion. Raw discovery remains retained; SPDX and retrieval use the
+effective investigated evidence. The two stages use the existing transport and central settings,
+registered native guidance, exact attempt artifacts and separate work/inventory telemetry.
 See the [operator guide](../operations/native-sbom.md) for artifacts, bounds, and gap triage.
 
-Only an unresolved native candidate may reach model inference. The request contains one bounded
+Only an unresolved native candidate may reach repository-resolution inference. That request contains one bounded
 candidate, evidence-reference allowlist, supported repository hosts, a registered persona, role,
 task, and runtime skill. The result schema is
 `appsec-review/native-dependency-resolution-proposal/1`. Candidate identity, repository fields,

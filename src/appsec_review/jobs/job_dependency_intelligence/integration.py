@@ -370,7 +370,7 @@ def convert_syft(source: Mapping[str, Any], *, unit: UnitContext) -> SpdxBaselin
 
 def publish_sbom(unit: UnitContext, converter: Converter | None) -> dict[str, Any]:
     from .sbom import build_spdx, schema_sha256
-    loaded, detected = unit.output("inputs.load_accepted"), unit.output("resolution.detect_dependencies")
+    loaded, detected = unit.output("inputs.load_accepted"), unit.output("resolution.investigate_components")
     discovery = detected["native_discovery_document"]
     settings = unit.job.config.settings
     counters = {name: 0 for name in METRIC_COUNTERS}
@@ -382,6 +382,8 @@ def publish_sbom(unit: UnitContext, converter: Converter | None) -> dict[str, An
         "inputs": loaded["native_input_identities"], "source_fingerprint": unit.job.source_fingerprint,
         "native_bounds": asdict(native_bounds(settings)), "sbom_bounds": asdict(sbom_bounds(settings)),
         "discovery": DISCOVERY_IDENTITY, "merge": MERGE_IDENTITY, "schema_sha256": schema_sha256(),
+        "native_inference": [unit.output(unit_id)["artifact"] for unit_id in (
+            "resolution.curate_components", "resolution.investigate_components")],
     }
     baseline_ref = None
     with operation_span(unit.job.events, "native-sbom.publication", unit_id=unit.unit_id) as span:
@@ -417,7 +419,8 @@ def publish_sbom(unit: UnitContext, converter: Converter | None) -> dict[str, An
             result = build_spdx(
                 source_fingerprint=unit.job.source_fingerprint, created=loaded["native_created"],
                 baselines=baselines, discovery=discovery,
-                input_identities=loaded["native_input_identities"], bounds=sbom_bounds(settings),
+                input_identities=[*loaded["native_input_identities"], *computation["native_inference"]],
+                bounds=sbom_bounds(settings),
             )
             gaps.extend(result["gaps"])
             counters.update(result["metrics"])
@@ -465,6 +468,8 @@ def publish_sbom(unit: UnitContext, converter: Converter | None) -> dict[str, An
             "provenance": reference(unit.job.run_root, provenance_path), "metrics": metrics_ref,
             "input_fingerprint": fingerprint, "schema_sha256": schema_sha256(),
             "bounds": asdict(sbom_bounds(settings)), "gaps": gaps,
+            "inference_metrics": [unit.output(unit_id)["inference_metrics"] for unit_id in (
+                "resolution.curate_components", "resolution.investigate_components")],
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps or status == "FAILED" else "SUCCEEDED",
         }
 
@@ -509,6 +514,9 @@ def validate_publication(run_root: Path, framework: Mapping[str, Any],
             or set(metrics.get("counters", {})) != set(METRIC_COUNTERS)
             or any(type(value) is not int or value < 0 for value in metrics["counters"].values())):
         raise ValueError("accepted native SPDX metrics binding changed")
+    if "inference_metrics" in sbom:
+        from .native_inference_integration import validate_inference_publication
+        validate_inference_publication(run_root, framework, document)
     if sbom.get("baseline"):
         validate_spdx(read_json(run_root, member(framework, sbom["baseline"]), bounds.input_bytes),
                       bounds=bounds)

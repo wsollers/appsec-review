@@ -116,7 +116,7 @@ def test_guidance_is_exact_registered_pinned_and_shared_rules_occur_once(tmp_pat
             assert pinned == (ROOT / ref["path"]).read_bytes()
             assert hashlib.sha256(pinned).hexdigest() == ref["sha256"]
             assert len(pinned) == ref["size_bytes"]
-    rules = (ROOT / GOVERNING_PATH).read_text()
+    rules = (ROOT / GOVERNING_PATH).read_bytes().decode("utf-8")
     for request, _ in fake.calls:
         assert request.guidance.count(rules) == 1
         assert ".claude" not in request.guidance and ".agents" not in request.guidance

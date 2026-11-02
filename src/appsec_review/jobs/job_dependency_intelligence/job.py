@@ -27,6 +27,7 @@ from appsec_review.observability.spans import operation_span
 
 from .datasets import CONSUMES, DATASETS
 from .inference import resolve_with_inference
+from .native_inference_integration import inference_bounds, run_native_inference
 from .integration import (
     Converter, collect_inputs, native_bounds, publish_sbom, read_native_file, sbom_bounds,
     validate_publication,
@@ -39,7 +40,8 @@ from .scorecard import (ScorecardCache, ScorecardCacheError, ScorecardClient, Sc
 JOB_ID = "job_dependency_intelligence"
 TOPOLOGY = {
     "inputs": ("load_accepted",),
-    "resolution": ("detect_dependencies", "infer_repositories"),
+    "resolution": ("detect_dependencies", "curate_components", "investigate_components",
+                   "infer_repositories"),
     "repositories": ("deduplicate",),
     "scorecards": ("fetch",),
     "publication": ("publish_sbom", "publish_context"),
@@ -52,7 +54,7 @@ MAPPING_IDENTITY = "dependency-intelligence-evidence-map/2"
 
 def _index_native_evidence(unit: UnitContext, builder: IndexBuilder, identities: Mapping[str, str],
                            dependencies: list[Mapping[str, Any]], sbom: Mapping[str, Any]) -> None:
-    discovery = unit.output("resolution.detect_dependencies")["native_discovery_document"]
+    discovery = unit.output("resolution.investigate_components")["native_discovery_document"]
     snapshot = unit.job.source_fingerprint
     evidence_entities: dict[str, str] = {}
     seen_artifacts: set[str] = set()
@@ -205,6 +207,7 @@ def _validate_config(context, _result) -> None:
         raise ValueError("dependency-intelligence deterministic bounds are invalid")
     native_bounds(settings)
     sbom_bounds(settings)
+    inference_bounds(settings)
     if (type(settings.get("sbom_conversion_timeout_seconds")) is not int
             or settings["sbom_conversion_timeout_seconds"] < 1):
         raise ValueError("SPDX conversion timeout must be a positive integer")
@@ -292,10 +295,17 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def infer_repositories(unit: UnitContext) -> Mapping[str, Any]:
-        detected = unit.output("resolution.detect_dependencies")
+        investigated = unit.output("resolution.investigate_components")
         dependencies, gaps = [], []
         settings = unit.job.config.settings
-        for dependency in detected["dependencies"]:
+        loaded = unit.output("inputs.load_accepted")
+        normalized, normalization_gaps = normalize_dependencies(
+            loaded["declared"], loaded["packages"],
+            investigated["native_discovery_document"]["candidates"],
+            supported_hosts=tuple(settings["repository_hosts"]),
+            max_dependencies=int(settings["dependency_limit"]))
+        gaps.extend(normalization_gaps)
+        for dependency in normalized:
             resolved, gap = resolve_with_inference(
                 dependency, repository_root=unit.job.repository_root, run_root=unit.job.run_root,
                 model=settings["model"], supported_hosts=tuple(settings["repository_hosts"]), infer=infer,
@@ -392,7 +402,11 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         scorecard = unit.output("scorecards.fetch")
         sbom = unit.output("publication.publish_sbom")
         gaps = [*unit.output("resolution.detect_dependencies")["gaps"], *resolved["gaps"],
+                *unit.output("resolution.curate_components")["gaps"],
+                *unit.output("resolution.investigate_components")["gaps"],
                 *repositories["gaps"], *scorecard["gaps"], *sbom["gaps"]]
+        unique_gaps = {canonical_json(item): item for item in gaps}
+        gaps = [unique_gaps[key] for key in sorted(unique_gaps)]
         producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
         producer_artifacts.append({"dependency_context_sha256": hashlib.sha256(canonical_json({
             "dependencies": resolved["dependencies"], "scorecards": scorecard["records"], "gaps": gaps,
@@ -463,7 +477,10 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                         "cache_hit_count": scorecard["cache_hit_count"]},
                     "gaps": context["gaps"], "index_identity": context["index_identity"],
                     "index_manifest": context["index_manifest"],
-                    "native_discovery": unit.output("resolution.detect_dependencies")["native_discovery"],
+                    "native_discovery": unit.output("resolution.investigate_components")["native_discovery"],
+                    "raw_native_discovery": unit.output("resolution.detect_dependencies")["native_discovery"],
+                    "native_curation": unit.output("resolution.curate_components")["artifact"],
+                    "native_metadata": unit.output("resolution.investigate_components")["artifact"],
                     "sbom": sbom,
                     "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
         path = unit.unit_root / "dependency-intelligence-handoff.json"
@@ -476,17 +493,25 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
     units = (
         Unit("inputs.load_accepted", load),
         Unit("resolution.detect_dependencies", detect, ("inputs.load_accepted",)),
-        Unit("resolution.infer_repositories", infer_repositories, ("resolution.detect_dependencies",)),
+        Unit("resolution.curate_components", lambda unit: run_native_inference(
+            unit, infer, investigate=False), ("inputs.load_accepted", "resolution.detect_dependencies")),
+        Unit("resolution.investigate_components", lambda unit: run_native_inference(
+            unit, infer, investigate=True), ("inputs.load_accepted", "resolution.curate_components")),
+        Unit("resolution.infer_repositories", infer_repositories,
+             ("inputs.load_accepted", "resolution.investigate_components")),
         Unit("repositories.deduplicate", repositories, ("resolution.infer_repositories",)),
         Unit("scorecards.fetch", scorecards, ("repositories.deduplicate",)),
         Unit("publication.publish_sbom", lambda unit: publish_sbom(unit, syft_converter),
-             ("inputs.load_accepted", "resolution.detect_dependencies")),
+             ("inputs.load_accepted", "resolution.investigate_components",
+              "resolution.curate_components")),
         Unit("publication.publish_context", publish_context,
-             ("inputs.load_accepted", "resolution.detect_dependencies", "resolution.infer_repositories",
+             ("inputs.load_accepted", "resolution.detect_dependencies", "resolution.curate_components",
+              "resolution.investigate_components", "resolution.infer_repositories",
               "repositories.deduplicate", "scorecards.fetch", "publication.publish_sbom")),
         Unit("acceptance.publish_handoff", publish_handoff,
              ("inputs.load_accepted", "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch",
-              "publication.publish_context", "publication.publish_sbom", "resolution.detect_dependencies")),
+              "publication.publish_context", "publication.publish_sbom", "resolution.detect_dependencies",
+              "resolution.curate_components", "resolution.investigate_components")),
     )
     implementation = None
     return Job(JOB_ID, "dependency_intelligence", UnitExecutor(units).execute,

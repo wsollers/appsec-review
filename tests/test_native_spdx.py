@@ -132,6 +132,70 @@ def file_record(identifier: str, name: str, **changes: Any) -> dict[str, Any]:
     return result
 
 
+@pytest.mark.parametrize("status", ["corroborated", "inferred", "unknown", "conflicted"])
+def test_native_metadata_fields_have_independent_evidence_gates(status):
+    row, evidence = candidate()
+    row["metadata"]["sbom_claims"] = {
+        field: {"value": value, "status": status, "evidence_ids": row["evidence_ids"],
+                "alternatives": []}
+        for field, value in {
+            "supplier": "Organization: Example", "download_location": "https://example.org/zlib.tar.gz",
+            "license_declared": "MIT",
+        }.items()
+    }
+    result = build(native=discovery((row, evidence)))
+    output = result["document"]["packages"][0]
+    assert output.get("supplier") == ("Organization: Example" if status == "corroborated" else None)
+    assert output["downloadLocation"] == (
+        "https://example.org/zlib.tar.gz" if status == "corroborated" else "NOASSERTION")
+    assert output["licenseDeclared"] == ("MIT" if status == "corroborated" else "NOASSERTION")
+    assert json.loads(output["sourceInfo"])["metadata_claims"] == row["metadata"]["sbom_claims"]
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("supplier", "untyped company"), ("license_declared", "our custom terms"),
+    ("license_declared", "LicenseRef-missing-text"),
+    ("download_location", "not a URL"),
+    ("download_location", "https://user:password@example.org/archive"),
+])
+def test_unrepresentable_metadata_stays_in_provenance_with_an_explicit_gap(field, value):
+    row, evidence = candidate()
+    row["metadata"]["sbom_claims"] = {
+        field: {"value": value, "status": "corroborated",
+                "evidence_ids": row["evidence_ids"], "alternatives": []}}
+    result = build(native=discovery((row, evidence)))
+    output = result["document"]["packages"][0]
+    assert output.get("supplier") is None
+    assert output["licenseDeclared"] == output["downloadLocation"] == "NOASSERTION"
+    assert any(gap["kind"] == "unsupported_metadata" and field in gap["detail"]
+               for gap in result["gaps"])
+
+
+def test_metadata_cannot_assert_without_resolving_evidence():
+    row, evidence = candidate()
+    row["metadata"]["sbom_claims"] = {
+        "supplier": {"value": "Organization: Example", "status": "corroborated",
+                     "evidence_ids": [], "alternatives": []}}
+    with pytest.raises(NativeInputIntegrityError, match="corroborated metadata"):
+        build(native=discovery((row, evidence)))
+
+
+def test_matching_baseline_metadata_is_enriched_without_overwriting_existing_assertions():
+    row, evidence = candidate(identity="corroborated", release="corroborated", purl=PURL)
+    row["metadata"]["sbom_claims"] = {
+        "license_declared": {"value": "MIT", "status": "corroborated",
+                             "evidence_ids": row["evidence_ids"], "alternatives": []},
+        "supplier": {"value": "Organization: Example", "status": "corroborated",
+                     "evidence_ids": row["evidence_ids"], "alternatives": []}}
+    result = build(document(package(licenseDeclared="Apache-2.0")),
+                   native=discovery((row, evidence)))
+    assert len(result["document"]["packages"]) == 1
+    output = result["document"]["packages"][0]
+    assert output["supplier"] == "Organization: Example"
+    assert output["licenseDeclared"] == "Apache-2.0"
+    assert any("licenseDeclared" in gap["detail"] for gap in result["gaps"])
+
+
 def test_official_schema_is_release_resource_with_recorded_license_and_no_refs() -> None:
     root = resources.files("appsec_review.jobs.job_dependency_intelligence").joinpath("schemas")
     data = root.joinpath("spdx-2.3.schema.json").read_bytes()
