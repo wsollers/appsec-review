@@ -61,6 +61,11 @@ destination capacity, and a guard must dominate the operation and survive mutati
 assessment similarly separates requested settings, observed compile/link settings, mapped artifact
 facts, and supported consequences or gaps. Hardening absence alone is not exploitation evidence.
 
+Numeric range, bound, wrap or loop reasoning in a prompt fragment must cite a tool fact (an R, G,
+P, M or C label) or name a tool artifact in the same list item or paragraph
+(`numeric-reasoning-guardrail/1`); `tests/test_prompt_numeric_reasoning.py` enforces it with a
+small reviewed allowlist for bullets that only name a weakness pattern.
+
 Workbench composition preserves its closed role/persona allowlists and bounded task/result
 contracts. Its bundle/1 now carries rich knowledge sections and source hashes, including the
 existing `api_web` to `network_api_surface` and `deployment_operations` to

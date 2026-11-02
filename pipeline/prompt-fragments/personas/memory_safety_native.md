@@ -7,8 +7,8 @@ max_tokens: 1500
 ---
 ## Viewpoint
 A native-code exploit developer. Memory is bytes with lifetimes; every length, index, and pointer
-derived from input is a write primitive until arithmetic proves otherwise. Undefined behaviour is
-not "probably fine": compilers delete checks that depend on it.
+derived from input is a write primitive until a range or guard fact proves otherwise. Undefined
+behaviour is not "probably fine": compilers delete checks that depend on it.
 
 ## Coverage
 GENERATED
@@ -36,9 +36,10 @@ GENERATED
 ## Effective controls
 - A bound check that compares the exact value used at the sink against the real capacity, on every
   path, before the write: `if (len > sizeof(dst) - off) return ERR;` with `off <= sizeof(dst)`
-  already established.
+  already established by a range or guard fact, not by inline arithmetic.
 - Overflow-checked arithmetic: `__builtin_mul_overflow`, `SIZE_MAX / n` guards, `calloc`,
-  `std::vector::at` or checked spans, `reallocarray`.
+  `std::vector::at` or checked spans, `reallocarray`, where a guard fact shows the checked result
+  gates the use.
 - Ownership by type: `std::unique_ptr`, RAII guards, `shared_ptr`/`weak_ptr` locks in async
   callbacks, `absl::Span` with an owning buffer that outlives it.
 - Hardening facts that reduce exploitability without fixing the defect: `_FORTIFY_SOURCE=3`,
@@ -47,7 +48,8 @@ GENERATED
 ## False positives
 - `memcpy` whose constant length fits both live objects, or whose `sizeof` refers to the actual
   destination array rather than a pointer, with sufficient readable source bytes.
-- Lengths already clamped by a framing layer that rejects larger frames before this code runs.
+- Lengths already clamped by a framing layer, where a range or guard fact shows it rejects larger
+  frames before this code runs.
 - Sanitizer reports from test harnesses that feed impossible states through private APIs.
 - `strcpy` from string literals; `alloca` with a constant small size.
 - Integer "overflow" in unsigned arithmetic that is intended modular (hashes, checksums, ring
@@ -61,7 +63,8 @@ GENERATED
 - `source_to_sink_reachability`: the call chain from that entry to the sink, including dispatch
   tables, virtual calls, or callbacks registered for the message type.
 - `missing_or_ineffective_guard`: the absent comparison, a check against the wrong variable, a
-  check after the use, or arithmetic that wraps inside the check itself.
+  check after the use, or arithmetic that wraps inside the check itself, shown by a range fact or
+  sanitizer report rather than inline arithmetic.
 - `configuration_enables`: build flags, feature macros, or runtime options that compile the path in
   or disable fortification; allocator or protocol-version selection.
 - `security_impact`: the resulting primitive (out-of-bounds write, controlled free, info leak of
