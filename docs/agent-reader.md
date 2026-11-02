@@ -20,6 +20,7 @@ Relevant bounded procedures and design references:
 - [`tasks/seeded-clang-neighborhoods-prompt.md`](tasks/seeded-clang-neighborhoods-prompt.md) — task prompt and acceptance requirements for seeded Clang AST/IR, static-analyzer and CPG producers.
 - [`architecture/seeded-neighborhoods.md`](architecture/seeded-neighborhoods.md) — seeded neighborhoods for the Clang AST/IR, Clang-Tidy/Static Analyzer and CPG producers: shared seeding module, card `producers`, flow, diagnostics and symbol exposure.
 - [`architecture/seeded-codeql-neighborhoods.md`](architecture/seeded-codeql-neighborhoods.md) — seeded, bounded-depth CodeQL neighborhoods around findings, database cards and their MCP tools.
+- [`architecture/dataflow-bounded-slices.md`](architecture/dataflow-bounded-slices.md) — lead packages bounded by correlated dataflow paths; pluggable source-slice strategies (`package-slice/1`).
 - [`operations/code-graph-index.md`](operations/code-graph-index.md) — `job_code_graph_index` inputs, units, shards, resume and verification.
 - [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — SVF points-to cross-check producer (opt-in): image, job, cross-check rules, memory-object accessor index, finding-lead memory and caller context, tunables and verification tiers.
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.

@@ -51,6 +51,7 @@ from appsec_review.review.references import load_cwe_reference
 from appsec_review.review.result_cache import cache_from_settings
 from appsec_review.review.scoring.cwe_impact import ImpactCatalog
 from appsec_review.review.scope import AcceptedScope, accept_manifest
+from appsec_review.review.slicing.sources import AcceptedSliceSources
 from appsec_review.review.teams import ReviewTeamSemaphore
 from appsec_review.review.scoring.evidence_source import AcceptedEvidenceSource
 from appsec_review.runtime import Job, Unit, UnitExecutor
@@ -346,8 +347,13 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             # Claim CWEs validate against the run-pinned MITRE CWE catalog; an unpinned, mismatched or
             # stale catalog falls back to the rule/crosswalk CWE set with a recorded coverage gap.
             reference = load_cwe_reference(unit.job.run_root)
+            # Slices of dataflow-bounded leads read verified source through the same accepted custody as triage.
+            core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
+                                 manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
+                                 manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
             assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
-                                         collection=triaged_collection(unit, scope), cwe_reference=reference)
+                                         collection=triaged_collection(unit, scope), cwe_reference=reference,
+                                         slice_sources=AcceptedSliceSources(scope, core=core))
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly")
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]

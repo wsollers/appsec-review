@@ -2108,7 +2108,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/9"
+          "const": "appsec-review/assemble-review-packages/11"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"
@@ -2345,13 +2345,83 @@
         }
       }
     },
+    "inference_package_slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "package-slice/1: the lines of the functions a lead's correlated dataflow paths pass through that the configured slice strategies relate to the path (identities and line numbers only).",
+      "required": ["rule", "paths", "functions", "strategies", "omitted", "gaps"],
+      "properties": {
+        "rule": {"const": "appsec-review/package-slice/1"},
+        "paths": {"type": "array", "items": {"$ref": "#/$defs/inference_identity"}},
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "file_sha256", "function", "first", "last", "truncated", "lines"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "file_sha256": {"$ref": "#/$defs/inference_sha"},
+              "function": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/inference_identity"}]},
+              "first": {"type": "integer", "minimum": 1},
+              "last": {"type": "integer", "minimum": 1},
+              "truncated": {"type": "boolean"},
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["line", "reasons", "basis", "precision"],
+                  "properties": {
+                    "line": {"type": "integer", "minimum": 1},
+                    "reasons": {
+                      "type": "array",
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "items": {"enum": ["source", "sink", "path_step", "guard", "range", "sanitizer", "interacter",
+                                         "backward_def", "alias", "function_header"]}
+                    },
+                    "basis": {"type": "string", "minLength": 1},
+                    "precision": {"enum": ["lexical", "syntax", "compiler", "path"]}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "strategies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "precision", "state", "lines", "gaps"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "precision": {"enum": ["lexical", "syntax", "compiler", "path"]},
+              "state": {"enum": ["applied", "partial", "not_applicable", "failed"]},
+              "lines": {"type": "integer", "minimum": 0},
+              "gaps": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "omitted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["lines"],
+          "properties": {"lines": {"type": "integer", "minimum": 0}}
+        },
+        "gaps": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "inference_neighborhood": {
       "type": "object",
       "additionalProperties": false,
-      "description": "package-neighborhood/1: identities and fact summaries selected by location and function scope.",
+      "description": "package-neighborhood/2: identities and fact summaries selected by the lead's correlated dataflow paths (bound dataflow_path, with a composed slice) or, without one, by location and call depth (bound call_depth, slice null).",
       "required": [
         "rule",
         "call_depth",
+        "bound",
+        "slice",
         "function",
         "sinks",
         "ranges",
@@ -2367,12 +2437,28 @@
       ],
       "properties": {
         "rule": {
-          "const": "appsec-review/package-neighborhood/1"
+          "const": "appsec-review/package-neighborhood/2"
         },
         "call_depth": {
           "type": "integer",
           "minimum": 1,
           "maximum": 8
+        },
+        "bound": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paths", "call_depth"],
+          "properties": {
+            "kind": {"enum": ["dataflow_path", "call_depth"]},
+            "paths": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/inference_identity"}},
+            "call_depth": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1, "maximum": 8}]}
+          }
+        },
+        "slice": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/inference_package_slice"}
+          ]
         },
         "function": {
           "oneOf": [

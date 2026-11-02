@@ -2718,6 +2718,12 @@ max_depth = 4
 max_memory_context_entries = 24
 max_callers = 16
 caller_depth = 2
+# Dataflow-bounded slice (review-protocol-v2.md section 4): a lead with a correlated dataflow_path is bounded
+# by that path, not call depth. Every named strategy runs and their lines are unioned; each line keeps its
+# highest-precision basis (compiler > syntax > lexical). Strategies without data report a named gap.
+slice_strategies = ["llvm_ir_def_use", "svf_points_to", "tree_sitter_references", "lexical_identifiers"]
+max_slice_lines = 120
+max_slice_lines_per_function = 40
 # Model-facing package view (docs/architecture/review-protocol-v2.md section 4): the view of one package is
 # trimmed to this byte budget, with omitted counts and a truncated gap.
 max_view_bytes = 49152

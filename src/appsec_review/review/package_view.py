@@ -1,4 +1,4 @@
-"""The model-facing view of a review package (``package-view/1``, review-protocol-v2.md section 4).
+"""The model-facing view of a review package (``package-view/4``, review-protocol-v2.md section 4).
 
 The stored package is hash-pinned and keeps every identity and every gap. A review cell is shown a *view* of
 it, built at cell time and never stored as an identity: labelled sections (``L`` lead, ``S`` source, ``K`` sink,
@@ -9,7 +9,10 @@ application assigns in a fixed order, so one package always yields the same labe
 * Source text is read through the accepted source index (``RetrievalCore.read_source_lines``: the entity must
   resolve, the file hash must equal the indexed hash). The function span is the lead's function; the type
   declarations are those of the types its signature and body mention, looked up in the accepted index; a type
-  that cannot be located is a named gap, never silently absent.
+  that cannot be located is a named gap, never silently absent. When the neighborhood is bounded by a dataflow
+  path (``bound.kind == "dataflow_path"``) and carries a slice, only the slice's lines are shown, one ``slice``
+  row per function, with ``...| n line(s) elided`` markers and per-line ``reasons``; the lead's line is always
+  shown. A call-depth bound keeps the whole function extent.
 * Coverage gaps that do not bear on the lead stay in the stored package and are written once to a
   hash-referenced ``gaps.jsonl`` (counted under ``files``); only gaps whose scope is the package, its function,
   build unit, file or sink are shown inline as ``X`` labels. Every stored gap is accounted: inline plus file.
@@ -33,7 +36,7 @@ from appsec_review.review.neighborhood import function_extent, type_names
 from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
-VIEW_RULE = "appsec-review/package-view/3"
+VIEW_RULE = "appsec-review/package-view/4"
 GAP_VIEW_RULE = "appsec-review/package-gap-view/1"
 PROTOCOL = "review-protocol/2"
 MAX_INLINE_GAPS = 12
@@ -210,6 +213,21 @@ class _Builder:
             return [], [f"no source text for the lead: {reason}"]
         location, lines = located["location"], located["lines"]
         path, line = str(location["path"]), int(location["start_line"])
+        bound, record = self.neighborhood.get("bound") or {}, self.neighborhood.get("slice")
+        if bound.get("kind") == "dataflow_path" and isinstance(record, Mapping) and record.get("functions"):
+            rows, slice_gaps = self.slice_rows(str(lead["ref"]), location, lines, record)
+            gaps.extend(slice_gaps)
+            if rows:
+                self.locator_paths.add(path)
+                shown = [int(number) for row in rows if row["path"] == path for number in row["reasons"]]
+                if shown:
+                    for name in type_names(lines, min(shown), max(shown), limit=self.limits.max_type_declarations):
+                        row, gap = self._declaration(name, path, lines, rows[0]["ref"])
+                        if row is not None:
+                            rows.append(row)
+                        if gap:
+                            gaps.append(gap)
+                return rows, gaps
         if function and function.get("path") == path and function.get("file_sha256") not in (None, location["file_sha256"]):
             gaps.append("the function's file changed after package assembly; its extent is not shown")
             function = None
@@ -272,6 +290,72 @@ class _Builder:
             if last < span[1]:
                 gaps.append("OWASP cited source span was cut by the view line budget")
         return rows, gaps
+
+    def slice_rows(self, lead_ref: str, location: Mapping[str, Any], lines: Sequence[str],
+                   record: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+        """Only the dataflow slice's lines, one row per slice function, with elision markers between runs.
+
+        Returns no rows (so the caller falls back to the whole function extent) when the lead file's slice
+        names another file hash. A slice function in another file is shown only when an identity on it reads
+        back at the slice's hash; otherwise it is a named gap. The lead's own line is always shown.
+        """
+        path, sha, line = str(location["path"]), str(location["file_sha256"]), int(location["start_line"])
+        rows: list[dict[str, Any]] = []
+        gaps: list[str] = []
+        remaining = self.limits.max_source_lines
+        lead_shown = False
+        for function in record.get("functions", ()):
+            fpath, fsha, symbol = str(function["path"]), str(function["file_sha256"]), function.get("function")
+            if fpath == path:
+                if fsha != sha:
+                    return [], [f"the dataflow slice of {fpath} names a different file hash than the accepted "
+                                "source; the whole function extent is shown instead"]
+                file_lines = lines
+            else:
+                located, reason = self.source(str(symbol)) if symbol else (None, "the slice names no function identity")
+                if (located is None or located["location"].get("path") != fpath
+                        or located["location"].get("file_sha256") != fsha):
+                    gaps.append(f"the dataflow slice lines in {fpath} could not be read at the slice's file hash "
+                                f"({reason or 'the function resolves elsewhere'}); they are not shown")
+                    continue
+                file_lines = located["lines"]
+            reasons = {int(item["line"]): ",".join(item.get("reasons", ())) for item in function.get("lines", ())}
+            if fpath == path and int(function["first"]) <= line <= int(function["last"]):
+                reasons.setdefault(line, "lead")
+                lead_shown = True
+            numbers = sorted(number for number in reasons if 1 <= number <= len(file_lines))
+            if remaining <= 0 or not numbers:
+                if numbers:
+                    gaps.append(f"dataflow slice lines in {fpath} exceed the view line budget; expand the path")
+                continue
+            truncated = bool(function.get("truncated")) or len(numbers) > remaining
+            if len(numbers) > remaining:
+                keep = [line] if line in numbers else []
+                keep += [number for number in numbers if number != line][:remaining - len(keep)]
+                numbers = sorted(keep)
+                gaps.append(f"dataflow slice lines in {fpath} were cut at the view line budget")
+            remaining -= len(numbers)
+            rows.append(self._slice_span(str(symbol or lead_ref), fpath, fsha, file_lines, numbers,
+                                         int(function["first"]), int(function["last"]),
+                                         {str(number): reasons[number] for number in numbers}, truncated))
+            self.locator_paths.add(fpath)
+        if rows and not lead_shown and 1 <= line <= len(lines):
+            rows.insert(0, self._slice_span(lead_ref, path, sha, lines, [line], line, line, {str(line): "lead"}, False))
+        return rows, gaps
+
+    def _slice_span(self, ref: str, path: str, file_sha: str, lines: Sequence[str], numbers: Sequence[int],
+                    first: int, last: int, reasons: Mapping[str, str], truncated: bool) -> dict[str, Any]:
+        text: list[str] = []
+        previous = first - 1
+        for number in numbers:
+            if number > previous + 1:
+                text.append(f"...| {number - previous - 1} line(s) elided")
+            text.append(f"{number}| {self._line(path, number, lines[number - 1].rstrip())[:MAX_LINE_CHARS]}")
+            previous = number
+        if last > previous:
+            text.append(f"...| {last - previous} line(s) elided")
+        return {"ref": ref, "role": "slice", "path": path, "lines": f"{first}-{last}", "file_sha256": file_sha,
+                "truncated": truncated, "text": text, "reasons": dict(reasons)}
 
     def _line(self, path: str, number: int, text: str) -> str:
         for start, end in self.secret_lines.get(path, ()):
@@ -412,8 +496,15 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         chain = nb.get("chain") or {}
         chain_view = {"reached": bool(chain.get("reached")), "depth_limit": chain.get("depth_limit"),
                       "hops": labelled("F", chain.get("hops", ())), "entries": labelled("E", chain.get("entries", ()))}
+        slice_record = nb.get("slice") if isinstance(nb.get("slice"), Mapping) else None
         neighborhood = {
             "rule": nb.get("rule"), "call_depth": nb.get("call_depth"), "chain": chain_view,
+            "bound": dict(nb["bound"]) if isinstance(nb.get("bound"), Mapping) else None,
+            "slice": ({"paths": len(slice_record.get("paths", ())),
+                       "lines": sum(len(item.get("lines", ())) for item in slice_record.get("functions", ())),
+                       "omitted_lines": (slice_record.get("omitted") or {}).get("lines", 0),
+                       "strategies": {item["name"]: item["state"] for item in slice_record.get("strategies", ())}}
+                      if slice_record is not None else None),
             "function": ({"name": nb["function"]["name"], "path": nb["function"]["path"],
                           "line": nb["function"]["start_line"], "basis": nb["function"]["basis"]}
                          if nb.get("function") else None),

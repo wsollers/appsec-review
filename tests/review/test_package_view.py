@@ -1,4 +1,4 @@
-"""The model-facing package view (``package-view/1``) and package neighborhood (``package-neighborhood/1``)."""
+"""The model-facing package view (``package-view/4``) and package neighborhood (``package-neighborhood/2``)."""
 from __future__ import annotations
 
 import json
@@ -125,7 +125,7 @@ def scoped(tmp_path_factory):
     from tests.review.test_packages_memory_context import _publish
 
     fixture = build_accepted_index_set(tmp_path_factory.mktemp("scoped"))
-    attach_graph(fixture)
+    graph_ids = attach_graph(fixture)
 
     def symbol(name: str, needle: str) -> EntityRecord:
         identity = LogicalIdentity.derive(EntityKind.SYMBOL, SNAPSHOT, {"qualified_name": name, "scope_id": SCOPE_ID})
@@ -163,7 +163,8 @@ def scoped(tmp_path_factory):
     assembly = assemble_packages(accept_manifest(fixture.run_root))
     return fixture, assembly, RetrievalCore(fixture.runs_dir, fixture.run_id), {
         "p": p.identity.value, "q": q.identity.value, "sink": sink.identity.value, "into_p": into_p.identity.value,
-        "out_of_p": out_of_p.identity.value, "entry_q": entry_q.identity.value}
+        "out_of_p": out_of_p.identity.value, "entry_q": entry_q.identity.value, "entry_n": graph_ids["entry_n"],
+        "path_bridged": graph_ids["path_bridged"]}
 
 
 def test_neighborhood_is_selected_by_function_scope_with_callers_and_callees(scoped) -> None:
@@ -199,9 +200,12 @@ def test_the_entry_chain_runs_from_the_lead_function_up_to_the_nearest_entry_poi
     shown = view.document["neighborhood"]["chain"]
     assert shown["reached"] and shown["hops"][0]["label"] == "F1" and shown["entries"][0]["label"] == "E1"
     assert view.labels["F1"] == ids["into_p"] and view.labels["E1"] == ids["entry_q"]
-    # q is the entry function itself: its own chain is empty and reached.
-    own = _package(assembly, fixture, "codeql_high")["neighborhood"]["chain"]
-    assert own["reached"] and own["hops"] == [] and [row["ref"] for row in own["entries"]] == [ids["entry_q"]]
+    # The CodeQL lead in q correlates a dataflow path, so its neighborhood is bounded by that path: the chain's
+    # entries are the path's source entry point rather than every entry point found by walking callers.
+    own = _package(assembly, fixture, "codeql_high")["neighborhood"]
+    assert own["bound"] == {"kind": "dataflow_path", "paths": [ids["path_bridged"]], "call_depth": None}
+    assert own["chain"]["reached"] and own["chain"]["hops"] == []
+    assert [row["ref"] for row in own["chain"]["entries"]] == [ids["entry_n"]]
 
 
 def test_an_unreachable_entry_point_is_a_material_gap_the_cell_can_see(graph) -> None:

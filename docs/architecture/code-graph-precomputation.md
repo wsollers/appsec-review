@@ -1416,6 +1416,12 @@ module, publish into the same `graph` index as the producers `clang-ast`, `llvm-
 clangd symbols are read through `query_codeql_neighborhood` (`include`) and `query_observations`. The
 contract is [`seeded-neighborhoods.md`](seeded-neighborhoods.md).
 
+The export stays bounded by `seed_depth`. What a review cell is shown is bounded more tightly. A lead
+with a correlated `dataflow_path` gets a package neighborhood bounded by that path, whose source is a
+slice of the path's functions: the path, its interacters and a backward slice. A lead without one
+falls back to call depth and carries a named gap. See
+[`dataflow-bounded-slices.md`](dataflow-bounded-slices.md).
+
 ### Open items
 
 - Measured seeded versus whole-program wall time on a 20k-100k LOC project (calibration database

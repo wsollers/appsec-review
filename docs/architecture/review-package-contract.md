@@ -183,9 +183,19 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
 Review protocol v2 ([`review-protocol-v2.md`](review-protocol-v2.md)) changes what a cell is shown, not
 what the stored package pins. Two things are new.
 
-**The stored `neighborhood` (`package-neighborhood/1`, `review/neighborhood.py`, `GraphContext.neighborhood`).**
-Every package has a required `neighborhood` object. For a lane A lead it is selected by *location and
-function scope*, not by a correlated dataflow path:
+**The stored `neighborhood` (`package-neighborhood/2`, `review/neighborhood.py`, `GraphContext.neighborhood`).**
+Every package has a required `neighborhood` object. It records the bound that selected it:
+
+- `bound: {kind, paths, call_depth}`;
+- `slice`: a `package-slice/1` record, or `null`.
+
+A lane A lead with a correlated `dataflow_path` is bounded by that path. The rows are then limited to
+the path's flows, sinks, guards, ranges and entry points, and to the call sites between functions on
+the path. The source is a slice of the path's functions. See
+[`dataflow-bounded-slices.md`](dataflow-bounded-slices.md) for the details.
+
+A lead without such a path gets a `dataflow_slice` gap `dataflow_path_unavailable`. It is then selected
+by *location and function scope*, to `max_call_depth`, as follows:
 
 - `function`: the lead's function symbol, name, path, start line, file hash and `basis`
   (`enclosing_fact_on_line` when a sink or call fact on the lead's line names it, otherwise
@@ -211,7 +221,17 @@ bounds the destination of a write. Every row is also a `context` entry (new role
 `max_package_bytes`; a row removed for bytes is counted in `omitted` and named by a `truncated`
 `code_graph_neighborhood` gap. Neighborhood rows are not capped by `max_context_entries`. A hunt package carries the
 summaries of its embedded sink and entry-point facts. The neighborhood enters the package fingerprint with
-`package-neighborhood/1`, `fact-summary/1`, `package-build-summary/1` and the graph caps.
+`package-neighborhood/2`, `fact-summary/1`, `package-build-summary/1` and the graph caps. The manifest counts
+finding-lead packages by bound in `counts.neighborhood_bounds`.
+
+The slice is configured under `[jobs.job_inference_security_review.settings.packages]`. These are
+required keys, validated at load:
+
+| Setting | Meaning | Bounds |
+|---|---|---|
+| `slice_strategies` | slice strategies to run, by registered name (`review/slicing/registry.py`) | non-empty, unique, known |
+| `max_slice_lines` | slice lines per package | 1–2000 |
+| `max_slice_lines_per_function` | slice lines per function | 1–`max_slice_lines` |
 
 **The model-facing view (`package-view/2`, `review/package_view.py`).** A cell is shown a view built at cell time
 from the stored package, never stored as an identity and never part of a reuse basis (the basis stays the hash of the

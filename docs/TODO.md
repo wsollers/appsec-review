@@ -387,6 +387,22 @@ implementation:
   (they use the same two external predicates, `exportScope` and `exportSeed`);
 - profile the slow `job_evidence_collection` tests.
 
+## Validate and measure dataflow-bounded package slices
+
+Design: `docs/architecture/dataflow-bounded-slices.md`. Remaining work:
+
+- run the dataflow-bound assertion in `tests/integration/test_code_graph_end_to_end.py`, which has
+  not been run yet;
+- measure how much package and view context shrinks on a live review compared with the call-depth
+  bound, and whether findings are lost (LLMxCPG reports 68–91% less context);
+- add a fixture with real compiler-produced output (LLVM IR flows, SVF, tree-sitter rows), so the
+  `llvm_ir_def_use`, `svf_points_to` and `tree_sitter_references` strategies are tested producing
+  package slice lines (today only `lexical_identifiers` does);
+- resolve function spans from graph symbol locations instead of the text heuristic, and support
+  languages other than Python and the brace languages;
+- add a JSON schema for the view and the manifest, so `counts.neighborhood_bounds` and the view's
+  `slice` fields are schema-checked.
+
 ## Measure and extend seeded Clang neighborhoods
 
 Design: `docs/architecture/seeded-neighborhoods.md`. The Clang AST/LLVM IR, Clang-Tidy/Static

@@ -23,6 +23,7 @@ from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLE
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
 from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
 from appsec_review.review.ship_block import ShipBlockSettings
+from appsec_review.review.slicing.registry import validate_names as validate_slice_strategies
 from appsec_review.config.attack_chains import AttackChainSettings
 
 
@@ -166,6 +167,11 @@ class PackageAssemblySettings:
     max_memory_context_entries: int
     max_callers: int
     caller_depth: int
+    # Dataflow-bounded slice of a lead with a correlated path (review.slicing): strategy names run and
+    # unioned, the slice line budget, and the per-function cap.
+    slice_strategies: tuple[str, ...]
+    max_slice_lines: int
+    max_slice_lines_per_function: int
     # Model-facing package view (review-protocol-v2.md section 4): byte budget of one view, the longest
     # function source excerpt in lines, and how many type declarations a view may embed.
     max_view_bytes: int
@@ -721,7 +727,12 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     packages_value = _table(settings["packages"], field, {
         "hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
         "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth",
-        "max_view_bytes", "max_view_source_lines", "max_view_type_declarations"})
+        "max_view_bytes", "max_view_source_lines", "max_view_type_declarations",
+        "slice_strategies", "max_slice_lines", "max_slice_lines_per_function"})
+    slice_strategies = packages_value["slice_strategies"]
+    if not isinstance(slice_strategies, list):
+        raise ValueError(f"{field}.slice_strategies must be an array of strategy names")
+    max_slice_lines = _int(packages_value["max_slice_lines"], f"{field}.max_slice_lines", 1, 2000)
     packages = PackageAssemblySettings(
         hunt_menu_partition_size=_int(packages_value["hunt_menu_partition_size"],
                                       f"{field}.hunt_menu_partition_size", 1, 10_000),
@@ -735,6 +746,10 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                         f"{field}.max_memory_context_entries", 1, 1_000),
         max_callers=_int(packages_value["max_callers"], f"{field}.max_callers", 1, 1_000),
         caller_depth=_int(packages_value["caller_depth"], f"{field}.caller_depth", 1, 4),
+        slice_strategies=validate_slice_strategies(slice_strategies, f"{field}.slice_strategies"),
+        max_slice_lines=max_slice_lines,
+        max_slice_lines_per_function=_int(packages_value["max_slice_lines_per_function"],
+                                          f"{field}.max_slice_lines_per_function", 1, max_slice_lines),
         max_view_bytes=_int(packages_value["max_view_bytes"], f"{field}.max_view_bytes", 4096, 1024 * 1024),
         max_view_source_lines=_int(packages_value["max_view_source_lines"], f"{field}.max_view_source_lines", 10, 2000),
         max_view_type_declarations=_int(packages_value["max_view_type_declarations"],
