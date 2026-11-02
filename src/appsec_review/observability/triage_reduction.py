@@ -48,10 +48,31 @@ Ratios:
 * ``lower_bound_over_admitted`` = (dismissed_by_adjudication + no_claim_raised) / admitted;
   unresolved leads count as not reduced.
 * Each ratio is null when its denominator is zero or the section is unavailable.
+
+Sources and linkage (``triage_reduction_metrics``):
+
+* Only run-owned artifacts bound by the accepted ``job_inference_security_review`` handoff are read,
+  each re-hashed against its reference: the review handoff (``publication.publish_handoff``), the
+  lane A package set and its verified package manifest (``packages.assemble_lead_packages``), the
+  lane A document (``lead_review.teams``, which carries ``lead_accounting`` and ``proposals``), and
+  the claim ledger receipt with its sibling projection (``publication.publish_claim_ledger``). The
+  manifest and the receipt are also cross-checked against the review handoff. No target is scanned.
+* Each admitted lead maps to its ``finding_lead`` package through the package's lead menu and takes
+  its red outcome from the lane A ``lead_accounting``. A ``proposal`` lead's claims are those the
+  lane document's ``proposals`` attributes to the package, lane A claims carrying the package id,
+  and claims whose origin cells ran on the package; a ``duplicate`` claim is replaced by the claim
+  its ``duplicate_of`` chain ends at.
+* ``dismissed_by_claim_state`` counts each distinct dismissing state once per dismissed lead, so a
+  lead dismissed by claims in two states increments both and the sum may exceed
+  ``dismissed_by_adjudication``.
+* ``hunt_lane_claims_excluded`` counts every lane B claim record in the projection, duplicates
+  included.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections import Counter
+from pathlib import Path, PurePosixPath
+from typing import Any, Iterable, Mapping
 
 TRIAGE_REDUCTION_SCHEMA = "appsec-review/triage-reduction-metrics/1"
 SCOPE = "lane_a_scanner_leads"
@@ -82,6 +103,8 @@ INTEGRITY_GAP_CODES = (
     "lead_package_unlinked",           # an admitted lead has no finding_lead package
     "duplicate_unresolved",            # a duplicate claim does not resolve to a canonical claim
     "review_incomplete",               # handoff accounting marks lane A review incomplete
+    # Appended by the metric computation: a lane A proposal names a claim the projection lacks.
+    "proposal_claim_missing",
 )
 
 
@@ -117,10 +140,325 @@ def unavailable_section(codes: Iterable[str]) -> dict[str, Any]:
     }
 
 
+REVIEW_JOB = "job_inference_security_review"
+_REVIEW_OUTPUT_SCHEMA = "appsec-review/inference-security-review/1"
+_REVIEW_HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/3"
+_LANE_PACKAGES_SCHEMA = "appsec-review/inference-review-lane-packages/1"
+_LANE_SCHEMA = "appsec-review/inference-review-lane/1"
+_RECEIPT_SCHEMA = "appsec-review/claim-ledger-head/1"
+_PROJECTION_SCHEMA = "appsec-review/claim-projection/1"
+_LEAD_OUTCOMES = ("proposal", "no_proposal", "blocked", "unaccounted")
+_UNLINKED = "(unlinked)"
+_READ_ERRORS: tuple[type[BaseException], ...] = (ValueError, OSError, KeyError, TypeError, AttributeError)
+
+
+class _Unavailable(Exception):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def _require(condition: bool, code: str) -> None:
+    if not condition:
+        raise _Unavailable(code)
+
+
+def _ref(value: Any, code: str) -> dict[str, str]:
+    _require(isinstance(value, Mapping) and isinstance(value.get("path"), str)
+             and isinstance(value.get("sha256"), str), code)
+    return {"path": value["path"], "sha256": value["sha256"]}
+
+
+def _output_ref(outputs: Mapping[str, Any], unit_id: str, code: str) -> dict[str, str]:
+    output = outputs.get(unit_id)
+    _require(isinstance(output, Mapping), code)
+    return _ref(output.get("artifact"), code)
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 6) if denominator > 0 else None
+
+
+def _stage(code: str, load, *args):
+    """Run one verified read; any read or verification failure names the stage's gap code."""
+    from appsec_review.review.models import IntegrityError
+    try:
+        return load(*args)
+    except _Unavailable:
+        raise
+    except (IntegrityError, *_READ_ERRORS) as exc:
+        raise _Unavailable(code) from exc
+
+
+def _load_review(run_root: Path) -> dict[str, Any]:
+    from appsec_review.indexing.store import accepted_handoff
+    from appsec_review.jobs.bound_artifacts import read_bound_json
+
+    code = "review_handoff_unavailable"
+    accepted = accepted_handoff(run_root, REVIEW_JOB)
+    _require(accepted is not None and accepted.handoff.get("job_id") == REVIEW_JOB, code)
+    outputs = accepted.handoff.get("outputs")
+    _require(isinstance(outputs, Mapping), code)
+    published = outputs.get("publication.publish_handoff")
+    _require(isinstance(published, Mapping) and published.get("schema") == _REVIEW_OUTPUT_SCHEMA, code)
+    review_ref = _ref(published.get("artifact"), code)
+    review = read_bound_json(run_root, review_ref)
+    _require(isinstance(review, Mapping) and review.get("schema") == _REVIEW_HANDOFF_SCHEMA
+             and review.get("run_id") == run_root.name, code)
+    lanes = [lane for lane in review["accounting"]["lanes"] if lane.get("lane") == "lead"]
+    _require(len(lanes) == 1, code)
+    by_outcome = lanes[0]["leads_by_outcome"]
+    _require(isinstance(by_outcome, Mapping) and isinstance(lanes[0]["review_incomplete"], bool), code)
+    return {
+        "outputs": outputs,
+        "lead_package_manifest_sha256": review.get("lead_package_manifest_sha256"),
+        "projection_sha256": review["projection_sha256"],
+        "ledger_head_sha256": review["ledger_head_sha256"],
+        "leads_by_outcome": {outcome: int(by_outcome.get(outcome, 0)) for outcome in _LEAD_OUTCOMES},
+        "review_incomplete": lanes[0]["review_incomplete"],
+        "sources": {"job_handoff": {"path": accepted.path, "sha256": accepted.sha256},
+                    "review_handoff": review_ref},
+    }
+
+
+def _load_manifest(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any]:
+    from appsec_review.jobs.bound_artifacts import read_bound_json, resolve_bound
+    from appsec_review.review.packages import verify_package_manifest
+
+    code = "lead_manifest_unavailable"
+    set_ref = _output_ref(review["outputs"], "packages.assemble_lead_packages", code)
+    document = read_bound_json(run_root, set_ref)
+    _require(isinstance(document, Mapping) and document.get("schema") == _LANE_PACKAGES_SCHEMA
+             and document.get("lane") == "lead", code)
+    manifest_ref = _ref(document.get("package_manifest"), code)
+    manifest_path = resolve_bound(run_root, manifest_ref)
+    manifest = verify_package_manifest(manifest_path)       # content hash and every package's bytes
+    _require(manifest["content_sha256"] == document.get("package_manifest_content_sha256")
+             == review["lead_package_manifest_sha256"], code)
+    admission = []
+    for row in manifest["admission"]:
+        _require(isinstance(row.get("lead_id"), str) and row.get("status") in ("admitted", "not_admitted")
+                 and isinstance(row.get("residual_coverage"), str), code)
+        admission.append((row["lead_id"], row["status"], row["residual_coverage"]))
+    _require(len({lead_id for lead_id, _, _ in admission}) == len(admission), code)
+    packages_dir = PurePosixPath(manifest_ref["path"]).parent / "packages"
+    lead_packages: dict[str, list[tuple[str, str, str]]] = {}
+    for entry in manifest["packages"]:
+        if entry.get("kind") != "finding_lead" or entry.get("lane") != "lead":
+            continue
+        body = read_bound_json(run_root, {"path": (packages_dir / f"{entry['package_id']}.json").as_posix(),
+                                          "sha256": entry["sha256"]})
+        lead_packages[entry["package_id"]] = [
+            (str(lead["observation_id"]), str(lead.get("lead_family") or _UNLINKED),
+             str(lead.get("scanner") or _UNLINKED)) for lead in body["lead_menu"]]
+    non_lead = manifest["counts"]["non_lead_observations"]
+    non_lead_total = sum(int(value) for value in non_lead.values()) if isinstance(non_lead, Mapping) else int(non_lead)
+    return {"admission": admission, "lead_packages": lead_packages, "non_lead_observations": non_lead_total,
+            "sources": {"lead_packages": set_ref, "lead_package_manifest": manifest_ref}}
+
+
+def _load_lane(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any]:
+    from appsec_review.jobs.bound_artifacts import read_bound_json
+
+    code = "lane_document_unavailable"
+    lane_ref = _output_ref(review["outputs"], "lead_review.teams", code)
+    document = read_bound_json(run_root, lane_ref)
+    _require(isinstance(document, Mapping) and document.get("schema") == _LANE_SCHEMA
+             and document.get("lane") == "lead", code)
+    accounting: dict[str, dict[str, Any]] = {}
+    for package_id, leads in document["lead_accounting"].items():
+        accounting[str(package_id)] = {
+            str(lead): (summary.get("outcome") if isinstance(summary, Mapping) else summary)
+            for lead, summary in leads.items()}
+    proposals = {str(claim_id): tuple(str(item) for item in packages)
+                 for claim_id, packages in document["proposals"].items()}
+    return {"lead_accounting": accounting, "proposals": proposals, "sources": {"lane_document": lane_ref}}
+
+
+def _load_projection(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any]:
+    from appsec_review.jobs.bound_artifacts import read_bound_json
+
+    code = "claim_projection_unavailable"
+    receipt_ref = _output_ref(review["outputs"], "publication.publish_claim_ledger", code)
+    receipt = read_bound_json(run_root, receipt_ref)
+    _require(isinstance(receipt, Mapping) and receipt.get("schema") == _RECEIPT_SCHEMA
+             and receipt.get("projection_sha256") == review["projection_sha256"]
+             and receipt.get("ledger_head_sha256") == review["ledger_head_sha256"], code)
+    projection_ref = {"path": (PurePosixPath(receipt_ref["path"]).parent / "projection.json").as_posix(),
+                      "sha256": receipt.get("projection_file_sha256")}
+    projection = read_bound_json(run_root, projection_ref)
+    _require(isinstance(projection, Mapping) and projection.get("schema") == _PROJECTION_SCHEMA
+             and projection.get("ledger_head_sha256") == review["ledger_head_sha256"], code)
+    claims = {}
+    for claim in projection["claims"]:
+        _require(isinstance(claim.get("claim_id"), str) and isinstance(claim.get("state"), str), code)
+        claims[claim["claim_id"]] = {"lane": claim["lane"], "package_id": claim["package_id"],
+                                     "state": claim["state"], "duplicate_of": claim.get("duplicate_of"),
+                                     "origin_cell_ids": tuple(claim.get("origin_cell_ids") or ())}
+    cells = {str(cell_id): {str(record["package_id"]) for record in records}
+             for cell_id, records in projection["cells"].items()}
+    return {"claims": claims, "cell_packages": cells,
+            "sources": {"claim_ledger_receipt": receipt_ref, "claim_projection": projection_ref}}
+
+
+def _canonical(claim_id: str, claims: Mapping[str, Mapping[str, Any]]) -> str | None:
+    """Follow ``duplicate_of`` to the claim it ends at; ``None`` when the chain breaks or cycles."""
+    seen = set()
+    while claim_id in claims and claims[claim_id]["state"] == "duplicate":
+        if claim_id in seen:
+            return None
+        seen.add(claim_id)
+        target = claims[claim_id]["duplicate_of"]
+        if not isinstance(target, str):
+            return None
+        claim_id = target
+    return claim_id if claim_id in claims else None
+
+
+def _linked_claims(packages: Iterable[str], lane: Mapping[str, Any], projection: Mapping[str, Any]) -> set[str]:
+    wanted = set(packages)
+    linked = {claim_id for claim_id, owners in lane["proposals"].items() if wanted.intersection(owners)}
+    for claim_id, claim in projection["claims"].items():
+        if claim["lane"] == "lead" and claim["package_id"] in wanted:
+            linked.add(claim_id)
+        elif any(wanted & projection["cell_packages"].get(cell, set()) for cell in claim["origin_cell_ids"]):
+            linked.add(claim_id)
+    return linked
+
+
+def _proposal_disposition(claim_ids: set[str], projection: Mapping[str, Any], gaps: set[str]
+                          ) -> tuple[str, str | None, set[str]]:
+    """(disposition, unresolved reason, dismissing states) of a lead whose red cells proposed."""
+    claims = projection["claims"]
+    states: set[str] = set()
+    not_final = False
+    for claim_id in claim_ids:
+        if claim_id not in claims:
+            gaps.add("proposal_claim_missing")
+            not_final = True
+            continue
+        canonical = _canonical(claim_id, claims)
+        if canonical is None:
+            gaps.add("duplicate_unresolved")
+            not_final = True
+            continue
+        states.add(claims[canonical]["state"])
+    if not claim_ids:
+        return "unresolved", "proposal_without_claim", set()
+    if "confirmed" in states:
+        return "survived_confirmed", None, set()
+    if "supported" in states:
+        return "survived_supported", None, set()
+    for reason in ("insufficient_evidence", "coverage_gap"):
+        if reason in states:
+            return "unresolved", reason, set()
+    if not_final or not states or not states <= set(DISMISSED_STATES):
+        return "unresolved", "claim_not_final", set()
+    return "dismissed_by_adjudication", None, states
+
+
+def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mapping[str, Any],
+             projection: Mapping[str, Any]) -> dict[str, Any]:
+    gaps: set[str] = set()
+    packages_of: dict[str, list[str]] = {}
+    menu: dict[str, tuple[str, str]] = {}
+    for package_id, leads in sorted(manifest["lead_packages"].items()):
+        for lead_id, family, scanner in leads:
+            packages_of.setdefault(lead_id, []).append(package_id)
+            menu.setdefault(lead_id, (family, scanner))
+
+    observed = Counter(outcome for leads in lane["lead_accounting"].values() for outcome in leads.values()
+                       if outcome in _LEAD_OUTCOMES)
+    if any(observed[outcome] != review["leads_by_outcome"][outcome] for outcome in _LEAD_OUTCOMES):
+        gaps.add("lead_outcome_mismatch")
+
+    dispositions = empty_dispositions()
+    dismissed_states = dict.fromkeys(DISMISSED_STATES, 0)
+    unresolved = dict.fromkeys(UNRESOLVED_REASONS, 0)
+    by_family: dict[str, dict[str, int]] = {}
+    by_scanner: dict[str, dict[str, int]] = {}
+    admitted = [lead_id for lead_id, status, _ in manifest["admission"] if status == "admitted"]
+    for lead_id in sorted(admitted):
+        packages = packages_of.get(lead_id, [])
+        if not packages:
+            gaps.add("lead_package_unlinked")
+        outcomes = []
+        for package_id in packages:
+            outcome = lane["lead_accounting"].get(package_id, {}).get(lead_id)
+            if outcome not in _LEAD_OUTCOMES:
+                gaps.add("lead_outcome_missing")
+                outcome = "unaccounted"
+            outcomes.append(outcome)
+        reason: str | None = None
+        states: set[str] = set()
+        if not outcomes:
+            disposition, reason = "unresolved", "unaccounted"
+        elif "proposal" in outcomes:
+            disposition, reason, states = _proposal_disposition(
+                _linked_claims(packages, lane, projection), projection, gaps)
+        elif all(outcome == "no_proposal" for outcome in outcomes):
+            disposition = "no_claim_raised"
+        else:
+            disposition = "unresolved"
+            reason = "blocked" if "blocked" in outcomes else "unaccounted"
+        dispositions[disposition] += 1
+        if reason is not None:
+            unresolved[reason] += 1
+        for state in states:
+            dismissed_states[state] += 1
+        family, scanner = menu.get(lead_id, (_UNLINKED, _UNLINKED))
+        for table, key in ((by_family, family), (by_scanner, scanner)):
+            row = table.setdefault(key, {"admitted": 0, **empty_dispositions()})
+            row["admitted"] += 1
+            row[disposition] += 1
+
+    if review["review_incomplete"]:
+        gaps.add("review_incomplete")
+    reduced = sum(dispositions[name] for name in REDUCED_DISPOSITIONS)
+    resolved = reduced + sum(dispositions[name] for name in SURVIVED_DISPOSITIONS)
+    not_admitted = Counter(residual for _, status, residual in manifest["admission"] if status == "not_admitted")
+    hunt_claims = sum(1 for claim in projection["claims"].values() if claim["lane"] == "hunt")
+    return {
+        "schema": TRIAGE_REDUCTION_SCHEMA,
+        "available": True,
+        "scope": SCOPE,
+        "sources": dict(sorted({**review["sources"], **manifest["sources"], **lane["sources"],
+                                **projection["sources"]}.items())),
+        "leads": {"collected": len(manifest["admission"]), "admitted": len(admitted),
+                  "not_admitted": sum(not_admitted.values()),
+                  "not_admitted_by_residual_coverage": dict(sorted(not_admitted.items())),
+                  "non_lead_observations": manifest["non_lead_observations"]},
+        "admitted_dispositions": dispositions,
+        "dismissed_by_claim_state": dismissed_states,
+        "unresolved_by_reason": unresolved,
+        "hunt_lane_claims_excluded": hunt_claims,
+        "reduction": {"ratio_over_resolved": _ratio(reduced, resolved),
+                      "lower_bound_over_admitted": _ratio(reduced, len(admitted)),
+                      "resolved_denominator": resolved, "admitted_denominator": len(admitted)},
+        "by_family": dict(sorted(by_family.items())),
+        "by_scanner": dict(sorted(by_scanner.items())),
+        "review_incomplete": review["review_incomplete"],
+        "accounting_complete": dispositions["unresolved"] == 0 and not review["review_incomplete"] and not gaps,
+        "integrity_gap_codes": sorted(gaps),
+        "interpretation": INTERPRETATION,
+    }
+
+
 def triage_reduction_metrics(run_root: Any) -> dict[str, Any]:
     """Compute the ``triage_reduction`` section from the run's verified review artifacts.
 
-    Implemented by the metric-computation chunk. Never raises for missing or unverifiable
-    inputs; returns ``unavailable_section`` with named integrity gap codes instead.
+    Never raises for missing or unverifiable inputs; returns ``unavailable_section`` with the
+    named integrity gap code of the first input that could not be read and verified instead.
     """
-    raise NotImplementedError
+    from appsec_review.storage.validation import validation_scope
+
+    root = Path(run_root).resolve()
+    try:
+        with validation_scope(root):
+            review = _stage("review_handoff_unavailable", _load_review, root)
+            manifest = _stage("lead_manifest_unavailable", _load_manifest, root, review)
+            lane = _stage("lane_document_unavailable", _load_lane, root, review)
+            projection = _stage("claim_projection_unavailable", _load_projection, root, review)
+    except _Unavailable as unavailable:
+        return unavailable_section([unavailable.code])
+    return _compute(review, manifest, lane, projection)

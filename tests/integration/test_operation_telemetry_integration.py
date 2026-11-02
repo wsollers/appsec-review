@@ -80,7 +80,7 @@ def test_artifact_indexing_run_summary_exposes_progress_phases_and_hotspots(tmp_
 
     write_run_metrics(run_root)
     summary = json.loads((run_root / "data" / "telemetry" / "summary.json").read_text(encoding="utf-8"))
-    assert summary["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/6"
+    assert summary["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/7"
     assert summary["operation_progress"] == []                  # every span completed
     hotspots = summary["operation_hotspots"]
     assert 1 <= len(hotspots) <= 20

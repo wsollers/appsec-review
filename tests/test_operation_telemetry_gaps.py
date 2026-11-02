@@ -452,7 +452,7 @@ def test_operation_progress_reports_running_spans_with_last_heartbeat(tmp_path: 
     _span_events(log, start=2, span_id="b" * 32)                # started, no heartbeat yet
     log(150, "TASK_STARTED", job=JOB, attempt="a1", step="other", task="other")
     metrics = aggregate_run_metrics(_write(tmp_path / "run", log))
-    assert metrics["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/6"
+    assert metrics["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/7"
     first, second = metrics["operation_progress"]
     assert first["span_id"] == SPAN and first["state"] == "running"
     assert first["stage"] == "unit.execute" and first["unit_id"] == "index.relationships"

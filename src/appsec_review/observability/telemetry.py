@@ -16,6 +16,7 @@ from appsec_review.observability.completion import completion_metrics
 from appsec_review.storage import atomic_json, canonical_json
 from appsec_review.storage import file_sha256
 from appsec_review.observability.debug_symbols import debug_symbol_metrics
+from appsec_review.observability.triage_reduction import triage_reduction_metrics
 
 
 SCHEMA = "appsec-review/telemetry-event/1"
@@ -23,7 +24,7 @@ FINDING_STATES = {"CANDIDATE", "REFUTED", "CONFIRMED"}
 TERMINAL_EVENTS = {"SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED",
                    "BLOCKED", "PARTIAL", "NOT_APPLICABLE"}
 METRICS_SEMANTICS = "appsec-review/review-metrics-semantics/1"
-RUN_METRICS_SCHEMA = "appsec-review/run-metrics/6"
+RUN_METRICS_SCHEMA = "appsec-review/run-metrics/7"
 CODEQL_METRICS_SEMANTICS = "appsec-review/codeql-execution-metrics/1"
 CODEQL_QUERY_METRICS_SCHEMA = "appsec-review/codeql-query-metrics/1"
 CODEQL_TOOLS = {"codeql", "codeql-graph-export", "codeql-graph-export-compile"}
@@ -1765,6 +1766,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completion": completion_metrics(records),
             "owasp": _owasp_metrics(Path(run_root), records),
             "review_flow": _review_flow_metrics(records),
+            "triage_reduction": triage_reduction_metrics(Path(run_root)),
             "openvex": openvex,
             "tree_sitter": tree_sitter,
             "native_sbom": native_sbom,
