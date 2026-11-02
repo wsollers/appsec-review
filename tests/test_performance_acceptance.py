@@ -27,7 +27,7 @@ PROGRESS_KEYS = {"span_id", "stage", "unit_id", "state", "started_at", "last_pro
 
 def _assert_operation_sections(metrics, root, enabled):
     """The summary exposes the gap-closing sections in their documented shapes."""
-    assert metrics["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/6"
+    assert metrics["schema"] == RUN_METRICS_SCHEMA == "appsec-review/run-metrics/7"
     records, torn = PipelineLog(root).read()
     assert not torn
     progress = [record for record in records if record["event_type"] == "OPERATION_PROGRESS"]
