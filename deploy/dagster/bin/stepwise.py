@@ -45,6 +45,7 @@ from appsec_review.acceptance.answer_key import evaluate, load_answer_key, obser
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
 from appsec_review.acceptance import funnel as funnel_report  # noqa: E402
+from appsec_review.acceptance import scoring as detector_scoring  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
 from appsec_review.acceptance.integrity import attempt_integrity  # noqa: E402
 from appsec_review.acceptance import model_contract  # noqa: E402
@@ -504,6 +505,15 @@ def command_system(args) -> int:
     except Exception as error:  # noqa: BLE001 - a report that cannot be built must not fail the run
         print(f"   funnel unavailable: {type(error).__name__}: {error}")
         funnel_section = {"error": f"{type(error).__name__}: {error}"}
+    # Detector scoring (docs/reviews/castle-style-detector-scoring.md) is reported, never asserted either.
+    try:
+        scoring = detector_scoring.score_run(run_root, key_root / "expectations.toml", repo_root=ROOT)
+        for line in detector_scoring.render_lines(scoring):
+            print(line)
+        scoring_section = scoring.as_dict()
+    except Exception as error:  # noqa: BLE001 - a report that cannot be built must not fail the run
+        print(f"   scoring unavailable: {type(error).__name__}: {error}")
+        scoring_section = {"error": f"{type(error).__name__}: {error}"}
 
     verdict = ("SYSTEM OK" if not failing(problems) and compared == 0 and not matrix.failed and not contract.failed
                else "SYSTEM FAILED")
@@ -513,7 +523,8 @@ def command_system(args) -> int:
         "verdict": verdict, "application_run_id": app_run_id, "corpus_tag": tag,
         "repository_commit": git("rev-parse", "HEAD", cwd=ROOT), "integrity": [item.as_dict() for item in problems],
         "baseline_compare_exit": compared, "model_contract": contract.as_dict(),
-        "answer_key": matrix.as_dict(), "funnel": funnel_section}, indent=1) + "\n", encoding="utf-8")
+        "answer_key": matrix.as_dict(), "funnel": funnel_section, "scoring": scoring_section}, indent=1) + "\n",
+        encoding="utf-8")
     print(f"== {verdict}; report {report.relative_to(ROOT)}")
     return 0 if verdict == "SYSTEM OK" else 1
 

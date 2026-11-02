@@ -1,6 +1,7 @@
 # CASTLE-style detector scoring, negative controls and the CASTLE regression corpus
 
-Status: design settled 2026-11-03 (coordinator session); implemented in chunks A-E below.
+Status: implemented 2026-11-02 in chunks A-E below (coordinator session). Live acceptance of case-094 and
+the CASTLE-C250 scoring run are user-owned and not yet run.
 
 Source: Dubniczky et al., "CASTLE: Benchmarking Dataset for Static Code Analyzers and LLMs towards
 CWE Detection", TASE 2025, arXiv:2503.09433v2. Dataset: <https://github.com/CASTLE-Benchmark/CASTLE-Benchmark>
@@ -67,7 +68,11 @@ low score is a statement about detectors, never evidence that a target is clean.
 
 5. **Producers.** Every tool observation in the run's observation index shards
    (`data/indices/observations/**/*.sqlite`, kind `tool_observation`) is a report of the producer
-   named by its payload `scanner` (else `tool`), lowercased. With `--include-review`, rows of the
+   its payload names, lowercased, with a leading `tool-` removed. Real payloads name it in different
+   fields, so the first present of `scanner`, `tool`, `common.scanner`, `tool_id`, `scanner_identity`,
+   `producer` and `tool_identity.id` wins (`producer_reports.producer_name`); for example `codeql`,
+   `cppcheck`, `semgrep`, `opengrep`, `clang-static-analyzer`, `clang-tidy` and `infer`. Observations
+   with no producer or no location are counted as named gaps. With `--include-review`, rows of the
    accepted current final report (`answer_key.current_report_findings`) are reports of producer
    `review`; when that report is unavailable the review producer is a named gap, never zero reports.
 
@@ -107,18 +112,27 @@ low score is a statement about detectors, never evidence that a target is clean.
    the paper's reference numbers (`data/reference/castle/castle-c250.lock.json`) beside ours by
    producer, for comparison only.
 
-10. **Fixed-twin case (item 1).** At the user's explicit direction the twins go into the
+10. **Paired case (item 1).** At the user's explicit direction the code goes into the
     `appsec-multi-vuln` corpus repository (`F:\XBOX-Repositories\appsec-multi-vuln`, remote
-    `wsollers/appsec-multi-vuln`) as a new case, `projects/native/case-094`: a C++ CMake project
-    with seven pairs for the v1 weakness classes CWE-121, 416, 476, 190, 134, 78 and 798, each a seeded
-    instance and a corrected twin, both reachable from `main`, with neutral names and comments, and
-    registered in the README and `support/project-matrix.json` like earlier cases. The cpp-multivuln
-    checkout behind v1 is not available on this host and is not recreated. The case is committed and
-    tagged `appsec-multi-vuln-c094-v1` locally and never pushed; nothing is written under `targets/`
-    (the user pulls and pins). Its key is `test/acceptance/appsec-multi-vuln-c094-v1/expectations.toml`
-    with paths from the target root, `scored_paths = ["projects/native/case-094"]`, function scopes,
-    seven defects and seven controls linked by `pair`. It has no baselines or seeds until the user's
-    live acceptance produces them.
+    `wsollers/appsec-multi-vuln`) and its answers go into the evaluator guide
+    (`F:\XBOX-Repositories\appsec-multi-vuln-guide`), so the corpus carries no hint of which code is
+    defective or correct. Both are worked on through the WSL links `~/projects/appsec-multi-vuln` and
+    `~/projects/appsec-multi-vuln-guide`, on local branches `case-094` stacked on `polyglot-case-093`;
+    nothing is pushed and nothing is written under `targets/` (the user pushes, pulls and pins).
+    - *Corpus.* `projects/native/case-094` is a C++ CMake project with seven pairs for the v1
+      weakness classes CWE-121, 416, 476, 190, 134, 78 and 798: one defective and one correct
+      implementation of the same operation, both reachable from `main`, with neutral names, comments
+      and commit message, registered in the README, `support/project-matrix.json` and the smoke
+      scripts like earlier cases. The commit is tagged `appsec-multi-vuln-c094-v1` locally.
+    - *Guide.* Seven `data/defect-inventory.json` records `case-094#1..7` and a new optional
+      top-level `controls` array (`case-094#c1..c7`, each with `pair`, `why` and located `construct`s)
+      that the guide's validator and renderer check, with the rubric rule that a report on a control
+      is a false positive and a silent control a true negative.
+    - *Key.* `test/acceptance/appsec-multi-vuln-c094-v1/expectations.toml` is derived from the guide
+      at the pinned corpus and guide commits: paths from the target root,
+      `scored_paths = ["projects/native/case-094"]`, function scopes, seven defects and seven controls
+      linked by `pair`. It has no baselines or seeds until the user's live acceptance produces them.
+      The cpp-multivuln checkout behind v1 is not on this host and is not recreated.
 
 11. **Default key.** `funnel.DEFAULT_EXPECTATIONS` (and the scoring CLI default) stays
     `test/acceptance/cpp-multivuln-v1/expectations.toml`, the only key with accepted baselines. Other
@@ -142,9 +156,12 @@ low score is a statement about detectors, never evidence that a target is clean.
     - *Build.* Upstream files are never edited. A generated, neutral `CMakeLists.txt` builds one
       executable per file and maps each upstream `compile` line to link libraries (OpenSSL, SQLite3,
       CURL through `find_package`; mysqlclient through pkg-config) and per-target flags. A missing
-      library fails the configure step; it is not silently dropped.
+      library fails the configure step; it is not silently dropped. The current native-cpp image has
+      OpenSSL and pkg-config but not the SQLite3, CURL or mysqlclient development packages, so 26
+      tests cannot configure there until the image owner adds them.
     - *Determinism.* One commit with a fixed author, committer and date, tagged `castle-c250-v1`, so the
-      blind commit SHA is reproducible and recorded in the key.
+      blind commit SHA is reproducible and recorded in the lock and the key
+      (`9792c7495ab01a0f38968bce02ba5588ef4c133e`, reproduced from a fresh preparation).
     - *Key.* `test/acceptance/castle-c250-v1/expectations.toml`, generated: 150 defects (`lines` from
       the JSON) and 100 controls, all `scope = "file"`, each with `upstream`. It is committed (MIT,
       derived metadata, attributed), never placed in the target.
@@ -159,7 +176,7 @@ The shared contract is `src/appsec_review/acceptance/scoring_model.py` (records,
 | A scoring core | `src/appsec_review/acceptance/scoring.py`, `data/reference/scoring/cwe-top25.json`, `data/reference/scoring/cwe-match.json`, `tests/test_detector_scoring.py` |
 | B run reports | `src/appsec_review/acceptance/producer_reports.py`, `data/reference/scoring/rule-cwe.json`, `tests/test_producer_reports.py` |
 | C CASTLE corpus | `src/appsec_review/acceptance/castle.py`, `data/reference/castle/**`, `test/acceptance/castle-c250-v1/expectations.toml`, `tests/test_castle_corpus.py`, `tests/fixtures/castle/**` |
-| D fixed twins | `appsec-multi-vuln` `projects/native/case-094/**` plus its README and matrix rows; `test/acceptance/appsec-multi-vuln-c094-v1/expectations.toml` |
+| D paired case | `appsec-multi-vuln` `projects/native/case-094/**` plus its README, matrix and smoke rows; the guide's case-094 records and `controls`; `test/acceptance/appsec-multi-vuln-c094-v1/expectations.toml` |
 | E wiring and docs (after A-D merge) | `deploy/dagster/bin/stepwise.py` system command, `docs/operations/acceptance-funnel.md`, `docs/processes/acceptance-and-regression-testing.md`, `docs/operations/test-targets.md`, `docs/TODO.md`, this design |
 
 Interfaces between chunks:
@@ -167,8 +184,11 @@ Interfaces between chunks:
 - `scoring.load_scoring_key(path: Path) -> ScoringKey`
 - `scoring.score(key: ScoringKey, reports: Iterable[Report], *, tolerance=DEFAULT_TOLERANCE,
   top_list=DEFAULT_TOP_LIST, max_combination=DEFAULT_MAX_COMBINATION, producers=None,
-  gaps=()) -> ScoringReport`, with `ScoringReport.as_dict()` (schema `appsec-review/detector-scoring/1`)
-  and `render_lines(report) -> list[str]`
+  gaps=(), reference=None) -> ScoringReport`, with `ScoringReport.as_dict()` (schema
+  `appsec-review/detector-scoring/1`) and `render_lines(report) -> list[str]`
+- `scoring.score_run(run_root, expectations, *, include_review=False, ...) -> ScoringReport`: the
+  path shared by the CLI and `stepwise.py system`; it loads the key, the run's reports and the key's
+  `reference_lock`
 - `producer_reports.reports_from_run(run_root: Path, *, include_review: bool = False)
   -> tuple[list[Report], list[str]]` (reports, named gaps); paths relative to the target root
 

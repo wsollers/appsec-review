@@ -488,6 +488,30 @@ def render_lines(report: ScoringReport) -> list[str]:
     return lines
 
 
+def score_run(run_root: Path, expectations: Path, *, include_review: bool = False,
+              tolerance: int = DEFAULT_TOLERANCE, top_list: str = DEFAULT_TOP_LIST,
+              max_combination: int = DEFAULT_MAX_COMBINATION, producers: Iterable[str] | None = None,
+              repo_root: Path | None = None) -> ScoringReport:
+    """Score a finished run's producer reports against a scoring key; the shared path of the CLI and stepwise."""
+
+    from .producer_reports import reports_from_run
+
+    repo_root = repo_root or Path(__file__).resolve().parents[3]
+    key = load_scoring_key(expectations)
+    reports, gaps = reports_from_run(run_root, include_review=include_review)
+    gaps = list(gaps)
+    reference = None
+    lock = key.corpus.get("reference_lock")
+    if isinstance(lock, str) and lock:
+        lock_path = repo_root / lock
+        if lock_path.is_file():
+            reference = json.loads(lock_path.read_text(encoding="utf-8"))
+        else:
+            gaps.append(f"reference_lock_missing: {lock}")
+    return score(key, reports, tolerance=tolerance, top_list=top_list, max_combination=max_combination,
+                 producers=producers, gaps=gaps, reference=reference)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parents[3]
     parser = argparse.ArgumentParser(description="CASTLE-style detector scoring of a finished run (reported, never asserted)")
@@ -505,23 +529,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not (run_root / "data").is_dir():
         print(f"scoring: no run tree at {run_root}", file=sys.stderr)
         return 2
-    from .producer_reports import reports_from_run
-
     try:
-        key = load_scoring_key(args.expectations)
-        reports, gaps = reports_from_run(run_root, include_review=args.include_review)
-        gaps = list(gaps)
-        reference = None
-        lock = key.corpus.get("reference_lock")
-        if isinstance(lock, str) and lock:
-            lock_path = repo_root / lock
-            if lock_path.is_file():
-                reference = json.loads(lock_path.read_text(encoding="utf-8"))
-            else:
-                gaps.append(f"reference_lock_missing: {lock}")
         producers = None if args.producers is None else [name for name in args.producers.split(",") if name.strip()]
-        report = score(key, reports, tolerance=args.tolerance, top_list=args.top_list,
-                       max_combination=args.max_combination, producers=producers, gaps=gaps, reference=reference)
+        report = score_run(run_root, args.expectations, include_review=args.include_review,
+                           tolerance=args.tolerance, top_list=args.top_list, max_combination=args.max_combination,
+                           producers=producers, repo_root=repo_root)
     except (OSError, ValueError) as error:
         print(f"scoring: {error}", file=sys.stderr)
         return 2

@@ -804,7 +804,11 @@ What needs deciding, roughly in order of expected value:
   This is cheap and would have caught the CERT suite yielding nothing at rule granularity.
 - **Metamorphic pairs.** For each rule, a vulnerable snippet must yield a result and its fixed
   counterpart must not. Testable without a full oracle, and it pins rule semantics rather than
-  aggregate counts.
+  aggregate counts. *Partly done (2026-11-02):* per weakness class rather than per rule, the
+  `appsec-multi-vuln-c094-v1` key pairs seven defects with seven negative controls (CWE-121, 416, 476,
+  190, 134, 78, 798), and CASTLE-C250 adds 150 defects and 100 controls; detector scoring
+  (`appsec_review.acceptance.scoring`) reports per-producer TP/FP/FN/TN against them. Still open: pairs
+  per enabled rule, and asserting them rather than reporting.
 - **The engine's own test framework.** CodeQL ships `codeql test run` with `.qlref`/`.expected`
   files, and the upstream coding-standards repository already uses it. Query semantics probably
   belong there, not in our pipeline, with our contracts asserting only that the suite ran, resolved

@@ -188,6 +188,19 @@ least one rule set.
    run's recorded responses. Further corpora are added only after the whole chain matches; see
    [`local-dagster-parity.md`](local-dagster-parity.md).
 
+## Decisions (2026-11-02)
+
+6. **False positives are measured against negative controls.** A key may list `[[controls]]`: correct
+   code paired with a defect of the same weakness, where any report is a false positive and silence a
+   true negative. v1 has none and stays unchanged; `appsec-multi-vuln-c094-v1` pairs seven defects with
+   seven controls whose answers live in the evaluator guide, never in the corpus.
+7. **Detectors are scored, not gated.** Each producer gets TP/FP/FN/TN, precision, recall, accuracy and
+   the CASTLE score, and combinations get the CASTLE combination score and each producer's marginal
+   contribution. The score is reported beside the funnel and never changes the verdict.
+8. **CASTLE-C250 is the public C regression corpus**, pinned at an exact upstream commit and prepared
+   into a blind target; its key is committed under `test/acceptance/castle-c250-v1/`. It is public, not a
+   holdout. Design: [`../reviews/castle-style-detector-scoring.md`](../reviews/castle-style-detector-scoring.md).
+
 
 ## System acceptance (SAT/SIT)
 
@@ -204,6 +217,7 @@ produces its final artifacts; per-job parity shows each job behaves the same thr
 | Baselines | the normalized output of a job differs from `test/acceptance/<tag>/<job>.json` (`stepwise.py compare`) |
 | Answer key | a defect in `test/acceptance/<tag>/expectations.toml` has no finding on its file and line. Spurious findings are reported and never fail |
 | Funnel | never: the per-defect funnel (below) is printed and written to the report, and does not change the verdict |
+| Detector scoring | never: per-producer and combination scores (below) are printed and written to the report under `scoring` |
 
 The live test is `tests/live/test_wave1_system_live.py`, skipped unless `APPSEC_REVIEW_SYSTEM_ACCEPTANCE=<tag>`
 is set. It needs the Dagster stack running, the Docker daemon, the Claude CLI overlay and the real model.
@@ -303,6 +317,18 @@ Hunt units are matched through the lead menu entries of their package, not throu
 event fields follow `docs/architecture/review-judge-and-poc.md`; until a run records them, `judged` is
 `not_reached` or `not_applicable_in_this_run`. The funnel is not evidence about the target: a defect that
 stops early says the review did not look, never that the code is clean.
+
+## Detector scoring: which producers earn their place
+
+The answer key asks whether a defect was observed; detector scoring asks how good each producer is.
+`appsec_review.acceptance.scoring` scores every producer's reports in a finished run against a key, with
+a location tolerance and CWE matching through the pinned hierarchy, using the CASTLE benchmark's score
+(Dubniczky et al., TASE 2025) and its combination score, so a scanner whose false positives outweigh its
+finds shows a negative marginal contribution. It is read-only and deterministic, `stepwise.py system`
+prints it after the funnel, and it never changes the verdict. A key without negative controls (v1) still
+scores, with TN reported as not measurable. Usage, output and the user-run commands for case-094 and
+CASTLE-C250 are in [`../operations/acceptance-funnel.md`](../operations/acceptance-funnel.md#detector-scoring);
+the design is [`../reviews/castle-style-detector-scoring.md`](../reviews/castle-style-detector-scoring.md).
 
 Operating notes: recreate the stack with `docker compose -f compose.yaml -f compose.claude.yaml up -d`, never
 `compose.yaml` alone. A local run that consumes a hash recorded inside the container (the retrieval

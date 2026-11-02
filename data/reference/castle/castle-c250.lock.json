@@ -86,7 +86,7 @@
     {
       "tool": "Semgrep Code",
       "version": "1.110.0",
-      "producer": "tool-semgrep",
+      "producer": "semgrep",
       "tp": 36,
       "tn": 73,
       "fp": 70,
@@ -96,7 +96,7 @@
     {
       "tool": "Cppcheck",
       "version": "2.13.0",
-      "producer": "tool-cppcheck",
+      "producer": "cppcheck",
       "tp": 19,
       "tn": 100,
       "fp": 9,

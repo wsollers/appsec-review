@@ -273,7 +273,7 @@ def test_committed_lock_pins_upstream_paper_reference_and_blind_commit() -> None
     assert all(set(row) == castle.PAPER_REFERENCE_KEYS for row in rows)
     assert [(row["tool"], row["producer"], row["castle_score"]) for row in rows] == [
         ("ESBMC", None, 661), ("CodeQL", "codeql", 634), ("GCC Fanalyzer", None, 559),
-        ("Semgrep Code", "tool-semgrep", 541), ("Cppcheck", "tool-cppcheck", 406),
+        ("Semgrep Code", "semgrep", 541), ("Cppcheck", "cppcheck", 406),
         ("Clang Analyzer", "clang-static-analyzer", 381)]
     # Transcribed from Table 3 as published; CodeQL (157) and Semgrep (156) have TP + FN != 150 there.
     assert [(row["version"], row["tp"], row["tn"], row["fp"], row["fn"]) for row in rows] == [

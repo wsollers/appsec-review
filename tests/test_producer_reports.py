@@ -224,3 +224,25 @@ def test_rule_cwe_loader_rejects_invalid_tables(tmp_path, change, message):
 
     with pytest.raises(ValueError, match=message):
         load_rule_cwe(path)
+
+
+def test_score_run_scores_a_real_observation_index_against_a_key(tmp_path):
+    from appsec_review.acceptance.scoring import score_run
+
+    run = tmp_path / "run-1"
+    _shard(run, [_entity("cppcheck", CPPCHECK, "<target>/src/a.c", 12),
+                 _entity("clang", CLANG, "src/b.c", 7, 9),
+                 _entity("codeql", CODEQL, "other/d.c", 20, 21)])
+    key = tmp_path / "expectations.toml"
+    key.write_text('[corpus]\nname = "mini"\nscored_paths = ["src"]\n\n'
+                   '[[defect]]\nid = "d1"\npath = "src/a.c"\nline = 12\ncwe = "CWE-476"\npair = "c1"\n\n'
+                   '[[control]]\nid = "c1"\npath = "src/b.c"\nline = 8\ncwe = "CWE-476"\npair = "d1"\n'
+                   'scope_start = 5\nscope_end = 10\n', encoding="utf-8")
+
+    result = score_run(run, key).as_dict()
+
+    by_producer = {row["producer"]: row for row in result["producers"]}
+    assert by_producer["cppcheck"]["tp"] == 1 and by_producer["cppcheck"]["castle_score"] == 5 + 1 + 2  # B(CWE-476 rank 21) = 1; clean control
+    assert by_producer["clang-static-analyzer"]["fp"] == 1
+    assert by_producer["clang-static-analyzer"]["castle_score"] == 0 - 1  # silent on d1, one report on c1
+    assert "codeql" not in by_producer or by_producer["codeql"]["tp"] == 0
