@@ -9,7 +9,7 @@ section differ for slice 1, the readiness decisions govern. `ship-block-policy/1
 distinctness, remediation intake, the planned downstream job names, the closed
 `security-predicates/1` vocabulary, the `red-discovery-result/1` contract and the catalog-derived
 CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
-and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/3`) and
+and 11), as are evidence-driven scoring (`score-factors/2`, `application_risk_matrix/3`) and
 code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
 CVSS v4/SSVC providers, global round barriers and cross-package variant hunts remain design only.
 Compile-only PoC generation exists; `ec9257bf` adds real pre-seal chain composition/challenges,
@@ -65,6 +65,16 @@ The job follows these non-negotiable rules:
 7. High/Critical or ship-blocking findings require direct resolving evidence and independent
    verification. Proof-of-trigger execution is separately authorized and is never a prerequisite
    for truthful confirmation when the other evidence is sufficient.
+8. Numeric facts come from deterministic tools (`numeric-reasoning-guardrail/1`,
+   `review/numeric_reasoning.py`). Models often reach a correct verdict through unsound reasoning
+   about value ranges, bounds, integer wrap, loop trip counts, termination, invariants and
+   fixpoints (Mitchell et al., arXiv:2503.12686), so such a fact counts only when it cites a range
+   or guard fact, a CodeQL, Infer, SVF or Clang Static Analyzer result, a sanitizer report, or the
+   scanner observation itself. Lead triage leaves a model reason that reasons numerically without
+   citing a supplied `tool_fact` `unknown` with `triage_unresolved:uncited_numeric_reasoning`.
+   For numeric weaknesses (`numeric-weakness-cwes/1`), scoring does not count `code_evidence`
+   toward `guard_absent`. `tests/test_prompt_numeric_reasoning.py` rejects prompt fragments that
+   model inline range or loop reasoning without naming a tool fact or artifact.
 
 Repository-agent authority lives in root `AGENTS.md`. Development skills live under
 `.claude/skills/` and never reach a job. Runtime skills live under `pipeline/skills/` and are
@@ -868,7 +878,7 @@ Initial providers are:
 - `cvss_v31_compat`, an explicitly labeled compatibility provider that retains its v3.1 vector and
   must never masquerade as v4.
 - `application_risk_matrix`, a versioned configurable model over evidence-derived factors (see
-  [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors1)).
+  [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors2)).
 - `ssvc_decision`, an SSVC-style decision-tree result with decision path and outcome, not a numeric
   severity.
 - organization plugins loaded from a closed registry, with signed/pinned package identity and no
@@ -895,7 +905,7 @@ record. That mixed technical severity, confidence, exposure, remediation, and pr
 The new provider boundary retains the useful hash-pinned calculator provenance while separating
 native provider output from organization policy and remediation.
 
-### Evidence-derived scoring factors (`score-factors/1`)
+### Evidence-derived scoring factors (`score-factors/2`)
 
 Decision B1 (user, 2026-10-12): a score must reflect the adjudicated evidence, not only the CWE
 class and whether the claim is confirmed or supported. `review/scoring/factors.py` derives a closed
@@ -919,7 +929,7 @@ Factors read only *counted* relations. Under `predicate-admission/1` source text
 | `verification` | `supported`, `confirmed` | the R5 claim state | adjudication id |
 | `taint_path` | `code_evidence`, `tool_observation`, `codeql_path_observation`, `graph_dataflow_path` | counted direct support on `source_to_sink_reachability`; strongest cited kind wins (a CodeQL path-problem observation needs its re-resolved payload) | relation ids and entity ids |
 | `attacker_control` | `internal`, `direct_unclassified`, `local`, `remote` | `source_class` of re-resolved `entry_point`/`dataflow_path` facts (`remote`; `local_user`/`argv`/`environment`/`file`/`ipc` are `local`; `database`/`internal` are `internal`), else `direct_unclassified` for other direct support on `attacker_input_control`; best class wins | relation ids and entity ids of the winning class |
-| `guard_absent` | `code_evidence`, `tool_observation`, `graph_fact` | counted direct support on `missing_or_ineffective_guard` (`guard_fact`/`range_fact` are `graph_fact`) | relation ids and entity ids |
+| `guard_absent` | `code_evidence`, `tool_observation`, `graph_fact` | counted direct support on `missing_or_ineffective_guard` (`guard_fact`/`range_fact` are `graph_fact`); for a numeric weakness (`numeric-weakness-cwes/1`) `code_evidence` does not count, and a claim with only that support has the factor missing with the `numeric-reasoning-guardrail/1` reason | relation ids and entity ids |
 | `exposure` | `local`, `internal_network`, `public` | accepted `surface:entry:*` tags (`http-public`, `cloud-public`, `mobile-deeplink`, `ci-untrusted` are `public`; `http-internal`, `rpc`, `message-consumer` are `internal_network`; `cli`, `env-config`, `file-input`, `local-ipc` are `local`) | tag assignment ids |
 | `privilege` | `sandboxed`, `elevated` | accepted `surface:priv:*` tags (`elevated`, `host`, `cluster-admin`, `cloud-admin`, `ci-write` are `elevated`) | tag assignment ids |
 | `data_sensitivity` | `sensitive`, `secret` | accepted `data:*` tags (`credential`, `key-material`, `session-token` are `secret`; `pii`, `financial`, `health` are `sensitive`) | tag assignment ids |
@@ -1514,7 +1524,7 @@ The following documents are concise shape examples; hashes are shortened only fo
   "missing_factors": ["business_asset_criticality"],
   "missing_factor_reasons": [{"factor": "business_asset_criticality", "reason": "no deployment data"}],
   "evidence_relations": ["evrel-51...", "evrel-c2..."],
-  "factors": [{"factor": "taint_path", "scale": "score-factors/1:taint_path",
+  "factors": [{"factor": "taint_path", "scale": "score-factors/2:taint_path",
                "value": "graph_dataflow_path", "detail": {"entity_kind": ["dataflow_path"]}}],
   "factor_citations": [{"factor": "taint_path", "evidence_relations": ["evrel-c2..."],
                         "entities": ["asr:dataflow_path:7d1e..."], "tag_assignments": [],
@@ -1629,7 +1639,10 @@ Errors are split so operators can distinguish an incomplete review from a compro
 | `publication_error` | non-exact accounting, unverified shard, concurrent publisher, handoff mismatch | fail publication; accepted pointer unchanged |
 
 Free-text error details are bounded and redacted. Machine decisions use only the taxonomy and typed
-fields, never phrase matching.
+fields, never phrase matching. The single exception is the conservative `numeric-reasoning-guardrail/1`
+vocabulary check on a lead-triage model reason. It can only withhold acceptance (the lead stays
+`unknown` with `triage_unresolved:uncited_numeric_reasoning`), so a match never promotes, confirms
+or scores anything.
 
 ## Proposed source, package, and schema locations
 
@@ -2158,8 +2171,8 @@ resolve to the same model.
   `pipeline/guidance/tasks/inference-security-review/`, and expand `governing-rules.md` only for
   rules shared with OWASP workers.
 - **Scoring.** The default scorer is `application_risk_matrix/3`, which is fully deterministic.
-  It rates the `score-factors/1` evidence factors (see
-  [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors1)) with a
+  It rates the `score-factors/2` evidence factors (see
+  [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors2)) with a
   configured, monotone model:
   - `impact_class` is one factor among many. It is a `cwe_impact_overrides` exception or is derived
     from the run's pinned MITRE CWE catalog consequences (`cwe-impact-derivation/1`, see
