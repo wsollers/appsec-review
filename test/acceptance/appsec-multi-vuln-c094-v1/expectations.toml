@@ -1,0 +1,175 @@
+# Answer key for appsec-multi-vuln case-094: seven defects, each paired with a negative control,
+# a correct implementation of the same operation placed beside it.
+# The guide inventory (wsollers/appsec-multi-vuln-guide, data/defect-inventory.json, records
+# case-094#1..#7 and controls case-094#c1..#c7) is authoritative. This key is derived from it at
+# guide_commit and corpus commit below; regenerate it from the guide, never edit it independently.
+# The target carries no defect hints; this file is never sent to a review worker.
+# `producers` are the tools expected to report each defect. They are a hypothesis until the
+# job-by-job walk confirms them; update them from accepted output, never from expectation.
+# Scopes are the enclosing function of each entry.
+
+[corpus]
+name = "appsec-multi-vuln-c094"
+tag = "appsec-multi-vuln-c094-v1"
+commit = "bd69bfe83fec49155366303604475512c98c4ce6"
+guide_commit = "5a0f2944998c97cf106a5a07b9e96425447eb95e"
+guide_inventory = "data/defect-inventory.json"
+build = "cmake -S projects/native/case-094 -B projects/native/case-094/build && cmake --build projects/native/case-094/build"
+scored_paths = ["projects/native/case-094"]
+
+[[defect]]
+id = "case-094#1"
+cwe = "CWE-121"
+path = "projects/native/case-094/src/title.cpp"
+line = 19
+scope_start = 17
+scope_end = 21
+pair = "case-094#c1"
+summary = "store_title strcpy-copies the argument into a 32-byte stack array without a length check"
+producers = ["codeql", "cppcheck"]
+
+[[defect]]
+id = "case-094#2"
+cwe = "CWE-416"
+path = "projects/native/case-094/src/notes.cpp"
+line = 7
+end_line = 8
+scope_start = 5
+scope_end = 10
+pair = "case-094#c2"
+summary = "retire_note reads note->id after delete note"
+producers = ["clang-static-analyzer"]
+
+[[defect]]
+id = "case-094#3"
+cwe = "CWE-476"
+path = "projects/native/case-094/src/directory.cpp"
+line = 33
+end_line = 34
+scope_start = 31
+scope_end = 35
+pair = "case-094#c3"
+summary = "entry_weight dereferences find_entry's result, which is nullptr for an unknown key"
+producers = ["clang-static-analyzer", "cppcheck"]
+
+[[defect]]
+id = "case-094#4"
+cwe = "CWE-190"
+path = "projects/native/case-094/src/blocks.cpp"
+lines = [34, 40]
+scope_start = 33
+scope_end = 45
+pair = "case-094#c4"
+summary = "fill_batch computes count * 64 in uint32_t without a limit; the wrapped size undersizes the buffer the loop fills"
+producers = ["codeql"]
+
+[[defect]]
+id = "case-094#5"
+cwe = "CWE-134"
+path = "projects/native/case-094/src/console.cpp"
+line = 6
+scope_start = 5
+scope_end = 8
+pair = "case-094#c5"
+summary = "show_line passes the argument to printf as the format string"
+producers = ["clang-tidy", "codeql", "semgrep"]
+
+[[defect]]
+id = "case-094#6"
+cwe = "CWE-78"
+path = "projects/native/case-094/src/echo.cpp"
+line = 34
+end_line = 35
+scope_start = 33
+scope_end = 36
+pair = "case-094#c6"
+summary = "echo_name appends the argument to \"echo \" and runs it with std::system"
+producers = ["codeql", "semgrep"]
+
+[[defect]]
+id = "case-094#7"
+cwe = "CWE-798"
+path = "projects/native/case-094/src/access.cpp"
+line = 24
+scope_start = 23
+scope_end = 28
+pair = "case-094#c7"
+summary = "accept_token compares against an access token literal embedded in the source"
+producers = ["gitleaks"]
+
+[[control]]
+id = "case-094#c1"
+cwe = "CWE-121"
+path = "projects/native/case-094/src/title.cpp"
+line = 8
+end_line = 12
+scope_start = 6
+scope_end = 15
+pair = "case-094#1"
+summary = "store_caption rejects values that do not fit before the same strcpy"
+
+[[control]]
+id = "case-094#c2"
+cwe = "CWE-416"
+path = "projects/native/case-094/src/notes.cpp"
+line = 13
+end_line = 16
+scope_start = 12
+scope_end = 18
+pair = "case-094#2"
+summary = "archive_note copies note->id into a local before delete and uses only the local afterwards"
+
+[[control]]
+id = "case-094#c3"
+cwe = "CWE-476"
+path = "projects/native/case-094/src/directory.cpp"
+line = 39
+end_line = 43
+scope_start = 37
+scope_end = 45
+pair = "case-094#3"
+summary = "entry_rank returns early when find_entry yields nullptr, then dereferences"
+
+[[control]]
+id = "case-094#c4"
+cwe = "CWE-190"
+path = "projects/native/case-094/src/blocks.cpp"
+line = 16
+end_line = 21
+scope_start = 15
+scope_end = 31
+pair = "case-094#4"
+summary = "fill_blocks limits count to 1..4096 before the same multiply, so the size cannot wrap"
+
+[[control]]
+id = "case-094#c5"
+cwe = "CWE-134"
+path = "projects/native/case-094/src/console.cpp"
+line = 11
+end_line = 13
+scope_start = 10
+scope_end = 14
+pair = "case-094#5"
+summary = "show_banner's format is one of two string literals; the argument is only the %s value"
+
+[[control]]
+id = "case-094#c6"
+cwe = "CWE-78"
+path = "projects/native/case-094/src/echo.cpp"
+line = 25
+end_line = 30
+scope_start = 24
+scope_end = 31
+pair = "case-094#6"
+summary = "echo_label calls std::system only after an allow-list of letters, digits and underscores"
+
+[[control]]
+id = "case-094#c7"
+cwe = "CWE-798"
+path = "projects/native/case-094/src/access.cpp"
+line = 31
+end_line = 36
+scope_start = 30
+scope_end = 39
+pair = "case-094#7"
+summary = "accept_key reads the expected key from CASE094_ACCESS_KEY and refuses when it is unset"
