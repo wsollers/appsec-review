@@ -56,7 +56,8 @@ def _config(tmp_path: Path, table: str) -> Path:
 
 @requires_openssl
 def test_required_enforcement_builds_an_envelope_verifier(tmp_path: Path) -> None:
-    signing = SigningConfig(trusted_keys_dir=tmp_path / "keys", image_signatures_dir=tmp_path / "sigs")
+    signing = SigningConfig(trusted_keys_dir=tmp_path / "keys", image_signatures_dir=tmp_path / "sigs",
+                            image_enforcement="required")
     verifier = image_verifier_from_config(signing)
 
     assert isinstance(verifier, EnvelopeImageVerifier)
@@ -69,7 +70,7 @@ def test_required_enforcement_builds_an_envelope_verifier(tmp_path: Path) -> Non
         verifier.verify(IMAGE)
 
 
-def test_only_explicit_disabled_enforcement_builds_the_disabled_verifier(tmp_path: Path) -> None:
+def test_disabled_enforcement_builds_the_disabled_verifier(tmp_path: Path) -> None:
     verifier = image_verifier_from_config(SigningConfig(image_enforcement="disabled",
                                                         openssl=tmp_path / "nonexistent" / "openssl"))
 
@@ -77,9 +78,17 @@ def test_only_explicit_disabled_enforcement_builds_the_disabled_verifier(tmp_pat
     assert verifier.enforced is False
 
 
+def test_default_signing_config_is_opt_in_and_builds_the_disabled_verifier(tmp_path: Path) -> None:
+    verifier = image_verifier_from_config(SigningConfig(openssl=tmp_path / "nonexistent" / "openssl"))
+
+    assert isinstance(verifier, DisabledImageVerifier)
+    assert verifier.enforced is False
+
+
 def test_required_enforcement_fails_closed_without_openssl(tmp_path: Path) -> None:
     with pytest.raises(SignatureVerificationError, match="OpenSSL binary is not an executable file"):
-        image_verifier_from_config(SigningConfig(openssl=tmp_path / "missing-openssl"))
+        image_verifier_from_config(SigningConfig(openssl=tmp_path / "missing-openssl",
+                                                 image_enforcement="required"))
 
 
 def test_factory_requires_typed_configuration() -> None:
@@ -89,7 +98,8 @@ def test_factory_requires_typed_configuration() -> None:
 
 @requires_openssl
 def test_default_resolves_from_the_configured_file_once(tmp_path: Path, monkeypatch) -> None:
-    path = _config(tmp_path, '[signing]\ntrusted_keys_dir = "trust"\nimage_signatures_dir = "images"\n')
+    path = _config(tmp_path, '[signing]\ntrusted_keys_dir = "trust"\nimage_signatures_dir = "images"\n'
+                             'image_enforcement = "required"\n')
     monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(path))
 
     verifier = default_image_verifier()
@@ -108,13 +118,24 @@ def test_default_honors_explicitly_disabled_configuration(tmp_path: Path, monkey
     assert isinstance(default_image_verifier(), DisabledImageVerifier)
 
 
-@requires_openssl
+def test_default_without_image_enforcement_key_is_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(_config(
+        tmp_path, f"[signing]\nopenssl = '{tmp_path / 'missing-openssl'}'\n")))
+
+    assert isinstance(default_image_verifier(), DisabledImageVerifier)
+
+
+def test_default_without_signing_table_is_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(_config(tmp_path, "")))
+
+    assert isinstance(default_image_verifier(), DisabledImageVerifier)
+
+
 def test_default_without_environment_uses_the_application_root_configuration() -> None:
     verifier = default_image_verifier()
 
-    assert isinstance(verifier, EnvelopeImageVerifier)
-    assert verifier.trusted_keys_dir == SigningConfig().trusted_keys_dir
-    assert verifier.signatures_dir == SigningConfig().image_signatures_dir
+    assert isinstance(verifier, DisabledImageVerifier)
+    assert verifier.enforced is False
 
 
 def test_override_wins_and_reset_restores_resolution(tmp_path: Path, monkeypatch) -> None:
@@ -176,7 +197,7 @@ def test_default_fails_closed_when_the_application_root_has_no_configuration(mon
 
 def test_default_fails_closed_when_the_configured_verifier_cannot_be_built(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(_config(
-        tmp_path, f"[signing]\nopenssl = '{tmp_path / 'missing-openssl'}'\n")))
+        tmp_path, f"[signing]\nopenssl = '{tmp_path / 'missing-openssl'}'\nimage_enforcement = \"required\"\n")))
 
     with pytest.raises(SignatureVerificationError, match="OpenSSL binary is not an executable file"):
         default_image_verifier()

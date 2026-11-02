@@ -177,7 +177,7 @@ def test_posix_signing_config_is_unchanged(tmp_path) -> None:
     assert config.view() == {"openssl": "/usr/bin/openssl",
                              "trusted_keys_dir": "/etc/appsec-review/signing/trusted-keys",
                              "image_signatures_dir": "/var/lib/appsec-review/signing/images",
-                             "image_enforcement": "required"}
+                             "image_enforcement": "disabled"}
     assert signing_config.parse_signing({"trusted_keys_dir": "/srv/keys"}, tmp_path).trusted_keys_dir == \
         Path("/srv/keys")
 

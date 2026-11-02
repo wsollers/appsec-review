@@ -89,7 +89,8 @@ fixes its executable and version.
 The language-family images referenced by `jobs.job_project_build.settings.profiles` are a separate
 current-state concern. Each profile declares a local tag, immutable image ID, and numeric non-root
 user. `BuildContainerExecutor.resolve` refuses to run when the local tag no longer resolves to the
-configured image ID, or when that ID has no signature envelope from a trusted key; it verifies the
+configured image ID, or, when the opt-in `[signing] image_enforcement = "required"` is set, when that
+ID has no signature envelope from a trusted key; it then verifies the
 signature again before each build or capture run, and a derived project image is verified through
 its recorded pinned base (see [`../operations/signing.md`](../operations/signing.md)). The ten
 build-environment entries in `containers/catalog.toml` (the shared

@@ -296,6 +296,8 @@ Blue and verifier pools fan out concurrently after normalization:
 
 Model/provider independence is enforced by actor identities and policy. A verifier cell cannot use
 the hypothesis author's request, response cache entry, conversation, or derived evidence record.
+The run's blue result memo (described with the unit of reuse below) serves only `blue_control` and
+`blue_reachability` cells; red, verifier and judge cells never read or write it.
 For ship-blocking findings, `ship-block-policy/1` additionally requires the verifier to run on a
 different model profile than the red cells (decision 2). That requirement never changes the claim
 state: a confirmed finding verified on the red cells' model is published as
@@ -810,6 +812,34 @@ score-policy changes invalidate score packages and eligibility decisions without
 discovery or verification. A PoC image/policy change invalidates PoC policy and attempts without
 changing the underlying claim. An accepted-manifest change first compares physical shards and
 entity dependencies; only affected packages and their closure rerun.
+
+A claim re-admitted in a later round gets new blue cells whose fingerprints differ only by round,
+round delta, and the round-bearing capability hash, so they would ask the model the identical
+question again. The run-scoped **blue result memo** (`review/result_cache.py`, after RepoAudit's
+agent memory M(function, value)) avoids that. Its key is a round-free hash
+(`review-memo-key/1`) of the run id, `claim_id` (affected entities, CWE, security predicate and
+preconditions, which is the (function, value) pair), and every other request-shaping cell input:
+lane, role, task, persona, stack profile, strategy, task input (including claim prose), manifest,
+package, reuse basis, readable evidence set, guidance bundle, provider, model, reasoning, budgets,
+output schema, validator and executor versions, and the capability's round-free semantic body.
+Only `round`, `round_delta`, and `capability_sha256` are excluded. The store (Garnet, Redis
+protocol) holds only a pointer `(cell_id, attempt, receipt_sha256)` to a fresh, succeeded,
+non-memo receipt in the same run; it owns storage and TTL and holds no evidence.
+
+A blue cell whose own receipt does not exist consults the memo. A hit is accepted only when:
+
+- the pointed-to receipt is another cell's receipt in this run's receipts root;
+- its file hash matches;
+- it succeeded and is not itself a memo reuse;
+- its executor and validator versions, guidance, provider and model match;
+- its citations revalidate against the current evidence set and validator.
+
+The cell then writes its own immutable receipt. That receipt has no turns, zero counts, and the
+source's result and seen identities, plus `reused_from = {cell_id, attempt, receipt_sha256,
+memo_key}`, so receipt verification and audits trace it to the model call. Any other pointer is a
+miss, and the cell runs normally. An unreachable store is also a miss, never a failure.
+
+Model output remains judgment data: the memo changes cost, never what counts as evidence.
 
 Retries create new attempt identities under the same cell fingerprint. They may repair transport,
 schema, or transient provider failures up to policy limits but may not silently increase tools,
@@ -2053,7 +2083,8 @@ only known after scoring.
 A verifier result is independent only when all of these hold:
 
 - its `actor_id` differs from every red and blue actor on the claim;
-- it ran in a fresh conversation with no `prior_response` and no shared cache entry;
+- it ran in a fresh conversation with no `prior_response` and no shared cache entry (the blue result
+  memo never serves or records a verifier cell);
 - its input excluded red/blue narratives, dispositions, and actor ids (asserted against the
   stored request bytes);
 - for every required predicate, at least one supporting relation came from its own retrieval
@@ -2241,6 +2272,11 @@ These record how slice 1 meets the decisions above where the decisions leave a c
   manifest and package ids: the hash of the package content without run/manifest identities plus
   the accepted shards (`name/shard@sha256`) that hold any entity in the package's capability scope.
   Changing one shard therefore reruns only the cells of packages that can read it.
+- **Blue result memo.** Within one run, a blue cell may reuse an earlier round's succeeded blue
+  result for the same round-free request (see the unit of reuse above). Cell-receipt reuse on
+  resume is checked first, then the memo, then the model. A hit has its own receipt carrying
+  `reused_from`. A memo pointer that fails any check is a miss. A malformed `reused_from` in a
+  receipt the run owns is an integrity failure, like any other unverifiable receipt.
 - **Evidence.** A tool observation is direct evidence only for the predicates of the versioned
   `tool-rule-predicates/2` mapping (for example `affected_construct` for source SAST,
   `affected_construct` and `source_to_sink_reachability` for a CodeQL path result,

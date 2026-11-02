@@ -485,9 +485,10 @@ re-pins them with `appsec-review update-image-pins --write`, and signs them with
 start (`job_image_pin_verification`) that every enabled catalog image, build profile and CodeQL source
 image resolves on the local daemon to exactly its pin, and fails before intake naming every missing
 image or moved tag. See
-[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md). Every
-launch or reuse of a pinned image then verifies its signature and refuses an unsigned or
-untrusted image ID; see [`docs/operations/signing.md`](docs/operations/signing.md).
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md). With the
+opt-in `[signing] image_enforcement = "required"` (the default is `"disabled"`), every launch or
+reuse of a pinned image then verifies its signature and refuses an unsigned or untrusted image ID;
+see [`docs/operations/signing.md`](docs/operations/signing.md).
 
 ## Sync third-party metadata
 

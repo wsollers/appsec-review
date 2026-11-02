@@ -31,6 +31,11 @@ CodeQL is the exception: its licensed source image is operator-provided and its 
 [`tools/codeql/README.md`](tools/codeql/README.md). The catalog keeps the legacy `audit-codeql`
 entry `deferred`.
 
+[`services/garnet/`](services/garnet/README.md) is also outside the catalog. It holds the Windows Nano
+Server build of the Garnet result-cache service, which an operator builds on a Windows-containers
+Docker host. The catalog lists only linux/amd64 images that `build.py` builds and the review
+launches, and this is neither. On Linux, Compose uses the upstream Garnet image pinned by digest.
+
 ## Build and validation
 
 The Bash and PowerShell launchers call the same engine and therefore have identical selection and
@@ -109,7 +114,8 @@ a read-only target mount, and one writable scratch mount. Image definitions pack
 Application jobs own arguments and translate tool output into findings.
 
 A catalog entry may pin `image_id`; the application executor then refuses to run a local image
-whose id differs (`src/appsec_review/container_runtime/executor.py`). Pinned or not, it also refuses
+whose id differs (`src/appsec_review/container_runtime/executor.py`). With the opt-in
+`[signing] image_enforcement = "required"`, pinned or not, it also refuses
 an image whose id has no signature envelope from a trusted operator key; sign images after building
 and re-pinning them (see [`../docs/operations/signing.md`](../docs/operations/signing.md)).
 Image-ID pins are host-local:

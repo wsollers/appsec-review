@@ -1,8 +1,9 @@
 """Typed settings for ``job_inference_security_review``.
 
-Every table rejects unknown keys. ``teams.review_teams`` is capacity, not semantics: it is the only
-job setting a local overlay may change, and :func:`semantic_settings_view` strips it so that runs at
-different concurrency share cell, lane, and round fingerprints. Everything else here is semantic.
+Every table rejects unknown keys. ``teams.review_teams`` and the ``result_cache`` table are capacity,
+not semantics: they are the only job settings a local overlay may change, and
+:func:`semantic_settings_view` strips them so that runs at different concurrency or cache placement
+share cell, lane, and round fingerprints. Everything else here is semantic.
 """
 from __future__ import annotations
 
@@ -27,8 +28,9 @@ from appsec_review.config.attack_chains import AttackChainSettings
 
 JOB_ID = "job_inference_security_review"
 REVIEW_TEAMS_KEY = f"jobs.{JOB_ID}.settings.teams.review_teams"
+RESULT_CACHE_KEY = f"jobs.{JOB_ID}.settings.result_cache.*"
 POOLS_KEY = "orchestration.dagster.pools.*"
-CAPACITY_KEYS: tuple[str, ...] = (REVIEW_TEAMS_KEY, POOLS_KEY, "review_policy.resources.*")
+CAPACITY_KEYS: tuple[str, ...] = (REVIEW_TEAMS_KEY, RESULT_CACHE_KEY, POOLS_KEY, "review_policy.resources.*")
 SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 TeamPackageBudget = int | Literal["all"]
 
@@ -331,6 +333,50 @@ class VerificationSettings:
                          f"{field}.require_distinct_model_for_ship_blocking"))
 
 
+MEMO_ROLES = ("blue_control", "blue_reachability")
+_REDIS_ENDPOINT = re.compile(r"redis://(?P<host>[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)"
+                             r":(?P<port>[1-9][0-9]{0,4})(?:/(?P<db>[0-9]|1[0-5]))?")
+
+
+@dataclass(frozen=True, slots=True)
+class ResultCacheSettings:
+    """The run-scoped blue-cell result memo (``settings.result_cache``, review/result_cache.py).
+
+    Cost and capacity, not review semantics: a memo hit reuses a result this run already produced for
+    the same round-free request, so :func:`semantic_settings_view` strips the table and a local overlay
+    may set it. ``roles`` names blue tasks only; red, the blind verifier (R6) and the judge are never
+    memoized. Storage and expiry belong to the external Garnet (Redis protocol) service; absent means off.
+    """
+
+    enabled: bool = False
+    roles: tuple[str, ...] = MEMO_ROLES
+    endpoint: str = "redis://result-cache:6379/0"
+    ttl_seconds: int = 604_800
+    connect_timeout_seconds: float = 0.5
+
+    @classmethod
+    def from_mapping(cls, value: object, field: str) -> "ResultCacheSettings":
+        if value is None:
+            return cls()
+        table = _table(value, field, {"enabled", "roles", "endpoint", "ttl_seconds", "connect_timeout_seconds"})
+        roles = table["roles"]
+        if isinstance(roles, list) and any(item not in MEMO_ROLES for item in roles if isinstance(item, str)):
+            raise ValueError(f"{field}.roles may name only blue tasks ({', '.join(MEMO_ROLES)}); red, the "
+                             "independent verifier and the adjudication judge are never memoized")
+        endpoint = table["endpoint"]
+        match = _REDIS_ENDPOINT.fullmatch(endpoint) if isinstance(endpoint, str) else None
+        if match is None or not 1 <= int(match["port"]) <= 65_535:
+            raise ValueError(f"{field}.endpoint must be a redis://host:port[/db] URL without credentials")
+        timeout = table["connect_timeout_seconds"]
+        if type(timeout) not in {int, float} or not math.isfinite(timeout) or not 0.05 <= timeout <= 10:
+            raise ValueError(f"{field}.connect_timeout_seconds must be a number between 0.05 and 10")
+        return cls(enabled=_bool(table["enabled"], f"{field}.enabled"),
+                   roles=_choices(roles, f"{field}.roles", MEMO_ROLES),
+                   endpoint=endpoint,
+                   ttl_seconds=_int(table["ttl_seconds"], f"{field}.ttl_seconds", 60, 2_592_000),
+                   connect_timeout_seconds=float(timeout))
+
+
 @dataclass(frozen=True, slots=True)
 class InferenceSecurityReviewSettings:
     rounds: RoundSettings
@@ -357,6 +403,8 @@ class InferenceSecurityReviewSettings:
     # PoC candidates the handoff lists (review-judge-and-poc.md section 4); semantic.
     poc_candidates: PocCandidateSettings = PocCandidateSettings()
     attack_chains: AttackChainSettings = AttackChainSettings()
+    # Blue-cell result memo (``settings.result_cache``); capacity, never in the semantic view.
+    result_cache: ResultCacheSettings = ResultCacheSettings()
 
     @property
     def judge(self) -> JudgeSettings | None:
@@ -416,6 +464,7 @@ def semantic_settings_view(settings: InferenceSecurityReviewSettings) -> dict[st
     """
     document = settings.as_document()
     del document["teams"]["review_teams"]
+    del document["result_cache"]
     return {"schema": SEMANTIC_VIEW_SCHEMA, "settings": document}
 
 
@@ -625,7 +674,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
                                        "roles", "routing", "scoring", "poc"},
                       {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates",
-                       "attack_chains"})
+                       "attack_chains", "result_cache"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -760,4 +809,5 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         triage=triage,
         poc_candidates=PocCandidateSettings.from_mapping(settings.get("poc_candidates"), f"{_PREFIX}.poc_candidates"),
         attack_chains=AttackChainSettings.from_mapping(settings.get("attack_chains")),
+        result_cache=ResultCacheSettings.from_mapping(settings.get("result_cache"), f"{_PREFIX}.result_cache"),
     )

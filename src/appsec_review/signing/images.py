@@ -122,8 +122,9 @@ class EnvelopeImageVerifier:
 class DisabledImageVerifier:
     """Performs NO image signature verification.
 
-    Construct this only when configuration explicitly sets image enforcement to ``"disabled"``;
-    it must never be a fallback for a missing, unreadable, or failing verifier.
+    Construct this only when the loaded configuration does not opt in to image enforcement
+    (``image_enforcement`` is ``"disabled"``, the default); it must never be a fallback for an
+    unreadable configuration or a failing verifier.
     """
 
     enforced = False

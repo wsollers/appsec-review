@@ -1,9 +1,11 @@
 # Container image and Python module signing
 
 Pinned container images and the installed `appsec_review` package are signed by the operator on the
-review host and verified wherever they are launched or imported. Verification fails closed: a
-missing, malformed, untrusted or mismatched signature stops the launch or the process. It is never
-reported as clean. Code: `src/appsec_review/signing/`, `src/appsec_review/config/signing.py`,
+review host and verified wherever they are launched or imported. Container image verification is
+opt-in: it runs only when `[signing] image_enforcement = "required"`, and the default (also the
+repository's `appsec-review.toml` setting) is `"disabled"`. When it is enabled, verification fails
+closed: a missing, malformed, untrusted or mismatched signature stops the launch or the process. It
+is never reported as clean. Code: `src/appsec_review/signing/`, `src/appsec_review/config/signing.py`,
 `deploy/dagster/bin/image_signing.py` and `deploy/dagster/native/root_entrypoint.py`.
 
 ## Threat model
@@ -126,19 +128,25 @@ types fail configuration loading. Runtime profiles and capacity overlays cannot 
 | `openssl` | `/usr/bin/openssl` | Absolute path to the OS-owned OpenSSL 3 binary; a relative path or `..` is rejected. |
 | `trusted_keys_dir` | `/etc/appsec-review/signing/trusted-keys` | Trust anchors; a relative path resolves against the configuration file's directory. |
 | `image_signatures_dir` | `/var/lib/appsec-review/signing/images` | Image envelopes; a relative path resolves the same way. |
-| `image_enforcement` | `"required"` | `"required"` verifies every image launch or reuse; only an explicit `"disabled"` turns image verification off. |
+| `image_enforcement` | `"disabled"` | Opt-in. `"required"` verifies every image launch or reuse; `"disabled"` launches and reuses images without checking envelopes. |
 
-A missing table means these defaults, including `"required"`. `signing.policy.default_image_verifier`
+A missing table or key means these defaults, including `"disabled"`; image enforcement is enabled
+only by an explicit `image_enforcement = "required"`. `signing.policy.default_image_verifier`
 resolves the policy once per process from `APPSEC_REVIEW_CONFIG`, or from `appsec-review.toml` at the
 application root. If the configuration cannot be loaded or the verifier cannot be built, it raises
 `SignatureVerificationError` and caches nothing. A failure never falls back to
 `DisabledImageVerifier`. `verify-image` always checks envelopes, whatever `image_enforcement` says.
+To opt in, install the trust anchors, sign the pinned images (`sign-image --all-pinned`), set
+`image_enforcement = "required"`, and rebuild the Dagster image, which bakes in
+`appsec-review.toml`.
 Module enforcement does not use `[signing]`. It is driven by the environment or by the release
 layout (see [Modules](#python-modules)).
 
 ## Container images
 
-Every pinned image is verified when it is launched or reused, after its identity check:
+With `image_enforcement = "required"`, every pinned image is verified when it is launched or reused,
+after its identity check. With the default `"disabled"`, each call site below still runs its identity
+and pin checks but skips the envelope check:
 
 | Call site | Image verified |
 | --- | --- |
@@ -375,7 +383,7 @@ Run these steps on the review host from the repository checkout, never during a 
    equal `APPSEC_REVIEW_DAGSTER_IMAGE` exactly, and verifies that ID against the mounted trust anchors
    before it execs the code server. Otherwise it exits 3, so the code location never becomes healthy
    and the webserver and daemon, which depend on it, do not start. With
-   `image_enforcement = "disabled"` it logs status `disabled` and starts unchecked. The gate is a
+   `image_enforcement = "disabled"` (the default) it logs status `disabled` and starts unchecked. The gate is a
    second check, not the authority: a malicious image can omit its own check (Docker socket access
    is root-equivalent), and a webserver or daemon started with `--no-deps` may skip it. Settings are
    described in [Signed image](../../deploy/dagster/README.md#signed-image) and
@@ -516,6 +524,12 @@ exit 3), and a Compose configuration without the verified ID (fails with the `:?
 These areas are not covered by signing. Do not read their absence from a failure report as
 evidence that they are verified.
 
+- **Image signature enforcement is opt-in and off by default.** With the default
+  `image_enforcement = "disabled"` (the repository setting), no job, executor, builder or the
+  Dagster self-check verifies container image envelopes; only digest pins and identity checks
+  apply. Unsigned or re-signed images launch. Set `image_enforcement = "required"` to enforce.
+  Host-side `lifecycle.py` signing and verification of the Dagster image, `verify-image`, and
+  Python module signing are not controlled by this setting.
 - **The native engine broker does not verify signatures yet.** It launches the images declared under
   `native_engine.images` of the bounded builder service configuration unverified. The follow-up
   locations are as follows (line numbers at `native-broker-jobs` commit `fad721d87`); see
@@ -554,9 +568,10 @@ evidence that they are verified.
   it. Pending owner action: build and smoke the image on the review host, read
   `docker image inspect --format '{{.Id}}' <settings.image>`, set `image_id` in
   `appsec-review.toml`, then run `sign-image --all-pinned`. Until then, on the first Docker-path run
-  with `settings.image` absent, the image is built from its context and launched unverified; later
-  runs verify whatever the tag resolves to, so they fail until the operator runs
-  `sign-image <settings.image>`, and any signed image retagged as `settings.image` is accepted.
+  with `settings.image` absent, the image is built from its context and launched unverified; with
+  `image_enforcement = "required"`, later runs verify whatever the tag resolves to, so they fail until
+  the operator runs `sign-image <settings.image>`, and any signed image retagged as `settings.image`
+  is accepted.
 - **Data read through `__file__` paths** instead of `importlib.resources` is covered only by the
   startup tree verification. The deployed trees are read-only or image-pinned.
 - **Code that runs before the hook is installed** is outside module verification. This includes
@@ -575,7 +590,7 @@ evidence that they are verified.
   Residuals: the gate is a second check, not the authority, because a malicious image can omit its
   own check (Docker socket access is root-equivalent), so host-side verification in `lifecycle.py`
   remains authoritative; a webserver or daemon started with `--no-deps` does not wait for the code
-  location and skips the gate; and with `image_enforcement = "disabled"` the gate starts unchecked.
+  location and skips the gate; and with `image_enforcement = "disabled"` (the default) the gate starts unchecked.
 
 ## Planned work
 

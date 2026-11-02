@@ -24,7 +24,7 @@ _default: ImageSignatureVerifier | None = None
 
 
 def image_verifier_from_config(signing: SigningConfig) -> ImageSignatureVerifier:
-    """Build the verifier ``signing`` selects; only an explicit ``"disabled"`` skips verification.
+    """Build the verifier ``signing`` selects; only an explicit ``"required"`` verifies envelopes.
 
     Raises SignatureVerificationError when enforcement is required and the OpenSSL binary is not an
     absolute executable file.
@@ -73,9 +73,10 @@ def default_image_verifier() -> ImageSignatureVerifier:
        It is loaded with ``load_config``, so ``APPSEC_REVIEW_PROFILE`` and
        ``APPSEC_REVIEW_CONFIG_OVERLAY`` apply as usual; neither layer may set ``[signing]``.
 
-    Fails closed: if the configuration cannot be located, read or validated, or the configured
-    verifier cannot be constructed, SignatureVerificationError is raised and nothing is cached, so
-    verification is never silently disabled. Only ``image_enforcement = "disabled"`` disables it.
+    Image enforcement is opt-in: it is ``"disabled"`` unless ``[signing]`` sets
+    ``image_enforcement = "required"``. Fails closed: if the configuration cannot be located, read or
+    validated, or the configured verifier cannot be constructed, SignatureVerificationError is
+    raised and nothing is cached, so an opted-in policy is never silently dropped.
     """
     global _default
     with _lock:

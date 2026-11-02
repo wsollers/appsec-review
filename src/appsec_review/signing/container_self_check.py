@@ -6,8 +6,9 @@ Python process in the final image stages, this one first passes the signed-modul
 (``sitecustomize``), so the gate itself runs only from verified modules. Before the code server
 starts it:
 
-1. resolves the image policy with ``default_image_verifier`` (``[signing]``); only an explicit
-   ``image_enforcement = "disabled"`` skips the gate, with a logged ``disabled`` status;
+1. resolves the image policy with ``default_image_verifier`` (``[signing]``); unless the
+   configuration opts in with ``image_enforcement = "required"`` it skips the gate, with a logged
+   ``disabled`` status;
 2. reads ``APPSEC_REVIEW_DAGSTER_IMAGE``, the ``sha256:`` ID that Compose launched;
 3. identifies its own container from ``/proc/self/mountinfo``: Docker bind-mounts ``/etc/hostname``
    (and ``/etc/hosts``, ``/etc/resolv.conf``) from ``<docker root>/containers/<64-hex ID>/``, which

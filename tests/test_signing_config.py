@@ -25,7 +25,7 @@ def _variant(tmp_path: Path, table: str) -> Path:
     return path
 
 
-def test_repository_config_requires_image_signatures_with_documented_defaults() -> None:
+def test_repository_config_leaves_image_signatures_opt_in_with_documented_defaults() -> None:
     config = load_config(ROOT / "appsec-review.toml")
 
     assert config.signing == SigningConfig()
@@ -35,15 +35,24 @@ def test_repository_config_requires_image_signatures_with_documented_defaults() 
         assert config.signing.openssl == Path("/usr/bin/openssl")
         assert config.signing.trusted_keys_dir == Path("/etc/appsec-review/signing/trusted-keys")
         assert config.signing.image_signatures_dir == Path("/var/lib/appsec-review/signing/images")
-    assert config.signing.image_enforcement == "required"
-    assert config.signing.image_enforced is True
+    assert config.signing.image_enforcement == "disabled"
+    assert config.signing.image_enforced is False
     assert json.loads(config.resolved_json)["signing"] == config.signing.view()
 
 
-def test_missing_or_empty_table_uses_required_defaults(tmp_path: Path) -> None:
+def test_missing_or_empty_table_uses_opt_in_defaults(tmp_path: Path) -> None:
     assert parse_signing(None, tmp_path) == SigningConfig()
     assert parse_signing({}, tmp_path) == SigningConfig()
     assert load_config(_variant(tmp_path, "")).signing == SigningConfig()
+    assert SigningConfig().image_enforcement == "disabled"
+    assert SigningConfig().image_enforced is False
+
+
+def test_explicit_required_opts_in_to_image_enforcement(tmp_path: Path) -> None:
+    signing = load_config(_variant(tmp_path, '[signing]\nimage_enforcement = "required"\n')).signing
+
+    assert signing.image_enforcement == "required"
+    assert signing.image_enforced is True
 
 
 def test_relative_directories_resolve_against_the_configuration_directory(tmp_path: Path) -> None:

@@ -28,6 +28,8 @@ TERMINAL = {"SUCCESS", "FAILURE", "CANCELED"}
 FEEDS = {"nvd_sync", "osv_sync", "mitre_sync", "kev_sync", "epss_sync", "cve_bin_tool_db_build"}
 SIGNING_MOUNTS = ("/etc/appsec-review/signing/trusted-keys", "/var/lib/appsec-review/signing/images")
 APPLICATION_SERVICES = IMAGE_SERVICES
+RESULT_CACHE_SERVICE = "result-cache"
+RESULT_CACHE_PASSWORD = "APPSEC_RESULT_CACHE_PASSWORD"
 
 
 def compose(platform: str) -> list[str]:
@@ -65,6 +67,22 @@ def check_signed_image(services: dict) -> None:
         raise RuntimeError(f"{SELF_CHECK_SERVICE} must receive {IMAGE_VARIABLE} equal to its image")
 
 
+def check_result_cache(services: dict) -> None:
+    """The optional result cache is a digest-pinned, unpublished, fail-open dependency of the code location."""
+    cache = services[RESULT_CACHE_SERVICE]
+    image = str(cache.get("image") or "")
+    if "@sha256:" not in image or "build" in cache:
+        raise RuntimeError(f"{RESULT_CACHE_SERVICE} must use a digest-pinned image and never build")
+    if cache.get("ports"):
+        raise RuntimeError(f"{RESULT_CACHE_SERVICE} must not publish host ports")
+    code = services["code-location"]
+    if not (code.get("environment") or {}).get(RESULT_CACHE_PASSWORD):
+        raise RuntimeError(f"code-location must receive {RESULT_CACHE_PASSWORD}")
+    dependency = (code.get("depends_on") or {}).get(RESULT_CACHE_SERVICE) or {}
+    if dependency.get("condition") != "service_started" or dependency.get("required") is not False:
+        raise RuntimeError(f"code-location must not require a healthy {RESULT_CACHE_SERVICE} (fail-open)")
+
+
 def check_config(platform: str) -> dict:
     validate_deployment(ROOT, DEPLOYMENT / ".env", platform)
     if not shutil.which("docker"):
@@ -73,10 +91,11 @@ def check_config(platform: str) -> dict:
     if document["name"] != project_name(platform):
         raise RuntimeError("Compose project identity does not match this host")
     services = document["services"]
-    if set(services) != {"postgres", "code-location", "webserver", "daemon"}:
+    if set(services) != {"postgres", RESULT_CACHE_SERVICE, "code-location", "webserver", "daemon"}:
         raise RuntimeError("Compose service set changed")
     code = services["code-location"]
     check_signed_image(services)
+    check_result_cache(services)
     mounts = {item["target"]: item for item in code["volumes"]}
     for target in ("/opt/app/runs", "/opt/app/data", "/var/run/docker.sock"):
         if target not in mounts:

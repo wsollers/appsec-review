@@ -64,7 +64,7 @@ with `appsec-review update-image-pins --write`, which re-pins each moved tag to 
 [`../../docs/operations/image-pin-verification.md`](../../docs/operations/image-pin-verification.md))
 and then sign it with `appsec-review signing sign-image --all-pinned` (see
 [`../../docs/operations/signing.md`](../../docs/operations/signing.md)); `BuildContainerExecutor`
-refuses an unsigned build image;
+refuses an unsigned build image when `[signing] image_enforcement = "required"` (opt-in);
 the pipeline never builds images or rewrites pins on its own, and `job_image_pin_verification` fails
 a review whose local images no longer match their pins. When a Dockerfile here changes, rebuild the image and update
 the pin in the same change. The committed pins name whichever host last re-pinned (see the last

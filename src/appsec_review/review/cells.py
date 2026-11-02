@@ -18,7 +18,7 @@ failure raises.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import json
 from pathlib import Path
 import re
@@ -117,6 +117,11 @@ class CellOutcome:
     receipt_paths: tuple[Path, ...]
     reused: bool
     counts: Mapping[str, int]
+    # How a reused outcome was obtained: "receipt" (this cell's own earlier attempt) or "memo" (another
+    # cell's revalidated result, review/result_cache.py); ``None`` when the cell ran.
+    reuse_source: str | None = None
+    # The memo lookup for a memoized cell: "hit", "miss" or "unavailable"; ``None`` when not consulted.
+    memo_status: str | None = None
 
 
 def cell_fingerprint(spec: CellSpec, capability: CellCapability) -> str:
@@ -231,8 +236,15 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
 
 
 def reuse_or_run(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapability,
-                 receipts_root: Path, validate_final: ValidateFinal, **retry: Any) -> CellOutcome:
-    """Reuse a succeeded, revalidated receipt with this fingerprint; otherwise run the cell."""
+                 receipts_root: Path, validate_final: ValidateFinal, memo: Any = None, **retry: Any) -> CellOutcome:
+    """Reuse a succeeded, revalidated receipt with this fingerprint; otherwise run the cell.
+
+    With ``memo`` (``review.result_cache.Memo``) and a claim-bound cell, a cell with no reusable receipt
+    of its own next looks up the run's memo: a pointer to another cell's succeeded receipt for the same
+    round-free request is revalidated against this cell's evidence set and, on success, reused through a
+    receipt of this cell's own (``reused_from``). Any memo failure is a miss; the cell then runs and a
+    succeeded fresh result is offered to the memo.
+    """
     cell_id = _bind(spec, capability, core)
     cell_root = Path(receipts_root) / cell_id
     for number in sorted(_attempt_numbers(cell_root), reverse=True):
@@ -256,9 +268,69 @@ def reuse_or_run(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCap
         return CellOutcome(
             record=_record(spec, cell_id, CellStatus.SUCCEEDED, number, gaps, path),
             result=result, gaps=gaps, security_events=tuple(receipt["security_events"]),
-            receipt_paths=(path,), reused=True, counts={**receipt["counts"], "attempts": 0})
-    return run_cell(spec, infer=infer, core=core, capability=capability, receipts_root=receipts_root,
-                    validate_final=validate_final, **retry)
+            receipt_paths=(path,), reused=True, counts={**receipt["counts"], "attempts": 0},
+            reuse_source="receipt")
+    if memo is None or not spec.claim_id:
+        return run_cell(spec, infer=infer, core=core, capability=capability, receipts_root=receipts_root,
+                        validate_final=validate_final, **retry)
+    from appsec_review.review.result_cache import MemoPointer, memo_key
+    key = memo_key(spec, capability, memo.run_id)
+    pointer = memo.cache.get(key)
+    if pointer is not None:
+        reused = _memo_reuse(spec, cell_id, capability, Path(receipts_root), pointer, key, validate_final)
+        if reused is not None:
+            return reused
+    outcome = run_cell(spec, infer=infer, core=core, capability=capability, receipts_root=receipts_root,
+                       validate_final=validate_final, **retry)
+    if outcome.record.status is CellStatus.SUCCEEDED and outcome.record.receipt_sha256:
+        memo.cache.put_if_absent(key, MemoPointer(cell_id, outcome.record.attempts, outcome.record.receipt_sha256))
+    return replace(outcome, memo_status="miss" if memo.cache.available else "unavailable")
+
+
+def _memo_reuse(spec: CellSpec, cell_id: str, capability: CellCapability, receipts_root: Path, pointer: Any,
+                key: str, validate_final: ValidateFinal) -> CellOutcome | None:
+    """Reuse the memoized receipt ``pointer`` names, or ``None`` (a miss) when it cannot be trusted here.
+
+    A pointer is untrusted data from the external store: it must name another cell's receipt in this
+    run's receipts root whose bytes hash to the pointer. Only once the bytes match is the receipt loaded,
+    so a receipt this run published that then fails to load is an integrity error, as in own-cell reuse;
+    a forged, stale or mismatched pointer is only a miss. The source must be a fresh (not itself
+    memoized) succeeded result of the same executor, validator, guidance and model, and its result must
+    revalidate against this cell's evidence set before it is used.
+    """
+    if pointer.cell_id == cell_id:
+        return None
+    source = receipts_root / pointer.cell_id / f"attempt-{pointer.attempt}.json"
+    _attempt_numbers(source.parent)                      # confines the path to the run, like own reuse
+    if not source.is_file() or file_sha256(source) != pointer.receipt_sha256:
+        return None
+    receipt = _load_receipt(source, pointer.cell_id, pointer.attempt)
+    if (receipt["status"] != CellStatus.SUCCEEDED.value or "reused_from" in receipt
+            or (receipt["executor_version"], receipt["validator_version"]) != (EXECUTOR_VERSION,
+                                                                               spec.validator_version)
+            or (receipt["guidance_bundle_sha256"], receipt["provider"], receipt["model"]) != (
+                spec.guidance_bundle_sha256, spec.provider, spec.model)):
+        return None
+    result = receipt["result"]
+    citable = set(receipt["seen_identities"]) | set(spec.evidence_set)
+    if _citation_errors(result, citable) or list(validate_final(result)):
+        return None
+    from appsec_review.storage.shared import current, consume_named
+    owner = current()
+    if owner is not None:
+        consume_named(owner.run_root, source, namespace="review-cell", expected_sha256=pointer.receipt_sha256)
+    cell_root = receipts_root / cell_id
+    number = _reserve_number(cell_root)
+    attempt = _Attempt(number, result=result, compact=receipt["compact_result"],
+                       seen=set(receipt["seen_identities"]),
+                       labels=LabelTable(dict(receipt["label_table"].get("retrieved", {}))))
+    reused_from = {"cell_id": pointer.cell_id, "attempt": pointer.attempt,
+                   "receipt_sha256": pointer.receipt_sha256, "memo_key": key}
+    path = _write_receipt(cell_root, spec, cell_id, capability, attempt, reused_from=reused_from)
+    counts = {"attempts": 0, "turns": 0, "queries": 0, "denials": 0, "input_tokens": 0, "output_tokens": 0}
+    return CellOutcome(record=_record(spec, cell_id, CellStatus.SUCCEEDED, number, (), path), result=result,
+                       gaps=(), security_events=(), receipt_paths=(path,), reused=True, counts=counts,
+                       reuse_source="memo", memo_status="hit")
 
 
 def _tool_catalog(capability: CellCapability) -> list[dict[str, Any]]:
@@ -746,7 +818,7 @@ def _reserve_number(cell_root: Path) -> int:
 
 
 def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: CellCapability,
-                   attempt: _Attempt) -> Path:
+                   attempt: _Attempt, *, reused_from: Mapping[str, Any] | None = None) -> Path:
     path = cell_root / f"attempt-{attempt.number}.json"
     if path.exists():
         raise IntegrityError("a cell attempt receipt already exists; attempts are never overwritten")
@@ -776,6 +848,9 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
         "result": attempt.result,
         "result_sha256": sha256_hex(attempt.result) if attempt.result is not None else None,
     }
+    if reused_from is not None:
+        # A memo reuse records the receipt whose result it carries; it ran no model turn of its own.
+        document["reused_from"] = dict(reused_from)
     from appsec_review.storage import canonical_json
     from appsec_review.storage.shared import current, publish_named
     owner = current()
@@ -793,6 +868,7 @@ _RECEIPT_KEYS = frozenset({"schema", "cell_id", "attempt", "attempt_id", "execut
                            "provider", "model", "status", "gap_class", "reason", "turns", "counts",
                            "gaps", "security_events", "seen_identities", "label_table", "compact_result",
                            "feedback", "repair_errors", "result", "result_sha256"})
+_REUSED_FROM_KEYS = frozenset({"cell_id", "attempt", "receipt_sha256", "memo_key"})
 
 
 def _load_receipt(path: Path, cell_id: str, number: int) -> Mapping[str, Any]:
@@ -801,14 +877,28 @@ def _load_receipt(path: Path, cell_id: str, number: int) -> Mapping[str, Any]:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise IntegrityError(f"cell receipt is unreadable: {path.name}") from exc
-    if not isinstance(receipt, dict) or set(receipt) != _RECEIPT_KEYS or \
+    if not isinstance(receipt, dict) or set(receipt) - {"reused_from"} != _RECEIPT_KEYS or \
             receipt["schema"] != RECEIPT_SCHEMA or receipt["cell_id"] != cell_id or \
             receipt["attempt"] != number:
         raise IntegrityError(f"cell receipt does not match its fingerprint: {path.name}")
+    if "reused_from" in receipt and not _valid_reused_from(receipt["reused_from"], cell_id):
+        raise IntegrityError(f"cell receipt has a malformed memo source: {path.name}")
     if receipt["status"] == CellStatus.SUCCEEDED.value and (
             not isinstance(receipt["result"], dict) or receipt["result_sha256"] != sha256_hex(receipt["result"])):
         raise IntegrityError(f"cell receipt result hash mismatch: {path.name}")
     return receipt
+
+
+def _valid_reused_from(value: Any, cell_id: str) -> bool:
+    if not isinstance(value, dict) or set(value) != _REUSED_FROM_KEYS:
+        return False
+    from appsec_review.review.result_cache import MemoPointer
+    try:
+        source = MemoPointer(value["cell_id"], value["attempt"], value["receipt_sha256"])
+    except (TypeError, ValueError):
+        return False
+    return source.cell_id != cell_id and isinstance(value["memo_key"], str) and \
+        re.fullmatch(r"[0-9a-f]{64}", value["memo_key"]) is not None
 
 
 __all__ = ["CellBudgetExceeded", "CellOutcome", "CellSpec", "EXECUTOR_VERSION", "RECEIPT_SCHEMA", "TURN_SCHEMA",
