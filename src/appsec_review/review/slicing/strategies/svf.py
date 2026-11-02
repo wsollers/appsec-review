@@ -48,13 +48,12 @@ from collections.abc import Mapping
 from typing import Any
 
 from appsec_review.review.slicing.contract import (
-    GAP_NOT_APPLICABLE, GAP_TRUNCATED, LineKey, Precision, Reason, SliceContribution, SliceLine, SliceRequest,
-    StrategyState,
+    GAP_NOT_APPLICABLE, GAP_PARTIAL, GAP_TRUNCATED, LineKey, Precision, Reason, SliceContribution, SliceLine,
+    SliceRequest, StrategyState,
 )
 
 NAME = "svf_points_to"
 MAX_RECORDS_PER_LINE = 256
-GAP_PARTIAL = "slice_strategy_partial"
 POINTS_TO, MEMORY_OBJECT = "points_to_set", "memory_object"
 _OBJECT_KINDS = frozenset({"heap", "stack", "global"})   # kinds the producer publishes a memory_object for
 

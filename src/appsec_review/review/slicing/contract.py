@@ -83,6 +83,7 @@ GAP_LEXICAL_ONLY = "slice_lexical_only"
 GAP_TRUNCATED = "slice_truncated"
 GAP_SOURCE_UNAVAILABLE = "slice_source_unavailable"
 GAP_STEP_UNLOCATED = "path_step_unlocated"
+GAP_PARTIAL = "slice_strategy_partial"
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -267,7 +268,7 @@ class SliceResult:
 
 __all__ = [
     "ANCHOR_REASONS", "Anchor", "Bound", "FunctionSpan", "GAP_FAILED", "GAP_LEXICAL_ONLY", "GAP_NOT_APPLICABLE",
-    "GAP_PATH_UNAVAILABLE", "GAP_SOURCE_UNAVAILABLE", "GAP_STEP_UNLOCATED", "GAP_TRUNCATED", "LineKey",
+    "GAP_PARTIAL", "GAP_PATH_UNAVAILABLE", "GAP_SOURCE_UNAVAILABLE", "GAP_STEP_UNLOCATED", "GAP_TRUNCATED", "LineKey",
     "PATH_BASIS", "Precision", "Reason", "SLICE_PRODUCER", "SLICE_RULE", "SliceBudget", "SliceContribution",
     "SliceLine", "SliceRequest", "SliceResult", "SliceSources", "SliceStrategy", "StrategyOutcome", "StrategyState",
 ]

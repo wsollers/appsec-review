@@ -49,13 +49,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from appsec_review.review.slicing.contract import (
-    GAP_NOT_APPLICABLE, GAP_TRUNCATED, FunctionSpan, LineKey, Precision, Reason, SliceContribution, SliceLine,
-    SliceRequest, StrategyState,
+    GAP_NOT_APPLICABLE, GAP_PARTIAL, GAP_TRUNCATED, FunctionSpan, LineKey, Precision, Reason, SliceContribution,
+    SliceLine, SliceRequest, StrategyState,
 )
 
 NAME = "llvm_ir_def_use"
 MAX_ROUNDS = 8
-GAP_PARTIAL = "slice_strategy_partial"
 _CUT_FLAGS = frozenset({"blocks", "def_use"})   # producer cuts that drop def-use detail (llvm_ir.parse_module)
 
 
