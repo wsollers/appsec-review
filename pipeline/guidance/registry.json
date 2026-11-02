@@ -30,6 +30,7 @@
     "completeness_reviewer": {"responsibility": "Identify review-coverage gaps across units, strategies, and personas.", "path": "pipeline/prompt-fragments/roles/completeness_reviewer.md", "lens": "generative", "output_schema": "completeness-result", "outputs": ["coverage_gap", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["coverage", "find", "query_dataset_inventory"]},
     "lead_triager": {"responsibility": "Assign one priority severity to each scanner lead whose scanner reported none, from the rule and a bounded excerpt.", "path": "pipeline/prompt-fragments/roles/lead_triager.md", "lens": "skeptical", "output_schema": "lead-triage-result", "outputs": [], "prohibited": ["accept_claim", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": []},
     "native_dependency_resolver": {"responsibility": "Resolve one bounded native dependency candidate to plausible public repository context."},
+    "native_sbom_investigator": {"responsibility": "Curate bounded native component candidates and propose component-local metadata from supplied source evidence."},
     "poc_writer": {"responsibility": "Write one benign, bounded unit-test function with a negative control that demonstrates an agreed finding; never run by the pipeline."},
     "remediation_writer": {"responsibility": "Propose inert exact-byte corrections and safe regression specifications for accepted confirmed findings only."},
     "remediation_reviewer": {"responsibility": "Independently assess one inert correction and bounded static or compile-check evidence without declaring a runtime fix."}
@@ -52,7 +53,8 @@
     "ci_cd_pipeline": {"path": "pipeline/prompt-fragments/personas/ci_cd_pipeline.md"},
     "cloud_container_deployment": {"path": "pipeline/prompt-fragments/personas/cloud_container_deployment.md"},
     "generalist": {"path": "pipeline/prompt-fragments/personas/generalist.md"},
-    "dependency_repository_investigator": {"viewpoint": "Resolve bounded native package observations to plausible public repository context."}
+    "dependency_repository_investigator": {"viewpoint": "Resolve bounded native package observations to plausible public repository context."},
+    "native_dependency_analyst": {"viewpoint": "Native dependency identity, component-local release evidence, physical packaging, and provenance without conflating SDK parents or separate copies."}
   },
   "stacks": {
     "cpp_rpc_service": {"path": "pipeline/prompt-fragments/stacks/cpp_rpc_service.md"},
@@ -91,7 +93,11 @@
       "chain_refuter": {"path": "pipeline/guidance/tasks/inference-security-review/chain_refuter.md"},
       "chain_weakest_link_verifier": {"path": "pipeline/guidance/tasks/inference-security-review/chain_weakest_link_verifier.md"}
     },
-    "dependency-intelligence": {"native_repository_resolution": {"path": "pipeline/guidance/tasks/dependency-intelligence/native_repository_resolution.md"}}
+    "dependency-intelligence": {
+      "native_repository_resolution": {"path": "pipeline/guidance/tasks/dependency-intelligence/native_repository_resolution.md"},
+      "native_component_curation": {"path": "pipeline/guidance/tasks/dependency-intelligence/native_component_curation.md"},
+      "native_metadata_investigation": {"path": "pipeline/guidance/tasks/dependency-intelligence/native_metadata_investigation.md"}
+    }
   },
   "persona_migrations": {
     "api_web": "network_api_surface",
@@ -107,6 +113,7 @@
     "post-build-security-assessment": {"path": "pipeline/skills/post-build-security-assessment/SKILL.md", "jobs": ["job_post_build_security_assessment"]},
     "target-analysis-planning": {"path": "pipeline/skills/target-analysis-planning/SKILL.md", "jobs": ["job_target_analysis_plan"]},
     "native-dependency-resolution": {"path": "pipeline/skills/native-dependency-resolution/SKILL.md", "jobs": ["job_dependency_intelligence"]},
+    "native-sbom-investigation": {"path": "pipeline/skills/native-sbom-investigation/SKILL.md", "jobs": ["job_dependency_intelligence"]},
     "poc-writer": {"path": "pipeline/skills/poc-writer/SKILL.md", "jobs": ["job_poc_generation"]}
   },
   "assignment": {
