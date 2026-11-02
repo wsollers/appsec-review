@@ -84,7 +84,8 @@ labelled sections. Ids are shortened here.
      "text": ["9| struct Header {", "10|  uint16_t kind;", "11|  uint16_t length;", "12|  char name[16];"]}
   ],
   "neighborhood": {
-    "rule": "package-neighborhood/1", "call_depth": 3,
+    "rule": "package-neighborhood/2", "call_depth": 3,
+    "bound": {"kind": "call_depth", "paths": [], "call_depth": 3}, "slice": null,
     "sinks":   [{"label": "K1", "ref": "asr:sink_site:effd6c6d…", "summary": "memcpy [memory_write], L16"}],
     "ranges":  [{"label": "R1", "ref": "asr:range_fact:9cedee4f…", "summary": "length operand is uint16_t, 0..65535"}],
     "guards":  [{"label": "G1", "ref": "asr:guard_fact:89ec1679…", "summary": "dominating: size < 4 (L8)"},
@@ -115,9 +116,22 @@ material gap. A row returned by a tool during the cell is labelled `Q1`, `Q2` �
 Labels exist only in the model-facing view. They are not stored as identities; the ledger stores the
 resolved refs.
 
-### 4.3 What is embedded (`package-neighborhood/1`)
+### 4.3 What is embedded (`package-neighborhood/2`)
 
-Embedding is keyed by **location and function scope**, not only by a correlated dataflow path:
+**Dataflow bound.** When the lead has a correlated `dataflow_path`, the neighborhood is bounded by
+that path rather than by call depth. It contains:
+
+- the path's flows, sinks, guards, ranges and entry points;
+- only the call sites between functions on the path;
+- in the source section, a *slice* of the path's functions, not the whole function.
+
+The slice consists of the path's lines, the lines that share identifiers with them (interacters), and
+a backward slice over both. It is built by pluggable strategies of decreasing precision: LLVM IR,
+SVF, tree-sitter and lexical. The record states `bound.kind`.
+
+**Call-depth bound.** A lead without a path gets a `dataflow_path_unavailable` gap, and its embedding
+is keyed by **location and function scope**, as described below. See
+[`dataflow-bounded-slices.md`](dataflow-bounded-slices.md).
 
 - the lead's function span, and the declarations of the types used at its sink sites;
 - every `sink_site`, `range_fact` and `guard_fact` located in that function;
