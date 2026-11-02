@@ -62,6 +62,10 @@ from appsec_review.review.neighborhood import (
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
+from appsec_review.review.slicing.contract import SliceBudget
+from appsec_review.review.slicing.registry import (
+    DEFAULT_STRATEGIES as DEFAULT_SLICE_STRATEGIES, validate_names as validate_slice_strategies,
+)
 from appsec_review.review.units import (
     RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
 )
@@ -121,6 +125,10 @@ class PackageSettings:
     max_memory_context_entries: int = 24
     max_callers: int = 16
     caller_depth: int = 2
+    # Dataflow-bounded slice of a lead with a correlated path (review.slicing; review-protocol-v2.md section 4).
+    slice_strategies: tuple[str, ...] = DEFAULT_SLICE_STRATEGIES
+    max_slice_lines: int = 120
+    max_slice_lines_per_function: int = 40
     rank_weights: RankWeights = DEFAULT_RANK_WEIGHTS   # lane B rank weights (``settings.ranking``)
 
     def __post_init__(self) -> None:
@@ -148,6 +156,12 @@ class PackageSettings:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= bound:
                 raise ValueError(f"{name} must be between 1 and {bound}")
+        object.__setattr__(self, "slice_strategies", validate_slice_strategies(self.slice_strategies))
+        SliceBudget(self.max_slice_lines, self.max_slice_lines_per_function)
+
+    @property
+    def slice_budget(self) -> SliceBudget:
+        return SliceBudget(self.max_slice_lines, self.max_slice_lines_per_function)
 
     @classmethod
     def from_review_settings(cls, settings: Any) -> "PackageSettings":
@@ -180,12 +194,15 @@ class PackageSettings:
             raise ValueError(f"unknown package settings: {unknown}")
         if "admit_severities" in value:
             value["admit_severities"] = tuple(value["admit_severities"])
+        if "slice_strategies" in value:
+            value["slice_strategies"] = tuple(value["slice_strategies"])
         if "rank_weights" in value and not isinstance(value["rank_weights"], RankWeights):
             value["rank_weights"] = RankWeights.from_mapping(value["rank_weights"], "rank_weights")
         return cls(**value)
 
     def record(self) -> dict[str, Any]:
-        return {**asdict(self), "admit_severities": list(self.admit_severities)}
+        return {**asdict(self), "admit_severities": list(self.admit_severities),
+                "slice_strategies": list(self.slice_strategies)}
 
 
 @dataclass(frozen=True, slots=True)
