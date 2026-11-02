@@ -1,0 +1,1240 @@
+{
+  "schema": "appsec-review/rule-cwe/1",
+  "source": "Fallback CWEs for producers whose observation payloads carry none. cppcheck entries copy the cwe attribute of cppcheck 2.22.0 --errorlist. Clang Static Analyzer and clang-tidy entries follow the checker descriptions of clang 18 (-analyzer-checker-help, clang-tidy --list-checks) and, for cert-* checks, the SEI CERT rule's CWE mapping; Infer entries follow Infer 1.3.0 help --list-issue-types. Each CWE is the MITRE CWE entry whose definition matches the described weakness. Rule ids are spelled exactly as the pinned tools emit them.",
+  "producers": {
+    "cppcheck": {
+      "nullPointer": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "nullPointerDefaultArg": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "nullPointerRedundantCheck": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "nullPointerOutOfMemory": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "nullPointerOutOfResources": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "nullPointerArithmetic": {
+        "cwes": [
+          "CWE-682"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "nullPointerArithmeticRedundantCheck": {
+        "cwes": [
+          "CWE-682"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "arrayIndexOutOfBounds": {
+        "cwes": [
+          "CWE-788"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "arrayIndexOutOfBoundsCond": {
+        "cwes": [
+          "CWE-788"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "bufferAccessOutOfBounds": {
+        "cwes": [
+          "CWE-788"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "stlOutOfBounds": {
+        "cwes": [
+          "CWE-788"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "algorithmOutOfBounds": {
+        "cwes": [
+          "CWE-788"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "negativeIndex": {
+        "cwes": [
+          "CWE-786"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "negativeContainerIndex": {
+        "cwes": [
+          "CWE-786"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "pointerOutOfBounds": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "pointerOutOfBoundsCond": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "containerOutOfBounds": {
+        "cwes": [
+          "CWE-398"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "containerOutOfBoundsIndexExpression": {
+        "cwes": [
+          "CWE-398"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidscanf": {
+        "cwes": [
+          "CWE-119"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidScanfFormatWidth": {
+        "cwes": [
+          "CWE-687"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "terminateStrncpy": {
+        "cwes": [
+          "CWE-170"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "negativeMemoryAllocationSize": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "incompleteArrayFill": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "memleak": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "memleakOnRealloc": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "leakUnsafeArgAlloc": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "leakReturnValNotUsed": {
+        "cwes": [
+          "CWE-771"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "leakNoVarFunctionCall": {
+        "cwes": [
+          "CWE-772"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "resourceLeak": {
+        "cwes": [
+          "CWE-775"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "doubleFree": {
+        "cwes": [
+          "CWE-415"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "deallocuse": {
+        "cwes": [
+          "CWE-416"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "deallocret": {
+        "cwes": [
+          "CWE-672"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "accessMoved": {
+        "cwes": [
+          "CWE-672"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "accessForwarded": {
+        "cwes": [
+          "CWE-672"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "mismatchAllocDealloc": {
+        "cwes": [
+          "CWE-762"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "autovarInvalidDeallocation": {
+        "cwes": [
+          "CWE-590"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "useClosedFile": {
+        "cwes": [
+          "CWE-910"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "uninitvar": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "legacyUninitvar": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "uninitdata": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "uninitStructMember": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "zerodiv": {
+        "cwes": [
+          "CWE-369"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "zerodivcond": {
+        "cwes": [
+          "CWE-369"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "integerOverflow": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "floatConversionOverflow": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "signConversion": {
+        "cwes": [
+          "CWE-195"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "shiftNegative": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "shiftNegativeLHS": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "shiftTooManyBits": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "shiftTooManyBitsSigned": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "autoVariables": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "danglingLifetime": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "danglingReference": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "danglingTempReference": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "danglingTemporaryLifetime": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidLifetime": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "returnDanglingLifetime": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "returnReference": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "returnTempReference": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidContainer": {
+        "cwes": [
+          "CWE-664"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidContainerLoop": {
+        "cwes": [
+          "CWE-664"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidContainerReference": {
+        "cwes": [
+          "CWE-664"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidIterator1": {
+        "cwes": [
+          "CWE-664"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "eraseDereference": {
+        "cwes": [
+          "CWE-664"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "derefInvalidIterator": {
+        "cwes": [
+          "CWE-825"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "wrongPrintfScanfArgNum": {
+        "cwes": [
+          "CWE-685"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidPrintfArgType_float": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidPrintfArgType_n": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidPrintfArgType_p": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidPrintfArgType_s": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidPrintfArgType_sint": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidPrintfArgType_uint": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidScanfArgType_float": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidScanfArgType_int": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidScanfArgType_s": {
+        "cwes": [
+          "CWE-686"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidFunctionArg": {
+        "cwes": [
+          "CWE-628"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "invalidFunctionArgStr": {
+        "cwes": [
+          "CWE-628"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "sprintfOverlappingData": {
+        "cwes": [
+          "CWE-628"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "stringLiteralWrite": {
+        "cwes": [
+          "CWE-758"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "ignoredReturnValue": {
+        "cwes": [
+          "CWE-252"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "ignoredReturnErrorCode": {
+        "cwes": [
+          "CWE-252"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "raceAfterInterlockedDecrement": {
+        "cwes": [
+          "CWE-362"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "sizeofwithsilentarraypointer": {
+        "cwes": [
+          "CWE-467"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      },
+      "pointerSize": {
+        "cwes": [
+          "CWE-467"
+        ],
+        "rationale": "cppcheck's own mapping (cppcheck 2.22.0 --errorlist cwe attribute (the evidence-collection adapter drops it))."
+      }
+    },
+    "clang-static-analyzer": {
+      "core.NullDereference": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Clang: 'Check for dereferences of null pointers'; CWE-476 NULL Pointer Dereference."
+      },
+      "core.NonNullParamChecker": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Clang: null passed to a parameter marked nonnull, then dereferenced; CWE-476."
+      },
+      "core.CallAndMessage": {
+        "cwes": [
+          "CWE-457",
+          "CWE-476"
+        ],
+        "rationale": "Clang: calls with uninitialized arguments or null function pointers; CWE-457 and CWE-476."
+      },
+      "core.DivideZero": {
+        "cwes": [
+          "CWE-369"
+        ],
+        "rationale": "Clang: 'Check for division by zero'; CWE-369 Divide By Zero."
+      },
+      "core.StackAddressEscape": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "Clang: stack address stored into a global or returned; CWE-562 Return of Stack Variable Address."
+      },
+      "core.UndefinedBinaryOperatorResult": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: binary operator on an undefined (uninitialized) value; CWE-457 Use of Uninitialized Variable."
+      },
+      "core.uninitialized.ArraySubscript": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: uninitialized value used as an array subscript; CWE-457."
+      },
+      "core.uninitialized.Assign": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: assignment of an uninitialized value; CWE-457."
+      },
+      "core.uninitialized.Branch": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: branch condition on an uninitialized value; CWE-457."
+      },
+      "core.uninitialized.UndefReturn": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: uninitialized value returned to the caller; CWE-457."
+      },
+      "core.uninitialized.NewArraySize": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: uninitialized value used as a new[] size; CWE-457."
+      },
+      "core.BitwiseShift": {
+        "cwes": [
+          "CWE-1335"
+        ],
+        "rationale": "Clang: shift by a negative or too large amount; CWE-1335 Incorrect Bitwise Shift of Integer."
+      },
+      "cplusplus.NewDelete": {
+        "cwes": [
+          "CWE-415",
+          "CWE-416"
+        ],
+        "rationale": "Clang: 'Check for double-free and use-after-free problems' of new/delete memory; CWE-415 and CWE-416."
+      },
+      "cplusplus.NewDeleteLeaks": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "Clang: memory leaks of new-allocated memory; CWE-401 Missing Release of Memory."
+      },
+      "cplusplus.InnerPointer": {
+        "cwes": [
+          "CWE-416"
+        ],
+        "rationale": "Clang: inner pointer of a container used after re/deallocation; CWE-416 Use After Free."
+      },
+      "cplusplus.Move": {
+        "cwes": [
+          "CWE-672"
+        ],
+        "rationale": "Clang: use of an object after it was moved from; CWE-672 Operation on a Resource after Release."
+      },
+      "cplusplus.PlacementNew": {
+        "cwes": [
+          "CWE-787"
+        ],
+        "rationale": "Clang: placement new into storage too small for the object; CWE-787 Out-of-bounds Write."
+      },
+      "unix.Malloc": {
+        "cwes": [
+          "CWE-401",
+          "CWE-415",
+          "CWE-416"
+        ],
+        "rationale": "Clang: 'memory leaks, double free, and use-after-free' of malloc/free memory; CWE-401, CWE-415, CWE-416."
+      },
+      "unix.MismatchedDeallocator": {
+        "cwes": [
+          "CWE-762"
+        ],
+        "rationale": "Clang: deallocator does not match the allocator; CWE-762 Mismatched Memory Management Routines."
+      },
+      "unix.MallocSizeof": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "Clang: dubious sizeof in a malloc size; CWE-131 Incorrect Calculation of Buffer Size."
+      },
+      "unix.cstring.NullArg": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Clang: null pointer passed to a C string function; CWE-476."
+      },
+      "unix.cstring.BadSizeArg": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "Clang: erroneous size argument to a C string function; CWE-131."
+      },
+      "security.insecureAPI.strcpy": {
+        "cwes": [
+          "CWE-120",
+          "CWE-676"
+        ],
+        "rationale": "Clang: use of strcpy/strcat; CWE-120 Classic Buffer Overflow, CWE-676 Potentially Dangerous Function."
+      },
+      "security.insecureAPI.gets": {
+        "cwes": [
+          "CWE-242"
+        ],
+        "rationale": "Clang: use of gets; CWE-242 Use of Inherently Dangerous Function."
+      },
+      "security.insecureAPI.getpw": {
+        "cwes": [
+          "CWE-676"
+        ],
+        "rationale": "Clang: use of getpw (unbounded buffer); CWE-676."
+      },
+      "security.insecureAPI.DeprecatedOrUnsafeBufferHandling": {
+        "cwes": [
+          "CWE-676"
+        ],
+        "rationale": "Clang: unsafe buffer functions with secure variants (sprintf, memcpy, ...); CWE-676."
+      },
+      "security.insecureAPI.UncheckedReturn": {
+        "cwes": [
+          "CWE-252"
+        ],
+        "rationale": "Clang: unchecked return of setuid-like calls; CWE-252 Unchecked Return Value."
+      },
+      "security.insecureAPI.mktemp": {
+        "cwes": [
+          "CWE-377"
+        ],
+        "rationale": "Clang: use of mktemp; CWE-377 Insecure Temporary File."
+      },
+      "security.insecureAPI.mkstemp": {
+        "cwes": [
+          "CWE-377"
+        ],
+        "rationale": "Clang: mkstemp template with too few X's; CWE-377 Insecure Temporary File."
+      },
+      "security.insecureAPI.rand": {
+        "cwes": [
+          "CWE-338"
+        ],
+        "rationale": "Clang: use of rand-family generators; CWE-338 Weak PRNG."
+      },
+      "security.insecureAPI.bcmp": {
+        "cwes": [
+          "CWE-477"
+        ],
+        "rationale": "Clang: use of the obsolete bcmp; CWE-477 Use of Obsolete Function."
+      },
+      "security.insecureAPI.bcopy": {
+        "cwes": [
+          "CWE-477"
+        ],
+        "rationale": "Clang: use of the obsolete bcopy; CWE-477."
+      },
+      "security.insecureAPI.bzero": {
+        "cwes": [
+          "CWE-477"
+        ],
+        "rationale": "Clang: use of the obsolete bzero; CWE-477."
+      },
+      "security.cert.env.InvalidPtr": {
+        "cwes": [
+          "CWE-825"
+        ],
+        "rationale": "Clang: use of a possibly invalidated environment pointer (CERT ENV31-C/ENV34-C); CWE-825 Expired Pointer Dereference."
+      },
+      "alpha.security.ArrayBound": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Clang: out-of-bound array access; CWE-125 Out-of-bounds Read and CWE-787 Out-of-bounds Write."
+      },
+      "alpha.security.ArrayBoundV2": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Clang: out-of-bound array access; CWE-125 and CWE-787."
+      },
+      "alpha.security.ReturnPtrRange": {
+        "cwes": [
+          "CWE-466"
+        ],
+        "rationale": "Clang: returned pointer is out of the buffer range; CWE-466 Return of Pointer Value Outside of Expected Range."
+      },
+      "alpha.security.MallocOverflow": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "Clang: possible integer overflow in a malloc size; CWE-190 Integer Overflow."
+      },
+      "alpha.unix.cstring.OutOfBounds": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Clang: out-of-bounds access by a C string function; CWE-125 and CWE-787."
+      }
+    },
+    "clang-tidy": {
+      "clang-analyzer-core.NullDereference": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Clang: 'Check for dereferences of null pointers'; CWE-476 NULL Pointer Dereference. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.NonNullParamChecker": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Clang: null passed to a parameter marked nonnull, then dereferenced; CWE-476. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.CallAndMessage": {
+        "cwes": [
+          "CWE-457",
+          "CWE-476"
+        ],
+        "rationale": "Clang: calls with uninitialized arguments or null function pointers; CWE-457 and CWE-476. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.DivideZero": {
+        "cwes": [
+          "CWE-369"
+        ],
+        "rationale": "Clang: 'Check for division by zero'; CWE-369 Divide By Zero. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.StackAddressEscape": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "Clang: stack address stored into a global or returned; CWE-562 Return of Stack Variable Address. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.UndefinedBinaryOperatorResult": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: binary operator on an undefined (uninitialized) value; CWE-457 Use of Uninitialized Variable. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.uninitialized.ArraySubscript": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: uninitialized value used as an array subscript; CWE-457. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.uninitialized.Assign": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: assignment of an uninitialized value; CWE-457. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.uninitialized.Branch": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: branch condition on an uninitialized value; CWE-457. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.uninitialized.UndefReturn": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: uninitialized value returned to the caller; CWE-457. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.uninitialized.NewArraySize": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Clang: uninitialized value used as a new[] size; CWE-457. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-core.BitwiseShift": {
+        "cwes": [
+          "CWE-1335"
+        ],
+        "rationale": "Clang: shift by a negative or too large amount; CWE-1335 Incorrect Bitwise Shift of Integer. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-cplusplus.NewDelete": {
+        "cwes": [
+          "CWE-415",
+          "CWE-416"
+        ],
+        "rationale": "Clang: 'Check for double-free and use-after-free problems' of new/delete memory; CWE-415 and CWE-416. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-cplusplus.NewDeleteLeaks": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "Clang: memory leaks of new-allocated memory; CWE-401 Missing Release of Memory. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-cplusplus.InnerPointer": {
+        "cwes": [
+          "CWE-416"
+        ],
+        "rationale": "Clang: inner pointer of a container used after re/deallocation; CWE-416 Use After Free. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-cplusplus.Move": {
+        "cwes": [
+          "CWE-672"
+        ],
+        "rationale": "Clang: use of an object after it was moved from; CWE-672 Operation on a Resource after Release. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-cplusplus.PlacementNew": {
+        "cwes": [
+          "CWE-787"
+        ],
+        "rationale": "Clang: placement new into storage too small for the object; CWE-787 Out-of-bounds Write. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-unix.Malloc": {
+        "cwes": [
+          "CWE-401",
+          "CWE-415",
+          "CWE-416"
+        ],
+        "rationale": "Clang: 'memory leaks, double free, and use-after-free' of malloc/free memory; CWE-401, CWE-415, CWE-416. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-unix.MismatchedDeallocator": {
+        "cwes": [
+          "CWE-762"
+        ],
+        "rationale": "Clang: deallocator does not match the allocator; CWE-762 Mismatched Memory Management Routines. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-unix.MallocSizeof": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "Clang: dubious sizeof in a malloc size; CWE-131 Incorrect Calculation of Buffer Size. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-unix.cstring.NullArg": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Clang: null pointer passed to a C string function; CWE-476. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-unix.cstring.BadSizeArg": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "Clang: erroneous size argument to a C string function; CWE-131. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.strcpy": {
+        "cwes": [
+          "CWE-120",
+          "CWE-676"
+        ],
+        "rationale": "Clang: use of strcpy/strcat; CWE-120 Classic Buffer Overflow, CWE-676 Potentially Dangerous Function. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.gets": {
+        "cwes": [
+          "CWE-242"
+        ],
+        "rationale": "Clang: use of gets; CWE-242 Use of Inherently Dangerous Function. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.getpw": {
+        "cwes": [
+          "CWE-676"
+        ],
+        "rationale": "Clang: use of getpw (unbounded buffer); CWE-676. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling": {
+        "cwes": [
+          "CWE-676"
+        ],
+        "rationale": "Clang: unsafe buffer functions with secure variants (sprintf, memcpy, ...); CWE-676. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.UncheckedReturn": {
+        "cwes": [
+          "CWE-252"
+        ],
+        "rationale": "Clang: unchecked return of setuid-like calls; CWE-252 Unchecked Return Value. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.mktemp": {
+        "cwes": [
+          "CWE-377"
+        ],
+        "rationale": "Clang: use of mktemp; CWE-377 Insecure Temporary File. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.mkstemp": {
+        "cwes": [
+          "CWE-377"
+        ],
+        "rationale": "Clang: mkstemp template with too few X's; CWE-377 Insecure Temporary File. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.rand": {
+        "cwes": [
+          "CWE-338"
+        ],
+        "rationale": "Clang: use of rand-family generators; CWE-338 Weak PRNG. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.bcmp": {
+        "cwes": [
+          "CWE-477"
+        ],
+        "rationale": "Clang: use of the obsolete bcmp; CWE-477 Use of Obsolete Function. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.bcopy": {
+        "cwes": [
+          "CWE-477"
+        ],
+        "rationale": "Clang: use of the obsolete bcopy; CWE-477. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.insecureAPI.bzero": {
+        "cwes": [
+          "CWE-477"
+        ],
+        "rationale": "Clang: use of the obsolete bzero; CWE-477. Same checker run through clang-tidy."
+      },
+      "clang-analyzer-security.cert.env.InvalidPtr": {
+        "cwes": [
+          "CWE-825"
+        ],
+        "rationale": "Clang: use of a possibly invalidated environment pointer (CERT ENV31-C/ENV34-C); CWE-825 Expired Pointer Dereference. Same checker run through clang-tidy."
+      },
+      "bugprone-use-after-move": {
+        "cwes": [
+          "CWE-672"
+        ],
+        "rationale": "clang-tidy: use of an object after std::move; CWE-672."
+      },
+      "bugprone-not-null-terminated-result": {
+        "cwes": [
+          "CWE-170"
+        ],
+        "rationale": "clang-tidy: result not null-terminated; CWE-170 Improper Null Termination."
+      },
+      "bugprone-unsafe-functions": {
+        "cwes": [
+          "CWE-676"
+        ],
+        "rationale": "clang-tidy: unsafe functions with safer alternatives (CERT MSC24-C/MSC33-C); CWE-676."
+      },
+      "bugprone-unused-return-value": {
+        "cwes": [
+          "CWE-252"
+        ],
+        "rationale": "clang-tidy: ignored return value of a function that must be checked; CWE-252."
+      },
+      "bugprone-sizeof-expression": {
+        "cwes": [
+          "CWE-467"
+        ],
+        "rationale": "clang-tidy: suspicious sizeof, e.g. of a pointer; CWE-467 Use of sizeof() on a Pointer Type."
+      },
+      "bugprone-integer-division": {
+        "cwes": [
+          "CWE-682"
+        ],
+        "rationale": "clang-tidy: integer division in a floating point context; CWE-682 Incorrect Calculation."
+      },
+      "bugprone-misplaced-operator-in-strlen-in-alloc": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "clang-tidy: misplaced +1 in strlen inside an allocation size; CWE-131."
+      },
+      "bugprone-misplaced-pointer-arithmetic-in-alloc": {
+        "cwes": [
+          "CWE-131"
+        ],
+        "rationale": "clang-tidy: pointer arithmetic applied to an allocation result instead of its size; CWE-131."
+      },
+      "bugprone-implicit-widening-of-multiplication-result": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "clang-tidy: multiplication overflows before widening; CWE-190."
+      },
+      "bugprone-dangling-handle": {
+        "cwes": [
+          "CWE-825"
+        ],
+        "rationale": "clang-tidy: handle (e.g. string_view) to a destroyed temporary; CWE-825."
+      },
+      "bugprone-signal-handler": {
+        "cwes": [
+          "CWE-479"
+        ],
+        "rationale": "clang-tidy: non-async-safe call in a signal handler (CERT SIG30-C); CWE-479."
+      },
+      "cert-sig30-c": {
+        "cwes": [
+          "CWE-479"
+        ],
+        "rationale": "CERT SIG30-C: only async-safe functions in signal handlers; CWE-479."
+      },
+      "cert-err33-c": {
+        "cwes": [
+          "CWE-252"
+        ],
+        "rationale": "CERT ERR33-C: detect and handle standard library errors; CWE-252."
+      },
+      "cert-err34-c": {
+        "cwes": [
+          "CWE-676"
+        ],
+        "rationale": "CERT ERR34-C: atoi-family conversions without error detection; CWE-676."
+      },
+      "cert-env33-c": {
+        "cwes": [
+          "CWE-78"
+        ],
+        "rationale": "CERT ENV33-C: do not call system(); CWE-78 OS Command Injection."
+      },
+      "cert-msc30-c": {
+        "cwes": [
+          "CWE-338"
+        ],
+        "rationale": "CERT MSC30-C: do not use rand(); CWE-338."
+      },
+      "cert-msc50-cpp": {
+        "cwes": [
+          "CWE-338"
+        ],
+        "rationale": "CERT MSC50-CPP: do not use std::rand(); CWE-338."
+      },
+      "cert-msc32-c": {
+        "cwes": [
+          "CWE-335"
+        ],
+        "rationale": "CERT MSC32-C: properly seed PRNGs; CWE-335 Incorrect Usage of Seeds in PRNG."
+      },
+      "cert-msc51-cpp": {
+        "cwes": [
+          "CWE-335"
+        ],
+        "rationale": "CERT MSC51-CPP: properly seed PRNGs; CWE-335."
+      },
+      "cert-str34-c": {
+        "cwes": [
+          "CWE-704"
+        ],
+        "rationale": "CERT STR34-C: cast characters to unsigned char before widening; CWE-704 Incorrect Type Conversion."
+      }
+    },
+    "infer": {
+      "NULLPTR_DEREFERENCE": {
+        "cwes": [
+          "CWE-476"
+        ],
+        "rationale": "Infer Pulse 'Null Dereference'; CWE-476."
+      },
+      "USE_AFTER_FREE": {
+        "cwes": [
+          "CWE-416"
+        ],
+        "rationale": "Infer Pulse 'Use After Free'; CWE-416."
+      },
+      "USE_AFTER_DELETE": {
+        "cwes": [
+          "CWE-416"
+        ],
+        "rationale": "Infer Pulse 'Use After Delete' (delete'd memory accessed); CWE-416."
+      },
+      "USE_AFTER_LIFETIME": {
+        "cwes": [
+          "CWE-825"
+        ],
+        "rationale": "Infer Pulse 'Use After Lifetime' (object accessed after its lifetime ended); CWE-825."
+      },
+      "VECTOR_INVALIDATION": {
+        "cwes": [
+          "CWE-825"
+        ],
+        "rationale": "Infer Pulse 'Vector Invalidation' (pointer into a reallocated vector); CWE-825."
+      },
+      "MEMORY_LEAK_C": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "Infer Pulse 'Memory Leak' (malloc); CWE-401."
+      },
+      "MEMORY_LEAK_CPP": {
+        "cwes": [
+          "CWE-401"
+        ],
+        "rationale": "Infer Pulse 'Memory Leak' (new); CWE-401."
+      },
+      "PULSE_RESOURCE_LEAK": {
+        "cwes": [
+          "CWE-772"
+        ],
+        "rationale": "Infer Pulse 'Resource Leak'; CWE-772 Missing Release of Resource."
+      },
+      "PULSE_UNINITIALIZED_VALUE": {
+        "cwes": [
+          "CWE-457"
+        ],
+        "rationale": "Infer Pulse 'Uninitialized Value'; CWE-457."
+      },
+      "STACK_VARIABLE_ADDRESS_ESCAPE": {
+        "cwes": [
+          "CWE-562"
+        ],
+        "rationale": "Infer Pulse 'Stack Variable Address Escape'; CWE-562."
+      },
+      "DEADLOCK": {
+        "cwes": [
+          "CWE-833"
+        ],
+        "rationale": "Infer starvation 'Deadlock'; CWE-833 Deadlock."
+      },
+      "INFERBO_ALLOC_IS_BIG": {
+        "cwes": [
+          "CWE-789"
+        ],
+        "rationale": "Infer bufferoverrun 'Alloc Is Big'; CWE-789 Memory Allocation with Excessive Size Value."
+      },
+      "INFERBO_ALLOC_MAY_BE_BIG": {
+        "cwes": [
+          "CWE-789"
+        ],
+        "rationale": "Infer bufferoverrun 'Alloc May Be Big'; CWE-789."
+      },
+      "BUFFER_OVERRUN_L1": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun L1' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "BUFFER_OVERRUN_L2": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun L2' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "BUFFER_OVERRUN_L3": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun L3' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "BUFFER_OVERRUN_L4": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun L4' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "BUFFER_OVERRUN_L5": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun L5' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "BUFFER_OVERRUN_S2": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun S2' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "BUFFER_OVERRUN_U5": {
+        "cwes": [
+          "CWE-125",
+          "CWE-787"
+        ],
+        "rationale": "Infer bufferoverrun 'Buffer Overrun U5' (out-of-bounds array access); CWE-125 and CWE-787."
+      },
+      "INTEGER_OVERFLOW_L1": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "Infer bufferoverrun 'Integer Overflow L1'; CWE-190."
+      },
+      "INTEGER_OVERFLOW_L2": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "Infer bufferoverrun 'Integer Overflow L2'; CWE-190."
+      },
+      "INTEGER_OVERFLOW_L5": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "Infer bufferoverrun 'Integer Overflow L5'; CWE-190."
+      },
+      "INTEGER_OVERFLOW_U5": {
+        "cwes": [
+          "CWE-190"
+        ],
+        "rationale": "Infer bufferoverrun 'Integer Overflow U5'; CWE-190."
+      }
+    }
+  }
+}
