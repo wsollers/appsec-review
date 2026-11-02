@@ -190,7 +190,7 @@ class ReviewContext:
         return cached
 
     def package_view(self, work: PackageWork) -> PackageView:
-        """The labelled, budgeted model-facing view of a package (built once per package; ``package-view/1``)."""
+        """The labelled, budgeted model-facing view of a package (built once per package; ``package-view/4``)."""
         with self._lock:
             cached = self._views.get(work.package_id)
         if cached is None:
