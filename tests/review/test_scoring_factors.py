@@ -1,4 +1,4 @@
-"""score-factors/1 extraction, application_risk_matrix/3, and the scoring stage wiring (decision B1)."""
+"""score-factors/2 extraction, application_risk_matrix/3, and the scoring stage wiring (decision B1)."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -18,6 +18,9 @@ from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.ledger import ClaimView, Projection
 from appsec_review.review.models import (
     Admissibility, ClaimState, EvidenceRelation, Gap, Lane, Predicate, RelationKind,
+)
+from appsec_review.review.numeric_reasoning import (
+    NUMERIC_CWE_TABLE_VERSION, RULE as NUMERIC_REASONING_RULE, SCORING_MISSING_REASON,
 )
 from appsec_review.review.obligations import ALWAYS_REQUIRED
 from appsec_review.review.scoring import (
@@ -165,11 +168,68 @@ def test_attacker_control_needs_a_resolved_payload_for_a_class() -> None:
 @pytest.mark.parametrize("kind, expected", [("source_span", "code_evidence"), ("tool_observation", "tool_observation"),
                                             ("guard_fact", "graph_fact"), ("range_fact", "graph_fact")])
 def test_guard_absent_basis(kind, expected) -> None:
+    # CWE-78 is not a numeric weakness, so every basis counts (the numeric guardrail is tested below).
     relation = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, kind)
-    value = extract(data([relation]), FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT)
+    value = extract(data([relation], cwe="CWE-78"), FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT)
     assert value.value == expected and Citation(CitationKind.EVIDENCE_RELATION, relation.relation_id) in value.citations
-    assert extract(data([rel(Predicate.SOURCE_TO_SINK_REACHABILITY)]),
+    assert extract(data([rel(Predicate.SOURCE_TO_SINK_REACHABILITY)], cwe="CWE-78"),
                    FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT) is None
+
+
+def _guard_absent(relations, cwe, entities=None):
+    result = extract(data(relations, cwe=cwe, entities=entities), FactorId.GUARD_ABSENT)
+    return result.get(FactorId.GUARD_ABSENT), {item.factor: item.reason for item in result.missing}
+
+
+def _cites(value, *relations):
+    return set(value.citations) == {citation for relation in relations for citation in (
+        Citation(CitationKind.EVIDENCE_RELATION, relation.relation_id), Citation(CitationKind.ENTITY, relation.entity_id))}
+
+
+@pytest.mark.parametrize("cwe", ["CWE-190", "CWE-787", "CWE-120", "190", "cwe-0835"])
+def test_numeric_weakness_guard_absent_needs_a_graph_or_tool_fact(cwe) -> None:
+    code = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "source_span", native="code")
+    tool = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "tool_observation", native="tool")
+    guard = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "guard_fact", native="guard")
+    ranged = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "range_fact", native="range")
+    # Only code_evidence: missing with the guardrail's reason, never the weakest value.
+    value, missing = _guard_absent([code], cwe)
+    assert value is None and missing == {FactorId.GUARD_ABSENT: SCORING_MISSING_REASON}
+    assert NUMERIC_REASONING_RULE in SCORING_MISSING_REASON
+    for fact in (guard, ranged):
+        value, missing = _guard_absent([fact], cwe)
+        assert value.value == "graph_fact" and _cites(value, fact) and not missing
+        assert value.detail["numeric_guardrail"] == (NUMERIC_REASONING_RULE,)
+        assert value.detail["numeric_cwe_table"] == (NUMERIC_CWE_TABLE_VERSION,)
+    value, _ = _guard_absent([tool], cwe)
+    assert value.value == "tool_observation" and _cites(value, tool)
+    # code_evidence is dropped, not outranked: the tool observation alone is cited.
+    value, _ = _guard_absent([code, tool], cwe)
+    assert value.value == "tool_observation" and _cites(value, tool)
+    assert value.detail["entity_kind"] == ("tool_observation",)
+
+
+def test_numeric_guardrail_keeps_the_no_support_reason_and_the_effective_guard_rule() -> None:
+    value, missing = _guard_absent([rel(Predicate.SOURCE_TO_SINK_REACHABILITY)], "CWE-190")
+    assert value is None
+    assert missing == {FactorId.GUARD_ABSENT: "no counted direct support on missing_or_ineffective_guard"}
+    # A cited effective guard still does not count, and is not reported as dropped code evidence.
+    relation = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "guard_fact")
+    entities = _guard_entities(relation, **_guard(">", _operand("rhs", "constant", 16)))
+    value, missing = _guard_absent([relation], "CWE-190", entities)
+    assert value is None
+    assert missing == {FactorId.GUARD_ABSENT: "no counted direct support on missing_or_ineffective_guard"}
+
+
+@pytest.mark.parametrize("cwe", ["CWE-78", None])
+def test_non_numeric_or_absent_cwe_keeps_code_evidence(cwe) -> None:
+    code = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "source_span", native="code")
+    value, missing = _guard_absent([code], cwe)
+    assert value.value == "code_evidence" and _cites(value, code) and not missing
+    assert dict(value.detail) == {"entity_kind": ("source_span",)}
+    tool = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "tool_observation", native="tool")
+    value, _ = _guard_absent([code, tool], cwe)
+    assert value.value == "tool_observation" and _cites(value, tool)
 
 
 def _guard_entities(relation, **result) -> dict:
@@ -467,11 +527,13 @@ def test_provider_conforms_and_declares_its_factors() -> None:
 def test_confirmed_minimum_evidence_matches_matrix_1_and_supported_needs_more() -> None:
     minimal = [rel(p) for p in ALWAYS_REQUIRED]
     confirmed = provider().score(request(factors_for(data(minimal))))
-    # Exposure is unknown (0 to 10 points), but 75 to 85 is `high` either way, so the rating stands
-    # as `bounded` and no single point value is claimed.
+    # CWE-120 is a numeric weakness, so the code-evidence guard support does not count (numeric-reasoning-guardrail/1):
+    # guard_absent is unknown (15 to 20 points) and exposure is unknown (0 to 10). 75 to 90 is `high` either way,
+    # so the rating stands as `bounded` and no single point value is claimed.
     assert confirmed.exploitability_confidence.rating == "high" and confirmed.exploitability_confidence.value is None
     assert (confirmed.native["exploitability"]["points_floor"], confirmed.native["exploitability"]["points_ceiling"]) \
-        == (75, 85)
+        == (75, 90)
+    assert dict(confirmed.missing_factor_reasons)["guard_absent"] == SCORING_MISSING_REASON
     assert confirmed.technical_severity.rating == "high" and confirmed.native["cell"] == ["high", "high"]
     assert confirmed.severity_assessment.assessment == "bounded"
     supported = provider().score(request(factors_for(data([rel(Predicate.AFFECTED_CONSTRUCT)],
@@ -509,9 +571,10 @@ def test_unmapped_cwe_leaves_technical_severity_null() -> None:
 
 
 def test_kev_raises_exploitability_one_band_only() -> None:
-    # Every scored factor is known (55 points, `medium`), so KEV has one band to raise.
+    # Every scored factor is known (55 points, `medium`), so KEV has one band to raise. CWE-120 is a numeric
+    # weakness, so the guard support is a tool observation (code evidence would leave guard_absent unknown).
     weak = [rel(Predicate.SOURCE_TO_SINK_REACHABILITY, native="t"), rel(Predicate.ATTACKER_INPUT_CONTROL, native="c"),
-            rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, native="g")]
+            rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "tool_observation", native="g")]
     local = (tag("surface:entry:cli", 1),)
     plain = provider().score(request(factors_for(data(weak, state=ClaimState.SUPPORTED, kev=False, tags=local)),
                                      state=ClaimState.SUPPORTED, kev_listed=False))
@@ -527,7 +590,10 @@ def test_kev_raises_exploitability_one_band_only() -> None:
 def test_provider_rejects_inconsistent_or_absent_factors() -> None:
     registry = ProviderRegistry((provider(),))
     gap = registry.score("application_risk_matrix", request(None))
-    assert isinstance(gap, Gap) and "needs the score-factors/1 factors" in gap.reason
+    assert isinstance(gap, Gap) and "needs the score-factors/2 factors" in gap.reason
+    stale = replace(default_factor_registry(TABLE).extract(data(), ALL), version="score-factors/1")
+    assert "factor set version score-factors/1 is not score-factors/2" in provider().validate_inputs(
+        request(stale)).errors
     partial = default_factor_registry(TABLE).extract(data(), [FactorId.VERIFICATION])
     assert isinstance(registry.score("application_risk_matrix", request(partial)), Gap)
     supported = factors_for(data(state=ClaimState.SUPPORTED))
@@ -600,8 +666,9 @@ def test_band_edges_are_inclusive_thresholds() -> None:
                            {"medium": 40, "high": 75})
 
     def interval(state, guard=None):
+        # CWE-78 is not a numeric weakness, so a code-evidence guard counts (35 points).
         relations = [rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, guard)] if guard else []
-        values = default_factor_registry(TABLE).extract(data(relations, state=state), model.factors)
+        values = default_factor_registry(TABLE).extract(data(relations, state=state, cwe="CWE-78"), model.factors)
         return model.interval(values)
 
     assert [model.classify(points) for points in (39, 40, 74, 75)] == ["low", "medium", "medium", "high"]
@@ -630,7 +697,7 @@ def _evidence_variants():
         yield dict(zip(options, combo))
 
 
-def _input_for(variant, state=ClaimState.SUPPORTED) -> FactorInput:
+def _input_for(variant, state=ClaimState.SUPPORTED, cwe="CWE-120") -> FactorInput:
     relations, entities, tags = [], {}, ()
     if variant["taint"]:
         relations.append(rel(Predicate.SOURCE_TO_SINK_REACHABILITY, variant["taint"], native="taint"))
@@ -645,10 +712,12 @@ def _input_for(variant, state=ClaimState.SUPPORTED) -> FactorInput:
         relations.append(rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, variant["guard"], native="guard"))
     if variant["exposure"]:
         tags = (tag(variant["exposure"], 1),)
-    return data(relations, state=state, entities=entities, tags=tags)
+    return data(relations, state=state, entities=entities, tags=tags, cwe=cwe)
 
 
-def test_monotonicity_stronger_evidence_never_lowers_exploitability() -> None:
+# CWE-78 counts a code-evidence guard; CWE-120 is a numeric weakness, for which it leaves guard_absent unknown.
+@pytest.mark.parametrize("cwe", ["CWE-78", "CWE-120"])
+def test_monotonicity_stronger_evidence_never_lowers_exploitability(cwe) -> None:
     scorer = provider()
     order = {"taint": [None, "source_span", "tool_observation", "dataflow_path"],
              "control": [None, "internal", "direct", "argv", "remote"],
@@ -661,7 +730,7 @@ def test_monotonicity_stronger_evidence_never_lowers_exploitability() -> None:
         """(points floor, points ceiling, severity floor rank, severity ceiling rank); a missing factor widens it."""
         key = (tuple(sorted(variant.items(), key=lambda pair: pair[0])), state)
         if key not in cache:
-            result = scorer.score(request(factors_for(_input_for(variant, state), scorer), state=state))
+            result = scorer.score(request(factors_for(_input_for(variant, state, cwe), scorer), state=state, cwe=cwe))
             native, assessment = result.native["exploitability"], result.severity_assessment
             cache[key] = (native["points_floor"], native["points_ceiling"],
                           bands.index(assessment.severity_floor), bands.index(assessment.severity_ceiling))

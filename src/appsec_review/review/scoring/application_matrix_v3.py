@@ -1,6 +1,6 @@
 """``application_risk_matrix/3``: evidence-driven, configurable application risk scoring.
 
-The provider consumes ``score-factors/1`` values (see :mod:`.factors`) and rates them with the
+The provider consumes ``score-factors/2`` values (see :mod:`.factors`) and rates them with the
 declarative :class:`~.risk_model.RiskModel` from TOML:
 
 - ``exploitability_confidence`` (scale ``exploitability_evidence/1``): summed factor points against

@@ -192,7 +192,7 @@ def _score() -> dict:
         "evidence_relations": [ident("evidence_relation", "51"), ident("evidence_relation", "c2")],
         "factor_citations": [{"factor": "taint_path", "evidence_relations": [ident("evidence_relation", "c2")],
                               "entities": ["asr:dataflow_path:" + SHA], "tag_assignments": [], "references": []}],
-        "factors": [{"factor": "taint_path", "scale": "score-factors/1:taint_path", "value": "graph_dataflow_path",
+        "factors": [{"factor": "taint_path", "scale": "score-factors/2:taint_path", "value": "graph_dataflow_path",
                      "detail": {"entity_kind": ["dataflow_path"]}}],
         "missing_factor_reasons": [{"factor": "business_asset_criticality", "reason": "no deployment data"}],
         "limitations": [], "scorer": ident("actor", "scorer"),
