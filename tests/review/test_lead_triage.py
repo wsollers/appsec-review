@@ -1,13 +1,18 @@
 """Deterministic-first lead severity triage and its bounded model fallback."""
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from appsec_review.config.inference_review import ModelProfileSettings
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+from appsec_review.review import lead_triage, numeric_reasoning
 from appsec_review.review.lead_families import Lead, with_triage
-from appsec_review.review.lead_triage import RESULT_SCHEMA, TriageGuidance, finding_input, run_triage
+from appsec_review.review.lead_triage import (
+    RESULT_SCHEMA, TriageGuidance, finding_fingerprint, finding_input, run_triage, supplied_fact_ids,
+    validate_result,
+)
 from appsec_review.review.lead_triage_settings import TriageRule, TriageSettings
 from appsec_review.review.packages import PackageSettings, admission_reasons, lead_record
 from appsec_review.review.references import CweConsequence, CweEntry, CweReference
@@ -16,6 +21,14 @@ from appsec_review.review.references import CweConsequence, CweEntry, CweReferen
 SCHEMAS = SchemaSet(Path("docs/schemas/inference-security-review"))
 PROFILE = ModelProfileSettings("claude-cli", "claude-haiku-5-5", "low", 32_000, 1_400, 0, 2, 60)
 GUIDANCE = TriageGuidance({"sha256": "a" * 64}, "bounded triage guidance")
+
+
+class _AnyText:
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and bool(other)
+
+
+ANY_TEXT = _AnyText()
 
 
 def lead(identifier: str, *, family: str = "source_sast", scanner: str = "tool-unknown",
@@ -91,6 +104,7 @@ def test_pinned_cwe_catalog_decides_before_the_model() -> None:
     assert outcome.model_calls == 0 and row["origin"] == "deterministic"
     assert row["assessed"]["source"] == "cwe_catalog" and row["assessed"]["value"] == "high"
     assert row["references"][0]["id"] == "CWE-78"
+    assert "numeric_reasoning" not in row and "tool_fact" not in row["assessed"]
 
 
 def test_unresolved_model_result_keeps_unknown_and_records_why() -> None:
@@ -121,3 +135,174 @@ def test_secret_excerpt_is_redacted_before_it_enters_a_model_request() -> None:
     rendered = "\n".join(item["excerpt"])
     assert "actual-secret-value" not in rendered and "<redacted:" in rendered
 
+
+
+# ------------------------------------------------------------------------- numeric-reasoning-guardrail/1
+
+NUMERIC_UNCITED = "The length can overflow when multiplied, so the allocation may be too small."
+NUMERIC_CITED = "Scanner observation O1 reports a size overflow before the allocation."
+
+
+def single_reply(reason: str, *, severity: str | None = "high", basis: str = "code_context",
+                 tool_fact: str | None = None, lead_id: str = "lead-num") -> dict:
+    item = {"lead_id": lead_id, "severity": severity, "basis": basis, "reason": reason}
+    if tool_fact is not None:
+        item["tool_fact"] = tool_fact
+    return {"schema": RESULT_SCHEMA, "items": [item]}
+
+
+def triage_one(target: Lead, *replies: dict):
+    calls = []
+
+    def infer(request, *, timeout_seconds):
+        calls.append(request)
+        return ModelResult(replies[len(calls) - 1])
+
+    outcome = run_triage([target], settings=settings(), profile=PROFILE, infer=infer, read_excerpt=reader,
+                         reference=None, guidance=GUIDANCE, schemas=SCHEMAS)
+    return outcome, calls
+
+
+def test_finding_input_supplies_the_scanner_observation_as_tool_fact_o1_and_it_feeds_the_fingerprint() -> None:
+    target = lead("lead-num", scanner="tool-codeql", rule="cpp/tainted-arithmetic")
+    target = replace(target, message="user value may overflow in multiplication " + "x" * 400)
+    item = finding_input(target, settings=settings(), reader=reader, reference=None, impact=None)
+    assert item["tool_facts"] == [{
+        "id": "O1", "kind": "scanner_observation", "scanner": "tool-codeql", "rule_id": "cpp/tainted-arithmetic",
+        "message": item["message"], "path": "src/a.c", "line": 2}]
+    assert len(item["tool_facts"][0]["message"]) == 300
+    assert supplied_fact_ids(item) == {"O1"}
+    without = {key: value for key, value in item.items() if key != "tool_facts"}
+    fingerprint = finding_fingerprint(item, settings=settings(), profile=PROFILE, guidance=GUIDANCE)
+    assert fingerprint != finding_fingerprint(without, settings=settings(), profile=PROFILE, guidance=GUIDANCE)
+    changed = {**item, "tool_facts": [{**item["tool_facts"][0], "message": "different"}]}
+    assert fingerprint != finding_fingerprint(changed, settings=settings(), profile=PROFILE, guidance=GUIDANCE)
+
+
+def test_uncited_numeric_reason_keeps_the_lead_unknown_with_the_named_gap() -> None:
+    target = lead("lead-num")
+    assert numeric_reasoning.detect(NUMERIC_UNCITED) == ("arithmetic_wrap",)
+    outcome, calls = triage_one(target, single_reply(NUMERIC_UNCITED))
+    assert len(calls) == 1 and outcome.model_calls == 1           # valid reply: no repair turn
+    assert calls[0].task_input["findings"][0]["tool_facts"][0]["id"] == "O1"
+    row = outcome.document["leads"][0]
+    assert row["state"] == "unresolved" and row["assessed"] is None
+    assert row["gap"] == {"code": numeric_reasoning.TRIAGE_GAP, "reason": numeric_reasoning.TRIAGE_GAP_REASON}
+    assert row["numeric_reasoning"] == {"rule": numeric_reasoning.RULE, "categories": ["arithmetic_wrap"],
+                                        "tool_fact": None, "model_severity": "high",
+                                        "model_reason": NUMERIC_UNCITED}
+    record = with_triage(target, outcome.assessments["lead-num"]).severity_record()
+    assert record["assessed"] is None and record["effective"] == {"value": "unknown", "from": "unknown"}
+    assert record["gap"]["code"] == "triage_unresolved:uncited_numeric_reasoning"
+    assert outcome.document["counts"]["unresolved"] == 1 and outcome.document["counts"]["model_triage"] == 0
+    assert outcome.document["numeric_reasoning"] == {
+        "rule": numeric_reasoning.RULE, "gap": numeric_reasoning.TRIAGE_GAP, "fact_ids": ANY_TEXT,
+        "numeric_reasons": 1, "cited": 0, "uncited": 1}
+
+
+def test_numeric_reason_citing_a_supplied_tool_fact_is_accepted_and_records_the_fact() -> None:
+    target = lead("lead-num")
+    outcome, calls = triage_one(target, single_reply(NUMERIC_CITED, tool_fact="O1"))
+    assert len(calls) == 1
+    row = outcome.document["leads"][0]
+    assert row["state"] == "assessed" and row["gap"] is None
+    assert row["assessed"]["value"] == "high" and row["assessed"]["tool_fact"] == "O1"
+    assert row["numeric_reasoning"] == {"rule": numeric_reasoning.RULE, "categories": ["arithmetic_wrap"],
+                                        "tool_fact": "O1"}
+    assert outcome.document["batches"][0]["results"][0]["tool_fact"] == "O1"
+    assert outcome.document["numeric_reasoning"]["cited"] == 1
+    assert outcome.document["numeric_reasoning"]["uncited"] == 0
+    assert with_triage(target, outcome.assessments["lead-num"]).effective_severity == "high"
+
+
+def test_unsupplied_tool_fact_is_a_validation_error_that_the_repair_turn_fixes() -> None:
+    target = lead("lead-num")
+    outcome, calls = triage_one(target, single_reply(NUMERIC_CITED, tool_fact="R7"),
+                                single_reply(NUMERIC_CITED, tool_fact="O1"))
+    assert len(calls) == 2 and outcome.model_calls == 2
+    assert calls[0].repair_errors == ()
+    assert any("tool_fact R7 is not a tool fact supplied for this lead (supplied: O1)" in error
+               for error in calls[1].repair_errors)
+    attempts = outcome.document["batches"][0]["attempts"]
+    assert "valid" not in attempts[0] and attempts[1]["valid"] is True
+    row = outcome.document["leads"][0]
+    assert row["state"] == "assessed" and row["assessed"]["tool_fact"] == "O1"
+
+
+def test_unsupplied_tool_fact_that_survives_repair_fails_the_batch() -> None:
+    reply = single_reply(NUMERIC_CITED, tool_fact="O2")
+    outcome, calls = triage_one(lead("lead-num"), reply, reply)
+    assert len(calls) == 2
+    row = outcome.document["leads"][0]
+    assert row["state"] == "unresolved" and row["gap"]["code"] == "triage_failed:invalid_output"
+
+
+def test_validate_result_checks_tool_fact_membership_per_lead() -> None:
+    proposal = {"schema": RESULT_SCHEMA, "items": [
+        {"lead_id": "a", "severity": "low", "basis": "code_context", "reason": "fine", "tool_fact": "O1"},
+        {"lead_id": "b", "severity": "low", "basis": "code_context", "reason": "fine", "tool_fact": "O1"}]}
+    items, errors = validate_result(proposal, ["a", "b"], max_reason_chars=200, schemas=SCHEMAS,
+                                    fact_ids={"a": {"O1"}, "b": set()})
+    assert items is None and errors == [
+        "items[1].tool_fact O1 is not a tool fact supplied for this lead (supplied: none)"]
+    items, errors = validate_result(proposal, ["a", "b"], max_reason_chars=200, schemas=SCHEMAS,
+                                    fact_ids={"a": {"O1"}, "b": {"O1"}})
+    assert errors == [] and [item["tool_fact"] for item in items] == ["O1", "O1"]
+
+
+def test_non_numeric_reason_without_tool_fact_is_still_accepted() -> None:
+    reason = "Command string built from a command-line argument reaches system()."
+    assert numeric_reasoning.detect(reason) == ()
+    outcome, _calls = triage_one(lead("lead-num"), single_reply(reason))
+    row = outcome.document["leads"][0]
+    assert row["state"] == "assessed" and row["assessed"]["value"] == "high"
+    assert "tool_fact" not in row["assessed"] and "numeric_reasoning" not in row
+    assert outcome.document["numeric_reasoning"]["numeric_reasons"] == 0
+
+
+def test_cached_items_pass_through_the_same_guardrail(monkeypatch) -> None:
+    cached = {
+        "lead-uncited": {"lead_id": "lead-uncited", "severity": "high", "basis": "code_context",
+                         "reason": NUMERIC_UNCITED},
+        "lead-cited": {"lead_id": "lead-cited", "severity": "high", "basis": "code_context",
+                       "reason": NUMERIC_CITED, "tool_fact": "O1"},
+        "lead-forged": {"lead_id": "lead-forged", "severity": "high", "basis": "code_context",
+                        "reason": NUMERIC_CITED, "tool_fact": "R9"},
+    }
+
+    def cache_hit(_cache_dir, _fingerprint, lead_id, *, shared=None):
+        return {"item": cached[lead_id], "batch_id": "batch-0001", "shared_receipt": None}
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("cached leads must not reach the model")
+
+    monkeypatch.setattr(lead_triage, "cache_read", cache_hit)
+    outcome = run_triage([lead(name) for name in cached], settings=settings(), profile=PROFILE, infer=forbidden,
+                         read_excerpt=reader, reference=None, guidance=GUIDANCE, schemas=SCHEMAS)
+    rows = {row["lead_id"]: row for row in outcome.document["leads"]}
+    assert {row["origin"] for row in rows.values()} == {"cache"}
+    assert outcome.document["counts"]["reused_from_cache"] == 3 and outcome.model_calls == 0
+    assert rows["lead-uncited"]["gap"]["code"] == numeric_reasoning.TRIAGE_GAP
+    assert rows["lead-cited"]["state"] == "assessed" and rows["lead-cited"]["assessed"]["tool_fact"] == "O1"
+    assert rows["lead-forged"]["state"] == "unresolved"
+    assert rows["lead-forged"]["gap"]["code"] == numeric_reasoning.TRIAGE_GAP
+
+
+def test_deterministic_steps_ignore_the_numeric_guardrail() -> None:
+    table_lead = lead("lead-table", scanner="tool-cppcheck:2.1", rule="integerOverflow")
+    reason = "Signed integer overflow in a size calculation can corrupt the heap."
+    assert numeric_reasoning.detect(reason)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("the model must not run when the rule table decides")
+
+    outcome = run_triage([table_lead], settings=settings(TriageRule("cppcheck", "high", "rule_semantics", reason,
+                                                                    rule="integerOverflow")),
+                         profile=PROFILE, infer=forbidden, read_excerpt=reader, reference=None,
+                         guidance=GUIDANCE, schemas=SCHEMAS)
+    row = outcome.document["leads"][0]
+    assert row["origin"] == "deterministic" and row["state"] == "assessed"
+    assert row["assessed"]["source"] == "rule_table" and row["assessed"]["value"] == "high"
+    assert row["assessed"]["reason"] == reason and row["gap"] is None
+    assert "numeric_reasoning" not in row and "tool_fact" not in row["assessed"]
+    assert outcome.document["numeric_reasoning"]["numeric_reasons"] == 0

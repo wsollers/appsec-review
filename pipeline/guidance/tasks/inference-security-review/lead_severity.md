@@ -1,6 +1,6 @@
 ---
 id: lead_severity
-version: 1
+version: 2
 roles: ["lead_triager"]
 requests_tools: []
 max_tokens: 1400
@@ -26,10 +26,20 @@ call, answer a null rating with that basis. Never use `low` as a stand-in for "n
 Bases: `rule_semantics` (the rule itself decides), `code_context` (the excerpt decides),
 `exposure` (where the code sits decides), `insufficient_context`.
 
+## Tool facts
+Each finding lists `tool_facts`: facts a deterministic tool produced, each with an `id`. `O1` is
+the scanner observation itself (scanner, rule, message, location). An item may set `tool_fact` to
+the one id its reason relies on, or null.
+Value ranges, bounds, overflow, wrap and loop termination are tool facts; only a tool fact
+establishes them, and model reasoning about them is unsound even when the answer is right.
+A reason making such a claim must cite a supplied fact in `tool_fact` and rest on what that fact
+says. Without one, leave the numeric claim out of the reason, or answer `insufficient_context`.
+An uncited numeric reason leaves the lead unknown; an id the finding does not supply is rejected.
+
 ## Expected result
 One JSON object with `schema` `appsec-review/lead-triage-result/1` and `items`: one item per lead id
-of the request, in any order, each with `lead_id`, `severity`, `basis` and a `reason` of one plain
-line. No other text.
+of the request, in any order, each with `lead_id`, `severity`, `basis`, a `reason` of one plain
+line, and an optional `tool_fact`. No other text.
 
 Worked examples (shortened):
 1. gitleaks `generic-api-key`, `src/config.py:12`, excerpt `API_KEY = "<redacted:32 chars>"`:
@@ -41,3 +51,6 @@ Worked examples (shortened):
 4. NOT an example to copy: CodeQL `cpp/uncontrolled-process-operation` with `excerpt` null and
    `excerpt_unavailable` set. Rating it anything would be a guess, so the answer is
    `{"lead_id":"L4","severity":null,"basis":"insufficient_context","reason":"No source excerpt; the rule name alone does not show a reachable call."}`
+5. CodeQL `cpp/tainted-arithmetic`, `tool_facts` `O1` with message "user-controlled value may
+   overflow in multiplication", excerpt shows the product sizing `malloc`:
+   `{"lead_id":"L5","severity":"high","basis":"code_context","tool_fact":"O1","reason":"Scanner observation O1 reports the size multiplication can overflow; the excerpt passes that product to malloc."}`
