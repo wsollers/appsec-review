@@ -1,0 +1,45 @@
+{
+  "version": "1.2",
+  "date": "2025-01-01T00:00:00",
+  "test_count": 3,
+  "tests": [
+    {
+      "name": "CASTLE-22-1.c",
+      "compile": "gcc CASTLE-22-1.c -o CASTLE-22-1 -lssl -lcrypto",
+      "vulnerable": true,
+      "description": "Toy path sample one.",
+      "cwe": 22,
+      "lines": [
+        7
+      ],
+      "id": "22-1",
+      "number": 1,
+      "code": "#include <stdio.h>\n#include <string.h>\n\n/* vulnerable: CWE-22 toy sample\n   the comment spans two lines */\nint main(int argc, char **argv) {\n    const char *url = \"http://example.invalid/a//b\"; // CWE-22 here\n    char slash = '/';\n    printf(\"%s %c\\n\", url, slash); /* inline */ printf(\"/* not a comment */\\n\");\n    // continued comment \\\n    still the comment: exploit\n    return argc > 5 ? (int)strlen(argv[0]) : 0;\n}\n"
+    },
+    {
+      "name": "CASTLE-22-2.c",
+      "compile": "gcc CASTLE-22-2.c -o CASTLE-22-2 -lm",
+      "vulnerable": false,
+      "description": "Toy path sample two.",
+      "cwe": 22,
+      "lines": [],
+      "id": "22-2",
+      "number": 2,
+      "code": "#include <math.h>\n#include <stdio.h>\n\n// not vulnerable: guarded CWE-22 handling\nint main(void) {\n    double value = sqrt(16.0); /* ok */\n    printf(\"%f\\n\", value);\n    return 0;\n}"
+    },
+    {
+      "name": "CASTLE-476-1.c",
+      "compile": "gcc CASTLE-476-1.c -o CASTLE-476-1 -Wno-type-limits -fno-pie -no-pie -z execstack",
+      "vulnerable": true,
+      "description": "Toy pointer sample.",
+      "cwe": 476,
+      "lines": [
+        5,
+        4
+      ],
+      "id": "476-1",
+      "number": 3,
+      "code": "#include <stdio.h>\n\nint main(void) {\n    int *pointer = NULL; // CWE-476 toy\n    if (pointer) { printf(\"%d\\n\", *pointer); }\n    return 0;\n}\n"
+    }
+  ]
+}
