@@ -110,7 +110,8 @@ several sessions share one Docker daemon and one Dagster stack.
 
 After starting, `stack-start`, `stack-restart` and `stack-rebuild` report:
 
-- the state and health of `postgres`, `code-location`, `daemon` and `webserver`;
+- the state and health of `postgres`, `code-location`, `daemon` and `webserver`, plus the optional
+  `result-cache`, which is reported but never fails the check (reviews run uncached without it);
 - whether the code-location's `com.docker.compose.project.config_files` label lists the overlay file
   (a stack created without it cannot reach the model);
 - a one-word `claude -p` probe inside the code-location container (`--no-probe` skips it). If the probe

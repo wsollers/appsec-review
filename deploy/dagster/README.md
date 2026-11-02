@@ -7,7 +7,8 @@ dependencies, multiprocess scheduling, node selection, and visibility. Applicati
 methods still allocate application attempts, validate unit receipts and artifacts, and publish
 accepted handoffs and manifests.
 
-The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
+The Compose project contains PostgreSQL, the optional `result-cache` (Garnet), a gRPC code location,
+the webserver, and the daemon. Only
 the web console is published, on `127.0.0.1:3000` by default (see `APPSEC_DAGSTER_WEB_PORT` below).
 The repository's `runs/` and `data/` directories
 are mounted into the Dagster containers, and `targets/` and `rules/` (the checked-in rule packs) are
@@ -28,6 +29,26 @@ Use the integrated `main` checkout for both deployment and review launches, not 
 worktree's configuration or virtual environment. Rebuild the application image after integrating
 code, then verify the loaded code location before launching; the fixed wrapper mount alone does
 not update the application package.
+
+## Result cache
+
+`result-cache` runs Microsoft Garnet 2.2.5, a Redis-compatible server, from the upstream Linux image
+pinned by digest. The inference security review stores TTL-bounded pointers to completed blue-role
+cell results there (endpoint `redis://result-cache:6379/0`). The service publishes no host port,
+holds at most 128 MiB of entries in memory (`--memory`; the oldest are evicted first; no volume),
+and runs within 0.5 CPU, 512 MiB and 256 PIDs. Garnet requires `AUTH` with
+`APPSEC_RESULT_CACHE_PASSWORD`. Compose passes that password to Garnet as a generated config file
+(`configs:`, mounted at `/run/appsec-result-cache/garnet.conf`), not as a command-line argument, so
+`docker inspect` does not show it (inline `configs` content needs Docker Compose 2.23.1 or later).
+Only the code location receives the variable.
+The cache is fail-open. The code location depends on it only for start ordering
+(`condition: service_started`, `required: false`), and reviews run uncached if it is down.
+`ops.py` reports the cache as optional and does not count it toward stack health. However,
+`lifecycle.py start` uses `up --wait`, so it still reports a failure if the cache never becomes
+healthy, even though the other services are running. The healthcheck sends an unauthenticated `PING`
+through bash's `/dev/tcp`, because the image has no Redis client. A `-NOAUTH` reply shows that the
+server is up and enforcing auth. For a Windows-containers host, build the Nano Server image in
+[`containers/services/garnet/`](../../containers/services/garnet/README.md).
 
 ## Native WSL review-host limits
 
@@ -50,9 +71,9 @@ daemon. The repository does not provision the host units automatically.
 
 Every slice has `MemorySwapMax=0`. The native daemon's `cgroup-parent` defaults to the actions
 slice; Docker and containerd service drop-ins place their processes in the engine slice.
-Compose places all four services in the services slice. Their individual CPU/RAM/PID limits
-are code location 4/5 GiB/2048, PostgreSQL 1/1 GiB/1024, webserver 0.5/1 GiB/512 and daemon
-0.5/1 GiB/512. Each container's memory-plus-swap limit equals its memory limit.
+Compose places all five services in the services slice. Their individual CPU/RAM/PID limits
+are code location 4/5 GiB/2048, PostgreSQL 1/1 GiB/1024, result cache 0.5/512 MiB/256, webserver
+0.5/1 GiB/512 and daemon 0.5/1 GiB/512. Each container's memory-plus-swap limit equals its memory limit.
 Verify kernel limits and actual process membership, not merely the configuration files.
 
 The unchanged review-action ledger allows 8 CPUs, 10240 MiB, one I/O slot and 512 MiB staging
@@ -107,7 +128,8 @@ Each checkout has its own ignored `.env`, `runs/`, `data/`, target files, Claude
 project, image, PostgreSQL volume, and Dagster storage volume. Stacks using one daemon share that
 engine, so stop one before starting the other. The lifecycle and live smoke commands enforce this
 within that daemon; they cannot discover a second scheduler on a different daemon.
-Bootstrap preserves the existing database secret while refreshing host-specific paths and removing
+Bootstrap preserves the existing database and result-cache secrets (`DAGSTER_POSTGRES_PASSWORD`,
+`APPSEC_RESULT_CACHE_PASSWORD`), generating either only when it is absent, while refreshing host-specific paths and removing
 Linux-only settings from the Windows environment. On Linux and WSL it records the operator uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees. It
 records the Docker socket group id and adds that supplemental group to the code location so tool
@@ -178,7 +200,7 @@ Compose command. If verification fails they exit 3 without starting anything, an
 scripts report `refused`. On success they record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `.env`
 and Compose launches exactly that ID (`pull_policy: never`, no `build:` section). `reload` recreates
 every service that runs the image (`code-location`, `webserver`, `daemon`; `host.IMAGE_SERVICES`) and
-leaves PostgreSQL running, so no service keeps an older image. Plain
+leaves PostgreSQL and the result cache running, so no service keeps an older image. Plain
 `docker compose ... exec` commands reuse the recorded ID. Read-only Compose actions (`config`, `status`,
 `logs`, `stop`) substitute an unlaunchable placeholder when no ID is recorded. The image variable has no
 default, so `docker compose up` without a recorded or exported ID fails. Do not run
@@ -658,7 +680,7 @@ limit and is bounded only by `max_concurrent`.
 ## Environment variables
 
 `deploy/dagster/.env` (from bootstrap; see `.env.example`) supplies Compose interpolation:
-`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, optionally `APPSEC_REVIEW_PROFILE` (`dev`|`prod`, default `dev`), the three
+`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_RESULT_CACHE_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, optionally `APPSEC_REVIEW_PROFILE` (`dev`|`prod`, default `dev`), the three
 `APPSEC_CLAUDE_*` bind paths for Linux/WSL, and optionally `ANTHROPIC_API_KEY`. `lifecycle.py start` records
 `APPSEC_REVIEW_DAGSTER_IMAGE`, the verified image ID, there; the optional `APPSEC_SIGNING_*` settings
 are described under [Signed image](#signed-image). Compose passes

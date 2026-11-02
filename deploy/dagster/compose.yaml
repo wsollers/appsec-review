@@ -74,6 +74,50 @@ services:
       retries: 12
     restart: unless-stopped
 
+  # Inference result cache (Microsoft Garnet, Redis-compatible): TTL-bounded pointers to completed
+  # blue-role cell results. Optional and fail-open: reviews run uncached if it is down. Internal
+  # network only; the password reaches Garnet through a config file, never the command line.
+  result-cache:
+    image: ghcr.io/microsoft/garnet:2.2.5@sha256:ef84a729cc054b048d8ed17113475890dc6389a8ea8725c34771efe785841137
+    cgroup_parent: appsecreview-services.slice
+    cpus: 0.5
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 256
+    command:
+      - --config-import-path
+      - /run/appsec-result-cache/garnet.conf
+      - --port
+      - "6379"
+      # In-memory only (no storage tier): the oldest entries are evicted beyond this log budget.
+      - --memory
+      - 128m
+      - --index
+      - 16m
+      - --page
+      - 4m
+      - --segment
+      - 32m
+    configs:
+      - source: result-cache-config
+        target: /run/appsec-result-cache/garnet.conf
+        mode: 0444
+    # Garnet has no CLI client; bash's /dev/tcp sends an unauthenticated PING, and -NOAUTH proves the
+    # server is up and enforcing authentication without putting the password in the check.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6379 && printf 'PING\\r\\n' >&3 && read -t 2 r <&3 && [[ $$r == +PONG* || $$r == -NOAUTH* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+      start_interval: 2s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   code-location:
     <<: *dagster-service
     cpus: 4
@@ -108,10 +152,16 @@ services:
       # Source-history GitHub enrichment only. lifecycle.py fills it from the creating shell's `gh`
       # login when unset; never stored in .env, and model workers never see it.
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # Result-cache AUTH secret; runs execute in code-location subprocesses, so only this service needs it.
+      APPSEC_RESULT_CACHE_PASSWORD: ${APPSEC_RESULT_CACHE_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
       HOME: /tmp
     depends_on:
       postgres:
         condition: service_healthy
+      # Ordering only: a missing or unhealthy cache never blocks the code location (fail-open).
+      result-cache:
+        condition: service_started
+        required: false
     volumes:
       - dagster-storage:/var/dagster
       - ../../runs:/opt/app/runs
@@ -184,6 +234,10 @@ services:
       retries: 10
       start_period: 60s
       start_interval: 5s
+
+configs:
+  result-cache-config:
+    content: '{"AuthenticationMode":"Password","Password":"${APPSEC_RESULT_CACHE_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}"}'
 
 volumes:
   postgres-data:
