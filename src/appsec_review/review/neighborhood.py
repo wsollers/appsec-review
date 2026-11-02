@@ -1,12 +1,18 @@
-"""Package neighborhood (``package-neighborhood/1``, docs/architecture/review-protocol-v2.md section 4).
+"""Package neighborhood (``package-neighborhood/2``, docs/architecture/review-protocol-v2.md section 4).
 
-The neighborhood is the part of a review package that is selected by *location and function scope* rather
-than by a correlated dataflow path: the lead's function, every sink, range and guard fact in it, the callers
-and callees of the function to the configured call depth, the flow and entry facts that touch those sinks,
-the build command summary of the compilation that owns the file, and the other observations at the same
-line. This module holds the pure pieces: the neighborhood record, the build summary, and the source-text
-helpers the model-facing view uses (function extent, type names). ``GraphContext.neighborhood`` in
-``review.packages`` selects the rows; ``review.package_view`` renders them.
+The neighborhood is the part of a review package that is selected around the lead. Its ``bound`` says how:
+
+* ``dataflow_path``: the lead has correlated dataflow paths. The flows are those paths; the callers and
+  callees are only the call sites between functions on the paths; the entries, sinks, guards and ranges are
+  the paths' own; and ``slice`` holds the composed program slice (``review.slicing``) the view renders.
+* ``call_depth``: no correlated path. The neighborhood is selected by *location and function scope*: the
+  lead's function, every sink, range and guard fact in it, the callers and callees of the function to the
+  configured call depth, and the flow and entry facts that touch those sinks. ``slice`` is null.
+
+Either way the record holds the build command summary of the compilation that owns the file and the other
+observations at the same line. This module holds the pure pieces: the neighborhood record, the build summary,
+and the source-text helpers the model-facing view uses (function extent, type names).
+``GraphContext.neighborhood`` in ``review.packages`` selects the rows; ``review.package_view`` renders them.
 
 Everything stored here is an identity plus a one-line summary (``review.fact_summary``); source text is read
 when a cell's view is built, from the accepted source index and verified against the file hash recorded in
@@ -24,7 +30,7 @@ from typing import Any
 
 from appsec_review.review.scope import AcceptedScope
 
-NEIGHBORHOOD_RULE = "appsec-review/package-neighborhood/1"
+NEIGHBORHOOD_RULE = "appsec-review/package-neighborhood/2"
 BUILD_RULE = "appsec-review/package-build-summary/1"
 SECTIONS = ("sinks", "ranges", "guards", "callers", "callees", "flows", "entries", "corroboration")
 # Token kinds of an ordered build command (``indexing.build_facts.classify_command``) shown as flags.
@@ -41,7 +47,8 @@ def empty_record(depth: int) -> dict[str, Any]:
     return {"rule": NEIGHBORHOOD_RULE, "call_depth": depth, "function": None,
             **{section: [] for section in SECTIONS}, "build": None,
             "chain": {"reached": False, "depth_limit": depth, "hops": [], "entries": []},
-            "omitted": {section: 0 for section in SECTIONS}}
+            "omitted": {section: 0 for section in SECTIONS},
+            "bound": {"kind": "call_depth", "paths": [], "call_depth": depth}, "slice": None}
 
 
 @dataclass(frozen=True, slots=True)

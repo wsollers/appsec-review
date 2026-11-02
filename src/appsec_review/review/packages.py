@@ -27,6 +27,12 @@ accepted ``job_svf_alias_analysis`` records, whatever scanner reported the lead,
 entries naming the accepted ``call_site`` facts that reach the lead's enclosing function, to
 ``caller_depth`` (default 2). Missing, partial and bounded context is a named gap.
 
+A finding-lead neighborhood (``package-neighborhood/2``) is bounded by the lead's correlated
+``dataflow_path`` facts when it has any (``bound.kind == "dataflow_path"``): flows, sinks, entries
+and the calls between the paths' functions only, plus a composed ``slice`` (``review.slicing``) of the
+path's lines. Without a correlated path it keeps the call-depth neighborhood and names a
+``dataflow_slice`` ``dataflow_path_unavailable`` gap. The manifest counts packages by bound.
+
 Packages are canonical JSON. ``package_id`` is the kind plus the SHA-256 of the canonical body
 without ``package_id``; arrays sort by stable identity; nothing time- or order-dependent enters a
 package. Reassembly from the same accepted inputs is byte-identical. A missing producer is a
@@ -57,15 +63,23 @@ from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, Lea
 from appsec_review.review.memory_context import C_FAMILY_SUFFIXES, MEMORY_CONTEXT_RULE, MemoryContext
 from appsec_review.review.models import IntegrityError, Predicate
 from appsec_review.review.neighborhood import (
-    BUILD_RULE, NEIGHBORHOOD_RULE, SECTIONS as NEIGHBORHOOD_SECTIONS, BuildContext, NeighborhoodRow, empty_record,
+    BUILD_RULE, MAX_FUNCTION_LINES, NEIGHBORHOOD_RULE, SECTIONS as NEIGHBORHOOD_SECTIONS, BuildContext,
+    NeighborhoodRow, empty_record,
 )
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
-from appsec_review.review.slicing.contract import SliceBudget
-from appsec_review.review.slicing.registry import (
-    DEFAULT_STRATEGIES as DEFAULT_SLICE_STRATEGIES, validate_names as validate_slice_strategies,
+from appsec_review.review.slicing import anchors as slice_anchors
+from appsec_review.review.slicing.compose import compose as compose_slice
+from appsec_review.review.slicing.contract import (
+    GAP_FAILED, GAP_NOT_APPLICABLE, GAP_PATH_UNAVAILABLE, GAP_SOURCE_UNAVAILABLE, GAP_TRUNCATED, SLICE_PRODUCER,
+    SLICE_RULE, SliceBudget,
 )
+from appsec_review.review.slicing.registry import (
+    DEFAULT_STRATEGIES as DEFAULT_SLICE_STRATEGIES, load_all as load_slice_strategies,
+    validate_names as validate_slice_strategies,
+)
+from appsec_review.review.slicing.sources import AcceptedSliceSources, UnavailableSliceSources
 from appsec_review.review.units import (
     RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
 )
@@ -74,7 +88,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/10"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/11"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -395,6 +409,9 @@ class GraphContext:
         self.symbols_by_path: dict[str, list[_Symbol]] = defaultdict(list)
         # (path, line) -> enclosing functions named by sink_site and call_site facts on that line.
         self.enclosing: dict[tuple[str, int], set[tuple[str | None, str]]] = defaultdict(set)
+        # dataflow_path payloads (result + gaps) for slice anchors, and guard/range locations to anchor them.
+        self.path_payloads: dict[str, dict[str, Any]] = {}
+        self.locations: dict[str, dict[str, Any]] = {}
         store = scope.store
         family_names = {item.value for item in Family}
         for shard in sorted(shards, key=shard_key):
@@ -433,6 +450,11 @@ class GraphContext:
                 if path:
                     paths.add(str(path))
                 line = (row.get("location") or {}).get("start_line")
+                if kind == "dataflow_path":
+                    self.path_payloads[str(row["identity"])] = {
+                        "result": dict(result), "gaps": [str(gap) for gap in payload.get("gaps") or ()]}
+                elif kind in {"guard_fact", "range_fact"} and row.get("location"):
+                    self.locations[str(row["identity"])] = dict(row["location"])
                 if kind == "call_site":
                     caller, callee = result.get("caller") or {}, result.get("callee") or {}
                     call = _Call(str(row["identity"]), _identity_or_none(caller.get("symbol")),
@@ -619,7 +641,7 @@ class GraphContext:
         return chosen, total - len(chosen)
 
 
-    # -- package neighborhood (package-neighborhood/1) --------------------------------------------------
+    # -- package neighborhood (package-neighborhood/2) --------------------------------------------------
     def function_at(self, path: str | None, line: int | None) -> tuple[_Symbol | None, str]:
         """The function a lead line belongs to and how it was chosen.
 
@@ -739,9 +761,200 @@ class GraphContext:
             frontier = following
         return [], [], False, by_name
 
-    def neighborhood(self, path: str | None, line: int | None, settings: GraphSettings, subject: str
-                     ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
-        """The ``package-neighborhood/1`` record for one lead location, its context entries and gaps."""
+    def neighborhood(self, observation_id: str, path: str | None, line: int | None, settings: GraphSettings,
+                     subject: str) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
+        """The ``package-neighborhood/2`` record for one lead, its context entries and gaps.
+
+        A lead with correlated (``bridged``/``partial``) ``dataflow_path`` facts is bounded by those paths
+        (:meth:`path_neighborhood`); any other lead keeps the call-depth neighborhood and a named
+        ``dataflow_path_unavailable`` gap. The slice itself is composed by the package assembler.
+        """
+        paths = sorted(identity for identity in self.correlated.get(observation_id, ()) if identity in self.facts)
+        if self.available and path and line and paths:
+            return self.path_neighborhood(paths, path, line, settings, subject)
+        record, context, gaps = self.call_depth_neighborhood(path, line, settings, subject)
+        if path and line:
+            gaps.append(ScopeGap(SLICE_PRODUCER, subject, "unavailable",
+                                 f"{GAP_PATH_UNAVAILABLE}: no correlated dataflow path for this lead; the "
+                                 f"neighborhood is bounded by call depth {settings.max_call_depth}"))
+        return record, context, gaps
+
+    def _lead_function(self, record: dict[str, Any], path: str, line: int, subject: str,
+                       context: list[ContextEntry], gaps: list[ScopeGap]) -> _Symbol | None:
+        """Fill ``record["function"]`` exactly as the call-depth neighborhood does; returns the symbol."""
+        fn, basis = self.function_at(path, line)
+        if fn:
+            record["function"] = {"symbol": fn.identity, "name": fn.name, "path": fn.path, "start_line": fn.line,
+                                  "file_sha256": fn.file_sha256, "basis": basis}
+            context.append(context_entry(fn.identity, "function", fn.shard_sha256))
+            if basis != "enclosing_fact_on_line":
+                gaps.append(ScopeGap("code_graph_neighborhood", subject, "ambiguous",
+                                     f"the lead's function {fn.name} is the nearest preceding definition in the file, "
+                                     "not a function a fact on the lead's line names"))
+        else:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "unavailable",
+                                 "no accepted graph symbol places the lead's line inside a known function; only facts "
+                                 "on the line itself are listed"))
+        return fn
+
+    def _fact_entry(self, row: NeighborhoodRow) -> ContextEntry:
+        fact = self.facts.get(row.ref)
+        return context_entry(row.ref, row.role, fact.shard_sha256 if fact else
+                             self.calls_by_id[row.ref].shard_sha256 if row.ref in self.calls_by_id else None)
+
+    def path_steps(self, identity: str) -> list[Mapping[str, Any]]:
+        steps = _nested(self.path_payloads.get(identity), "result", "steps")
+        return [step for step in steps if isinstance(step, Mapping)] if isinstance(steps, list) else []
+
+    def path_functions(self, paths: Iterable[str], fn: _Symbol | None) -> list[tuple[str | None, str]]:
+        """Functions on the paths, in step order: step symbols, the functions enclosing step locations, the
+        functions of the paths' entry points and sinks, and the lead's own function."""
+        ordered: dict[tuple[str | None, str], None] = {}
+
+        def add(symbol: str | None, name: str = "") -> None:
+            if symbol and symbol in self.symbols:
+                name = name or function_tail(self.symbols[symbol].name)
+            if symbol or name:
+                ordered.setdefault((symbol, name), None)
+        for identity in paths:
+            fact = self.facts[identity]
+            entry = self.facts.get(fact.entry or "")
+            if entry is not None and entry.function:
+                add(entry.function)
+            for step in self.path_steps(identity):
+                add(_identity_or_none(step.get("symbol")))
+                location = step.get("location") if isinstance(step.get("location"), Mapping) else {}
+                where, at = location.get("path"), location.get("start_line")
+                if isinstance(where, str) and type(at) is int:
+                    for symbol, name in sorted(self.enclosing_functions(where, at), key=repr):
+                        add(symbol, name)
+                    found, _basis = self.function_at(where, at)
+                    if found:
+                        add(found.identity)
+            sink = self.facts.get(fact.sink or "")
+            if sink is not None and sink.function:
+                add(sink.function)
+        if fn:
+            add(fn.identity)
+        # A symbol-less (name only) entry is dropped when the same name is also known with a symbol.
+        named = {name for symbol, name in ordered if symbol and name}
+        return [key for key in ordered if key[0] or key[1] not in named]
+
+    def path_neighborhood(self, paths: list[str], path: str, line: int, settings: GraphSettings, subject: str
+                          ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
+        """The dataflow-path-bounded neighborhood: only the paths, their functions, entries, sinks and calls."""
+        record = empty_record(settings.max_call_depth)
+        gaps: list[ScopeGap] = []
+        context: list[ContextEntry] = []
+        omitted = record["omitted"]
+        rows: dict[str, list[NeighborhoodRow]] = {section: [] for section in NEIGHBORHOOD_SECTIONS}
+        fn = self._lead_function(record, path, line, subject, context, gaps)
+        selected = paths[:settings.max_paths_per_sink]
+        omitted["flows"] = len(paths) - len(selected)
+        record["bound"] = {"kind": "dataflow_path", "paths": list(selected), "call_depth": None}
+        flows = [self.facts[identity] for identity in selected]
+        rows["flows"] = [NeighborhoodRow(fact.identity, "path", fact.summary, fact.line) for fact in flows]
+
+        sinks = sorted({fact.sink: self.facts[fact.sink] for fact in flows if fact.sink in self.facts}.values(),
+                       key=lambda fact: (fact.line or 0, fact.identity))
+        rows["sinks"] = [NeighborhoodRow(fact.identity, "sink", fact.summary, fact.line)
+                         for fact in sinks[:settings.max_neighbors_per_function]]
+        omitted["sinks"] = max(0, len(sinks) - settings.max_neighbors_per_function)
+        for sink in sinks[:settings.max_neighbors_per_function]:
+            related = self.by_sink.get(sink.identity, ())
+            for kind, section, role in (("range_fact", "ranges", "range"), ("guard_fact", "guards", "guard")):
+                members = [fact for fact in related if fact.kind == kind]
+                rows[section].extend(NeighborhoodRow(fact.identity, role, fact.summary, fact.line)
+                                     for fact in members[:settings.max_guards_per_sink])
+                omitted[section] += max(0, len(members) - settings.max_guards_per_sink)
+        entries = sorted({fact.entry: self.facts[fact.entry] for fact in flows if fact.entry in self.facts}.values(),
+                         key=lambda fact: (fact.line or 0, fact.identity))
+        rows["entries"] = [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line)
+                           for fact in entries[:settings.max_neighbors_per_function]]
+        omitted["entries"] = max(0, len(entries) - settings.max_neighbors_per_function)
+
+        functions = self.path_functions(selected, fn)
+        order = {key: number for number, key in enumerate(functions)}
+        names = {name for _symbol, name in functions if name}
+        by_name = False
+
+        def on_path(symbol: str | None, name: str) -> tuple[tuple[str | None, str] | None, bool]:
+            if symbol is not None:
+                return next((key for key in functions if key[0] == symbol), None), False
+            if name in names:
+                return next(key for key in functions if key[1] == name), True
+            return None, False
+        hops: list[tuple[int, int, _Call]] = []
+        for call in self.calls:
+            caller, caller_named = on_path(call.caller_symbol, call.caller_name)
+            callee, callee_named = on_path(call.callee_symbol, call.callee_name)
+            if caller is None or callee is None:
+                continue
+            by_name = by_name or caller_named or callee_named
+            hops.append((order[caller], order[callee], call))
+        hops.sort(key=lambda item: (item[0], item[1], item[2].identity))
+
+        def from_lead(call: _Call) -> bool:
+            if fn is None:
+                return False
+            return (call.caller_symbol == fn.identity if call.caller_symbol
+                    else call.caller_name == function_tail(fn.name))
+        # Path-internal calls only: a call leaving the lead's function is a callee, every other a caller.
+        for section, members in (("callees", [call for _a, _b, call in hops if from_lead(call)]),
+                                 ("callers", [call for _a, _b, call in hops if not from_lead(call)])):
+            rows[section] = [NeighborhoodRow(call.identity, section[:-1], call.summary, call.line, {"depth": 1})
+                             for call in members[:settings.max_neighbors_per_function]]
+            omitted[section] = max(0, len(members) - settings.max_neighbors_per_function)
+        # The chain is the path's own hops in step order, bounded like the call-depth chain.
+        chain = [NeighborhoodRow(call.identity, "caller", call.summary, call.line, {"depth": number})
+                 for number, (_a, _b, call) in enumerate(hops[:settings.max_call_depth], start=1)]
+        record["chain"] = {"reached": bool(entries), "depth_limit": settings.max_call_depth,
+                           "hops": [row.record() for row in chain],
+                           "entries": [row.record() for row in rows["entries"]]}
+        if by_name:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "ambiguous",
+                                 "some call sites between the path's functions were matched by unqualified function "
+                                 "name because a call site or a function has no symbol; overloads and same-named "
+                                 "functions may be included"))
+        if not entries:
+            gaps.append(ScopeGap(
+                "code_graph_neighborhood", subject, "unavailable",
+                "no correlated dataflow path names an accepted entry_point fact; whether an attacker can reach the "
+                "lead is unknown, not excluded"))
+        if not sinks:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "unavailable",
+                                 "no correlated dataflow path names an accepted sink_site fact; absence of a sink "
+                                 "fact is a gap, not evidence that the code has no sink"))
+        context.extend(self._fact_entry(row) for row in (*chain, *rows["entries"]))
+        for section in NEIGHBORHOOD_SECTIONS:
+            record[section] = [row.record() for row in rows[section]]
+            context.extend(self._fact_entry(row) for row in rows[section])
+        dropped = {key: value for key, value in omitted.items() if value}
+        if dropped:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "truncated",
+                                 "neighborhood rows exceeded the code-graph bounds and were omitted: "
+                                 + ", ".join(f"{key}={value}" for key, value in sorted(dropped.items()))))
+        return record, context, gaps
+
+    def slice_paths(self, paths: Iterable[str]) -> list[tuple[str, dict[str, Any]]]:
+        """``(identity, {"result", "gaps"})`` path payloads for ``slicing.anchors.build_request``; bare guard
+        identities are resolved to ``{identity, location}`` from the accepted guard facts so they anchor."""
+        found: list[tuple[str, dict[str, Any]]] = []
+        for identity in sorted(paths):
+            payload = self.path_payloads.get(identity) or {"result": {}, "gaps": []}
+            result = dict(payload["result"])
+            for key in ("guards", "ranges"):
+                if isinstance(result.get(key), list):
+                    result[key] = [
+                        {"identity": entry, "location": self.locations[entry]}
+                        if isinstance(entry, str) and entry in self.locations else entry
+                        for entry in result[key]]
+            found.append((identity, {"result": result, "gaps": list(payload["gaps"])}))
+        return found
+
+    def call_depth_neighborhood(self, path: str | None, line: int | None, settings: GraphSettings, subject: str
+                                ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
+        """The call-depth-bounded record for one lead location, its context entries and gaps."""
         record = empty_record(settings.max_call_depth)
         gaps: list[ScopeGap] = []
         if not self.available or not path or not line:
@@ -845,10 +1058,60 @@ class GraphContext:
         return record
 
 
+_SLICE_UNAVAILABLE_PREFIXES = (GAP_PATH_UNAVAILABLE, GAP_NOT_APPLICABLE, GAP_SOURCE_UNAVAILABLE,
+                               slice_anchors.GAP_FUNCTION_UNRESOLVED)
+_PRECISION_RANK = {"lexical": 1, "syntax": 2, "compiler": 3, "path": 4}
+MAX_GAP_REASON = 1000
+
+
+def slice_gap(reason: str, subject: str) -> ScopeGap:
+    """The package gap of one slice gap: ``truncated`` for a cut slice, ``failed`` for a raising strategy,
+    ``unavailable`` for missing paths, sources, functions or inapplicable strategies, ``partial`` otherwise."""
+    if reason.startswith(GAP_TRUNCATED):
+        state = "truncated"
+    elif reason.startswith(GAP_FAILED):
+        state = "failed"
+    elif reason.startswith(_SLICE_UNAVAILABLE_PREFIXES):
+        state = "unavailable"
+    else:
+        state = "partial"
+    return ScopeGap(SLICE_PRODUCER, subject, state, reason[:MAX_GAP_REASON])
+
+
+def trim_slice(record: dict[str, Any]) -> bool:
+    """Drop one non-anchor slice line, lowest precision first and then the highest line; False when only
+    anchor (``path``) lines remain. Records the omission in the slice and keeps empty functions out."""
+    found = record.get("slice")
+    if not isinstance(found, dict):
+        return False
+    candidates = [(_PRECISION_RANK.get(line["precision"], 0), -line["line"], -number, number, index)
+                  for number, function in enumerate(found["functions"])
+                  for index, line in enumerate(function["lines"]) if line["precision"] != "path"]
+    if not candidates:
+        return False
+    *_order, number, index = min(candidates)
+    function = found["functions"][number]
+    del function["lines"][index]
+    if not function["lines"]:
+        del found["functions"][number]
+    found["omitted"]["lines"] += 1
+    found["gaps"] = sorted({*found["gaps"], f"{GAP_TRUNCATED}: slice lines omitted to respect max_package_bytes"})
+    return True
+
+
 class _Assembler:
     def __init__(self, scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection,
-                 cwe_reference: CweReference | None = None, graph_settings: GraphSettings | None = None):
+                 cwe_reference: CweReference | None = None, graph_settings: GraphSettings | None = None,
+                 slice_sources: Any = None):
         self.scope = scope
+        self.slice_strategies = load_slice_strategies(settings.slice_strategies)
+        if slice_sources is None:
+            try:
+                slice_sources = AcceptedSliceSources(scope)
+            except Exception as exc:  # noqa: BLE001 - without sources a slice keeps its anchors and names the gap
+                slice_sources = UnavailableSliceSources(f"slice sources unavailable: {type(exc).__name__}")
+        self.slice_sources = slice_sources
+        self.bound_counts: Counter[str] = Counter()
         self.settings = settings
         self.graph_settings = graph_settings if graph_settings is not None else GraphSettings()
         self.build_context = BuildContext(scope)
@@ -911,7 +1174,11 @@ class _Assembler:
     def lead_neighborhood(self, lead: Lead, subject: str, unit_id: str | None
                           ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
         """Neighborhood record, context entries and gaps of a lane A lead."""
-        record, entries, gaps = self.graph.neighborhood(lead.path, lead.start_line, self.graph_settings, subject)
+        record, entries, gaps = self.graph.neighborhood(lead.observation_id, lead.path, lead.start_line,
+                                                        self.graph_settings, subject)
+        if record["bound"]["kind"] == "dataflow_path":
+            record["slice"], slice_gaps = self.lead_slice(record["bound"]["paths"])
+            gaps.extend(slice_gap(reason, subject) for reason in slice_gaps)
         rows, dropped = self.corroboration(lead)
         record["corroboration"] = [row.record() for row in rows]
         record["omitted"]["corroboration"] = dropped
@@ -926,9 +1193,32 @@ class _Assembler:
                                  "unknown for it, not absent"))
         return record, entries, gaps
 
+    def lead_slice(self, paths: list[str]) -> tuple[dict[str, Any], list[str]]:
+        """The ``package-slice/1`` record composed from ``paths`` and the slice gaps (record order).
+
+        Facade gaps of the slice's files are added to the record; an unexpected error keeps an empty slice
+        with a named ``slice_strategy_failed`` gap rather than failing the package."""
+        try:
+            request, anchor_gaps = slice_anchors.build_request(
+                self.graph.slice_paths(paths), self.slice_sources, max_function_lines=MAX_FUNCTION_LINES)
+            result = compose_slice(request, self.slice_strategies, self.settings.slice_budget,
+                                   inherited_gaps=anchor_gaps, paths=paths)
+            found = result.record()
+            facade = getattr(self.slice_sources, "gaps", None)
+            if callable(facade):
+                found["gaps"] = sorted({*found["gaps"], *facade({span.path for span in request.functions})})
+        except Exception as exc:  # noqa: BLE001 - a slice failure is a named gap, never a package failure
+            found = {"rule": SLICE_RULE, "paths": sorted(paths), "functions": [], "strategies": [],
+                     "omitted": {"lines": 0}, "gaps": [f"{GAP_FAILED}: compose: {type(exc).__name__}"]}
+        return found, list(found["gaps"])
+
     @staticmethod
     def trim_neighborhood(record: dict[str, Any], entries: list[ContextEntry]) -> bool:
-        """Drop the least valuable neighborhood row to respect ``max_package_bytes``; False when none is left."""
+        """Drop the least valuable neighborhood row to respect ``max_package_bytes``; False when none is left.
+
+        Non-anchor slice lines go first (lowest precision, then highest line); path anchors stay."""
+        if trim_slice(record):
+            return True
         for section in ("corroboration", "callees", "callers", "flows", "entries", "guards", "ranges", "sinks"):
             if record[section]:
                 row = record[section].pop()
@@ -1134,6 +1424,7 @@ class _Assembler:
             unit_id, (lead.path,) if lead.path else (), partition_key) if not binary_only else ([], [], []))
         capped, omitted, gaps = self._cap(context, partition_key, lead.family)
         neighborhood, nb_entries, nb_gaps = self.lead_neighborhood(lead, partition_key, unit_id)
+        self.bound_counts[neighborhood["bound"]["kind"]] += 1
         gaps.extend(nb_gaps)
         gaps.extend(graph_gaps)
         gaps.extend(context_gaps)
@@ -1159,7 +1450,8 @@ class _Assembler:
         while True:
             merged = {(item.role, item.id): item for item in (*capped, *nb_entries)}
             visible = gaps + ([ScopeGap("code_graph_neighborhood", partition_key, "truncated",
-                                        f"{trimmed} neighborhood row(s) omitted to respect max_package_bytes")]
+                                        f"{trimmed} neighborhood row(s) or slice line(s) omitted to respect "
+                                        "max_package_bytes")]
                               if trimmed else [])
             package_id, body = self._build(
                 kind="finding_lead", lead_family=lead.family, scope_record=scope_record, partition=(0, 1), rank=None,
@@ -1334,11 +1626,14 @@ def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> di
 def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = None, *,
                       collection: LeadCollection | None = None,
                       cwe_reference: CweReference | None = None,
-                      graph_settings: GraphSettings | None = None) -> Assembly:
+                      graph_settings: GraphSettings | None = None, slice_sources: Any = None) -> Assembly:
     """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
 
     ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
     weakness names come from the accepted ``reference_intelligence`` facts or stay unresolved.
+    ``slice_sources`` (``slicing.contract.SliceSources``) backs the slices of dataflow-bounded leads; by
+    default it is ``slicing.sources.AcceptedSliceSources`` over ``scope``. When no facade can be built,
+    slices keep their path anchors and name the unavailable sources as gaps.
     """
     settings = settings or PackageSettings()
     collection = collection if collection is not None else collect_leads(scope)
@@ -1346,7 +1641,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                                 collection.gaps, collection.available, collection.correlation_audit,
                                 collection.correlation_shards, collection.non_lead_counts)
     graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
-    assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings)
+    assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
     admitted = admitted_leads(collection, settings)
     admitted_ids = {lead.observation_id for lead in admitted}
     packages = [assembler.finding_lead(lead) for lead in admitted]
@@ -1389,7 +1684,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                        else "outside_admission_policy"}
                       for lead in sorted(collection.leads, key=lambda item: item.observation_id)],
         "rules": {"families": dict(FAMILY_RULES), "rank": RANK_RULE, "obligations": OBLIGATION_RULE,
-                  "neighborhood": NEIGHBORHOOD_RULE},
+                  "neighborhood": NEIGHBORHOOD_RULE, "slice": SLICE_RULE},
         "inputs": ShardSet.identities(scope.shards), "evidence_map_sha256": sha256_hex(scope.evidence_map()),
         "packages": [package.entry() for package in packages],
         "units": [{"unit_key": item.unit.key, **item.rank_record(), "hunted": item.unit.key in hunted_keys,
@@ -1401,7 +1696,9 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                    "non_lead_observations": dict(collection.non_lead_counts),
                    "packages": {"finding_lead": sum(1 for item in packages if item.kind == "finding_lead"),
                                 "hunt": sum(1 for item in packages if item.kind == "hunt")},
-                   "units": {"total": len(ranked), "hunted": len(hunted), "below_cutoff": len(cutoff_gaps)}},
+                   "units": {"total": len(ranked), "hunted": len(hunted), "below_cutoff": len(cutoff_gaps)},
+                   "neighborhood_bounds": {kind: assembler.bound_counts[kind]
+                                           for kind in ("call_depth", "dataflow_path")}},
         "audit": {"lane_a": lane_a, "lane_b": lane_b,
                   "families_available": {family: bool(collection.available.get(family)) for family in FAMILIES}},
     }

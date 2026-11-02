@@ -156,10 +156,16 @@ def attach_graph(fixture: FixtureRun, *, entry_points: bool = True, reverse: boo
     handoff_path = run_root / pointer["handoff_path"]
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     sha = file_sha256(manifest_path)
-    for artifact in handoff["artifacts"]:
-        if artifact["path"] == pointer["manifest_path"]:
-            artifact["sha256"] = sha
-    atomic_json(handoff_path, handoff)
+    reference = {"path": pointer["manifest_path"], "sha256": sha, "size_bytes": manifest_path.stat().st_size}
+    handoff["artifacts"] = [reference]
+    for output in handoff["outputs"].values():
+        if output.get("index_manifest", {}).get("path") == pointer["manifest_path"]:
+            output["index_manifest"] = reference
+    result_path = run_root / handoff["resolving_paths"]["result"]
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    atomic_json(result_path, {**result, "outputs": handoff["outputs"]})
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, handoff)
     atomic_json(pointer_path, {**pointer, "manifest_sha256": sha, "handoff_sha256": file_sha256(handoff_path)})
     return ids
 
@@ -227,13 +233,15 @@ def test_codeql_lead_embeds_its_correlated_path_sink_guards_and_ranges(graph_fix
     graph_gaps = [gap for gap in document["coverage_gaps"] if gap["producer"] == "code_graph"]
     assert [(gap["state"], "call_site, flow_summary" in gap["reason"]) for gap in graph_gaps] == [
         ("unavailable", True)]
-    # A source-SAST lead in the same build unit has no correlated path, but package-neighborhood/1 selects the
-    # sink, guard and range facts located on its own line (and in its function) by location, not by correlation.
+    # A source-SAST lead in the same build unit has no correlated path, so package-neighborhood/2 keeps the call-depth
+    # bound: it selects the sink, guard and range facts located on its own line (and in its function) by location.
     sast = _lead(graph_assembly, fixture, "sast_critical")
     assert sast["retrieval"]["graph_families"] == document["retrieval"]["graph_families"]
     assert not [entry for entry in _graph_entries(sast) if entry["id"] == ids["path_bridged"]]
     neighborhood = sast["neighborhood"]
-    assert neighborhood["rule"] == "appsec-review/package-neighborhood/1"
+    assert neighborhood["rule"] == "appsec-review/package-neighborhood/2"
+    assert neighborhood["bound"] == {"kind": "call_depth", "paths": [], "call_depth": neighborhood["call_depth"]}
+    assert neighborhood["slice"] is None
     assert ids["sink_strcpy"] in {row["ref"] for row in neighborhood["sinks"]}
     assert ids["guard_strcpy"] in {row["ref"] for row in neighborhood["guards"]}
     assert {row["ref"] for row in neighborhood["sinks"]} <= set(sast["retrieval"]["entity_ids"])

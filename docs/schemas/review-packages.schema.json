@@ -2108,7 +2108,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/9"
+          "const": "appsec-review/assemble-review-packages/11"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"
@@ -2416,10 +2416,12 @@
     "inference_neighborhood": {
       "type": "object",
       "additionalProperties": false,
-      "description": "package-neighborhood/1: identities and fact summaries selected by location and function scope.",
+      "description": "package-neighborhood/2: identities and fact summaries selected by the lead's correlated dataflow paths (bound dataflow_path, with a composed slice) or, without one, by location and call depth (bound call_depth, slice null).",
       "required": [
         "rule",
         "call_depth",
+        "bound",
+        "slice",
         "function",
         "sinks",
         "ranges",
@@ -2435,12 +2437,28 @@
       ],
       "properties": {
         "rule": {
-          "const": "appsec-review/package-neighborhood/1"
+          "const": "appsec-review/package-neighborhood/2"
         },
         "call_depth": {
           "type": "integer",
           "minimum": 1,
           "maximum": 8
+        },
+        "bound": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paths", "call_depth"],
+          "properties": {
+            "kind": {"enum": ["dataflow_path", "call_depth"]},
+            "paths": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/inference_identity"}},
+            "call_depth": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1, "maximum": 8}]}
+          }
+        },
+        "slice": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/inference_package_slice"}
+          ]
         },
         "function": {
           "oneOf": [
