@@ -10,6 +10,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Iterable, Mapping
 
+from appsec_review.observability.triage_reduction import (DISMISSED_STATES, DISPOSITIONS, REDUCED_DISPOSITIONS,
+                                                        SCOPE, TRIAGE_REDUCTION_SCHEMA, UNRESOLVED_REASONS)
+
 from ..model import (Bar, BarChart, Block, Box, Bullets, Cell, Field, Fields, Heading, Lane, Note, Para,
                      Segment, Stat, Stats, Table, Timeline, Truncation)
 from ..text import anchor, bound, clean, sha256_value
@@ -23,6 +26,7 @@ OPERATION_LIMIT = 12
 MODEL_LIMIT = 12
 TOOL_LIMIT = 12
 GAP_LIMIT = 16
+TRIAGE_LIMIT = 12
 LABEL_CHARS = 64
 CELL_CHARS = 96
 VALUE_CHARS = 220
@@ -414,6 +418,125 @@ def _builds_and_findings(inputs: TelemetryInputs) -> Box:
              muted=True)))
 
 
+# --- triage reduction --------------------------------------------------------------------------
+
+TRIAGE_TITLE = "Triage reduction"
+TRIAGE_READING = ("These are triage outcomes for admitted lane A scanner leads, not security conclusions: "
+                  "dismissed and no-claim leads are not confirmed false positives, and unresolved or unadmitted "
+                  "leads are never counted as reduced.")
+_DISPOSITION_LABELS = {
+    "survived_confirmed": "Survived as confirmed claim", "survived_supported": "Survived as supported claim",
+    "dismissed_by_adjudication": "Dismissed by adjudication", "no_claim_raised": "Examined, no claim raised",
+    "unresolved": "Unresolved (never counted as reduced)",
+}
+
+
+def _yes_no(value: Any) -> str:
+    return fmt.UNAVAILABLE if not isinstance(value, bool) else ("yes" if value else "no")
+
+
+def _breakdown(value: Any, order: tuple[str, ...] = ()) -> str | None:
+    """``a: 1, b: 2`` in contract order, then any further keys sorted; None when not a mapping."""
+    if not isinstance(value, Mapping):
+        return None
+    names = [name for name in order if name in value]
+    names += sorted((name for name in value if name not in order), key=clean)
+    return ", ".join(f"{clean(name)}: {fmt.count(value[name])}" for name in names) or "none"
+
+
+def _reduction(ratio: Any, denominator: Any, unit: str) -> str:
+    if _number(ratio) is None:
+        return (f"{fmt.UNAVAILABLE} (no {unit}s)" if _number(denominator) == 0 else fmt.UNAVAILABLE)
+    return f"{fmt.percent(ratio)} of {fmt.plural(denominator, unit)}"
+
+
+def _triage_slices(label: str, value: Any) -> Table | None:
+    if not isinstance(value, Mapping) or not value:
+        return None
+    entries = [(clean(name), entry if isinstance(entry, Mapping) else {}) for name, entry in value.items()]
+    entries.sort(key=lambda item: (-(_number(item[1].get("admitted")) or 0), item[0]))
+    shown, omitted = _cap(entries, TRIAGE_LIMIT)
+
+    def cell(entry: Mapping[str, Any], key: str) -> Cell:
+        return Cell(fmt.NA if _number(entry.get(key)) is None else fmt.count(entry.get(key)))
+
+    rows = tuple((Cell(_short(name, LABEL_CHARS), mono=True), cell(entry, "admitted"),
+                  *(cell(entry, key) for key in DISPOSITIONS)) for name, entry in shown)
+    return Table((label, "Admitted", "Confirmed", "Supported", "Dismissed", "No claim", "Unresolved"),
+                 rows, (0.28, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12), omitted)
+
+
+def _triage_reduction(inputs: TelemetryInputs) -> Box:
+    section = inputs.summary.get("triage_reduction")
+    if not isinstance(section, Mapping) or section.get("schema") != TRIAGE_REDUCTION_SCHEMA:
+        reason = ("the metrics summary does not record it (older schema or recomputation failure)"
+                  if not isinstance(section, Mapping) else "the metrics summary records an unrecognised schema")
+        return Box(BoxKind.GAP, TRIAGE_TITLE, meta=fmt.UNAVAILABLE, items=(
+            Para(f"Triage reduction: unavailable; {reason}. This is a gap, not zero reduction."),
+            Para(TRIAGE_READING, muted=True)))
+    available = section.get("available") is True
+    complete = section.get("accounting_complete") is True
+    leads = _mapping(section, "leads")
+    dispositions = _mapping(section, "admitted_dispositions")
+    reduction = _mapping(section, "reduction")
+    codes = section.get("integrity_gap_codes")
+    codes = [_short(code, LABEL_CHARS) for code in codes] if isinstance(codes, list) else []
+    scope = section.get("scope")
+    not_admitted = fmt.count(leads.get("not_admitted"))
+    by_coverage = _breakdown(leads.get("not_admitted_by_residual_coverage"))
+    if by_coverage not in (None, "none") and not_admitted != fmt.UNAVAILABLE:
+        not_admitted = f"{not_admitted} (by residual coverage: {by_coverage})"
+    rows = [
+        _field("Scope", "lane A scanner leads" if scope == SCOPE else _short(scope or fmt.UNAVAILABLE)),
+        Field("Leads collected", fmt.count(leads.get("collected"))),
+        Field("Admitted for review", fmt.count(leads.get("admitted"))),
+        _field("Not admitted (unreviewed)", not_admitted),
+        Field("Non-lead observations", fmt.count(leads.get("non_lead_observations"))),
+        Field("Hunt-lane claims excluded", fmt.count(section.get("hunt_lane_claims_excluded"))),
+        Field("Dismissed or no claim, of resolved", _reduction(
+            reduction.get("ratio_over_resolved"), reduction.get("resolved_denominator"), "resolved lead")),
+        Field("Lower bound, of admitted", _reduction(
+            reduction.get("lower_bound_over_admitted"), reduction.get("admitted_denominator"), "admitted lead")),
+        Field("Accounting complete", _yes_no(section.get("accounting_complete"))),
+        Field("Review incomplete", _yes_no(section.get("review_incomplete"))),
+    ]
+    disposition_rows = tuple((Cell(_DISPOSITION_LABELS[key]), Cell(fmt.count(dispositions.get(key))))
+                             for key in DISPOSITIONS)
+    items: list[Any] = [Fields(tuple(rows)),
+                        Table(("Admitted-lead disposition", "Leads"), disposition_rows, (0.7, 0.3))]
+    detail = [(label, _breakdown(section.get(key), order)) for label, key, order in (
+        ("Dismissed by claim state", "dismissed_by_claim_state", DISMISSED_STATES),
+        ("Unresolved by reason", "unresolved_by_reason", UNRESOLVED_REASONS))]
+    items.append(Fields(tuple(_field(label, value) for label, value in detail)))
+    slices = [table for table in (_triage_slices("Lead family", section.get("by_family")),
+                                  _triage_slices("Scanner", section.get("by_scanner"))) if table]
+    items.extend(slices)
+    if slices:
+        items.append(Para("Per-family and per-scanner counts are admitted leads by disposition; n/a means not "
+                          "recorded.", muted=True))
+    if not available:
+        items.append(Para("Triage reduction is unavailable: its inputs could not be read and verified. Counts "
+                          "are shown as unavailable, not zero."))
+    elif not complete:
+        items.append(Para("Accounting is incomplete: unresolved leads, an incomplete review or integrity gaps "
+                          "leave these figures partial. This is a named gap, not a clean result."))
+    shown, omitted = _cap(codes, GAP_LIMIT, "codes")
+    if shown:
+        items.append(Bullets(tuple(f"Integrity gap: {code}" for code in shown), omitted))
+    items.append(Para(TRIAGE_READING, muted=True))
+    reduced = [_number(dispositions.get(key)) for key in REDUCED_DISPOSITIONS]
+    if not available:
+        meta = fmt.UNAVAILABLE
+    else:
+        meta = (f"{fmt.count(sum(reduced))} of {fmt.count(leads.get('admitted'))} admitted reduced"
+                if None not in reduced else "reduced count unavailable")
+        if not complete:
+            meta += ", accounting incomplete"
+    gap = not available or not complete or bool(codes)
+    return Box(BoxKind.GAP if gap else BoxKind.RESULT, TRIAGE_TITLE, meta=meta,
+               chip=None if gap else "TRIAGE", items=tuple(items))
+
+
 # --- data quality ------------------------------------------------------------------------------
 
 def _gap_line(record: Mapping[str, Any]) -> str:
@@ -471,6 +594,7 @@ def overview_sections(inputs: TelemetryInputs) -> tuple[Block, ...]:
         _models(inputs),
         _tools(inputs),
         _builds_and_findings(inputs),
+        _triage_reduction(inputs),
         Heading(2, "Data quality", anchor("telemetry", "quality")),
         _quality(inputs),
     )
