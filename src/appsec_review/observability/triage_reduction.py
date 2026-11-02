@@ -315,15 +315,24 @@ def _canonical(claim_id: str, claims: Mapping[str, Mapping[str, Any]]) -> str | 
     return claim_id if claim_id in claims else None
 
 
-def _linked_claims(packages: Iterable[str], lane: Mapping[str, Any], projection: Mapping[str, Any]) -> set[str]:
-    wanted = set(packages)
-    linked = {claim_id for claim_id, owners in lane["proposals"].items() if wanted.intersection(owners)}
+def _claims_by_package(lane: Mapping[str, Any], projection: Mapping[str, Any]) -> dict[str, set[str]]:
+    """Package id -> claims linked to it: lane proposals, lane A claim packages, origin-cell packages."""
+    index: dict[str, set[str]] = {}
+    for claim_id, owners in lane["proposals"].items():
+        for package_id in owners:
+            index.setdefault(package_id, set()).add(claim_id)
     for claim_id, claim in projection["claims"].items():
-        if claim["lane"] == "lead" and claim["package_id"] in wanted:
-            linked.add(claim_id)
-        elif any(wanted & projection["cell_packages"].get(cell, set()) for cell in claim["origin_cell_ids"]):
-            linked.add(claim_id)
-    return linked
+        packages = {package_id for cell in claim["origin_cell_ids"]
+                    for package_id in projection["cell_packages"].get(cell, ())}
+        if claim["lane"] == "lead" and isinstance(claim["package_id"], str):
+            packages.add(claim["package_id"])
+        for package_id in packages:
+            index.setdefault(package_id, set()).add(claim_id)
+    return index
+
+
+def _linked_claims(packages: Iterable[str], index: Mapping[str, set[str]]) -> set[str]:
+    return {claim_id for package_id in packages for claim_id in index.get(package_id, ())}
 
 
 def _proposal_disposition(claim_ids: set[str], projection: Mapping[str, Any], gaps: set[str]
@@ -377,6 +386,7 @@ def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mappi
     unresolved = dict.fromkeys(UNRESOLVED_REASONS, 0)
     by_family: dict[str, dict[str, int]] = {}
     by_scanner: dict[str, dict[str, int]] = {}
+    claim_index = _claims_by_package(lane, projection)
     admitted = [lead_id for lead_id, status, _ in manifest["admission"] if status == "admitted"]
     for lead_id in sorted(admitted):
         packages = packages_of.get(lead_id, [])
@@ -395,7 +405,7 @@ def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mappi
             disposition, reason = "unresolved", "unaccounted"
         elif "proposal" in outcomes:
             disposition, reason, states = _proposal_disposition(
-                _linked_claims(packages, lane, projection), projection, gaps)
+                _linked_claims(packages, claim_index), projection, gaps)
         elif all(outcome == "no_proposal" for outcome in outcomes):
             disposition = "no_claim_raised"
         else:

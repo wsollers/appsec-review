@@ -42,6 +42,21 @@ def test_missing_summary_is_recomputed_in_memory_and_named(tmp_path: Path) -> No
     assert not (run_dir / "data" / "telemetry" / "summary.json").exists()
 
 
+def test_previous_schema_summary_is_recomputed_with_triage_reduction(tmp_path: Path) -> None:
+    run_dir = build_telemetry_run(tmp_path)
+    summary = run_dir / "data" / "telemetry" / "summary.json"
+    stale = json.dumps({"schema": "appsec-review/run-metrics/6", "run_id": RUN_ID})
+    summary.write_text(stale, encoding="utf-8")
+    inputs = load_inputs(run_dir)
+    assert inputs.summary_source == "recomputed" and "metrics_summary_schema_mismatch" in inputs.named_gaps
+    assert inputs.summary["schema"] == "appsec-review/run-metrics/7"
+    triage = inputs.summary["triage_reduction"]
+    # The fixture run has no accepted review handoff: a named gap, never zero reduction.
+    assert triage["available"] is False and triage["leads"]["admitted"] is None
+    assert triage["integrity_gap_codes"] == ["review_handoff_unavailable"]
+    assert summary.read_text(encoding="utf-8") == stale
+
+
 def test_mismatched_summary_and_missing_log_are_gaps(tmp_path: Path) -> None:
     run_dir = build_telemetry_run(tmp_path)
     summary = run_dir / "data" / "telemetry" / "summary.json"
