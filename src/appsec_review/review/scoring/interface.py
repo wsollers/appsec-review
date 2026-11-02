@@ -3,7 +3,7 @@
 Providers emit one normalized four-dimension package. Dimensions a provider does not produce stay
 ``None`` and are named in ``missing_factors``; unlike scales are never combined or coerced.
 
-A provider may declare ``consumed_factors`` (``score-factors/1`` ids); the scoring stage then
+A provider may declare ``consumed_factors`` (``score-factors/2`` ids); the scoring stage then
 extracts exactly those factors from the adjudicated evidence and passes them in
 ``ScoreRequest.factors``. A request without factors canonicalizes exactly as before, so providers
 that consume none keep their fingerprints.
@@ -44,7 +44,7 @@ class ScoreRequest:
     reference_cvss: tuple[Mapping[str, Any], ...] = ()
     kev_listed: bool | None = None
     epss: Mapping[str, Any] | None = None
-    # score-factors/1 values the provider declared it consumes, derived from adjudicated evidence.
+    # score-factors/2 values the provider declared it consumes, derived from adjudicated evidence.
     factors: FactorSet | None = None
 
     def canonical(self, exclude: Collection[str] = ()) -> dict[str, Any]:
@@ -140,7 +140,7 @@ class ScoreProviderResult:
     overrides: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     reference_inputs: Mapping[str, Any] = field(default_factory=dict)
     schema: str = SCORE_PACKAGE_SCHEMA
-    # The score-factors/1 values the provider used (with their citations) and why each consumed
+    # The score-factors/2 values the provider used (with their citations) and why each consumed
     # factor is missing; ``None`` for providers that consume no factors.
     factors: FactorSet | None = None
     missing_factor_reasons: tuple[tuple[str, str], ...] = field(default_factory=tuple)

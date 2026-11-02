@@ -373,13 +373,25 @@ provider availability and real-run behavior remain operator validation.
 ## Tuning scoring
 
 Scoring is deterministic and runs only on `confirmed` and `supported` claims. The default provider
-is `application_risk_matrix/3`. It rates `score-factors/1` factors, each derived from adjudicated,
+is `application_risk_matrix/3`. It rates `score-factors/2` factors, each derived from adjudicated,
 re-resolved evidence: `verification`, `taint_path`, `attacker_control`, `guard_absent`,
 `exposure`, `privilege`, `data_sensitivity`, `impact_class` (from the pinned MITRE catalog; see
 "CWE impact classes" below) and `threat` (KEV only). The design section "Evidence-derived scoring
 factors" lists every factor's scale and source. A factor with no
 evidence is listed in the score package's `missing_factors`, with its reason in
 `missing_factor_reasons`. It is unknown, never zero and never a low value.
+
+`score-factors/2` adds the numeric-reasoning guardrail (`numeric-reasoning-guardrail/1`) to
+`guard_absent`. When the claim's CWE is a numeric weakness, listed in `numeric-weakness-cwes/1`
+(integer overflow, wrap, truncation and conversion, off-by-one, divide by zero, loop bounds, and
+bounds-based buffer reads and writes such as CWE-190, CWE-120 and CWE-787), its guard is a range,
+bound or overflow fact. That fact must come from a deterministic tool, so only `graph_fact` (a
+guard or range fact) and `tool_observation` support count. `code_evidence` (cited source lines) does
+not count. If a claim has only `code_evidence` support, `guard_absent` is missing. Its reason names
+the guardrail, and the factor is never set to `code_evidence`. A counted value for such a claim
+records `numeric_guardrail` and `numeric_cwe_table` in its `detail`. Other CWEs, and claims with no
+CWE, are scored as before. To rate such a finding, export graph guard and range facts for its
+language, or supply a tool observation that maps to `missing_or_ineffective_guard`.
 
 ### Missing factors: the interval
 

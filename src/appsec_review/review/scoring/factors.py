@@ -1,4 +1,4 @@
-"""Evidence-derived scoring factors (``score-factors/1``).
+"""Evidence-derived scoring factors (``score-factors/2``).
 
 A factor is one closed-scale fact about an adjudicated claim, derived deterministically from what
 adjudication already accepted: the claim's counted supporting relations (design R3/R5), the
@@ -29,8 +29,11 @@ from appsec_review.graph.bounds import fact_bounds_destination, sink_destination
 from appsec_review.graph.contract import ATTACKER_REACHABLE_SOURCES, Family, SourceClass
 from appsec_review.review.scoring import cwe_impact
 from appsec_review.review.models import ClaimState, EvidenceRelation, Predicate, RelationKind
+from appsec_review.review.numeric_reasoning import (
+    NUMERIC_CWE_TABLE_VERSION, RULE as NUMERIC_REASONING_RULE, SCORING_MISSING_REASON, is_numeric_weakness,
+)
 
-FACTORS_VERSION = "score-factors/1"
+FACTORS_VERSION = "score-factors/2"
 
 
 class FactorId(StrEnum):
@@ -442,12 +445,18 @@ class GuardAbsentExtractor:
 
     A supporting citation of a guard or range fact that the exported facts show bounds the destination is an
     effective guard and does not count as support that the guard is absent.
+
+    For a numeric weakness (``numeric-weakness-cwes/1``) the guard is a range, bound or overflow fact, which must
+    come from a graph or tool fact (``numeric-reasoning-guardrail/1``): ``code_evidence`` support does not count,
+    and a claim supported only by it has the factor missing with that reason, never a low value.
     """
 
     factor = FactorId.GUARD_ABSENT
 
     def extract(self, data: FactorInput) -> FactorValue | MissingFactor:
+        numeric = is_numeric_weakness(data.weakness_cwe)
         candidates = []
+        dropped = 0
         for relation in data.supporting_for(Predicate.MISSING_OR_INEFFECTIVE_GUARD):
             if _effective_guard(data, relation):
                 continue
@@ -457,8 +466,18 @@ class GuardAbsentExtractor:
                 basis = "tool_observation"
             else:
                 basis = "code_evidence"
+            if numeric and basis == "code_evidence":
+                dropped += 1
+                continue
             candidates.append((basis, relation, {"entity_kind": relation.entity_kind}))
-        return _best(self.factor, candidates, "no counted direct support on missing_or_ineffective_guard")
+        if not candidates and dropped:
+            return MissingFactor(self.factor, SCORING_MISSING_REASON)
+        outcome = _best(self.factor, candidates, "no counted direct support on missing_or_ineffective_guard")
+        if numeric and isinstance(outcome, FactorValue):
+            outcome = FactorValue(outcome.factor, outcome.value, outcome.citations,
+                                  {**outcome.detail, "numeric_guardrail": [NUMERIC_REASONING_RULE],
+                                   "numeric_cwe_table": [NUMERIC_CWE_TABLE_VERSION]})
+        return outcome
 
 
 class TagExtractor:

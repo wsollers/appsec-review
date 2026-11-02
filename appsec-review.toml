@@ -2888,7 +2888,7 @@ override_policy = "review_lead_only/1"
 implementation = "first-reference-compatible/1"
 metric_groups = ["base", "threat", "environmental", "supplemental"]
 
-# application_risk_matrix/3 rates score-factors/1 evidence factors. Points are summed per dimension
+# application_risk_matrix/3 rates score-factors/2 evidence factors. Points are summed per dimension
 # (a missing factor is unknown: its minimum and maximum points bound the rating, and a rating that the
 # missing factors could change is withheld as unrated) and must not decrease along a factor's scale. Replacing a table
 # replaces it whole. See docs/operations/inference-security-review.md "Tuning scoring".

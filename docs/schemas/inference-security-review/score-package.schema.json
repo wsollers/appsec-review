@@ -315,7 +315,7 @@
       "$ref": "common.schema.json#/$defs/relation_ids"
     },
     "factor_citations": {
-      "description": "Per present score-factors/1 factor, the adjudicated evidence it was derived from.",
+      "description": "Per present score-factors/2 factor, the adjudicated evidence it was derived from.",
       "type": "array",
       "items": {
         "type": "object",
@@ -364,7 +364,7 @@
       "uniqueItems": true
     },
     "factors": {
-      "description": "score-factors/1 values the provider consumed; each is on a closed scale and cited in factor_citations.",
+      "description": "score-factors/2 values the provider consumed; each is on a closed scale and cited in factor_citations.",
       "type": "array",
       "items": {
         "type": "object",
