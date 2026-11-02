@@ -31,6 +31,11 @@ CodeQL is the exception: its licensed source image is operator-provided and its 
 [`tools/codeql/README.md`](tools/codeql/README.md). The catalog keeps the legacy `audit-codeql`
 entry `deferred`.
 
+[`services/garnet/`](services/garnet/README.md) is also outside the catalog. It holds the Windows Nano
+Server build of the Garnet result-cache service, which an operator builds on a Windows-containers
+Docker host. The catalog lists only linux/amd64 images that `build.py` builds and the review
+launches, and this is neither. On Linux, Compose uses the upstream Garnet image pinned by digest.
+
 ## Build and validation
 
 The Bash and PowerShell launchers call the same engine and therefore have identical selection and

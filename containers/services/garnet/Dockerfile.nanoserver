@@ -1,0 +1,41 @@
+# Windows Nano Server image of Microsoft Garnet 2.2.5 for the inference result cache on Windows-container
+# Docker hosts. Adapted from upstream Garnet v2.2.5 Dockerfile.nanoserver (MIT License,
+# https://github.com/microsoft/garnet/blob/8d007138208ce030eb10a50c80e636b1678b83e4/Dockerfile.nanoserver).
+# Changes from upstream: both base images are pinned by digest (ltsc2022, windows/amd64, .NET 10.0.14), and
+# the build context must be a Garnet checkout at commit 8d007138208ce030eb10a50c80e636b1678b83e4 (tag v2.2.5),
+# which build-windows.ps1 prepares and verifies. Build it only through build-windows.ps1.
+
+# mcr.microsoft.com/dotnet/sdk:10.0-nanoserver-ltsc2022 (SDK 10.0.403)
+FROM mcr.microsoft.com/dotnet/sdk@sha256:4448cbdb99f98b425f00793390a13eabbb901c6740fabf08aa0b54d3aa4f09ad AS build
+
+ENV NUGET_PACKAGES=/src/pkg
+
+WORKDIR /src
+
+COPY . .
+
+# Docker images disable protected mode, as upstream does; the cache requires password authentication instead.
+USER ContainerAdministrator
+RUN pwsh -Command "(Get-Content /src/libs/host/defaults.conf) -replace '\""ProtectedMode\"": \"yes\",', '\""ProtectedMode\"": \"no\",' | Set-Content /src/libs/host/defaults.conf"
+USER ContainerUser
+
+WORKDIR /src/main/GarnetServer
+
+RUN dotnet restore && \
+    dotnet build -c Release -p:EnableSourceLink=false -p:EnableSourceControlManagerQueries=false && \
+    dotnet publish -c Release -o /app -r win-x64 --self-contained false -f net10.0 -p:EnableSourceLink=false -p:EnableSourceControlManagerQueries=false
+
+RUN pwsh -Command "gci -Path /app -Filter '*.xml' -Recurse | del -Force"
+
+# mcr.microsoft.com/dotnet/runtime:10.0-nanoserver-ltsc2022 (.NET 10.0.14)
+FROM mcr.microsoft.com/dotnet/runtime@sha256:8a78bcac668783ee6196f89543594cbf5ebea5aff15400269ab7c64a3c5665f6 AS runtime
+WORKDIR /app
+COPY --from=build /app .
+
+LABEL org.opencontainers.image.source="https://github.com/microsoft/garnet" \
+      org.opencontainers.image.version="2.2.5" \
+      org.opencontainers.image.revision="8d007138208ce030eb10a50c80e636b1678b83e4"
+
+EXPOSE 6379
+
+ENTRYPOINT ["/app/GarnetServer"]
