@@ -104,13 +104,15 @@ enable_swift = false
 # name does not match its key is rejected. `image_signatures_dir` holds one envelope per signed
 # container image, `<image id hex>.json`. Relative directories resolve against this file's directory;
 # `openssl` must be an absolute path to an OS-owned binary.
-# `image_enforcement = "required"` refuses to launch or reuse any image without a valid envelope from
-# a trusted key; "disabled" turns image verification off entirely and must be an explicit choice.
+# Image signature enforcement is opt-in. "disabled" (the default, also used when this key or table is
+# absent) launches and reuses images without checking envelopes. Set
+# `image_enforcement = "required"` to refuse to launch or reuse any image without a valid envelope
+# from a trusted key. `appsec-review signing verify-image` always verifies, whatever this says.
 # Runtime profiles and capacity overlays cannot change this table.
 openssl = "/usr/bin/openssl"
 trusted_keys_dir = "/etc/appsec-review/signing/trusted-keys"
 image_signatures_dir = "/var/lib/appsec-review/signing/images"
-image_enforcement = "required"
+image_enforcement = "disabled"
 
 [binary_decompilation]
 # Pre-run Ghidra decompilation of third-party binaries (`appsec-review binary-decompile`). It runs

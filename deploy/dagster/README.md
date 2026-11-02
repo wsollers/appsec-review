@@ -218,7 +218,9 @@ the image ID against the mounted trust anchors and envelopes with the configured
 On success it prints a `container-image-self-check` JSON line with status `verified` and execs the
 code server. On any failure it prints status `refused` and exits 3, so the code location never
 becomes healthy and the webserver and daemon, which wait for it, are not started. With
-`image_enforcement = "disabled"` it prints status `disabled` and starts the server unchecked. The
+`image_enforcement = "disabled"` (the default; enforcement is opt-in with `"required"`) it prints
+status `disabled` and starts the server unchecked. The image bakes in `appsec-review.toml`, so a
+change to `[signing]` takes effect only after `lifecycle.py build` and `reload`. The
 gate itself runs from verified modules, because the image's `sitecustomize.py` verifies the package
 first. `lifecycle.py reload` recreates the code location, so the gate runs again with the newly
 verified ID. The gate does not replace host verification: access to the Docker socket is

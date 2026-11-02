@@ -2,8 +2,9 @@
 
 Private keys never appear here or anywhere in the repository. ``trusted_keys_dir`` holds root-owned
 public-key PEM trust anchors named ``<key_id hex>.pem``; ``image_signatures_dir`` holds container
-image envelopes named ``<image id hex>.json``. A missing table means the defaults below, including
-``image_enforcement = "required"``; enforcement is never disabled implicitly.
+image envelopes named ``<image id hex>.json``. A missing table or key means the defaults below,
+including ``image_enforcement = "disabled"``: image signature enforcement is opt-in and is enabled
+only by an explicit ``image_enforcement = "required"``.
 
 On a native Windows host the POSIX defaults are replaced by host defaults, both when the table is
 missing and when it names exactly a POSIX default (as the repository ``appsec-review.toml`` does):
@@ -60,7 +61,7 @@ class SigningConfig:
     openssl: Path = _field(default_factory=lambda: Path(host_default("openssl")))
     trusted_keys_dir: Path = _field(default_factory=lambda: Path(host_default("trusted_keys_dir")))
     image_signatures_dir: Path = _field(default_factory=lambda: Path(host_default("image_signatures_dir")))
-    image_enforcement: str = IMAGE_ENFORCEMENT_REQUIRED
+    image_enforcement: str = IMAGE_ENFORCEMENT_DISABLED
 
     def __post_init__(self) -> None:
         for name in ("openssl", "trusted_keys_dir", "image_signatures_dir"):

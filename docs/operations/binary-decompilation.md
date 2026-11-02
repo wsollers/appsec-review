@@ -217,7 +217,8 @@ receipt) and `scratch/raw/stdout.bin` and `stderr.bin` (the Ghidra log).
 | `INVALID_EXPORT` | The export script did not finish, or its output broke the contract | Read `stdout.bin` for the script error. |
 
 `RuntimeError: cataloged image is not locally available: tool-ghidra` means the image was not built
-on this host. `SignatureVerificationError: refusing to launch tool-ghidra image ...` means the
+on this host. `SignatureVerificationError: refusing to launch tool-ghidra image ...` means
+`[signing] image_enforcement = "required"` is set and the
 local image has no trusted signature; sign it as shown in the prerequisites.
 
 ## Efficacy check on the known binary

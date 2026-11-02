@@ -110,8 +110,8 @@ rebuild moves tags on the shared daemon that a live run may be using.
    exits non-zero in any of those cases. It never adds a pin to an unpinned catalog entry; that is a
    reviewed edit. Review the diff and commit it. Only the session on the review host that built the
    images changes these pins (see `.claude/skills/multi-session-coordination/SKILL.md`). Then sign the
-   re-pinned images with `appsec-review signing sign-image --all-pinned --private-key <key>`: with
-   `[signing] image_enforcement = "required"` an unsigned pinned image is refused at launch (see
+   re-pinned images with `appsec-review signing sign-image --all-pinned --private-key <key>`: with the
+   opt-in `[signing] image_enforcement = "required"` an unsigned pinned image is refused at launch (see
    [Container image and Python module signing](signing.md)).
 
 3. **Rebuild and reload the Dagster image services** (code location, webserver and daemon), so the

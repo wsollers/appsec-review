@@ -114,7 +114,8 @@ a read-only target mount, and one writable scratch mount. Image definitions pack
 Application jobs own arguments and translate tool output into findings.
 
 A catalog entry may pin `image_id`; the application executor then refuses to run a local image
-whose id differs (`src/appsec_review/container_runtime/executor.py`). Pinned or not, it also refuses
+whose id differs (`src/appsec_review/container_runtime/executor.py`). With the opt-in
+`[signing] image_enforcement = "required"`, pinned or not, it also refuses
 an image whose id has no signature envelope from a trusted operator key; sign images after building
 and re-pinning them (see [`../docs/operations/signing.md`](../docs/operations/signing.md)).
 Image-ID pins are host-local:
