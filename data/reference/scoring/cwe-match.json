@@ -1,0 +1,110 @@
+{
+ "schema": "appsec-review/cwe-match/1",
+ "source": "MITRE CWE 5.0 (2026-10-28), Research Concepts view (CWE-1000) ChildOf/ParentOf relations, https://cwe.mitre.org/data/definitions/<n>.html. Each key accepts itself, its direct children, and only the direct parent or sibling classes static tools commonly emit for it. Matching is one-way: a key accepts the listed report CWEs; nothing is implied in reverse.",
+ "accepts": {
+  "CWE-22": {
+   "accepts": ["CWE-22", "CWE-23", "CWE-36"],
+   "rationale": "Children CWE-23 (relative) and CWE-36 (absolute) path traversal. Parent CWE-706 is too broad."
+  },
+  "CWE-78": {
+   "accepts": ["CWE-78", "CWE-77"],
+   "rationale": "Parent CWE-77 command injection, which tools report for OS command construction."
+  },
+  "CWE-89": {
+   "accepts": ["CWE-89", "CWE-564"],
+   "rationale": "Child CWE-564 (Hibernate SQL injection). Parent CWE-943 is too broad."
+  },
+  "CWE-121": {
+   "accepts": ["CWE-121", "CWE-787", "CWE-788", "CWE-120", "CWE-119", "CWE-805", "CWE-806"],
+   "rationale": "Parents CWE-787 and CWE-788; sibling CWE-120 (child of 787); grandparent CWE-119 and its buffer-length children CWE-805/806, which C/C++ analyzers report for stack buffer overflows."
+  },
+  "CWE-125": {
+   "accepts": ["CWE-125", "CWE-126", "CWE-127", "CWE-119", "CWE-788"],
+   "rationale": "Children CWE-126 (over-read) and CWE-127 (under-read); parent CWE-119; sibling CWE-788 (after end of buffer), reported by cppcheck for out-of-bounds indexing."
+  },
+  "CWE-134": {
+   "accepts": ["CWE-134"],
+   "rationale": "No children; parent CWE-668 is too broad. Tools report CWE-134 itself."
+  },
+  "CWE-190": {
+   "accepts": ["CWE-190", "CWE-680"],
+   "rationale": "Child CWE-680 (integer overflow to buffer overflow chain). Parent CWE-682 is too broad."
+  },
+  "CWE-253": {
+   "accepts": ["CWE-253", "CWE-252", "CWE-754"],
+   "rationale": "Parent CWE-754 and sibling CWE-252 (unchecked return value, also a child of 754), which tools report for mishandled return values."
+  },
+  "CWE-327": {
+   "accepts": ["CWE-327", "CWE-328", "CWE-780", "CWE-1240"],
+   "rationale": "Children CWE-328 (weak hash), CWE-780 (RSA without OAEP), CWE-1240. Parent CWE-693 is too broad."
+  },
+  "CWE-362": {
+   "accepts": ["CWE-362", "CWE-364", "CWE-366", "CWE-367", "CWE-368", "CWE-421", "CWE-689", "CWE-1223", "CWE-1298"],
+   "rationale": "Direct children (signal handler race, race within a thread, TOCTOU, context switching race, alternate channel race, permission race, write-once race, hardware logic race). Parent CWE-662 is too broad."
+  },
+  "CWE-369": {
+   "accepts": ["CWE-369"],
+   "rationale": "No children; parent CWE-682 is too broad."
+  },
+  "CWE-401": {
+   "accepts": ["CWE-401", "CWE-772"],
+   "rationale": "Parent CWE-772 (missing release of resource), reported by leak checkers."
+  },
+  "CWE-415": {
+   "accepts": ["CWE-415", "CWE-1341", "CWE-825"],
+   "rationale": "Parents CWE-1341 (multiple releases of same resource) and CWE-825 (expired pointer dereference). Parent CWE-666 is too broad."
+  },
+  "CWE-416": {
+   "accepts": ["CWE-416", "CWE-825"],
+   "rationale": "Parent CWE-825 (expired pointer dereference). Peer CWE-415 is a distinct weakness."
+  },
+  "CWE-476": {
+   "accepts": ["CWE-476", "CWE-690"],
+   "rationale": "CWE-690 is the chain unchecked return value to NULL pointer dereference ending in CWE-476. Parents CWE-710 and CWE-754 are too broad."
+  },
+  "CWE-522": {
+   "accepts": ["CWE-522", "CWE-256", "CWE-257", "CWE-260", "CWE-261", "CWE-523", "CWE-549"],
+   "rationale": "Direct children (plaintext storage, recoverable format, password in configuration file, weak encoding, unprotected transport, missing field masking). Parents CWE-1390 and CWE-668 are too broad."
+  },
+  "CWE-617": {
+   "accepts": ["CWE-617"],
+   "rationale": "No children; parent CWE-705 is too broad."
+  },
+  "CWE-628": {
+   "accepts": ["CWE-628", "CWE-683", "CWE-685", "CWE-686", "CWE-687", "CWE-688"],
+   "rationale": "Direct children (wrong argument order, number, type, value, variable). Parent CWE-573 is too broad."
+  },
+  "CWE-674": {
+   "accepts": ["CWE-674", "CWE-776"],
+   "rationale": "Child CWE-776 (recursive entity references). Parent CWE-834 is too broad for recursion."
+  },
+  "CWE-761": {
+   "accepts": ["CWE-761", "CWE-763"],
+   "rationale": "Parent CWE-763 (release of invalid pointer), reported by allocator checkers for offset frees."
+  },
+  "CWE-770": {
+   "accepts": ["CWE-770", "CWE-774", "CWE-789", "CWE-1325", "CWE-400"],
+   "rationale": "Children CWE-774 (file descriptors), CWE-789 (memory allocation with excessive size), CWE-1325; parent CWE-400 (uncontrolled resource consumption), commonly reported for unbounded allocation. Parent CWE-665 is unrelated in practice."
+  },
+  "CWE-787": {
+   "accepts": ["CWE-787", "CWE-120", "CWE-121", "CWE-122", "CWE-123", "CWE-124", "CWE-785", "CWE-119", "CWE-788", "CWE-805"],
+   "rationale": "Direct children (classic, stack, heap overflow, write-what-where, underwrite, path manipulation without size); parent CWE-119; siblings CWE-788 and CWE-805, which cppcheck and CodeQL report for out-of-bounds writes."
+  },
+  "CWE-798": {
+   "accepts": ["CWE-798", "CWE-259", "CWE-321"],
+   "rationale": "Children CWE-259 (hard-coded password) and CWE-321 (hard-coded cryptographic key)."
+  },
+  "CWE-822": {
+   "accepts": ["CWE-822"],
+   "rationale": "No children; parent CWE-119 would accept unrelated memory errors."
+  },
+  "CWE-835": {
+   "accepts": ["CWE-835", "CWE-834"],
+   "rationale": "Parent CWE-834 (excessive iteration), reported for unbounded loops."
+  },
+  "CWE-843": {
+   "accepts": ["CWE-843", "CWE-704"],
+   "rationale": "Parent CWE-704 (incorrect type conversion or cast), reported for type confusion."
+  }
+ }
+}

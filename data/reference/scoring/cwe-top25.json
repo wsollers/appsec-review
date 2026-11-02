@@ -1,0 +1,59 @@
+{
+ "schema": "appsec-review/cwe-top25/1",
+ "lists": {
+  "castle-2025-table2": {
+   "source": "Dubniczky et al., CASTLE: Benchmarking Dataset for Static Code Analyzers and LLMs towards CWE Detection, TASE 2025, arXiv:2503.09433v2, Table 2 (Top 25 Standing column). The paper attributes the standings to MITRE's 2024 Top 25; several differ from it (CWE-369, 415, 522, 674, 761, 770, 822, 835). Unranked in Table 2: CWE-253, 327, 362, 401, 617, 628, 843.",
+   "ranks": {
+    "CWE-22": 5,
+    "CWE-78": 7,
+    "CWE-89": 3,
+    "CWE-125": 6,
+    "CWE-134": 12,
+    "CWE-190": 23,
+    "CWE-369": 23,
+    "CWE-415": 21,
+    "CWE-416": 8,
+    "CWE-476": 21,
+    "CWE-522": 14,
+    "CWE-674": 24,
+    "CWE-761": 20,
+    "CWE-770": 24,
+    "CWE-787": 2,
+    "CWE-798": 14,
+    "CWE-822": 20,
+    "CWE-835": 24
+   }
+  },
+  "mitre-2024": {
+   "source": "MITRE 2024 CWE Top 25 Most Dangerous Software Weaknesses, https://cwe.mitre.org/top25/archive/2024/2024_top25_list.html",
+   "retrieved": "2026-11-02",
+   "ranks": {
+    "CWE-79": 1,
+    "CWE-787": 2,
+    "CWE-89": 3,
+    "CWE-352": 4,
+    "CWE-22": 5,
+    "CWE-125": 6,
+    "CWE-78": 7,
+    "CWE-416": 8,
+    "CWE-862": 9,
+    "CWE-434": 10,
+    "CWE-94": 11,
+    "CWE-20": 12,
+    "CWE-77": 13,
+    "CWE-287": 14,
+    "CWE-269": 15,
+    "CWE-502": 16,
+    "CWE-200": 17,
+    "CWE-863": 18,
+    "CWE-918": 19,
+    "CWE-119": 20,
+    "CWE-476": 21,
+    "CWE-798": 22,
+    "CWE-190": 23,
+    "CWE-400": 24,
+    "CWE-306": 25
+   }
+  }
+ }
+}
