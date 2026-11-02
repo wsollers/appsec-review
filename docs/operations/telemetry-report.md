@@ -17,7 +17,7 @@ The report reads only two run files, both read-only:
 
 - `runs/<id>/data/logs/pipeline.jsonl` — the authoritative event log. Each record is validated; a
   torn final record is ignored and named.
-- `runs/<id>/data/telemetry/summary.json` — the `appsec-review/run-metrics/6` summary, used when
+- `runs/<id>/data/telemetry/summary.json` — the `appsec-review/run-metrics/7` summary, used when
   its `schema` and `run_id` match the run. Otherwise, if events were read, the summary is
   recomputed in memory with `aggregate_run_metrics` and is **never written back**.
 
@@ -49,7 +49,12 @@ hash is labelled *metrics summary sha256* (`unavailable` when the summary was re
   [diagnosing a slow or stuck step](metrics.md#diagnosing-a-slow-or-stuck-step).
 - **Run-wide usage** — model usage by model and role, tool calls by tool, project image builds and
   finding-lifecycle transitions. A call counts as failed unless its `terminal_status` (or, for a
-  tool, its `disposition`) is `SUCCEEDED`, `COMPLETED` or `ACCEPTED`.
+  tool, its `disposition`) is `SUCCEEDED`, `COMPLETED` or `ACCEPTED`. A **Triage reduction** box
+  follows: lane A scanner leads collected, admitted and unreviewed, admitted dispositions, and the
+  reduction ratios with their denominators (see [triage reduction](metrics.md#triage-reduction)).
+  These are triage outcomes, not confirmed false positives; unresolved or unadmitted leads never
+  count as reduced. A missing or unavailable section (for example a `/6` summary), incomplete
+  accounting or integrity gaps make it a gap box, and unavailable values read `unavailable`, not 0.
 - **Data quality** — summary source (`summary.json`, `recomputed` or `unavailable`), lifecycle
   accounting, event-log presence, torn tail, named gaps, lifecycle gaps and genuinely running work.
 

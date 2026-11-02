@@ -496,7 +496,7 @@ the earlier 4.290% comparison below predates this instrumentation and has not be
 The performance acceptance comparison accelerates the cadences to a 1.0 s progress interval and a
 0.1 s sample interval (from the 60 s / 1 s defaults) so heartbeats and sampling run inside its
 few-second workload, and records them as `sampling_intervals_seconds` in
-`telemetry-comparison.json`. It also checks the run-metrics/6 `operation_progress`,
+`telemetry-comparison.json`. It also checks the run-metrics/7 `operation_progress`,
 `operation_hotspots` and span `phases`/`expected`/`thread_states`/`progress_count` shapes, and that
 the sections are empty when the instrumentation is disabled.
 `resource_admissions` retains per-lease queue delay and scope/profile for admission and timeout;

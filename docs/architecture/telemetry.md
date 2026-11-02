@@ -236,8 +236,9 @@ new counters as well. See
 ## Existing derived views
 
 `appsec-review metrics --run-id <id>` deterministically rebuilds and persists
-`data/telemetry/summary.json` using `appsec-review/run-metrics/6`
-(historical summaries use `/5` or earlier; `/5` summaries lack `operation_progress`,
+`data/telemetry/summary.json` using `appsec-review/run-metrics/7`
+(historical summaries use `/6` or earlier; `/6` summaries lack `triage_reduction`; `/5` summaries
+also lack `operation_progress`,
 `operation_hotspots` and the span `phases`/`expected`/`thread_states`/`progress_count` fields, and
 their absence is not zero). It separates end-to-end wall time, per-job wall spans, summed
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
@@ -303,6 +304,17 @@ to fresh-call totals. Cell dispatch attempts remain distinct from that fresh-cal
 Neither model counts nor publication/cell success establish findings or safety, and scripted/recorded transports do not
 establish live-provider efficacy. Raw prompts, responses, source, and exception text are not emitted
 by the shared model-call measurement helper.
+
+Version 7 adds the `triage_reduction` section (`appsec-review/triage-reduction-metrics/1`). It
+derives from the hash-verified artifacts bound by the accepted `job_inference_security_review`
+handoff rather than from events: the lane A lead package manifest, the lane A document's
+`lead_accounting` and `proposals`, and the claim ledger projection. Each admitted scanner lead lands
+in one disposition (`survived_confirmed`, `survived_supported`, `dismissed_by_adjudication`,
+`no_claim_raised` or `unresolved`), with breakdowns by lead family and scanner and two reduction
+ratios that carry their denominators. Unadmitted leads are unreviewed, not reduced; unresolved leads
+never count as reduced; dismissed and no-claim leads are triage outcomes, not confirmed false
+positives. Unreadable or mismatched inputs make the section `available: false` with null counts and
+named `integrity_gap_codes`. See [triage reduction](../operations/metrics.md#triage-reduction).
 
 Version 4 adds the top-level `codeql` section (`appsec-review/codeql-execution-metrics/1`). Every
 CodeQL action (database, analyze, compile, export) is one row derived from its

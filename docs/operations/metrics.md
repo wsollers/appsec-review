@@ -7,7 +7,7 @@ recorded in the run telemetry stream.
 
 The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
 adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`), introduced
-in `appsec-review/run-metrics/5` and retained in the current `/6`. It separates handoff admission, execution, coverage, native retention,
+in `appsec-review/run-metrics/5` and retained in the current `/7`. It separates handoff admission, execution, coverage, native retention,
 and observation provenance. Historical `/4` summaries lack this section; absence is not zero
 provenance work. Do not copy claimed event counts into reports:
 retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
@@ -50,7 +50,9 @@ That zero describes avoided producer execution only. Read `resource_spans` and
 Scope/profile, resource lease and tool invocation identifiers correlate concurrent work;
 inclusive process resource samples must not be added across overlapping spans.
 
-The current summary schema is `appsec-review/run-metrics/6`. `/6` adds `operation_progress`,
+The current summary schema is `appsec-review/run-metrics/7`. `/7` adds `triage_reduction` (see
+[triage reduction](#triage-reduction)); historical `/6` summaries lack it, and its absence is not
+zero reduction. `/6` added `operation_progress`,
 `operation_hotspots` and the `resource_spans` `phases`, `expected`, `thread_states` and
 `progress_count` fields (see [operation progress and hotspots](#operation-progress-and-hotspots)).
 Historical `/5` summaries lack them, and their absence is not zero; `/4` summaries also lack
@@ -103,6 +105,43 @@ as missing coverage. A missing, changed, escaped, or malformed receipt is an int
 never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
+
+## Triage reduction
+
+The `triage_reduction` section (`appsec-review/triage-reduction-metrics/1`, scope
+`lane_a_scanner_leads`) is the per-run before/after-triage figure: how many scanner leads were
+collected and admitted for review, and what the review did with each admitted lead. It reads only
+run-owned artifacts bound by the accepted `job_inference_security_review` handoff and re-hashes each
+against its reference: the review handoff, the lane A lead package manifest, the lane A document
+(`lead_accounting`, `proposals`) and the claim ledger projection. It does not scan the target.
+
+- `leads` — `collected`, `admitted`, `not_admitted` (by `residual_coverage`) and
+  `non_lead_observations`. An unadmitted lead was never triaged; it is reported as unreviewed and
+  excluded from every ratio.
+- `admitted_dispositions` — each admitted lead lands in exactly one of `survived_confirmed`,
+  `survived_supported`, `dismissed_by_adjudication` (every linked final claim is `contradicted`,
+  `not_reachable`, `not_exploitable_in_observed_configuration` or `out_of_scope`),
+  `no_claim_raised` (the red cells examined it and proposed nothing) or `unresolved`. A `duplicate`
+  claim resolves through its `duplicate_of` chain; the strongest linked claim decides.
+- `unresolved_by_reason` — `blocked`, `unaccounted`, `insufficient_evidence`, `coverage_gap`,
+  `claim_not_final` and `proposal_without_claim`. Unresolved leads never count as reduced.
+- `dismissed_by_claim_state` counts each distinct dismissing state once per dismissed lead, so its
+  sum may exceed `dismissed_by_adjudication`.
+- `by_family` and `by_scanner` break admitted dispositions down by lead family and scanner.
+  `hunt_lane_claims_excluded` counts lane B claims, which are not scanner-derived.
+- `reduction.ratio_over_resolved` = reduced / (survived + reduced), and
+  `reduction.lower_bound_over_admitted` = reduced / admitted, where reduced is
+  `dismissed_by_adjudication + no_claim_raised`. Both carry their denominators and are null when
+  the denominator is zero.
+
+Dismissed and no-claim leads are triage outcomes, not confirmed false positives: a dismissal is
+model judgment over the evidence presented, and absence of a claim is not proof of safety. Read
+`accounting_complete` before quoting a ratio; it is false when any lead is unresolved, lane A review
+is incomplete, or `integrity_gap_codes` is non-empty (`review_handoff_unavailable`,
+`lead_manifest_unavailable`, `lane_document_unavailable`, `claim_projection_unavailable`,
+`lead_outcome_mismatch`, `lead_outcome_missing`, `lead_package_unlinked`, `duplicate_unresolved`,
+`review_incomplete`, `proposal_claim_missing`). When the inputs cannot be read or verified the
+section is `available: false` with null counts and ratios, never zero.
 
 ## Operation progress and hotspots
 
@@ -229,7 +268,7 @@ requires PoC, chain, remediation, dossier and final-publication tracking from th
 implementation. The existing `metrics` command and summary path remain the operating surface;
 no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
 combined source `6975aef2` retained `completion-process-metrics/1` in `run-metrics/4`;
-`run-metrics/5` retained it alongside interchange and the other domain sections, as does the current `/6`.
+`run-metrics/5` retained it alongside interchange and the other domain sections, as do `/6` and the current `/7`.
 This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
 parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.
