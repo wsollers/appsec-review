@@ -48,12 +48,13 @@ check. Independently verify these facts rather than inferring them from a scanne
 Fixed case (a separate package): S1 decodes a local `const size_t n` only after `size >= 4`;
 G2 rejects `n > sizeof out.name || n > size - 4` and dominates the copy of `n` bytes.
 S2 establishes a live 16-byte array, not a pointer. S1 shows no path bypasses the guard and
-no mutation, alias or lifetime change invalidates it. Subtraction cannot underflow after the
-header check. Only this destination-write predicate is refuted, not every possible parser defect.
+no mutation, alias or lifetime change invalidates it. G1, the header guard, dominates G2, so
+`size - 4` cannot underflow. Only this destination-write predicate is refuted, not every
+possible parser defect.
 
 ```json
 {"action": "final", "result": {"disposition": "contradicted", "per_predicate": {
-  "missing_or_ineffective_guard": {"stance": "contradicts", "cites": ["G2", "S1", "S2"],
+  "missing_or_ineffective_guard": {"stance": "contradicts", "cites": ["G1", "G2", "S1", "S2"],
     "why": "The fixed guard bounds the immutable copy length by both source availability and actual destination capacity on every path."}}}}
 ```
 

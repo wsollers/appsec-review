@@ -174,7 +174,7 @@ LIMITATIONS: Mapping[str, tuple[str, ...]] = {
         "application_risk_matrix/1 rates impact from a configured CWE table only; it is not a CVSS score and "
         "does not assess environment or business impact", _REFERENCE_LIMITATION),
     "application_risk_matrix/3": (
-        "application_risk_matrix/3 rates configured score-factors/1 evidence factors with a configured model; "
+        "application_risk_matrix/3 rates configured score-factors/2 evidence factors with a configured model; "
         "it is not a CVSS score", "environmental_business_impact reflects accepted security tags (exposure, "
         "privilege, data sensitivity), not deployment or business data",
         "impact_class is a cwe_impact_overrides entry or is derived (cwe-impact-derivation/1) from the run's "
@@ -315,7 +315,7 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
     their models (without it, ``application_risk_matrix`` runs at its default implementation and
     model with ``cwe_impact_overrides``). ``cwe_catalog`` is the run's pinned MITRE CWE catalog,
     from which ``impact_class`` is derived (decision 11); without it the factor is missing unless
-    overridden. Each provider receives exactly the ``score-factors/1`` factors it declares,
+    overridden. Each provider receives exactly the ``score-factors/2`` factors it declares,
     extracted from the claim's counted supporting relations; ``evidence`` re-resolves their cited
     entities and supplies accepted tags, and without it payload- and tag-derived factors are
     missing with a reason. FIRST EPSS from ``references`` is dropped here: it is never a scoring
