@@ -24,7 +24,7 @@ Relevant bounded procedures and design references:
 - [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — SVF points-to cross-check producer (opt-in): image, job, cross-check rules, memory-object accessor index, finding-lead memory and caller context, tunables and verification tiers.
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
-- [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository).
+- [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository, the paired case-094 tag and the blind CASTLE-C250 corpus).
 - [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, AST/compile checks, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
 - [`architecture/openvex-export.md`](architecture/openvex-export.md) — automatic standalone affected-only
   local OpenVEX generation/validation: tool author, no-setup snapshot namespace, strict frozen
@@ -50,6 +50,7 @@ Relevant bounded procedures and design references:
   documentation inventory/reconciliation record and checks, with implementation gaps kept explicit.
 - [`architecture/graph-alias-slice-layout-modes.md`](architecture/graph-alias-slice-layout-modes.md) — proposed alias, slice, type-layout and buffer-bound `query_code_graph` modes and sink CFG context (design only, not implemented).
 - [`reviews/detector-coverage-checklist.md`](reviews/detector-coverage-checklist.md) — detector coverage checklist (use after free, double free, null dereference, overflows, uninitialized reads, integer overflow, format string, TOCTOU, command injection, taint, bounds checks) against the registered rule packs and configured scanners, with proposed remediations.
+- [`reviews/castle-style-detector-scoring.md`](reviews/castle-style-detector-scoring.md) — CASTLE-style detector scoring: numbered decisions for negative controls, per-producer and combination scores, the paired case-094 key and the pinned blind CASTLE-C250 regression corpus.
 - [`reviews/code-graph-precomputation-implementation.md`](reviews/code-graph-precomputation-implementation.md) — code-graph implementation record: decisions, chunks and merges, reconciliations, C9 integration fixes, verification, live-unverified items, and next work.
 - [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
 - [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.

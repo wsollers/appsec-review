@@ -157,8 +157,8 @@ low score is a statement about detectors, never evidence that a target is clean.
       executable per file and maps each upstream `compile` line to link libraries (OpenSSL, SQLite3,
       CURL through `find_package`; mysqlclient through pkg-config) and per-target flags. A missing
       library fails the configure step; it is not silently dropped. The current native-cpp image has
-      OpenSSL and pkg-config but not the SQLite3, CURL or mysqlclient development packages, so 26
-      tests cannot configure there until the image owner adds them.
+      OpenSSL and pkg-config but not the SQLite3, CURL or mysqlclient development packages (26 programs
+      link them), so the whole configure fails there until the image owner adds them.
     - *Determinism.* One commit with a fixed author, committer and date, tagged `castle-c250-v1`, so the
       blind commit SHA is reproducible and recorded in the lock and the key
       (`9792c7495ab01a0f38968bce02ba5588ef4c133e`, reproduced from a fresh preparation).

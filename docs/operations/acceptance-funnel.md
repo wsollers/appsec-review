@@ -108,8 +108,8 @@ None of these has been run by the implementing agents.
    git -C targets/castle-c250 checkout castle-c250-v1
    ```
 
-   The native-cpp image must also carry the SQLite3, CURL and mysqlclient development packages, or 26
-   CASTLE programs fail to configure. Review `targets/castle-c250` with `APPSEC_REVIEW_TARGET=/opt/app/targets/castle-c250`
+   The native-cpp image must also carry the SQLite3, CURL and mysqlclient development packages (26 CASTLE
+   programs link them, and the generated CMake requires them), or the whole configure fails. Review `targets/castle-c250` with `APPSEC_REVIEW_TARGET=/opt/app/targets/castle-c250`
    (a `wave1_review` run, or `stepwise.py init`/`next` without accepting), then score it:
 
    ```text
