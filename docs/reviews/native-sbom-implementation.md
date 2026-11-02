@@ -54,6 +54,25 @@ Windows repair-loop record:
   nonconflicting positional event argument.
 - Corrected wiring file: 24 passed in 15.37s (16.80s wall).
 
+The first definitive Linux check at `aa5085f51a5661ce3e8837314b3d4b3ea78d2a39`
+completed with **544 passed, 1 failed, 0 skipped** in 35.05s (35.80s wall):
+
+```text
+.venv/bin/python -m pytest tests/test_native_component_curation.py tests/test_native_metadata_investigation.py tests/test_native_inference_runtime.py tests/test_native_inference_wiring.py tests/test_native_discovery.py tests/test_native_spdx.py tests/test_native_sbom_metrics.py tests/test_skill_separation.py -q -rs --basetemp=test/tmp/native-inference-integrated-e2b31256
+```
+
+The sole failure exposed a real telemetry edge case: a hash-matched accepted legacy job
+without native inference fields took the current-inventory branch and was wrongly reported
+as missing new-stage receipts. The correction recognizes that verified legacy contract
+without weakening receipt requirements for actual inference events. Runtime, curation,
+investigation, SPDX, discovery and skill-separation checks all passed on Linux, including
+the symlink protection unavailable on the Windows host. The focused Windows repair check
+passed four legacy/history/wrong-run/wrong-handoff regressions in 6.40s (7.85s wall):
+
+```text
+.\.venv\Scripts\python.exe -m pytest tests\test_native_sbom_metrics.py::test_legacy_job_reuse_does_not_invent_missing_native_inference_stages tests\test_native_sbom_metrics.py::test_historical_reuse_and_latest_inventory_are_separate tests\test_native_inference_wiring.py::test_wrong_run_reuse_cannot_claim_current_inventory tests\test_native_inference_wiring.py::test_job_reuse_requires_the_original_handoff_hash -q --basetemp=test/tmp/native-inference-legacy-repair
+```
+
 The historical integration/image results below belong to the earlier deterministic feature,
 not this extension. Integration, acceptance, live-model, Docker and Dagster review validation
 of the inference extension are **not run by user direction**.

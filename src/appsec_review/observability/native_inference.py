@@ -95,6 +95,10 @@ def aggregate_native_inference(run_root: Path, records: list[Mapping[str, Any]],
                     digest = next(iter(hashes))
                     if (accepted is not None and accepted.get("attempt_id") == attempt
                             and accepted.get("handoff_sha256") == digest):
+                        if accepted.get("inference_metrics") is None:
+                            if key not in sources and key not in failed:
+                                continue
+                            raise ValueError("native inference result is absent from reused publication")
                         prior = inventory
                     else:
                         if attempt not in historical:
