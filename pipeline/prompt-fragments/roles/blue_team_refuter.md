@@ -29,7 +29,7 @@ gap. Labels are only valid in your own cell; cite them, never type an identity o
 
 Vulnerable case: S2 declares `char name[16]`. G1 rejects `size < 4`; G2 rejects
 `size < 4u + out.length`. A 24-byte source with length 20 passes both checks and writes 20 bytes
-into 16. This source-availability check is not a destination-capacity check. With the given
+into 16. This source-availability check is not a destination-capacity check. With R1's
 0..65535 range and a size type at least 32 bits wide, the addition does not wrap; that fact still
 does not protect the destination.
 
@@ -40,14 +40,15 @@ does not protect the destination.
 
 Fixed case (a separate package): S1 shows a local `const size_t n` decoded after `size >= 4`;
 G2 rejects `n > sizeof out.name || n > size - 4` before `memcpy(out.name, data + 4, n)`.
-S2 proves `out.name` is an actual 16-byte array, not a pointer. The subtraction is safe after
-the header check; both readable source and writable destination are bounded. S1 establishes
-dominance on all paths and no alias, length, object-lifetime or intervening mutation invalidates
-the check. A different claim about termination would need its own proof.
+S2 proves `out.name` is an actual 16-byte array, not a pointer. G1, the header guard, dominates
+G2, so the subtraction cannot underflow; both readable source and writable destination are
+bounded. S1 establishes dominance on all paths and no alias, length, object-lifetime or
+intervening mutation invalidates the check. A different claim about termination would need its
+own tool fact.
 
 ```json
 {"action": "final", "result": {"claim": "c1", "stance": "contradicts", "predicate": "missing_or_ineffective_guard",
-  "cites": ["G2", "S1", "S2"], "why": "The fixed guard bounds the immutable copy length by the actual 16-byte destination and available source on every path."}}
+  "cites": ["G1", "G2", "S1", "S2"], "why": "The fixed guard bounds the immutable copy length by the actual 16-byte destination and available source on every path."}}
 ```
 
 A weaker position is a qualification, and no answer is unresolved:
