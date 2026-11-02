@@ -73,6 +73,24 @@ passed four legacy/history/wrong-run/wrong-handoff regressions in 6.40s (7.85s w
 .\.venv\Scripts\python.exe -m pytest tests\test_native_sbom_metrics.py::test_legacy_job_reuse_does_not_invent_missing_native_inference_stages tests\test_native_sbom_metrics.py::test_historical_reuse_and_latest_inventory_are_separate tests\test_native_inference_wiring.py::test_wrong_run_reuse_cannot_claim_current_inventory tests\test_native_inference_wiring.py::test_job_reuse_requires_the_original_handoff_hash -q --basetemp=test/tmp/native-inference-legacy-repair
 ```
 
+The corrected exact commit `5a6ddaf639bd9366e0960fe61fcd7eb0dfc0aa8f` passed the
+smallest affected Linux file set: **107 passed, 0 failed, 0 skipped** in 21.31s
+(21.90s wall), including the formerly failing legacy-reuse regression:
+
+```text
+.venv/bin/python -m pytest tests/test_native_inference_wiring.py tests/test_native_sbom_metrics.py -q -rs --basetemp=test/tmp/native-inference-legacy-fix-e2b31256
+```
+
+Both Linux checks used the isolated checkout's own environment with checkout-local imports.
+The unchanged algorithm/runtime/SPDX/discovery/skill files retain the successful first-run
+evidence; they were not redundantly rerun for the four-line telemetry repair. Together the
+initial selection and affected repair cover 545 focused cases, not a full acceptance claim.
+
+The user directed Dagster to stop before definitive WSL-main integration. Only its three
+application containers were stopped; Postgres and feed data were retained. No service restart,
+image rebuild or deployment validation is part of this source change. Updating WSL source
+alone is not a claim that the stopped containers contain the new code.
+
 The historical integration/image results below belong to the earlier deterministic feature,
 not this extension. Integration, acceptance, live-model, Docker and Dagster review validation
 of the inference extension are **not run by user direction**.
