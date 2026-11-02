@@ -737,9 +737,9 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
 def overlay_capacity_keys(document: object) -> tuple[str, ...]:
     """Validate a local capacity overlay and return the dotted keys it sets.
 
-    The overlay may set only ``CAPACITY_KEYS``: the inference review's team count, Dagster pool
-    limits and the host resource budget (``review_policy.resources``). Every other key, and every
-    empty table, is rejected.
+    The overlay may set only ``CAPACITY_KEYS``: the inference review's team count and result-cache
+    placement, Dagster pool limits and the host resource budget (``review_policy.resources``). Every
+    other key, and every empty table, is rejected.
     """
     from .inference_review import JOB_ID
 
@@ -757,11 +757,17 @@ def overlay_capacity_keys(document: object) -> tuple[str, ...]:
     if "jobs" in root:
         jobs = table(root["jobs"], "jobs", {JOB_ID})
         job = table(jobs[JOB_ID], f"jobs.{JOB_ID}", {"settings"})
-        settings = table(job["settings"], f"jobs.{JOB_ID}.settings", {"teams"})
-        teams = table(settings["teams"], f"jobs.{JOB_ID}.settings.teams", {"review_teams"})
-        if type(teams["review_teams"]) is not int:
-            raise ValueError("configuration overlay review_teams must be an integer")
-        keys.append(f"jobs.{JOB_ID}.settings.teams.review_teams")
+        settings = table(job["settings"], f"jobs.{JOB_ID}.settings", {"teams", "result_cache"})
+        if "teams" in settings:
+            teams = table(settings["teams"], f"jobs.{JOB_ID}.settings.teams", {"review_teams"})
+            if type(teams["review_teams"]) is not int:
+                raise ValueError("configuration overlay review_teams must be an integer")
+            keys.append(f"jobs.{JOB_ID}.settings.teams.review_teams")
+        if "result_cache" in settings:
+            # Values are validated with the rest of the job settings after the overlay is applied.
+            cache = table(settings["result_cache"], f"jobs.{JOB_ID}.settings.result_cache",
+                          {"enabled", "roles", "endpoint", "ttl_seconds", "connect_timeout_seconds"})
+            keys.extend(f"jobs.{JOB_ID}.settings.result_cache.{name}" for name in sorted(cache))
     if "orchestration" in root:
         orchestration = table(root["orchestration"], "orchestration", {"dagster"})
         dagster = table(orchestration["dagster"], "orchestration.dagster", {"pools"})
@@ -784,12 +790,20 @@ def _apply_overlay(document: dict[str, Any], overlay: Mapping[str, Any]) -> None
     from .inference_review import JOB_ID
 
     if "jobs" in overlay:
+        settings_overlay = overlay["jobs"][JOB_ID]["settings"]
         job = document.get("jobs", {}).get(JOB_ID)
-        teams = job.get("settings", {}).get("teams") if isinstance(job, dict) else None
-        if not isinstance(teams, dict):
-            raise ValueError(f"configuration overlay sets review_teams but jobs.{JOB_ID}.settings.teams "
-                             "is not configured")
-        teams["review_teams"] = overlay["jobs"][JOB_ID]["settings"]["teams"]["review_teams"]
+        settings = job.get("settings") if isinstance(job, dict) else None
+        if "teams" in settings_overlay:
+            teams = settings.get("teams") if isinstance(settings, dict) else None
+            if not isinstance(teams, dict):
+                raise ValueError(f"configuration overlay sets review_teams but jobs.{JOB_ID}.settings.teams "
+                                 "is not configured")
+            teams["review_teams"] = settings_overlay["teams"]["review_teams"]
+        if "result_cache" in settings_overlay:
+            if not isinstance(settings, dict) or not isinstance(settings.setdefault("result_cache", {}), dict):
+                raise ValueError(f"configuration overlay sets result_cache but jobs.{JOB_ID}.settings "
+                                 "is not configured")
+            settings["result_cache"].update(settings_overlay["result_cache"])
     if "orchestration" in overlay:
         orchestration = document.setdefault("orchestration", {})
         dagster = orchestration.setdefault("dagster", {}) if isinstance(orchestration, dict) else None

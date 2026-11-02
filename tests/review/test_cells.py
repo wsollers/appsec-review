@@ -432,3 +432,136 @@ def test_receipt_hashes_ignore_response_wall_clock_fields(tmp_path: Path) -> Non
         outcome = run(tmp_path / name, infer, core=core)
         receipts.append(outcome.receipt_paths[0].read_bytes())
     assert receipts[0] == receipts[1]
+
+
+# ------------------------------------------------------------------------------------------------ result memo
+
+MEMO_RUN = "2026-10-12-0001"
+CLAIM = "claim-" + "9" * 64
+
+
+def blue_spec(round: int = 0, **overrides) -> CellSpec:
+    values = dict(lane=Lane.LEAD, role=Role.BLUE_TEAM_REFUTER, claim_id=CLAIM, strategy=None, task="blue_control",
+                  round=round, round_delta_sha256=None if round == 0 else "d" * 64)
+    values.update(overrides)
+    return spec(**values)
+
+
+def blue_capability(round: int = 0) -> CellCapability:
+    return capability(role=Role.BLUE_TEAM_REFUTER, round=round)
+
+
+def memo_run(tmp_path: Path, infer, memo, *, round: int = 0, validate_final=validate, **overrides):
+    return reuse_or_run(blue_spec(round, **overrides), infer=infer, core=FakeCore(),
+                        capability=blue_capability(round), receipts_root=tmp_path / "cells",
+                        validate_final=validate_final, memo=memo)
+
+
+def memo_for(cache, run_id: str = MEMO_RUN):
+    from appsec_review.review.result_cache import Memo
+    return Memo(cache, run_id)
+
+
+def seed_pointer(cache, pointer, *, round: int = 1) -> None:
+    from appsec_review.review.result_cache import memo_key
+    cache.entries[memo_key(blue_spec(round), blue_capability(round), MEMO_RUN)] = pointer.encode()
+
+
+def test_a_later_round_reuses_the_memoized_result_through_its_own_receipt(tmp_path: Path) -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache, MemoPointer
+    from appsec_review.storage import file_sha256
+    cache = InMemoryResultCache()
+    first = memo_run(tmp_path, ScriptedInfer(retrieve({"tool": "read_excerpt", "parameters": {"identity": SPAN}}),
+                                             final(SPAN)), memo_for(cache))
+    assert (first.reused, first.reuse_source, first.memo_status) == (False, None, "miss")
+    assert list(cache.entries.values()) == [MemoPointer(first.record.cell_id, 1, first.record.receipt_sha256).encode()]
+    never = ScriptedInfer()
+    second = memo_run(tmp_path, never, memo_for(cache), round=1)
+    assert never.requests == [] and second.result == first.result      # SPAN was retrieved by the source cell
+    assert (second.reused, second.reuse_source, second.memo_status) == (True, "memo", "hit")
+    assert second.record.cell_id != first.record.cell_id and second.record.status is CellStatus.SUCCEEDED
+    path = tmp_path / "cells" / second.record.cell_id / f"attempt-{second.record.attempts}.json"
+    assert second.receipt_paths == (path,) and file_sha256(path) == second.record.receipt_sha256
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    assert receipt["reused_from"] == {"cell_id": first.record.cell_id, "attempt": 1,
+                                      "receipt_sha256": first.record.receipt_sha256,
+                                      "memo_key": next(iter(cache.entries))}
+    assert receipt["turns"] == [] and set(receipt["counts"].values()) == {0}
+    assert receipt["capability_sha256"] == blue_capability(1).capability_sha256
+    assert receipt["seen_identities"] == json.loads(first.receipt_paths[0].read_text())["seen_identities"]
+    assert set(second.counts.values()) == {0} and second.gaps == () and cache.puts == 1
+    # A resumed attempt reuses the memo receipt as this cell's own; a memo receipt is never a memo source.
+    resumed = memo_run(tmp_path, ScriptedInfer(), memo_for(InMemoryResultCache()), round=1)
+    assert (resumed.reuse_source, resumed.record) == ("receipt", second.record)
+    seed_pointer(cache, MemoPointer(second.record.cell_id, 1, second.record.receipt_sha256), round=2)
+    third = memo_run(tmp_path, ScriptedInfer(final(LEAD)), memo_for(cache), round=2)
+    assert (third.reused, third.memo_status) == (False, "miss")
+
+
+@pytest.mark.parametrize("pointer", ["forged", "mismatched_sha", "self", "failed_source", "tampered_source"])
+def test_an_untrusted_memo_pointer_is_a_miss_and_the_cell_runs(tmp_path: Path, pointer: str) -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache, MemoPointer
+    from appsec_review.storage import file_sha256
+    cache = InMemoryResultCache()
+    if pointer == "failed_source":
+        source = memo_run(tmp_path, ScriptedInfer(RuntimeError("provider down")), None)
+        assert source.record.status is CellStatus.FAILED
+    else:
+        source = memo_run(tmp_path, ScriptedInfer(final(LEAD)), None)
+    sha = file_sha256(source.receipt_paths[0])
+    seed_pointer(cache, {
+        "forged": MemoPointer("cell-" + "e" * 64, 1, sha),
+        "mismatched_sha": MemoPointer(source.record.cell_id, 1, "0" * 64),
+        "self": MemoPointer(cell_fingerprint(blue_spec(1), blue_capability(1)), 1, sha),
+        "failed_source": MemoPointer(source.record.cell_id, 1, sha),
+        "tampered_source": MemoPointer(source.record.cell_id, 1, sha),
+    }[pointer])
+    if pointer == "tampered_source":
+        source.receipt_paths[0].write_text(source.receipt_paths[0].read_text().replace(LEAD, SPAN))
+    infer = ScriptedInfer(final(LEAD))
+    outcome = memo_run(tmp_path, infer, memo_for(cache), round=1)
+    assert len(infer.requests) == 1 and outcome.record.status is CellStatus.SUCCEEDED
+    assert (outcome.reused, outcome.reuse_source, outcome.memo_status) == (False, None, "miss")
+
+
+def test_a_memoized_result_that_fails_revalidation_is_a_miss(tmp_path: Path) -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache
+    cache = InMemoryResultCache()
+    memo_run(tmp_path, ScriptedInfer(final(LEAD)), memo_for(cache))
+    stricter = lambda result: [] if result == final(SPAN)["result"] else ["stricter"]  # noqa: E731
+    infer = ScriptedInfer(retrieve({"tool": "read_excerpt", "parameters": {"identity": SPAN}}), final(SPAN))
+    outcome = memo_run(tmp_path, infer, memo_for(cache), round=1, validate_final=stricter)
+    assert len(infer.requests) == 2 and (outcome.reused, outcome.memo_status) == (False, "miss")
+
+
+def test_memo_entries_never_cross_runs_and_an_unavailable_store_only_runs_the_cell(tmp_path: Path) -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache
+    cache = InMemoryResultCache()
+    memo_run(tmp_path / "a", ScriptedInfer(final(LEAD)), memo_for(cache))
+    other = ScriptedInfer(final(LEAD))
+    assert memo_run(tmp_path / "a", other, memo_for(cache, "2026-10-12-0002"), round=1).memo_status == "miss"
+    assert len(other.requests) == 1
+    down = InMemoryResultCache(available=False)
+    infer = ScriptedInfer(final(LEAD))
+    outcome = memo_run(tmp_path / "b", infer, memo_for(down))
+    assert outcome.record.status is CellStatus.SUCCEEDED and len(infer.requests) == 1
+    assert (outcome.reused, outcome.memo_status) == (False, "unavailable") and down.unavailable == 2
+
+
+def test_cells_without_a_memo_or_a_claim_never_consult_it(tmp_path: Path) -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache
+    cache = InMemoryResultCache()
+    plain = memo_run(tmp_path, ScriptedInfer(final(LEAD)), None)
+    unbound = memo_run(tmp_path / "x", ScriptedInfer(final(LEAD)), memo_for(cache), claim_id=None)
+    assert plain.memo_status is None and unbound.memo_status is None and cache.gets == cache.puts == 0
+
+
+def test_a_receipt_with_a_malformed_memo_source_is_an_integrity_error(tmp_path: Path) -> None:
+    outcome = run(tmp_path, ScriptedInfer(final(LEAD)))
+    path = outcome.receipt_paths[0]
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    receipt["reused_from"] = {"cell_id": outcome.record.cell_id}
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    with pytest.raises(IntegrityError, match="memo source"):
+        reuse_or_run(spec(), infer=ScriptedInfer(), core=FakeCore(), capability=capability(),
+                     receipts_root=tmp_path / "cells", validate_final=validate)

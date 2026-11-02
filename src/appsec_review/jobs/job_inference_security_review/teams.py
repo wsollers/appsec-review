@@ -48,6 +48,7 @@ from appsec_review.review.budget import JobBudget
 from appsec_review.review.adjudication import adjudicate
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
 from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
+from appsec_review.review.result_cache import Memo
 from appsec_review.review.claims import normalize_claim
 from appsec_review.review.compact import Expander, expand_blue, expand_judge, expand_red, expand_verifier
 from appsec_review.review.fact_summary import summarize_fact
@@ -152,6 +153,8 @@ class ReviewContext:
     max_page_size: int = 20
     max_depth: int = 4
     attempt_id: str = "-"
+    # The run's blue-cell result memo (``review.result_cache``); ``None`` when disabled.
+    result_cache: Any = None
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
     _views: dict[str, PackageView] = field(default_factory=dict)
@@ -304,7 +307,8 @@ class TeamResult:
     rounds: list[dict[str, Any]] = field(default_factory=list)
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
-                                                            "cells_not_launched": 0})
+                                                            "cells_memo_reused": 0, "cells_not_launched": 0,
+                                                            "memo_cache_unavailable": 0})
 
 
 @dataclass
@@ -517,6 +521,7 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
                 "cell_id": cell.cell_id, "package_id": spec.package_id, "lane": spec.lane.value,
                 "role": spec.role.value, "persona": spec.persona,
                 "terminal_status": outcome.record.status.value, "reused": outcome.reused,
+                "reuse_source": outcome.reuse_source, "memo": outcome.memo_status,
                 "model_dispatches": dispatches, "counts": dict(outcome.counts),
                 "gap_count": len(outcome.gaps),
                 "duration_ms": max(0, int((time.monotonic() - started) * 1000))})
@@ -530,7 +535,7 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
     retry = ctx.settings.retry
     guard = _Guard(ctx, cell, ctx.profile(cell.spec.role), capture=capture)
     outcome = reuse_or_run(cell.spec, infer=guard, core=ctx.core, capability=cell.capability,
-                           receipts_root=ctx.receipts_root, validate_final=validate,
+                           receipts_root=ctx.receipts_root, validate_final=validate, memo=_memo(ctx, cell),
                            max_attempts=retry.max_attempts, retry_on_timeout=retry.retry_on_timeout,
                            retry_on_provider_error=retry.retry_on_provider_error,
                            retry_on_invalid_output=retry.retry_on_invalid_output)
@@ -538,6 +543,18 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
         ctx.budget.charge(retrieval_queries=int(outcome.counts["queries"]))
     cell.outcome, cell.record = outcome, outcome.record
     completed(outcome, guard.dispatches)
+
+
+def _memo(ctx: ReviewContext, cell: _Cell) -> Memo | None:
+    """The run's result memo for a claim-bound blue cell of a configured role; never for red, the blind
+    verifier (R6: no shared cache entry) or the judge."""
+    if ctx.result_cache is None:
+        return None
+    memo = ctx.settings.result_cache
+    if (not memo.enabled or cell.spec.role is not Role.BLUE_TEAM_REFUTER
+            or cell.spec.task not in memo.roles or not cell.spec.claim_id):
+        return None
+    return Memo(ctx.result_cache, ctx.run_id)
 
 
 def _seen(cell: _Cell) -> set[str]:
@@ -795,8 +812,11 @@ def _record(result: TeamResult, cell: _Cell) -> None:
                                 "package_id": cell.spec.package_id, **cell.capability.body(),
                                 "capability_sha256": cell.capability.capability_sha256})
     key = ("cells_not_launched" if cell.record.status is CellStatus.NOT_LAUNCHED
+           else "cells_memo_reused" if cell.outcome.reuse_source == "memo"
            else "cells_reused" if cell.outcome.reused else "cells_run")
     result.counts[key] += 1
+    if cell.outcome.memo_status == "unavailable":
+        result.counts["memo_cache_unavailable"] += 1
 
 
 def _coverage_row(work: PackageWork, cell: _Cell) -> dict[str, Any]:
@@ -1563,7 +1583,8 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "capabilities": [row for team in teams for row in team.capabilities],
         "security_events": [dict(event) for team in teams for event in team.security_events],
         "counts": {key: sum(team.counts[key] for team in teams)
-                   for key in ("cells_run", "cells_reused", "cells_not_launched")},
+                   for key in ("cells_run", "cells_reused", "cells_memo_reused", "cells_not_launched",
+                               "memo_cache_unavailable")},
         "ledger_shard": {"path": str(ledger_path), "stream": stream, "events": receipt.event_count,
                          "sha256": file_sha256(ledger_path)},
     }

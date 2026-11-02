@@ -273,8 +273,8 @@ def test_checked_in_prod_capacity_overlay_loads(profile: str) -> None:
 
 
 def test_capacity_key_allowlist_is_exposed() -> None:
-    assert CAPACITY_KEYS == (f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.*",
-                             "review_policy.resources.*")
+    assert CAPACITY_KEYS == (f"jobs.{JOB}.settings.teams.review_teams", f"jobs.{JOB}.settings.result_cache.*",
+                             "orchestration.dagster.pools.*", "review_policy.resources.*")
     assert overlay_capacity_keys({"orchestration": {"dagster": {"pools": {"index": 2}}}}) == (
         "orchestration.dagster.pools.index",)
 
@@ -323,6 +323,51 @@ def test_capacity_keys_are_excluded_from_the_semantic_view(tmp_path: Path) -> No
     assert semantic_settings_sha256(larger_budget) != semantic_settings_sha256(base)
     assert semantic_settings_sha256(other_share) != semantic_settings_sha256(base)
     assert base.as_document()["teams"]["review_teams"] == 3   # the full view still carries capacity
+
+
+# ---------------------------------------------------------------- result memo
+
+MEMO = f"{SECTION}.result_cache]"
+MEMO_BLOCK = (f'{MEMO}\nenabled = true\nroles = ["blue_control", "blue_reachability"]\n'
+              'endpoint = "redis://result-cache:6379/0"\nttl_seconds = 604800\nconnect_timeout_seconds = 0.5\n')
+
+
+def test_result_cache_defaults_memoize_only_blue_tasks(tmp_path: Path) -> None:
+    memo = _settings(load_config(ROOT / "appsec-review.toml")).result_cache
+    assert (memo.enabled, memo.roles, memo.endpoint, memo.ttl_seconds, memo.connect_timeout_seconds) == (
+        True, ("blue_control", "blue_reachability"), "redis://result-cache:6379/0", 604800, 0.5)
+    absent = _settings(_variant(tmp_path, (MEMO_BLOCK, "")))
+    assert absent.result_cache.enabled is False
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    ('roles = ["blue_control", "blue_reachability"]', 'roles = ["blue_control", "independent_verifier"]', "blue"),
+    ('roles = ["blue_control", "blue_reachability"]', 'roles = ["adjudicate_claim"]', "blue"),
+    ('roles = ["blue_control", "blue_reachability"]', 'roles = ["red_team_analyst"]', "blue"),
+    ('roles = ["blue_control", "blue_reachability"]', "roles = []", "roles"),
+    ('endpoint = "redis://result-cache:6379/0"', 'endpoint = "http://result-cache:6379"', "endpoint"),
+    ('endpoint = "redis://result-cache:6379/0"', 'endpoint = "redis://user:secret@result-cache:6379/0"', "endpoint"),
+    ('endpoint = "redis://result-cache:6379/0"', 'endpoint = "redis://result-cache:70000/0"', "endpoint"),
+    ("ttl_seconds = 604800", "ttl_seconds = 10", "ttl_seconds"),
+    ("ttl_seconds = 604800", "ttl_seconds = 99999999", "ttl_seconds"),
+    ("connect_timeout_seconds = 0.5", "connect_timeout_seconds = 0.0", "connect_timeout_seconds"),
+    ("connect_timeout_seconds = 0.5", "connect_timeout_seconds = 30", "connect_timeout_seconds"),
+    ("connect_timeout_seconds = 0.5", "connect_timeout_seconds = 0.5\nshared = true", "shared"),
+])
+def test_result_cache_settings_are_closed_and_bounded(tmp_path: Path, old: str, new: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _variant(tmp_path, (MEMO_BLOCK, MEMO_BLOCK.replace(old, new, 1)))
+
+
+def test_result_cache_is_overlay_capacity_and_never_fingerprinted(tmp_path: Path) -> None:
+    base = _settings(_variant(tmp_path / "base"))
+    overlay = f'{MEMO}\nendpoint = "redis://127.0.0.1:6380/1"\nenabled = false\n'
+    local = _variant(tmp_path / "local", overlay=overlay)
+    memo = _settings(local).result_cache
+    assert (memo.endpoint, memo.enabled, memo.roles) == ("redis://127.0.0.1:6380/1", False, base.result_cache.roles)
+    assert "result_cache" not in semantic_settings_view(base)["settings"]
+    assert semantic_settings_sha256(_settings(local)) == semantic_settings_sha256(base)
+    assert base.as_document()["result_cache"]["ttl_seconds"] == 604800
 
 
 # ---------------------------------------------------------------- Dagster pools

@@ -48,6 +48,7 @@ from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
 )
 from appsec_review.review.references import load_cwe_reference
+from appsec_review.review.result_cache import cache_from_settings
 from appsec_review.review.scoring.cwe_impact import ImpactCatalog
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.teams import ReviewTeamSemaphore
@@ -241,6 +242,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
     return ReviewContext(
         run_root=Path(run_root), run_id=run_id, repository_root=root, settings=settings, core=core, infer=infer,
         attempt_id=Path(attempt_root).name,
+        result_cache=cache_from_settings(settings.result_cache, run_id),
         receipts_root=Path(run_root) / "data" / "jobs" / JOB_ID / "cells",
         budget=JobBudget(Path(attempt_root) / "budget", settings.budgets),
         semaphore=ReviewTeamSemaphore.for_run(Path(run_root), settings.teams.review_teams),

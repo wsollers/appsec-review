@@ -150,8 +150,8 @@ review_teams = 1
 
 Set `APPSEC_REVIEW_CONFIG_OVERLAY=local-capacity.toml`, pass `overlay=` to `load_config`, or choose an
 overlay under `test/acceptance` for one Dagster run with `scripts/review-start --overlay`. The
-overlay may set only `review_teams`, `orchestration.dagster.pools.*` and
-`review_policy.resources.*` (the host resource budget); any other key is rejected.
+overlay may set only `review_teams`, `[...settings.result_cache]` (see [Blue result memo](#blue-result-memo)),
+`orchestration.dagster.pools.*` and `review_policy.resources.*` (the host resource budget); any other key is rejected.
 It is recorded as its own hashed layer in the run's configuration manifest. Capacity is excluded
 from cell fingerprints, so runs with different team counts reuse each other's cells and produce
 identical canonical outputs.
@@ -199,6 +199,38 @@ The blind verifier receives `claim.hypothesis` with `condition` (the canonical s
 `affected_labels`, `weakness_cwe`, and closed `preconditions`, alongside the claim ID and required
 predicates. It independently reconstructs the alleged condition from evidence. This is not the red
 worker's exact mechanism or statement: statement, argument, trigger, and rationale prose are withheld.
+
+### Blue result memo
+
+A claim repeated in a later round gets new blue cells that differ only by round, so they would ask the
+model the same question again. The run-scoped blue result memo
+([architecture](../architecture/inference-security-review.md#delta-driven-rounds-and-resumption)) reuses the
+earlier answer instead:
+
+```toml
+[jobs.job_inference_security_review.settings.result_cache]
+enabled = true
+roles = ["blue_control", "blue_reachability"]   # blue tasks only; anything else is rejected
+endpoint = "redis://result-cache:6379/0"        # Garnet (Redis protocol), no credentials in the URL
+ttl_seconds = 604800                            # 60..2592000; Garnet expires entries
+connect_timeout_seconds = 0.5                   # 0.05..10; connect and socket timeout
+```
+
+- **Scope.** Keys are prefixed `appsec-review:review-memo:<run_id>:`, so entries never cross runs
+  but do survive resumed job attempts. Red, the blind verifier (R6) and the adjudication judge never
+  use the memo, and neither does any cell without a claim.
+- **Settings.** The table is capacity, not review semantics. It is excluded from the semantic
+  settings hash, a capacity overlay may set it, and an absent table means off. The password, if
+  any, comes from `APPSEC_RESULT_CACHE_PASSWORD`. It is never logged.
+- **Fail-open.** A store that is unreachable, times out, or has no `redis` client turns every lookup
+  into a miss and every write into a no-op. The first failure disables the memo for the rest of
+  that job attempt and logs one `REVIEW_RESULT_CACHE_UNAVAILABLE` warning. The cell runs the model
+  normally, and the outcome is identical to running without the memo. Unavailability is not a gap.
+- **Auditing.** A hit writes the cell's own receipt with `turns: []`, zero counts, and
+  `reused_from = {cell_id, attempt, receipt_sha256, memo_key}`, which names the receipt of the model
+  call that produced the result. A pointer that fails any check is a miss. The checks are: another
+  cell in this run, matching hash, succeeded, not itself a memo reuse, same model and guidance, and
+  revalidated citations.
 
 ## Opt-in medium/low exploration
 
@@ -610,6 +642,10 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
 - **View bounds.** `max_view_bytes`, `max_view_source_lines` and `max_view_type_declarations` under
   `[jobs.job_inference_security_review.settings.packages]` bound what a cell sees. A view that omitted rows names
   them in a material gap and in `omitted`; the whole stored package, including every gap, stays hash-pinned.
+- **Memo reuse.** `INFERENCE_REVIEW_CELL_COMPLETED` carries `reused` (bool), `reuse_source` (`receipt` on resume,
+  `memo` on a blue result memo hit, otherwise null) and `memo` (`hit`, `miss`, `unavailable`, or null when the cell
+  is not memo-eligible). Lane documents count `cells_memo_reused` and `memo_cache_unavailable` beside `cells_run`
+  and `cells_reused`.
 
 ## The adjudication judge
 
@@ -738,6 +774,9 @@ read this handoff ([`final-report.md`](final-report.md)); the two remediation jo
   tampered manifest or shard, a broken ledger chain, a non-deterministic merge, or the application
   granting a forbidden capability.
 - Re-executing a lane unit reuses every succeeded cell whose fingerprint still matches.
+- Within a run, a later round's blue cell for the same claim and round-free request reuses the earlier blue
+  result through the [blue result memo](#blue-result-memo). An unavailable memo store only costs model calls; it is
+  never a gap or a failure.
 - A judge that fails, times out or returns an invalid answer is an ordinary cell gap with one terminal record; the
   claim is still adjudicated by R5 and published without a `judge_verdict`, and is never a PoC candidate. A missing
   verdict is not a `neither` and not agreement with either side. `accounting.judge_verdicts` in the handoff counts

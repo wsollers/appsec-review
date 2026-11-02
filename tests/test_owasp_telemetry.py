@@ -270,7 +270,7 @@ def test_review_cell_terminal_metrics_cover_reuse_and_not_launched(tmp_path, mon
         budget=SimpleNamespace(cell_launch_allowed=lambda: allowed, charge=lambda **kw: None,
                                usage_exhausted=lambda: "max_model_turns"),
         infer=lambda *args, **kwargs: ModelResult({}), profile=lambda role: profile,
-        core=None, receipts_root=tmp_path / "receipts")
+        core=None, receipts_root=tmp_path / "receipts", result_cache=None)
     cell = SimpleNamespace(cell_id="cell", spec=SimpleNamespace(
         lane=Lane.HUNT, package_id="package", role=Role.INDEPENDENT_VERIFIER, persona="specialist",
         stack_profile="stack", task="task", claim_id=None), capability=None)
