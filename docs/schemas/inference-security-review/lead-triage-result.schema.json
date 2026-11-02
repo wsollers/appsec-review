@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/inference-security-review/lead-triage-result.schema.json",
   "title": "Lead severity triage result",
-  "description": "The closed reply of one lead_triager batch turn (appsec-review/lead-triage-result/1). Exactly one item per lead of the request; a lead the excerpt cannot support is answered with basis insufficient_context and a null severity, which leaves the lead unknown. The reason bound here is the hard ceiling; triage.max_reason_chars tightens it.",
+  "description": "The closed reply of one lead_triager batch turn (appsec-review/lead-triage-result/1). Exactly one item per lead of the request; a lead the excerpt cannot support is answered with basis insufficient_context and a null severity, which leaves the lead unknown. An item may cite one supplied tool fact by id in tool_fact. The reason bound here is the hard ceiling; triage.max_reason_chars tightens it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -55,6 +55,15 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "tool_fact": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Optional id of one entry of the finding's supplied tool_facts that the reason relies on (numeric-reasoning-guardrail/1). A reason that reasons about ranges, bounds, overflow, wrap or loops must cite one, or the lead stays unknown with triage_unresolved:uncited_numeric_reasoning. An id the request did not supply for that lead is a validation error."
           }
         },
         "allOf": [
