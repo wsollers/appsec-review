@@ -531,3 +531,61 @@ def test_poc_basis_briefs_are_stored_beside_the_claims_and_never_as_claim_state(
     document = json.loads((tmp_path / "poc-basis.json").read_text())
     assert entry["count"] == 2 and [item["claim_id"][-1] for item in document["briefs"]] == ["a", "b"]
     assert "not claims, evidence" in document["statement"]
+
+
+def _memo_ctx(cache, **settings):
+    from appsec_review.config.inference_review import ResultCacheSettings
+    return SimpleNamespace(result_cache=cache, run_id="2026-10-12-0001",
+                           settings=SimpleNamespace(result_cache=ResultCacheSettings(**{"enabled": True, **settings})))
+
+
+def _memo_cell(role: Role, task: str, claim_id: str | None = "claim-" + "c" * 64):
+    return SimpleNamespace(spec=SimpleNamespace(role=role, task=task, claim_id=claim_id))
+
+
+@pytest.mark.parametrize(("role", "task", "claim_id", "eligible"), [
+    (Role.BLUE_TEAM_REFUTER, "blue_control", "claim-" + "c" * 64, True),
+    (Role.BLUE_TEAM_REFUTER, "blue_reachability", "claim-" + "c" * 64, True),
+    (Role.BLUE_TEAM_REFUTER, "blue_control", None, False),            # no claim, no (function, value) key
+    (Role.BLUE_TEAM_REFUTER, "chain_refuter", "claim-" + "c" * 64, False),
+    (Role.INDEPENDENT_VERIFIER, "independent_verifier", "claim-" + "c" * 64, False),   # R6
+    (Role.ADJUDICATION_JUDGE, "adjudicate_claim", "claim-" + "c" * 64, False),
+    (Role.RED_TEAM_ANALYST, "blue_control", "claim-" + "c" * 64, False),
+])
+def test_only_claim_bound_blue_cells_use_the_result_memo(role, task, claim_id, eligible) -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache, Memo
+    cache = InMemoryResultCache()
+    memo = team_handler._memo(_memo_ctx(cache), _memo_cell(role, task, claim_id))
+    assert memo == (Memo(cache, "2026-10-12-0001") if eligible else None)
+
+
+def test_a_disabled_absent_or_narrowed_memo_is_never_consulted() -> None:
+    from appsec_review.review.result_cache import InMemoryResultCache
+    blue = _memo_cell(Role.BLUE_TEAM_REFUTER, "blue_reachability")
+    assert team_handler._memo(_memo_ctx(InMemoryResultCache(), enabled=False), blue) is None
+    assert team_handler._memo(_memo_ctx(None), blue) is None
+    assert team_handler._memo(_memo_ctx(InMemoryResultCache(), roles=("blue_control",)), blue) is None
+
+
+def test_team_counts_separate_memo_reuse_and_store_unavailability() -> None:
+    from appsec_review.jobs.job_inference_security_review.teams import TeamResult, _record
+    from appsec_review.review.models import CellRecord
+
+    def cell(index: int, *, reused: bool, source: str | None, memo: str | None):
+        record = CellRecord(cell_id=f"cell-{index:064d}", package_id="package-1", lane=Lane.LEAD,
+                            role=Role.BLUE_TEAM_REFUTER, persona="p", stack_profile="s", task="blue_control",
+                            claim_id="claim-" + "c" * 64, status=CellStatus.SUCCEEDED, attempts=1, gap_ids=(),
+                            receipt_sha256="a" * 64)
+        outcome = SimpleNamespace(record=record, gaps=(), security_events=(), reused=reused,
+                                  reuse_source=source, memo_status=memo)
+        return SimpleNamespace(record=record, outcome=outcome,
+                               spec=SimpleNamespace(role=Role.BLUE_TEAM_REFUTER, package_id="package-1"),
+                               capability=SimpleNamespace(body=dict, capability_sha256="b" * 64))
+
+    team = TeamResult("package-1", Lane.LEAD, None)
+    for index, (reused, source, memo) in enumerate([(False, None, "miss"), (True, "memo", "hit"),
+                                                     (True, "receipt", None), (False, None, "unavailable")]):
+        _record(team, cell(index, reused=reused, source=source, memo=memo))
+    assert {key: team.counts[key] for key in ("cells_run", "cells_reused", "cells_memo_reused",
+                                              "memo_cache_unavailable")} == {
+        "cells_run": 2, "cells_reused": 1, "cells_memo_reused": 1, "memo_cache_unavailable": 1}

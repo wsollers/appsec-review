@@ -14,7 +14,8 @@ import time
 import pytest
 
 from tests.operator_support import (
-    CODE_ID, PROJECT, REPOSITORY, WEBSERVER_ID, FakeDagster, Sandbox, plan_data, run, run_data, runs_data, step,
+    CODE_ID, PROJECT, REPOSITORY, WEBSERVER_ID, FakeDagster, Sandbox, container, plan_data, run, run_data, runs_data,
+    step,
 )
 
 import ops  # noqa: E402  (tests.operator_support puts deploy/dagster/bin on sys.path)
@@ -235,6 +236,19 @@ def test_stack_start_with_unhealthy_service_fails(box: Sandbox) -> None:
     box.dagster.runs()
     result = box.run("stack-start", "--no-probe")
     assert result.returncode == 1 and "daemon" in result.stdout and "unhealthy" in result.stdout
+
+
+@pytest.mark.parametrize("health", ["unhealthy", None])
+def test_stack_start_reports_but_does_not_require_the_optional_result_cache(box: Sandbox, health) -> None:
+    if health:
+        box.state["containers"].append(container("result-cache", box.deploy, health=health))
+        box.save()
+    box.dagster.runs()
+    result = box.run("stack-start", "--no-probe")
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected = "running (unhealthy) (optional: reviews run uncached)" if health else "MISSING (optional"
+    line, = [item for item in result.stdout.splitlines() if item.strip().startswith("result-cache")]
+    assert expected in line
 
 
 def test_stack_start_guards_a_rebuild_while_a_run_is_active(box: Sandbox) -> None:

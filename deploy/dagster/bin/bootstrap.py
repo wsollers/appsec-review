@@ -20,6 +20,7 @@ existing = {line.split("=", 1)[0]: line.split("=", 1)[1] for line in lines
             if "=" in line and not line.lstrip().startswith("#")}
 values: dict[str, object] = {
     "DAGSTER_POSTGRES_PASSWORD": existing.get("DAGSTER_POSTGRES_PASSWORD") or secrets.token_hex(32),
+    "APPSEC_RESULT_CACHE_PASSWORD": existing.get("APPSEC_RESULT_CACHE_PASSWORD") or secrets.token_hex(32),
     "APPSEC_DEPLOYMENT_PLATFORM": platform,
     "APPSEC_COMPOSE_PROJECT": project_name(platform),
 }

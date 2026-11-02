@@ -36,6 +36,9 @@ ROOT = DEPLOYMENT.parents[1]
 BIN = Path(__file__).resolve().parent
 URL_VARIABLE = "APPSEC_DAGSTER_URL"
 SERVICES = ("postgres", "code-location", "daemon", "webserver")
+# Reported but never required: reviews run uncached (fail-open) when the result cache is down.
+OPTIONAL_SERVICES = ("result-cache",)
+ALL_SERVICES = SERVICES + OPTIONAL_SERVICES
 TERMINAL = frozenset({"SUCCESS", "FAILURE", "CANCELED"})
 FAILED_FINAL = frozenset({"FAILURE", "CANCELED"})
 JOB_NAME = "wave1_review"
@@ -148,7 +151,8 @@ def stack_containers(project: str) -> list[Container]:
             # Only the three non-secret deployment settings are kept; the rest of the environment is never read.
             settings={key: environment[key] for key in DEPLOY_VARIABLES if key in environment},
             image_id=item.get("Image", "")))
-    return sorted(containers, key=lambda item: (SERVICES.index(item.service) if item.service in SERVICES else 99))
+    return sorted(containers, key=lambda item: (ALL_SERVICES.index(item.service) if item.service in ALL_SERVICES
+                                                else 99))
 
 
 def by_service(containers: list[Container]) -> dict[str, Container]:
@@ -354,6 +358,14 @@ def check_health(project: str) -> tuple[bool, list[Container]]:
             continue
         say(f"  {name:<14} {item.state} ({item.health})")
         ok = ok and item.healthy
+    for name in OPTIONAL_SERVICES:
+        item = services.get(name)
+        if item is None:
+            say(f"  {name:<14} MISSING (optional: reviews run uncached)")
+        elif not item.healthy:
+            say(f"  {name:<14} {item.state} ({item.health}) (optional: reviews run uncached)")
+        else:
+            say(f"  {name:<14} {item.state} ({item.health})")
     return ok, containers
 
 
@@ -1042,7 +1054,7 @@ def build_parser() -> argparse.ArgumentParser:
     stop.add_argument("--yes", action="store_true", help="confirm --purge-volumes")
     add("stack-status", cmd_stack_status, "One-screen status of the stack, its runs and disk.")
     logs = add("stack-logs", cmd_stack_logs, "Show container logs.", url=False)
-    logs.add_argument("service", nargs="?", choices=SERVICES, help="one service (default: all)")
+    logs.add_argument("service", nargs="?", choices=ALL_SERVICES, help="one service (default: all)")
     logs.add_argument("--tail", type=int, default=100, help="lines per service (default %(default)s)")
     logs.add_argument("--follow", action="store_true", help="stream new lines (needs a service)")
 
