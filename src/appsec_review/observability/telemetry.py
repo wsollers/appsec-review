@@ -818,6 +818,30 @@ def _interchange_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
             raise _InterchangeIntegrityError("identity_mismatch")
         return computation, fingerprint, receipt
 
+    def publication(raw: Mapping[str, Any], event: Mapping[str, Any], kind: str) -> dict[str, Any]:
+        """Retain bounded accounting facts, not each publication's verified payload trees."""
+        from appsec_review.runtime.handoff import verify_outcomes
+
+        handoff = decode_handoff(_interchange_document(run_root, raw),
+                                 run_id=run_root.name, job_id=str(event["job_id"]), accepted_only=False)
+        if handoff["attempt_id"] != event.get("attempt_id"):
+            raise _InterchangeIntegrityError("identity_mismatch")
+        if (kind == "HANDOFF_REJECTED") != (handoff["status"] == "REJECTED"):
+            raise _InterchangeIntegrityError("identity_mismatch")
+        outcomes = verify_outcomes(run_root, handoff)
+        codes: Counter[str] = Counter()
+        retryable = 0
+        for gap in outcomes["gaps"]:
+            codes[GapCode(gap["code"]).value] += 1
+            retryable += gap["retryable"]
+        return {
+            "attempt_id": handoff["attempt_id"], "status": handoff["status"],
+            "coverage_disposition": handoff["coverage"]["disposition"],
+            "retry_required": handoff["coverage"]["retry_required"],
+            "execution_status": handoff["execution_status"], "units": len(outcomes["units"]),
+            "producer_gap_codes": dict(codes), "retryable_gaps": retryable,
+        }
+
     for event in records:
         kind = event.get("event_type")
         if kind not in kinds:
@@ -846,15 +870,8 @@ def _interchange_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
                 continue
             seen.add(key)
             if section == "handoffs":
-                from appsec_review.runtime.handoff import verify_outcomes
-                handoff = decode_handoff(_interchange_document(run_root, reference.as_dict()),
-                                         run_id=run_root.name, job_id=job, accepted_only=False)
-                if handoff["attempt_id"] != event.get("attempt_id"):
-                    raise _InterchangeIntegrityError("identity_mismatch")
-                if (kind == "HANDOFF_REJECTED") != (handoff["status"] == "REJECTED"):
-                    raise _InterchangeIntegrityError("identity_mismatch")
-                outcomes = verify_outcomes(run_root, handoff)
-                identity = (job, str(handoff["attempt_id"]))
+                summary = publication(reference.as_dict(), event, kind)
+                identity = (job, str(summary["attempt_id"]))
                 prior = publications.get(identity)
                 if prior is not None and prior["sha256"] != reference.sha256:
                     raise _InterchangeIntegrityError("conflicting_publication")
@@ -863,7 +880,7 @@ def _interchange_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
                         or not math.isfinite(duration) or duration < 0):
                     raise _InterchangeIntegrityError("malformed_duration")
                 row = publications.setdefault(identity, {
-                    "sha256": reference.sha256, "handoff": handoff, "outcomes": outcomes,
+                    "sha256": reference.sha256, "summary": summary,
                     "duration_ms": duration, "validated": False})
                 row["validated"] |= kind == "HANDOFF_VALIDATED"
             elif section == "native_outputs":
@@ -921,18 +938,17 @@ def _interchange_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
     accepted = rejected = validated = units = retries = retryable_gaps = 0
     durations = []
     for (job, _), row in publications.items():
-        handoff, outcomes = row["handoff"], row["outcomes"]
-        accepted += handoff["status"] == "ACCEPTED"
-        rejected += handoff["status"] == "REJECTED"
+        summary = row["summary"]
+        accepted += summary["status"] == "ACCEPTED"
+        rejected += summary["status"] == "REJECTED"
         validated += row["validated"]
-        units += len(outcomes["units"])
-        retries += handoff["coverage"]["retry_required"]
-        coverage[handoff["coverage"]["disposition"]] += 1
-        execution[handoff["execution_status"]] += 1
+        units += summary["units"]
+        retries += summary["retry_required"]
+        coverage[summary["coverage_disposition"]] += 1
+        execution[summary["execution_status"]] += 1
         durations.append(row["duration_ms"])
-        for gap in outcomes["gaps"]:
-            producer_gaps[GapCode(gap["code"]).value] += 1
-            retryable_gaps += gap["retryable"]
+        producer_gaps.update(summary["producer_gap_codes"])
+        retryable_gaps += summary["retryable_gaps"]
         by_job.setdefault(job, Counter())["publications"] += 1
 
     def measured(value: int, section: str, available: bool) -> int | None:
