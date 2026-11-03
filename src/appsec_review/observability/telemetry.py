@@ -301,6 +301,7 @@ def _tree_sitter_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
 
 def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
     source_rows: list[Mapping[str, Any]] = []
+    file_discovery: dict[str, Any] | None = None
     source_gaps: list[object] = []
     projects: list[Mapping[str, Any]] = []
     targets: list[Mapping[str, Any]] = []
@@ -322,6 +323,26 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
                     raise ValueError("source metrics semantics are unsupported")
                 source_rows = list(partition.get("source_metrics", ()))
                 source_gaps = [*partition.get("source_metric_gaps", ()), *partition.get("gaps", ())]
+                discovery = partition.get("file_discovery")
+                if discovery is not None:
+                    counters = ("file_paths_examined", "descriptors_matched", "descriptors_retained",
+                                "descriptors_unavailable", "content_files_retained",
+                                "content_bytes_retained", "content_files_omitted")
+                    if (not isinstance(discovery, Mapping) or
+                            discovery.get("semantics") != "appsec-review/file-discovery/1" or
+                            discovery.get("descriptor_coverage") not in ("complete", "partial") or
+                            any(type(discovery.get(key)) is not int or discovery[key] < 0 for key in counters)):
+                        raise ValueError("file discovery metrics receipt is invalid")
+                    if (discovery["descriptors_matched"] > discovery["file_paths_examined"] or
+                            discovery["descriptors_matched"] + discovery["content_files_retained"] +
+                            discovery["content_files_omitted"] > discovery["file_paths_examined"] or
+                            discovery["descriptors_retained"] + discovery["descriptors_unavailable"] !=
+                            discovery["descriptors_matched"] or
+                            (discovery["descriptor_coverage"] == "complete") !=
+                            (discovery["descriptors_unavailable"] == 0)):
+                        raise ValueError("file discovery metrics accounting is inconsistent")
+                    file_discovery = {key: discovery[key] for key in
+                                      ("semantics", "descriptor_coverage", *counters)}
                 projects = list(project_doc.get("projects", ()))
                 targets = list(target_doc.get("targets", ()))
                 for key in ("source_receipt", "project_receipt", "build_target_receipt"):
@@ -503,6 +524,7 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
                 "tests": "test/tests/spec/specs segment or test_/spec_ filename",
                 "artifacts": "references count each build-unit edge; deduplicated totals use SHA-256 content identity"},
             "source_by_language": dict(sorted(source.items())),
+            "file_discovery": file_discovery,
             "source_gap_count": len(source_gaps), "source_gaps": source_gaps[:200],
             "projects": {"discovered": len(projects), "selected": len(selected_projects)},
             "build_units": {"discovered": len(targets), "selected": len(build_receipts),

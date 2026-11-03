@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
+from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, PROJECT_FILE_SUFFIXES, inventory, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
 from appsec_review.jobs.build_discovery import (
     android_descriptor_facts, descriptor_package, discover_build_units, required_image_profile,
@@ -125,6 +125,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
                **snapshot, "target_artifacts": target_artifacts}
         return {"artifact": _artifact(unit, "repository-partition.json", doc),
                 "files": snapshot["files"], "gaps": snapshot["gaps"],
+                "file_discovery": snapshot["file_discovery"],
                 "target_artifacts": target_artifacts,
                 "configured_exclusions": snapshot["configured_exclusions"]}
 
@@ -140,7 +141,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         found = []
         for item in unit.output("repository_discovery.partition_repository")["files"]:
             path = Path(item["path"])
-            if path.name in PROJECT_FILES or path.suffix in {".csproj", ".sln", ".vcxproj"}:
+            if path.name in PROJECT_FILES or path.suffix.lower() in PROJECT_FILE_SUFFIXES:
                 found.append({"manifest": item["path"], "root": path.parent.as_posix(), "sha256": item["sha256"]})
         doc = {"schema": "appsec-review/project-catalog/1", "projects": found,
                "gaps": [] if found else ["no recognized project manifests"]}
@@ -151,7 +152,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         systems = []
         for item in unit.output("repository_discovery.partition_repository")["files"]:
             name = Path(item["path"]).name
-            if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix in {".csproj", ".sln", ".vcxproj"}:
+            if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix.lower() in PROJECT_FILE_SUFFIXES:
                 systems.append({"path": item["path"], "kind": name, "sha256": item["sha256"]})
         files = unit.output("repository_discovery.partition_repository")["files"]
         target = _target(unit).resolve()
