@@ -1,7 +1,7 @@
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/9`); the catalog-derived
+(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/12`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -233,7 +233,7 @@ required keys, validated at load:
 | `max_slice_lines` | slice lines per package | 1–2000 |
 | `max_slice_lines_per_function` | slice lines per function | 1–`max_slice_lines` |
 
-**The model-facing view (`package-view/2`, `review/package_view.py`).** A cell is shown a view built at cell time
+**The model-facing view (`package-view/4`, `review/package_view.py`).** A cell is shown a view built at cell time
 from the stored package, never stored as an identity and never part of a reuse basis (the basis stays the hash of the
 stored package). Labels are assigned in a fixed order so one package always yields the same labels: `L` lead, `S`
 source, `K` sink, `R` range, `G` guard, `F` call site (chain hops first, then callers, then callees), `P` flow, `E`
@@ -252,8 +252,19 @@ verifier cells. The view:
 - has a byte budget (`max_view_bytes`) and drops the least valuable rows first, counted in `omitted` and named by a
   material gap;
 - omits `retrieval.entity_ids` and every raw identity that is not a labelled row;
-- redacts the literal on the line(s) of every `secret` lead (`secret-redaction/1`; see gate 2). `package-view/2`
-  differs from `/1` only by this redaction.
+- redacts the literal on the line(s) of every `secret` lead (`secret-redaction/1`; see gate 2);
+- under the `dataflow_path` bound, shows only the slice's lines in the `S` source section: one `slice` row per slice
+  function, with elision markers between runs and per-line reasons, the lead's line always included. A slice whose
+  file hash differs from the accepted source falls back to the whole function extent with a gap (see
+  [`dataflow-bounded-slices.md`](dataflow-bounded-slices.md)).
+
+View rule history: `/2` added the secret redaction; `/3` carries a lead's `artifacts` into its row, keeps an
+artifact lead without a source path out of source rendering, and adds the scope's artifact ids to the retrieval
+terms; `/4` renders dataflow-bounded leads as slice lines and adds the slice summary (paths, lines, omitted lines,
+strategy states) to the neighborhood summary.
+
+Every view is validated against [review-package-view.schema.json](../schemas/review-package-view.schema.json) when it
+is built (`build_view`, `review/schemas.py`). A violation raises `IntegrityError`; it is never turned into a gap.
 
 The three view bounds live next to the package bounds:
 
@@ -366,7 +377,8 @@ The three view bounds live next to the package bounds:
    the evidence-map hash; the CWE reference record; ranked units with their basis and hunt state;
    every gap; per-family and per-severity counts, including KEV-admitted leads; and both audits. Its shape is
    [review-package-manifest.schema.json](../schemas/review-package-manifest.schema.json), checked before the
-   manifest is hashed and again on verification. `publish_packages` writes and verifies the bytes, and
+   manifest is hashed and again on verification (`review/schemas.py`); a violation raises `IntegrityError`
+   and blocks publication. `publish_packages` writes and verifies the bytes, and
    the review job consumes the manifest only after `verify_package_manifest` succeeds. Producer
    failure publishes explicit gaps; membership or integrity failure blocks the handoff.
 
