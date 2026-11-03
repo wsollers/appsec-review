@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -13,9 +14,18 @@ from appsec_review.observability.triage_reduction import (
     DISMISSED_STATES, DISPOSITIONS, INTERPRETATION, SCOPE, TRIAGE_REDUCTION_SCHEMA, UNRESOLVED_REASONS,
     triage_reduction_metrics,
 )
-from appsec_review.review.packages import MANIFEST_SCHEMA, sha256_hex
+from appsec_review.review.lead_families import FAMILY_RULES
+from appsec_review.review.models import IntegrityError
+from appsec_review.review.neighborhood import NEIGHBORHOOD_RULE
+from appsec_review.review.packages import (
+    ASSEMBLY_RULE, MANIFEST_SCHEMA, OBLIGATION_RULE, PACKAGE_SCHEMA, Assembly, publish_packages, sha256_hex,
+    verify_package_manifest,
+)
+from appsec_review.review.slicing.contract import SLICE_RULE
+from appsec_review.review.units import RANK_RULE
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 from tests.handoff_fixture import write_fixture_handoff
+from tests.review.test_packages_dataflow_bound import dataflow  # noqa: F401  (module-scoped fixture)
 
 JOB = "job_inference_security_review"
 RUN_ID = "2026-10-12-0001"
@@ -58,7 +68,75 @@ def _write(path: Path, value: Any) -> dict[str, str]:
     return {"path": path.as_posix(), "sha256": file_sha256(path)}
 
 
-def build_run(tmp_path: Path, scenario: Scenario) -> Path:
+def _write_fixture_manifest(assembly_dir: Path, scenario: Scenario) -> tuple[dict[str, str], str, Path]:
+    """Publish minimal packages under a manifest that satisfies ``review-package-manifest.schema.json``.
+
+    The package bodies carry only what the triage reader uses (``kind``, ``lane``, ``lead_menu``); the
+    manifest carries every field the schema requires, so it passes ``verify_package_manifest`` exactly as an
+    ``assemble_packages`` manifest does.
+    """
+    package_of: dict[str, str] = {}
+    entries = []
+
+    def publish(body: dict[str, Any], *, family: str | None, unit_key: str | None) -> str:
+        package_id = f"{body['kind']}-{sha256_hex(body)}"
+        path = assembly_dir / "packages" / f"{package_id}.json"
+        atomic_bytes(path, canonical_json({**body, "package_id": package_id}))
+        entries.append({"package_id": package_id, "kind": body["kind"], "lane": body["lane"], "lead_family": family,
+                        "partition_key": family or "hunt", "unit_key": unit_key,
+                        "lead_count": len(body["lead_menu"]), "sha256": file_sha256(path),
+                        "bytes": path.stat().st_size})
+        return package_id
+
+    packaged = [lead for lead in scenario.leads if lead.admitted and lead.packaged]
+    for lead in packaged:
+        package_of[lead.lead_id] = publish(
+            {"kind": "finding_lead", "lane": "lead", "lead_menu": [
+                {"observation_id": lead.lead_id, "lead_family": lead.family, "scanner": lead.scanner}]},
+            family=lead.family, unit_key=None)
+    hunt_id = publish({"kind": "hunt", "lane": "hunt", "lead_menu": []}, family=None, unit_key="unit-1")
+
+    def by_family(leads: list[Lead]) -> dict[str, dict[str, int]]:
+        counts: dict[str, dict[str, int]] = {}
+        for lead in leads:
+            counts.setdefault(lead.family, {"high": 0})["high"] += 1
+        return counts
+
+    admitted = [lead for lead in scenario.leads if lead.admitted]
+    families = sorted({lead.family for lead in scenario.leads})
+    manifest: dict[str, Any] = {
+        "schema": MANIFEST_SCHEMA, "assembly_rule": ASSEMBLY_RULE, "package_schema": PACKAGE_SCHEMA,
+        "run_id": RUN_ID, "manifest_sha256": "d" * 64, "target_snapshot": None,
+        "settings": {"admit_severities": ["critical", "high"], "slice_strategies": []}, "graph_settings": {},
+        "admission": [{"lead_id": lead.lead_id, "effective_severity": "high",
+                       "status": "admitted" if lead.admitted else "not_admitted", "reasons": [],
+                       "residual_coverage": "review_pending" if lead.admitted else lead.residual}
+                      for lead in sorted(scenario.leads, key=lambda item: item.lead_id)],
+        "rules": {"families": dict(FAMILY_RULES), "rank": RANK_RULE, "obligations": OBLIGATION_RULE,
+                  "neighborhood": NEIGHBORHOOD_RULE, "slice": SLICE_RULE},
+        "inputs": [], "evidence_map_sha256": sha256_hex({}),
+        "packages": sorted(entries, key=lambda entry: entry["package_id"]),
+        "units": [{"unit_key": "unit-1", "position": 1, "unit_count": 1, "score": 1.0, "rule": RANK_RULE,
+                   "basis": [], "hunted": True, "lead_count": 0, "package_ids": [hunt_id]}],
+        "gaps": [], "cwe_reference": None,
+        "counts": {"leads": by_family(scenario.leads), "admitted": by_family(admitted),
+                   "kev_admitted": dict.fromkeys(families, 0),
+                   "non_lead_observations": {"secret": 2, "config": 1},
+                   "packages": {"finding_lead": len(packaged), "hunt": 1},
+                   "units": {"total": 1, "hunted": 1, "below_cutoff": 0},
+                   "neighborhood_bounds": {"call_depth": len(packaged), "dataflow_path": 0}},
+        "audit": {"lane_a": {"status": "passed", "expected": len(packaged), "packaged": len(packaged),
+                             "by_family": by_family(packaged), "suppressed": 0, "duplicates": 0, "kev_admitted": 0},
+                  "lane_b": {"status": "passed", "listed_leads": 0},
+                  "families_available": dict.fromkeys(families, True)},
+    }
+    manifest["content_sha256"] = sha256_hex(manifest)
+    manifest_path = assembly_dir / "package-manifest.json"
+    atomic_bytes(manifest_path, canonical_json(manifest))
+    return package_of, hunt_id, manifest_path
+
+
+def build_run(tmp_path: Path, scenario: Scenario, assembly: Assembly | None = None) -> Path:
     run_root = tmp_path / "runs" / RUN_ID
     attempt = run_root / ATTEMPT
     rel = lambda path: path.relative_to(run_root).as_posix()  # noqa: E731
@@ -66,34 +144,15 @@ def build_run(tmp_path: Path, scenario: Scenario) -> Path:
     def ref(path: Path) -> dict[str, Any]:
         return {"path": rel(path), "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
 
-    assembly = attempt / "steps" / "packages" / "tasks" / "assemble_lead_packages" / "assembly"
-    package_of: dict[str, str] = {}
-    entries = []
-    for lead in scenario.leads:
-        if not (lead.admitted and lead.packaged):
-            continue
-        body = {"kind": "finding_lead", "lane": "lead", "lead_menu": [
-            {"observation_id": lead.lead_id, "lead_family": lead.family, "scanner": lead.scanner}]}
-        package_id = f"finding_lead-{sha256_hex(body)}"
-        path = assembly / "packages" / f"{package_id}.json"
-        atomic_bytes(path, canonical_json({**body, "package_id": package_id}))
-        package_of[lead.lead_id] = package_id
-        entries.append({"package_id": package_id, "kind": "finding_lead", "lane": "lead",
-                        "lead_family": lead.family, "lead_count": 1, "sha256": file_sha256(path)})
-    hunt_body = {"kind": "hunt", "lane": "hunt", "lead_menu": []}
-    hunt_id = f"hunt-{sha256_hex(hunt_body)}"
-    atomic_bytes(assembly / "packages" / f"{hunt_id}.json", canonical_json({**hunt_body, "package_id": hunt_id}))
-    entries.append({"package_id": hunt_id, "kind": "hunt", "lane": "hunt", "lead_family": None, "lead_count": 0,
-                    "sha256": file_sha256(assembly / "packages" / f"{hunt_id}.json")})
-    manifest = {"schema": MANIFEST_SCHEMA, "run_id": RUN_ID, "packages": sorted(entries, key=lambda e: e["package_id"]),
-                "admission": [{"lead_id": lead.lead_id, "status": "admitted" if lead.admitted else "not_admitted",
-                               "residual_coverage": "review_pending" if lead.admitted else lead.residual,
-                               "effective_severity": "high", "reasons": []}
-                              for lead in sorted(scenario.leads, key=lambda item: item.lead_id)],
-                "counts": {"non_lead_observations": {"secret": 2, "config": 1}}}
-    manifest["content_sha256"] = sha256_hex(manifest)
-    manifest_path = assembly / "package-manifest.json"
-    atomic_bytes(manifest_path, canonical_json(manifest))
+    assembly_dir = attempt / "steps" / "packages" / "tasks" / "assemble_lead_packages" / "assembly"
+    if assembly is None:
+        package_of, hunt_id, manifest_path = _write_fixture_manifest(assembly_dir, scenario)
+    else:
+        manifest_path = publish_packages(assembly, assembly_dir)
+        package_of = {lead["observation_id"]: package.package_id for package in assembly.packages
+                      if package.kind == "finding_lead" for lead in json.loads(package.body)["lead_menu"]}
+        hunt_id = next((package.package_id for package in assembly.packages if package.kind == "hunt"), None)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     packages_doc = attempt / "steps" / "packages" / "tasks" / "assemble_lead_packages" / "lead-packages.json"
     atomic_json(packages_doc, {"schema": "appsec-review/inference-review-lane-packages/1", "lane": "lead",
                                "package_manifest": ref(manifest_path),
@@ -347,6 +406,38 @@ def test_tampered_package_is_unavailable(tmp_path: Path) -> None:
     document["lead_menu"][0]["scanner"] = "bandit"
     path.write_bytes(canonical_json(document))
     _assert_unavailable(triage_reduction_metrics(run_root), "lead_manifest_unavailable")
+
+
+def test_the_fixture_manifest_satisfies_the_manifest_schema_and_a_rehashed_violation_is_refused(
+        tmp_path: Path) -> None:
+    path = next(build_run(tmp_path, mixed()).rglob("package-manifest.json"))
+    verify_package_manifest(path)
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+    del document["audit"], document["content_sha256"]
+    path.write_bytes(canonical_json({**document, "content_sha256": sha256_hex(document)}))
+    with pytest.raises(IntegrityError, match="violates review-package-manifest.schema.json"):
+        verify_package_manifest(path)
+
+
+def test_a_real_assembled_manifest_passes_the_triage_reader(tmp_path: Path, dataflow) -> None:
+    assembly = dataflow[3]
+    packaged = {lead["observation_id"] for package in assembly.packages if package.kind == "finding_lead"
+                for lead in json.loads(package.body)["lead_menu"]}
+    rows = assembly.manifest["admission"]
+    assert packaged and {row["lead_id"] for row in rows if row["status"] == "admitted"} == packaged
+    scenario = Scenario(leads=[Lead(row["lead_id"], admitted=row["status"] == "admitted",
+                                    residual=row["residual_coverage"],
+                                    outcome="no_proposal" if row["lead_id"] in packaged else None)
+                               for row in rows])
+    section = triage_reduction_metrics(build_run(tmp_path, scenario, assembly))
+
+    assert section["available"] is True and section["integrity_gap_codes"] == []
+    assert section["leads"]["collected"] == len(rows) and section["leads"]["admitted"] == len(packaged)
+    assert section["leads"]["non_lead_observations"] == sum(
+        assembly.manifest["counts"]["non_lead_observations"].values())
+    assert section["admitted_dispositions"] == {**dict.fromkeys(DISPOSITIONS, 0), "no_claim_raised": len(packaged)}
+    assert section["sources"]["lead_package_manifest"]["sha256"] == hashlib.sha256(assembly.manifest_bytes).hexdigest()
 
 
 def test_tampered_handoff_bound_lane_document_is_unavailable(tmp_path: Path) -> None:
