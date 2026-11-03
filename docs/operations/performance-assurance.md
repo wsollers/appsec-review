@@ -107,6 +107,18 @@ Lifetime regressions check that the original trees are unreachable at the verifi
 The `outcomes_canonical_checks` and `outcomes_decoded_checks` counters distinguish the proof paths.
 Container limits remain unchanged; completion of the restarted live review is a separate result.
 
+That restart completed catalog publication, but later OOM-killed the target-plan graph's
+`__complete` process after its handoff was accepted. The surviving metrics summary predates that
+completion, and graph completion writes metrics before attempting the optional report renderer.
+Interchange metrics retained every verified handoff and outcomes tree until all publication events
+had been processed. It now extracts only closed-dimension accounting facts in a separate scope,
+releasing each payload before verifying the next event. Coverage, unit and gap counts, retryability,
+publication deduplication, durations and integrity failures retain their existing meaning. Every
+distinct publication event still performs the real verification; no cross-event outcome trust cache,
+gap truncation or resource-limit increase is introduced. Lifetime regressions cover two and eight
+publications and check both handoff and gap-tree release, exact metrics and between-event tampering.
+Publication acceptance remains distinct from Dagster graph success; the failed graph is not promoted.
+
 Managed publication still verifies new evidence. It detaches private builder files from writable
 aliases, requires application-owned POSIX custody, removes accepted payload write permissions,
 and issues an authenticated admission record outside the review run's mounts, under

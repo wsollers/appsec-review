@@ -402,12 +402,12 @@ def test_interchange_hash_bound_but_invalid_counts_are_rejected(tmp_path, count)
     assert summary["integrity_gap_codes"]
 
 
-def _handoff_metrics_receipt(root: Path, *, rejected=False):
+def _handoff_metrics_receipt(root: Path, *, rejected=False, attempt_id="attempt_0001"):
     from appsec_review.runtime.handoff import build_outcomes, execution_status
     from appsec_review.storage.shared import reference
     from tests.handoff_fixture import write_fixture_handoff
 
-    job, attempt = "job_target_catalog", "attempt_0001"
+    job, attempt = "job_target_catalog", attempt_id
     base = root / "data" / "jobs" / job / "attempts" / attempt
     path = base / "handoff.json"
     write_fixture_handoff(root, path, {
@@ -436,7 +436,7 @@ def _handoff_metrics_receipt(root: Path, *, rejected=False):
 
 def _handoff_event(root, path, *, kind="HANDOFF_VALIDATED", duration=12.5):
     from appsec_review.storage.shared import reference
-    PipelineLog(root).write(kind, run_id=root.name, job_id="job_target_catalog", attempt_id="attempt_0001",
+    PipelineLog(root).write(kind, run_id=root.name, job_id="job_target_catalog", attempt_id=path.parent.name,
                              details={"handoff_reference": reference(root, path), "duration_ms": duration,
                                       "unit_count": 999999, "gap_count": 999999, "coverage_disposition": "clean"})
 
@@ -460,6 +460,98 @@ def test_interchange_handoff_authority_coverage_retry_duration_and_publication_d
     assert summary["handoffs"]["accounting_complete"]
     assert summary["duplicate_events"] == 1
     assert "clean" not in json.dumps(summary) and "999999" not in json.dumps(summary)
+
+
+@pytest.mark.parametrize("publication_count", [2, 8])
+def test_interchange_releases_verified_payloads_between_publication_events(tmp_path, monkeypatch, publication_count):
+    import gc
+    import weakref
+
+    import appsec_review.observability.telemetry as telemetry
+    import appsec_review.runtime.handoff as accounting
+
+    root = tmp_path / "2026-10-28-0001"
+    for index in range(publication_count):
+        path, _ = _handoff_metrics_receipt(root, attempt_id=f"attempt_{index + 1:04d}")
+        _handoff_event(root, path)
+        _handoff_event(root, path, kind="HANDOFF_ACCEPTED")
+
+    class TrackedPayload(dict):
+        pass
+
+    handoffs, outcomes = [], []
+    real_decode, real_verify = telemetry.decode_handoff, accounting.verify_outcomes
+
+    def decode(*args, **kwargs):
+        gc.collect()
+        assert all(ref() is None for ref in handoffs)
+        document = TrackedPayload(real_decode(*args, **kwargs))
+        handoffs.append(weakref.ref(document))
+        return document
+
+    def verify(*args, **kwargs):
+        gc.collect()
+        assert all(ref() is None for ref in outcomes)
+        document = TrackedPayload(real_verify(*args, **kwargs))
+        document["gaps"] = [TrackedPayload(gap) for gap in document["gaps"]]
+        outcomes.extend(weakref.ref(value) for value in (document, *document["gaps"]))
+        return document
+
+    monkeypatch.setattr(telemetry, "decode_handoff", decode)
+    monkeypatch.setattr(accounting, "verify_outcomes", verify)
+    summary = aggregate_run_metrics(root)["interchange"]
+    gc.collect()
+    assert all(ref() is None for ref in (*handoffs, *outcomes))
+    assert len(handoffs) == publication_count * 2
+    measured = summary["handoffs"]
+    assert measured["accepted"] == measured["validated"] == measured["units"] == publication_count
+    assert measured["retry_required"] == measured["retryable_gaps"] == publication_count
+    assert measured["coverage_dispositions"]["unavailable"] == publication_count
+    assert sum(measured["producer_gap_codes"].values()) == publication_count
+    assert measured["duration_ms"]["count"] == publication_count
+    assert measured["duration_ms"]["sum"] == publication_count * 12.5
+    assert measured["accounting_complete"]
+    assert summary["by_job"]["job_target_catalog"]["publications"] == publication_count
+
+
+def test_interchange_rechecks_outcomes_for_each_distinct_publication_event(tmp_path, monkeypatch):
+    import appsec_review.runtime.handoff as accounting
+
+    root = tmp_path / "2026-10-28-0001"
+    path, handoff = _handoff_metrics_receipt(root)
+    _handoff_event(root, path)
+    _handoff_event(root, path, kind="HANDOFF_ACCEPTED")
+    real_verify = accounting.verify_outcomes
+    calls = []
+
+    def verify(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == 2:
+            outcomes = root / handoff["outcomes"]["path"]
+            payload = bytearray(outcomes.read_bytes())
+            payload[0] = ord("[")
+            outcomes.write_bytes(payload)
+        return real_verify(*args, **kwargs)
+
+    monkeypatch.setattr(accounting, "verify_outcomes", verify)
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert len(calls) == 2
+    assert summary["handoffs"]["accepted"] is None
+    assert not summary["handoffs"]["accounting_complete"]
+    assert summary["integrity_gap_codes"]["malformed_or_unverifiable_receipt"] == 1
+
+
+def test_interchange_compact_publication_facts_still_reject_conflicting_handoffs(tmp_path):
+    root = tmp_path / "2026-10-28-0001"
+    path, handoff = _handoff_metrics_receipt(root)
+    _handoff_event(root, path)
+    other = path.with_name("conflicting-handoff.json")
+    atomic_json(other, {**handoff, "completed_at": "2026-10-28T00:00:02+00:00"})
+    _handoff_event(root, other, kind="HANDOFF_ACCEPTED")
+    summary = aggregate_run_metrics(root)["interchange"]
+    assert summary["handoffs"]["accepted"] is None
+    assert not summary["handoffs"]["accounting_complete"]
+    assert summary["integrity_gap_codes"]["conflicting_publication"] == 1
 
 
 def test_interchange_rejected_admission_is_distinct_from_failed_execution(tmp_path):
