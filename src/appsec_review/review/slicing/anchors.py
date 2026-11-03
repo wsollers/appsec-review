@@ -1,4 +1,4 @@
-"""Slice anchors: correlated CodeQL ``dataflow_path`` facts -> a ``SliceRequest`` (``package-slice/1``).
+"""Slice anchors: correlated CodeQL ``dataflow_path`` facts -> a ``SliceRequest`` (``package-slice/2``).
 
 Input shape consumed (``graph.normalize`` ``_Builder.path_fact``, family ``dataflow_path``). Each entry of
 ``paths`` is ``(fact identity, mapping)`` where the mapping is the fact payload's ``result``; a full payload
@@ -27,15 +27,18 @@ Today the normalizer publishes guards as bare ``guard_fact`` identities without 
 anchored here and are recorded as ``path_step_unlocated`` gaps. The integration may resolve them to
 ``{identity, location}`` mappings before calling :func:`build_request`.
 
-Function spans. The path names a step's function only by symbol identity, and ``SliceSources`` has no
-symbol locations, so the enclosing function is found in the verified source text: from the anchor line
-upwards (at most ``max_function_lines`` lines), the nearest function-header-like line whose
-``neighborhood.function_extent`` contains the anchor line is the function start (Python: ``def``/``async def``
-lines; brace languages: a name followed by ``(`` that is not a control keyword or a statement, and whose
-extent opens a ``{`` body). The innermost enclosing function therefore wins. An extent cut by
-``max_function_lines`` is ``truncated``. Other languages, and lines outside any found function (for example
-module-level Python), get no span: their anchors are dropped with a ``slice_function_unresolved`` gap rather
-than an invented window. Overlapping extents in one file are merged into one ``FunctionSpan``.
+Function spans. Each anchor line's enclosing *named* function or method comes from ``review.slicing.spans``.
+That module tries the file's accepted tree-sitter rows first (``sources.syntax_rows``, matched by file hash).
+Next it tries the graph symbols' function-name lines for the file (``function_headers``), preferring the
+step's own symbol. Last, it uses the language's text rules, which cover every catalog language: brace,
+indentation and ``def``/``end`` extents with language-specific header patterns, comments and literals. The
+innermost enclosing function wins. Lambdas, closures and blocks stay inside it. An extent cut by
+``max_function_lines`` is ``truncated``. A line outside every named function (for example module-level code),
+or in a language no layer resolves, gets no span. Its anchors are dropped with a
+``slice_function_unresolved`` gap that names the language and the layers tried; the slicer never invents a
+window. A fallback past damaged or incomplete tree-sitter rows adds a ``slice_function_fallback`` gap.
+Overlapping extents in one file are merged into one ``FunctionSpan``, whose ``basis`` is the least precise
+of the bases merged into it.
 
 Gaps (all named, prefixed with the path identity where they come from one path):
 ``slice_source_unavailable: <path>: <reason>`` when the source text is unavailable (its anchors are dropped),
@@ -48,14 +51,14 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from pathlib import PurePosixPath
 from typing import Any
 
-from appsec_review.review.neighborhood import _BRACE_LANGUAGES, function_extent
+from appsec_review.review.slicing import spans as function_spans
 from appsec_review.review.slicing.contract import (
     GAP_PATH_UNAVAILABLE, GAP_SOURCE_UNAVAILABLE, GAP_STEP_UNLOCATED, GAP_TRUNCATED, Anchor, FunctionSpan, LineKey,
     Reason, SliceRequest, SliceSources,
 )
+from appsec_review.review.slicing.spans import Extent, Header
 
 GAP_FUNCTION_UNRESOLVED = "slice_function_unresolved"
 INHERITED_GAPS = ("truncated_steps", "omitted_paths", "ambiguous_step_location")
@@ -64,15 +67,16 @@ MAX_LOCATION_LINES = 8
 _ROLES = {"source": Reason.SOURCE, "sink": Reason.SINK}
 _IDENTITY = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
-_PY_HEADER = re.compile(r"^\s*(?:async\s+)?def\s+\w")
-_BRACE_HEADER = re.compile(
-    r"^\s*(?!(?:if|for|while|switch|return|else|do|catch|sizeof|case|throw|new|delete)\b)"
-    r"[^;{}()=]*?\b[A-Za-z_~][\w:<>~]*\s*\(")
 
 
 def build_request(paths: Sequence[tuple[str, Mapping[str, Any]]], sources: SliceSources, *,
-                  max_function_lines: int) -> tuple[SliceRequest, tuple[str, ...]]:
-    """The slice request for a lead's correlated paths, and the named gaps found building it."""
+                  max_function_lines: int,
+                  function_headers: Mapping[tuple[str, str], Sequence[Header]] | None = None,
+                  ) -> tuple[SliceRequest, tuple[str, ...]]:
+    """The slice request for a lead's correlated paths, and the named gaps found building it.
+
+    ``function_headers`` maps ``(path, file_sha256)`` to the graph symbols' function-name lines in that file.
+    """
     if isinstance(max_function_lines, bool) or not isinstance(max_function_lines, int) or max_function_lines < 1:
         raise ValueError("max_function_lines must be a positive integer")
     gaps: list[str] = []
@@ -90,21 +94,32 @@ def build_request(paths: Sequence[tuple[str, Mapping[str, Any]]], sources: Slice
         if lines is None:
             gaps.append(f"{GAP_SOURCE_UNAVAILABLE}: {path}: {reason or 'no reason given'}")
             continue
-        extents: dict[int, tuple[int, int, bool] | None] = {}
-        located: list[tuple[Anchor, tuple[int, int, bool]]] = []
+        try:
+            rows = sources.syntax_rows(path)
+        except Exception as exc:  # noqa: BLE001 - spans fall back to text; the syntax strategy reports the failure
+            rows = None
+            gaps.append(f"{function_spans.GAP_FUNCTION_FALLBACK}: tree_sitter rows for {path} could not be read "
+                        f"({type(exc).__name__}); function spans use the text rules")
+        headers = tuple((function_headers or {}).get((path, sha), ()))
+        resolutions: dict[tuple[int, str | None], function_spans.Resolution] = {}
+        located: list[tuple[Anchor, Extent]] = []
         for anchor in sorted(file_anchors, key=_anchor_order):
             line = anchor.key.line
             if line > len(lines):
                 gaps.append(f"{GAP_STEP_UNLOCATED}: {anchor.ref}: line {line} is beyond the end of {path}")
                 continue
-            if line not in extents:
-                extents[line] = _enclosing(lines, line, path, max_function_lines)
-            extent = extents[line]
-            if extent is None:
-                gaps.append(f"{GAP_FUNCTION_UNRESOLVED}: {path}:{line}: no enclosing function found within "
-                            f"{max_function_lines} lines; the {anchor.reason.value} anchor is not sliced")
+            cache = (line, anchor.function)
+            if cache not in resolutions:
+                resolutions[cache] = function_spans.resolve(
+                    lines, line, path, sha, rows=rows, headers=headers, function=anchor.function,
+                    max_lines=max_function_lines)
+            resolution = resolutions[cache]
+            gaps.extend(f"{note} ({path}:{line})" for note in resolution.notes)
+            if resolution.extent is None:
+                gaps.append(f"{GAP_FUNCTION_UNRESOLVED}: {path}:{line}: {resolution.reason}; the "
+                            f"{anchor.reason.value} anchor is not sliced")
                 continue
-            located.append((anchor, extent))
+            located.append((anchor, resolution.extent))
         file_spans = _merge(path, sha, located)
         spans.extend(file_spans)
         kept.extend(anchor for anchor, _extent in located)
@@ -184,42 +199,23 @@ def _located(location: Any, reason: Reason, ref: str, where: str, gaps: list[str
             for line in range(start, end + 1)]
 
 
-def _enclosing(lines: Sequence[str], line: int, path: str, max_lines: int) -> tuple[int, int, bool] | None:
-    """(first, last, truncated) of the innermost function enclosing ``line``, or ``None``."""
-    suffix = PurePosixPath(path).suffix.lower()
-    if suffix == ".py":
-        header = _PY_HEADER
-    elif suffix in _BRACE_LANGUAGES:
-        header = _BRACE_HEADER
-    else:
-        return None
-    for candidate in range(line, max(1, line - max_lines + 1) - 1, -1):
-        text = lines[candidate - 1]
-        if not header.match(text) or (header is _BRACE_HEADER and text.rstrip().endswith(";")):
-            continue
-        first, last, truncated = function_extent(lines, candidate, path, max_lines=max_lines)
-        if not first <= line <= last:
-            continue
-        if header is _BRACE_HEADER and not any("{" in lines[number - 1] for number in range(first, last + 1)):
-            continue
-        return first, last, truncated
-    return None
-
-
-def _merge(path: str, sha: str, located: Sequence[tuple[Anchor, tuple[int, int, bool]]]) -> list[FunctionSpan]:
-    """Non-overlapping spans of one file: overlapping extents merge, keeping their anchors' function."""
-    groups: list[list[Any]] = []        # [first, last, truncated, functions]
-    for anchor, (first, last, truncated) in sorted(located, key=lambda item: (item[1][0], item[1][1])):
-        if groups and first <= groups[-1][1]:
+def _merge(path: str, sha: str, located: Sequence[tuple[Anchor, Extent]]) -> list[FunctionSpan]:
+    """Non-overlapping spans of one file: overlapping extents merge, keeping their anchors' function and the
+    least precise span basis."""
+    groups: list[list[Any]] = []        # [first, last, truncated, functions, basis rank]
+    for anchor, extent in sorted(located, key=lambda item: (item[1].first, item[1].last)):
+        rank = function_spans.basis_rank(extent.basis)
+        if groups and extent.first <= groups[-1][1]:
             group = groups[-1]
-            group[1], group[2] = max(group[1], last), group[2] or truncated
+            group[1], group[2], group[4] = max(group[1], extent.last), group[2] or extent.truncated, max(group[4], rank)
         else:
-            group = [first, last, truncated, set()]
+            group = [extent.first, extent.last, extent.truncated, set(), rank]
             groups.append(group)
         if anchor.function:
             group[3].add(anchor.function)
     return [FunctionSpan(path, sha, first, last, function=next(iter(functions)) if len(functions) == 1 else None,
-                         truncated=truncated) for first, last, truncated, functions in groups]
+                         truncated=truncated, basis=function_spans.SPAN_BASES[rank])
+            for first, last, truncated, functions, rank in groups]
 
 
 __all__ = ["GAP_FUNCTION_UNRESOLVED", "INHERITED_GAPS", "MAX_LOCATION_LINES", "build_request"]

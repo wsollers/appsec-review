@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/review-package-view.schema.json",
+  "title": "Review package view (package-view/4)",
+  "description": "The labelled, budgeted, model-facing view of a stored review package (review/package_view.py, review-protocol-v2.md section 4). Built at cell time and never stored as an identity; build_view validates every view against this schema. Persona and stack profile are routing fields the caller sets per cell.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "rule", "protocol", "kind", "lane", "lead_family", "persona", "stack_profile", "scope",
+               "partition", "rank", "leads", "source", "neighborhood", "build", "corroboration", "tags",
+               "other_context", "material_gaps", "gap_counts", "files", "omitted", "proof_obligations",
+               "graph_families", "truncation"],
+  "properties": {
+    "schema": {"const": "appsec-review/review-package-view/1"},
+    "rule": {"const": "appsec-review/package-view/4"},
+    "protocol": {"const": "review-protocol/2"},
+    "kind": {"type": ["string", "null"]},
+    "lane": {"type": ["string", "null"]},
+    "lead_family": {"type": ["string", "null"]},
+    "persona": {"type": ["string", "null"]},
+    "stack_profile": {"type": ["string", "null"]},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_id", "build_unit_id", "partition_key"],
+      "properties": {
+        "component_id": {"type": ["string", "null"]},
+        "build_unit_id": {"type": ["string", "null"]},
+        "partition_key": {"type": "string"}
+      }
+    },
+    "partition": {"type": ["object", "null"]},
+    "rank": {"type": ["object", "null"]},
+    "leads": {"type": "array", "items": {"$ref": "#/$defs/lead"}},
+    "source": {"type": "array", "items": {"$ref": "#/$defs/source_row"}},
+    "neighborhood": {"$ref": "#/$defs/neighborhood"},
+    "build": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "required": ["label"], "properties": {"label": {"$ref": "#/$defs/label_B"}}}
+      ]
+    },
+    "corroboration": {"type": "array", "items": {"$ref": "#/$defs/row_C"}},
+    "tags": {"type": "array", "items": {"$ref": "#/$defs/row_T"}},
+    "other_context": {"type": "array", "items": {"$ref": "#/$defs/row_O"}},
+    "material_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "text"],
+        "properties": {"label": {"type": "string", "pattern": "^X[1-9][0-9]*$"}, "text": {"type": "string"}}
+      }
+    },
+    "gap_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stored", "inline", "file"],
+      "properties": {
+        "stored": {"$ref": "#/$defs/count"},
+        "inline": {"$ref": "#/$defs/count"},
+        "file": {"$ref": "#/$defs/count"}
+      }
+    },
+    "files": {
+      "type": "object",
+      "propertyNames": {"enum": ["gaps.jsonl", "corroborating_findings.jsonl"]},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["count", "bytes", "sha256"],
+        "properties": {
+          "count": {"type": "integer", "minimum": 1},
+          "bytes": {"type": "integer", "minimum": 1},
+          "sha256": {"$ref": "#/$defs/sha"}
+        }
+      }
+    },
+    "omitted": {
+      "description": "Rows dropped per section to meet the byte budget; view_over_budget is set when nothing more could be dropped.",
+      "type": "object",
+      "properties": {"view_over_budget": {"const": true}},
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "proof_obligations": {"type": "array", "items": {"type": "string"}},
+    "graph_families": {"type": "array", "items": {"type": "string"}},
+    "truncation": {"type": ["object", "null"]}
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0},
+    "line": {"type": "integer", "minimum": 1},
+    "label_B": {"type": "string", "pattern": "^B[1-9][0-9]*$"},
+    "lead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "ref", "family", "scanner", "rule", "severity", "native_severity", "message", "cwe",
+                   "where", "location_exact", "suppression", "duplicate_of", "weaknesses"],
+      "properties": {
+        "label": {"type": "string", "pattern": "^L[1-9][0-9]*$"},
+        "ref": {"type": "string", "minLength": 1},
+        "family": {"type": ["string", "null"]},
+        "scanner": {"type": ["string", "null"]},
+        "rule": {"type": ["string", "null"]},
+        "severity": {"type": ["string", "null"]},
+        "native_severity": {"type": ["string", "null"]},
+        "message": {"type": ["string", "null"]},
+        "cwe": {"type": "array", "items": {"type": "string"}},
+        "where": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "line", "function"],
+          "properties": {
+            "path": {"type": ["string", "null"]},
+            "line": {"type": ["integer", "null"], "minimum": 1},
+            "function": {"type": ["string", "null"]}
+          }
+        },
+        "location_exact": {"type": ["boolean", "null"]},
+        "suppression": {"type": ["string", "null"]},
+        "duplicate_of": {"type": ["string", "null"]},
+        "weaknesses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cwe", "name"],
+            "properties": {"cwe": {"type": ["string", "null"]}, "name": {"type": ["string", "null"]}}
+          }
+        },
+        "admission": {"type": "array", "items": {"type": "string"}},
+        "advisory": {"type": ["object", "null"]},
+        "artifacts": {"type": "array"},
+        "control_assessment": {"type": "object"}
+      }
+    },
+    "source_row": {
+      "description": "A span of accepted source text. A slice row shows only the dataflow slice's lines, with elision markers, and maps each shown line to its reasons.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "ref", "role", "path", "lines", "file_sha256", "truncated", "text"],
+      "properties": {
+        "label": {"type": "string", "pattern": "^S[1-9][0-9]*$"},
+        "ref": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "pattern": "^(function|slice|cited_source|type:.+)$"},
+        "path": {"type": "string", "minLength": 1},
+        "lines": {"type": "string", "pattern": "^[1-9][0-9]*-[1-9][0-9]*$"},
+        "file_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+        "truncated": {"type": "boolean"},
+        "text": {"type": "array", "items": {"type": "string", "pattern": "^([1-9][0-9]*|\\.\\.\\.)\\| "}},
+        "reasons": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[1-9][0-9]*$"},
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "if": {"properties": {"role": {"const": "slice"}}},
+      "then": {"required": ["reasons"]},
+      "else": {"not": {"required": ["reasons"]}}
+    },
+    "labelled_row": {
+      "type": "object",
+      "required": ["label", "ref"],
+      "properties": {"ref": {"type": "string", "minLength": 1}}
+    },
+    "row_K": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^K[1-9][0-9]*$"}}}]},
+    "row_R": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^R[1-9][0-9]*$"}}}]},
+    "row_G": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^G[1-9][0-9]*$"}}}]},
+    "row_F": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^F[1-9][0-9]*$"}}}]},
+    "row_P": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^P[1-9][0-9]*$"}}}]},
+    "row_E": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^E[1-9][0-9]*$"}}}]},
+    "row_M": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^M[1-9][0-9]*$"}}}]},
+    "row_C": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^C[1-9][0-9]*$"}}}]},
+    "row_T": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^T[1-9][0-9]*$"}}}]},
+    "row_O": {"allOf": [{"$ref": "#/$defs/labelled_row"}, {"properties": {"label": {"pattern": "^O[1-9][0-9]*$"}}}]},
+    "neighborhood": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "call_depth", "chain", "bound", "slice", "function", "sinks", "ranges", "guards",
+                   "callers", "callees", "flows", "entries", "memory"],
+      "properties": {
+        "rule": {"type": ["string", "null"]},
+        "call_depth": {"type": ["integer", "null"], "minimum": 1},
+        "chain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reached", "depth_limit", "hops", "entries"],
+          "properties": {
+            "reached": {"type": "boolean"},
+            "depth_limit": {"type": ["integer", "null"], "minimum": 1},
+            "hops": {"type": "array", "items": {"$ref": "#/$defs/row_F"}},
+            "entries": {"type": "array", "items": {"$ref": "#/$defs/row_E"}}
+          }
+        },
+        "bound": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": {"kind": {"enum": ["dataflow_path", "call_depth"]}}
+            }
+          ]
+        },
+        "slice": {
+          "description": "A summary of the stored package-slice: the dataflow paths, the lines kept and cut, and each strategy's state.",
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["paths", "lines", "omitted_lines", "strategies"],
+              "properties": {
+                "paths": {"$ref": "#/$defs/count"},
+                "lines": {"$ref": "#/$defs/count"},
+                "omitted_lines": {"$ref": "#/$defs/count"},
+                "strategies": {
+                  "type": "object",
+                  "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+                  "additionalProperties": {"enum": ["applied", "partial", "not_applicable", "failed"]}
+                }
+              }
+            }
+          ]
+        },
+        "function": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "path", "line", "basis"],
+              "properties": {
+                "name": {"type": "string"},
+                "path": {"type": "string"},
+                "line": {"$ref": "#/$defs/line"},
+                "basis": {"type": "string"}
+              }
+            }
+          ]
+        },
+        "sinks": {"type": "array", "items": {"$ref": "#/$defs/row_K"}},
+        "ranges": {"type": "array", "items": {"$ref": "#/$defs/row_R"}},
+        "guards": {"type": "array", "items": {"$ref": "#/$defs/row_G"}},
+        "callers": {"type": "array", "items": {"$ref": "#/$defs/row_F"}},
+        "callees": {"type": "array", "items": {"$ref": "#/$defs/row_F"}},
+        "flows": {"type": "array", "items": {"$ref": "#/$defs/row_P"}},
+        "entries": {"type": "array", "items": {"$ref": "#/$defs/row_E"}},
+        "memory": {"type": "array", "items": {"$ref": "#/$defs/row_M"}}
+      }
+    }
+  }
+}

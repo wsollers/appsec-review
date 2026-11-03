@@ -233,13 +233,13 @@ def test_codeql_lead_embeds_its_correlated_path_sink_guards_and_ranges(graph_fix
     graph_gaps = [gap for gap in document["coverage_gaps"] if gap["producer"] == "code_graph"]
     assert [(gap["state"], "call_site, flow_summary" in gap["reason"]) for gap in graph_gaps] == [
         ("unavailable", True)]
-    # A source-SAST lead in the same build unit has no correlated path, so package-neighborhood/2 keeps the call-depth
+    # A source-SAST lead in the same build unit has no correlated path, so package-neighborhood/3 keeps the call-depth
     # bound: it selects the sink, guard and range facts located on its own line (and in its function) by location.
     sast = _lead(graph_assembly, fixture, "sast_critical")
     assert sast["retrieval"]["graph_families"] == document["retrieval"]["graph_families"]
     assert not [entry for entry in _graph_entries(sast) if entry["id"] == ids["path_bridged"]]
     neighborhood = sast["neighborhood"]
-    assert neighborhood["rule"] == "appsec-review/package-neighborhood/2"
+    assert neighborhood["rule"] == "appsec-review/package-neighborhood/3"
     assert neighborhood["bound"] == {"kind": "call_depth", "paths": [], "call_depth": neighborhood["call_depth"]}
     assert neighborhood["slice"] is None
     assert ids["sink_strcpy"] in {row["ref"] for row in neighborhood["sinks"]}

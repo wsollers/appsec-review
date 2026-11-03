@@ -39,6 +39,8 @@ def verify_runtime_assets() -> None:
     for relative in (
         "containers/catalog.toml",
         "docs/schemas/document-issue-ledger.schema.json",
+        "docs/schemas/review-package-manifest.schema.json",
+        "docs/schemas/review-package-view.schema.json",
         "pipeline/guidance/registry.json",
         "pipeline/prompt-fragments/personas/devops-engineer.md",
         "rules/codeql-graph-export/catalog.json",

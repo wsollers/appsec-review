@@ -1,4 +1,4 @@
-"""Dataflow-bounded package slice contract (``package-slice/1``).
+"""Dataflow-bounded package slice contract (``package-slice/2``).
 
 A finding-lead package whose lead has a correlated ``dataflow_path`` fact is bounded by that path rather
 than by call-graph depth (docs/architecture/review-protocol-v2.md section 4). The model-facing source is a
@@ -23,7 +23,9 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum
 from typing import Any, Protocol, runtime_checkable
 
-SLICE_RULE = "appsec-review/package-slice/1"
+from appsec_review.review.slicing.spans import SPAN_BASES, SPAN_TEXT
+
+SLICE_RULE = "appsec-review/package-slice/2"
 SLICE_PRODUCER = "dataflow_slice"
 PATH_BASIS = "dataflow_path"
 
@@ -118,7 +120,11 @@ class Anchor:
 
 @dataclass(frozen=True, slots=True)
 class FunctionSpan:
-    """The inclusive extent of one function the path passes through; strategies stay inside spans."""
+    """The inclusive extent of one function the path passes through; strategies stay inside spans.
+
+    ``basis`` names the ``review.slicing.spans`` layer that resolved the extent (``tree_sitter``,
+    ``graph_symbol`` or ``text``); a merged span carries the least precise basis of its parts.
+    """
 
     path: str
     file_sha256: str
@@ -126,10 +132,13 @@ class FunctionSpan:
     last: int
     function: str | None = None
     truncated: bool = False
+    basis: str = SPAN_TEXT
 
     def __post_init__(self) -> None:
         if not 1 <= self.first <= self.last:
             raise ValueError("a function span is 1 <= first <= last")
+        if self.basis not in SPAN_BASES:
+            raise ValueError(f"unknown function span basis {self.basis!r}")
 
     def contains(self, key: LineKey) -> bool:
         return key.path == self.path and key.file_sha256 == self.file_sha256 and self.first <= key.line <= self.last
@@ -246,7 +255,7 @@ class SliceResult:
     paths: tuple[str, ...] = ()     # identities of the dataflow_path facts that anchored it
 
     def record(self) -> dict[str, Any]:
-        """The ``package-slice/1`` record (deterministic; identities and line numbers only)."""
+        """The ``package-slice/2`` record (deterministic; identities and line numbers only)."""
         by_span: dict[FunctionSpan, list[SliceLine]] = {span: [] for span in self.functions}
         for line in self.lines:
             span = next((item for item in self.functions if item.contains(line.key)), None)
@@ -258,7 +267,7 @@ class SliceResult:
             kept = sorted(by_span[span], key=lambda item: item.key.line)
             functions.append({
                 "path": span.path, "file_sha256": span.file_sha256, "function": span.function,
-                "first": span.first, "last": span.last, "truncated": span.truncated,
+                "first": span.first, "last": span.last, "truncated": span.truncated, "span_basis": span.basis,
                 "lines": [{"line": item.key.line, "reasons": sorted(reason.value for reason in item.reasons),
                            "basis": item.basis, "precision": item.precision.label} for item in kept]})
         return {"rule": SLICE_RULE, "paths": sorted(self.paths), "functions": functions,

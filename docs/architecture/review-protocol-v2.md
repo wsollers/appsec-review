@@ -62,7 +62,8 @@ a wrong one fatal.
 ### 4.1 Shape
 
 The package keeps its hash-pinned identity and reuse basis. Its model-facing view is organized into
-labelled sections. Ids are shortened here.
+labelled sections. Ids are shortened here. Every built view is validated against
+[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/4`).
 
 ```json
 {
@@ -84,7 +85,7 @@ labelled sections. Ids are shortened here.
      "text": ["9| struct Header {", "10|  uint16_t kind;", "11|  uint16_t length;", "12|  char name[16];"]}
   ],
   "neighborhood": {
-    "rule": "package-neighborhood/2", "call_depth": 3,
+    "rule": "package-neighborhood/3", "call_depth": 3,
     "bound": {"kind": "call_depth", "paths": [], "call_depth": 3}, "slice": null,
     "sinks":   [{"label": "K1", "ref": "asr:sink_site:effd6c6d…", "summary": "memcpy [memory_write], L16"}],
     "ranges":  [{"label": "R1", "ref": "asr:range_fact:9cedee4f…", "summary": "length operand is uint16_t, 0..65535"}],
@@ -116,7 +117,7 @@ material gap. A row returned by a tool during the cell is labelled `Q1`, `Q2` �
 Labels exist only in the model-facing view. They are not stored as identities; the ledger stores the
 resolved refs.
 
-### 4.3 What is embedded (`package-neighborhood/2`)
+### 4.3 What is embedded (`package-neighborhood/3`)
 
 **Dataflow bound.** When the lead has a correlated `dataflow_path`, the neighborhood is bounded by
 that path rather than by call depth. It contains:

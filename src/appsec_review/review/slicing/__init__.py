@@ -1,1 +1,1 @@
-"""Dataflow-bounded package slicing (``package-slice/1``); see ``review.slicing.contract``."""
+"""Dataflow-bounded package slicing (``package-slice/2``); see ``review.slicing.contract``."""

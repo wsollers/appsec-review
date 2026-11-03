@@ -1,4 +1,4 @@
-"""package-slice/1 anchors and composer: dataflow_path facts -> request -> budgeted, schema-valid slice."""
+"""package-slice/2 anchors and composer: dataflow_path facts -> request -> budgeted, schema-valid slice."""
 from __future__ import annotations
 
 import json
@@ -192,15 +192,15 @@ def test_spans_per_function_merge_when_overlapping_and_mark_truncation() -> None
     nested = {"steps": [_step(0, "source", _loc(6, "src/app.py", PY_SHA), symbol=INNER),
                         _step(1, "sink", _loc(7, "src/app.py", PY_SHA), symbol=FN)]}
     request, gaps = build_request([(P1, nested)], SOURCES, max_function_lines=160)
-    assert request.functions == (FunctionSpan("src/app.py", PY_SHA, 3, 8, function=None),) and gaps == ()
+    assert request.functions == (FunctionSpan("src/app.py", PY_SHA, 3, 7, function=None),) and gaps == ()
     assert all(request.span_for(anchor.key) for anchor in request.anchors)
 
     request, gaps = build_request([(P1, _c_path(steps=[_step(0, "source", _loc(9)), _step(1, "sink", _loc(13))]))],
                                   SOURCES, max_function_lines=4)
     assert request.functions == (FunctionSpan("src/a.c", SHA, 7, 10, function=FN, truncated=True),)
     assert [anchor.key.line for anchor in request.anchors] == [9]
-    assert gaps == (f"{GAP_FUNCTION_UNRESOLVED}: src/a.c:13: no enclosing function found within 4 lines; "
-                    "the sink anchor is not sliced",)
+    assert gaps == (f"{GAP_FUNCTION_UNRESOLVED}: src/a.c:13: no enclosing named C/C++ function found within 4 "
+                    "lines (tried: text); the sink anchor is not sliced",)
 
 
 def test_module_level_and_out_of_file_anchors_are_dropped_with_gaps() -> None:
@@ -209,8 +209,8 @@ def test_module_level_and_out_of_file_anchors_are_dropped_with_gaps() -> None:
                       _step(2, "sink", _loc(40, "src/app.py", PY_SHA))]}
     request, gaps = build_request([(P1, fact)], SOURCES, max_function_lines=160)
     assert [anchor.key.line for anchor in request.anchors] == [7]
-    assert gaps == (f"{GAP_FUNCTION_UNRESOLVED}: src/app.py:9: no enclosing function found within 160 lines; "
-                    "the source anchor is not sliced",
+    assert gaps == (f"{GAP_FUNCTION_UNRESOLVED}: src/app.py:9: no enclosing named Python function found within "
+                    "160 lines (tried: text); the source anchor is not sliced",
                     f"{GAP_STEP_UNLOCATED}: {P1}: line 40 is beyond the end of src/app.py")
 
 

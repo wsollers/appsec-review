@@ -524,11 +524,11 @@ def test_codeql_publishes_what_the_graph_job_reads_and_build_units_match(pipelin
     assert {entry["role"] for entry in lead["context"]} >= {"path", "sink", "entry_point", "guard", "range"}
     # The bridged CodeQL lead is bounded by its correlated dataflow path and carries a composed slice.
     neighborhood = lead["neighborhood"]
-    assert neighborhood["rule"] == "appsec-review/package-neighborhood/2"
+    assert neighborhood["rule"] == "appsec-review/package-neighborhood/3"
     assert neighborhood["bound"]["kind"] == "dataflow_path" and neighborhood["bound"]["call_depth"] is None
     assert neighborhood["bound"]["paths"] and all(
         identity.startswith("asr:dataflow_path:") for identity in neighborhood["bound"]["paths"])
-    assert neighborhood["slice"]["rule"] == "appsec-review/package-slice/1"
+    assert neighborhood["slice"]["rule"] == "appsec-review/package-slice/2"
     assert neighborhood["slice"]["paths"] == neighborhood["bound"]["paths"]
     assert neighborhood["slice"]["functions"] and all(
         len(item["file_sha256"]) == 64 and item["lines"] for item in neighborhood["slice"]["functions"])
