@@ -1,7 +1,7 @@
 # Dataflow-bounded package slices
 
-Status: implemented for the review-package context of lane A finding leads (`package-slice/1`,
-`package-neighborhood/2`). The CodeQL export scope (`seed_depth`, see
+Status: implemented for the review-package context of lane A finding leads (`package-slice/2`,
+`package-neighborhood/3`). The CodeQL export scope (`seed_depth`, see
 [`seeded-codeql-neighborhoods.md`](seeded-codeql-neighborhoods.md)) and the retrieval tools are
 unchanged.
 
@@ -31,12 +31,13 @@ The bound is recorded in the stored neighborhood (`bound.kind`, `bound.paths`, `
 so each package states why its context has the extent it has. The fallback is never silent: a lead
 without a path is a named gap, not a lead with an empty slice.
 
-## The slice (`package-slice/1`)
+## The slice (`package-slice/2`)
 
 Code: `src/appsec_review/review/slicing/`.
 
 - `contract.py` defines the record, the strategy protocol and the gap names.
 - `anchors.py` turns path facts into anchors and function spans.
+- `spans.py` resolves the named function or method that encloses a line, in every catalog language.
 - `compose.py` runs the strategies and applies the budget.
 - `registry.py` maps configured names to strategy classes.
 - `sources.py` is the facade over accepted data that the strategies read.
@@ -47,11 +48,42 @@ Every located line of a path step becomes an **anchor**, with the reason `source
 `path_step`. So does every located guard, range and sanitizer, with the reason `guard`, `range` or
 `sanitizer`.
 
-The enclosing function of each anchor is found in the hash-verified source text. The search walks up
-from the anchor to the nearest function header whose extent contains it. This works for Python and
-the brace languages; anchors in other languages, or outside any function, are dropped with a
-`slice_function_unresolved` gap. Overlapping extents are merged. An extent cut at the line bound is
-marked `truncated`.
+The enclosing function of each anchor comes from `spans.resolve`. It tries four layers, most precise
+first. The first layer that answers wins and becomes the span's `span_basis`:
+
+1. **`tree_sitter`:** the accepted tree-sitter `ast_node` rows of the file, at the anchor's file hash.
+   The innermost row of a callable node type that contains the anchor gives the extent. If the parse
+   is clean and its rows cover the line but no callable contains it, the anchor is outside every
+   function, and that answer is final. If the parse has errors near the anchor, or its rows stop
+   before the line (the parser's node bound), resolution moves to the next layer and records a
+   `slice_function_fallback` gap.
+2. **`graph_symbol`:** the function-name lines of accepted graph symbols at the same file hash
+   (`GraphContext.function_headers`). The anchor's step symbol is tried first, then the nearest
+   preceding header. The extent comes from the language's text rule.
+3. **`text`:** the language's header patterns (`spans.LANGUAGES`, keyed by file suffix), searched
+   upward from the anchor. The innermost header whose extent contains the anchor wins.
+4. **Otherwise:** a `slice_function_unresolved` gap that names the language and the layers tried. No
+   window is invented.
+
+Only named functions and methods are spans. Lambdas, closures and blocks belong to the named
+function around them. Function-valued bindings (`const f = () => {...}` in JavaScript and TypeScript,
+`f := func() {...}` in Go) count as named.
+
+The text rules decide where an extent ends:
+
+| Rule | Languages | Extent |
+|---|---|---|
+| `indent` | Python | the block below the header |
+| `brace` | C, C++, Objective-C, Java, Kotlin, Scala, C#, JavaScript, TypeScript, Go, Rust, Swift, Dart, PHP, shell, PowerShell | from the first body `{` at parenthesis depth 0 to its matching `}`, ignoring braces inside that language's strings, character literals and comments |
+| `keyword` | Ruby | from `def` to its matching `end` |
+
+An expression body (`= expr`, `=> expr`) ends with its statement. A header with no body is a
+declaration, not a function.
+
+Overlapping extents are merged, and a merged span keeps the basis of its least precise part. An
+extent cut at the line bound is marked `truncated`. `tests/fixtures/function_spans/` holds one source
+file per language and a recorded tree-sitter golden. `tests/review/test_slicing_spans.py` checks every
+layer against them.
 
 Missing input produces these gaps:
 
@@ -120,8 +152,8 @@ counted in `omitted.lines` and named in a `slice_truncated` gap.
 
 - `rule`;
 - the sorted path identities;
-- the functions (path, file hash, function, first and last line, `truncated`), each with its lines
-  (line number, sorted reasons, basis, precision label);
+- the functions (path, file hash, function, first and last line, `truncated`, `span_basis`), each
+  with its lines (line number, sorted reasons, basis, precision label);
 - the per-strategy outcomes (name, precision, state, lines contributed, gaps);
 - `omitted.lines`;
 - the sorted, unique gaps.
@@ -131,7 +163,7 @@ recorded file hash.
 
 ## Package, view and manifest
 
-**Assembly** (`review/packages.py`, `assemble-review-packages/11`) reads the slice inputs through
+**Assembly** (`review/packages.py`, `assemble-review-packages/12`) reads the slice inputs through
 `SliceSources`. `GraphContext.neighborhood` takes the lead's observation identity and picks the bound:
 
 - **`dataflow_path`:** `flows` are the lead's correlated paths, sorted by identity, at most
@@ -142,10 +174,10 @@ recorded file hash.
   `chain` follows the path's functions. The `function` record is unchanged.
 - **`call_depth`:** today's breadth-first walk to `max_call_depth`.
 
-The stored neighborhood (`package-neighborhood/2`) gains two fields:
+The stored neighborhood (`package-neighborhood/3`) gains two fields:
 
 - `bound: {kind, paths, call_depth}`;
-- `slice`: a `package-slice/1` record, or `null` under `call_depth`.
+- `slice`: a `package-slice/2` record, or `null` under `call_depth`.
 
 Slice gaps become package gaps with producer `dataflow_slice`. Their state is:
 
@@ -172,6 +204,25 @@ bound, the number of paths, lines and omitted lines, and each strategy's state.
 **Manifest:** `counts.neighborhood_bounds` counts finding-lead packages by bound. Cell receipts carry
 no package or view metadata and are unchanged.
 
+**Schemas:** every view is validated against `docs/schemas/review-package-view.schema.json` when it
+is built. The manifest is validated against `docs/schemas/review-package-manifest.schema.json` before
+it is hashed, and again by `verify_package_manifest`. Both are loaded by `review/schemas.py`. A
+violation is an `IntegrityError` that blocks publication; it is never turned into a gap.
+
+### Tests with real producer output
+
+`tests/review/test_slicing_end_to_end.py` runs the whole slice over C files with real producer
+output from `tests/fixtures/slicing_end_to_end/`:
+
+- clang-18 LLVM IR, normalized by the real `llvm-ir` producer;
+- SVF output from the real alias-analysis job;
+- tree-sitter rows from the real syntax normalizer.
+
+All four strategies apply, and the test pins the slice's exact lines, which leave out an unrelated
+variable. `record.py` re-records the fixture; it needs Docker and is run by hand.
+`tests/review/test_slicing_sources.py` tests the `AcceptedSliceSources` facade against real index
+shards, covering shard selection, filtering, caps, caching and every unavailable reason.
+
 ### Gap vocabulary
 
 All slice gaps use the producer `dataflow_slice`:
@@ -185,6 +236,7 @@ All slice gaps use the producer `dataflow_slice`:
 - `slice_source_unavailable`
 - `path_step_unlocated`
 - `slice_function_unresolved`
+- `slice_function_fallback`
 - `slice_out_of_span`
 - the inherited path gaps
 

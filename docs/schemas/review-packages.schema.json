@@ -2108,7 +2108,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/11"
+          "const": "appsec-review/assemble-review-packages/12"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"
@@ -2348,17 +2348,17 @@
     "inference_package_slice": {
       "type": "object",
       "additionalProperties": false,
-      "description": "package-slice/1: the lines of the functions a lead's correlated dataflow paths pass through that the configured slice strategies relate to the path (identities and line numbers only).",
+      "description": "package-slice/2: the lines of the functions a lead's correlated dataflow paths pass through that the configured slice strategies relate to the path (identities and line numbers only).",
       "required": ["rule", "paths", "functions", "strategies", "omitted", "gaps"],
       "properties": {
-        "rule": {"const": "appsec-review/package-slice/1"},
+        "rule": {"const": "appsec-review/package-slice/2"},
         "paths": {"type": "array", "items": {"$ref": "#/$defs/inference_identity"}},
         "functions": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "file_sha256", "function", "first", "last", "truncated", "lines"],
+            "required": ["path", "file_sha256", "function", "first", "last", "truncated", "span_basis", "lines"],
             "properties": {
               "path": {"type": "string", "minLength": 1},
               "file_sha256": {"$ref": "#/$defs/inference_sha"},
@@ -2366,6 +2366,10 @@
               "first": {"type": "integer", "minimum": 1},
               "last": {"type": "integer", "minimum": 1},
               "truncated": {"type": "boolean"},
+              "span_basis": {
+                "description": "The function-span layer that resolved the extent (review/slicing/spans.py), most precise first; a merged span carries its least precise part's basis.",
+                "enum": ["tree_sitter", "graph_symbol", "text"]
+              },
               "lines": {
                 "type": "array",
                 "items": {
@@ -2416,7 +2420,7 @@
     "inference_neighborhood": {
       "type": "object",
       "additionalProperties": false,
-      "description": "package-neighborhood/2: identities and fact summaries selected by the lead's correlated dataflow paths (bound dataflow_path, with a composed slice) or, without one, by location and call depth (bound call_depth, slice null).",
+      "description": "package-neighborhood/3: identities and fact summaries selected by the lead's correlated dataflow paths (bound dataflow_path, with a composed slice) or, without one, by location and call depth (bound call_depth, slice null).",
       "required": [
         "rule",
         "call_depth",
@@ -2437,7 +2441,7 @@
       ],
       "properties": {
         "rule": {
-          "const": "appsec-review/package-neighborhood/2"
+          "const": "appsec-review/package-neighborhood/3"
         },
         "call_depth": {
           "type": "integer",

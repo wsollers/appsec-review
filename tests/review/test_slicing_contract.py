@@ -1,4 +1,4 @@
-"""package-slice/1 contract: record shape, registry, and central slice settings."""
+"""package-slice/2 contract: record shape, registry, and central slice settings."""
 from __future__ import annotations
 
 import json

@@ -1,4 +1,4 @@
-"""Dataflow-path-bounded lead neighborhoods (``package-neighborhood/2``), their slices and slice-only views.
+"""Dataflow-path-bounded lead neighborhoods (``package-neighborhood/3``), their slices and slice-only views.
 
 parse.c (from the inference-review fixture)::
 
@@ -15,6 +15,7 @@ library call, off the path) and outer -> q (outer is not on the path; call-depth
 from __future__ import annotations
 
 from dataclasses import asdict
+import json
 from typing import Any
 
 import jsonschema
@@ -24,10 +25,17 @@ from appsec_review.graph.contract import Family
 from appsec_review.retrieval import EntityKind, EntityRecord, RelationKind as IndexRelation, RelationRecord
 from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.retrieval.model import LogicalIdentity
+from appsec_review.review import package_view
+from appsec_review.review.identity import sha256_hex
+from appsec_review.review.models import IntegrityError
 from appsec_review.review.neighborhood import NEIGHBORHOOD_RULE
-from appsec_review.review.package_view import VIEW_RULE, ViewLimits, build_view
+from appsec_review.review.package_view import VIEW_RULE, VIEW_SCHEMA, ViewLimits, build_view
 from appsec_review.review.packages import (
-    GraphContext, GraphSettings, assemble_packages, slice_gap, trim_slice,
+    ASSEMBLY_RULE, MANIFEST_SCHEMA, PACKAGE_SCHEMA, GraphContext, GraphSettings, assemble_packages,
+    publish_packages, slice_gap, trim_slice, verify_package_manifest,
+)
+from appsec_review.review.schemas import (
+    MANIFEST_SCHEMA_FILE, VIEW_SCHEMA_FILE, schema_path, validate as validate_schema, validator,
 )
 from appsec_review.review.scope import accept_manifest
 from appsec_review.review.slicing.contract import SLICE_PRODUCER, SLICE_RULE
@@ -129,7 +137,7 @@ def _slice_gaps(package: dict[str, Any]) -> list[dict[str, Any]]:
 def test_a_lead_with_a_correlated_path_is_bounded_by_it_and_carries_a_slice(dataflow) -> None:
     fixture, ids, _scope, assembly, _core = dataflow
     neighborhood = _package(assembly, fixture, "sast_critical")["neighborhood"]
-    assert neighborhood["rule"] == NEIGHBORHOOD_RULE == "appsec-review/package-neighborhood/2"
+    assert neighborhood["rule"] == NEIGHBORHOOD_RULE == "appsec-review/package-neighborhood/3"
     assert neighborhood["bound"] == {"kind": "dataflow_path", "paths": [ids["path"]], "call_depth": None}
     assert neighborhood["function"]["symbol"] == ids["p"]
     assert [row["ref"] for row in neighborhood["flows"]] == [ids["path"]]
@@ -198,6 +206,7 @@ def test_slice_gaps_become_named_package_gaps(dataflow) -> None:
     ("slice_function_unresolved: a.c:3: none", "unavailable"),
     ("slice_strategy_partial: tree_sitter_references: a.c", "partial"),
     ("slice_lexical_only: a.c:1-4", "partial"),
+    ("slice_function_fallback: tree_sitter rows for a.c could not be read (RuntimeError)", "partial"),
     ("asr:dataflow_path:x: truncated_steps: 9 steps", "partial"),
 ])
 def test_slice_gap_states_are_consistent(reason: str, state: str) -> None:
@@ -227,9 +236,11 @@ def test_a_failing_strategy_is_isolated_and_the_package_stays_valid(dataflow) ->
     found = package["neighborhood"]["slice"]
     states = {item["name"]: item["state"] for item in found["strategies"]}
     assert states["tree_sitter_references"] == "failed" and states["lexical_identifiers"] == "applied"
-    assert found["functions"]
+    assert found["functions"] and {item["span_basis"] for item in found["functions"]} == {"graph_symbol"}
     assert ("failed", "slice_strategy_failed: tree_sitter_references: RuntimeError") in {
         (gap["state"], gap["reason"]) for gap in _slice_gaps(package)}
+    assert any(gap["reason"].startswith("slice_function_fallback: tree_sitter rows for ")
+               and gap["state"] == "partial" for gap in _slice_gaps(package))
 
 
 def test_a_failing_source_facade_never_fails_assembly(dataflow) -> None:
@@ -286,6 +297,57 @@ def test_the_manifest_counts_finding_leads_by_bound(dataflow) -> None:
     kinds = [item.document()["neighborhood"]["bound"]["kind"] for item in assembly.packages
              if item.kind == "finding_lead"]
     assert kinds.count("dataflow_path") == 1 and kinds.count("call_depth") == bounds["call_depth"]
+
+
+def test_the_view_and_manifest_schemas_pin_the_emitted_versions() -> None:
+    view, manifest = validator(VIEW_SCHEMA_FILE).schema, validator(MANIFEST_SCHEMA_FILE).schema
+    assert view["properties"]["schema"]["const"] == VIEW_SCHEMA
+    assert view["properties"]["rule"]["const"] == VIEW_RULE
+    assert manifest["properties"]["schema"]["const"] == MANIFEST_SCHEMA
+    assert manifest["properties"]["assembly_rule"]["const"] == ASSEMBLY_RULE
+    assert manifest["properties"]["package_schema"]["const"] == PACKAGE_SCHEMA
+    rules = manifest["properties"]["rules"]["properties"]
+    assert rules["neighborhood"]["const"] == NEIGHBORHOOD_RULE and rules["slice"]["const"] == SLICE_RULE
+    with pytest.raises(ValueError):
+        schema_path("../review-packages.schema.json")
+
+
+def test_every_view_and_the_manifest_validate_and_violations_raise(dataflow) -> None:
+    fixture, _ids, _scope, assembly, core = dataflow
+    views = [build_view(package.document(), core, LIMITS).document for package in assembly.packages]
+    for document in views:
+        validator(VIEW_SCHEMA_FILE).validate(document)
+    assert any(row["role"] == "slice" for document in views for row in document["source"])
+    validator(MANIFEST_SCHEMA_FILE).validate(assembly.manifest)
+
+    broken = json.loads(json.dumps(views[0]))
+    broken["neighborhood"]["slice"] = {"paths": 1, "lines": 2, "omitted_lines": 0, "strategies": {"x": "done"}}
+    with pytest.raises(IntegrityError, match="package view violates"):
+        validate_schema(VIEW_SCHEMA_FILE, broken, "package view")
+    manifest = json.loads(json.dumps(assembly.manifest))
+    del manifest["counts"]["neighborhood_bounds"]["dataflow_path"]
+    with pytest.raises(IntegrityError, match="neighborhood_bounds"):
+        validate_schema(MANIFEST_SCHEMA_FILE, manifest, "package manifest")
+
+
+def test_build_view_refuses_a_view_its_schema_rejects(dataflow, monkeypatch) -> None:
+    fixture, _ids, _scope, assembly, core = dataflow
+    package = _package(assembly, fixture, "sast_critical")
+    monkeypatch.setattr(package_view, "VIEW_RULE", "appsec-review/package-view/3")
+    with pytest.raises(IntegrityError, match="review-package-view.schema.json"):
+        build_view(package, core, LIMITS)
+
+
+def test_verify_refuses_a_rehashed_manifest_its_schema_rejects(dataflow, tmp_path) -> None:
+    _fixture, _ids, _scope, assembly, _core = dataflow
+    path = publish_packages(assembly, tmp_path / "out")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document.pop("content_sha256")
+    document["counts"]["neighborhood_bounds"]["everything"] = 1
+    document["content_sha256"] = sha256_hex(document)
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(IntegrityError, match="review-package-manifest.schema.json"):
+        verify_package_manifest(path)
 
 
 # ------------------------------------------------------------------------------------------------ trimming
@@ -359,8 +421,9 @@ SOURCE[6] = 'key = "hunter2-Xq9v"'
 class _FakeCore:
     """The accepted-index boundary of the view: one lead in ``a.c`` at line 7 and its function symbol."""
 
-    def __init__(self, sha: str = SHA):
+    def __init__(self, sha: str = SHA, source: list[str] = SOURCE):
         self.location = {"path": "a.c", "file_sha256": sha, "start_line": 7, "end_line": 7}
+        self.source = source
 
     def find(self, **query: Any) -> dict[str, Any]:
         if query.get("identity") == LEAD:
@@ -369,7 +432,7 @@ class _FakeCore:
 
     def read_source_lines(self, *, identity: str):
         if identity in {LEAD, FN}:
-            return {"location": dict(self.location), "lines": list(SOURCE)}, None
+            return {"location": dict(self.location), "lines": list(self.source)}, None
         return None, "not accepted"
 
 
@@ -408,10 +471,11 @@ def test_a_lead_outside_every_slice_function_gets_its_own_line_row() -> None:
 
 
 def test_a_slice_of_another_file_version_falls_back_to_the_function_extent() -> None:
-    view = build_view(_sliced_package([3, 10], function_sha="d" * 64), _FakeCore(sha="d" * 64), LIMITS)
+    source = [*SOURCE[:1], "int f(void) {", *SOURCE[2:10], "}", *SOURCE[11:]]
+    view = build_view(_sliced_package([3, 10], function_sha="d" * 64), _FakeCore(sha="d" * 64, source=source), LIMITS)
     assert not [item for item in view.document["source"] if item["role"] == "slice"]
     [span] = [item for item in view.document["source"] if item["role"] == "function"]
-    assert span["text"][0].startswith("2| ")
+    assert span["lines"] == "2-11" and span["text"][0] == "2| int f(void) {"
     assert any("dataflow slice of a.c names a different file hash" in item["text"]
                for item in view.document["material_gaps"])
 

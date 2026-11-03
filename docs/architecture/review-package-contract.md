@@ -183,11 +183,11 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
 Review protocol v2 ([`review-protocol-v2.md`](review-protocol-v2.md)) changes what a cell is shown, not
 what the stored package pins. Two things are new.
 
-**The stored `neighborhood` (`package-neighborhood/2`, `review/neighborhood.py`, `GraphContext.neighborhood`).**
+**The stored `neighborhood` (`package-neighborhood/3`, `review/neighborhood.py`, `GraphContext.neighborhood`).**
 Every package has a required `neighborhood` object. It records the bound that selected it:
 
 - `bound: {kind, paths, call_depth}`;
-- `slice`: a `package-slice/1` record, or `null`.
+- `slice`: a `package-slice/2` record, or `null`.
 
 A lane A lead with a correlated `dataflow_path` is bounded by that path. The rows are then limited to
 the path's flows, sinks, guards, ranges and entry points, and to the call sites between functions on
@@ -221,7 +221,7 @@ bounds the destination of a write. Every row is also a `context` entry (new role
 `max_package_bytes`; a row removed for bytes is counted in `omitted` and named by a `truncated`
 `code_graph_neighborhood` gap. Neighborhood rows are not capped by `max_context_entries`. A hunt package carries the
 summaries of its embedded sink and entry-point facts. The neighborhood enters the package fingerprint with
-`package-neighborhood/2`, `fact-summary/1`, `package-build-summary/1` and the graph caps. The manifest counts
+`package-neighborhood/3`, `fact-summary/1`, `package-build-summary/1` and the graph caps. The manifest counts
 finding-lead packages by bound in `counts.neighborhood_bounds`.
 
 The slice is configured under `[jobs.job_inference_security_review.settings.packages]`. These are
@@ -364,7 +364,9 @@ The three view bounds live next to the package bounds:
 6. Publish a run-owned manifest (`appsec-review/review-package-manifest/1`) listing every
    package id, kind, lane, family, partition, SHA-256 and size; the accepted input shard hashes;
    the evidence-map hash; the CWE reference record; ranked units with their basis and hunt state;
-   every gap; per-family and per-severity counts, including KEV-admitted leads; and both audits. `publish_packages` writes and verifies the bytes, and
+   every gap; per-family and per-severity counts, including KEV-admitted leads; and both audits. Its shape is
+   [review-package-manifest.schema.json](../schemas/review-package-manifest.schema.json), checked before the
+   manifest is hashed and again on verification. `publish_packages` writes and verifies the bytes, and
    the review job consumes the manifest only after `verify_package_manifest` succeeds. Producer
    failure publishes explicit gaps; membership or integrity failure blocks the handoff.
 

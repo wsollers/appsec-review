@@ -27,7 +27,7 @@ accepted ``job_svf_alias_analysis`` records, whatever scanner reported the lead,
 entries naming the accepted ``call_site`` facts that reach the lead's enclosing function, to
 ``caller_depth`` (default 2). Missing, partial and bounded context is a named gap.
 
-A finding-lead neighborhood (``package-neighborhood/2``) is bounded by the lead's correlated
+A finding-lead neighborhood (``package-neighborhood/3``) is bounded by the lead's correlated
 ``dataflow_path`` facts when it has any (``bound.kind == "dataflow_path"``): flows, sinks, entries
 and the calls between the paths' functions only, plus a composed ``slice`` (``review.slicing``) of the
 path's lines. Without a correlated path it keeps the call-depth neighborhood and names a
@@ -68,6 +68,7 @@ from appsec_review.review.neighborhood import (
 )
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
+from appsec_review.review.schemas import MANIFEST_SCHEMA_FILE, validate as validate_schema
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 from appsec_review.review.slicing import anchors as slice_anchors
 from appsec_review.review.slicing.compose import compose as compose_slice
@@ -80,6 +81,7 @@ from appsec_review.review.slicing.registry import (
     validate_names as validate_slice_strategies,
 )
 from appsec_review.review.slicing.sources import AcceptedSliceSources, UnavailableSliceSources
+from appsec_review.review.slicing.spans import Header as SpanHeader
 from appsec_review.review.units import (
     RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
 )
@@ -88,7 +90,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/11"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/12"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -641,7 +643,7 @@ class GraphContext:
         return chosen, total - len(chosen)
 
 
-    # -- package neighborhood (package-neighborhood/2) --------------------------------------------------
+    # -- package neighborhood (package-neighborhood/3) --------------------------------------------------
     def function_at(self, path: str | None, line: int | None) -> tuple[_Symbol | None, str]:
         """The function a lead line belongs to and how it was chosen.
 
@@ -763,7 +765,7 @@ class GraphContext:
 
     def neighborhood(self, observation_id: str, path: str | None, line: int | None, settings: GraphSettings,
                      subject: str) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
-        """The ``package-neighborhood/2`` record for one lead, its context entries and gaps.
+        """The ``package-neighborhood/3`` record for one lead, its context entries and gaps.
 
         A lead with correlated (``bridged``/``partial``) ``dataflow_path`` facts is bounded by those paths
         (:meth:`path_neighborhood`); any other lead keeps the call-depth neighborhood and a named
@@ -951,6 +953,21 @@ class GraphContext:
                         for entry in result[key]]
             found.append((identity, {"result": result, "gaps": list(payload["gaps"])}))
         return found
+
+    def function_headers(self) -> dict[tuple[str, str], tuple[SpanHeader, ...]]:
+        """Function-name lines of the accepted graph symbols by ``(path, file_sha256)``, for function spans.
+
+        A symbol without a recorded file hash is not used: its line cannot be tied to the verified text."""
+        cached = getattr(self, "_function_headers", None)
+        if cached is not None:
+            return cached
+        found: dict[tuple[str, str], list[SpanHeader]] = defaultdict(list)
+        for path, symbols in self.symbols_by_path.items():
+            for symbol in symbols:
+                if symbol.file_sha256:
+                    found[(path, symbol.file_sha256)].append(SpanHeader(symbol.line, symbol.name, symbol.identity))
+        self._function_headers = {key: tuple(values) for key, values in found.items()}
+        return self._function_headers
 
     def call_depth_neighborhood(self, path: str | None, line: int | None, settings: GraphSettings, subject: str
                                 ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
@@ -1194,13 +1211,14 @@ class _Assembler:
         return record, entries, gaps
 
     def lead_slice(self, paths: list[str]) -> tuple[dict[str, Any], list[str]]:
-        """The ``package-slice/1`` record composed from ``paths`` and the slice gaps (record order).
+        """The ``package-slice/2`` record composed from ``paths`` and the slice gaps (record order).
 
         Facade gaps of the slice's files are added to the record; an unexpected error keeps an empty slice
         with a named ``slice_strategy_failed`` gap rather than failing the package."""
         try:
             request, anchor_gaps = slice_anchors.build_request(
-                self.graph.slice_paths(paths), self.slice_sources, max_function_lines=MAX_FUNCTION_LINES)
+                self.graph.slice_paths(paths), self.slice_sources, max_function_lines=MAX_FUNCTION_LINES,
+                function_headers=self.graph.function_headers())
             result = compose_slice(request, self.slice_strategies, self.settings.slice_budget,
                                    inherited_gaps=anchor_gaps, paths=paths)
             found = result.record()
@@ -1702,6 +1720,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "audit": {"lane_a": lane_a, "lane_b": lane_b,
                   "families_available": {family: bool(collection.available.get(family)) for family in FAMILIES}},
     }
+    validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
     document["content_sha256"] = sha256_hex(document)
     return Assembly(tuple(packages), document, gaps)
 
@@ -1747,6 +1766,7 @@ def verify_package_manifest(manifest_path: Path) -> dict[str, Any]:
     if claimed != sha256_hex(document):
         raise IntegrityError("package manifest content hash mismatch")
     document["content_sha256"] = claimed
+    validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
     for entry in document["packages"]:
         path = manifest_path.parent / "packages" / f"{entry['package_id']}.json"
         if not path.is_file() or file_sha256(path) != entry["sha256"]:

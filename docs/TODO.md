@@ -394,14 +394,14 @@ Design: `docs/architecture/dataflow-bounded-slices.md`. Remaining work:
 - run the dataflow-bound assertion in `tests/integration/test_code_graph_end_to_end.py`, which has
   not been run yet;
 - measure how much package and view context shrinks on a live review compared with the call-depth
-  bound, and whether findings are lost (LLMxCPG reports 68–91% less context);
-- add a fixture with real compiler-produced output (LLVM IR flows, SVF, tree-sitter rows), so the
-  `llvm_ir_def_use`, `svf_points_to` and `tree_sitter_references` strategies are tested producing
-  package slice lines (today only `lexical_identifiers` does);
-- resolve function spans from graph symbol locations instead of the text heuristic, and support
-  languages other than Python and the brace languages;
-- add a JSON schema for the view and the manifest, so `counts.neighborhood_bounds` and the view's
-  `slice` fields are schema-checked.
+  bound, and whether findings are lost (LLMxCPG reports 68–91% less context).
+
+Done: a real compiler, SVF and tree-sitter fixture now drives every strategy end to end
+(`tests/review/test_slicing_end_to_end.py`), and the `AcceptedSliceSources` facade has its own tests.
+Function spans are resolved from tree-sitter rows, then graph symbol headers, then per-language text
+rules, with a named gap when none applies. The view and the manifest are validated at run time
+against `docs/schemas/review-package-view.schema.json` and
+`docs/schemas/review-package-manifest.schema.json`.
 
 ## Measure and extend seeded Clang neighborhoods
 

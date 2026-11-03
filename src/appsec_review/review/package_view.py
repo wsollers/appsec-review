@@ -33,6 +33,7 @@ from typing import Any
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.labels import LabelTable
 from appsec_review.review.neighborhood import function_extent, type_names
+from appsec_review.review.schemas import VIEW_SCHEMA_FILE, validate as validate_schema
 from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
@@ -570,6 +571,7 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         else:
             document["omitted"] = {**document["omitted"], "view_over_budget": True}
             break
+    validate_schema(VIEW_SCHEMA_FILE, document, "package view")
     return PackageView(
         document=document, labels=labels, files=files, locator_paths=frozenset(builder.locator_paths),
         lead_refs=tuple(lead["ref"] for lead in leads), texts=dict(texts),

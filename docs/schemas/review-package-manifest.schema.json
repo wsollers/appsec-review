@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/review-package-manifest.schema.json",
+  "title": "Review package manifest (review-package-manifest/1)",
+  "description": "The manifest assemble-review-packages/12 publishes beside the package bytes (review/packages.py). assemble_packages validates the document before hashing it, and verify_package_manifest validates it again before any consumer reads a package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "assembly_rule", "package_schema", "run_id", "manifest_sha256", "target_snapshot",
+               "settings", "graph_settings", "admission", "rules", "inputs", "evidence_map_sha256", "packages",
+               "units", "gaps", "cwe_reference", "counts", "audit"],
+  "properties": {
+    "schema": {"const": "appsec-review/review-package-manifest/1"},
+    "assembly_rule": {"const": "appsec-review/assemble-review-packages/12"},
+    "package_schema": {"const": "appsec-review/review-package/6"},
+    "run_id": {"type": "string", "minLength": 1},
+    "manifest_sha256": {"$ref": "#/$defs/sha"},
+    "target_snapshot": {"type": ["string", "null"]},
+    "content_sha256": {"$ref": "#/$defs/sha"},
+    "settings": {
+      "description": "The resolved package settings (PackageSettings.record).",
+      "type": "object",
+      "required": ["admit_severities", "slice_strategies"],
+      "properties": {
+        "admit_severities": {"type": "array", "items": {"$ref": "#/$defs/severity"}},
+        "slice_strategies": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+      }
+    },
+    "graph_settings": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "admission": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lead_id", "effective_severity", "status", "reasons", "residual_coverage"],
+        "properties": {
+          "lead_id": {"type": "string", "minLength": 1},
+          "effective_severity": {"$ref": "#/$defs/severity"},
+          "status": {"enum": ["admitted", "not_admitted"]},
+          "reasons": {"type": "array", "items": {"type": "string"}},
+          "residual_coverage": {"enum": ["review_pending", "exploration_reserve_cutoff", "outside_admission_policy"]}
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["families", "rank", "obligations", "neighborhood", "slice"],
+      "properties": {
+        "families": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "pattern": "^appsec-review/lead-family/[a-z_]+/[0-9]+$"}
+        },
+        "rank": {"$ref": "#/$defs/rule"},
+        "obligations": {"$ref": "#/$defs/rule"},
+        "neighborhood": {"const": "appsec-review/package-neighborhood/3"},
+        "slice": {"const": "appsec-review/package-slice/2"}
+      }
+    },
+    "inputs": {"type": "array", "items": {"$ref": "#/$defs/shard_identity"}},
+    "evidence_map_sha256": {"$ref": "#/$defs/sha"},
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["package_id", "kind", "lane", "lead_family", "partition_key", "unit_key", "lead_count",
+                     "sha256", "bytes"],
+        "properties": {
+          "package_id": {"type": "string", "pattern": "^(finding_lead|hunt)-[0-9a-f]{64}$"},
+          "kind": {"enum": ["finding_lead", "hunt"]},
+          "lane": {"enum": ["lead", "hunt"]},
+          "lead_family": {"type": ["string", "null"]},
+          "partition_key": {"type": "string", "minLength": 1},
+          "unit_key": {"type": ["string", "null"]},
+          "lead_count": {"$ref": "#/$defs/count"},
+          "sha256": {"$ref": "#/$defs/sha"},
+          "bytes": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unit_key", "position", "unit_count", "score", "rule", "basis", "hunted", "lead_count",
+                     "package_ids"],
+        "properties": {
+          "unit_key": {"type": "string", "minLength": 1},
+          "position": {"type": "integer", "minimum": 1},
+          "unit_count": {"type": "integer", "minimum": 1},
+          "score": {"type": "number"},
+          "rule": {"$ref": "#/$defs/rule"},
+          "basis": {"type": "array", "items": {"type": "object"}},
+          "hunted": {"type": "boolean"},
+          "lead_count": {"$ref": "#/$defs/count"},
+          "package_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+        }
+      }
+    },
+    "gaps": {"type": "array", "items": {"$ref": "#/$defs/gap"}},
+    "cwe_reference": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule", "source", "snapshot_id", "manifest_sha256", "version", "gap", "accepted_count"],
+          "properties": {
+            "rule": {"$ref": "#/$defs/rule"},
+            "source": {"type": ["string", "null"]},
+            "snapshot_id": {"type": ["string", "null"]},
+            "manifest_sha256": {"type": ["string", "null"]},
+            "version": {"type": ["string", "null"]},
+            "gap": {"type": ["string", "null"]},
+            "accepted_count": {"$ref": "#/$defs/count"}
+          }
+        }
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["leads", "admitted", "kev_admitted", "non_lead_observations", "packages", "units",
+                   "neighborhood_bounds"],
+      "properties": {
+        "leads": {"$ref": "#/$defs/family_severity_counts"},
+        "admitted": {"$ref": "#/$defs/family_severity_counts"},
+        "kev_admitted": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+        "non_lead_observations": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+        "packages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["finding_lead", "hunt"],
+          "properties": {"finding_lead": {"$ref": "#/$defs/count"}, "hunt": {"$ref": "#/$defs/count"}}
+        },
+        "units": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "hunted", "below_cutoff"],
+          "properties": {
+            "total": {"$ref": "#/$defs/count"},
+            "hunted": {"$ref": "#/$defs/count"},
+            "below_cutoff": {"$ref": "#/$defs/count"}
+          }
+        },
+        "neighborhood_bounds": {
+          "description": "Finding-lead neighborhoods per bound kind: bounded by the lead's correlated dataflow paths, or by call depth when no path correlates.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["call_depth", "dataflow_path"],
+          "properties": {"call_depth": {"$ref": "#/$defs/count"}, "dataflow_path": {"$ref": "#/$defs/count"}}
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lane_a", "lane_b", "families_available"],
+      "properties": {
+        "lane_a": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "expected", "packaged", "by_family", "suppressed", "duplicates", "kev_admitted"],
+          "properties": {
+            "status": {"const": "passed"},
+            "expected": {"$ref": "#/$defs/count"},
+            "packaged": {"$ref": "#/$defs/count"},
+            "by_family": {"$ref": "#/$defs/family_severity_counts"},
+            "suppressed": {"$ref": "#/$defs/count"},
+            "duplicates": {"$ref": "#/$defs/count"},
+            "kev_admitted": {"$ref": "#/$defs/count"}
+          }
+        },
+        "lane_b": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "listed_leads"],
+          "properties": {"status": {"const": "passed"}, "listed_leads": {"$ref": "#/$defs/count"}}
+        },
+        "families_available": {"type": "object", "additionalProperties": {"type": "boolean"}}
+      }
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0},
+    "rule": {"type": "string", "pattern": "^appsec-review/[a-z0-9-]+(/[a-z0-9_-]+)*/[0-9]+$"},
+    "severity": {"enum": ["critical", "high", "medium", "low", "info", "unknown"]},
+    "family_severity_counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {"$ref": "#/$defs/severity"},
+        "additionalProperties": {"$ref": "#/$defs/count"}
+      }
+    },
+    "shard_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "shard_id", "sha256"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "shard_id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gap_id", "producer", "scope", "state", "reason"],
+      "properties": {
+        "gap_id": {"type": "string", "minLength": 1},
+        "producer": {"type": "string", "minLength": 1},
+        "scope": {"type": "string"},
+        "state": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "maxLength": 1000}
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-"""Package neighborhood (``package-neighborhood/2``, docs/architecture/review-protocol-v2.md section 4).
+"""Package neighborhood (``package-neighborhood/3``, docs/architecture/review-protocol-v2.md section 4).
 
 The neighborhood is the part of a review package that is selected around the lead. Its ``bound`` says how:
 
@@ -24,23 +24,19 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
 import re
 from typing import Any
 
 from appsec_review.review.scope import AcceptedScope
+from appsec_review.review.slicing.spans import MAX_FUNCTION_LINES, text_extent
 
-NEIGHBORHOOD_RULE = "appsec-review/package-neighborhood/2"
+NEIGHBORHOOD_RULE = "appsec-review/package-neighborhood/3"
 BUILD_RULE = "appsec-review/package-build-summary/1"
 SECTIONS = ("sinks", "ranges", "guards", "callers", "callees", "flows", "entries", "corroboration")
 # Token kinds of an ordered build command (``indexing.build_facts.classify_command``) shown as flags.
 _FLAG_KINDS = frozenset({"optimization", "debug", "language_standard", "define", "undefine", "warning",
                          "security_flag", "flag"})
 MAX_BUILD_FLAGS = 48
-_BRACE_LANGUAGES = frozenset({".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp",
-                              ".java", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".cs", ".php", ".kt", ".swift",
-                              ".m", ".mm", ".scala"})
-MAX_FUNCTION_LINES = 160
 
 
 def empty_record(depth: int) -> dict[str, Any]:
@@ -112,57 +108,14 @@ class BuildContext:
 
 def function_extent(lines: Sequence[str], start_line: int, path: str, *, max_lines: int = MAX_FUNCTION_LINES
                     ) -> tuple[int, int, bool]:
-    """(first, last, truncated) 1-based lines of the function whose name is on ``start_line``.
+    """(first, last, truncated) 1-based lines of the definition whose name is on ``start_line``.
 
-    Brace languages: from the first ``{`` at or after the name to its matching ``}``, ignoring braces in
-    string and character literals and in comments. Indentation languages: the block that follows the
-    definition line. When no end is found within ``max_lines`` the extent is cut there and marked truncated.
+    Delegates to the per-language text rules of ``review.slicing.spans`` (brace, indentation and ``def``/``end``
+    rules for every catalog language): brace languages run from the body ``{`` to its matching ``}`` ignoring
+    braces in that language's literals and comments, and a header that ends before a body is a one-line
+    declaration. A suffix without a rule gets a 40-line display window.
     """
-    start = max(1, min(int(start_line), len(lines) or 1))
-    suffix = PurePosixPath(path).suffix.lower()
-    limit = min(len(lines), start + max_lines - 1)
-    if suffix == ".py":
-        base = len(lines[start - 1]) - len(lines[start - 1].lstrip()) if lines else 0
-        end = start
-        for number in range(start + 1, limit + 1):
-            text = lines[number - 1]
-            if text.strip() and len(text) - len(text.lstrip()) <= base and not text.lstrip().startswith(("#", ")")):
-                break
-            end = number
-        return start, end, end == limit and limit < len(lines)
-    if suffix not in _BRACE_LANGUAGES:
-        return start, min(len(lines), start + 40), len(lines) > start + 40
-    depth, opened, in_block = 0, False, False
-    for number in range(start, limit + 1):
-        text = lines[number - 1]
-        index, in_string = 0, None
-        while index < len(text):
-            char = text[index]
-            pair = text[index:index + 2]
-            if in_block:
-                if pair == "*/":
-                    in_block, index = False, index + 1
-            elif in_string:
-                if char == "\\":
-                    index += 1
-                elif char == in_string:
-                    in_string = None
-            elif pair == "//":
-                break
-            elif pair == "/*":
-                in_block, index = True, index + 1
-            elif char in "\"'":
-                in_string = char
-            elif char == "{":
-                depth, opened = depth + 1, True
-            elif char == "}":
-                depth -= 1
-                if opened and depth <= 0:
-                    return start, number, False
-            elif char == ";" and not opened:
-                return start, number, False       # a declaration, not a definition
-            index += 1
-    return start, limit, True
+    return text_extent(lines, start_line, path, max_lines=max_lines)
 
 
 _TYPE_KEYWORD = re.compile(r"\b(?:struct|class|union|enum)\s+([A-Za-z_]\w*)")

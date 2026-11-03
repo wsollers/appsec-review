@@ -1,4 +1,4 @@
-"""The model-facing package view (``package-view/4``) and package neighborhood (``package-neighborhood/2``)."""
+"""The model-facing package view (``package-view/4``) and package neighborhood (``package-neighborhood/3``)."""
 from __future__ import annotations
 
 import json
@@ -106,7 +106,7 @@ def test_function_extent_and_type_names_are_deterministic_text_helpers() -> None
     lines = ["#include <string.h>", "struct Header { char name[16]; };", "int parse(const Header &h, int n) {",
              "  if (n > 3) { return 1; }  // } not a brace", "  char *s = \"}\";", "  return 0;", "}", "int other() {}"]
     assert function_extent(lines, 3, "a.cpp") == (3, 7, False)
-    assert function_extent(["def f(x):", "    return x", "", "def g():", "    pass"], 1, "a.py")[:2] == (1, 3)
+    assert function_extent(["def f(x):", "    return x", "", "def g():", "    pass"], 1, "a.py")[:2] == (1, 2)
     assert function_extent(["int f(int);", "int g() {", "}"], 1, "a.c") == (1, 1, False)
     assert type_names(lines, 3, 7) == ["Header"]
 
