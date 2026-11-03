@@ -87,6 +87,26 @@ Focused regressions preserve every gap, exercise repeated and conflicting eviden
 check independent-call tamper rejection, and verify the terminal spans and exact work counters.
 This repair does not itself establish a completed native SBOM review.
 
+The subsequent catalog attempt exposed a separate memory failure: its 512,683,389-byte outcomes
+artifact reached publication verification, where the finalizer was OOM-killed at the unchanged
+5 GiB container limit. Canonical outcomes verification now independently reconstructs the expected
+document from verified task receipts and streams its canonical SHA-256, including the wire newline.
+It freshly streams the outcomes file's byte hash after reconstruction rather than relying on an
+earlier scoped digest-cache hit. It compares those identities against the pinned reference, avoiding another
+decoded outcomes tree and whole-document encoded copies. Noncanonical JSON retains the existing
+decoded semantic check, including exact JSON number representations and legacy topology handling.
+The verifier still checks every nested evidence binding, claim, coverage summary and execution
+status. No persistent or cross-operation outcome trust cache is introduced.
+
+Accepted and rejected publishers release their initial outcomes tree before independent verification;
+accepted result validation also ends its payload lifetime before reconstructing outcomes. This
+removes duplicate representations, not gap records. Reconstruction still uses memory proportional
+to the logical outcomes; the entire finalizer is not constant-memory. Streaming-digest regressions
+check exact canonical bytes and peak additional allocation below 512 KiB for a payload over 2 MiB.
+Lifetime regressions check that the original trees are unreachable at the verification boundary.
+The `outcomes_canonical_checks` and `outcomes_decoded_checks` counters distinguish the proof paths.
+Container limits remain unchanged; completion of the restarted live review is a separate result.
+
 Managed publication still verifies new evidence. It detaches private builder files from writable
 aliases, requires application-owned POSIX custody, removes accepted payload write permissions,
 and issues an authenticated admission record outside the review run's mounts, under

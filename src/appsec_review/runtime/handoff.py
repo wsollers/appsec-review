@@ -20,7 +20,8 @@ from appsec_review.interchange import (
 )
 from appsec_review.observability.spans import count_work
 from appsec_review.runtime.datasets import read_dataset_contract
-from appsec_review.storage import canonical_json
+from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.storage.atomic import canonical_json_sha256
 from appsec_review.storage.shared import reference, safe_path, verify_reference
 from appsec_review.storage.validation import validation_operation
 
@@ -320,35 +321,77 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
 @validation_operation
 def verify_outcomes(root: Path, handoff: Mapping[str, Any]) -> dict[str, Any]:
     handoff = decode_handoff(handoff, run_id=root.name, accepted_only=False)
-    document = _read(root, handoff["outcomes"])
-    fields = {"schema", "run_id", "job_id", "attempt_id", "target_snapshot", "units", "gaps", "coverage"}
-    if set(document) != fields or document["schema"] != OUTCOMES_SCHEMA:
-        raise ValueError("unsupported job outcomes document")
-    for name in ("run_id", "job_id", "attempt_id", "target_snapshot"):
-        if document[name] != handoff[name]:
-            raise ValueError("outcomes identity differs from handoff")
-    if not isinstance(document["units"], list) or not isinstance(document["gaps"], list):
-        raise ValueError("outcomes must contain unit and gap arrays")
+    outcomes_ref = artifact_reference_from_mapping(handoff["outcomes"]).as_dict()
+    verify_reference(root, outcomes_ref)
+
+    def read_document() -> dict[str, Any]:
+        count_work("outcomes_decoded_checks")
+        document = _read(root, outcomes_ref)
+        fields = {"schema", "run_id", "job_id", "attempt_id", "target_snapshot", "units", "gaps", "coverage"}
+        if set(document) != fields or document["schema"] != OUTCOMES_SCHEMA:
+            raise ValueError("unsupported job outcomes document")
+        for name in ("run_id", "job_id", "attempt_id", "target_snapshot"):
+            if document[name] != handoff[name]:
+                raise ValueError("outcomes identity differs from handoff")
+        if not isinstance(document["units"], list) or not isinstance(document["gaps"], list):
+            raise ValueError("outcomes must contain unit and gap arrays")
+        return document
+
     pinned = {ref["path"]: ref for ref in handoff["artifacts"]}
-    for ref in collect_artifacts(root, document):
-        if pinned.get(ref["path"]) != ref:
-            raise ValueError("outcomes reference is not bound in handoff artifacts")
     claim_ref = pinned.get(handoff["resolving_paths"]["attempt"] + "/claim.json")
     if claim_ref is None:
         raise ValueError("handoff does not bind its attempt claim")
     claim = _read(root, claim_ref)
-    unit_ids = claim.get("unit_ids", [unit["unit_id"] for unit in document["units"]])
+    document = read_document() if "unit_ids" not in claim else None
+    unit_ids = claim["unit_ids"] if document is None else [unit["unit_id"] for unit in document["units"]]
     if (not isinstance(unit_ids, list) or any(not isinstance(unit, str) for unit in unit_ids)
             or len(unit_ids) != len(set(unit_ids))):
         raise ValueError("invalid pinned unit topology")
     expected = build_outcomes(root, run_id=root.name, job_id=handoff["job_id"], attempt_id=handoff["attempt_id"],
                               target_snapshot=handoff["target_snapshot"], unit_ids=unit_ids,
                               diagnostic=handoff["status"] == "REJECTED")
-    if canonical_json(document) != canonical_json(expected):
-        raise ValueError("outcomes differ from verified task receipts and producer declarations")
+    expected_sha256 = canonical_json_sha256(expected)
+    # Replace the old JSON read with a fresh streaming byte check, not a scoped
+    # digest-cache hit that could hide a change during receipt reconstruction.
+    path = safe_path(root, outcomes_ref["path"])
+    if file_sha256(path) != outcomes_ref["sha256"] or path.stat().st_size != outcomes_ref["size_bytes"]:
+        raise ValueError(f"shared artifact integrity mismatch: {outcomes_ref['path']}")
+    if expected_sha256 == outcomes_ref["sha256"]:
+        # Exact verified canonical bytes already prove the reconstructed document;
+        # decoding another tree would duplicate hundreds of MB of gap accounting.
+        count_work("outcomes_canonical_checks")
+        document = expected
+    else:
+        if document is None:
+            document = read_document()
+        if canonical_json_sha256(document) != expected_sha256:
+            raise ValueError("outcomes differ from verified task receipts and producer declarations")
+    for ref in collect_artifacts(root, document):
+        if pinned.get(ref["path"]) != ref:
+            raise ValueError("outcomes reference is not bound in handoff artifacts")
     if document["coverage"] != handoff["coverage"] or execution_status(document) != handoff["execution_status"]:
         raise ValueError("handoff coverage or execution differs from outcomes")
     return document
+
+
+def _verify_accepted_result(root: Path, handoff: Mapping[str, Any],
+                            pinned: Mapping[str, Mapping[str, Any]], claim: Mapping[str, Any]) -> None:
+    result_path = handoff["resolving_paths"].get("result")
+    attempt = handoff["resolving_paths"]["attempt"]
+    if result_path != attempt + "/result.json" or result_path not in pinned:
+        raise ValueError("accepted handoff does not bind its result")
+    result = _read(root, pinned[result_path])
+    if result.get("status") != handoff["completion_status"]:
+        raise ValueError("handoff completion differs from its result")
+    for unit_id, output in handoff["outputs"].items():
+        native = result.get("outputs", {}).get(unit_id)
+        if not isinstance(output, Mapping) or not isinstance(native, Mapping) or any(
+                key not in native or native[key] != value for key, value in output.items()):
+            raise ValueError("handoff output differs from its result")
+    for ref in collect_artifacts(root, result):
+        if pinned.get(ref["path"]) != ref:
+            raise ValueError("result reference is not bound in handoff artifacts")
+    verify_required_outputs(root, handoff, claim, result)
 
 
 @validation_operation
@@ -403,21 +446,7 @@ def verify_handoff_integrity(root: Path, handoff: Mapping[str, Any], *,
         if document["run_id"] != root.name or document["target_snapshot"] != handoff["target_snapshot"]:
             raise ValueError("input manifest target or run identity mismatch")
     if handoff["status"] == "ACCEPTED":
-        result_path = handoff["resolving_paths"].get("result")
-        if result_path != attempt + "/result.json" or result_path not in pinned:
-            raise ValueError("accepted handoff does not bind its result")
-        result = _read(root, pinned[result_path])
-        if result.get("status") != handoff["completion_status"]:
-            raise ValueError("handoff completion differs from its result")
-        for unit_id, output in handoff["outputs"].items():
-            native = result.get("outputs", {}).get(unit_id)
-            if not isinstance(output, Mapping) or not isinstance(native, Mapping) or any(
-                    key not in native or native[key] != value for key, value in output.items()):
-                raise ValueError("handoff output differs from its result")
-        for ref in collect_artifacts(root, result):
-            if pinned.get(ref["path"]) != ref:
-                raise ValueError("result reference is not bound in handoff artifacts")
-        verify_required_outputs(root, handoff, claim, result)
+        _verify_accepted_result(root, handoff, pinned, claim)
     if handoff["outcomes"] is not None:
         verify_outcomes(root, handoff)
     from appsec_review.observability.spans import count_work

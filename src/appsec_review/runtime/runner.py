@@ -688,6 +688,7 @@ class JobRunner:
                 context, claim, {}, outcomes, outcomes_ref, accepted=False,
                 completed=json.loads((context.attempt_root / "status.json").read_bytes())["completed_at"],
                 artifacts=artifacts)
+            del outcomes
             from appsec_review.runtime.handoff import verify_handoff_integrity
             verify_handoff_integrity(root, handoff, accepted_only=False)
             handoff_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()
@@ -790,6 +791,7 @@ class JobRunner:
                 raise ValueError("failed task execution cannot publish an accepted handoff")
             outcomes_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()
                                           + "/outcomes.json", canonical_json(outcomes))
+            unit_count = len(outcomes["units"])
         result_path = context.attempt_root / "result.json"
         # Manifest verification records this attempt's consumption receipts. Finish
         # that closure before freezing the artifact list, not during admission.
@@ -809,6 +811,7 @@ class JobRunner:
                 outcomes_ref, outcomes, result, attempt_artifacts(root, context.attempt_root))
         handoff = self._handoff_document(
             context, claim, result, outcomes, outcomes_ref, accepted=True, completed=completed, artifacts=artifacts)
+        del outcomes
         with operation_span(context.events, "publication.verify"):
             verify_handoff(root, handoff)
         manifests = [output["index_manifest"] for output in result.get("outputs", {}).values()
@@ -822,7 +825,7 @@ class JobRunner:
             handoff["validation_record"] = admission
         handoff_ref = immutable_bytes(root, handoff_path.relative_to(root).as_posix(), canonical_json(handoff))
         duration_ms = max(0, int((time.monotonic() - started) * 1000))
-        self._handoff_event(context, "HANDOFF_VALIDATED", handoff, handoff_ref, duration_ms, len(outcomes["units"]))
+        self._handoff_event(context, "HANDOFF_VALIDATED", handoff, handoff_ref, duration_ms, unit_count)
         pointer_paths = [safe_path(root, context.attempt_root.parent.parent.relative_to(root).as_posix()
                                    + "/latest.json")]
         if accepted_manifest is not None:
@@ -847,7 +850,7 @@ class JobRunner:
                     datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000)))
             # The run-wide summary re-verifies every published handoff, so refreshing it on each
             # publication made finalize cost grow with the run. Run-level drivers write it once.
-            self._handoff_event(context, "HANDOFF_ACCEPTED", handoff, handoff_ref, duration_ms, len(outcomes["units"]))
+            self._handoff_event(context, "HANDOFF_ACCEPTED", handoff, handoff_ref, duration_ms, unit_count)
         except BaseException as original:
             for path, payload in previous.items():
                 try:

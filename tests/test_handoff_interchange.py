@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+import gc
 import hashlib
 import json
 from pathlib import Path
+import weakref
 
 import pytest
 
@@ -194,6 +196,180 @@ def test_rehashed_outcomes_cannot_invent_execution_or_hide_producer_failure(tmp_
     handoff["coverage"] = document["coverage"]
     with pytest.raises(ValueError, match="outcomes differ"):
         verify_outcomes(root, handoff)
+
+
+def test_canonical_outcomes_are_proved_without_decoding_a_second_tree(tmp_path, monkeypatch):
+    import appsec_review.runtime.handoff as accounting
+
+    _, _, _, outcome, root = publish(tmp_path, lambda unit: {"gaps": ["bounded coverage gap"]})
+    real_read = accounting._read
+    reads = []
+
+    def counted(root, ref):
+        reads.append(ref["path"])
+        return real_read(root, ref)
+
+    monkeypatch.setattr(accounting, "_read", counted)
+    events = EventLog(root / "proof-events.jsonl", PipelineLog(root), {"run_id": root.name})
+    with operation_span(events, "fixture.outcomes") as span:
+        document = verify_outcomes(root, outcome["handoff"])
+    assert document["coverage"]["gap_count"] == 1
+    assert outcome["handoff"]["outcomes"]["path"] not in reads
+    assert any(path.endswith("/claim.json") for path in reads)
+    assert any("/tasks/" in path and path.endswith("/result.json") for path in reads)
+    assert span.counters["outcomes_canonical_checks"] == 1
+    assert span.counters.get("outcomes_decoded_checks", 0) == 0
+
+
+@pytest.mark.parametrize("legacy_topology", [False, True])
+def test_noncanonical_outcomes_keep_semantic_validation(tmp_path, legacy_topology):
+    _, _, _, outcome, root = publish(tmp_path, lambda unit: {"gaps": ["bounded caf\u00e9 gap"]})
+    handoff = deepcopy(outcome["handoff"])
+    expected = verify_outcomes(root, handoff)
+    path = root / handoff["outcomes"]["path"]
+    path.write_text(json.dumps(expected, indent=2, ensure_ascii=True), encoding="utf-8")
+    updated = reference(root, path)
+    handoff["outcomes"] = updated
+    handoff["artifacts"] = [updated if ref["path"] == updated["path"] else ref
+                            for ref in handoff["artifacts"]]
+    if legacy_topology:
+        claim_path = root / handoff["resolving_paths"]["attempt"] / "claim.json"
+        claim = json.loads(claim_path.read_bytes())
+        del claim["unit_ids"]
+        atomic_json(claim_path, claim)
+        updated_claim = reference(root, claim_path)
+        handoff["artifacts"] = [updated_claim if ref["path"] == updated_claim["path"] else ref
+                                for ref in handoff["artifacts"]]
+    rehash(handoff)
+    events = EventLog(root / "proof-events.jsonl", PipelineLog(root), {"run_id": root.name})
+    with operation_span(events, "fixture.outcomes") as span:
+        assert verify_outcomes(root, handoff) == expected
+    assert span.counters["outcomes_decoded_checks"] == 1
+    assert span.counters.get("outcomes_canonical_checks", 0) == 0
+
+
+def test_canonical_outcomes_still_reject_same_size_byte_tampering(tmp_path):
+    _, _, _, outcome, root = publish(tmp_path)
+    path = root / outcome["handoff"]["outcomes"]["path"]
+    payload = bytearray(path.read_bytes())
+    payload[0] = ord("[")
+    path.write_bytes(payload)
+    with pytest.raises(ValueError, match="integrity"):
+        verify_outcomes(root, outcome["handoff"])
+
+
+def test_canonical_outcomes_recheck_bytes_changed_during_receipt_reconstruction(tmp_path, monkeypatch):
+    import appsec_review.runtime.handoff as accounting
+
+    _, _, _, outcome, root = publish(tmp_path)
+    path = root / outcome["handoff"]["outcomes"]["path"]
+    real_build = accounting.build_outcomes
+
+    def build(*args, **kwargs):
+        expected = real_build(*args, **kwargs)
+        payload = bytearray(path.read_bytes())
+        payload[0] = ord("[")
+        path.write_bytes(payload)
+        return expected
+
+    monkeypatch.setattr(accounting, "build_outcomes", build)
+    with pytest.raises(ValueError, match="integrity"):
+        verify_outcomes(root, outcome["handoff"])
+
+
+def test_canonical_outcomes_proof_still_requires_nested_artifact_bindings(tmp_path):
+    _, _, _, outcome, root = publish(tmp_path, lambda unit: {"gaps": ["bounded coverage gap"]})
+    handoff = deepcopy(outcome["handoff"])
+    document = verify_outcomes(root, handoff)
+    missing = document["units"][0]["result_reference"]["path"]
+    handoff["artifacts"] = [ref for ref in handoff["artifacts"] if ref["path"] != missing]
+    rehash(handoff)
+    with pytest.raises(ValueError, match="outcomes reference is not bound"):
+        verify_outcomes(root, handoff)
+
+
+def test_streamed_outcomes_comparison_preserves_json_number_types(tmp_path):
+    _, _, _, outcome, root = publish(tmp_path, lambda unit: {"gaps": ["bounded coverage gap"]})
+    handoff = deepcopy(outcome["handoff"])
+    document = verify_outcomes(root, handoff)
+    document["coverage"]["gap_count"] = 1.0
+    path = root / handoff["outcomes"]["path"]
+    atomic_json(path, document)
+    updated = reference(root, path)
+    handoff["outcomes"] = updated
+    handoff["artifacts"] = [updated if ref["path"] == updated["path"] else ref
+                            for ref in handoff["artifacts"]]
+    rehash(handoff)
+    with pytest.raises(ValueError, match="outcomes differ"):
+        verify_outcomes(root, handoff)
+
+
+class _TrackedDocument(dict):
+    pass
+
+
+@pytest.mark.parametrize("rejected", [False, True])
+def test_publication_releases_outcomes_before_independent_verification(tmp_path, monkeypatch, rejected):
+    import appsec_review.runtime.handoff as accounting
+    import appsec_review.runtime.runner as lifecycle
+
+    real_build = lifecycle.build_outcomes
+    documents, checks = [], []
+
+    def build(*args, **kwargs):
+        document = _TrackedDocument(real_build(*args, **kwargs))
+        documents.append(weakref.ref(document))
+        return document
+
+    real_verify = accounting.verify_handoff_integrity if rejected else lifecycle.verify_handoff
+
+    def verify(*args, **kwargs):
+        gc.collect()
+        checks.append(bool(documents) and all(ref() is None for ref in documents))
+        return real_verify(*args, **kwargs)
+
+    monkeypatch.setattr(lifecycle, "build_outcomes", build)
+    if rejected:
+        monkeypatch.setattr(accounting, "verify_handoff_integrity", verify)
+
+        def fail(unit):
+            raise RuntimeError("operational fixture failure")
+
+        _, job, runner = setup(tmp_path, fail)
+        with pytest.raises(RuntimeError, match="operational fixture failure"):
+            runner.run(job)
+    else:
+        monkeypatch.setattr(lifecycle, "verify_handoff", verify)
+        publish(tmp_path, lambda unit: {"gaps": ["bounded coverage gap"]})
+    assert checks == [True]
+
+
+def test_accepted_result_tree_is_released_before_outcomes_reconstruction(tmp_path, monkeypatch):
+    import appsec_review.runtime.handoff as accounting
+
+    _, _, _, outcome, root = publish(
+        tmp_path, lambda unit: {"payload": {"values": list(range(8))}, "gaps": ["bounded coverage gap"]})
+    result_path = outcome["handoff"]["resolving_paths"]["result"]
+    real_read, real_verify = accounting._read, accounting.verify_outcomes
+    documents, checks = [], []
+
+    def read(root, ref):
+        document = real_read(root, ref)
+        if ref["path"] == result_path:
+            document = _TrackedDocument(document)
+            document["outputs"] = {key: _TrackedDocument(value) for key, value in document["outputs"].items()}
+            documents.extend(weakref.ref(value) for value in (document, *document["outputs"].values()))
+        return document
+
+    def verify(*args, **kwargs):
+        gc.collect()
+        checks.append(bool(documents) and all(ref() is None for ref in documents))
+        return real_verify(*args, **kwargs)
+
+    monkeypatch.setattr(accounting, "_read", read)
+    monkeypatch.setattr(accounting, "verify_outcomes", verify)
+    verify_handoff_integrity(root, outcome["handoff"])
+    assert checks == [True]
 
 
 def test_legacy_handoff_requires_fresh_execution(tmp_path):
