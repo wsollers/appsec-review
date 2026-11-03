@@ -41,7 +41,8 @@ def _rejecting(*image_ids: str) -> RecordingVerifier:
 
 
 def _catalog(tmp_path: Path, *, expected: str | None = PINNED) -> ContainerCatalog:
-    policy = MappingProxyType({"tmpfs": ["/tmp:rw,nosuid,nodev,noexec,size=128m"]})
+    policy = MappingProxyType({"tmpfs": ["/tmp:rw,nosuid,nodev,noexec,size=128m"],
+                               "admission_timeout_seconds": 3600})
     tool = ToolImage("tool-fixture", "fixture", "1", "fixture:1", "/bin/fixture",
                      "10001:10001", "none", "1g", "2", 256, 10, 8, expected,
                      tmp_path / "tool.toml", MappingProxyType({}))

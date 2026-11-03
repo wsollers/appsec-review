@@ -10,5 +10,7 @@ pids_limit = 256
 memory = "1g"
 cpus = "2"
 timeout_seconds = 600
+# Application admission queue budget; not a scanner-container execution limit.
+admission_timeout_seconds = 3600
 output_bytes = 16777216
 tmpfs = ["/tmp:rw,nosuid,nodev,noexec,size=128m"]

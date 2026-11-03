@@ -234,7 +234,8 @@ class ContainerExecutor:
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
         tool = self.catalog.tool(request.tool_id)
         with reserve_execution(cpu=tool.cpus, memory=request.memory or tool.memory,
-                               action=f"scanner.{tool.tool_id}", timeout_seconds=tool.timeout_seconds):
+                               action=f"scanner.{tool.tool_id}",
+                               timeout_seconds=self.catalog.admission_timeout_seconds):
             return self._execute(request)
 
     def _container_control(self, argv: Sequence[str], timeout: int):
@@ -292,7 +293,9 @@ class ContainerExecutor:
             "memory": memory, "memory_source": "request" if request.memory else "catalog",
             "pids": tool.pids_limit,
             "tmpfs": list(self.catalog.policy["tmpfs"]),
-            "timeout_seconds": tool.timeout_seconds, "stdout_bytes": tool.output_bytes,
+            "timeout_seconds": tool.timeout_seconds,
+            "admission_timeout_seconds": self.catalog.admission_timeout_seconds,
+            "stdout_bytes": tool.output_bytes,
             "stderr_bytes": tool.output_bytes, "file_size_bytes": request.file_size_limit_bytes,
         }
         started = _stamp()

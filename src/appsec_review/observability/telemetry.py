@@ -1646,6 +1646,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                 "query_profile": details.get("query_profile"),
                 "status": record["event_type"].removeprefix("RESOURCE_"),
                 "queue_delay_ms": details.get("queue_delay_ms"),
+                "admission_timeout_seconds": details.get("admission_timeout_seconds"),
                 "reservation": details.get("reservation"), "reason": details.get("reason"),
             })
         if record["event_type"] == "MODEL_CALL_COMPLETED":
