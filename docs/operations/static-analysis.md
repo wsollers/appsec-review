@@ -40,6 +40,19 @@ user, read-only root and target, run-owned writable scratch, all capabilities dr
 `no-new-privileges`, and bounded CPU, memory, PIDs, tmpfs, time, stdout, and stderr. Scanner
 containers never receive the Docker socket and never execute target programs.
 
+Scanner admission uses the central runtime policy's `admission_timeout_seconds` (3600 seconds),
+separately from the unchanged per-tool `timeout_seconds` (600 seconds) passed to the scanner
+process. Queuing for aggregate CPU, memory, or I/O capacity does not spend the execution budget.
+The aggregate action budget remains `[review_policy.resources]`; Dagster scanner-pool concurrency
+does not enlarge it. Admission is still bounded and cancellation-aware: expiration fails before
+launch, and no lease is reclaimed automatically. A capacity timeout is not evidence of stale
+leases. Resource events record the admission budget and queue delay, and execution receipts
+record both budgets. Aggregated admission metrics preserve the queue budget; legacy events
+without that field report an unknown budget, not an inferred value.
+This application-side queue setting does not change tool manifests or
+require unrelated tooling images to be rebuilt. It does not make a scanner that exhausts its
+execution budget successful.
+
 Each execution receipt records image tag/ID/digest, a secret-free argv identity, mounts, limits,
 timestamps, exit/timeout/OOM state, truncation, and resolving raw-output/log paths. Raw output is
 preserved within bounds and normalized separately. Unexpected exit, timeout, OOM, parse failure, or

@@ -469,7 +469,8 @@ class ResourceAdmission:
         lease_id = uuid4().hex
         start = time.monotonic()
         correlation = {"span_id": lease_id, "operation_id": action, "unit_id": unit_id,
-                       "scope_id": scope_id, "query_profile": query_profile}
+                       "scope_id": scope_id, "query_profile": query_profile,
+                       "admission_timeout_seconds": timeout_seconds}
         events.write("RESOURCE_ELIGIBLE", **correlation, reservation=asdict(request))
         path = self.root / "leases.json"
         while True:
@@ -506,7 +507,7 @@ class ResourceAdmission:
                 events.write("RESOURCE_TIMED_OUT", **correlation,
                              queue_delay_ms=int((time.monotonic() - start) * 1000),
                              reason="admission_timeout_or_unreconciled_lease")
-                raise TimeoutError(f"{action} admission timed out; outstanding leases require reconciliation")
+                raise TimeoutError(f"{action} admission timed out waiting for aggregate capacity")
             time.sleep(0.05)
         active = ActiveLease(self, lease_id, request)
         token = _ACTIVE.set(active)

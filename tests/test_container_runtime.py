@@ -41,7 +41,8 @@ def test_application_runtime_user_keeps_non_root_fallback_for_root_process(monke
 
 
 def catalog(tmp_path: Path, *, expected: str | None = DIGEST, additional: tuple[str, ...] = ()) -> ContainerCatalog:
-    policy = MappingProxyType({"tmpfs": ["/tmp:rw,nosuid,nodev,noexec,size=128m"]})
+    policy = MappingProxyType({"tmpfs": ["/tmp:rw,nosuid,nodev,noexec,size=128m"],
+                               "admission_timeout_seconds": 3600})
     tool = ToolImage("tool-fixture", "fixture", "1", "fixture:1", "/bin/fixture",
                      "10001:10001", "none", "1g", "2", 256, 10, 8, expected,
                      tmp_path / "tool.toml", MappingProxyType({}), additional_executables=additional)

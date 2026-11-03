@@ -56,6 +56,16 @@ class ContainerCatalog:
     policy: Mapping[str, Any]
     tools: Mapping[str, ToolImage]
 
+    def __post_init__(self) -> None:
+        _ = self.admission_timeout_seconds
+
+    @property
+    def admission_timeout_seconds(self) -> int:
+        value = self.policy.get("admission_timeout_seconds")
+        if type(value) is not int or value < 1:
+            raise ValueError("container runtime policy admission_timeout_seconds must be a positive integer")
+        return value
+
     def tool(self, tool_id: str) -> ToolImage:
         try:
             return self.tools[tool_id]
