@@ -149,7 +149,7 @@ def test_review_metrics_name_absent_producers_as_coverage_gaps(tmp_path: Path) -
 @pytest.mark.parametrize("change", [
     {"descriptors_retained": -1}, {"file_paths_examined": True},
     {"descriptors_matched": 2}, {"descriptor_coverage": "partial"},
-    {"semantics": "unknown"}, {"descriptor_coverage": []},
+    {"semantics": "unknown"}, {"descriptor_coverage": []}, {"content_files_retained": 3},
 ])
 def test_review_metrics_reject_invalid_discovery_accounting(tmp_path: Path, change: dict) -> None:
     discovery = {

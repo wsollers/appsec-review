@@ -334,6 +334,8 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
                             any(type(discovery.get(key)) is not int or discovery[key] < 0 for key in counters)):
                         raise ValueError("file discovery metrics receipt is invalid")
                     if (discovery["descriptors_matched"] > discovery["file_paths_examined"] or
+                            discovery["descriptors_matched"] + discovery["content_files_retained"] +
+                            discovery["content_files_omitted"] > discovery["file_paths_examined"] or
                             discovery["descriptors_retained"] + discovery["descriptors_unavailable"] !=
                             discovery["descriptors_matched"] or
                             (discovery["descriptor_coverage"] == "complete") !=
