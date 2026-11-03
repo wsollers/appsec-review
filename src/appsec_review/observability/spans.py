@@ -38,6 +38,7 @@ _COUNTERS = frozenset({
     "handoff_validations", "native_output_references", "native_output_bytes",
     "observation_references", "provenance_gaps",
     "receipts_processed", "artifacts_processed", "shards_built", "shards_reused",
+    "artifact_references", "artifact_validations",
     "entities_written", "relations_written", "invocations_scanned", "fsync_calls",
 })
 _PHASES = frozenset({

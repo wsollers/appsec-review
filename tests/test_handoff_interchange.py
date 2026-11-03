@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff, handoff_input_projection, input_set_sha256
+from appsec_review.interchange import (
+    HANDOFF_SCHEMA, ProducerGap, artifact_reference_from_mapping, decode_handoff, gap_id,
+    handoff_input_projection, input_set_sha256,
+)
+from appsec_review.observability import EventLog, PipelineLog, aggregate_run_metrics
+from appsec_review.observability.spans import operation_span
 from appsec_review.retrieval.index import INDEX_SCHEMA, IndexBuilder, IndexIdentity, write_manifest
 from appsec_review.runtime import Job, JobRunner, Unit
 from appsec_review.runtime.datasets import artifact_only, indexed
@@ -20,6 +25,7 @@ from appsec_review.runtime.handoff import (
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import reference, verify_handoff
+from appsec_review.storage.validation import validation_scope
 from tests.test_job_runtime import write_config
 
 
@@ -375,6 +381,135 @@ def test_native_inventory_keeps_nested_evidence_artifacts_bound_and_verified(tmp
     (root / bound["path"]).write_bytes(b"changed")
     with pytest.raises(ValueError):
         verify_handoff_integrity(root, outcome["handoff"])
+
+
+@pytest.mark.parametrize("count", [1, 256])
+def test_repeated_artifact_references_are_resolved_once_per_collection(tmp_path, monkeypatch, count):
+    import appsec_review.runtime.handoff as accounting
+
+    path = tmp_path / "data/proof.json"
+    atomic_json(path, {"proof": True})
+    proof = reference(tmp_path, path)
+    real_reference = accounting.reference
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args[1])
+        return real_reference(*args, **kwargs)
+
+    monkeypatch.setattr(accounting, "reference", counted)
+    values = {"gaps": [{"evidence_refs": [dict(proof)]} for _ in range(count)]}
+    events = EventLog(tmp_path / "events.jsonl", PipelineLog(tmp_path), {"run_id": tmp_path.name})
+    with validation_scope(tmp_path), operation_span(events, "fixture.collect"):
+        assert collect_artifacts(tmp_path, values) == [proof]
+    assert calls == [path]
+    work = aggregate_run_metrics(tmp_path)["work_counters"]
+    assert work["artifact_references"] == count
+    assert work["artifact_validations"] == 1
+
+
+@pytest.mark.parametrize("changed", [
+    {"sha256": "0" * 64}, {"size_bytes": 1}, {"size_bytes": True},
+    {"run_path": "../proof.json"}, {"artifact": {"path": "data/missing", "sha256": "0" * 64}},
+])
+def test_duplicate_artifacts_still_validate_every_declaration_and_nested_reference(tmp_path, changed):
+    path = tmp_path / "data/proof.json"
+    atomic_json(path, {"proof": True})
+    proof = reference(tmp_path, path)
+    with pytest.raises(ValueError):
+        collect_artifacts(tmp_path, [proof, {**proof, **changed}])
+
+
+def test_artifact_collection_reverifies_bytes_in_each_independent_call(tmp_path):
+    path = tmp_path / "data/proof"
+    path.parent.mkdir()
+    path.write_bytes(b"before")
+    proof = reference(tmp_path, path)
+    assert collect_artifacts(tmp_path, [proof, proof]) == [proof]
+    path.write_bytes(b"after!")
+    with pytest.raises(ValueError, match="integrity"):
+        collect_artifacts(tmp_path, [proof, proof])
+
+
+def _write_outcome_receipts(root, gaps):
+    base = root / "data/jobs/job_fixture/attempts/attempt_0001/steps/work/tasks/only"
+    atomic_json(base / "result.json", {"gaps": gaps})
+    atomic_json(base / "status.json", {
+        "unit_id": "work.only", "step_id": "work", "task_id": "only", "status": "SUCCEEDED",
+        "result_sha256": file_sha256(base / "result.json"),
+    })
+    return base
+
+
+@pytest.mark.parametrize("count", [1, 256])
+def test_outcome_gap_evidence_is_verified_once_per_identity(tmp_path, monkeypatch, count):
+    import appsec_review.runtime.handoff as accounting
+
+    path = tmp_path / "data/proof.json"
+    atomic_json(path, {"proof": True})
+    proof = artifact_reference_from_mapping(reference(tmp_path, path))
+    gaps = [{"path": f"vendor/{index}", "reason": "inventory_bound_reached"} for index in range(count)]
+    for index in range(count):
+        reason = f"bounded metadata gap {index}"
+        gaps.append(ProducerGap(
+            gap_id({"reason": reason}), "producer_reported_gap", "work.only", None,
+            reason, False, (proof,)).as_dict())
+    base = _write_outcome_receipts(tmp_path, gaps)
+    real_verify = accounting.verify_reference
+    calls = []
+
+    def counted(root, ref):
+        calls.append(ref["path"])
+        return real_verify(root, ref)
+
+    monkeypatch.setattr(accounting, "verify_reference", counted)
+    with validation_scope(tmp_path):
+        outcomes = build_outcomes(
+            tmp_path, run_id=tmp_path.name, job_id="job_fixture", attempt_id="attempt_0001",
+            target_snapshot="snapshot", unit_ids=["work.only"])
+    assert len(outcomes["gaps"]) == count * 2
+    assert outcomes["coverage"] == {"disposition": "partial", "gap_count": count * 2, "retry_required": False}
+    assert outcomes["units"][0]["gap_ids"] == sorted(gap["gap_id"] for gap in outcomes["gaps"])
+    assert {ref["path"] for gap in outcomes["gaps"] for ref in gap["evidence_refs"]} == {
+        (base / "result.json").relative_to(tmp_path).as_posix(),
+        (base / "status.json").relative_to(tmp_path).as_posix(), proof.path,
+    }
+    assert len(calls) == len(set(calls)) == 3
+
+
+@pytest.mark.parametrize("changed", [{"sha256": "0" * 64}, {"size_bytes": 1}])
+def test_outcome_gap_evidence_deduplication_does_not_hide_conflicting_identity(tmp_path, changed):
+    path = tmp_path / "data/proof.json"
+    atomic_json(path, {"proof": True})
+    proof = artifact_reference_from_mapping(reference(tmp_path, path))
+    gaps = [ProducerGap(
+        gap_id({"index": index}), "producer_reported_gap", "work.only", None,
+        f"bounded metadata gap {index}", False, (candidate,)).as_dict()
+        for index, candidate in enumerate((proof, replace(proof, **changed)))]
+    _write_outcome_receipts(tmp_path, gaps)
+    with validation_scope(tmp_path), pytest.raises(ValueError, match="integrity"):
+        build_outcomes(
+            tmp_path, run_id=tmp_path.name, job_id="job_fixture", attempt_id="attempt_0001",
+            target_snapshot="snapshot", unit_ids=["work.only"])
+
+
+def test_publication_stages_have_correlated_terminal_measurements(tmp_path):
+    _, _, _, outcome, _ = publish(tmp_path, lambda unit: {"gaps": ["bounded deterministic limitation"]})
+    events = [json.loads(line) for line in
+              (Path(outcome["attempt_root"]) / "logs/events.jsonl").read_text().splitlines()]
+    parent, = [event for event in events
+               if event["event"] == "OPERATION_STARTED" and event.get("operation_id") == "publication.handoff"]
+    for stage in ("outcomes", "outputs", "artifacts", "verify", "admission"):
+        pair = [event for event in events if event.get("operation_id") == f"publication.{stage}"]
+        assert [event["event"] for event in pair] == ["OPERATION_STARTED", "OPERATION_COMPLETED"]
+        assert pair[0]["span_id"] == pair[1]["span_id"]
+        assert all(event["parent_span_id"] == parent["span_id"] for event in pair)
+        assert pair[1]["terminal_status"] == "SUCCEEDED"
+        assert pair[1]["duration_ms"] >= 0
+    artifacts = next(event for event in events
+                     if event["event"] == "OPERATION_COMPLETED"
+                     and event.get("operation_id") == "publication.artifacts")
+    assert artifacts["work"]["artifact_references"] > artifacts["work"]["artifact_validations"] > 0
 
 
 def test_scoped_binary_inventory_binds_explicit_run_path_not_display_path(tmp_path):

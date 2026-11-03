@@ -67,6 +67,26 @@ Strict consumers deduplicate expected-digest checks, receipt closure checks and 
 within one operation. The context is bound to its run, target snapshot and policy; incompatible
 nested contexts fail. A new independent strict operation performs its own verification.
 
+Outcome accounting verifies each distinct evidence-reference identity once per construction,
+including unit result/status receipts already verified while reading them. Artifact collection
+checks each distinct run-relative path once per traversal, while still rejecting conflicting
+digests, malformed or conflicting sizes, and nested invalid references in duplicate declarations.
+The collection map is local to that invocation; later independent collections recheck the bytes.
+Source inventory metadata remains distinct from explicit run artifacts, and no gaps are dropped.
+This avoids repeating filesystem resolution for every gap's identical evidence references:
+the interrupted Barracuda intake had 285,112 gaps and 570,244 path/hash occurrences in its outcomes,
+but only 20 distinct lexical reference identities. Its retained cancellation stack reached
+`verify_outcomes -> collect_artifacts -> reference -> safe_path`.
+
+Publication emits child operation spans for `publication.outcomes`, `publication.outputs`,
+`publication.artifacts`, `publication.verify`, and `publication.admission`, correlated under
+`publication.handoff`. Artifact collection aggregates `artifact_references` (declared occurrences)
+and `artifact_validations` (filesystem validation attempts for distinct paths) without per-item
+events. These counters accumulate across collector invocations, not globally unique artifacts.
+Focused regressions preserve every gap, exercise repeated and conflicting evidence identities,
+check independent-call tamper rejection, and verify the terminal spans and exact work counters.
+This repair does not itself establish a completed native SBOM review.
+
 Managed publication still verifies new evidence. It detaches private builder files from writable
 aliases, requires application-owned POSIX custody, removes accepted payload write permissions,
 and issues an authenticated admission record outside the review run's mounts, under

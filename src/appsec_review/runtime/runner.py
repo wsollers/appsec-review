@@ -782,37 +782,42 @@ class JobRunner:
                   "trigger": context.trigger, "orchestration": dict(context.orchestration),
                   "status": completion_status, "started_at": claim["started_at"], "completed_at": completed}
         root = context.run_root
-        outcomes = build_outcomes(
-            root, run_id=context.run_id, job_id=job.job_id, attempt_id=context.attempt_id,
-            target_snapshot=claim["evidence_target_snapshot"], unit_ids=claim["unit_ids"])
-        if execution_status(outcomes) == "FAILED":
-            raise ValueError("failed task execution cannot publish an accepted handoff")
-        outcomes_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()
-                                      + "/outcomes.json", canonical_json(outcomes))
+        with operation_span(context.events, "publication.outcomes"):
+            outcomes = build_outcomes(
+                root, run_id=context.run_id, job_id=job.job_id, attempt_id=context.attempt_id,
+                target_snapshot=claim["evidence_target_snapshot"], unit_ids=claim["unit_ids"])
+            if execution_status(outcomes) == "FAILED":
+                raise ValueError("failed task execution cannot publish an accepted handoff")
+            outcomes_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()
+                                          + "/outcomes.json", canonical_json(outcomes))
         result_path = context.attempt_root / "result.json"
         # Manifest verification records this attempt's consumption receipts. Finish
         # that closure before freezing the artifact list, not during admission.
         from appsec_review.runtime.handoff import verify_required_outputs
-        if context.input_manifest_path is not None:
-            from appsec_review.retrieval.index import load_verified_manifest
-            load_verified_manifest(root, context.input_manifest_path, context.input_manifest_sha256)
-        verify_required_outputs(root, {
-            "job_id": job.job_id, "target_snapshot": claim["evidence_target_snapshot"],
-            "resolving_paths": {"attempt": context.attempt_root.relative_to(root).as_posix()},
-        }, claim, result)
+        with operation_span(context.events, "publication.outputs"):
+            if context.input_manifest_path is not None:
+                from appsec_review.retrieval.index import load_verified_manifest
+                load_verified_manifest(root, context.input_manifest_path, context.input_manifest_sha256)
+            verify_required_outputs(root, {
+                "job_id": job.job_id, "target_snapshot": claim["evidence_target_snapshot"],
+                "resolving_paths": {"attempt": context.attempt_root.relative_to(root).as_posix()},
+            }, claim, result)
         from appsec_review.storage.shared import attempt_artifacts
-        artifacts = collect_artifacts(
-            root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
-            outcomes_ref, outcomes, result, attempt_artifacts(root, context.attempt_root))
+        with operation_span(context.events, "publication.artifacts"):
+            artifacts = collect_artifacts(
+                root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
+                outcomes_ref, outcomes, result, attempt_artifacts(root, context.attempt_root))
         handoff = self._handoff_document(
             context, claim, result, outcomes, outcomes_ref, accepted=True, completed=completed, artifacts=artifacts)
-        verify_handoff(root, handoff)
+        with operation_span(context.events, "publication.verify"):
+            verify_handoff(root, handoff)
         manifests = [output["index_manifest"] for output in result.get("outputs", {}).values()
                      if isinstance(output, Mapping) and isinstance(output.get("index_manifest"), Mapping)]
         accepted_manifest = _accepted_retrieval_manifest(root, manifests)
         handoff_path = context.attempt_root / "handoff.json"
         from appsec_review.storage.admission import create_admission
-        admission = create_admission(context, handoff)
+        with operation_span(context.events, "publication.admission"):
+            admission = create_admission(context, handoff)
         if admission is not None:
             handoff["validation_record"] = admission
         handoff_ref = immutable_bytes(root, handoff_path.relative_to(root).as_posix(), canonical_json(handoff))

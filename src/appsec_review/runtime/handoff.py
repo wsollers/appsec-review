@@ -18,6 +18,7 @@ from appsec_review.interchange import (
     OUTCOMES_SCHEMA, ProducerGap, UnitOutcome, artifact_reference_from_mapping,
     classify_producer_status, decode_handoff, gap_id,
 )
+from appsec_review.observability.spans import count_work
 from appsec_review.runtime.datasets import read_dataset_contract
 from appsec_review.storage import canonical_json
 from appsec_review.storage.shared import reference, safe_path, verify_reference
@@ -60,9 +61,10 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
     """Resolve every declared artifact reference, never silently drop a missing path."""
     artifacts: dict[str, dict[str, Any]] = {}
     source_layers: list[Mapping[str, Any]] | None = None
+    references = validations = 0
 
     def collect(value: Any, *, declared: bool = False, source_data: bool = False) -> None:
-        nonlocal source_layers
+        nonlocal source_layers, references, validations
         if isinstance(value, Mapping):
             if ("path" in value or "run_path" in value) and "sha256" in value:
                 relative = value.get("run_path", value.get("path"))
@@ -78,14 +80,18 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
                 # not run artifacts; artifact fields and the run's data namespace are.
                 if "run_path" in value or declared or (
                         not source_data and isinstance(relative, str) and relative.startswith("data/")):
-                    path = safe_path(root, relative)
-                    ref = reference(root, path, expected_sha256=value["sha256"])
+                    references += 1
+                    ref = artifacts.get(relative) if isinstance(relative, str) else None
+                    if ref is None:
+                        validations += 1
+                        path = safe_path(root, relative)
+                        ref = reference(root, path, expected_sha256=value["sha256"])
+                        artifacts[ref["path"]] = ref
+                    elif value["sha256"] != ref["sha256"]:
+                        raise ValueError("result artifact has conflicting identities")
                     if "size_bytes" in value and (
                             type(value["size_bytes"]) is not int or value["size_bytes"] != ref["size_bytes"]):
                         raise ValueError("result artifact size mismatch")
-                    previous = artifacts.setdefault(ref["path"], ref)
-                    if previous != ref:
-                        raise ValueError("result artifact has conflicting identities")
             for name, child in value.items():
                 collect(child, declared=name not in _SOURCE_DATA_FIELDS and (
                             name in _REFERENCE_FIELDS or _REFERENCE_FIELD.fullmatch(name) is not None),
@@ -94,8 +100,12 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
             for child in value:
                 collect(child, declared=declared, source_data=source_data)
 
-    for value in values:
-        collect(value, declared=True)
+    try:
+        for value in values:
+            collect(value, declared=True)
+    finally:
+        count_work("artifact_references", references)
+        count_work("artifact_validations", validations)
     return list(artifacts.values())
 
 
@@ -251,6 +261,7 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
                    unit_ids: Sequence[str], diagnostic: bool = False) -> dict[str, Any]:
     units: list[UnitOutcome] = []
     gaps: dict[str, ProducerGap] = {}
+    verified: set[ArtifactReference] = set()
     for unit_id in unit_ids:
         parts = unit_id.split(".")
         if len(parts) != 2 or any(not part or not part.replace("_", "a").isalnum() for part in parts):
@@ -270,6 +281,7 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
                 result_ref = artifact_reference_from_mapping(reference(
                     root, safe_path(root, base + "/result.json"), expected_sha256=receipt["result_sha256"]))
                 result = _read(root, result_ref.as_dict())
+            verified.update(ref for ref in (result_ref, status_ref) if ref is not None)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             if not diagnostic:
                 raise ValueError(f"unit terminal receipt is missing or unsafe: {unit_id}") from exc
@@ -280,7 +292,9 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
             unit, declared = _producer_outcome(unit_id, state, result, result_ref, status_ref)
             for gap in declared.values():
                 for evidence in gap.evidence_refs:
-                    verify_reference(root, evidence.as_dict())
+                    if evidence not in verified:
+                        verify_reference(root, evidence.as_dict())
+                        verified.add(evidence)
         except (OSError, ValueError, KeyError, TypeError):
             if not diagnostic:
                 raise
