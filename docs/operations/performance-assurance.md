@@ -24,6 +24,28 @@ as `vendor`, `node_modules`, `build`, and `dist` do not establish platform owner
 Job construction does not enumerate application source trees to assemble an implementation
 identity; unused discovery left over from the former source-fingerprint path is removed.
 
+## Streaming project discovery
+
+Intake and cataloging enumerate eligible target paths with a deterministic streaming walk, not
+a whole-tree filename list or a model-assisted listing task. Filename filters select build/project
+markers and their build context before the ordinary content inventory's shared file/byte limits.
+Consequently a late `.vcxproj`, legacy `.vcproj`, lowercase `makefile`, or `GNUmakefile` is not
+lost because earlier unrelated assets exhausted the 10,000-entry content budget. FASTBuild and
+Windows build-script context is retained; that does not establish a supported FASTBuild executor.
+Project markers are declarations, not evidence of a successful compilation.
+
+Configured exclusions, symlink restrictions, path-length limits and per-file byte limits still
+apply and are reported explicitly. Source/SLOC and ordinary artifact/content coverage remain
+bounded and may be partial even when descriptor discovery is complete. Directory enumeration
+errors fail the scan instead of silently reporting completeness. The target snapshot streams
+hashes in the same deterministic order; exclusions do not narrow the snapshot's byte identity.
+
+Both intake and the pinned catalog partition publish `appsec-review/file-discovery/1` accounting:
+paths examined, descriptors matched/retained/unavailable, content files/bytes retained and content
+files omitted. Run metrics resolve those counters from the authenticated catalog receipt, not
+unverified event counts, and reject inconsistent accounting. Legacy receipts without this section
+report discovery accounting as unavailable (`null`), never as zero discovered files.
+
 ## Delivery scope roles
 
 Every accepted artifact row carries delivery-scope fields under scope version

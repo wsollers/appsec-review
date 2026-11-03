@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import os
-from pathlib import Path
-from typing import Any, Iterable, Mapping
+from pathlib import Path, PurePosixPath
+from typing import Any, Callable, Iterable, Iterator, Mapping
 
 from appsec_review.config.exclusions import PathExclusions
+from appsec_review.jobs.build_discovery import is_build_descriptor
 
 
 LANGUAGES = {
@@ -17,9 +18,11 @@ LANGUAGES = {
     ".php": "PHP", ".swift": "Swift", ".sh": "Shell", ".ps1": "PowerShell",
 }
 SOURCE_METRICS_SEMANTICS = "appsec-review/source-counting/1"
+FILE_DISCOVERY_SEMANTICS = "appsec-review/file-discovery/1"
 PROJECT_FILES = {"pyproject.toml", "package.json", "pom.xml", "build.gradle", "build.gradle.kts",
                  "go.mod", "Cargo.toml", "Gemfile", "composer.json"}
-BUILD_FILES = {"Makefile", "CMakeLists.txt", "meson.build", "BUILD", "WORKSPACE", "Dockerfile"}
+BUILD_FILES = {"Makefile", "makefile", "GNUmakefile", "CMakeLists.txt", "meson.build",
+               "BUILD", "WORKSPACE", "Dockerfile"}
 
 # Ecosystem tables used to decide which of several components sharing one root owns a file.
 # Every project manifest the catalog recognizes (PROJECT_FILES by name, MANIFEST_SUFFIX_ECOSYSTEMS by
@@ -31,7 +34,8 @@ MANIFEST_ECOSYSTEMS: dict[str, str] = {
     "composer.json": "php",
 }
 MANIFEST_SUFFIX_ECOSYSTEMS: dict[str, str] = {
-    ".csproj": "dotnet", ".vcxproj": "native", ".sln": "msbuild-solution",
+    ".csproj": "dotnet", ".vbproj": "dotnet", ".fsproj": "dotnet",
+    ".vcxproj": "native", ".vcproj": "native", ".sln": "msbuild-solution",
 }
 # Source suffixes (the keys of LANGUAGES that belong to a manifest ecosystem) mapped to that ecosystem.
 SOURCE_ECOSYSTEMS: dict[str, str] = {
@@ -74,6 +78,27 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _walk_files(root: Path, skip_directory: Callable[[Path], bool] | None = None) -> Iterator[Path]:
+    """Yield deterministic target paths without retaining a whole-tree filename list."""
+    def fail(error: OSError) -> None:
+        raise error
+
+    for directory, dirnames, filenames in os.walk(root, topdown=True, followlinks=False, onerror=fail):
+        base = Path(directory)
+        kept = []
+        for name in sorted(dirnames):
+            candidate = base / name
+            if skip_directory is not None and skip_directory(candidate):
+                continue
+            if candidate.is_symlink():
+                yield candidate
+            elif name not in {".git", ".hg", ".svn"}:
+                kept.append(name)
+        dirnames[:] = kept
+        for name in sorted(filenames):
+            yield base / name
+
+
 def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions | None = None) -> dict[str, Any]:
     """Catalog the target's files. ``exclusions`` (config/exclusions.py) leaves configured paths out;
     each is listed once under ``configured_exclusions`` with its pattern and scope, not as a gap."""
@@ -84,38 +109,36 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
     artifact_candidates: list[dict[str, Any]] = []
     gaps: list[dict[str, str]] = []
     excluded: set[str] = set()
-    total = 0
-    candidates: list[Path] = []
+    content_files = content_bytes = 0
+    discovery = {"file_paths_examined": 0,
+                 "descriptors_matched": 0, "descriptors_retained": 0,
+                 "descriptors_unavailable": 0, "content_files_retained": 0,
+                 "content_bytes_retained": 0, "content_files_omitted": 0}
     source_metrics: list[dict[str, Any]] = []
     source_metric_gaps: list[dict[str, str]] = []
     source_metric_bytes = 0
-    for directory, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-        base = Path(directory)
-        dirnames.sort()
-        filenames.sort()
-        kept = []
-        for name in dirnames:
-            candidate = base / name
-            rule = exclusions.match_directory(candidate.relative_to(root).as_posix())
-            if rule is not None:
-                configured.append({"path": candidate.relative_to(root).as_posix() + "/", **rule.as_dict()})
-            elif candidate.is_symlink():
-                candidates.append(candidate)
-            elif name in {".git", ".hg", ".svn"}:
-                relative = candidate.relative_to(root).as_posix()
-                gaps.append({"path": relative, "reason": "excluded_directory"})
-                excluded.add(relative)
-            else:
-                kept.append(name)
-        dirnames[:] = kept
-        candidates.extend(base / name for name in filenames)
-    for path in candidates:
+    def skip_directory(path: Path) -> bool:
+        relative = path.relative_to(root).as_posix()
+        rule = exclusions.match_directory(relative)
+        if rule is not None:
+            configured.append({"path": relative + "/", **rule.as_dict()})
+            return True
+        if not path.is_symlink() and path.name in {".git", ".hg", ".svn"}:
+            gaps.append({"path": relative, "reason": "excluded_directory"})
+            excluded.add(relative)
+            return True
+        return False
+
+    for path in _walk_files(root, skip_directory):
         relative = path.relative_to(root).as_posix()
         parts = path.relative_to(root).parts
+        discovery["file_paths_examined"] += 1
         rule = exclusions.match(relative)
         if rule is not None:
             configured.append({"path": relative, **rule.as_dict()})
             continue
+        descriptor = is_build_descriptor(PurePosixPath(relative))
+        discovery["descriptors_matched"] += int(descriptor)
         language = LANGUAGES.get(path.suffix.lower())
         if language is not None and path.is_file() and not path.is_symlink():
             try:
@@ -150,25 +173,34 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
             continue
         if path.is_symlink():
             gaps.append({"path": relative, "reason": "symlink_excluded"})
+            discovery["descriptors_unavailable"] += int(descriptor)
             continue
         if not path.is_file():
+            if descriptor:
+                gaps.append({"path": relative, "reason": "non_regular_descriptor"})
+                discovery["descriptors_unavailable"] += 1
             continue
         if len(relative) > bounds.max_path_length:
             gaps.append({"path": relative[:bounds.max_path_length], "reason": "path_too_long"})
+            discovery["descriptors_unavailable"] += int(descriptor)
             continue
         size = path.stat().st_size
         if size > bounds.max_file_bytes:
             gaps.append({"path": relative, "reason": "file_too_large"})
+            discovery["descriptors_unavailable"] += int(descriptor)
             continue
-        if len(files) + len(artifact_candidates) >= bounds.max_files or total + size > bounds.max_total_bytes:
+        if not descriptor and (content_files >= bounds.max_files or content_bytes + size > bounds.max_total_bytes):
             gaps.append({"path": relative, "reason": "inventory_bound_reached"})
+            discovery["content_files_omitted"] += 1
             continue
-        with path.open("rb") as stream:
-            sample = stream.read(8192)
-        if b"\0" in sample:
+        if not descriptor:
+            content_files += 1
+            content_bytes += size
+            with path.open("rb") as stream:
+                sample = stream.read(8192)
+        if not descriptor and b"\0" in sample:
             artifact_candidates.append({"path": relative, "size_bytes": size,
                                         "sha256": sha256_file(path)})
-            total += size
             continue
         digest = sha256_file(path)
         from appsec_review.runtime.scope import target_role
@@ -178,8 +210,12 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
                       "generated": any(part in {"generated", "gen"} for part in parts),
                       "scope_role": target_role(relative).value, "scope_version": SCOPE_VERSION,
                       "delivery_status": "unknown"})
-        total += size
+        discovery["descriptors_retained"] += int(descriptor)
     snapshot = raw_snapshot(root)
+    discovery["content_files_retained"] = content_files
+    discovery["content_bytes_retained"] = content_bytes
+    file_discovery = {"semantics": FILE_DISCOVERY_SEMANTICS, **discovery,
+                      "descriptor_coverage": "partial" if discovery["descriptors_unavailable"] else "complete"}
     return {"files": files, "gaps": gaps, "file_count": len(files),
             "total_bytes": sum(item["size_bytes"] for item in files),
             "artifact_candidates": artifact_candidates,
@@ -187,6 +223,7 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
             "artifact_candidate_bytes": sum(item["size_bytes"] for item in artifact_candidates),
             "source_metrics_semantics": SOURCE_METRICS_SEMANTICS,
             "source_metrics": source_metrics, "source_metric_gaps": source_metric_gaps,
+            "file_discovery": file_discovery,
             "configured_exclusions": sorted(configured, key=lambda item: item["path"]),
             "snapshot": snapshot}
 
@@ -196,19 +233,7 @@ def raw_snapshot(root: Path) -> dict[str, Any]:
     root = root.resolve(strict=True)
     digest = hashlib.sha256()
     count = total = 0
-    candidates: list[Path] = []
-    for directory, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-        base = Path(directory)
-        kept = []
-        for name in sorted(dirnames):
-            candidate = base / name
-            if candidate.is_symlink():
-                candidates.append(candidate)
-            elif name not in {".git", ".hg", ".svn"}:
-                kept.append(name)
-        dirnames[:] = kept
-        candidates.extend(base / name for name in sorted(filenames))
-    for path in candidates:
+    for path in _walk_files(root):
         relative_path = path.relative_to(root)
         if any(part in {".git", ".hg", ".svn"} for part in relative_path.parts):
             continue

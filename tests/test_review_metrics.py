@@ -138,11 +138,38 @@ def test_review_metrics_turn_missing_or_changed_receipt_into_explicit_gap(tmp_pa
 
 def test_review_metrics_name_absent_producers_as_coverage_gaps(tmp_path: Path) -> None:
     review = aggregate_run_metrics(tmp_path)["review"]
+    assert review["file_discovery"] is None
     assert review["gaps"] == [
         "source/catalog metrics producer receipt is unavailable",
         "language-build metrics producer receipt is unavailable",
         "CodeQL scope metrics producer receipt is unavailable",
     ]
+
+
+@pytest.mark.parametrize("change", [
+    {"descriptors_retained": -1}, {"file_paths_examined": True},
+    {"descriptors_matched": 2}, {"descriptor_coverage": "partial"},
+    {"semantics": "unknown"}, {"descriptor_coverage": []},
+])
+def test_review_metrics_reject_invalid_discovery_accounting(tmp_path: Path, change: dict) -> None:
+    discovery = {
+        "semantics": "appsec-review/file-discovery/1", "descriptor_coverage": "complete",
+        "file_paths_examined": 2, "descriptors_matched": 1, "descriptors_retained": 1,
+        "descriptors_unavailable": 0, "content_files_retained": 1,
+        "content_bytes_retained": 4, "content_files_omitted": 0,
+        **change,
+    }
+    source = _receipt(tmp_path, "source.json", {
+        "source_metrics_semantics": "appsec-review/source-counting/1",
+        "file_discovery": discovery,
+    })
+    empty = _receipt(tmp_path, "empty.json", {})
+    PipelineLog(tmp_path).write("REVIEW_SCOPE_CATALOGED", run_id="run", details={
+        "source_receipt": source, "project_receipt": empty, "build_target_receipt": empty,
+    })
+    review = aggregate_run_metrics(tmp_path)["review"]
+    assert review["file_discovery"] is None
+    assert any("file discovery metrics" in gap for gap in review["gaps"])
 
 
 def tree_invocation(root: Path, identity: str, *, start: int, end: int | None,

@@ -57,6 +57,17 @@ def test_dotnet_project_suffixes_cover_csharp_visual_basic_and_fsharp() -> None:
     ]
 
 
+def test_native_project_and_makefile_variants_are_discovered() -> None:
+    units = discover_build_units([
+        _file("modern/App.VCXPROJ"), _file("legacy/App.vcproj"),
+        _file("make/makefile"), _file("gnu/GNUmakefile"),
+    ])
+    assert [(item["root"], item["family"], item["build_system"]) for item in units] == [
+        ("gnu", "native", "make"), ("legacy", "native", "vcbuild"),
+        ("make", "native", "make"), ("modern", "native", "msbuild"),
+    ]
+
+
 def test_bundler_is_a_precise_execution_gap_not_a_false_build_unit() -> None:
     files = [_file("ruby/Gemfile", "source 'https://rubygems.org'\n"),
              _file("ruby/Gemfile.lock", "GEM\n")]

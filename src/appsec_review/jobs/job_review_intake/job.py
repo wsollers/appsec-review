@@ -257,7 +257,8 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         if not snapshot["files"]:
             raise ValueError("target has no bounded text files")
         return {"file_count": snapshot["file_count"], "total_bytes": snapshot["total_bytes"],
-                "gaps": snapshot["gaps"], "configured_exclusions": snapshot["configured_exclusions"]}
+                "gaps": snapshot["gaps"], "configured_exclusions": snapshot["configured_exclusions"],
+                "file_discovery": snapshot["file_discovery"]}
 
     def fingerprint_target(unit: UnitContext) -> Mapping[str, Any]:
         actual = source_fingerprint(_target(unit))

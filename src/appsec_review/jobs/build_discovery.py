@@ -19,6 +19,8 @@ _MARKERS: dict[str, tuple[str, str]] = {
     "configure.in": ("native", "autotools"),
     "Makefile.am": ("native", "autotools"),
     "Makefile": ("native", "make"),
+    "makefile": ("native", "make"),
+    "GNUmakefile": ("native", "make"),
     "meson.build": ("native", "meson"),
     "Cargo.toml": ("rust", "cargo"),
     "go.mod": ("go", "go"),
@@ -40,6 +42,7 @@ _SUFFIX_MARKERS: dict[str, tuple[str, str]] = {
     ".fsproj": ("dotnet", "dotnet"),
     ".sln": ("dotnet", "dotnet"),
     ".vcxproj": ("native", "msbuild"),
+    ".vcproj": ("native", "vcbuild"),
     ".wat": ("wasm", "wasm"),
     ".wasm": ("wasm", "wasm"),
 }
@@ -65,6 +68,7 @@ _CONTEXT_NAMES = {
     "rust-toolchain", "rust-toolchain.toml", "Directory.Build.props", "global.json",
     "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
     "binding.gyp", "config.m4", "go.sum", "go.work.sum",
+    "Gemfile", "Gemfile.lock", "ReadMe.txt", "fbuild.bff", "build_ms.bat",
 }
 # Families whose own packaging tool drives a C/C++ compile inside the same build (node-gyp,
 # setuptools, phpize, clang --target=wasm32). C/C++ sources under such a root are the unit's
@@ -199,6 +203,11 @@ def jvm_build_command_errors(profile: str, argv: Sequence[str]) -> tuple[str, ..
 
 def _marker(path: PurePosixPath) -> tuple[str, str] | None:
     return _MARKERS.get(path.name) or _SUFFIX_MARKERS.get(path.suffix.lower())
+
+
+def is_build_descriptor(path: PurePosixPath) -> bool:
+    """Select project markers and build context before ordinary content-inventory limits."""
+    return path.suffix.lower() != ".wasm" and (_marker(path) is not None or _is_context_name(path.name))
 
 
 def _id(root: str, family: str, system: str) -> str:
