@@ -39,6 +39,7 @@ _COUNTERS = frozenset({
     "observation_references", "provenance_gaps",
     "receipts_processed", "artifacts_processed", "shards_built", "shards_reused",
     "artifact_references", "artifact_validations",
+    "outcomes_canonical_checks", "outcomes_decoded_checks",
     "entities_written", "relations_written", "invocations_scanned", "fsync_calls",
 })
 _PHASES = frozenset({

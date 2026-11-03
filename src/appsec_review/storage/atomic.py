@@ -9,6 +9,11 @@ import tempfile
 from typing import Any
 
 
+_CANONICAL_JSON_OPTIONS: dict[str, Any] = {
+    "sort_keys": True, "separators": (",", ":"), "ensure_ascii": False,
+}
+
+
 def timed_fsync(descriptor: int) -> None:
     """fsync counted and timed into the innermost operation span (no-op accounting without one)."""
     from appsec_review.observability.spans import count_work, operation_phase
@@ -28,7 +33,16 @@ def copy_file(source: str | Path, destination: str | Path) -> str | Path:
 
 
 def canonical_json(value: Any) -> bytes:
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+    return (json.dumps(value, **_CANONICAL_JSON_OPTIONS) + "\n").encode()
+
+
+def canonical_json_sha256(value: Any) -> str:
+    """Hash the canonical wire bytes without materializing the entire encoding."""
+    digest = hashlib.sha256()
+    for chunk in json.JSONEncoder(**_CANONICAL_JSON_OPTIONS).iterencode(value):
+        digest.update(chunk.encode())
+    digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def atomic_bytes(path: Path, payload: bytes) -> None:
