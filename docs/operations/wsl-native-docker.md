@@ -166,9 +166,9 @@ separates actions, application/model services, and Docker/containerd overhead un
 
 All slices require zero swap. The daemon default cgroup parent routes tool containers into the
 actions slice; service drop-ins put Docker/containerd in the engine slice. Compose explicitly
-routes its four services into the services slice, with individual CPU/RAM/PID ceilings:
-code location 4 / 5 GiB / 2048, PostgreSQL 1 / 1 GiB / 1024, webserver and daemon each
-0.5 / 1 GiB / 512. Container memory-plus-swap equals memory.
+routes its five services into the services slice, with individual CPU/RAM/PID ceilings:
+code location 4 / 5 GiB / 2048, PostgreSQL 1 / 1 GiB / 1024, result cache 0.5 / 512 MiB / 256,
+webserver and daemon each 0.5 / 1 GiB / 512. Container memory-plus-swap equals memory.
 
 Approval and declared settings are not proof of enforcement. Before launch, inspect effective
 `cpu.max`, `memory.max`, `memory.swap.max`, `pids.max` and actual daemon/service/task membership.
