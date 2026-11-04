@@ -63,6 +63,9 @@ Command, phase-cwd, build-directory and export revisions use the separate typed 
 operation and the accepted recipe validator, not arbitrary fields in this image-only proposal.
 The source root stays fixed; optional `execution_cwd` configure/build choices stay within the
 accepted unit and require verified source/descriptor or declared build-directory context.
+Changing cwd must not select a different source or build driver: CMake source/build operands
+and Make directory/driver operands must still resolve to their accepted boundaries. Build
+target names, including CMake `--target` values, are not paths to rebase.
 Detached replay
 uses the complete committed target context and verified prerequisites at `/workspace` and
 `/install`. It does not patch the original target or advancing production workspace. A successful

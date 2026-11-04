@@ -13,15 +13,15 @@ from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
-import posixpath
 import re
-from typing import Any
+from typing import Any, Literal
 
 from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime.build_capture import CaptureScope, verify_capture_record
 from appsec_review.container_runtime.build_executor import BuildCommandResult, BuildProfile
-from appsec_review.jobs.build_discovery import (
-    ensure_declared_build_dir, recipe_execution_cwd, validate_build_recipe,
+from appsec_review.jobs.build_discovery import ensure_declared_build_dir, validate_build_recipe
+from appsec_review.jobs.build_recipe_commands import (
+    normalize_recipe_command, prepare_recipe_command,
 )
 from appsec_review.jobs.build_topology import ready_build_units, validate_build_topology
 from appsec_review.jobs.build_workspace import (
@@ -134,7 +134,11 @@ class ReplayInvocation:
             raise ReplayRefused("unsafe_execution_cwd", str(error)) from error
         if not path.is_dir() or path.is_symlink() or path.absolute() != path.resolve():
             raise ReplayRefused("unsafe_execution_cwd", "effective cwd must be an existing nonsymlink workspace directory")
-        return self.commands[ordinal], cwd
+        configure_count = len(recipe["configure_commands"])
+        phase: Literal["configure", "build"] = "configure" if ordinal < configure_count else "build"
+        index = ordinal if phase == "configure" else ordinal - configure_count
+        return prepare_recipe_command(
+            self.paths.target, self.context.validation_unit, recipe, phase, recipe[f"{phase}_commands"][index])
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,26 +390,13 @@ def _validate_candidate(context: ReplayContext, candidate: RecipeCandidate, run:
 
 
 def _command_plan(recipe: Mapping[str, Any]) -> tuple[tuple[str, ...], ...]:
-    source = recipe["source_dir"]
-    commands: list[tuple[str, ...]] = []
-    for argv, cwd in zip([*recipe["configure_commands"], *recipe["build_commands"]],
-                         _working_directories(recipe), strict=True):
-        normalized = [str(argv[0])]
-        for value in argv[1:]:
-            if "execution_cwd" in recipe and source != "." and (
-                    value == source or value.startswith(source + "/")):
-                normalized.append(posixpath.relpath(value, cwd))
-            else:
-                normalized.append("." if value == source else
-                                  value[len(source) + 1:] if source != "." and value.startswith(source + "/")
-                                  else value)
-        commands.append(tuple(normalized))
-    return tuple(commands)
+    return tuple(normalize_recipe_command(recipe, phase, argv)[0]
+                 for phase in ("configure", "build") for argv in recipe[f"{phase}_commands"])
 
 
 def _working_directories(recipe: Mapping[str, Any]) -> tuple[str, ...]:
-    return tuple(recipe_execution_cwd(recipe, phase)
-                 for phase in ("configure", "build") for _ in recipe[f"{phase}_commands"])
+    return tuple(normalize_recipe_command(recipe, phase, argv)[1]
+                 for phase in ("configure", "build") for argv in recipe[f"{phase}_commands"])
 
 
 def _commands(run: Path, invocation: ReplayInvocation, execution: TrialExecution) -> tuple[list[dict[str, Any]], list[str]]:

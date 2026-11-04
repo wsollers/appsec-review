@@ -12,9 +12,9 @@ import pytest
 
 from appsec_review.config.build_workspaces import BuildWorkspacePolicy
 from appsec_review.container_runtime.build_executor import BuildCommandResult, BuildProfile
-from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
+from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units, validate_build_recipe
 from appsec_review.jobs.build_recipe_replay import (
-    ImageResolution, RecipeCandidate, ReplayContext, ReplayRefused, ProducerProduct, TrialExecution,
+    ImageResolution, RecipeCandidate, ReplayContext, ReplayInvocation, ReplayRefused, ProducerProduct, TrialExecution,
     load_promoted_recipe, load_promoted_revision, promote_recipe, replay_recipe,
 )
 from appsec_review.jobs.build_topology import compile_build_topology
@@ -474,8 +474,8 @@ def test_evidenced_export_path_and_build_directory_revision_uses_same_source_cwd
         generated.mkdir(exist_ok=True)
         (generated / "B").write_bytes(b"revised export")
         seen.append(invocation)
-        return TrialExecution(tuple(_capture(invocation, index, argv)
-                                    for index, argv in enumerate(invocation.commands)), True)
+        return TrialExecution(tuple(_capture(invocation, index, invocation.prepare_command(index)[0])
+                                    for index in range(len(invocation.commands))), True)
 
     ref = replay_recipe(build.workspace, build.context, candidate, execute=execute)
     assert len(seen) == 1
@@ -523,6 +523,77 @@ def test_phase_cwd_correction_replays_and_promotes_without_changing_source_root_
     assert revision.recipe["source_dir"] == build.context.accepted_recipe["source_dir"] == "a-consumer"
     assert revision.recipe_identity != build.context.binding.recipe_identity
     assert (build.workspace.paths.install / "lib/libA.a").read_bytes() == b"corrupt failed B overwrite"
+
+
+@pytest.mark.parametrize("explicit_cwd", [False, True])
+@pytest.mark.parametrize("argv", [
+    ["cmake", "--build", "a-consumer/build", "--target", "a-consumer/custom-target"],
+    ["make", "-f", "a-consumer/Makefile", "a-consumer/custom-target"],
+])
+def test_command_plan_rebases_recognized_path_operands_not_source_prefixed_targets(build, explicit_cwd, argv):
+    recipe = {**build.candidate.recipe, "build_commands": [argv]}
+    if explicit_cwd:
+        recipe["execution_cwd"] = {"build": "a-consumer/build"}
+    original_recipe = deepcopy(recipe)
+    original_argv = tuple(argv)
+    assert validate_build_recipe(recipe, build.context.validation_unit) == []
+    invocation = ReplayInvocation(
+        build.context, replace(build.candidate, recipe=recipe), build.workspace.paths,
+        build.workspace.run_dir / "artifacts/command-plan", "plan-only", "none",
+        build.context.binding.image_identity,
+    )
+    expected_path = "." if explicit_cwd else "build"
+    if argv[0] == "make":
+        expected_path = "../Makefile" if explicit_cwd else "Makefile"
+    assert invocation.commands == ((original_argv[0], original_argv[1], expected_path, *original_argv[3:]),)
+    assert invocation.working_directories == (
+        "a-consumer/build" if explicit_cwd else "a-consumer",
+    )
+    assert recipe == original_recipe
+
+
+def test_shared_command_guard_refuses_wrong_source_before_replay_configure_launch(build):
+    recipe = {**build.candidate.recipe,
+              "execution_cwd": {"configure": "a-consumer/build", "build": "a-consumer/build"},
+              "configure_commands": [["cmake", "-S", ".", "-B", "."]],
+              "build_commands": [["cmake", "--build", "."]]}
+    execute = Mock(side_effect=AssertionError("wrong-source configure must not launch"))
+    with pytest.raises(ValueError, match="(?i)source|descriptor|origin"):
+        replay_recipe(build.workspace, build.context, replace(build.candidate, recipe=recipe), execute=execute)
+    execute.assert_not_called()
+
+
+def test_shared_command_guard_allows_parent_source_from_declared_build_cwd(build):
+    recipe = {**build.candidate.recipe,
+              "execution_cwd": {"configure": "a-consumer/build", "build": "a-consumer/build"},
+              "configure_commands": [["cmake", "-S", "..", "-B", "."]],
+              "build_commands": [["cmake", "--build", "."]]}
+    ref = replay_recipe(build.workspace, build.context, replace(build.candidate, recipe=recipe),
+                        execute=_executor(build))
+    trial = _read(build.workspace.run_dir, ref)
+    assert trial["status"] == "SUCCEEDED"
+    assert [command["working_directory"] for command in trial["commands"]] == ["a-consumer/build"] * 2
+    revision = load_promoted_revision(build.workspace, build.context,
+                                      promote_recipe(build.workspace, build.context, ref))
+    assert revision.recipe["source_dir"] == "a-consumer"
+    assert revision.recipe["configure_commands"] == [["cmake", "-S", "..", "-B", "."]]
+
+
+def test_rebased_target_cannot_bypass_exact_command_capture_matching(build):
+    recipe = {**build.candidate.recipe,
+              "build_commands": [["cmake", "--build", "a-consumer/build",
+                                  "--target", "a-consumer/custom-target"]]}
+
+    def wrong_target(invocation, results):
+        argv = (*results[0].argv[:-1], "custom-target")
+        results[0] = replace(results[0], argv=argv)
+        document = json.loads(results[0].capture_record.read_bytes())
+        document["command"]["argv"] = list(argv)
+        results[0].capture_record.write_bytes(canonical_json(document))
+
+    with pytest.raises(ReplayRefused, match="command_mismatch"):
+        replay_recipe(build.workspace, build.context, replace(build.candidate, recipe=recipe),
+                      execute=_executor(build, before_return=wrong_target))
 
 
 def test_explicit_default_phase_cwds_are_a_normalized_no_op(build):
