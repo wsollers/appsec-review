@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -230,6 +231,142 @@ def test_lockless_node_inference_is_normalized_before_plan_acceptance(tmp_path: 
     assert plan["model"]["status"] == "ACCEPTED"
 
 
+@pytest.mark.parametrize("with_grunt", (False, True))
+def test_optional_node_recipes_recover_full_authority_after_summary_trimming(tmp_path: Path, with_grunt) -> None:
+    padding = "x" * 18000
+    files = {
+        "static/package.json": json.dumps({"devDependencies": {"grunt": "0.4.5"}, "padding": padding}),
+        "copy-static/package.json": json.dumps({"devDependencies": {"grunt": "0.4.5"}, "padding": padding}),
+        "minify/package.json": json.dumps({
+            "scripts": {"minify": "fixture-minifier"},
+            "devDependencies": {"fixture-minifier": "1.0.0"}, "padding": padding,
+        }),
+        "copy-minify/package.json": json.dumps({
+            "scripts": {"minify": "fixture-minifier"},
+            "devDependencies": {"fixture-minifier": "1.0.0"}, "padding": padding,
+        }),
+        "dashboard/package.json": json.dumps({
+            "scripts": {"build": "gulp build", "start": "server", "test": "tests"},
+            "devDependencies": {"gulp": "4.0.0"}, "padding": padding,
+        }),
+        "dashboard/gulpfile.js": "//" + padding + "\ngulp.task('build', function () {});",
+    }
+    if with_grunt:
+        for root in ("static", "copy-static"):
+            files[f"{root}/Gruntfile.js"] = (
+                "//" + padding + "\ngrunt.registerTask('buildApp', ['clean:dist', 'concat', 'uglify']);"
+            )
+    config, target = _fixture(tmp_path, files, model_enabled=True)
+    job = config.job("job_target_analysis_plan")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text(config_path.read_text(encoding="utf-8").replace(
+        f"summary_max_bytes = {job.settings['summary_max_bytes']}", "summary_max_bytes = 12288"),
+        encoding="utf-8")
+    config = load_config(config_path)
+
+    def proposal(request):
+        assert request.summary["bounds"]["truncated"]
+        assert request.summary["bounds"]["actual_bytes"] <= 12288
+        assert all(not unit["descriptor_package"]["documents"] for unit in request.summary["build_units"])
+        value = _proposal(request)
+        for recipe in value["build_recipes"]:
+            recipe["build_commands"] = [["npm", "run", "build", "--if-present"]]
+            recipe["expected_outputs"] = []
+            recipe["network_required"] = recipe["source_dir"] == "dashboard"
+        return value
+
+    model = _Model(proposal)
+    _outcome, plan = _run(config, target, build_job(infer=model.complete))
+    actions = {action["root"]: action for action in plan["build_topology"]["build_actions"]}
+    assert len(actions) == 5
+    assert plan["model"]["status"] == ("ACCEPTED" if with_grunt else "PARTIAL")
+    assert model.calls == (1 if with_grunt else job.settings["model"]["retries"] + 1)
+    expected = {
+        "minify": ["npm", "run", "minify"], "copy-minify": ["npm", "run", "minify"],
+        "dashboard": ["npm", "run", "build"],
+    }
+    if with_grunt:
+        expected.update({root: ["npx", "--no-install", "grunt", "buildApp"]
+                         for root in ("static", "copy-static")})
+    for root, command in expected.items():
+        action = actions[root]
+        assert action["descriptor_package"]["documents"]
+        assert action["recipe"]["build_commands"] == [command]
+        assert action["recipe"]["expected_outputs"] == []
+        assert action["recipe"]["network_required"] is True
+        if root in {"static", "copy-static"}:
+            assert f"{root}/Gruntfile.js" in action["recipe"]["dependency_files"]
+    if not with_grunt:
+        for root in ("static", "copy-static"):
+            assert actions[root]["recipe"] is None
+            assert any(actions[root]["build_unit_id"] in gap and "--if-present" in gap
+                       and actions[root]["markers"][0]["sha256"] in gap
+                       for gap in plan["coverage_gaps"])
+
+
+def test_native_nonbuild_recipes_are_gaps_without_erasing_real_make_and_cmake_builds(tmp_path: Path) -> None:
+    files = {f"vendor/fragment-{index}/Makefile.am": "include_HEADERS = header.h\n" for index in range(27)}
+    for index in range(4):
+        root = f"vendor/project-{index}"
+        files[f"{root}/configure.ac"] = "AC_INIT([fixture], [1])\nAC_CONFIG_FILES([Makefile])\nAC_OUTPUT\n"
+        files[f"{root}/Makefile.am"] = "bin_PROGRAMS = fixture\n"
+    portable = {f"server/proj/{name}" for name in ("center", "db", "game", "gateway", "log", "login", "object")}
+    for root in portable:
+        files[f"{root}/makefile"] = "all: depend program\ndepend:\n\t$(CC) -MM entry.cpp\nprogram:\n\t$(CC) entry.cpp -o program\n"
+    for root in ("infra-one", "infra-two"):
+        files[f"{root}/Makefile"] = "all:\n\t$(CC) entry.cpp -o entry\n"
+    files["wrapper/Makefile"] = "all: native\nnative:\n\tif not exist bin mkdir bin\n\tpowershell build.ps1\n\t$(MSBUILD) native.sln\n"
+    files["migrator/Makefile"] = "db-docker:\n\tdocker build -f Dockerfile .\n"
+    files["compiled/CMakeLists.txt"] = "project(fixture)\n"
+    for root, project_type, extension in (
+            ("native-solution", "8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942", "vcxproj"),
+            ("managed-solution", "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC", "csproj")):
+        files[f"{root}/app.sln"] = (
+            f'Project("{{{project_type}}}") = "app", "app\\app.{extension}", '
+            '"{00000000-0000-0000-0000-000000000001}"\nEndProject\n'
+        )
+    config, target = _fixture(tmp_path, files, model_enabled=True)
+
+    def proposal(request):
+        value = _proposal(request)
+        for recipe in value["build_recipes"]:
+            root = recipe["source_dir"]
+            if root.startswith("vendor/fragment-"):
+                recipe["build_commands"] = [["make", "--version"]]
+            elif root.startswith("vendor/project-"):
+                recipe["build_commands"] = [["autoreconf", "-fi"]]
+            elif root in {"infra-one", "infra-two"}:
+                recipe["build_commands"] = [["make", "-n"]]
+            elif root in {"native-solution", "managed-solution"}:
+                recipe["build_commands"] = [["dotnet", "build", "app.sln"]]
+            recipe["expected_outputs"] = []
+        return value
+
+    model = _Model(proposal)
+    _outcome, plan = _run(config, target, build_job(infer=model.complete))
+    actions = {action["root"]: action for action in plan["build_topology"]["build_actions"]}
+    assert plan["model"]["status"] == "PARTIAL"
+    assert len(actions) == 45
+    assert {root for root, action in actions.items() if action["recipe"] is not None} == portable | {"compiled", "managed-solution"}
+    for root, action in actions.items():
+        if root in portable:
+            assert action["recipe"]["build_commands"] == [["make"]]
+        elif root == "compiled":
+            assert action["recipe"]["build_commands"][0][:2] == ["cmake", "--build"]
+        elif root == "managed-solution":
+            assert action["recipe"]["build_commands"] == [["dotnet", "build", "app.sln"]]
+        else:
+            assert action["recipe"] is None
+            assert any(action["build_unit_id"] in gap and action["markers"][0]["sha256"] in gap
+                       for gap in plan["coverage_gaps"])
+    gaps = "\n".join(plan["coverage_gaps"])
+    assert "nonstandalone_autotools_fragment" in gaps
+    assert "no compilation or build step" in gaps
+    assert "unavailable_native_windows_toolchain" in gaps
+    assert "unsupported_native_orchestration" in gaps
+    assert "unavailable_native_project_toolchain" in gaps
+
+
 def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path, {
         "a/package.json": "{}", "a/tsconfig.json": "{}", "a/index.ts": "export {}\n",
@@ -288,6 +425,25 @@ def test_summary_bounds_and_prompt_injection_names_are_data() -> None:
         "component_id": "component:0001", "scanner_ids": ["tool-semgrep"], "build_systems": [],
         "scope_paths": [files[0]["path"]], "dependencies": [], "reason": "data only"}],
         "build_recipes": []}, catalog=catalog) == []
+
+
+def test_summary_trimming_does_not_mutate_accepted_descriptor_authority() -> None:
+    catalog = {
+        "source_fingerprint": "snapshot", "catalog_handoff_sha256": "a" * 64,
+        "files": (), "components": (), "build_files": (), "compile_databases": (),
+        "build_units": [{
+            "build_unit_id": "build-unit-example",
+            "descriptor_package": {"documents": [{
+                "path": "package.json", "content": "x" * 4096,
+            }]},
+        }],
+    }
+    original = copy.deepcopy(catalog)
+    summary = summarize_catalog(catalog, max_items=20, max_bytes=2048, sample_per_prefix=1)
+    assert summary["bounds"]["truncated"] is True
+    assert summary["bounds"]["actual_bytes"] <= 2048
+    assert summary["build_units"][0]["descriptor_package"]["documents"] == []
+    assert catalog == original
 
 
 def test_plan_is_resumable_indexed_and_has_exact_dag_position(tmp_path: Path) -> None:

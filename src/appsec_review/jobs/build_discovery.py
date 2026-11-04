@@ -116,12 +116,15 @@ _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CRE
 _ENV_KEY = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 _PACKAGE = re.compile(r"[a-z0-9][a-z0-9+.-]{0,127}")
 _FORBIDDEN_SUBCOMMANDS = {
+    "make": {"check", "test", "install", "uninstall"},
+    "gmake": {"check", "test", "install", "uninstall"},
     "cargo": {"install", "run", "test"}, "go": {"get", "install", "run", "test"},
     "dotnet": {"run", "test", "tool"}, "npm": {"exec", "install", "test", "start", "publish"},
     "npx": {"--yes", "-y"}, "pnpm": {"add", "dlx", "exec", "install", "test", "start", "publish"},
     "yarn": {"add", "dlx", "exec", "install", "test", "start", "publish"}, "mvn": {"exec:java", "test"},
     "composer": {"exec", "run-script", "test"}, "php": {"-r", "--interactive"},
 }
+_NATIVE_BOOTSTRAP_COMMANDS = frozenset({"autoreconf", "autoconf", "automake", "libtoolize"})
 
 _GRADLE_BUILD_TASKS = ("assemble", "classes", "jar", "war", "clean", "build")
 _ANDROID_GRADLE_BUILD_TASKS = ("assemble", "assembleDebug")
@@ -668,7 +671,10 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
     total = 0
     by_path = {str(item["path"]): item for item in files}
     inventory = {path: _identity(by_path[path]) for path in (workspace or {}).get("inventory", ())}
-    for item in sorted(candidates, key=lambda value: str(value["path"])):
+    for item in sorted(candidates, key=lambda value: (
+            0 if str(value["path"]) in marker_paths else
+            1 if PurePosixPath(str(value["path"])).parent == PurePosixPath(root) else 2,
+            str(value["path"]))):
         if len(documents) >= max_files:
             gaps.append("descriptor file-count bound reached")
             break
@@ -693,6 +699,7 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
         path = (target_root / Path(*PurePosixPath(relative).parts)).resolve()
         if target_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
             raise ValueError("dependency inventory escaped the accepted target")
+    documents.sort(key=lambda document: str(document["path"]))
     package = {"schema": BUILD_DESCRIPTOR_SCHEMA, "build_unit": dict(unit), "documents": documents,
                "bounds": {"max_files": max_files, "max_file_bytes": max_file_bytes,
                           "max_total_bytes": max_total_bytes, "actual_files": len(documents),
@@ -828,6 +835,17 @@ def _node_restore_only(argv: Any) -> bool:
     )
 
 
+def _node_optional_command(argv: Any) -> bool:
+    if not isinstance(argv, list) or not argv or argv[0] not in {"npm", "pnpm", "yarn"}:
+        return False
+    for argument in argv[1:]:
+        if argument == "--":
+            break
+        if isinstance(argument, str) and argument.partition("=")[0] == "--if-present":
+            return True
+    return False
+
+
 def _node_grunt_commands(unit: Mapping[str, Any]) -> list[tuple[list[str], str]]:
     path = (PurePosixPath(str(unit.get("root", "."))) / "Gruntfile.js").as_posix()
     build_tasks = {"clean", "copy", "concat", "ngAnnotate", "uglify", "rev", "useminPrepare", "usemin"}
@@ -870,9 +888,123 @@ def _node_build_authority(unit: Mapping[str, Any]) -> tuple[list[str], str] | No
     return commands[0] if commands else None
 
 
+def _native_non_build_command(argv: Any) -> bool:
+    if not isinstance(argv, list) or not argv or not all(isinstance(value, str) for value in argv):
+        return True
+    executable = PurePosixPath(argv[0]).name
+    if executable in _NATIVE_BOOTSTRAP_COMMANDS | {"pkg-config"}:
+        return True
+    if any(value in {"--version", "--help"} for value in argv[1:]):
+        return True
+    if executable == "cmake":
+        return "--build" not in argv[1:]
+    if executable == "meson":
+        return argv[1:2] != ["compile"]
+    if executable in {"make", "gmake", "ninja"}:
+        for value in argv[1:]:
+            if value == "--":
+                break
+            if value.partition("=")[0] in {
+                    "--dry-run", "--just-print", "--recon", "--question", "--touch"}:
+                return True
+            if value.startswith("-") and not value.startswith("--"):
+                for option in value[1:]:
+                    if option in ("nqtvh" if executable != "ninja" else "nth"):
+                        return True
+                    if option in "CfIjloW":
+                        break
+    return False
+
+
+def _make_default_capability_gap(unit: Mapping[str, Any]) -> str | None:
+    root = PurePosixPath(str(unit.get("root", ".")))
+    markers = {str(marker["path"]): marker for marker in unit.get("markers", ())
+               if PurePosixPath(str(marker["path"])).parent == root}
+    documents = {str(document.get("path")): document
+                 for document in unit.get("descriptor_package", {}).get("documents", ())}
+    for name in ("GNUmakefile", "makefile", "Makefile"):
+        path = (root / name).as_posix()
+        if path not in markers or path not in documents:
+            continue
+        text = documents[path].get("content")
+        if not isinstance(text, str):
+            continue
+        rules: dict[str, tuple[list[str], list[str]]] = {}
+        current: list[str] = []
+        default = None
+        for line in text.replace("\\\n", " ").splitlines():
+            if line.startswith("\t"):
+                for target in current:
+                    rules[target][1].append(line.strip())
+                continue
+            declared_default = re.fullmatch(r"\.DEFAULT_GOAL\s*:?=\s*([^\s$]+)\s*", line)
+            if declared_default:
+                default = declared_default.group(1)
+            match = re.match(r"^([^#\s:=][^:=]*?)\s*:(?!=)([^;#]*)(?:;(.*))?$", line)
+            current = []
+            if not match:
+                continue
+            for target in match.group(1).split():
+                if default is None and not target.startswith("."):
+                    default = target
+                prerequisites, commands = rules.setdefault(target, ([], []))
+                prerequisites.extend(match.group(2).split())
+                if match.group(3):
+                    commands.append(match.group(3))
+                current.append(target)
+        pending = [default] if default is not None else []
+        visited: set[str] = set()
+        commands = []
+        while pending:
+            target = pending.pop()
+            if target in visited:
+                continue
+            visited.add(target)
+            prerequisites, target_commands = rules.get(target, ([], []))
+            pending.extend(prerequisites)
+            commands.extend(target_commands)
+        body = "\n".join(commands)
+        authority = f"{path}@{markers[path]['sha256']}"
+        if (re.search(r"\bif\s+not\s+exist\b", body, re.I) and
+                re.search(r"\b(?:powershell|msbuild)\b", body, re.I)):
+            return (f"unavailable_native_windows_toolchain: {authority}: "
+                    "default Make target requires Windows shell/MSBuild authority")
+        if re.search(r"(?:^|[;&|])\s*[@+-]*docker\s+build\b", body, re.M):
+            return (f"unsupported_native_orchestration: {authority}: "
+                    "default Make target builds a Docker image, not a native compiler unit")
+        return None
+    return None
+
+
 def native_build_capability_gap(unit: Mapping[str, Any]) -> str | None:
     """Separate Visual C++ authority from cross-platform .NET/MSBuild projects."""
-    if unit.get("family") != "native" or unit.get("build_system") not in {"msbuild", "vcbuild"}:
+    if unit.get("family") == "dotnet":
+        markers = {str(item["path"]): item for item in unit.get("markers", ())
+                   if PurePosixPath(str(item["path"])).suffix.lower() == ".sln" and
+                   PurePosixPath(str(item["path"])).parent == PurePosixPath(str(unit.get("root", ".")))}
+        for document in unit.get("descriptor_package", {}).get("documents", ()):
+            path = str(document.get("path", ""))
+            text = document.get("content")
+            if path not in markers or not isinstance(text, str):
+                continue
+            if re.search(
+                    r'^[ \t]*Project\("\{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942\}"\)'
+                    r'[ \t]*=[ \t]*"[^"\r\n]*",[ \t]*"[^"\r\n]+\.vcx?proj"[ \t]*,', text, re.I | re.M):
+                return (f"unavailable_native_project_toolchain: {path}@{markers[path]['sha256']}: "
+                        "accepted solution declares Visual C++ members requiring native MSBuild/VCBuild "
+                        "capability not supplied by the Linux .NET profile; Windows platform unproven")
+        return None
+    if unit.get("family") != "native":
+        return None
+    if unit.get("build_system") == "autotools" and not any(
+            PurePosixPath(str(marker["path"])).name in {"configure.ac", "configure.in"} and
+            PurePosixPath(str(marker["path"])).parent == PurePosixPath(str(unit.get("root", ".")))
+            for marker in unit.get("markers", ())):
+        return ("nonstandalone_autotools_fragment: Makefile.am does not establish an independent "
+                "build without its owning configure.ac/configure.in project")
+    if unit.get("build_system") == "make":
+        return _make_default_capability_gap(unit)
+    if unit.get("build_system") not in {"msbuild", "vcbuild"}:
         return None
     markers = {str(item["path"]): item for item in unit.get("markers", ())
                if PurePosixPath(str(item["path"])).suffix.lower() in {".vcxproj", ".vcproj"}}
@@ -909,6 +1041,19 @@ def native_build_capability_gap(unit: Mapping[str, Any]) -> str | None:
 def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Apply narrow descriptor-backed corrections before accepting inferred build argv."""
     value = dict(recipe)
+    if (value.get("image_profile") == "native" and isinstance(unit, Mapping) and
+            unit.get("build_system") == "autotools" and native_build_capability_gap(unit) is None):
+        commands = value.get("build_commands")
+        configure = value.get("configure_commands")
+        if isinstance(commands, list) and isinstance(configure, list):
+            bootstrap = []
+            for command in commands:
+                if not isinstance(command, list) or not command or command[0] not in _NATIVE_BOOTSTRAP_COMMANDS:
+                    break
+                bootstrap.append(command)
+            if bootstrap and any(not _native_non_build_command(command) for command in commands[len(bootstrap):]):
+                value["configure_commands"] = [*bootstrap, *configure]
+                value["build_commands"] = commands[len(bootstrap):]
     if value.get("image_profile") == "node" and isinstance(unit, Mapping):
         dependencies = list(value.get("dependency_files", ()))
         root = PurePosixPath(str(unit.get("root", ".")))
@@ -983,14 +1128,15 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
             value[field] = normalized
     if value.get("image_profile") == "node" and isinstance(unit, Mapping):
         commands = value.get("build_commands")
-        if isinstance(commands, list) and all(_node_restore_only(argv) for argv in commands):
+        if (isinstance(commands, list) and
+                all(_node_restore_only(argv) or _node_optional_command(argv) for argv in commands)):
             authority = _node_build_authority(unit)
             if authority is not None:
                 command, path = authority
                 value["build_commands"] = [command]
                 if path not in value["dependency_files"]:
                     value["dependency_files"].append(path)
-                value["reason"] = f"Accepted {path} declares the build-only command; dependency installation alone is not a build"
+                value["reason"] = f"Accepted {path} declares the mandatory build-only command; installation or optional scripts are not build authority"
     return value
 
 
@@ -1131,6 +1277,8 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
                               for error in jvm_build_command_errors(str(profile), argv))
             if profile == "node" and executable == "node" and "--check" not in argv[1:]:
                 errors.append(f"{field}[{index}] may execute a target application")
+            if profile == "node" and _node_optional_command(argv):
+                errors.append(f"{field}[{index}] requests an optional script with --if-present, not a mandatory build")
             if profile == "node" and executable == "npx" and "grunt" in argv[1:]:
                 if not any(argv == command for command, _path in _node_grunt_commands(unit)):
                     errors.append(f"{field}[{index}] requires an accepted literal build-only Grunt task with --no-install")
@@ -1144,6 +1292,10 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     elif (profile == "node" and isinstance(recipe.get("build_commands"), list) and
           all(_node_restore_only(argv) for argv in recipe["build_commands"])):
         errors.append("Node build_commands contain dependency installation only, not a build")
+    if (profile == "native" and isinstance(recipe.get("build_commands"), list) and
+            recipe["build_commands"] and all(_native_non_build_command(argv) for argv in recipe["build_commands"])):
+        errors.append("Native build_commands contain no compilation or build step; "
+                      "version, dry-run, configuration, and bootstrap-only commands are not builds")
     outputs = recipe.get("expected_outputs")
     if (not isinstance(outputs, list) or len(outputs) > 64 or
             any(not isinstance(item, str) or not _relative(item) for item in outputs)):

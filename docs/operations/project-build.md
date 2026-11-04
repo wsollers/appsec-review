@@ -132,16 +132,39 @@ declares `dependencies`, `devDependencies`, or `optionalDependencies`, even with
 derived image then runs the script-disabled lockless restore (`npm install --ignore-scripts`), so a
 TypeScript build resolves the declared `typescript` and `@types/*` packages instead of failing with
 TS2688. The Node build image is defined in `containers/buildenv/typescript/`.
-An empty or installation-only inferred build command can be normalized to the accepted
+An empty, installation-only, or optional (`--if-present`) inferred build command can be normalized to the accepted
 manifest's `build` or `minify` script, never its `start` or `test` script. Bounded descriptor
 discovery also retains `Gruntfile.js` and `gulpfile.js` independently of ordinary content limits.
 A Grunt dependency alone does not identify a safe task: fallback requires a literal, unique
 `build*` alias consisting solely of recognized build/minification tasks, invoked through
 `npx --no-install grunt <alias>`. Its accepted Gruntfile joins the recipe's dependency identity.
 Dynamic, unknown, test, watch and server tasks are not fallback build authority.
+Optional package-script invocations are rejected when mandatory source-backed recovery is not
+possible, including in configure commands. Arguments after the package manager's `--` separator
+belong to the declared script, not the package manager's optional-execution flag.
+The bounded model summary may omit descriptor text, but trimming never mutates the accepted
+catalog. Deterministic normalization and validation use the full accepted descriptors for that
+group, including their declared dependencies; model input bounds and allowed paths stay unchanged.
 After the configured inference retries, individually validated
 sibling recipes are retained and each unresolved unit has a marker/hash-resolving planning gap;
 one missing recipe does not erase the other projects' valid recipes.
+
+Native version queries, Make dry runs, and Autotools bootstrap/configuration commands alone do
+not establish a compile/build step. A standalone proposal may retain bootstrap commands as
+configure-stage preparation when it also proposes an actual build; normalization never invents
+the missing build command. A `Makefile.am` fragment without its own accepted `configure.ac` or
+`configure.in` is a named nonstandalone gap, not an independently buildable product. Generated
+`./configure` currently has no native-profile driver exception (the PHP `phpize` driver has its
+own explicit exception); installing Autotools packages does not fill that contract gap.
+Own accepted markers and root-local context take precedence over nested optional descriptor
+context within the existing file/byte limits. Make classification examines its own accepted
+default-target authority, not neighboring Windows projects or a directory named `test`. Proven
+Windows-shell/MSBuild wrappers and Docker-image orchestration defaults are named capability
+gaps; they are not replaced with speculative Linux builds or direct Docker fallback.
+Own accepted solution declarations of Visual C++ `.vcproj`/`.vcxproj` members also require
+native MSBuild/VCBuild capability, even when discovery places the solution in the .NET family.
+This does not prove a Windows platform or disqualify neighboring C# projects or Linux Make
+alternatives. Missing include-chain authority remains unverified, not proof of portability.
 
 Concurrent image-repair telemetry identifies `family`, `root`, `build_system`, `build_unit_id`, and
 `repair_number`. Operators must use those correlation fields rather than adjacent log order when

@@ -288,6 +288,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             unit.output("catalog_summary.load_accepted_catalog")["catalog"],
             enabled=unit.job.tools.enable_swift)
         summary = unit.output("catalog_summary.summarize_components")["summary"]
+        catalog_units = {str(value["build_unit_id"]): value for value in catalog.get("build_units", ())}
         guidance = load_runtime_skill(unit.job.repository_root, "target-analysis-planning",
                                       job_id="job_target_analysis_plan").text
         prompt_root = unit.job.repository_root / "pipeline" / "prompt-fragments"
@@ -351,7 +352,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             if len(canonical_json(request_identity)) + len(guidance_bytes) > request.max_input_tokens * 4:
                 return {"status": "BUDGET_EXCEEDED", "proposal": None, "calls": 0, "errors": [],
                         "gap": f"{family}/{build_system}: recipe inference exceeded its input budget"}
-            group_catalog = {**catalog, "build_units": build_units}
+            # Summary trimming limits model context, not accepted source authority.
+            accepted_units = [catalog_units[str(value["build_unit_id"])] for value in build_units]
+            group_catalog = {**catalog, "build_units": accepted_units}
             calls = 0
             errors: list[str] = []
             last_error: Exception | None = None
@@ -377,7 +380,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     proposal = dict(result.proposal)
                     recipes = proposal.get("build_recipes")
                     if isinstance(recipes, list):
-                        units_by_id = {str(value["build_unit_id"]): value for value in build_units}
+                        units_by_id = {str(value["build_unit_id"]): value for value in accepted_units}
                         proposal["build_recipes"] = [
                             normalize_build_recipe(
                                 recipe, units_by_id.get(str(recipe.get("build_unit_id", ""))))
@@ -439,7 +442,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                         if isinstance(recipe, Mapping):
                             key = str(recipe.get("build_unit_id", ""))
                             counts[key] = counts.get(key, 0) + 1
-                for build_unit in build_units:
+                for build_unit in accepted_units:
                     key = str(build_unit["build_unit_id"])
                     candidates = [recipe for recipe in recipes if isinstance(recipe, Mapping)
                                   and recipe.get("build_unit_id") == key] if subset_allowed else []

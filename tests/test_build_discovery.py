@@ -96,6 +96,27 @@ def test_descriptor_package_is_bounded_and_hash_identified(tmp_path: Path) -> No
     assert package["gaps"] == []
 
 
+def test_own_make_authority_precedes_nested_context_without_widening_bounds(tmp_path: Path) -> None:
+    values = {f"wrapper/AA/{index}/README.md": "nested context" for index in range(25)}
+    values["wrapper/Makefile"] = "all:\n\t$(MSBUILD) native.sln\n"
+    files = []
+    for relative, content in values.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        files.append(_file(relative, content))
+    unit = discover_build_units(files)[0]
+    package = descriptor_package(tmp_path, unit, files)
+    assert any(document["path"] == "wrapper/Makefile" for document in package["documents"])
+    assert package["bounds"] == {
+        "max_files": 24, "max_file_bytes": 65536, "max_total_bytes": 262144,
+        "actual_files": 24, "actual_bytes": len(values["wrapper/Makefile"].encode()) + 23 * len("nested context"),
+    }
+    assert [document["path"] for document in package["documents"]] == sorted(
+        document["path"] for document in package["documents"])
+    assert "descriptor file-count bound reached" in package["gaps"]
+
+
 def test_node_workspace_member_receives_bounded_ancestor_descriptors(tmp_path: Path) -> None:
     target = tmp_path / "target"
     values = {
@@ -186,6 +207,61 @@ def test_recipe_validation_forbids_target_execution_and_tool_installation() -> N
                for error in validate_build_recipe(recipe, unit))
 
 
+@pytest.mark.parametrize("system,command", (
+    ("autotools", ["make", "--version"]),
+    ("autotools", ["autoreconf", "-fi"]),
+    ("make", ["make", "-n"]),
+    ("make", ["make", "-Bn"]),
+    ("make", ["make", "--dry-run"]),
+    ("make", ["make", "--question"]),
+    ("cmake", ["cmake", "--version"]),
+))
+def test_native_version_dry_run_and_bootstrap_are_not_compilation(system, command) -> None:
+    markers = {"autotools": ["configure.ac", "Makefile.am"], "make": ["Makefile"],
+               "cmake": ["CMakeLists.txt"]}[system]
+    unit = discover_build_units([_file("native/" + marker) for marker in markers])[0]
+    recipe = {**_recipe(unit), "configure_commands": [], "build_commands": [command], "expected_outputs": []}
+    assert any("no compilation or build step" in error for error in validate_build_recipe(recipe, unit))
+
+
+def test_autotools_fragment_is_not_a_standalone_make_project() -> None:
+    unit = discover_build_units([_file("native/include/Makefile.am")])[0]
+    recipe = {**_recipe(unit), "source_dir": unit["root"], "build_dir": unit["root"],
+              "configure_commands": [], "build_commands": [["make"]], "expected_outputs": []}
+    assert any("nonstandalone_autotools_fragment" in error for error in validate_build_recipe(recipe, unit))
+
+
+def test_standalone_native_bootstrap_is_preserved_before_a_real_build() -> None:
+    unit = discover_build_units([_file("native/configure.ac"), _file("native/Makefile.am")])[0]
+    recipe = {**_recipe(unit), "configure_commands": [],
+              "build_commands": [["autoreconf", "-fi"], ["make", "-j2"]]}
+    normalized = normalize_build_recipe(recipe, unit)
+    assert normalized["configure_commands"] == [["autoreconf", "-fi"]]
+    assert normalized["build_commands"] == [["make", "-j2"]]
+    assert validate_build_recipe(normalized, unit) == []
+
+
+@pytest.mark.parametrize("kind", ("windows", "orchestration", "portable"))
+def test_make_default_authority_distinguishes_native_wrappers_from_portable_builds(kind) -> None:
+    windows = "\tif not exist bin mkdir bin\n\tpowershell build.ps1\n\t$(MSBUILD) native.sln\n"
+    text = {
+        "windows": "all: native\nnative:\n" + windows,
+        "orchestration": "db-docker:\n\tdocker build -f Dockerfile .\n",
+        "portable": "all:\n\tg++ source.cpp -o sample1_unittest\ncheck: all\n\t./sample1_unittest\nwindows:\n" + windows,
+    }[kind]
+    unit = discover_build_units([_file("native/Makefile", text)])[0]
+    unit["descriptor_package"] = {"documents": [{"path": "native/Makefile", "content": text}]}
+    recipe = {**_recipe(unit), "configure_commands": [], "build_commands": [["make"]]}
+    errors = validate_build_recipe(recipe, unit)
+    if kind == "portable":
+        assert errors == []
+        assert any("execution, tests" in error for error in validate_build_recipe(
+            {**recipe, "build_commands": [["make", "check"]]}, unit))
+    else:
+        assert any(("unavailable_native_windows_toolchain" if kind == "windows"
+                    else "unsupported_native_orchestration") in error for error in errors)
+
+
 def test_lockless_node_recipe_normalizes_npm_ci_before_acceptance() -> None:
     unit = discover_build_units([_file("web/package.json")])[0]
     recipe = {
@@ -202,8 +278,13 @@ def test_lockless_node_recipe_normalizes_npm_ci_before_acceptance() -> None:
 
 
 @pytest.mark.parametrize("script", ("build", "minify"))
-@pytest.mark.parametrize("commands", ([], [["npm", "ci", "--ignore-scripts"]]))
-def test_node_recipe_uses_declared_build_script_not_empty_or_restore_only_commands(script, commands) -> None:
+@pytest.mark.parametrize("commands", (
+    [], [["npm", "ci", "--ignore-scripts"]],
+    [["npm", "run", "build", "--if-present"]],
+    [["npm", "--if-present", "run", "build"]],
+    [["npm", "run", "build", "--if-present=true"]],
+))
+def test_node_recipe_uses_declared_build_script_not_empty_restore_only_or_optional_commands(script, commands) -> None:
     unit = discover_build_units([_file("web/package.json")])[0]
     unit["descriptor_package"] = {"documents": [{
         "path": "web/package.json", "content": json.dumps({"scripts": {script: "fixture-build"}}),
@@ -216,6 +297,53 @@ def test_node_recipe_uses_declared_build_script_not_empty_or_restore_only_comman
     normalized = normalize_build_recipe(recipe, unit)
     assert normalized["build_commands"] == [["npm", "run", script]]
     assert validate_build_recipe(normalized, unit) == []
+
+
+@pytest.mark.parametrize("command", (
+    ["npm", "run", "build", "--if-present"],
+    ["npm", "--if-present", "run", "build"],
+    ["npm", "run", "build", "--if-present=true"],
+    ["pnpm", "run", "--if-present", "build"],
+    ["yarn", "run", "--if-present", "build"],
+))
+@pytest.mark.parametrize("field", ("configure_commands", "build_commands"))
+def test_node_optional_commands_are_rejected_without_build_authority(command, field) -> None:
+    unit = discover_build_units([_file("web/package.json")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "web/package.json",
+        "content": '{"scripts":{"start":"server","test":"test-runner"}}',
+    }]}
+    recipe = {
+        **_recipe(unit), "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+        "system_packages": [], "environment": {}, "configure_commands": [],
+        "build_commands": [["npm", "run", "build"]], "expected_outputs": [],
+        field: [command],
+    }
+    normalized = normalize_build_recipe(recipe, unit)
+    assert normalized[field] == [command]
+    assert any("optional" in error and "--if-present" in error
+               for error in validate_build_recipe(normalized, unit))
+
+
+@pytest.mark.parametrize("command", (
+    ["npm", "run", "build"],
+    ["npm", "--prefix", "web", "run", "build"],
+    ["npm", "run", "build", "--", "--if-present"],
+))
+def test_node_mandatory_declared_build_commands_are_preserved(command) -> None:
+    unit = discover_build_units([_file("web/package.json")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "web/package.json", "content": '{"scripts":{"build":"fixture-build"}}',
+    }]}
+    recipe = {
+        **_recipe(unit), "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+        "system_packages": [], "environment": {}, "configure_commands": [],
+        "build_commands": [command], "expected_outputs": [],
+    }
+    assert normalize_build_recipe(recipe, unit)["build_commands"] == [command]
+    assert validate_build_recipe(recipe, unit) == []
+    optional = {**recipe, "build_commands": [["npm", "run", "build", "--if-present"]]}
+    assert any("optional" in error for error in validate_build_recipe(optional, unit))
 
 
 @pytest.mark.parametrize("extra_task", (None, "serve", "watch", "test", "commented", "string"))
@@ -305,6 +433,30 @@ def test_cross_platform_dotnet_msbuild_is_not_windows_native_authority() -> None
         "build_commands": [["dotnet", "build", "project.csproj"]],
     }
     assert validate_build_recipe(recipe, unit) == []
+
+
+@pytest.mark.parametrize("extension", ("vcxproj", "vcproj", "csproj"))
+@pytest.mark.parametrize("own_solution", (False, True))
+def test_solution_native_members_require_own_accepted_authority(extension, own_solution) -> None:
+    project_type = ("8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942" if extension != "csproj"
+                    else "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC")
+    text = (f'Project("{{{project_type}}}") = "app", "app\\app.{extension}", '
+            '"{00000000-0000-0000-0000-000000000001}"\nEndProject\n')
+    unit = discover_build_units([_file("native/msvc10.sln", text)])[0]
+    path = "native/msvc10.sln" if own_solution else "native/neighbor/msvc10.sln"
+    unit["descriptor_package"] = {"documents": [{"path": path, "content": text}]}
+    recipe = {
+        **_recipe(unit), "image_profile": "dotnet", "configure_commands": [],
+        "build_commands": [["dotnet", "build", "msvc10.sln"]],
+    }
+    errors = validate_build_recipe(recipe, unit)
+    if own_solution and extension != "csproj":
+        assert any("unavailable_native_project_toolchain" in error and
+                   f"native/msvc10.sln@{unit['markers'][0]['sha256']}" in error and
+                   "Visual C++" in error for error in errors)
+        assert not any("unavailable_native_windows_toolchain" in error for error in errors)
+    else:
+        assert errors == []
 
 
 def test_java_recipe_normalization_removes_host_specific_java_home() -> None:

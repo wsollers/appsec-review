@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Collection, Mapping
+import copy
 import hashlib
 from pathlib import PurePosixPath
 from typing import Any
@@ -91,7 +92,7 @@ def summarize_catalog(catalog: Mapping[str, Any], *, max_items: int, max_bytes: 
         "recognized_build_files": list(catalog["build_files"]),
         "compile_databases": list(catalog["compile_databases"]),
         "accepted_artifacts": list(catalog.get("accepted_artifacts", ())),
-        "build_units": list(catalog.get("build_units", ())),
+        "build_units": copy.deepcopy(list(catalog.get("build_units", ()))),
         "catalog_gaps": list(catalog.get("gaps", ())),
     }
     summary["summary_sha256"] = "0" * 64
@@ -392,7 +393,6 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
 
 
 def merge_proposal(plan: Mapping[str, Any], proposal: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any]:
-    import copy
     result = copy.deepcopy(dict(plan))
     path_hashes = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
     components = {item["component_id"]: item for item in result["components"]}
