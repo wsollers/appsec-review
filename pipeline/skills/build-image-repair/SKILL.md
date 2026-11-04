@@ -59,8 +59,11 @@ reason or package ordering. They stop recovery immediately, not another identica
 Prefer the smallest evidenced change. Do not guess apt packages when the cause is ambiguous.
 Never claim the proposal is proven until captured execution and expected products verify it.
 
-Command, build-directory and export revisions use the separate typed recipe-replay operation and
-the accepted recipe validator, not arbitrary fields in this image-only proposal. Detached replay
+Command, phase-cwd, build-directory and export revisions use the separate typed recipe-replay
+operation and the accepted recipe validator, not arbitrary fields in this image-only proposal.
+The source root stays fixed; optional `execution_cwd` configure/build choices stay within the
+accepted unit and require verified source/descriptor or declared build-directory context.
+Detached replay
 uses the complete committed target context and verified prerequisites at `/workspace` and
 `/install`. It does not patch the original target or advancing production workspace. A successful
 trial promotes immutable recipe inputs only; production must execute the revised node itself.

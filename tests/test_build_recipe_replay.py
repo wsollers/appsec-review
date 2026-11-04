@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 from pathlib import Path
@@ -49,7 +49,7 @@ class Fixture:
 
 
 @pytest.fixture
-def build(tmp_path):
+def build(tmp_path, request):
     source = tmp_path / "source"
     original = {
         "z-library/CMakeLists.txt": b"project(A)\nadd_library(A STATIC a.c)\n",
@@ -88,7 +88,8 @@ def build(tmp_path):
     run.mkdir(parents=True)
     workspace = BuildWorkspace(run)
     initial = workspace.materialize(source, source_identity)
-    configuration = canonical_json_sha256({"releases": {"platform": "platform/1", "validation": "validation/1"}})
+    releases = getattr(request, "param", {"platform": "platform/1", "validation": "validation/1"})
+    configuration = canonical_json_sha256({"releases": releases})
     binding_a = NodeBinding(
         producer["build_unit_id"], source_identity, graph["topology_id"], configuration,
         producer["recipe_revision"], "sha256:" + "1" * 64, VARIANT["toolchain"], (),
@@ -127,7 +128,6 @@ def build(tmp_path):
         "attempt_id": "B-failed", "binding": binding_b.view(), "terminal_status": "FAILED",
         "evidence": [stdout, stderr, capture],
     })
-    releases = {"platform": "platform/1", "validation": "validation/1"}
     inputs = {
         "failure": failure, "graph": _json(run, "artifacts/inputs/graph.json", graph),
         "configuration": _json(run, "artifacts/inputs/configuration.json", {
@@ -177,7 +177,7 @@ def _capture(invocation, ordinal, argv, *, exit_code=0, gaps=()):
                   "attempt_id": invocation.attempt_id, "build_unit_id": invocation.context.binding.node_id,
                   "family": invocation.context.validation_unit["family"]},
         "collector": {"image_id": invocation.image_identity},
-        "command": {"argv": list(argv), "working_directory": invocation.candidate.recipe["source_dir"],
+        "command": {"argv": list(argv), "working_directory": invocation.working_directories[ordinal],
                     "exit_code": exit_code, "timed_out": False},
         "coverage": {"complete": not gaps, "gaps": list(gaps)},
         "events": events, "streams": {"stdout": stdout, "stderr": stderr},
@@ -200,6 +200,12 @@ def _executor(build, *, exit_code=0, capture_gaps=(), cleanup=True, produce=True
         assert (invocation.paths.install / "lib/libA.a").read_bytes() == build.a_bytes
         assert (invocation.paths.install / "include/a.h").is_file()
         assert b"-L/install" in (invocation.paths.install / "lib/pkgconfig/a.pc").read_bytes()
+        assert {item["path"] for item in invocation.interfaces} == {
+            "/install/lib/libA.a", "/install/include/a.h", "/install/lib/pkgconfig/a.pc",
+        }
+        assert all(item["producer_build_unit_id"] == build.context.upstreams[0].binding.node_id
+                   and item["workspace_product"] == build.context.upstreams[0].reference
+                   for item in invocation.interfaces)
         replay_key = invocation.paths.target.parent.name
         with pytest.raises(LockUnavailable, match="lock"):
             with FileLock(build.workspace.run_dir / f"data/build/workspace/replays/{replay_key}/writer.lock"):
@@ -211,11 +217,13 @@ def _executor(build, *, exit_code=0, capture_gaps=(), cleanup=True, produce=True
             directory = invocation.paths.target / "a-consumer/build"
             directory.mkdir(exist_ok=True)
             (directory / "B").write_bytes(b"verified B executable")
-        results = tuple(_capture(invocation, index, argv, exit_code=exit_code, gaps=capture_gaps)
-                        for index, argv in enumerate(invocation.commands))
+        results = []
+        for index in range(len(invocation.commands)):
+            argv, _cwd = invocation.prepare_command(index)
+            results.append(_capture(invocation, index, argv, exit_code=exit_code, gaps=capture_gaps))
         if before_return:
             before_return(invocation, results)
-        return TrialExecution(results, cleanup)
+        return TrialExecution(tuple(results), cleanup)
     return Mock(side_effect=execute)
 
 
@@ -239,6 +247,7 @@ def test_full_context_detached_replay_promotes_recipe_only_then_reexecutes_b_wit
     promotion = promote_recipe(build.workspace, build.context, ref)
     promoted = load_promoted_recipe(build.workspace, build.context, promotion)
     assert promoted == build.candidate.recipe
+    assert load_promoted_revision(build.workspace, build.context, promotion).profile is None
     assert _read(build.workspace.run_dir, promotion)["production_reexecution_required"] is True
     assert (build.workspace.run_dir / build.workspace.state_relative).read_bytes() == production_state
     assert (build.workspace.paths.install / "lib/libA.a").read_bytes() == failed_library
@@ -304,6 +313,46 @@ def test_missing_or_foreign_context_is_explicit_refusal_before_execution(build, 
     executor.assert_not_called()
 
 
+@pytest.mark.parametrize("releases", [
+    {"platform": "platform/1"}, {"validation": "validation/1"}, {"unrelated": "unrelated/1"},
+    {"platform": "undeclared", "validation": "validation/1"},
+    {"job_project_build": "build/1", "validation": "undeclared"},
+])
+def test_missing_specific_or_placeholder_releases_are_not_reuse_proof(build, releases):
+    execute = _executor(build)
+    with pytest.raises(ReplayRefused, match="missing_release_identity"):
+        replay_recipe(build.workspace, replace(build.context, releases=releases), build.candidate, execute=execute)
+    execute.assert_not_called()
+
+
+def test_approved_image_evidence_must_pin_the_full_execution_and_signature_profile(build):
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe, "system_packages": ["libssl-dev"]})
+    profile = BuildProfile("native", "prepared:fixture", "sha256:" + "2" * 64, "1000:1000",
+                           build.context.binding.image_identity)
+    receipt = _json(build.workspace.run_dir, "artifacts/prepared/wrong-profile.json", {
+        "image_id": profile.image_id, "recipe_identity": canonical_json_sha256(candidate.recipe),
+        "profile": {**asdict(profile), "user": "2000:2000"}, "operator_approved": True,
+    })
+    execute = _executor(build)
+    with pytest.raises(ReplayRefused, match="unverified_image_preparation"):
+        replay_recipe(build.workspace, build.context, candidate, execute=execute,
+                      approved_image_builder=Mock(return_value=ImageResolution(profile, receipt)))
+    execute.assert_not_called()
+
+
+@pytest.mark.parametrize("build", [{"job_project_build": "build/1", "validation": "validation/1"}], indirect=True)
+def test_job_implementation_override_and_validation_release_are_valid_reuse_proof(build):
+    assert _read(build.workspace.run_dir, _trial(build))["status"] == "SUCCEEDED"
+
+
+def test_malformed_release_identity_has_explicit_refusal_before_execution(build):
+    execute = _executor(build)
+    with pytest.raises(ReplayRefused, match="invalid_release_identity"):
+        replay_recipe(build.workspace, replace(build.context, releases={"platform": "release with spaces",
+                      "validation": "validation/1"}), build.candidate, execute=execute)
+    execute.assert_not_called()
+
+
 @pytest.mark.parametrize("field,value", [
     ("source_identity", "foreign-source"), ("graph_identity", "foreign-graph"),
     ("configuration_identity", "foreign-config"), ("recipe_identity", "foreign-recipe"),
@@ -362,7 +411,8 @@ def test_explicit_network_offline_uses_none_and_refuses_fetch_requirements(build
               "failure": _json(build.workspace.run_dir, "artifacts/inputs/network-failure.json", failure),
               "graph": _json(build.workspace.run_dir, "artifacts/inputs/network-graph.json", graph)}
     context = replace(build.context, accepted_recipe=recipe, binding=binding, inputs=inputs)
-    candidate = replace(build.candidate, recipe={**build.candidate.recipe, "network_required": True})
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe, "network_required": True},
+                        evidence=(inputs["graph"],))
     blocked = replay_recipe(build.workspace, context, candidate, execute=executor, network_offline=True)
     assert _read(build.workspace.run_dir, blocked)["reason"] == "network_offline_requires_prepared_dependencies"
     executor.assert_called_once()
@@ -421,7 +471,7 @@ def test_evidenced_export_path_and_build_directory_revision_uses_same_source_cwd
         out.parent.mkdir()
         out.write_bytes(b"revised export")
         generated = invocation.paths.target / recipe["build_dir"]
-        generated.mkdir()
+        generated.mkdir(exist_ok=True)
         (generated / "B").write_bytes(b"revised export")
         seen.append(invocation)
         return TrialExecution(tuple(_capture(invocation, index, argv)
@@ -437,32 +487,156 @@ def test_evidenced_export_path_and_build_directory_revision_uses_same_source_cwd
     assert revision.image_identity == build.context.binding.image_identity
 
 
+def test_phase_cwd_correction_replays_and_promotes_without_changing_source_root_or_a(build):
+    recipe = deepcopy(build.candidate.recipe)
+    recipe.update(
+        execution_cwd={"configure": "a-consumer", "build": "a-consumer/build"},
+        configure_commands=[["cmake", "-S", "a-consumer", "-B", "a-consumer/build"]],
+    )
+    candidate = replace(build.candidate, recipe=recipe)
+    observed = []
+
+    def execute(invocation):
+        assert invocation.commands == (
+            ("cmake", "-S", ".", "-B", "build"), ("cmake", "--build", ".", "--parallel", "2"))
+        assert invocation.working_directories == ("a-consumer", "a-consumer/build")
+        results = []
+        for ordinal in range(len(invocation.commands)):
+            argv, cwd = invocation.prepare_command(ordinal)
+            assert (invocation.paths.target / cwd).is_dir()
+            observed.append(cwd)
+            if ordinal == 1:
+                (invocation.paths.target / cwd / "B").write_bytes(b"built from corrected cwd")
+                output = invocation.paths.install / "bin/B"
+                output.parent.mkdir()
+                output.write_bytes(b"built from corrected cwd")
+            results.append(_capture(invocation, ordinal, argv))
+        return TrialExecution(tuple(results), True)
+
+    ref = replay_recipe(build.workspace, build.context, candidate, execute=execute)
+    trial = _read(build.workspace.run_dir, ref)
+    assert trial["status"] == "SUCCEEDED"
+    assert [item["working_directory"] for item in trial["commands"]] == observed
+    revision = load_promoted_revision(build.workspace, build.context,
+                                      promote_recipe(build.workspace, build.context, ref))
+    assert revision.recipe["execution_cwd"] == recipe["execution_cwd"]
+    assert revision.recipe["source_dir"] == build.context.accepted_recipe["source_dir"] == "a-consumer"
+    assert revision.recipe_identity != build.context.binding.recipe_identity
+    assert (build.workspace.paths.install / "lib/libA.a").read_bytes() == b"corrupt failed B overwrite"
+
+
+def test_explicit_default_phase_cwds_are_a_normalized_no_op(build):
+    candidate = replace(build.candidate, recipe={**build.context.accepted_recipe,
+        "execution_cwd": {"configure": "a-consumer", "build": "a-consumer"}})
+    executor = _executor(build)
+    ref = replay_recipe(build.workspace, build.context, candidate, execute=executor)
+    assert _read(build.workspace.run_dir, ref)["reason"] == "normalized_no_op"
+    executor.assert_not_called()
+
+
+def test_cwd_is_revalidated_between_configure_and_build_instead_of_trusting_initial_directory(build):
+    recipe = {**build.candidate.recipe, "execution_cwd": {"build": "a-consumer/build"},
+              "configure_commands": [["cmake", "-S", "a-consumer", "-B", "a-consumer/build"]]}
+    candidate = replace(build.candidate, recipe=recipe)
+    executed = []
+
+    def execute(invocation):
+        argv, cwd = invocation.prepare_command(0)
+        executed.append((argv, cwd))
+        directory = invocation.paths.target / "a-consumer/build"
+        directory.rmdir()
+        directory.symlink_to("../", target_is_directory=True)
+        invocation.prepare_command(1)
+        raise AssertionError("build must not launch through configure-created symlink")
+
+    with pytest.raises(ReplayRefused, match="unsafe_execution_cwd"):
+        replay_recipe(build.workspace, build.context, candidate, execute=execute)
+    assert len(executed) == 1
+
+
+@pytest.mark.parametrize("cwd", ["/tmp/host", "../outside", "a-consumer/../shared"])
+def test_execution_cwd_never_relaxes_accepted_recipe_path_authority(build, cwd):
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe, "execution_cwd": {"build": cwd}})
+    executor = _executor(build)
+    with pytest.raises(ReplayRefused, match="invalid_candidate_recipe"):
+        replay_recipe(build.workspace, build.context, candidate, execute=executor)
+    executor.assert_not_called()
+
+
+def test_non_build_source_cwd_requires_accepted_descriptor_evidence(build):
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe,
+                                                "execution_cwd": {"build": "a-consumer/undocumented"}})
+    executor = _executor(build)
+    with pytest.raises(ReplayRefused, match="unproven_execution_cwd"):
+        replay_recipe(build.workspace, build.context, candidate, execute=executor)
+    executor.assert_not_called()
+
+
+def test_missing_generated_child_cwd_is_not_created_or_treated_as_verified_context(build):
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe,
+        "execution_cwd": {"build": "a-consumer/build/not-generated"}})
+    executor = _executor(build)
+    with pytest.raises(ReplayRefused, match="unsafe_execution_cwd"):
+        replay_recipe(build.workspace, build.context, candidate, execute=executor)
+    executor.assert_not_called()
+
+
+def test_captured_wrong_phase_cwd_cannot_be_a_winner(build):
+    recipe = {**build.candidate.recipe, "execution_cwd": {"build": "a-consumer/build"}}
+    candidate = replace(build.candidate, recipe=recipe)
+
+    def wrong_cwd(invocation, results):
+        record = results[0].capture_record
+        document = json.loads(record.read_bytes())
+        document["command"]["working_directory"] = recipe["source_dir"]
+        record.write_bytes(canonical_json(document))
+
+    with pytest.raises(ReplayRefused, match="capture_command_mismatch"):
+        replay_recipe(build.workspace, build.context, candidate,
+                      execute=_executor(build, before_return=wrong_cwd))
+
+
 def test_network_offline_approved_prepared_image_requires_immutable_matching_builder_evidence(build):
     candidate = replace(build.candidate, recipe={**build.candidate.recipe, "system_packages": ["libssl-dev"]})
     image = "sha256:" + "2" * 64
+    profile = BuildProfile("native", "prepared:fixture", image, "1000:1000", build.context.binding.image_identity)
     receipt = _json(build.workspace.run_dir, "artifacts/prepared/image.json", {
         "image_id": image, "recipe_identity": canonical_json_sha256(candidate.recipe),
-        "operator_approved": True, "network": "none", "prepared": True,
+        "profile": asdict(profile), "operator_approved": True, "network": "none", "prepared": True,
     })
-    builder = Mock(return_value=ImageResolution(BuildProfile("native", "prepared:fixture", image, "1000:1000"), receipt))
+    builder = Mock(return_value=ImageResolution(profile, receipt))
     execute = _executor(build)
     ref = replay_recipe(build.workspace, build.context, candidate, execute=execute,
                         network_offline=True, approved_image_builder=builder)
     builder.assert_called_once_with(build.context, candidate, True)
     assert _read(build.workspace.run_dir, ref)["binding"]["image_identity"] == image
+    assert execute.call_args.args[0].profile == profile
     assert execute.call_args.args[0].network == "none"
-    assert load_promoted_recipe(build.workspace, build.context,
-                                promote_recipe(build.workspace, build.context, ref)) == candidate.recipe
+    promotion = promote_recipe(build.workspace, build.context, ref)
+    promoted = load_promoted_revision(build.workspace, build.context, promotion)
+    assert promoted.recipe == candidate.recipe
+    assert promoted.profile == profile
+    assert _read(build.workspace.run_dir, promotion)["image_profile"] == asdict(profile)
+    trial = _read(build.workspace.run_dir, ref)
+    intent = _read(build.workspace.run_dir, trial["intent"])
+    intent["image_profile"]["tag"] = "forged:profile"
+    trial["intent"] = _json(build.workspace.run_dir,
+                           f"artifacts/build/recipe-replay/intents/{canonical_json_sha256(intent)}.json", intent)
+    forged = _json(build.workspace.run_dir,
+                   f"artifacts/build/recipe-replay/trials/{canonical_json_sha256(trial)}.json", trial)
+    with pytest.raises(ReplayRefused, match="image_mismatch"):
+        promote_recipe(build.workspace, build.context, forged)
 
 
 def test_network_offline_builder_cannot_hide_a_fetch_or_unapproved_recipe(build):
     candidate = replace(build.candidate, recipe={**build.candidate.recipe, "system_packages": ["libssl-dev"]})
     image = "sha256:" + "2" * 64
+    profile = BuildProfile("native", "prepared:fixture", image, "1000:1000")
     receipt = _json(build.workspace.run_dir, "artifacts/prepared/unapproved.json", {
         "image_id": image, "recipe_identity": canonical_json_sha256(candidate.recipe),
-        "operator_approved": True, "network": "bridge", "prepared": False,
+        "profile": asdict(profile), "operator_approved": True, "network": "bridge", "prepared": False,
     })
-    builder = Mock(return_value=ImageResolution(BuildProfile("native", "prepared:fixture", image, "1000:1000"), receipt))
+    builder = Mock(return_value=ImageResolution(profile, receipt))
     execute = _executor(build)
     with pytest.raises(ReplayRefused, match="unverified_image_preparation"):
         replay_recipe(build.workspace, build.context, candidate, execute=execute,
@@ -476,6 +650,14 @@ def test_accepted_descriptor_content_cannot_be_forged_to_widen_command_validatio
     execute = _executor(build)
     with pytest.raises(ReplayRefused, match="descriptor_identity_mismatch"):
         replay_recipe(build.workspace, replace(build.context, validation_unit=unit), build.candidate, execute=execute)
+    execute.assert_not_called()
+
+
+def test_unrelated_durable_artifact_is_not_accepted_build_evidence(build):
+    evidence = _json(build.workspace.run_dir, "artifacts/unrelated/model-claim.json", {"claim": "trust me"})
+    execute = _executor(build)
+    with pytest.raises(ReplayRefused, match="foreign_candidate_evidence"):
+        replay_recipe(build.workspace, build.context, replace(build.candidate, evidence=(evidence,)), execute=execute)
     execute.assert_not_called()
 
 

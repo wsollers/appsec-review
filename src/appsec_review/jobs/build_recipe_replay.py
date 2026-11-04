@@ -12,13 +12,17 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import posixpath
 import re
 from typing import Any
 
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime.build_capture import CaptureScope, verify_capture_record
 from appsec_review.container_runtime.build_executor import BuildCommandResult, BuildProfile
-from appsec_review.jobs.build_discovery import validate_build_recipe
+from appsec_review.jobs.build_discovery import (
+    ensure_declared_build_dir, recipe_execution_cwd, validate_build_recipe,
+)
 from appsec_review.jobs.build_topology import ready_build_units, validate_build_topology
 from appsec_review.jobs.build_workspace import (
     BuildWorkspace, NodeBinding, ProductSpec, WorkspaceError, WorkspacePaths, WorkspaceWriter,
@@ -35,7 +39,7 @@ _ROOT = "artifacts/build/recipe-replay"
 _VARIANT = {"configuration", "target_arch", "execution_role", "linkage", "toolchain", "abi"}
 _IMAGE_FIELDS = ("system_packages", "image_repairs", "environment")
 _MUTABLE = {"configure_commands", "build_commands", "build_dir", "expected_outputs",
-            "system_packages", "image_repairs", "environment", "reason"}
+            "system_packages", "image_repairs", "environment", "reason", "execution_cwd"}
 
 
 class ReplayRefused(ValueError):
@@ -100,10 +104,37 @@ class ReplayInvocation:
     attempt_id: str
     network: str
     image_identity: str
+    profile: BuildProfile | None = None
+    interfaces: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def commands(self) -> tuple[tuple[str, ...], ...]:
         return _command_plan(self.candidate.recipe)
+
+    @property
+    def working_directories(self) -> tuple[str, ...]:
+        return _working_directories(self.candidate.recipe)
+
+    def prepare_command(self, ordinal: int) -> tuple[tuple[str, ...], str]:
+        """C calls this immediately before each captured container launch."""
+        if type(ordinal) is not int or not 0 <= ordinal < len(self.commands):
+            raise ReplayRefused("invalid_command_ordinal", "command ordinal is outside the validated sequence")
+        cwd = self.working_directories[ordinal]
+        recipe = self.candidate.recipe
+        build_dir = recipe["build_dir"]
+        build_cwd = cwd == build_dir or build_dir != "." and cwd.startswith(build_dir + "/")
+        if cwd != recipe["source_dir"] and not build_cwd:
+            documents = self.context.validation_unit.get("descriptor_package", {}).get("documents", ())
+            if not any(PurePosixPath(item["path"]).parent.as_posix() == cwd for item in documents):
+                raise ReplayRefused("unproven_execution_cwd", "source cwd needs accepted descriptor evidence")
+        try:
+            ensure_declared_build_dir(self.paths.target, recipe)
+            path = self.paths.target if cwd == "." else safe_path(self.paths.target, cwd)
+        except ValueError as error:
+            raise ReplayRefused("unsafe_execution_cwd", str(error)) from error
+        if not path.is_dir() or path.is_symlink() or path.absolute() != path.resolve():
+            raise ReplayRefused("unsafe_execution_cwd", "effective cwd must be an existing nonsymlink workspace directory")
+        return self.commands[ordinal], cwd
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +156,7 @@ class PromotedRecipe:
     image_identity: str
     recipe_identity: str
     reference: Mapping[str, Any]
+    profile: BuildProfile | None = None
 
 
 ReplayExecutor = Callable[[ReplayInvocation], TrialExecution]
@@ -161,6 +193,13 @@ def _load(run: Path, kind: str, ref: Mapping[str, Any]) -> dict[str, Any]:
 def _recipe_key(recipe: Mapping[str, Any]) -> str:
     value = deepcopy(dict(recipe))
     value.pop("reason", None)
+    if isinstance(value.get("execution_cwd"), Mapping):
+        explicit = {phase: cwd for phase, cwd in value["execution_cwd"].items()
+                    if cwd != value.get("source_dir")}
+        if explicit:
+            value["execution_cwd"] = explicit
+        else:
+            value.pop("execution_cwd")
     value["system_packages"] = sorted(value.get("system_packages", ()))
     value["expected_outputs"] = sorted(value.get("expected_outputs", ()))
     if isinstance(value.get("image_repairs"), dict):
@@ -185,6 +224,15 @@ def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
     if (not context.releases or any(not isinstance(value, str) or not value.strip()
                                    for value in context.releases.values())):
         raise ReplayRefused("missing_release_identity", "accepted release identities are required")
+    try:
+        releases = ComponentReleases(context.releases)
+    except ValueError as error:
+        raise ReplayRefused("invalid_release_identity", str(error)) from error
+    implementation = "job_project_build" if "job_project_build" in releases.values else "platform"
+    reusable, reason = releases.require(implementation, "validation")
+    if not reusable or any(releases.values.get(key) == "undeclared" for key in (implementation, "validation")):
+        raise ReplayRefused(reason or "missing_release_identity",
+                            "declared implementation and validation releases are required")
     if (set(context.variant) != _VARIANT or any(not isinstance(value, str) or not value.strip()
                                              for value in context.variant.values())
             or context.variant.get("execution_role") not in {"host", "target"}):
@@ -295,8 +343,13 @@ def _validate_candidate(context: ReplayContext, candidate: RecipeCandidate, run:
     if (not isinstance(candidate.reason, str) or not candidate.reason.strip()
             or len(candidate.reason.encode()) > 4096 or not 1 <= len(candidate.evidence) <= 64):
         raise ReplayRefused("missing_candidate_evidence", "a bounded reason and accepted evidence are required")
+    accepted_evidence = [*context.inputs.values(), *(item.reference for item in context.upstreams),
+                         *_read(run, context.inputs["failure"])["evidence"]]
+    accepted_identities = {canonical_json_sha256(dict(ref)) for ref in accepted_evidence}
     for ref in candidate.evidence:
         _verify_evidence(run, ref)
+        if canonical_json_sha256(dict(ref)) not in accepted_identities:
+            raise ReplayRefused("foreign_candidate_evidence", "candidate evidence is outside the frozen accepted context")
     recipe = candidate.recipe
     errors = validate_build_recipe(recipe, context.validation_unit)
     if errors:
@@ -335,14 +388,24 @@ def _validate_candidate(context: ReplayContext, candidate: RecipeCandidate, run:
 def _command_plan(recipe: Mapping[str, Any]) -> tuple[tuple[str, ...], ...]:
     source = recipe["source_dir"]
     commands: list[tuple[str, ...]] = []
-    for argv in [*recipe["configure_commands"], *recipe["build_commands"]]:
+    for argv, cwd in zip([*recipe["configure_commands"], *recipe["build_commands"]],
+                         _working_directories(recipe), strict=True):
         normalized = [str(argv[0])]
         for value in argv[1:]:
-            normalized.append("." if value == source else
-                              value[len(source) + 1:] if source != "." and value.startswith(source + "/")
-                              else value)
+            if "execution_cwd" in recipe and source != "." and (
+                    value == source or value.startswith(source + "/")):
+                normalized.append(posixpath.relpath(value, cwd))
+            else:
+                normalized.append("." if value == source else
+                                  value[len(source) + 1:] if source != "." and value.startswith(source + "/")
+                                  else value)
         commands.append(tuple(normalized))
     return tuple(commands)
+
+
+def _working_directories(recipe: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(recipe_execution_cwd(recipe, phase)
+                 for phase in ("configure", "build") for _ in recipe[f"{phase}_commands"])
 
 
 def _commands(run: Path, invocation: ReplayInvocation, execution: TrialExecution) -> tuple[list[dict[str, Any]], list[str]]:
@@ -368,7 +431,7 @@ def _commands(run: Path, invocation: ReplayInvocation, execution: TrialExecution
         verified = verify_capture_record(result.capture_record, run_root=run, scope=scope)
         command = verified.document["command"]
         if (command.get("argv") != list(result.argv)
-                or command.get("working_directory") != invocation.candidate.recipe["source_dir"]
+                or command.get("working_directory") != invocation.working_directories[ordinal]
                 or command.get("exit_code") != result.exit_code
                 or command.get("timed_out") != result.timed_out
                 or verified.document.get("collector", {}).get("image_id") != invocation.image_identity):
@@ -380,7 +443,8 @@ def _commands(run: Path, invocation: ReplayInvocation, execution: TrialExecution
             gaps.extend(verified.gaps)
         if verified.findings["findings"]:
             gaps.append("capture_secret_findings")
-        records.append({"ordinal": ordinal, "argv": list(result.argv), "exit_code": result.exit_code,
+        records.append({"ordinal": ordinal, "argv": list(result.argv),
+                        "working_directory": invocation.working_directories[ordinal], "exit_code": result.exit_code,
                         "timed_out": result.timed_out,
                         "capture": reference(run, result.capture_record),
                         "stdout": reference(run, result.stdout_file),
@@ -430,6 +494,7 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
                     "reason": "network_offline_requires_prepared_dependencies"})
             image_identity = context.binding.image_identity
             image_evidence = None
+            image_profile = None
             if any(candidate.recipe.get(field) != context.accepted_recipe.get(field) for field in _IMAGE_FIELDS):
                 if approved_image_builder is None:
                     return _publish(run, "trials", {**base, "status": "BLOCKED",
@@ -437,6 +502,7 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
                 resolution = approved_image_builder(context, candidate, network_offline)
                 receipt = _read(run, resolution.evidence)
                 if (receipt.get("image_id") != resolution.profile.image_id
+                        or receipt.get("profile") != asdict(resolution.profile)
                         or receipt.get("recipe_identity") != canonical_json_sha256(candidate.recipe)
                         or receipt.get("operator_approved") is not True
                         or resolution.profile.name != context.accepted_recipe["image_profile"]
@@ -444,19 +510,22 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
                                                 or receipt.get("prepared") is not True)):
                     raise ReplayRefused("unverified_image_preparation", "approved bounded image evidence is required")
                 image_identity, image_evidence = resolution.profile.image_id, dict(resolution.evidence)
+                image_profile = resolution.profile
             replay_id = f"recipe-{key}"
             replay = writer.create_replay(replay_id, context.generation_identity)
         attempt = f"replay-{key[:32]}"
         intent = _publish(run, "intents", {**base, "replay_id": replay_id, "attempt_id": attempt,
-                          "image_identity": image_identity, "image_evidence": image_evidence})
+                          "image_identity": image_identity, "image_evidence": image_evidence,
+                          "image_profile": None if image_profile is None else asdict(image_profile)})
         capture_dir = safe_path(run, f"{_ROOT}/captures/{key}")
         invocation = ReplayInvocation(context, candidate, replay.paths, capture_dir, attempt,
-                                      base["network"], image_identity)
+                                      base["network"], image_identity, image_profile)
         with replay.writer() as trial:
             interfaces: list[dict[str, Any]] = []
             producer_by_node = {item.binding.node_id: item for item in context.upstreams}
             for producer in context.upstreams:
                 interfaces.extend(trial.product_interfaces(producer.reference, producer.binding))
+            invocation = replace(invocation, interfaces=tuple(deepcopy(interfaces)))
 
             def verify(product: Mapping[str, Any]) -> bool:
                 producer = producer_by_node[product["producer_build_unit_id"]]
@@ -469,6 +538,7 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
             binding = replace(context.binding, recipe_identity=canonical_json_sha256(candidate.recipe),
                               image_identity=image_identity)
             trial.begin_attempt(binding, attempt, context.generation_identity)
+            invocation.prepare_command(0)
             execution = execute(invocation)
             if type(execution.cleanup_complete) is not bool:
                 raise ReplayRefused("invalid_cleanup_proof", "worker cleanup must be explicitly confirmed")
@@ -512,7 +582,8 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
 
 
 def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
-                    trial_ref: Mapping[str, Any], writer: WorkspaceWriter) -> tuple[dict[str, Any], dict[str, Any]]:
+                    trial_ref: Mapping[str, Any], writer: WorkspaceWriter
+                    ) -> tuple[dict[str, Any], dict[str, Any], BuildProfile | None]:
     graph = _validate_context(workspace, context, writer)
     run = workspace.run_dir
     trial = _load(run, "trials", trial_ref)
@@ -534,13 +605,21 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
                                image_identity=intent["image_identity"])
     if trial.get("binding") != expected_binding.view():
         raise ReplayRefused("trial_binding_mismatch", "recipe, image or execution inputs changed")
+    profile = None
     if intent.get("image_evidence") is not None:
+        try:
+            profile = BuildProfile(**intent["image_profile"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ReplayRefused("invalid_image_profile", "approved full image profile is required") from error
         image = _read(run, intent["image_evidence"])
         if (image.get("image_id") != expected_binding.image_identity or image.get("operator_approved") is not True
+                or profile.name != context.accepted_recipe["image_profile"]
+                or profile.image_id != expected_binding.image_identity or image.get("profile") != asdict(profile)
                 or image.get("recipe_identity") != expected_binding.recipe_identity
                 or trial["network"] == "none" and (image.get("network") != "none" or image.get("prepared") is not True)):
             raise ReplayRefused("image_mismatch", "image preparation evidence changed")
     elif (expected_binding.image_identity != context.binding.image_identity
+          or intent.get("image_profile") is not None
           or any(candidate.recipe.get(field) != context.accepted_recipe.get(field) for field in _IMAGE_FIELDS)):
         raise ReplayRefused("image_mismatch", "changed image inputs require bounded preparation evidence")
     expected = _command_plan(candidate.recipe)
@@ -548,7 +627,7 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
         raise ReplayRefused("command_sequence_incomplete", "the trial did not complete every required command")
     scope = CaptureScope(context.run_id, "job_project_build", intent["attempt_id"],
                          context.binding.node_id, str(context.validation_unit["family"]))
-    for argv, result in zip(expected, trial["commands"], strict=True):
+    for argv, cwd, result in zip(expected, _working_directories(candidate.recipe), trial["commands"], strict=True):
         for name in ("stdout", "stderr", "capture"):
             _verify_evidence(run, result[name])
         captured = verify_capture_record(verify_reference(run, result["capture"]), run_root=run, scope=scope)
@@ -556,7 +635,8 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
                 or captured.gaps or captured.document["command"]["argv"] != list(argv)
                 or captured.document["command"]["exit_code"] != 0
                 or captured.document["command"]["timed_out"] is not False
-                or captured.document["command"].get("working_directory") != candidate.recipe["source_dir"]
+                or captured.document["command"].get("working_directory") != cwd
+                or result.get("working_directory", candidate.recipe["source_dir"]) != cwd
                 or captured.findings["findings"]
                 or captured.document.get("collector", {}).get("image_id") != expected_binding.image_identity):
             raise ReplayRefused("unverified_command", "actual captured command is not a successful exact trial")
@@ -580,19 +660,20 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
             "workspace_product": trial["products"],
         }.items()):
             raise ReplayRefused("unverified_interfaces", "trial interface identity differs from verified products")
-    return trial, dict(candidate.recipe)
+    return trial, dict(candidate.recipe), profile
 
 
 def promote_recipe(workspace: BuildWorkspace, context: ReplayContext,
                    trial_ref: Mapping[str, Any]) -> dict[str, Any]:
     """Publish a recipe revision, not acceptance of replay products in production."""
     with workspace.writer() as writer:
-        trial, recipe = _verified_trial(workspace, context, trial_ref, writer)
+        trial, recipe, profile = _verified_trial(workspace, context, trial_ref, writer)
         return _publish(workspace.run_dir, "promotions", {
             "schema": PROMOTION_SCHEMA, "context": trial["context"], "trial": dict(trial_ref),
             "recipe": recipe, "recipe_identity": canonical_json_sha256(recipe),
             "production_reexecution_required": True, "trial_products_reusable_in_production": False,
             "image_identity": trial["binding"]["image_identity"],
+            "image_profile": None if profile is None else asdict(profile),
             "products": _read(workspace.run_dir, trial["products"])["products"],
         })
 
@@ -606,14 +687,15 @@ def load_promoted_revision(workspace: BuildWorkspace, context: ReplayContext,
                 or promotion.get("production_reexecution_required") is not True
                 or promotion.get("trial_products_reusable_in_production") is not False):
             raise ReplayRefused("invalid_promotion", "promotion is not a recipe-only reexecution input")
-        trial, recipe = _verified_trial(workspace, context, promotion["trial"], writer)
+        trial, recipe, profile = _verified_trial(workspace, context, promotion["trial"], writer)
         if (promotion.get("context") != trial["context"] or promotion.get("recipe") != recipe
                 or promotion.get("recipe_identity") != canonical_json_sha256(recipe)
                 or promotion.get("image_identity") != trial["binding"]["image_identity"]
+                or promotion.get("image_profile") != (None if profile is None else asdict(profile))
                 or promotion.get("products") != _read(workspace.run_dir, trial["products"])["products"]):
             raise ReplayRefused("promotion_mismatch", "promotion differs from its verified trial")
         return PromotedRecipe(recipe, tuple(ProductSpec(**spec) for spec in promotion["products"]),
-                              promotion["image_identity"], promotion["recipe_identity"], dict(promotion_ref))
+                              promotion["image_identity"], promotion["recipe_identity"], dict(promotion_ref), profile)
 
 
 def load_promoted_recipe(workspace: BuildWorkspace, context: ReplayContext,
