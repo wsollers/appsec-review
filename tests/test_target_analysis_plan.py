@@ -14,7 +14,7 @@ from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job, load_accepted_plan
 from appsec_review.jobs.job_target_analysis_plan.job import publish_guidance_bundle
 from appsec_review.jobs.job_target_analysis_plan.planning import (
-    PLAN_SCHEMA, PROPOSAL_SCHEMA, deterministic_plan, summarize_catalog, validate_plan, validate_proposal,
+    PLAN_SCHEMA, PROPOSAL_SCHEMA, deterministic_plan, merge_proposal, summarize_catalog, validate_plan, validate_proposal,
 )
 from appsec_review.jobs.build_topology import topological_order, topology_identity
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
@@ -576,3 +576,41 @@ def test_plan_validation_rejects_unaccepted_graph_projection_or_authority(tmp_pa
         plan["build_topology"]["build_actions"][0]["required_image_profile"] = "java"
     with pytest.raises(ValueError):
         validate_plan(plan, catalog)
+
+
+def test_optional_execution_cwd_survives_plan_acceptance_without_changing_catalog_authority(tmp_path: Path) -> None:
+    import hashlib
+    from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units, recipe_execution_cwd
+
+    text = "project(app)\nadd_executable(A a.c)\n"
+    (tmp_path / "CMakeLists.txt").write_text(text)
+    files = [{"path": "CMakeLists.txt", "sha256": hashlib.sha256(text.encode()).hexdigest(),
+              "size_bytes": len(text), "language": None}]
+    units = discover_build_units(files)
+    units[0]["descriptor_package"] = descriptor_package(tmp_path, units[0], files)
+    catalog = {"source_fingerprint": "snapshot", "catalog_handoff_sha256": "a" * 64,
+               "files": files, "components": [], "build_files": files, "compile_databases": [],
+               "build_units": units}
+    original = copy.deepcopy(catalog)
+    summary = summarize_catalog(catalog, max_items=100, max_bytes=65536, sample_per_prefix=1)
+    plan = deterministic_plan(catalog, summary)
+    recipe = {"schema": "appsec-review/build-recipe/1", "build_unit_id": units[0]["build_unit_id"],
+              "image_profile": "native", "source_dir": ".", "build_dir": "build",
+              "system_packages": [], "environment": {}, "dependency_files": ["CMakeLists.txt"],
+              "configure_commands": [["cmake", ".."]], "build_commands": [["cmake", "--build", "."]],
+              "execution_cwd": {"configure": "build", "build": "build"},
+              "expected_outputs": ["build"], "network_required": False,
+              "reason": "accepted configure/build phase execution directory"}
+    proposal = {"schema": PROPOSAL_SCHEMA, "component_proposals": [], "build_recipes": [recipe]}
+    assert validate_proposal(proposal, catalog=catalog) == []
+    accepted = merge_proposal(plan, proposal, catalog)
+    validate_plan(accepted, catalog)
+    assert catalog == original
+    assert plan["build_topology"]["build_actions"][0]["recipe"] is None
+    action = accepted["build_topology"]["build_actions"][0]
+    assert action["root"] == action["recipe"]["source_dir"] == "."
+    assert recipe_execution_cwd(action["recipe"], "configure") == "build"
+    changed = copy.deepcopy(accepted)
+    changed["build_topology"]["build_actions"][0]["recipe"]["source_dir"] = "build"
+    with pytest.raises(ValueError, match="source_dir must equal"):
+        validate_plan(changed, catalog)

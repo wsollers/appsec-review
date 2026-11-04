@@ -11,6 +11,16 @@
     "image_profile": {"enum": ["native", "rust", "go", "java", "android", "node", "dotnet", "python", "php", "wasm"]},
     "source_dir": {"type": "string", "minLength": 1, "maxLength": 512},
     "build_dir": {"type": "string", "minLength": 1, "maxLength": 512},
+    "execution_cwd": {
+      "description": "Optional target-relative configure/build working directories within the immutable accepted source root. An omitted phase uses source_dir; omission never inserts defaults into the recipe. Callers must separately verify accepted directory evidence and effective workspace custody, rejecting symlink/outside escapes. This field does not authorize creating an arbitrary directory or changing source_dir.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "configure": {"$ref": "#/$defs/executionCwdPath"},
+        "build": {"$ref": "#/$defs/executionCwdPath"}
+      }
+    },
     "system_packages": {"type": "array", "uniqueItems": true, "maxItems": 64, "items": {"type": "string", "maxLength": 128}},
     "environment": {"type": "object", "maxProperties": 32, "additionalProperties": {"type": "string", "maxLength": 1024}},
     "dependency_files": {"type": "array", "uniqueItems": true, "maxItems": 64, "items": {"type": "string", "maxLength": 512}},
@@ -31,5 +41,14 @@
       }
     }
   },
-  "$defs": {"commands": {"type": "array", "maxItems": 16, "items": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"type": "string", "maxLength": 2048}}}}
+  "$defs": {
+    "commands": {"type": "array", "maxItems": 16, "items": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"type": "string", "maxLength": 2048}}},
+    "executionCwdPath": {
+      "type": "string", "minLength": 1, "maxLength": 512,
+      "allOf": [
+        {"not": {"pattern": "[\\\\:\\u0000-\\u001f\\u007f]|^/|/$|//"}},
+        {"anyOf": [{"const": "."}, {"not": {"pattern": "(^|/)\\.{1,2}(/|$)"}}]}
+      ]
+    }
+  }
 }

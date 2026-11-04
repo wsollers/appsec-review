@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -9,8 +10,9 @@ import pytest
 from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, android_descriptor_facts, build_recipe_inference_policy,
     descriptor_package, discover_build_units, is_build_descriptor, normalize_build_recipe, required_image_profile,
-    unsupported_build_gaps, validate_build_recipe,
+    recipe_execution_cwd, unsupported_build_gaps, validate_build_recipe,
 )
+from appsec_review.storage import canonical_json
 
 
 def _file(path: str, content: str = "x") -> dict[str, object]:
@@ -206,6 +208,103 @@ def test_recipe_validation_accepts_argv_and_rejects_model_escape_routes() -> Non
     assert any("shell syntax" in error for error in errors)
     assert any("expected_outputs" in error for error in errors)
     assert any("source_dir must" in error for error in errors)
+
+
+def test_execution_cwd_omission_preserves_legacy_recipe_shape_hash_and_defaults() -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    recipe = _recipe(unit)
+    original = copy.deepcopy(recipe)
+    original_bytes = canonical_json(recipe)
+    assert recipe_execution_cwd(recipe, "configure") == "native"
+    assert recipe_execution_cwd(recipe, "build") == "native"
+    assert validate_build_recipe(recipe, unit) == []
+    normalized = normalize_build_recipe(recipe, unit)
+    assert normalized == original == recipe
+    assert "execution_cwd" not in normalized
+    assert canonical_json(normalized) == original_bytes
+    assert hashlib.sha256(canonical_json(normalized)).digest() == hashlib.sha256(original_bytes).digest()
+
+
+@pytest.mark.parametrize("overrides,configure,build", [
+    ({"configure": "native"}, "native", "native"),
+    ({"build": "native/build"}, "native", "native/build"),
+    ({"configure": "native/configure", "build": "native/build/subdir"}, "native/configure", "native/build/subdir"),
+])
+def test_execution_cwd_explicit_phase_paths_validate_without_mutating_origin(overrides, configure, build) -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    legacy = _recipe(unit)
+    recipe = {**copy.deepcopy(legacy), "execution_cwd": overrides}
+    original = copy.deepcopy(recipe)
+    assert validate_build_recipe(recipe, unit) == []
+    assert recipe_execution_cwd(recipe, "configure") == configure
+    assert recipe_execution_cwd(recipe, "build") == build
+    assert normalize_build_recipe(recipe, unit) == original == recipe
+    assert recipe["source_dir"] == legacy["source_dir"] == unit["root"]
+    assert hashlib.sha256(canonical_json(recipe)).digest() != hashlib.sha256(canonical_json(legacy)).digest()
+
+
+@pytest.mark.parametrize("value", [
+    None, [], {}, "native/build", {"export": "native/build"}, {"build": "native", "unknown": "native"},
+    {"build": ""}, {"build": 1}, {"build": None}, {"build": []},
+    {"build": "/tmp"}, {"build": "/workspace/native"}, {"build": "../native"},
+    {"build": "native/../sibling"}, {"build": "sibling"}, {"build": "native-other"},
+    {"build": "native\\build"}, {"build": "C:/host"}, {"build": "native/C:drive"},
+    {"build": "//host/path"}, {"build": "./native"}, {"build": "native//build"},
+    {"build": "native/./build"}, {"build": "native/build/"},
+    {"build": "native/\0"}, {"build": "native/\n"}, {"build": "native/\r"}, {"build": "native/\x7f"},
+    {"build": "native/" + "x" * 512},
+])
+def test_execution_cwd_rejects_unsafe_unknown_and_malformed_overrides(value) -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    recipe = {**_recipe(unit), "execution_cwd": value}
+    assert any("execution_cwd" in error for error in validate_build_recipe(recipe, unit))
+    with pytest.raises(ValueError, match="execution_cwd"):
+        recipe_execution_cwd(recipe, "build")
+
+
+def test_execution_cwd_does_not_override_origin_profile_or_unit_validation() -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    recipe = {**_recipe(unit), "source_dir": "sibling", "execution_cwd": {"build": "native/build"},
+              "image_profile": "java", "build_unit_id": "unaccepted"}
+    errors = validate_build_recipe(recipe, unit)
+    assert "source_dir must equal the accepted build-unit root" in errors
+    assert any("required profile native" in error for error in errors)
+    assert any("build_unit_id does not match" in error for error in errors)
+    with pytest.raises(ValueError, match="accepted build-unit root"):
+        recipe_execution_cwd(recipe, "build")
+    with pytest.raises(ValueError, match="phase must"):
+        recipe_execution_cwd(_recipe(unit), "export")
+
+
+def test_execution_cwd_root_project_is_target_relative_not_host_relative() -> None:
+    unit = discover_build_units([_file("CMakeLists.txt")])[0]
+    recipe = {**_recipe(unit), "source_dir": ".", "build_dir": "build",
+              "expected_outputs": ["build"], "execution_cwd": {"configure": ".", "build": "build"}}
+    assert validate_build_recipe(recipe, unit) == []
+    assert recipe_execution_cwd(recipe, "configure") == "."
+    assert recipe_execution_cwd(recipe, "build") == "build"
+
+
+def test_execution_cwd_recipe_schema_matches_runtime_contract() -> None:
+    import jsonschema
+
+    schema = json.loads((Path(__file__).parents[1] / "docs/schemas/build-recipe.schema.json").read_text())
+    validator = jsonschema.Draft202012Validator(schema)
+    validator.check_schema(schema)
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    legacy = _recipe(unit)
+    validator.validate(legacy)
+    for overrides in ({"configure": "native"}, {"build": "native/build"},
+                      {"configure": "native", "build": "native/build"}):
+        recipe = {**legacy, "execution_cwd": overrides}
+        validator.validate(recipe)
+        assert validate_build_recipe(recipe, unit) == []
+    for overrides in (None, {}, {"export": "native"}, {"build": "/host"}, {"build": "native/../host"},
+                      {"build": "native//build"}, {"build": "native/\n"}, {"build": "C:/host"},
+                      {"build": "native/build/"}, {"build": "native/./build"}):
+        recipe = {**legacy, "execution_cwd": overrides}
+        assert list(validator.iter_errors(recipe))
+        assert validate_build_recipe(recipe, unit)
 
 
 def test_recipe_validation_forbids_target_execution_and_tool_installation() -> None:

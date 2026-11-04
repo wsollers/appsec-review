@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
 from appsec_review.jobs.engine_contracts import UNITY_BUILD_SYSTEM, UNITY_LANGUAGE_FAMILY
@@ -809,6 +809,42 @@ def _within(value: str, root: str) -> bool:
     return root == "." or path == boundary or boundary in path.parents
 
 
+def _execution_cwd_errors(recipe: Mapping[str, Any], root: str) -> list[str]:
+    if "execution_cwd" not in recipe:
+        return []
+    values = recipe["execution_cwd"]
+    if (not isinstance(values, Mapping) or not values or
+            set(values) - {"configure", "build"}):
+        return ["execution_cwd must be a nonempty configure/build phase mapping"]
+    errors = []
+    for phase, value in values.items():
+        if (not _relative(value) or len(value) > 512 or ":" in value or
+                any(ord(character) < 32 or ord(character) == 127 for character in value) or
+                PurePosixPath(value).as_posix() != value):
+            errors.append(f"execution_cwd.{phase} must be a normalized target-relative path")
+        elif not _within(value, root):
+            errors.append(f"execution_cwd.{phase} must stay within the accepted build-unit root")
+    return errors
+
+
+def recipe_execution_cwd(recipe: Mapping[str, Any], phase: Literal["configure", "build"]) -> str:
+    """Return a lexical target-relative cwd without creating or resolving directories.
+
+    validate_build_recipe binds source_dir to its accepted unit; callers additionally verify
+    directory evidence, existence and effective workspace custody before each command.
+    """
+    if phase not in ("configure", "build"):
+        raise ValueError("recipe execution phase must be configure or build")
+    source = recipe.get("source_dir")
+    if (not _relative(source) or ":" in source or PurePosixPath(source).as_posix() != source or
+            any(ord(character) < 32 or ord(character) == 127 for character in source)):
+        raise ValueError("source_dir must be a normalized target-relative path")
+    errors = _execution_cwd_errors(recipe, source)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return recipe.get("execution_cwd", {}).get(phase, source)
+
+
 _NODE_DEPENDENCY_FIELDS = ("dependencies", "devDependencies", "optionalDependencies")
 
 
@@ -1199,8 +1235,8 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     required = {"schema", "build_unit_id", "image_profile", "source_dir", "build_dir",
                 "system_packages", "environment", "dependency_files", "configure_commands",
                 "build_commands", "expected_outputs", "network_required", "reason"}
-    # image_repairs is present only on a recipe an accepted image repair produced.
-    if (set(recipe) - {"image_repairs"} != required or
+    # Optional execution paths never replace the immutable source origin.
+    if (set(recipe) - {"image_repairs", "execution_cwd"} != required or
             recipe.get("schema") != BUILD_RECIPE_SCHEMA):
         return ["recipe fields or schema are unsupported"]
     if "image_repairs" in recipe:
@@ -1224,6 +1260,7 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
             errors.append(f"{field} must stay within the accepted build-unit root")
     if recipe.get("source_dir") != root:
         errors.append("source_dir must equal the accepted build-unit root")
+    errors.extend(_execution_cwd_errors(recipe, root))
     packages = recipe.get("system_packages")
     if (not isinstance(packages, list) or len(packages) > 64 or
             any(not isinstance(item, str) or not _PACKAGE.fullmatch(item) for item in packages) or

@@ -228,6 +228,27 @@ def test_b_recipe_revision_does_not_invalidate_structural_graph_or_a_product(tmp
                              verify_product=lambda _: True)["ready"] == []
 
 
+def test_b_execution_cwd_changes_only_recipe_revision_not_structure_or_a_readiness(tmp_path: Path):
+    units = _pair(tmp_path)
+    original = copy.deepcopy(units)
+    before = compile_build_topology(units, source_fingerprint="snapshot")
+    consumer = next(unit for unit in units if unit["root"] == "a-consumer")
+    consumer["recipe"]["execution_cwd"] = {"configure": "a-consumer", "build": "a-consumer/build"}
+    after = compile_build_topology(units, source_fingerprint="snapshot")
+    assert before["topology_id"] == after["topology_id"]
+    producer_id = before["edges"][0]["producer_build_unit_id"]
+    consumer_id = before["edges"][0]["consumer_build_unit_id"]
+    before_nodes = {node["build_unit_id"]: node for node in before["nodes"]}
+    after_nodes = {node["build_unit_id"]: node for node in after["nodes"]}
+    assert before_nodes[producer_id] == after_nodes[producer_id]
+    assert before_nodes[consumer_id]["recipe_revision"] != after_nodes[consumer_id]["recipe_revision"]
+    assert {key: value for key, value in before_nodes[consumer_id].items() if key != "recipe_revision"} == {
+        key: value for key, value in after_nodes[consumer_id].items() if key != "recipe_revision"}
+    assert ready_build_units(after, {producer_id: "SUCCEEDED"}, products=[_record(before)],
+                             verify_product=lambda _: True)["ready"] == [consumer_id]
+    assert original != units and all("execution_cwd" not in unit["recipe"] for unit in original)
+
+
 def test_cross_family_host_tool_dependency_survives_generic_contract(tmp_path: Path):
     graph = compile_build_topology(_pair(tmp_path), source_fingerprint="snapshot")
     producer = graph["edges"][0]["producer_build_unit_id"]
