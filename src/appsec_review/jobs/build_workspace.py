@@ -793,6 +793,9 @@ class WorkspaceWriter:
                     raise ReconstructionMiss("completed invalidation has uncommitted workspace mutations")
             elif (state["generation"] == expected_generation
                   and state["attempt"] == receipt["before_attempt"]):
+                if (state["condition"] == "clean" and not state["purged"]
+                        and _scan(self.workspace.root) != current["entries"]):
+                    raise ReconstructionMiss("untracked clean-workspace mutations prevent invalidation retry")
                 self.restore(result)
             else:
                 raise ReconstructionMiss("invalidation retry is stale against a newer generation or attempt")

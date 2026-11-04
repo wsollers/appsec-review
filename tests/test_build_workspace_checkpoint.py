@@ -632,14 +632,19 @@ def test_selective_invalidation_restores_invalid_node_input_deletion_and_mutatio
         assert writer.verify_product(records["C"], binding("C")) == records["C"]
 
 
-@pytest.mark.parametrize("when", ["during_restore", "after_commit"])
+@pytest.mark.parametrize("when", ["before_restore", "during_restore", "after_commit"])
 def test_selective_invalidation_crash_reopen_exact_retry_is_idempotent(tmp_path, monkeypatch, when):
     workspace, _, initial = make_workspace(tmp_path)
     _, checkpoints, records = accept_independent_nodes(workspace, initial)
     operation_id = "B-change-durable-operation"
     with workspace.writer() as writer:
         before = writer.state()["generation"]
-        if when == "during_restore":
+        if when == "before_restore":
+            def crash(identity=None):
+                raise OSError("crash after operation publication before restore")
+
+            monkeypatch.setattr(writer, "restore", crash)
+        elif when == "during_restore":
             actual_write = writer._write_state
 
             def crash(value):
@@ -779,3 +784,31 @@ def test_selective_invalidation_refuses_unknown_ids_without_mutation(tmp_path):
         with pytest.raises(ReconstructionMiss, match="not in the committed"):
             invalidate(writer, ["unknown-node"], checkpoints)
         assert writer.state() == before_state
+
+
+def test_invalidation_retry_before_restore_refuses_unknown_newer_dirt(tmp_path, monkeypatch):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        before = writer.state()["generation"]
+
+        def crash_before_restore(identity=None):
+            raise OSError("crash after operation publication before restore")
+
+        monkeypatch.setattr(writer, "restore", crash_before_restore)
+        with pytest.raises(OSError, match="before restore"):
+            writer.invalidate_nodes(
+                ["B"], checkpoints, operation_id="B-pre-restore-crash", expected_generation=before)
+        assert writer.state()["generation"] == before
+        assert writer.state()["condition"] == "clean"
+    reopened = type(workspace)(workspace.run_dir)
+    unknown = reopened.paths.target / "newer-unknown-input"
+    unknown.write_bytes(b"must remain for explicit resolution")
+    state_bytes = (reopened.run_dir / reopened.state_relative).read_bytes()
+    with reopened.writer() as writer:
+        with pytest.raises(ReconstructionMiss, match="untracked|uncommitted"):
+            writer.invalidate_nodes(
+                ["B"], checkpoints, operation_id="B-pre-restore-crash", expected_generation=before)
+        assert unknown.read_bytes() == b"must remain for explicit resolution"
+        assert (reopened.run_dir / reopened.state_relative).read_bytes() == state_bytes
+        assert (writer.paths.install / "libB.a").read_bytes() == b"library-B"
