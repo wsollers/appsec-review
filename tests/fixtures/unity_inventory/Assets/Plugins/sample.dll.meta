@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: 01abcdef0123456789abcdef012345678
+PluginImporter:
+  isPreloaded: 0
+  platformData:
+  - first:
+      Standalone: Win64
+    second:
+      enabled: 1
+      settings:
+        CPU: AnyCPU

@@ -1,0 +1,8 @@
+{
+  "name": "Game.Mixed",
+  "references": ["Unity.Editor", "Game.Runtime"],
+  "includePlatforms": ["Editor", "WindowsStandalone64"],
+  "excludePlatforms": [],
+  "defineConstraints": ["FEATURE_GAME"],
+  "versionDefines": [{"name": "com.example.direct", "expression": "1.0.0", "define": "HAVE_DIRECT"}]
+}
