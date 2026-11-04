@@ -37,6 +37,15 @@ ROOT = Path(__file__).parents[1]
 
 
 def _declare_fixture_releases(text: str) -> str:
+    text += """
+[jobs.job_project_build.settings.variants.java]
+configuration = "release"
+target_arch = "jvm"
+execution_role = "target"
+linkage = "managed"
+toolchain = "fixture/1"
+abi = "jvm-fixture/1"
+"""
     return text.replace("[review_policy.releases]\n", "[review_policy.releases]\n" +
         "".join(f'{key} = "fixture/1"\n' for key in
                 ("platform", "validation", "build_toolchain", "jvm_instrumentation")))
@@ -98,7 +107,7 @@ class JvmExecutor:
         return None
 
     def execute(self, argv, *, workspace, working_directory, environment,
-                instrumentation_root=None, instrumentation_evidence_root=None):
+                instrumentation_root=None, instrumentation_evidence_root=None, install_dir=None):
         self.calls.append(tuple(argv))
         if self.environments is not None:
             self.environments.append(dict(environment))
@@ -153,7 +162,7 @@ class JvmExecutor:
         return BuildCommandResult(tuple(argv), 2 if failed else 0, stdout[:8] if self.truncate else stdout,
             stderr[:8] if self.truncate else stderr, False, len(stdout), len(stderr),
             self.truncate, self.truncate, stdout[-16:] if self.truncate else b"",
-            stderr[-16:] if self.truncate else b"")
+            stderr[-16:] if self.truncate else b"", cleanup_complete=True)
 
 
 def _fixture(tmp_path: Path, *, gradle: bool = False, output_bytes: int | None = None):
@@ -213,9 +222,10 @@ def test_jvm_mixed_maven_build_catalogs_provenance_and_never_executes_wrapper(tm
     outcome = GraphRunner(config, [build_language(
         executor_factory=lambda unit, profile: JvmExecutor(calls))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "SUCCEEDED"
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     assert receipt["terminal_status"] == "SUCCEEDED" and receipt["family"] == "java"
+    assert any("delivery_fact_unavailable" in gap for gap in receipt["gaps"])
     assert {item["kind"] for item in receipt["artifacts"]} >= {
         "jvm-class", "generated-java-source", "generated-kotlin-source", "jar", "war",
         "kotlin-module-metadata", "dependency-metadata"}
@@ -270,14 +280,13 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["terminal_status"] == "SUCCEEDED" and receipt["family"] == "java"
-    assert receipt["gaps"][0].startswith(
-        "Android dex task :app:mergeDexDebug ran D8 in-process inside Gradle")
+    assert any(gap.startswith("Android dex task :app:mergeDexDebug ran D8 in-process inside Gradle")
+               for gap in receipt["gaps"])
     assert not any("not emitted" in gap or "did not report" in gap for gap in receipt["gaps"])
     (dex,) = receipt["declared_compilations"]
     assert dex["tool"] == "d8" and dex["evidence_kind"] == "build-tool-declared"
     assert "declared_arguments" not in dex and dex["declared_arguments_sha256"]
-    # Project-build ran the accepted command; language-build ran it with provenance instrumentation.
-    assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 1
+    assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 0
     (instrumented,) = [call for call in calls if "--init-script" in call]
     assert instrumented[:3] == ("gradle", "--no-daemon", ":app:assembleDebug")
     assert instrumented[-1] == "/appsec-jvm/gradle/appsec-provenance.init.gradle"
@@ -395,11 +404,13 @@ def test_jvm_failure_isolated_and_success_checkpoint_detects_tampering(tmp_path:
     first_by_root = {item["root"]: item for item in receipts}
     second_by_root = {item["root"]: item for item in resumed}
     assert second_by_root["maven"]["workspace"] == first_by_root["maven"]["workspace"]
-    assert second_by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]
+    assert second_by_root["sibling"]["workspace"] == first_by_root["sibling"]["workspace"]
+    assert second_by_root["sibling"]["attempt_id"] != first_by_root["sibling"]["attempt_id"]
     successful = next(item for item in resumed if item["root"] == "maven")
     artifact = config.runtime.runs_dir / run_id / successful["artifacts"][0]["path"]
     artifact.write_bytes(b"tampered")
-    with pytest.raises(RuntimeError, match="partial failure"):
+    from appsec_review.jobs.build_workspace import ReconstructionMiss
+    with pytest.raises(ReconstructionMiss, match="retained file is missing or changed"):
         GraphRunner(config, [build_language(executor_factory=lambda unit, profile: JvmExecutor([]))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id,
             force_from="job_language_build")

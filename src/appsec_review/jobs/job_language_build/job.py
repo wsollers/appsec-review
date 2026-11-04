@@ -6,7 +6,9 @@ from collections.abc import Collection, Mapping, Sequence
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
+from dataclasses import asdict, replace
 import json
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -32,7 +34,7 @@ from appsec_review.container_runtime.project_images import (
     derived_base_image_id, node_dependency_root, project_recipe_identity,
 )
 from appsec_review.jobs.build_discovery import (
-    copied_source_symlink, ensure_declared_build_dir, validate_build_recipe,
+    copied_source_symlink, ensure_declared_build_dir, recipe_execution_cwd, validate_build_recipe,
 )
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, SCOPE_FIELDS, apply_scope
@@ -56,6 +58,10 @@ from .native_layout import write_cmake_file_api_query
 from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
+from appsec_review.jobs.build_iterations import (
+    BuildIterations, IterationOutcome, durable_artifacts, install_inventory, product_specs, read_reference,
+)
+from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec, WorkspacePaths
 from appsec_review.observability.spans import operation_phase
 from appsec_review.config.build_outputs import BuildOutputPolicy
 from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
@@ -152,6 +158,7 @@ def _dispatches(
     producer cannot fail unrelated language lanes.
     """
     accepted = load_accepted_builds(unit.job.run_root)
+    iterative = accepted.get("execution_mode") == "iterative"
     reject_swift_derived(
         accepted, enabled=swift_enabled_from_run(unit.job.run_root),
         context="accepted project-build dispatch")
@@ -178,13 +185,22 @@ def _dispatches(
             continue
         probe = probes.get(build_unit_id)
         image, recipe = raw.get("image"), raw.get("recipe")
-        if not isinstance(probe, Mapping) or probe.get("terminal_status") != "SUCCEEDED":
-            raise ValueError("accepted build dispatch is not backed by a successful probe")
-        if hashlib.sha256(canonical_json(probe)).hexdigest() != raw.get("probe_identity"):
-            raise ValueError("accepted build dispatch probe identity mismatch")
+        if iterative:
+            entries = accepted.get("images", {}).get(family, {}).get("entries", ())
+            preparation = next((item for item in entries
+                                if item["action"]["build_unit_id"] == build_unit_id), None)
+            if (not isinstance(preparation, Mapping) or preparation["terminal_status"] != "SUCCEEDED"
+                    or hashlib.sha256(canonical_json(preparation)).hexdigest() != raw.get("preparation_identity")
+                    or preparation["image"] != image or preparation["action"]["recipe"] != recipe):
+                raise ValueError("iterative dispatch has no matching immutable image preparation")
+        else:
+            if not isinstance(probe, Mapping) or probe.get("terminal_status") != "SUCCEEDED":
+                raise ValueError("accepted build dispatch is not backed by a successful probe")
+            if hashlib.sha256(canonical_json(probe)).hexdigest() != raw.get("probe_identity"):
+                raise ValueError("accepted build dispatch probe identity mismatch")
         if not isinstance(image, Mapping) or not isinstance(recipe, Mapping):
             raise ValueError("accepted build dispatch recipe or image is unavailable")
-        if (raw.get("source_fingerprint") != unit.job.source_fingerprint or raw.get("family") != probe.get("family") or
+        if not iterative and (raw.get("source_fingerprint") != unit.job.source_fingerprint or raw.get("family") != probe.get("family") or
                 raw.get("root") != probe.get("root") or raw.get("recipe_identity") != probe.get("recipe_identity") or
                 image.get("image_id") != probe.get("image_id")):
             raise ValueError("accepted build dispatch recipe, image, or probe identity mismatch")
@@ -609,7 +625,8 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
         "image": image["image_id"], "executor": EXECUTOR_IDENTITY,
         "capture": CAPTURE_IDENTITIES[str(dispatch["family"])],
         "toolchain": {"family": dispatch["family"], "image_id": image["image_id"]},
-        "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"],
+        "preparation": dispatch.get("preparation_identity", dispatch.get("probe_identity")),
+        "upstream_handoff": accepted["project_build_handoff_sha256"],
         "limits": ({key: settings[key] for key in
                     ("command_timeout_seconds", "output_bytes", "artifact_count_limit")}
                    if settings is not None else {}),
@@ -675,7 +692,8 @@ def _platform_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
             "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
             "build_unit_id": dispatch["build_unit_id"], "family": "dotnet", "root": dispatch["root"],
             "build_system": dispatch.get("build_system"), "recipe": dispatch["recipe"],
-            "recipe_identity": dispatch["recipe_identity"], "probe_identity": dispatch["probe_identity"],
+            "recipe_identity": dispatch["recipe_identity"],
+            "preparation_identity": dispatch.get("preparation_identity", dispatch.get("probe_identity")),
             "image": dispatch["image"], "workspace": None, "commands": [], "tool_invocations": [],
             "project_topology": projects, "artifacts": [], "gaps": gaps,
             "terminal_status": "NOT_APPLICABLE", "checkpoint_reused": False,
@@ -744,7 +762,8 @@ def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
             "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
             "build_unit_id": dispatch["build_unit_id"], "family": "node", "root": dispatch["root"],
             "build_system": dispatch.get("build_system"), "recipe": dispatch["recipe"],
-            "recipe_identity": dispatch["recipe_identity"], "probe_identity": dispatch["probe_identity"],
+            "recipe_identity": dispatch["recipe_identity"],
+            "preparation_identity": dispatch.get("preparation_identity", dispatch.get("probe_identity")),
             "image": dispatch["image"], "workspace": None, "commands": [], "tool_invocations": [],
             "dependency_identity": dict(dependency), "artifacts": [], "gaps": gaps,
             "terminal_status": "BLOCKED", "checkpoint_reused": False,
@@ -754,7 +773,7 @@ def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
 def _captured_command(unit: UnitContext, executor: Any, argv: Sequence[str], *, workspace: Path,
                       working_directory: str, environment: Mapping[str, str],
                       capture_directory: Path, build_unit_id: str,
-                      family: str) -> tuple[Any, VerifiedCapture, dict[str, Any]]:
+                      family: str, install_dir: Path | None = None) -> tuple[Any, VerifiedCapture, dict[str, Any]]:
     """Run one accepted command under standardized capture and hash-verify what it recorded."""
     captured = getattr(executor, "execute_captured", None)
     if not callable(captured) or unit.job.config.build_capture is None:
@@ -763,7 +782,8 @@ def _captured_command(unit: UnitContext, executor: Any, argv: Sequence[str], *, 
                          build_unit_id, family)
     result = captured(argv, workspace=workspace, working_directory=working_directory,
                       environment=environment, capture_directory=capture_directory,
-                      capture_config=unit.job.config.build_capture, scope=scope)
+                      capture_config=unit.job.config.build_capture, scope=scope,
+                      **({"install_dir": install_dir} if install_dir is not None else {}))
     record = getattr(result, "capture_record", None)
     if not isinstance(record, Path):
         raise FrameworkIntegrityError("build execution capture record is required")
@@ -884,14 +904,121 @@ def _has_build_output(receipt: Mapping[str, Any]) -> bool:
                for item in receipt.get("artifacts", ()))
 
 
-def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any], executor_factory=None) -> dict[str, Any]:
+def _interface_environment(interfaces: Sequence[Mapping[str, Any]],
+                           environment: Mapping[str, str]) -> dict[str, str]:
+    values: dict[str, set[str]] = {}
+    for product in interfaces:
+        path, kind = PurePosixPath(str(product["path"])), product["kind"]
+        key = {"library": "LIBRARY_PATH", "headers": "CPATH", "executable": "PATH",
+               "package_metadata": "PKG_CONFIG_PATH"}.get(kind)
+        if key:
+            directory = path if kind == "headers" and path.suffix not in {".h", ".hpp", ".hh"} else path.parent
+            values.setdefault(key, set()).add(str(directory))
+        if str(path).startswith("/install/"):
+            values.setdefault("CMAKE_PREFIX_PATH", set()).add("/install")
+    result = {}
+    for key, paths in values.items():
+        existing = environment.get(key, "")
+        if key == "PATH" and not existing:
+            existing = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        result[key] = ":".join([*sorted(paths), *([existing] if existing else [])])
+    return result
+
+
+def _recipe_command(workspace: Path, recipe: Mapping[str, Any], phase: str,
+                    raw: Sequence[str], validation_unit: Mapping[str, Any]) -> tuple[tuple[str, ...], str]:
+    from appsec_review.jobs.build_iterations import prepare_recipe_command
+    return prepare_recipe_command(workspace, validation_unit, recipe, phase, raw)
+
+
+def _production_iteration(unit: UnitContext, request: Mapping[str, Any], dagster_run_id: str,
+                          accepted: Mapping[str, Any], executor_factory=None) -> IterationOutcome:
+    workspace = BuildWorkspace(unit.job.run_root)
+    install_before = install_inventory(workspace.paths.install)
+    graph = read_reference(unit.job.run_root, request["graph"])
+    node = next(item for item in graph["nodes"] if item["build_unit_id"] == request["node_id"])
+    context = replace(unit.job, attempt_id=request["attempt_id"],
+                      orchestration={"system": "dagster", "run_id": dagster_run_id,
+                                     "node": request["display_label"]})
+    selected = replace(unit, job=context)
+    results: list[Any] = []
+    attempted = []
+
+    class CapturedExecutor:
+        def __init__(self, executor):
+            self.executor = executor
+
+        def __getattr__(self, key):
+            return getattr(self.executor, key)
+
+        def execute(self, argv, **kwargs):
+            attempted.append(tuple(argv))
+            kwargs["install_dir"] = workspace.paths.install
+            result = self.executor.execute(argv, **kwargs)
+            results.append(result)
+            return result
+
+        def execute_captured(self, argv, **kwargs):
+            attempted.append(tuple(argv))
+            kwargs["install_dir"] = workspace.paths.install
+            result = self.executor.execute_captured(argv, **kwargs)
+            results.append(result)
+            return result
+
+    def factory(child, profile):
+        if request["dispatch"].get("promoted_profile") is not None:
+            profile = BuildProfile(**request["dispatch"]["promoted_profile"])
+        executor = executor_factory(child, profile) if executor_factory else BuildContainerExecutor(
+            profile, timeout_seconds=int(child.job.config.settings["command_timeout_seconds"]),
+            output_bytes=int(child.job.config.settings["output_bytes"]),
+            lease_directory=unit.job.run_root / "data/build/iterations/leases" / request["attempt_id"])
+        return CapturedExecutor(executor)
+
+    dispatch = {**request["dispatch"], "validation_unit": next(
+        action for action in accepted["execution_actions"] if action["build_unit_id"] == request["node_id"])}
+    from . import wasm
+    wasm_producer = wasm._select_producer(dispatch, wasm._producer_rules(unit.job.config.settings["wasm"]))
+    if dispatch["family"] == "java":
+        receipt = jvm.execute_jvm_one(selected, dispatch, accepted, factory,
+                                      shared_paths=workspace.paths, interfaces=request["interfaces"])
+    elif wasm_producer is not None:
+        receipt = wasm._execute_one(selected, dispatch, accepted, wasm_producer,
+                                    {item["producer_build_unit_id"]: item["sha256"]
+                                     for item in request["interfaces"]}, factory,
+                                    shared_paths=workspace.paths, interfaces=request["interfaces"])
+    else:
+        receipt = _execute_one(selected, dispatch, accepted, factory,
+                               shared_paths=workspace.paths, interfaces=request["interfaces"])
+    specs = ((tuple(ProductSpec(**value) for value in request["products"])
+              if request.get("products") is not None else product_specs(
+                  node, receipt, workspace, install_before=install_before))
+             if receipt.get("terminal_status") == "SUCCEEDED" else ())
+    receipt = durable_artifacts(unit.job.run_root, receipt)
+    decisions = [finalize_processing(
+        decision_from_mapping(value), succeeded=receipt.get("terminal_status") == "SUCCEEDED",
+        evidence_complete=not bool(receipt.get("gaps")),
+        artifacts_valid=(_has_build_output(receipt) if value["feature"] ==
+                         ProcessingFeature.COMPILER_ARTIFACTS.value else True),
+        toolchain_available=receipt.get("terminal_status") != "BLOCKED",
+    ).as_dict() for value in dispatch.get("processing_decisions", ())]
+    receipt["processing_decisions"] = decisions
+    receipt["gaps"] = list(dict.fromkeys([*receipt.get("gaps", ()), *(
+        f"{value['feature']}: {value['reason_code']}" for value in decisions
+        if value.get("disposition") == "GAP")]))
+    return IterationOutcome(receipt, specs, not attempted or bool(results) and all(
+        getattr(result, "cleanup_complete", False) is True for result in results))
+
+
+def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any], executor_factory=None,
+                 *, shared_paths: WorkspacePaths | None = None,
+                 interfaces: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     family = str(dispatch["family"])
     fingerprint = _fingerprint(dispatch, accepted, unit.job.config.settings,
                                releases=unit.job.review_policy.releases, build_outputs=_build_output_policy(unit))
     root = (unit.job.run_root / "data" / "build" / family / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
-    workspace = root / "workspace"
+    workspace = shared_paths.target if shared_paths is not None else root / "workspace"
     namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
     cache = unit.job.metadata_root / "language-builds" / namespace / fingerprint / "accepted.json"
     reusable, reuse_reason = unit.job.review_policy.releases.require(
@@ -900,7 +1027,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         unit.job.events.write("CHECKPOINT_MISSED", scope_id=build_unit_id,
                               action="language_build", reason=reuse_reason)
     with FileLock(cache.parent / "build.lock"):
-        if reusable and cache.is_file():
+        if shared_paths is None and reusable and cache.is_file():
             prior = json.loads(cache.read_text(encoding="utf-8"))
             prior_workspace = Path(str(prior.get("workspace", "")))
             if (prior.get("fingerprint") == fingerprint and prior.get("terminal_status") == "SUCCEEDED" and
@@ -918,7 +1045,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                                       build_unit_id=build_unit_id, fingerprint=fingerprint,
                                       result_count=len(artifacts), gap_count=len(gaps), duration_ms=0)
                 return receipt
-    _copy_source(unit, dispatch, workspace)
+    if shared_paths is None:
+        _copy_source(unit, dispatch, workspace)
+    else:
+        ensure_declared_build_dir(workspace, recipe)
     projects: list[dict[str, Any]] = []
     go_settings = None
     if family == "go":
@@ -981,7 +1111,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
                     "build_unit_id": build_unit_id, "family": family, "root": dispatch["root"],
                     "build_system": dispatch.get("build_system"), "recipe_identity": dispatch["recipe_identity"],
-                    "probe_identity": dispatch["probe_identity"], "image": image, "workspace": None,
+                    "preparation_identity": dispatch.get("preparation_identity", dispatch.get("probe_identity")),
+                    "image": image, "workspace": None,
                     "commands": [], "tool_invocations": [], "project_topology": projects,
                     "package_relationships": python_relationships, "artifacts": [],
                     "gaps": [*python_metadata_gaps, *recipe_gaps], "terminal_status": "BLOCKED",
@@ -1035,7 +1166,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                           family=family, recipe_identity=dispatch["recipe_identity"],
                           image_id=image["image_id"], command_count=len(command_plan))
     for ordinal, (role, raw) in enumerate(command_plan, 1):
-        argv = tuple(raw) if role in {"metadata", "catalog"} else _normalized_argv(recipe, list(raw))
+        if role in {"metadata", "catalog"}:
+            argv, cwd = tuple(raw), str(recipe["source_dir"])
+        else:
+            argv, cwd = _recipe_command(workspace, recipe, role, raw, dispatch.get("validation_unit", dispatch))
         if family == "go" and go_settings is not None:
             argv = go.build_argv(argv, go_settings)
         elif family == "dotnet":
@@ -1045,6 +1179,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         elif family == "php":
             argv = php.policy_argv(argv, php_policy)
         environment = _probe_environment(operational_recipe)
+        if shared_paths is not None:
+            environment.update(_interface_environment(interfaces, environment))
         if family == "go":
             environment = go.environment(environment, workspace, str(recipe["source_dir"]))
         if family == "node":
@@ -1066,9 +1202,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         protected_argv, protected_environment = None, dict(environment)
         if family in _CAPTURED_FAMILIES:
             result, verified, capture_identity = _captured_command(
-                unit, executor, argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
+                unit, executor, argv, workspace=workspace, working_directory=cwd,
                 environment=environment, capture_directory=capture_root / f"command-{ordinal:03d}",
-                build_unit_id=build_unit_id, family=family)
+                build_unit_id=build_unit_id, family=family,
+                install_dir=shared_paths.install if shared_paths else None)
             captures.append((ordinal, verified))
             capture_gaps = [f"{_CAPTURE_GAP} {ordinal}: {gap}" for gap in verified.gaps]
             if not capture_identity["envp_captured"]:
@@ -1081,8 +1218,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 protected_argv = recorded_argv
                 protected_environment = {key: "<redacted: secret scan disposition>" for key in environment}
         else:
-            result = executor.execute(argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                      environment=environment)
+            result = executor.execute(argv, workspace=workspace, working_directory=cwd,
+                                      environment=environment,
+                                      **({"install_dir": shared_paths.install} if shared_paths else {}))
         command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
                                                     "unit": build_unit_id, "ordinal": ordinal,
                                                     "argv": list(argv)})).hexdigest()
@@ -1092,7 +1230,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         exact = protected / f"{command_id[:24]}.json"
         protected_json(exact, {"schema": "appsec-review/protected-build-command/2",
             "argv": protected_argv if protected_argv is not None else list(result.argv),
-            "working_directory": str(recipe["source_dir"]), "environment": protected_environment,
+            "working_directory": cwd, "environment": protected_environment,
             "access": "run-owned-protected"})
         try: exact.chmod(0o600)
         except OSError: pass
@@ -1106,7 +1244,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                           "package-catalog" if role == "catalog" else
                           _TOOL_KINDS.get(Path(argv[0]).name, "build-driver")),
             "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
-            "working_directory": str(recipe["source_dir"]),
+            "working_directory": cwd,
             "environment_facts": {key: "set" for key in sorted(environment)
                                   if not _SECRET_KEY.search(key)},
             "started_at": datetime.now(timezone.utc).isoformat(), "duration_ms": int((time.monotonic()-command_started)*1000),
@@ -1115,6 +1253,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "protected_argv": {"path": exact.relative_to(unit.job.run_root).as_posix(), "sha256": file_sha256(exact)},
             "image_id": image["image_id"], "build_unit_id": build_unit_id,
             "role": role,
+            "cleanup_complete": getattr(result, "cleanup_complete", False),
             "module": (argv[2] if len(argv) > 2 and argv[1] == "-m" else None)})
         if capture_identity is not None:
             commands[-1]["execution_capture"] = capture_identity
@@ -1344,7 +1483,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"], "build_unit_id": build_unit_id,
         "family": family, "root": dispatch["root"], "build_system": dispatch.get("recipe", {}).get("build_system", dispatch.get("build_system")),
-        "recipe": recipe, "recipe_identity": dispatch["recipe_identity"], "probe_identity": dispatch["probe_identity"],
+        "recipe": recipe, "recipe_identity": dispatch["recipe_identity"],
+        "preparation_identity": dispatch.get("preparation_identity"),
         "image": image, "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
         "commands": commands, "tool_invocations": sanitized_compile,
         "project_topology": projects,
@@ -1397,7 +1537,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["package_relationships"] = list((php_metadata or {}).get("relationships", ()))
     # A capture that lost evidence, or tool provenance it could not establish, is never
     # checkpointed: the next run must capture again.
-    if status == "SUCCEEDED" and capture_complete and reusable:
+    if shared_paths is None and status == "SUCCEEDED" and capture_complete and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/language-build-checkpoint/1", "fingerprint": fingerprint,
@@ -1410,9 +1550,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
 
 
 def _validate_config(context, _result) -> None:
-    if tuple(context.config.steps) != ("load", "execute", "acceptance"):
+    if tuple(context.config.steps) != ("iterations", "load", "execute", "acceptance"):
         raise ValueError("language-build topology does not match central configuration")
-    expected = {"load": ("native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"),
+    expected = {"iterations": ("dispatch",),
+                "load": ("native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"),
                 "execute": ("native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"),
                 "acceptance": ("publish_handoff",)}
     for step, tasks in expected.items():
@@ -1559,8 +1700,77 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
     return {"path": manifest.relative_to(unit.job.run_root).as_posix(), "sha256": file_sha256(manifest)}
 
 
+def iteration_controller(unit: UnitContext):
+    dispatches, accepted = _dispatches(unit)
+    if accepted.get("execution_mode") != "iterative":
+        raise ValueError("legacy probe/rebuild dispatches require replanning")
+    from appsec_review.jobs.build_iterations import selected_revisions
+    graph, dispatches, overrides = selected_revisions(unit.job.run_root, accepted, dispatches)
+    selected, skipped = [], []
+    for family in accepted.get("images", {}).values():
+        for preparation in family.get("entries", ()):
+            if preparation.get("terminal_status") != "SUCCEEDED":
+                skipped.append(upstream_build_failure_receipt({
+                    **preparation["action"], "terminal_status": preparation["terminal_status"],
+                    "gaps": preparation.get("gaps", ())}, accepted))
+    typed = unit.job.config.typed_settings
+    configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+    for dispatch in dispatches:
+        facts = facts_from_build_unit(dispatch)
+        build = evaluate_applicability(
+            feature=ProcessingFeature.BUILD_CAPTURE,
+            policy=unit.job.config.build_capture.mode.value, facts=facts,
+            configuration_sha256=configuration_sha256)
+        artifacts = evaluate_applicability(
+            feature=ProcessingFeature.COMPILER_ARTIFACTS,
+            policy=typed.compiler_artifact_mode(dispatch["family"]).value, facts=facts,
+            configuration_sha256=configuration_sha256)
+        pair = [build.as_dict(), artifacts.as_dict()]
+        if build.action is ApplicabilityAction.RUN:
+            if dispatch["family"] == "dotnet":
+                projects, topology_gaps, platform_gaps = dotnet.project_topology(
+                    _safe_root(unit.job.target_root, str(dispatch["root"])))
+                if platform_gaps:
+                    skipped.append(_platform_receipt(
+                        unit, dispatch, accepted, [*topology_gaps, *platform_gaps], projects))
+                    continue
+            selected.append({**dispatch, "processing_facts": facts.as_dict(), "processing_decisions": pair})
+        else:
+            terminal = build.disposition.value if build.disposition else "GAP"
+            skipped.append({
+                "schema": RECEIPT_SCHEMA, "build_unit_id": dispatch["build_unit_id"],
+                "family": dispatch["family"], "root": dispatch["root"], "artifacts": [],
+                "commands": [], "processing_decisions": pair, "terminal_status": terminal,
+                "gaps": [] if terminal in {"SKIPPED_NA", "SKIPPED_POLICY"} else [build.reason_code.value],
+            })
+    configuration = {
+        "settings": dict(unit.job.config.settings),
+        "capture": asdict(unit.job.config.build_capture),
+        "releases": unit.job.review_policy.releases.view(),
+    }
+    controller = BuildIterations(
+        unit.job.run_root, unit.job.target_root or Path(), graph, selected,
+        configuration=configuration, releases=unit.job.review_policy.releases.view(),
+        execution_identity=EXECUTOR_IDENTITY, output_policy_identity=_build_output_policy(unit).identity,
+        validate_receipt=lambda receipt: _validate_checkpoint_artifacts(unit.job.run_root, receipt),
+        product_overrides=overrides,
+        omitted_receipts={item["build_unit_id"]: item for item in skipped})
+    return controller, accepted, skipped
+
+
 def build_job(*, executor_factory=None) -> Job:
     from . import wasm
+
+    def iterations(unit: UnitContext) -> Mapping[str, Any]:
+        controller, accepted, skipped = iteration_controller(unit)
+        invoke = None
+        if executor_factory is None:
+            from appsec_review.jobs.job_build_iteration.job import invoke_registered_iteration
+            invoke = lambda request, label, _execute: invoke_registered_iteration(
+                unit.job.run_root, request, label)
+        result = controller.run(lambda request, run_id: _production_iteration(
+            unit, request, run_id, accepted, executor_factory), invoke=invoke)
+        return result
 
     def load_family(family: str):
       def load(unit: UnitContext) -> Mapping[str, Any]:
@@ -1655,6 +1865,14 @@ def build_job(*, executor_factory=None) -> Job:
     def execute_family(family: str):
       def execute(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output(f"load.{family}")
+        if loaded["accepted"].get("execution_mode") == "iterative":
+            receipts = [dict(item) for item in unit.output("iterations.dispatch")["receipts"]
+                        if item.get("family") == family]
+            receipts.extend(loaded.get("engine_receipts", ()))
+            gaps = [f"{item['build_unit_id']}: {gap}" for item in receipts for gap in item.get("gaps", ())]
+            return {"receipts": receipts, "receipt_count": len(receipts), "gaps": gaps,
+                    "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
+                                       "SUCCEEDED" if receipts else "NOT_APPLICABLE"}
         dispatches = {str(item["build_unit_id"]): item for item in loaded["dispatches"]}
         known_units = {str(item.get("build_unit_id")) for item in loaded["accepted"].get("probe_receipts", ())}
         if any(dependency not in known_units for item in dispatches.values()
@@ -1761,7 +1979,8 @@ def build_job(*, executor_factory=None) -> Job:
                     "processing_decisions": [decision for result in executions
                                              for receipt in result["receipts"]
                                              for decision in receipt.get("processing_decisions", ())],
-                    "gaps": list(dict.fromkeys([*unsupported_gaps,
+                    "execution_graph": unit.output("iterations.dispatch").get("graph"),
+                    "gaps": list(dict.fromkeys([*unit.output("iterations.dispatch").get("gaps", ()), *unsupported_gaps,
                         *(gap for result in executions for gap in result["gaps"])]))}
         artifact = _artifact(unit, "accepted-language-builds.json", document)
         unit.job.events.write("LANGUAGE_BUILDS_RECORDED", unit_id=unit.unit_id,
@@ -1775,14 +1994,16 @@ def build_job(*, executor_factory=None) -> Job:
                 "dispositions": document["processing_decisions"],
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
-    units = (Unit("load.native", load_family("native")), Unit("load.go", load_family("go")),
-             Unit("load.dotnet", load_family("dotnet")),
-             Unit("load.node", load_family("node")),
-             Unit("load.python", load_family("python")),
-             Unit("load.rust", load_family("rust")),
-             Unit("load.php", load_family("php")),
-             Unit("load.java", load_family("java")),
-             Unit("load.wasm", load_family("wasm")),
+    units = (Unit("iterations.dispatch", iterations),
+             Unit("load.native", load_family("native"), ("iterations.dispatch",)),
+             Unit("load.go", load_family("go"), ("iterations.dispatch",)),
+             Unit("load.dotnet", load_family("dotnet"), ("iterations.dispatch",)),
+             Unit("load.node", load_family("node"), ("iterations.dispatch",)),
+             Unit("load.python", load_family("python"), ("iterations.dispatch",)),
+             Unit("load.rust", load_family("rust"), ("iterations.dispatch",)),
+             Unit("load.php", load_family("php"), ("iterations.dispatch",)),
+             Unit("load.java", load_family("java"), ("iterations.dispatch",)),
+             Unit("load.wasm", load_family("wasm"), ("iterations.dispatch",)),
              Unit("execute.native", execute_family("native"), ("load.native",)),
              Unit("execute.go", execute_family("go"), ("load.go",)),
              Unit("execute.dotnet", execute_family("dotnet"), ("load.dotnet",)),

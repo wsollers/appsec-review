@@ -449,3 +449,48 @@ def test_tool_input_json_is_readable_by_the_container_user(tmp_path: Path) -> No
     assert (tmp_path / "private.json").stat().st_mode & 0o777 == 0o600
     assert (tmp_path / "input.json").stat().st_mode & 0o777 == 0o644
     assert json.loads((tmp_path / "input.json").read_text(encoding="utf-8")) == {"a": 1}
+
+
+@pytest.mark.parametrize("offline", [False, True])
+def test_explicit_offline_executor_prohibits_hidden_pulls_in_build_and_capture_scan(tmp_path, offline):
+    from appsec_review.container_runtime.build_executor import BuildContainerExecutor
+    workspace, install = tmp_path / "workspace", tmp_path / "install"
+    workspace.mkdir()
+    install.mkdir()
+    (workspace / "source.c").write_bytes(b"int a;\n")
+    profile = BuildProfile("native", "fixture:local", "sha256:" + "a" * 64, "1000:1000")
+    observed = []
+
+    def behavior(argv, target, cwd, environment, capture):
+        assert argv == ("cc", "source.c") and cwd == "."
+        capture.exec("/usr/bin/cc", argv)
+        return 0, b"", b""
+
+    simulated = simulated_executor(profile, behavior)
+
+    def boundary(argv, timeout):
+        assert tuple(argv[:2]) in {("docker", "image"), ("docker", "inspect"),
+                                  ("docker", "run"), ("docker", "rm")}
+        observed.append(tuple(argv))
+        return simulated.runner(argv, timeout)
+
+    executor = BuildContainerExecutor(
+        profile, timeout_seconds=90, output_bytes=4096, runner=boundary,
+        network="none" if offline else "bridge", network_offline=offline,
+        lease_directory=tmp_path / "leases")
+    executor.resolve()
+    result = executor.execute_captured(
+        ("cc", "source.c"), workspace=workspace, install_dir=install, working_directory=".",
+        environment={}, capture_directory=tmp_path / "capture",
+        capture_config=BuildCaptureConfig("ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 100),
+        scope=CaptureScope("fixture", "job_project_build", "attempt", "B", "native"))
+    assert result.cleanup_complete
+    containers = [argv for argv in observed if argv[:2] == ("docker", "run")]
+    assert len(containers) == 2
+    for argv in containers:
+        assert ("--pull" in argv) is offline
+        if offline:
+            assert argv[argv.index("--pull") + 1] == "never"
+            assert argv[argv.index("--network") + 1] == "none"
+    if not offline:
+        assert containers[0][containers[0].index("--network") + 1] == "bridge"

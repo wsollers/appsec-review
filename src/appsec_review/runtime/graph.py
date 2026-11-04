@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 import logging
 
@@ -83,19 +84,30 @@ class GraphRunner:
                              terminal=terminal)
         finally:
             if "run_root" in terminal:
-                self._finish(terminal["run_root"])
+                primary = sys.exception()
+                try:
+                    self._finish(terminal["run_root"])
+                except BaseException as finalization:
+                    if primary is not None:
+                        raise BaseExceptionGroup("graph and terminal finalization failed",
+                                                 [primary, finalization]) from None
+                    raise
 
     def _finish(self, run_root: Path) -> None:
         """After a terminal graph event and outside the resume lock: final metrics, then the report."""
         # Imported here: telemetry_render's own imports load this module, so a top-level import cycles.
         from appsec_review.reporting.telemetry_finalize import finalize_telemetry_report
+        from appsec_review.jobs.build_iterations import finish_build_workspaces
 
         try:
-            write_run_metrics(run_root)
-        except Exception as exc:  # derived telemetry must not replace the run's own outcome
-            LOGGER.warning("run metrics for %s were not written: %s", run_root.name, type(exc).__name__)
-        finalize_telemetry_report(run_root, self.config.telemetry_report,
-                                  repository_root=self.config.runtime.repository_root)
+            finish_build_workspaces(run_root, self.config.build_workspaces)
+        finally:
+            try:
+                write_run_metrics(run_root)
+            except Exception as exc:  # derived telemetry must not replace the run's own outcome
+                LOGGER.warning("run metrics for %s were not written: %s", run_root.name, type(exc).__name__)
+            finalize_telemetry_report(run_root, self.config.telemetry_report,
+                                      repository_root=self.config.runtime.repository_root)
 
     def _run(
         self,
@@ -122,6 +134,8 @@ class GraphRunner:
         position = self._split() if deferred else 0
         with FileLock(run_root / "data" / "resume.lock"):
             runner._bind_configuration(run_root)
+            from appsec_review.jobs.build_iterations import resume_build_workspace
+            resume_build_workspace(run_root)
             graph_started = datetime.now(timezone.utc)
             PipelineLog(run_root).write("RUN_STARTED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),

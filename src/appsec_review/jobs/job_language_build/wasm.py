@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -16,6 +16,7 @@ from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, derived_base_image_id
 from appsec_review.jobs.build_discovery import ensure_declared_build_dir
+from appsec_review.jobs.build_workspace import WorkspacePaths
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build.job import (
     _captured_command, _dispatches, _mapped_files, _probe_environment, _snapshot,
@@ -258,12 +259,15 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], produ
         "delivery_policy": POLICY_IDENTITY,
         "capture_limit": settings["stream_limit_bytes"], "artifact_limit": settings["artifact_count_limit"],
         "processing_modes": settings["processing_modes"],
-        "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"],
+        "preparation": dispatch.get("preparation_identity", dispatch.get("probe_identity")),
+        "upstream_handoff": accepted["project_build_handoff_sha256"],
     })).hexdigest()
 
 
 def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any], producer: str,
-                 upstream: Mapping[str, str], executor_factory=None) -> dict[str, Any]:
+                 upstream: Mapping[str, str], executor_factory=None, *,
+                 shared_paths: WorkspacePaths | None = None,
+                 interfaces: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = _runtime_settings(unit)
     releases = unit.job.review_policy.releases
@@ -272,14 +276,14 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                                releases=releases, policy=unit.job.review_policy.view())
     root = (unit.job.run_root / "data" / "build" / "wasm" / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
-    workspace = root / "workspace"
+    workspace = shared_paths.target if shared_paths else root / "workspace"
     namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
     cache = unit.job.metadata_root / "wasm-builds" / namespace / fingerprint / "accepted.json"
     if not reusable:
         unit.job.events.write("CHECKPOINT_MISSED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
                               action="wasm_build", reason=reuse_reason)
     with FileLock(cache.parent / "build.lock"):
-        if reusable and cache.is_file():
+        if shared_paths is None and reusable and cache.is_file():
             prior = json.loads(cache.read_text(encoding="utf-8"))
             if prior.get("fingerprint") != fingerprint or prior.get("terminal_status") != "SUCCEEDED":
                 raise WasmIntegrityError("wasm-build checkpoint identity is invalid")
@@ -305,7 +309,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             return {**receipt, "checkpoint_reused": True,
                     "completed_at": datetime.now(timezone.utc).isoformat()}
 
-    _copy_source(unit, dispatch, workspace)
+    if shared_paths is None:
+        _copy_source(unit, dispatch, workspace)
+    else:
+        ensure_declared_build_dir(workspace, recipe)
     before = _snapshot(workspace, int(settings["workspace_file_limit"]))
     profile = BuildProfile(str(dispatch["family"]), str(image["image_tag"]),
                            str(image["image_id"]), str(image["user"]),
@@ -324,6 +331,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     started_at, started = datetime.now(timezone.utc).isoformat(), time.monotonic()
     operational_recipe = {**recipe, "build_system": dispatch.get("build_system")}
     environment = _probe_environment(operational_recipe)
+    if shared_paths:
+        from .job import _interface_environment
+        environment.update(_interface_environment(interfaces, environment))
     raw_commands = [*recipe["configure_commands"], *recipe["build_commands"]]
     native_sources = bool(dispatch.get("native_components"))
     captures: list[tuple[int, Any]] = []
@@ -331,6 +341,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     if capture_root.exists():
         shutil.rmtree(capture_root)
     for ordinal, raw in enumerate(raw_commands, 1):
+        from .job import _recipe_command
+        phase = "configure" if ordinal <= len(recipe["configure_commands"]) else "build"
+        raw, cwd = _recipe_command(workspace, recipe, phase, raw, dispatch.get("validation_unit", dispatch))
         argv = _capture_argv(recipe, raw)
         command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
             "unit": build_unit_id, "ordinal": ordinal, "argv": list(argv)})).hexdigest()
@@ -341,21 +354,23 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 # authority for those compiles, which then flow to the native analysis jobs.
                 result, verified, capture_identity = _captured_command(
                     unit, executor, argv, workspace=workspace,
-                    working_directory=str(recipe["source_dir"]), environment=environment,
+                    working_directory=cwd, environment=environment,
                     capture_directory=capture_root / f"command-{ordinal:03d}",
-                    build_unit_id=build_unit_id, family=str(dispatch["family"]))
+                    build_unit_id=build_unit_id, family=str(dispatch["family"]),
+                    install_dir=shared_paths.install if shared_paths else None)
                 captures.append((ordinal, verified))
                 gaps.extend(f"execution capture command {ordinal}: {gap}" for gap in verified.gaps)
             else:
                 capture_identity = None
                 result = executor.execute(argv, workspace=workspace,
-                                          working_directory=str(recipe["source_dir"]),
-                                          environment=environment)
+                                          working_directory=cwd,
+                                          environment=environment,
+                                          **({"install_dir": shared_paths.install} if shared_paths else {}))
         except (RuntimeError, OSError) as exc:
             raise ProducerUnavailable(str(exc)) from exc
         exact = protected / f"{command_id}.json"
         protected_command = {"schema": "appsec-review/protected-build-command/2",
-            "argv": list(result.argv), "working_directory": str(recipe["source_dir"]),
+            "argv": list(result.argv), "working_directory": cwd,
             "environment": dict(environment), "access": "run-owned-protected"}
         immutable_bytes(unit.job.run_root, exact.relative_to(unit.job.run_root).as_posix(),
                         canonical_json(protected_command))
@@ -370,7 +385,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "build_attempt_id": f"{build_unit_id}:{unit.job.attempt_id}", "ordinal": ordinal,
             "tool": Path(argv[0]).name, "tool_kind": _TOOL_KINDS.get(Path(argv[0]).name, "build-driver"),
             "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
-            "working_directory": str(recipe["source_dir"]),
+            "working_directory": cwd,
             "environment_facts": {key: "set" for key in sorted(environment) if not _SECRET_KEY.search(key)},
             "started_at": command_started_at, "duration_ms": int((time.monotonic()-command_started)*1000),
             "exit_code": result.exit_code, "timed_out": result.timed_out,
@@ -436,7 +451,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "upstream_build_fingerprints": dict(sorted(upstream.items())), "build_unit_id": build_unit_id,
         "source_family": dispatch["family"], "producer": producer, "root": dispatch["root"],
         "build_system": dispatch.get("build_system"), "recipe_identity": dispatch["recipe_identity"],
-        "probe_identity": dispatch["probe_identity"], "image": image,
+        "preparation_identity": dispatch.get("preparation_identity"), "image": image,
+        "family": "wasm", "recipe": dict(recipe),
         "workspace": workspace.relative_to(unit.job.run_root).as_posix(), "commands": commands,
         "tool_invocations": [{key: value for key, value in command.items()
                               if key not in {"stdout", "stderr", "protected_argv"}}
@@ -459,7 +475,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["native_components"] = list(native_database["native_components"])
         receipt["native_compile_database"] = {
             key: native_database[key] for key in ("path", "sha256", "entry_count", "family")}
-    if status == "SUCCEEDED" and reusable:
+    if shared_paths is None and status == "SUCCEEDED" and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/wasm-build-checkpoint/1",

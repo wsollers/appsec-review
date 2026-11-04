@@ -40,6 +40,7 @@ from appsec_review.jobs.build_discovery import (
     copied_source_symlink, ensure_declared_build_dir, native_build_capability_gap, validate_build_recipe,
 )
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
+from appsec_review.jobs.build_iterations import selected_graph
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
@@ -1158,23 +1159,12 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
         configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
-        components = {str(item["component_id"]): str(item["root"])
-                      for item in accepted.get("components", ())}
-        action_by_component: dict[str, str] = {}
-        for component_id, component_root in components.items():
-            candidates = [item for item in actions if component_root == "." or item["root"] == component_root or
-                          str(item["root"]).startswith(component_root.rstrip("/") + "/")]
-            if candidates:
-                action_by_component[component_id] = str(min(candidates, key=lambda item: len(str(item["root"])))
-                                                        ["build_unit_id"])
         dependencies: dict[str, set[str]] = {str(item["build_unit_id"]): set() for item in actions}
-        for relation in accepted.get("build_topology", {}).get("relationships", ()):
-            if relation.get("kind") != "depends_on":
-                continue
-            owner = action_by_component.get(str(relation.get("component_id")))
-            dependency = action_by_component.get(str(relation.get("dependency_component_id")))
-            if owner and dependency and owner != dependency:
-                dependencies[owner].add(dependency)
+        accepted_graph = accepted.get("build_topology", {}).get("executable_graph")
+        if not isinstance(accepted_graph, Mapping):
+            raise ValueError("graphless target plans require replanning before iterative builds")
+        for edge in accepted_graph["edges"]:
+            dependencies[edge["consumer_build_unit_id"]].add(edge["producer_build_unit_id"])
         resolved_actions = []
         for item in actions:
             deterministic = (_deterministic_native_recipe(unit, item) or
@@ -1231,7 +1221,12 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                 decisions.append(decision.as_dict())
                 if decision.action is ApplicabilityAction.GAP:
                     gaps.append(f"{decision.project_id}: {decision.reason_code.value}")
-        return {"actions": actions, "scanner_selections": accepted["scanner_selections"],
+        graph = selected_graph(
+            actions, source_fingerprint=unit.job.source_fingerprint,
+            relationships=accepted["build_topology"].get("relationships", ()),
+            variants=unit.job.config.settings.get("variants", {}))
+        return {"actions": actions, "execution_graph": graph,
+                "scanner_selections": accepted["scanner_selections"],
                 "action_count": len(actions), "processing_decisions": decisions,
                 "terminal_status": "GAP" if gaps else "SUCCEEDED", "gaps": gaps}
 
@@ -1359,22 +1354,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
 
     def probe_handler(family: str):
         def execute(unit: UnitContext) -> Mapping[str, Any]:
-            profiles = profiles_from_settings(unit.job.config.settings["profiles"])
-            resolver = image_resolver_factory(unit) if image_resolver_factory else ProjectImageResolver(
-                metadata_root=unit.job.metadata_root, target_root=unit.job.target_root or Path(),
-                releases=unit.job.review_policy.releases, run_root=unit.job.run_root,
-                timeout_seconds=int(unit.job.config.settings["image_build_timeout_seconds"]),
-                output_bytes=int(unit.job.config.settings["output_bytes"]))
             receipts = []
-            for entry in unit.output(f"image.{family}")["entries"]:
-                if (not isinstance(entry.get("image"), Mapping) or
-                        not isinstance(entry.get("action", {}).get("recipe"), Mapping)):
-                    receipts.append(_probe_one(unit, entry, executor_factory))
-                else:
-                    profile_name = str(entry["action"]["recipe"].get("image_profile", family))
-                    receipts.append(_probe_with_repairs(unit, entry, profile=profiles[profile_name],
-                                                        resolver=resolver, infer=infer,
-                                                        executor_factory=executor_factory))
             if family == "dotnet":
                 from appsec_review.config.unity import parse_unity_build_settings
                 from appsec_review.jobs.unity_build import execute_unity_build
@@ -1397,26 +1377,22 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
             receipts = unit.output(f"probe.{family}")["receipts"]
             images = {value["action"]["build_unit_id"]: value for value in unit.output(f"image.{family}")["entries"]}
             dispatches, gaps = [], []
-            for receipt in receipts:
-                if receipt.get("build_system") == "unity":
-                    gaps.extend(receipt.get("gaps", ()))
+            for entry in images.values():
+                action = entry["action"]
+                if entry["terminal_status"] != "SUCCEEDED":
+                    gaps.extend(entry["gaps"])
                     continue
-                if receipt["terminal_status"] != "SUCCEEDED":
-                    gaps.extend(receipt["gaps"])
-                    continue
-                entry = images[receipt["build_unit_id"]]
-                accepted_recipe = receipt.get("accepted_recipe", entry["action"]["recipe"])
-                accepted_image = receipt.get("accepted_image", entry["image"])
-                value = {"workflow": "lang_jobflow_build", "family": family, "build_unit_id": receipt["build_unit_id"],
-                         "root": receipt["root"], "build_system": receipt["build_system"],
+                accepted_recipe = action["recipe"]
+                accepted_image = entry["image"]
+                value = {"workflow": "lang_jobflow_build", "family": family, "build_unit_id": action["build_unit_id"],
+                         "root": action["root"], "build_system": action["build_system"],
                          "recipe": accepted_recipe,
-                         "recipe_provenance": receipt.get(
-                             "recipe_provenance", entry["action"].get("recipe_provenance", "accepted-inference")),
-                         "recipe_identity": receipt["recipe_identity"], "image": accepted_image,
+                         "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
+                         "recipe_identity": accepted_image["recipe_identity"], "image": accepted_image,
                          "source_fingerprint": unit.job.source_fingerprint,
-                         "probe_identity": hashlib.sha256(canonical_json(receipt)).hexdigest(),
+                         "preparation_identity": hashlib.sha256(canonical_json(entry)).hexdigest(),
                          "build_dependencies": list(entry["action"].get("build_dependencies", ())),
-                         "probe_disposition": receipt["probe_disposition"],
+                         "execution_mode": "iterative",
                          "markers": list(entry["action"].get("markers", ())),
                          "descriptor_package": dict(entry["action"].get("descriptor_package", {})),
                          "descriptor_facts": dict(entry["action"].get("descriptor_facts", {})),
@@ -1429,11 +1405,10 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                          "capabilities": list(_BUILD_CAPABILITIES[family])}
                 dispatches.append(value)
                 unit.job.events.write("LANGUAGE_BUILD_WORKFLOW_DISPATCHED", unit_id=unit.unit_id, family=family,
-                    workflow="lang_jobflow_build", build_unit_id=receipt["build_unit_id"],
-                    recipe_identity=receipt["recipe_identity"], image_id=receipt["image_id"],
-                    probe_disposition=receipt["probe_disposition"])
+                    workflow="lang_jobflow_build", build_unit_id=action["build_unit_id"],
+                    recipe_identity=accepted_image["recipe_identity"], image_id=accepted_image["image_id"])
             return {"family": family, "dispatches": dispatches, "dispatch_count": len(dispatches),
-                    "terminal_status": "NOT_APPLICABLE" if not receipts else "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED",
+                    "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if dispatches else "NOT_APPLICABLE",
                     "gaps": gaps}
         return execute
 
@@ -1450,7 +1425,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         processing_decisions = []
         for decision in planned_decisions:
             receipt = receipts_by_unit.get(decision.project_id)
-            if decision.action is ApplicabilityAction.RUN:
+            if decision.action is ApplicabilityAction.RUN and receipt is not None:
                 successful = bool(receipt and receipt.get("terminal_status") == "SUCCEEDED")
                 decision = finalize_processing(
                     decision, succeeded=successful,
@@ -1460,6 +1435,9 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         processing_gaps = [f"{item['project_id']}: {item['reason_code']}"
                            for item in processing_decisions if item.get("disposition") == "GAP"]
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint, "images": images,
+                    "execution_mode": "iterative",
+                    "execution_graph": unit.output("plan.load_recipes")["execution_graph"],
+                    "execution_actions": unit.output("plan.load_recipes")["actions"],
                     "probes": probes, "probe_receipts": receipts,
                     "static_dispatches": [item for value in static.values() for item in value["dispatches"]],
                     "build_dispatches": [item for value in builds.values() for item in value["dispatches"]],

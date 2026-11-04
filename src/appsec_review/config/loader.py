@@ -21,6 +21,7 @@ from .banned_functions import BannedFunctions, parse_banned_functions
 from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .build_outputs import BUILD_OUTPUT_JOBS, BuildOutputPolicy, parse_build_outputs, reject_misplaced
+from .build_workspaces import BuildWorkspacePolicy, parse_build_workspaces
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 from .signing import SigningConfig, parse_signing
@@ -583,6 +584,7 @@ class AppConfig:
     compiler_target: CompilerTarget = CompilerTarget.CLANG
     telemetry_report: TelemetryReportSettings = TelemetryReportSettings()
     signing: SigningConfig = SigningConfig()
+    build_workspaces: BuildWorkspacePolicy = BuildWorkspacePolicy()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -952,6 +954,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         raise ValueError("[jobs] must contain at least one job")
     excluded_globally = global_exclusions(document)
     build_output_policy = parse_build_outputs(document.get("build_outputs"))
+    build_workspace_policy = parse_build_workspaces(document.get("build_workspaces"))
+    resolved_document.pop("build_workspaces", None)
     resolved_document["build_outputs"] = build_output_policy.view()
     jobs: dict[str, JobConfig] = {}
     for job_id, value in jobs_value.items():
@@ -1017,6 +1021,22 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                 tasks=MappingProxyType(tasks),
             )
         typed_settings: object | None = None
+        if job_id == "job_project_build":
+            if settings.get("force_buildability_probe") is not False and "force_buildability_probe" in settings:
+                raise ValueError("force_buildability_probe is retired; use a selected build iteration "
+                                 "recipe revision instead of an extra project probe")
+            if "force_probes" in settings:
+                raise ValueError("force_probes is retired; use selected build iteration recipe revisions")
+            variants = settings.get("variants", {})
+            from appsec_review.jobs.build_topology import VARIANT_FIELDS
+            if not isinstance(variants, dict):
+                raise ValueError("project build variants must be a table of explicit runtime facts")
+            for name, facts in variants.items():
+                if (not isinstance(name, str) or not isinstance(facts, dict)
+                        or set(facts) - set(VARIANT_FIELDS)
+                        or any(not isinstance(value, str) or not value.strip() for value in facts.values())
+                        or facts.get("execution_role", "target") not in {"host", "target"}):
+                    raise ValueError("project build variants contain invalid runtime facts")
         if job_id == "job_language_build":
             allowed_language_settings = {
                 "command_timeout_seconds", "output_bytes", "artifact_count_limit", "build_capture",
@@ -1281,6 +1301,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         resolved_sha256=hashlib.sha256(resolved_json).hexdigest(),
         runtime=runtime,
         build_capture=build_capture,
+        build_workspaces=build_workspace_policy,
         jobs=MappingProxyType(jobs),
         dagster=DagsterConfig(executor=str(dagster_value.get("executor", "multiprocess")),
                               max_concurrent=int(dagster_value.get("max_concurrent", 8)),

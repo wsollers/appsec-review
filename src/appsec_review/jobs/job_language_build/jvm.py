@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
@@ -18,6 +18,7 @@ from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope, scope_fields
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, derived_base_image_id
 from appsec_review.jobs.build_discovery import jvm_build_command_errors
+from appsec_review.jobs.build_workspace import WorkspacePaths
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity,
     RelationKind, RelationRecord, index_fingerprint,
@@ -583,7 +584,8 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
         "review_policy": {key: value for key, value in (policy or {}).items() if key != "releases"},
         "workspace_layout": "jvm-detached-instrumentation/1",
         "delivery_policy": POLICY_IDENTITY,
-        "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"]
+        "preparation": dispatch.get("preparation_identity", dispatch.get("probe_identity")),
+        "upstream_handoff": accepted["project_build_handoff_sha256"]
     })).hexdigest()
 
 
@@ -669,8 +671,9 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
-                    executor_factory: Any = None) -> dict[str, Any]:
-    from .job import _copy_source
+                    executor_factory: Any = None, *, shared_paths: WorkspacePaths | None = None,
+                    interfaces: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    from .job import _copy_source, _interface_environment
 
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = unit.job.config.settings["jvm"]
@@ -689,14 +692,14 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     }, releases=releases, policy=unit.job.review_policy.view())
     root = (unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
-    workspace = root / "workspace"
+    workspace = shared_paths.target if shared_paths else root / "workspace"
     namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
     cache = unit.job.metadata_root / "language-builds" / namespace / "jvm" / fingerprint / "accepted.json"
     if not reusable:
         unit.job.events.write("CHECKPOINT_MISSED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
                               action="jvm_build", reason=reuse_reason)
     with FileLock(cache.parent / "build.lock"):
-        if reusable and cache.is_file():
+        if shared_paths is None and reusable and cache.is_file():
             prior = json.loads(cache.read_text(encoding="utf-8"))
             if prior.get("fingerprint") != fingerprint or prior.get("terminal_status") != "SUCCEEDED":
                 raise JvmIntegrityError("JVM checkpoint identity is invalid")
@@ -725,7 +728,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             receipt = {**prior["receipt"], "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
                        "checkpoint_reused": True, "completed_at": datetime.now(timezone.utc).isoformat()}
             return receipt
-    _copy_source(unit, dispatch, workspace)
+    if shared_paths is None:
+        _copy_source(unit, dispatch, workspace)
     before = _manifest(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     image_profile = str(recipe.get("image_profile", ""))
     if image_profile not in {"java", "android"} or str(image.get("family", "")) != image_profile:
@@ -739,6 +743,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     environment, trace = _environment(
         {**recipe, "build_system": dispatch.get("build_system")}, workspace, settings,
         instrumentation_root=instrumentation_root, evidence_root=evidence_root)
+    if shared_paths:
+        environment.update(_interface_environment(interfaces, environment))
     profile = BuildProfile(image_profile, str(image["image_tag"]), str(image["image_id"]), str(image["user"]),
                            derived_from_image_id=derived_base_image_id(image))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
@@ -758,7 +764,11 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     protected = root / "protected-commands"
     protected.mkdir(parents=True, exist_ok=True)
     for ordinal, raw in enumerate([*recipe["configure_commands"], *recipe["build_commands"]], 1):
-        argv, wrapper = _jvm_argv(recipe, raw)
+        from .job import _recipe_command
+        phase = "configure" if ordinal <= len(recipe["configure_commands"]) else "build"
+        _, wrapper = _jvm_argv(recipe, raw)
+        raw, cwd = _recipe_command(workspace, recipe, phase, raw, dispatch.get("validation_unit", dispatch))
+        argv, _ = _jvm_argv(recipe, raw)
         instrumentation = None
         if Path(argv[0]).name == "gradle":
             argv, instrumentation = gradle_provenance.instrument_argv(
@@ -770,7 +780,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         exact = protected / f"{command_id}.json"
         immutable_bytes(unit.job.run_root, exact.relative_to(unit.job.run_root).as_posix(),
             canonical_json({"schema": "appsec-review/protected-build-command/2", "argv": list(argv),
-            "working_directory": str(recipe["source_dir"]), "environment": command_environment,
+            "working_directory": cwd, "environment": command_environment,
             "access": "run-owned-protected"}))
         try:
             exact.chmod(0o600)
@@ -779,8 +789,9 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         command_started = time.monotonic()
         try:
             result = executor.execute(argv, workspace=workspace,
-                working_directory=str(recipe["source_dir"]), environment=command_environment,
-                instrumentation_root=instrumentation_root, instrumentation_evidence_root=evidence_root)
+                working_directory=cwd, environment=command_environment,
+                instrumentation_root=instrumentation_root, instrumentation_evidence_root=evidence_root,
+                **({"install_dir": shared_paths.install} if shared_paths else {}))
         except (RuntimeError, OSError) as exc:
             gaps.append(f"JVM build command {ordinal} failed to start ({type(exc).__name__}: {exc})")
             break
@@ -792,7 +803,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         commands.append({"command_id": command_id, "attempt_identity": attempt_identity,
             "ordinal": ordinal, "tool": Path(argv[0]).name, "tool_kind": "build-driver",
             "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
-            "working_directory": str(recipe["source_dir"]),
+            "working_directory": cwd,
             "environment_facts": {key: "set" for key in sorted(command_environment) if not _SECRET.search(key)},
             "wrapper_resolution": ({"requested": wrapper, "executed": argv[0],
                 "policy": "pinned-system-tool"} if wrapper else None),
@@ -879,7 +890,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
         "build_unit_id": build_unit_id, "family": "java", "root": dispatch["root"],
         "build_system": dispatch.get("build_system"), "recipe": recipe,
-        "recipe_identity": dispatch["recipe_identity"], "probe_identity": dispatch["probe_identity"],
+        "recipe_identity": dispatch["recipe_identity"],
+        "preparation_identity": dispatch.get("preparation_identity"),
         "image": image, "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
         "commands": commands, "tool_invocations": sanitized,
         "declared_compilations": sanitized_declared,
@@ -898,7 +910,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         "executor_identity": JVM_EXECUTOR_IDENTITY, "capture_identity": JVM_CAPTURE_IDENTITY}
     if status == "SUCCEEDED":
         receipt["retrieval_index"] = _index(unit, receipt)
-    if status == "SUCCEEDED" and reusable:
+    if shared_paths is None and status == "SUCCEEDED" and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/language-build-checkpoint/1",

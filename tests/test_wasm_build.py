@@ -206,18 +206,18 @@ class WasmExecutor:
     def resolve(self):
         return None
 
-    def execute(self, argv, *, workspace, working_directory, environment):
+    def execute(self, argv, *, workspace, working_directory, environment, install_dir=None):
         self.calls.append(working_directory)
         if working_directory in self.fail_roots:
             return BuildCommandResult(tuple(argv), 2, b"0123", b"boun", False,
-                                      10, 24, True, True, b"6789", b"failure")
+                                      10, 24, True, True, b"6789", b"failure", cleanup_complete=True)
         output = workspace / working_directory / "target" / "wasm32-unknown-unknown" / "release"
         output.mkdir(parents=True, exist_ok=True)
         (output / "demo.wasm").write_bytes(b"\x00asm\x01\x00\x00\x00")
         (output / "demo.wat").write_text("(module)", encoding="utf-8")
         (output / "demo.js").write_text("export const ready = true;", encoding="utf-8")
         return BuildCommandResult(tuple(argv), 0, b"0123", b"diag", False,
-                                  10, 10, True, True, b"6789", b"ostic")
+                                  10, 10, True, True, b"6789", b"ostic", cleanup_complete=True)
 
 
 def _fixture(tmp_path: Path):
@@ -226,6 +226,15 @@ def _fixture(tmp_path: Path):
     text = text.replace("[review_policy.releases]\n", "[review_policy.releases]\n" +
         "".join(f'{key} = "fixture/1"\n' for key in
                 ("platform", "validation", "build_toolchain", "wasm_instrumentation")))
+    text += """
+[jobs.job_project_build.settings.variants.rust]
+configuration = "release"
+target_arch = "wasm32"
+execution_role = "target"
+linkage = "static"
+toolchain = "fixture/1"
+abi = "wasm-fixture/1"
+"""
     text = text.replace(
         "[jobs.job_language_build.settings]\ncommand_timeout_seconds = 1800\n"
         "# In-memory diagnostic preview only; captured build streams are retained as complete files.\n"
@@ -308,7 +317,7 @@ def test_wasm_build_retains_protected_streams_indexes_sanitized_evidence_and_reu
         force_from="job_language_build")
     second = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     assert resumed["status"] == "COMPLETED_WITH_GAPS" and second["checkpoint_reused"] is True
-    assert len(calls) == 2  # one project-build probe and one real WASM build
+    assert len(calls) == 1  # one authoritative captured build, reused on resume
 
 
 def test_wasm_checkpoint_tamper_is_framework_failure(tmp_path: Path) -> None:
@@ -321,7 +330,8 @@ def test_wasm_checkpoint_tamper_is_framework_failure(tmp_path: Path) -> None:
     accepted_pointer = latest.read_bytes()
     artifact = config.runtime.runs_dir / run_id / receipt["artifacts"][0]["path"]
     artifact.write_bytes(b"tampered")
-    with pytest.raises(RuntimeError, match="partial failure"):
+    from appsec_review.jobs.build_workspace import ReconstructionMiss
+    with pytest.raises(ReconstructionMiss, match="retained file is missing or changed"):
         GraphRunner(config, [build_language(executor_factory=lambda unit, profile: WasmExecutor([]))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id,
             force_from="job_language_build")
@@ -357,4 +367,5 @@ def test_wasm_sibling_failure_isolated(tmp_path: Path) -> None:
     assert second_by_root["crate"]["checkpoint_reused"] is True
     assert second_by_root["crate"]["workspace"] == first_by_root["crate"]["workspace"]
     assert second_by_root["sibling"]["checkpoint_reused"] is False
-    assert second_by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]
+    assert second_by_root["sibling"]["workspace"] == first_by_root["sibling"]["workspace"]
+    assert second_by_root["sibling"]["attempt_id"] != first_by_root["sibling"]["attempt_id"]

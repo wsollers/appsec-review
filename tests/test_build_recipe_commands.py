@@ -135,3 +135,23 @@ def test_target_root_source_and_explicit_nested_build_directory_are_contained(tm
     (workspace / "build/CMakeCache.txt").symlink_to(workspace / "CMakeLists.txt")
     with pytest.raises(ValueError, match="cache traverses a symlink"):
         prepare_recipe_command(workspace, accepted, recipe, "build", ("cmake", "--build", "build"))
+
+
+@pytest.mark.parametrize("source_dir", [".", "B"])
+def test_guest_cmake_home_cache_accepts_the_exact_root_or_nested_unit(tmp_path, source_dir):
+    workspace = tmp_path / "workspace"
+    source = workspace / source_dir
+    source.mkdir(parents=True)
+    content = b"project(accepted)\n"
+    descriptor = source / "CMakeLists.txt"
+    descriptor.write_bytes(content)
+    accepted = {"root": source_dir, "descriptor_package": {"documents": [{
+        "path": descriptor.relative_to(workspace).as_posix(), "sha256": hashlib.sha256(content).hexdigest()}]}}
+    build_dir = "build" if source_dir == "." else "B/build"
+    recipe = {"source_dir": source_dir, "build_dir": build_dir,
+              "execution_cwd": {"configure": build_dir, "build": build_dir}}
+    prepare_recipe_command(workspace, accepted, recipe, "configure", ("cmake", "-S", "..", "-B", "."))
+    guest_home = "/workspace" if source_dir == "." else "/workspace/B"
+    (workspace / build_dir / "CMakeCache.txt").write_text(f"CMAKE_HOME_DIRECTORY:INTERNAL={guest_home}\n")
+    assert prepare_recipe_command(workspace, accepted, recipe, "build", ("cmake", "--build", ".")) == (
+        ("cmake", "--build", "."), build_dir)

@@ -56,6 +56,8 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--trigger", choices=("manual", "schedule"), default="manual")
     run.add_argument("--target", type=Path,
                      help="target checkout for target-reading jobs (default: APPSEC_REVIEW_TARGET)")
+    run.add_argument("--iteration-request",
+                     help="immutable run-owned request reference JSON for job_build_iteration only")
     run.add_argument("--upstream-from-run", action="store_true",
                      help="bind the run's accepted handoffs of the upstream jobs wave1_review would pass")
     run.add_argument("--admit-manual-poc", action="store_true",
@@ -86,6 +88,22 @@ def parser() -> argparse.ArgumentParser:
 
     tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
     tools.add_argument("--run-id", required=True)
+
+    context = commands.add_parser("build-failure-context", help="pin actual failure inputs and explicit product declarations")
+    context.add_argument("--run-id", required=True)
+    context.add_argument("--node-id", required=True)
+    context.add_argument("--products", type=Path, required=True, help="JSON array of evidence-backed ProductSpec declarations")
+    replay = commands.add_parser("replay-build-recipe", help="execute a bounded recipe trial in a detached generation")
+    replay.add_argument("--run-id", required=True)
+    replay.add_argument("--context", required=True, help="immutable context reference JSON")
+    replay.add_argument("--candidate", type=Path, required=True)
+    replay.add_argument("--prepared-image",
+                        help="immutable approved image-preparation reference JSON; never builds an image")
+    replay.add_argument("--offline", action="store_true", help="explicitly prohibit all fetching; no hidden image preparation")
+    promote = commands.add_parser("promote-build-recipe", help="select a verified trial recipe for production reexecution")
+    promote.add_argument("--run-id", required=True)
+    promote.add_argument("--context", required=True, help="immutable context reference JSON")
+    promote.add_argument("--trial", required=True, help="immutable trial reference JSON")
 
     logs = commands.add_parser("logs", help="read or follow the run-wide structured log")
     logs.add_argument("--run-id", required=True)
@@ -137,7 +155,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "signing":
         return run_signing(args, lambda: load_config(args.config, profile=args.profile))
     compiler = getattr(args, "compiler_target", None)
-    if args.command in {"run", "plan-resume", "resume"} and getattr(args, "run_id", None):
+    if args.command in {"run", "plan-resume", "resume", "build-failure-context",
+                        "replay-build-recipe", "promote-build-recipe"} and getattr(args, "run_id", None):
         preliminary = load_config(args.config, profile=args.profile)
         manifest_path = (preliminary.runtime.runs_dir / args.run_id /
                          "data" / "configuration" / "manifest.json")
@@ -145,6 +164,51 @@ def main(argv: Sequence[str] | None = None) -> int:
             compiler = json.loads(manifest_path.read_text(encoding="utf-8")).get(
                 "selection", {}).get("compiler_target", "clang")
     config = load_config(args.config, profile=args.profile, compiler_target=compiler)
+    if args.command in {"build-failure-context", "replay-build-recipe", "promote-build-recipe"}:
+        from appsec_review.jobs.build_iterations import (
+            captured_replay, decode_replay_context, failure_context, read_reference, select_promotion,
+        )
+        from appsec_review.jobs.build_recipe_replay import (
+            CANDIDATE_SCHEMA, ImageResolution, RecipeCandidate, replay_recipe,
+        )
+        from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec
+        from appsec_review.storage import RunStore
+        run_root = RunStore(config.runtime.runs_dir).resolve(args.run_id)
+        manifest = json.loads((run_root / "data/configuration/manifest.json").read_bytes())
+        if config.resolved_sha256 != manifest["resolved_sha256"]:
+            raise ValueError("recipe recovery configuration differs from its frozen run")
+        if args.command == "build-failure-context":
+            result = failure_context(run_root, args.node_id, json.loads(args.products.read_bytes()))
+        else:
+            context_document = read_reference(run_root, json.loads(args.context))
+            context = decode_replay_context(context_document)
+            if context.run_id != run_root.name:
+                raise ValueError("recipe context belongs to another application run")
+            if args.command == "promote-build-recipe":
+                result = select_promotion(run_root, context_document, json.loads(args.trial))
+            else:
+                value = json.loads(args.candidate.read_bytes())
+                if value.pop("schema", None) != CANDIDATE_SCHEMA:
+                    raise ValueError("recipe candidate schema is unsupported")
+                if value.get("products") is not None:
+                    value["products"] = tuple(ProductSpec(**item) for item in value["products"])
+                value["evidence"] = tuple(value["evidence"])
+                image_builder = None
+                if args.prepared_image:
+                    from appsec_review.container_runtime import BuildProfile
+                    image_evidence = json.loads(args.prepared_image)
+                    approval = read_reference(run_root, image_evidence)
+                    resolution = ImageResolution(BuildProfile(**approval["profile"]), image_evidence)
+                    image_builder = lambda *_: resolution
+                result = replay_recipe(
+                    BuildWorkspace(run_root), context, RecipeCandidate(**value),
+                    network_offline=args.offline,
+                    approved_image_builder=image_builder,
+                    execute=lambda invocation: captured_replay(config, context, invocation))
+                print(json.dumps(result, sort_keys=True))
+                return 0 if read_reference(run_root, result).get("status") == "SUCCEEDED" else 1
+        print(json.dumps(result, sort_keys=True))
+        return 0
     if args.command == "schedules":
         schedules = {
             job_id: {
@@ -324,6 +388,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     inputs = launch_inputs(job, target=args.target or configured_target(
                                config.runtime.repository_root, config.target_acquisition.targets_dir),
                            upstream_handoffs=upstream)
-    outcome = launch(JobRunner(config), job, inputs, run_id=args.run_id, trigger=args.trigger)
+    if args.job_id == "job_build_iteration":
+        if not args.run_id or not args.iteration_request:
+            parser().error("job_build_iteration requires --run-id and --iteration-request")
+        from appsec_review.jobs.build_iterations import read_reference
+        from appsec_review.jobs.job_build_iteration.job import invoke_registered_iteration
+        reference = json.loads(args.iteration_request)
+        run_root = RunStore(config.runtime.runs_dir).resolve(args.run_id)
+        request = read_reference(run_root, reference)
+        manifest = json.loads((run_root / "data/configuration/manifest.json").read_bytes())
+        if config.resolved_sha256 != manifest["resolved_sha256"]:
+            raise ValueError("iteration worker configuration differs from its frozen run")
+        outcome = invoke_registered_iteration(run_root, reference, request["display_label"])
+    else:
+        if args.iteration_request:
+            parser().error("--iteration-request is only valid for job_build_iteration")
+        outcome = launch(JobRunner(config), job, inputs, run_id=args.run_id, trigger=args.trigger)
     print(json.dumps(outcome, sort_keys=True))
     return 0

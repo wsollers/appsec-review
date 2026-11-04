@@ -594,7 +594,7 @@ def test_declared_build_dir_exists_before_recipe_commands_write_into_it(tmp_path
     assert not any(escape.iterdir())
 
 
-def test_node_086_087_restore_outputs(tmp_path: Path) -> None:
+def test_node_restore_recipes_are_prepared_without_running_dependency_fetches(tmp_path: Path) -> None:
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
                            encoding="utf-8")
@@ -621,13 +621,11 @@ def test_node_086_087_restore_outputs(tmp_path: Path) -> None:
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    receipts = {item["root"]: item for item in accepted["probe_receipts"]}
-    assert {root: receipt["terminal_status"] for root, receipt in receipts.items()} == {
-        "case-086": "SUCCEEDED",
-        "case-087": "SUCCEEDED",
-    }
-    assert calls.count(("npm", "ci")) == 2
-    assert calls.count(("npm", "run", "build")) == 2
+    dispatches = {item["root"]: item for item in accepted["build_dispatches"]}
+    assert set(dispatches) == {"case-086", "case-087"}
+    assert all(item["recipe"]["configure_commands"] == [["npm", "ci"]] for item in dispatches.values())
+    assert all(item["recipe"]["build_commands"] == [["npm", "run", "build"]] for item in dispatches.values())
+    assert accepted["probe_receipts"] == [] and calls == []
 
 
 def _repair(**fields):
@@ -811,7 +809,7 @@ def _fixture(tmp_path: Path, *, declared_releases: bool = False):
     return load_config(config_path), target
 
 
-def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: Path) -> None:
+def test_project_build_prepares_dispatch_without_a_second_build_or_fake_probe(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
@@ -823,31 +821,22 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
                                              run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    assert accepted["probe_artifact_count"] == 2
-    assert {item["family"] for item in accepted["probe_receipts"]} == {"native", "rust"}
+    assert accepted["probe_artifact_count"] == 0
+    assert accepted["probe_receipts"] == []
+    assert accepted["execution_mode"] == "iterative"
+    assert accepted["execution_graph"]["source_fingerprint"] == fingerprint
+    assert {item["family"] for item in accepted["build_dispatches"]} == {"native", "rust"}
     assert {item["family"] for item in accepted["static_dispatches"]
             if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
     assert {item["workflow"] for item in accepted["build_dispatches"]} == {"lang_jobflow_build"}
-    assert all(item["executor_identity"] == "appsec-review/build-container-executor/3"
-               for item in accepted["probe_receipts"])
-    assert all((config.runtime.runs_dir / upstream["run_id"] / artifact["path"]).is_file()
-               for build in accepted["probe_receipts"] for artifact in build["artifacts"])
-    for build in accepted["probe_receipts"]:
-        assert all(command["execution_capture"]["complete"] for command in build["commands"])
-        assert all((config.runtime.runs_dir / upstream["run_id"] /
-                    command["execution_capture"]["path"]).is_file()
-                   for command in build["commands"])
     for family in ("native", "rust"):
         image_entry = accepted["images"][family]["entries"][0]
         assert image_entry["attempt_identity"] and image_entry["command_identity"]
         assert all(stream["sha256"] and stream["capture_limit"]
                    for stream in image_entry["streams"].values())
-    assert calls == [
-        ("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"),
-        ("cmake", "--build", "build", "--parallel", "2"),
-        ("cargo", "build", "--manifest-path", "Cargo.toml"),
-    ]
+    assert calls == []
+    assert all(item["preparation_identity"] and "probe_identity" not in item
+               for item in accepted["build_dispatches"])
     native = next(item for item in accepted["build_dispatches"] if item["family"] == "native")
     assert native["recipe_provenance"] == "deterministic-cmake-marker"
     assert native["recipe"]["system_packages"] == []
@@ -855,7 +844,7 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
 
 
 @pytest.mark.parametrize("repair_baseline", (False, True))
-def test_missing_builder_is_per_unit_blocked_and_preserves_baseline_execution(tmp_path: Path, repair_baseline) -> None:
+def test_missing_builder_blocks_only_affected_preparation(tmp_path: Path, repair_baseline) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [
@@ -888,24 +877,16 @@ def test_missing_builder_is_per_unit_blocked_and_preserves_baseline_execution(tm
     outcome = GraphRunner(config, [job]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    native = next(x for x in accepted["probe_receipts"] if x["family"] == "native")
+    native = accepted["images"]["native"]["entries"][0]
     rust = accepted["images"]["rust"]["entries"][0]
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     assert rust["terminal_status"] == "BLOCKED"
     assert any("derived_image_preparation_unavailable" in gap for gap in rust["gaps"])
     assert not any(argv[:3] == ("docker", "buildx", "build") for argv in image_calls)
-    assert calls and calls[0][0] == "cmake"
-    if repair_baseline:
-        assert native["terminal_status"] == "BLOCKED"
-        assert native["attempts"][0]["terminal_status"] == "FAILED"
-        assert native["attempts"][-1]["terminal_status"] == "BLOCKED"
-        assert any("derived_image_preparation_unavailable" in gap for gap in native["gaps"])
-        assert model.calls == 1
-        assert not accepted["build_dispatches"]
-    else:
-        assert native["terminal_status"] == "SUCCEEDED"
-        assert {x["family"] for x in accepted["build_dispatches"]} == {"native"}
-        assert model.calls == 0
+    assert native["terminal_status"] == "SUCCEEDED"
+    assert {x["family"] for x in accepted["build_dispatches"]} == {"native"}
+    assert calls == [] and model.calls == 0
+    assert accepted["probe_receipts"] == []
 
 
 def test_native_windows_placeholder_is_blocked_without_hiding_alternate_cmake_authority(tmp_path: Path) -> None:
@@ -1003,7 +984,7 @@ def test_project_build_resolves_missing_cmake_recipe_deterministically(tmp_path:
     assert native["recipe"]["build_commands"][0][-2:] == ["--parallel", "2"]
 
 
-def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Path) -> None:
+def test_preparation_does_not_run_either_family_even_with_a_failing_executor(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
@@ -1022,18 +1003,15 @@ def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Pat
                          image_resolver_factory=lambda unit: FakeImageResolver())
     outcome = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                              run_id=upstream["run_id"])
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert outcome["status"] == "SUCCEEDED"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    native = next(item for item in accepted["probe_receipts"] if item["family"] == "native")
-    rust = next(item for item in accepted["probe_receipts"] if item["family"] == "rust")
-    assert native["terminal_status"] == "SUCCEEDED" and native["artifacts"]
-    assert rust["terminal_status"] == "FAILED" and rust["gaps"]
+    assert accepted["probe_receipts"] == []
     assert {item["family"] for item in accepted["static_dispatches"]
             if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
-    assert {item["family"] for item in accepted["build_dispatches"]} == {"native"}
+    assert {item["family"] for item in accepted["build_dispatches"]} == {"native", "rust"}
 
 
-def test_capture_gap_is_reported_without_triggering_image_repair(tmp_path: Path) -> None:
+def test_preparation_does_not_fabricate_capture_or_infer_image_repairs(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(
@@ -1045,19 +1023,16 @@ def test_capture_gap_is_reported_without_triggering_image_repair(tmp_path: Path)
         image_resolver_factory=lambda unit: RepairImageResolver(tmp_path / "image-metadata"),
         infer=model.complete,
     )]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert outcome["status"] == "SUCCEEDED"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    assert accepted["build_dispatches"] == []
+    assert {item["family"] for item in accepted["build_dispatches"]} == {"native", "rust"}
     assert model.calls == 0
-    assert {item["terminal_status"] for item in accepted["probe_receipts"]} == {
-        "COMPLETED_WITH_GAPS"}
-    assert all(item["repair_attempt_count"] == 0 for item in accepted["probe_receipts"])
-    assert all("capture:" in item["gaps"][0] for item in accepted["probe_receipts"])
+    assert accepted["probe_receipts"] == []
 
 
 @pytest.mark.parametrize("declared_releases", [False, True])
 @pytest.mark.parametrize("same_run", [False, True])
-def test_probe_reuse_requires_declarations_and_the_same_run(
+def test_preparation_never_rebuilds_to_probe_reuse(
         tmp_path: Path, declared_releases: bool, same_run: bool) -> None:
     config, target = _fixture(tmp_path, declared_releases=declared_releases)
     fingerprint = source_fingerprint(target)
@@ -1074,47 +1049,24 @@ def test_probe_reuse_requires_declarations_and_the_same_run(
         GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                       run_id=upstream["run_id"],
                                       force_from="job_project_build" if ordinal and same_run else None)
-    reused = declared_releases and same_run
-    assert len(calls) == (3 if reused else 6)
+    assert calls == []
     second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
-    assert {item["probe_disposition"] for item in second["probe_receipts"]} == {
-        "REUSED" if reused else "PROBED"}
-    assert all(item["probe_disposition"] == ("REUSED" if reused else "PROBED")
-               for item in second["build_dispatches"])
+    assert second["probe_receipts"] == []
+    assert {item["family"] for item in second["build_dispatches"]} == {"native", "rust"}
 
 
-def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
+@pytest.mark.parametrize("spelling", ["force_buildability_probe", "force_probes"])
+def test_retired_force_probe_options_are_rejected_visibly(tmp_path: Path, spelling: str) -> None:
     config_path = tmp_path / "appsec-review.toml"
     source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     config_path.write_text(source.replace("force_buildability_probe = false",
-                                          "force_buildability_probe = true"), encoding="utf-8")
-    target = tmp_path / "target"
-    (target / "native").mkdir(parents=True)
-    (target / "native" / "CMakeLists.txt").write_text("project(sample)\n", encoding="utf-8")
-    (target / "native" / "main.cpp").write_text("int main(){}\n", encoding="utf-8")
-    config, fingerprint = load_config(config_path), source_fingerprint(target)
-    calls: list[tuple[str, ...]] = []
-    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
-                         image_resolver_factory=lambda unit: FakeImageResolver())
-    for _ in range(2):
-        upstream = GraphRunner(
-            config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-        ).run(target_root=target, source_fingerprint=fingerprint)
-        GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
-                                      run_id=upstream["run_id"])
-    configure = ("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-                 "-DCMAKE_BUILD_TYPE=RelWithDebInfo")
-    build = ("cmake", "--build", "build", "--parallel", "2")
-    assert calls == [configure, build, configure, build]
+                                          f"{spelling} = true"), encoding="utf-8")
+    with pytest.raises(ValueError, match="retired"):
+        load_config(config_path)
 
 
 def test_forced_project_build_rerun_in_same_application_run_is_attempt_isolated(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
-    config.source_path.write_text(
-        config.source_path.read_text(encoding="utf-8").replace(
-            "force_buildability_probe = false", "force_buildability_probe = true"),
-        encoding="utf-8")
-    config = load_config(config.source_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(
         config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
@@ -1130,14 +1082,14 @@ def test_forced_project_build_rerun_in_same_application_run_is_attempt_isolated(
     assert first["status"]["attempt_id"] == "attempt_0001"
     assert second["status"]["attempt_id"] == "attempt_0002"
     run_root = config.runtime.runs_dir / upstream["run_id"]
-    captures = sorted(path.relative_to(run_root).as_posix()
-                      for path in (run_root / "data" / "build" / "probes").glob(
-                          "*/attempts/attempt_*/probe-001/execution-capture/command-001/record.json"))
-    assert any("/attempts/attempt_0001/" in path for path in captures)
-    assert any("/attempts/attempt_0002/" in path for path in captures)
+    assert calls == []
+    assert not (run_root / "data/build/probes").exists()
+    accepted = load_accepted_builds(run_root)
+    assert accepted["probe_receipts"] == []
+    assert {item["family"] for item in accepted["build_dispatches"]} == {"native", "rust"}
 
 
-def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_path: Path) -> None:
+def test_repeated_preparation_preserves_recipe_without_speculative_image_repair(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path, declared_releases=True)
     fingerprint = source_fingerprint(target)
     model = RepairModel((["libone-dev"], ["libtwo-dev"]))
@@ -1160,42 +1112,26 @@ def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_pa
         if ordinal == 0:
             first = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
 
-    native_receipt = next(value for value in first["probe_receipts"] if value["family"] == "native")
     native_dispatch = next(value for value in first["build_dispatches"] if value["family"] == "native")
-    assert native_receipt["repair_attempt_count"] == 2
-    assert [value["terminal_status"] for value in native_receipt["attempts"]] == [
-        "FAILED", "FAILED", "SUCCEEDED"]
-    for attempt in native_receipt["attempts"][1:]:
-        assert attempt["attempt_identity"] and attempt["command_identity"]
-        assert all(stream["sha256"] and "truncated" in stream
-                   for stream in attempt["streams"].values())
-    assert native_dispatch["recipe"]["system_packages"] == ["libtwo-dev"]
-    assert native_dispatch["recipe_provenance"] == "inference-image-repair"
-    definition = resolver.root / native_dispatch["image"]["dockerfile_path"]
-    assert definition.is_file() and "libtwo-dev" in definition.read_text(encoding="utf-8")
-    assert model.calls == 2
+    assert first["probe_receipts"] == []
+    assert native_dispatch["recipe"]["system_packages"] == []
+    assert calls == [] and model.calls == 0
 
     events = [json.loads(line) for line in (
         config.runtime.runs_dir / run_ids[0] / "data" / "logs" / "pipeline.jsonl"
     ).read_text(encoding="utf-8").splitlines()]
     repair_events = [item for item in events if item["event_type"] == "MODEL_CALL_STARTED"
                      and item["details"].get("inference_task") == "build_image_repair"]
-    assert [(item["details"]["family"], item["details"]["root"],
-             item["details"]["build_system"], item["details"]["repair_number"])
-            for item in repair_events] == [
-                ("native", "native", "cmake", 1),
-                ("native", "native", "cmake", 2),
-            ]
+    assert repair_events == []
 
     second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
-    reused = next(value for value in second["build_dispatches"] if value["family"] == "native")
-    assert reused["recipe"]["system_packages"] == ["libtwo-dev"]
-    assert reused["recipe_provenance"] == "reused-image-repair"
-    assert reused["probe_disposition"] == "REUSED"
-    assert model.calls == 2
+    prepared = next(value for value in second["build_dispatches"] if value["family"] == "native")
+    assert prepared["recipe"] == native_dispatch["recipe"]
+    assert prepared["recipe_identity"] == native_dispatch["recipe_identity"]
+    assert second["probe_receipts"] == []
 
 
-def test_typed_environment_repair_is_offered_applied_and_recorded(tmp_path: Path) -> None:
+def test_environment_repair_is_not_requested_without_an_observed_production_failure(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(
@@ -1223,24 +1159,15 @@ def test_typed_environment_repair_is_offered_applied_and_recorded(tmp_path: Path
         image_resolver_factory=lambda unit: resolver, infer=model)]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
-    assert len(requests) == 1
-    options = requests[0].summary["repair_options"]
-    assert "CARGO_NET_GIT_FETCH_WITH_CLI" in options["environment_names"]
-    assert options["restorable_manifests"] == ["rust/Cargo.toml"]
-    assert options["package_managers"] == {}
+    assert requests == []
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    rust = next(value for value in accepted["probe_receipts"] if value["family"] == "rust")
-    assert [value["terminal_status"] for value in rust["attempts"]] == ["FAILED", "SUCCEEDED"]
-    assert rust["attempts"][1]["image_repairs"] == {
-        "environment": {"CARGO_NET_GIT_FETCH_WITH_CLI": "true"}, "package_manager": None,
-        "dependency_restores": [{"manager": "cargo", "manifest": "rust/Cargo.toml"}]}
     dispatch = next(value for value in accepted["build_dispatches"] if value["family"] == "rust")
-    assert dispatch["recipe"]["environment"] == {"CARGO_NET_GIT_FETCH_WITH_CLI": "true"}
-    assert dispatch["recipe"]["image_repairs"] == rust["attempts"][1]["image_repairs"]
-    assert dispatch["recipe_provenance"] == "inference-image-repair"
+    assert dispatch["recipe"]["environment"] == {}
+    assert "image_repairs" not in dispatch["recipe"]
+    assert accepted["probe_receipts"] == []
 
 
-def test_build_failure_exhausts_three_image_repair_attempts(tmp_path: Path) -> None:
+def test_preparation_does_not_exhaust_image_attempts_before_production(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(
@@ -1252,17 +1179,14 @@ def test_build_failure_exhausts_three_image_repair_attempts(tmp_path: Path) -> N
         executor_factory=lambda unit, profile: RepairingExecutor([], profile, success_package=None),
         image_resolver_factory=lambda unit: resolver, infer=model.complete)]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert outcome["status"] == "SUCCEEDED"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    native = next(value for value in accepted["probe_receipts"] if value["family"] == "native")
-    assert native["terminal_status"] == "FAILED"
-    assert native["repair_attempt_count"] == 3
-    assert len(native["attempts"]) == 4  # Default image plus three inferred custom images.
-    assert model.calls == 3
-    assert native["gaps"][-1] == "build remained unavailable after 3 image repair attempts"
+    assert accepted["probe_receipts"] == []
+    assert model.calls == 0
+    assert len(accepted["build_dispatches"]) == 2
 
 
-def test_rejected_repair_proposal_keeps_probe_failure_for_the_next_repair(tmp_path: Path) -> None:
+def test_preparation_never_manufactures_failure_evidence_to_request_repairs(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(
@@ -1280,10 +1204,7 @@ def test_rejected_repair_proposal_keeps_probe_failure_for_the_next_repair(tmp_pa
         image_resolver_factory=lambda unit: RepairImageResolver(tmp_path / "image-metadata"),
         infer=model)]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
-    native = [request.summary["failure"] for request in requests
-              if request.summary["build_unit"]["family"] == "native"]
-    assert len(native) == 2
-    assert "fixture.h: missing" in native[0]["stderr_tail"]
-    assert "fixture.h: missing" in native[1]["stderr_tail"]
-    assert native[1]["repair_error"] == {
-        "error_class": "ValueError", "message": "repair proposal repeated the current repair set"}
+    assert requests == []
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    assert accepted["probe_receipts"] == []
+    assert len(accepted["build_dispatches"]) == 2

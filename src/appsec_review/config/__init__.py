@@ -1,5 +1,6 @@
 """Typed application configuration."""
 
+from .build_workspaces import BuildWorkspacePolicy, parse_build_workspaces
 from .compiler_target import CompilerTarget, COMPILER_TARGET_TAG
 from .binary_decompilation import BinaryDecompilationSettings, BinaryRequest, parse_binary_decompilation
 
@@ -31,6 +32,7 @@ from .loader import (
 )
 
 __all__ = [
+    "BuildWorkspacePolicy", "parse_build_workspaces",
     "CompilerTarget", "COMPILER_TARGET_TAG",
     "BinaryDecompilationSettings", "BinaryRequest", "parse_binary_decompilation",
     "SystemRequest", "TargetAcquisitionSettings", "TargetRequest", "parse_target_acquisition",

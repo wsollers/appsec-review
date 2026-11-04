@@ -193,6 +193,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                                          for decision in value.get("resume_decisions", [])],
                 }
                 tags = dict(context.dagster_run.tags)
+                iteration_request = tags.get("appsec/iteration_request")
+                if selected.job_id == "job_build_iteration" and not iteration_request:
+                    raise ValueError("internal build iteration requires an immutable request tag")
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
                 upstream_handoffs = dict(upstream.get("handoffs", {}))
                 tagged = launch_upstream_handoffs(config.runtime.runs_dir, tags,
@@ -204,7 +207,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                 claim = launch_begin(
                     runner_factory(config), selected, inputs, run_id=run_id, trigger=_trigger_for_run(tags),
                     orchestration={"system": "dagster", "run_id": context.run_id,
-                                   "node": context.op.name})
+                                   "node": context.op.name,
+                                   **({"iteration_request": iteration_request} if iteration_request else {})})
                 created_at = getattr(context.dagster_run, "create_timestamp", None)
                 if isinstance(created_at, (int, float)):
                     queue_delay_ms = max(0, int((datetime.now(timezone.utc).timestamp() - created_at) * 1000))
@@ -308,6 +312,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
         if len(run_ids) != 1 or len(triggers) != 1:
             raise ValueError("terminal branches belong to different application runs or triggers")
         run_id, trigger = run_ids.pop(), triggers.pop()
+        if all(job.job_id == "job_build_iteration" for job in jobs):
+            return dict(values[0])
         if any(value["completion_status"] not in {"SUCCEEDED", "COMPLETED_WITH_GAPS"} for value in values):
             raise ValueError("terminal branch has not completed successfully")
         completion = ("COMPLETED_WITH_GAPS" if any(
@@ -330,6 +336,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
         ordered_decisions = [decisions[job.job_id] for job in jobs if job.job_id in decisions]
         started = min(datetime.fromisoformat(value["graph_started_at"]) for value in values)
         run_root = config.runtime.runs_dir / run_id
+        if len(jobs) > 1:
+            from appsec_review.jobs.build_iterations import finish_build_workspaces
+            finish_build_workspaces(run_root, config.build_workspaces)
         event = "GRAPH_COMPLETED_WITH_GAPS" if completion == "COMPLETED_WITH_GAPS" else "GRAPH_SUCCEEDED"
         log = PipelineLog(run_root)
         log.write(event, run_id=run_id, trigger=trigger, orchestrator="dagster",
@@ -395,7 +404,10 @@ def build_definitions(
     sensors = []
     for job_id in sorted(registered):
         job_config = config.job(job_id)
-        if job_id == "job_tree_sitter_ast":
+        if job_id == "job_build_iteration":
+            from appsec_review.jobs.job_build_iteration.job import registered_definition
+            dagster_job = registered_definition(config, runner_factory)
+        elif job_id == "job_tree_sitter_ast":
             from appsec_review.jobs.job_tree_sitter_ast.dagster import build_dagster_job
             dagster_job = build_dagster_job(config, runner_factory)
         else:

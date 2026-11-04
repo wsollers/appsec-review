@@ -64,6 +64,34 @@ def test_roots_classify_workspace_capture_image_ephemeral_and_virtual(tmp_path: 
     assert roots.classify("/workspacex/a")[0] == "image"
 
 
+def test_install_files_are_hashed_mutable_evidence_not_image_content(tmp_path: Path) -> None:
+    workspace, install = tmp_path / "workspace", tmp_path / "install"
+    workspace.mkdir()
+    (install / "include").mkdir(parents=True)
+    (install / "include" / "a.h").write_bytes(b"header")
+    roots = CaptureRoots("/workspace", workspace, "/capture", IMAGE, "/workspace",
+                         install_host=install)
+    output = tmp_path / "inventory.jsonl"
+    build_file_inventory([_event(1, "file_open", path="/install/include/a.h", access="read", result=3)],
+                         roots, output, snapshot=None, count_limit=10)
+    row, = _rows(output)
+    assert row["root"] == "install"
+    assert row["path"] == "include/a.h"
+    assert row["status"] == "hashed"
+    assert row["sha256"] == hashlib.sha256(b"header").hexdigest()
+    assert "image_id" not in row
+
+
+def test_unmapped_install_is_a_gap_not_immutable_image_evidence(tmp_path: Path) -> None:
+    output = tmp_path / "inventory.jsonl"
+    summary = build_file_inventory(
+        [_event(1, "file_open", path="/install/a.h", access="read", result=3)],
+        _roots(tmp_path), output, snapshot=None, count_limit=10)
+    row, = _rows(output)
+    assert row["status"] == "unmapped" and "image_id" not in row
+    assert summary["gaps"] == ["mutable capture root has no host mapping: install/a.h"]
+
+
 def test_inventory_deduplicates_reuses_snapshot_hashes_and_hashes_only_the_rest(tmp_path: Path) -> None:
     workspace = tmp_path / "ws"
     (workspace / "unit").mkdir(parents=True)

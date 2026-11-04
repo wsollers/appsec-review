@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -89,6 +89,7 @@ class BuildCommandResult:
     capture_record: Path | None = None
     stdout_file: Path | None = None
     stderr_file: Path | None = None
+    cleanup_complete: bool = False
 
 
 Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
@@ -132,6 +133,25 @@ def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, b
 
 def _container_name() -> str:
     return f"appsec-review-build-{uuid.uuid4().hex}"
+
+
+def reconcile_build_leases(directory: Path, *, workspace: Path, install: Path,
+                           runner: Runner = _run) -> None:
+    """Close only recorded attempt containers before a writer restores the accepted generation."""
+    for path in sorted(directory.glob("*.json")):
+        lease = json.loads(path.read_bytes())
+        name = lease.get("container", "")
+        if (lease.get("schema") != "appsec-review/build-worker-lease/1"
+                or not re.fullmatch(r"appsec-review-build-[0-9a-f]{32}", name)
+                or path.stem != name or lease.get("workspace") != str(workspace.resolve())
+                or lease.get("install") != str(install.resolve())):
+            raise ValueError(f"invalid build worker lease: {path}")
+        code, _stdout, stderr, timed_out = runner(("docker", "rm", "--force", name), 60)
+        absent = code == 1 and any(value in stderr.decode("utf-8", "replace").lower()
+                                  for value in ("no such container", "no such object"))
+        if timed_out or not (code == 0 or absent):
+            raise RuntimeError(f"registered build worker cleanup is unconfirmed: {name}")
+        atomic_json(path, {**lease, "container_closed": True})
 
 
 def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
@@ -211,17 +231,60 @@ class BuildContainerExecutor:
 
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
                  runner: Runner | None = None, network: str = "bridge",
-                 image_verifier: ImageSignatureVerifier | None = None) -> None:
+                 image_verifier: ImageSignatureVerifier | None = None,
+                 lease_directory: Path | None = None, network_offline: bool = False) -> None:
         if network not in {"bridge", "none"}:
             raise ValueError("build container network must be bridge or none")
+        if type(network_offline) is not bool or network_offline and network != "none":
+            raise ValueError("explicit offline execution requires network none")
+        if network_offline and native_execution_requested():
+            raise RuntimeError("native broker offline no-pull capability is unsupported")
         self.profile = profile
         self.timeout_seconds = timeout_seconds
         self.output_bytes = output_bytes
         self.runner = runner or _run
         # Dependency downloads need egress; a job that only compiles already-fetched source asks for none.
         self.network = network
+        self.network_offline = network_offline
         # None defers to the process-wide default, resolved at first use rather than construction.
         self._image_verifier = image_verifier
+        self.lease_directory = lease_directory
+        self._cleanup_failed = False
+
+    def _register_lease(self, command: Sequence[str], root: Path, install: Path | None) -> None:
+        if self.lease_directory is None:
+            return
+        name = command[command.index("--name") + 1]
+        atomic_json(self.lease_directory / f"{name}.json", {
+            "schema": "appsec-review/build-worker-lease/1", "container": name,
+            "workspace": str(root), "install": str(install.resolve()) if install else None,
+            "container_closed": False, "mounts_closed": False,
+        })
+
+    @contextmanager
+    def _mount_access(self, workspace: Path, install: Path | None):
+        if install is None:
+            self._active_mount_roots = None
+            yield
+            return
+        roots = (workspace.resolve(strict=True), install.resolve(strict=True))
+        self._active_mount_roots = roots
+        modes = {path: (path.lstat().st_ino, path.stat().st_mode & 0o7777)
+                 for root in roots for path in (root, *root.rglob("*")) if not path.is_symlink()}
+        try:
+            yield
+        finally:
+            for root in roots:
+                self._restrict_workspace(root)
+            for path, (inode, mode) in modes.items():
+                if path.exists() and not path.is_symlink() and path.lstat().st_ino == inode:
+                    path.chmod(mode)
+            if self.lease_directory is not None and self.lease_directory.exists():
+                for path in self.lease_directory.glob("*.json"):
+                    lease = json.loads(path.read_bytes())
+                    if lease["container_closed"]:
+                        atomic_json(path, {**lease, "mounts_closed": True})
+            self._active_mount_roots = None
 
     def _verifier(self) -> ImageSignatureVerifier:
         return self._image_verifier if self._image_verifier is not None else default_image_verifier()
@@ -263,6 +326,19 @@ class BuildContainerExecutor:
         if timed_out and "--name" in command:
             self.runner(("docker", "rm", "--force", command[command.index("--name") + 1]), 60)
 
+    def _confirm_cleanup(self, command: Sequence[str]) -> None:
+        name = command[command.index("--name") + 1]
+        code, _stdout, stderr, timed_out = self.runner(("docker", "rm", "--force", name), 60)
+        absent = code == 1 and any(
+            text in stderr.decode("utf-8", "replace").lower()
+            for text in ("no such container", "no such object"))
+        if timed_out or not (code == 0 or absent):
+            self._cleanup_failed = True
+            raise RuntimeError(f"build container cleanup is unconfirmed: {name}")
+        if self.lease_directory is not None:
+            path = self.lease_directory / f"{name}.json"
+            atomic_json(path, {**json.loads(path.read_bytes()), "container_closed": True})
+
     def _make_workspace_writable(self, root: Path) -> None:
         """Give the build container's identity owner-only write access to its run-owned source copy."""
         grant_runtime_user(root, application_runtime_user(self.profile.user), recursive=True, writable_files=True)
@@ -281,17 +357,25 @@ class BuildContainerExecutor:
                 continue  # a container-owned entry the host cannot change; the audit names it
 
     def _prepare(self, *, workspace: Path, working_directory: str,
-                 environment: Mapping[str, str]) -> tuple[Path, list[str]]:
+                 environment: Mapping[str, str], install_dir: Path | None = None) -> tuple[Path, list[str]]:
         root = workspace.resolve(strict=True)
+        if workspace.is_symlink() or working_directory.startswith("/") or ".." in working_directory.split("/"):
+            raise ValueError("build working directory is not a contained workspace directory")
         relative_workdir = Path(*working_directory.split("/"))
+        current = root
+        for component in relative_workdir.parts:
+            current = current / component
+            if current.is_symlink():
+                raise ValueError("build working directory traverses a symlink")
         resolved_workdir = (root / relative_workdir).resolve(strict=True)
-        if root != resolved_workdir and root not in resolved_workdir.parents:
+        if not resolved_workdir.is_dir() or root != resolved_workdir and root not in resolved_workdir.parents:
             raise ValueError("build working directory escaped the run-owned workspace")
         self._make_workspace_writable(root)
         bind_source = self._bind_source(root)
         runtime_user = application_runtime_user(self.profile.user)
         command = [
-            "docker", "run", "--rm", "--name", _container_name(), "--network", self.network, "--read-only",
+            "docker", "run", "--rm", *(("--pull", "never") if self.network_offline else ()),
+            "--name", _container_name(), "--network", self.network, "--read-only",
             "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges",
             # Plain Docker builds run uncapped so they finish as fast as the host allows; the
@@ -305,6 +389,13 @@ class BuildContainerExecutor:
             "--env", "HOME=/tmp", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC",
         ]
+        if install_dir is not None:
+            install = install_dir.resolve(strict=True)
+            if (install_dir.is_symlink() or not install.is_dir()
+                    or install.is_relative_to(root) or root.is_relative_to(install)):
+                raise ValueError("install_dir must be a separate run-owned directory")
+            self._make_workspace_writable(install)
+            command.extend(("--mount", f"type=bind,src={self._bind_source(install)},dst=/install"))
         if self.profile.name == "android":
             command.extend((
                 "--env", "GRADLE_USER_HOME=/tmp/gradle",
@@ -317,7 +408,17 @@ class BuildContainerExecutor:
     @bounded_execution(cpu="2", memory="4g", action="build.execute")
     def execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
                 environment: Mapping[str, str], instrumentation_root: Path | None = None,
-                instrumentation_evidence_root: Path | None = None) -> BuildCommandResult:
+                instrumentation_evidence_root: Path | None = None,
+                install_dir: Path | None = None) -> BuildCommandResult:
+        with self._mount_access(workspace, install_dir):
+            return self._execute(
+                argv, workspace=workspace, working_directory=working_directory, environment=environment,
+                instrumentation_root=instrumentation_root,
+                instrumentation_evidence_root=instrumentation_evidence_root, install_dir=install_dir)
+
+    def _execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
+                 environment: Mapping[str, str], instrumentation_root: Path | None,
+                 instrumentation_evidence_root: Path | None, install_dir: Path | None) -> BuildCommandResult:
         started_at, started = datetime.now(timezone.utc).isoformat(), time.monotonic()
         if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
             raise ValueError("build command argv is invalid")
@@ -337,7 +438,8 @@ class BuildContainerExecutor:
         self._verify_profile_image()
         try:
             _root, command = self._prepare(
-                workspace=workspace, working_directory=working_directory, environment=environment)
+                workspace=workspace, working_directory=working_directory, environment=environment,
+                install_dir=install_dir)
             if instrumentation is not None and evidence is not None:
                 self._make_workspace_writable(evidence)
                 command.extend((
@@ -345,6 +447,7 @@ class BuildContainerExecutor:
                     "--mount", f"type=bind,src={self._bind_source(evidence)},dst=/appsec-jvm-evidence",
                 ))
             command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
+            self._register_lease(command, _root, install_dir)
             with self._container(command):
                 code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
                 if safety.active():
@@ -361,9 +464,13 @@ class BuildContainerExecutor:
                                          f"build command failed; evidence: {retained}", action="build.execute")
                 self._stop_on_timeout(command, timed_out)
         finally:
+            if install_dir is not None and "command" in locals():
+                self._confirm_cleanup(command)
             self._restrict_workspace(_root)
             if evidence is not None:
                 self._restrict_workspace(evidence)
+            if install_dir is not None:
+                self._restrict_workspace(install_dir)
         stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
         tail_bytes = min(32768, self.output_bytes)
         return BuildCommandResult(
@@ -372,6 +479,7 @@ class BuildContainerExecutor:
             stdout_truncated=stdout_truncated, stderr_truncated=stderr_truncated,
             stdout_tail=stdout[-tail_bytes:] if stdout_truncated else b"",
             stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
+            cleanup_complete=install_dir is not None and not self._cleanup_failed,
         )
 
     def _container(self, command: Sequence[str]):
@@ -384,7 +492,23 @@ class BuildContainerExecutor:
                          capture_directory: Path, capture_config: BuildCaptureConfig,
                          scope: CaptureScope,
                          snapshot_files: Mapping[str, Mapping[str, Any]] | None = None,
+                         install_dir: Path | None = None,
                          ) -> BuildCommandResult:
+        with self._mount_access(workspace, install_dir):
+            result = self._execute_captured(
+                argv, workspace=workspace, working_directory=working_directory, environment=environment,
+                capture_directory=capture_directory, capture_config=capture_config, scope=scope,
+                snapshot_files=snapshot_files, install_dir=install_dir)
+        if result.cleanup_complete:
+            path = capture_directory / "execution-outcome.json"
+            atomic_json(path, {**json.loads(path.read_bytes()), "cleanup": "SUCCEEDED"})
+        return result
+
+    def _execute_captured(self, argv: Sequence[str], *, workspace: Path,
+                          working_directory: str, environment: Mapping[str, str],
+                          capture_directory: Path, capture_config: BuildCaptureConfig,
+                          scope: CaptureScope, snapshot_files: Mapping[str, Mapping[str, Any]] | None,
+                          install_dir: Path | None) -> BuildCommandResult:
         """Run a build under a process-tree-local syscall catcher and emit its JSON record.
 
         ``snapshot_files`` maps workspace-relative paths to pre-build ``sha256``, ``size_bytes``
@@ -410,7 +534,7 @@ class BuildContainerExecutor:
         self._verify_profile_image()
         root, command = self._prepare(
             workspace=workspace, working_directory=working_directory,
-            environment=capture_environment)
+            environment=capture_environment, install_dir=install_dir)
         capture_root = capture_directory.resolve()
         recorder = BuildExecutionRecorder(
             capture_root, scope, capture_config,
@@ -453,6 +577,7 @@ class BuildContainerExecutor:
                         str(capture_config.tool_call_count_limit), logical_wrappers,
                         "1" if capture_config.capture_envp else "0", *argv))
         stdout_path, stderr_path = capture_root / "stdout", capture_root / "stderr"
+        self._register_lease(command, root, install_dir)
         try:
             with self._container(command):
                 if self.runner is _run:
@@ -475,8 +600,18 @@ class BuildContainerExecutor:
                     safety.failed_result(timed_out or code != 0,
                                          f"captured build failed; evidence: {capture_root}", action="build.capture")
         finally:
+            if install_dir is not None:
+                self._confirm_cleanup(command)
             self._restrict_workspace(root)
+            if install_dir is not None:
+                self._restrict_workspace(install_dir)
             capture_root.chmod(0o755)  # the build container's write window into the capture closed
+        if install_dir is not None:
+            atomic_json(capture_root / "execution-outcome.json", {
+                "exit_code": code, "timed_out": timed_out, "cleanup": "PENDING",
+                "started_at": started_at, "completed_at": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": max(0, int((time.monotonic() - started) * 1000)),
+            })
         self._take_tool_call_ownership(capture_root)
         trace_paths = tuple(capture_root.glob("trace*"))
         parse_errors = record_strace_files(trace_paths, recorder)
@@ -487,7 +622,8 @@ class BuildContainerExecutor:
         parse_errors = reference_raw_traces(parse_errors, raw_traces)
         recorder.flush()
         roots = CaptureRoots("/workspace", root, logical_capture, self.profile.image_id,
-                             posixpath.normpath(f"/workspace/{working_directory}"))
+                             posixpath.normpath(f"/workspace/{working_directory}"),
+                             install_host=install_dir)
         # Response files are copied before the secret scan so the scan covers their contents.
         response_files, response_gaps = snapshot_response_files(
             list(read_events(capture_root / "events.jsonl")), roots, capture_root,
@@ -545,6 +681,7 @@ class BuildContainerExecutor:
             stdout_tail=tail(stdout_path, tail_bytes) if stdout_truncated else b"",
             stderr_tail=tail(stderr_path, tail_bytes) if stderr_truncated else b"",
             capture_record=record, stdout_file=stdout_path, stderr_file=stderr_path,
+            cleanup_complete=install_dir is not None and not self._cleanup_failed,
         )
 
     @staticmethod
@@ -690,7 +827,8 @@ class BuildContainerExecutor:
             runtime_user = application_runtime_user(tool.user)
             grant_runtime_user(scan_root, runtime_user)
             command = [
-                "docker", "run", "--rm", "--name", _container_name(), "--network", "none", "--read-only",
+                "docker", "run", "--rm", *(("--pull", "never") if self.network_offline else ()),
+                "--name", _container_name(), "--network", "none", "--read-only",
                 "--user", runtime_user, "--cap-drop", "ALL", "--security-opt",
                 "no-new-privileges", "--cpus", tool.cpus, "--memory", tool.memory,
                 "--pids-limit", str(tool.pids_limit), "--tmpfs", "/tmp:rw,noexec,nosuid,size=1g",
@@ -701,12 +839,17 @@ class BuildContainerExecutor:
                 "--redact=100", "--report-format", "json", "--report-path",
                 "/scratch/gitleaks.json", "--exit-code", "1",
             ]
+            roots = getattr(self, "_active_mount_roots", None)
+            if roots is not None:
+                self._register_lease(command, *roots)
             try:
                 with reserve_execution(cpu=tool.cpus, memory=tool.memory, action="build.capture_secret_scan",
                                        timeout_seconds=tool.timeout_seconds), self._container(command):
                     code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
                     self._stop_on_timeout(command, timed_out)
             finally:
+                if roots is not None:
+                    self._confirm_cleanup(command)
                 scan_root.chmod(0o755)  # gitleaks wrote its report; close its write window
             scan_code, scan_timed_out = code, timed_out
             stdout_path.write_bytes(stdout[:tool.output_bytes])

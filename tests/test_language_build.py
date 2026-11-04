@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -254,7 +255,8 @@ class NativeExecutor:
             build.mkdir(parents=True, exist_ok=True)
             source = root / "main.cpp"
             obj = build / "main.o"
-            binary = build / "sample"
+            target = re.search(r"add_executable\(\s*([^\s)]+)", (root / "CMakeLists.txt").read_text())[1]
+            binary = build / target
             obj.write_bytes(b"object")
             binary.write_bytes(b"\x7fELFfixture")
             (build / "compile_commands.json").write_text(json.dumps([{
@@ -263,8 +265,8 @@ class NativeExecutor:
                               f"/workspace/{working_directory}/build/main.o"],
                 "output": f"/workspace/{working_directory}/build/main.o",
             }]), encoding="utf-8")
-            link = build / "CMakeFiles" / "sample.dir"
-            link.mkdir(parents=True)
+            link = build / "CMakeFiles" / f"{target}.dir"
+            link.mkdir(parents=True, exist_ok=True)
             (link / "link.txt").write_text(
                 f"clang++ {obj.as_posix()} -o {binary.as_posix()}\n", encoding="utf-8")
         return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
@@ -285,7 +287,9 @@ def native_language_executor(profile, calls: list[tuple[str, ...]], *, fail: boo
         if "--build" in command and result.exit_code == 0:
             source = f"/workspace/{working_directory}/main.cpp"
             obj = f"/workspace/{working_directory}/build/main.o"
-            binary = f"/workspace/{working_directory}/build/sample"
+            target = re.search(r"add_executable\(\s*([^\s)]+)",
+                               (workspace / working_directory / "CMakeLists.txt").read_text())[1]
+            binary = f"/workspace/{working_directory}/build/{target}"
             compiler = ("clang++", "-g", "-c", source, "-o", obj)
             if phantom_compiler:
                 simulation.tool_call("clang++", compiler[1:], executable="/usr/bin/clang++")
@@ -425,13 +429,22 @@ class AnalysisExecutor:
             False, False, relative(stdout), relative(stderr), relative(receipt))
 
 
-def _fixture(tmp_path: Path, *, declared_releases: bool = False):
+def _fixture(tmp_path: Path, *, declared_releases: bool = True):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
         text = text.replace("[review_policy.releases]", '[review_policy.releases]\n'
                             'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\n'
                             'validation = "fixture-validation"', 1)
+    text += """
+[jobs.job_project_build.settings.variants.native]
+configuration = "release"
+target_arch = "x86_64"
+execution_role = "target"
+linkage = "static"
+toolchain = "fixture-build"
+abi = "native-fixture/1"
+"""
     config_path.write_text(text, encoding="utf-8")
     target = tmp_path / "target"
     (target / "native").mkdir(parents=True)
@@ -476,7 +489,122 @@ def test_native_dispatch_executes_real_build_and_publishes_provenance(tmp_path: 
     assert '"argv":' not in json.dumps(receipt["tool_invocations"])
     protected = config.runtime.runs_dir / run_id / receipt["protected_compile_commands"]["path"]
     assert "clang++" in protected.read_text(encoding="utf-8")
-    assert len(calls) == 4  # probe and real build each execute the exact two-command recipe.
+    assert len(calls) == 2
+
+
+def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_promoted_recipe(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import uuid
+    from appsec_review.container_runtime import build_executor
+    from appsec_review.jobs.build_iterations import (
+        captured_replay, decode_replay_context, failure_context, read_reference, select_promotion,
+    )
+    from appsec_review.jobs.build_recipe_replay import RecipeCandidate, replay_recipe
+    from appsec_review.jobs.build_workspace import BuildWorkspace
+
+    config, target = _fixture(tmp_path)
+    sibling = target / "sibling"
+    sibling.mkdir()
+    (sibling / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.20)\nproject(sibling)\n"
+        "add_executable(sibling main.cpp)\n")
+    (sibling / "main.cpp").write_text("int main() { return 1; }\n")
+    run_id, fingerprint = _accepted_project(config, target, [])
+    run = config.runtime.runs_dir / run_id
+    dispatch = load_accepted_builds(run)["build_dispatches"][0]
+    profile = BuildProfile("native", dispatch["image"]["image_tag"],
+                           dispatch["image"]["image_id"], dispatch["image"]["user"])
+    calls = []
+    launched = []
+    failed = {"sibling"}
+    docker = native_language_executor(profile, calls, fail_workdirs=failed).runner
+
+    def boundary(argv, timeout):
+        assert tuple(argv[:2]) in {
+            ("docker", "image"), ("docker", "run"), ("docker", "inspect"), ("docker", "rm")}
+        launched.append(tuple(argv))
+        return docker(argv, timeout)
+
+    def files(argv, timeout, stdout, stderr):
+        code, out, err, expired = boundary(argv, timeout)
+        stdout.write_bytes(out)
+        stderr.write_bytes(err)
+        return code, expired
+
+    monkeypatch.setattr(build_executor, "_run", boundary)
+    monkeypatch.setattr(build_executor, "_run_to_files", files)
+    first = GraphRunner(config, [build_language()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert first["status"] == "COMPLETED_WITH_GAPS"
+    receipts = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
+    assert {root: item["terminal_status"] for root, item in receipts.items()} == {
+        "native": "SUCCEEDED", "sibling": "FAILED"}
+    requests = list((run / "artifacts/build/iterations/requests").glob("*.json"))
+    assert len(requests) == 2
+    immutable_requests = {path: path.read_bytes() for path in requests}
+    run_ids = {item["dagster_run_id"] for item in receipts.values()}
+    assert len(run_ids) == 2
+    assert all(str(uuid.UUID(value)) == value for value in run_ids)
+    attempts = sorted((run / "data/jobs/job_build_iteration/attempts").iterdir())
+    assert len(attempts) == 2
+    statuses = [json.loads((attempt / "status.json").read_bytes()) for attempt in attempts]
+    assert {status["orchestration"]["run_id"] for status in statuses} == run_ids
+    for attempt in attempts:
+        if (attempt / "result.json").is_file():
+            result = json.loads((attempt / "result.json").read_bytes())
+            assert result["outputs"]["execute.node"]["terminal_status"] == "SUCCEEDED"
+    # The failed worker is still a real registered invocation; its job records failure, not success.
+    assert sum(status["status"] == "FAILED" for status in statuses) == 1
+
+    workspace = BuildWorkspace(run)
+    native_bytes = (workspace.paths.target / "native/build/sample").read_bytes()
+    assert not (workspace.paths.target / "sibling/build/sibling").exists()
+    node_id = receipts["sibling"]["build_unit_id"]
+    graph = load_accepted_builds(run)["execution_graph"]
+    node = next(item for item in graph["nodes"] if item["build_unit_id"] == node_id)
+    products = [{"path": "target/sibling/build/sibling", **product} for product in node["products"]]
+    context_ref = failure_context(run, node_id, products)
+    context = decode_replay_context(read_reference(run, context_ref))
+    revised = {**context.accepted_recipe, "build_commands": [
+        [*context.accepted_recipe["build_commands"][0], "--verbose"]]}
+    candidate = RecipeCandidate(revised, (context.inputs["graph"],), "retry with verbose build")
+    failed.clear()
+    trial = replay_recipe(
+        workspace, context, candidate, execute=lambda invocation: captured_replay(config, context, invocation))
+    assert read_reference(run, trial)["status"] == "SUCCEEDED"
+    assert not (workspace.paths.target / "sibling/build/sibling").exists()
+    select_promotion(run, context.view(), trial)
+    resumed = GraphRunner(config, [build_language()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id, force_from="job_language_build")
+    assert resumed["status"] == "COMPLETED_WITH_GAPS"
+    final = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
+    assert all(item["terminal_status"] == "SUCCEEDED" for item in final.values())
+    assert final["native"]["checkpoint_reused"] is True
+    assert final["native"]["dagster_run_id"] == receipts["native"]["dagster_run_id"]
+    assert final["sibling"]["dagster_run_id"] not in run_ids
+    assert "--verbose" in revised["build_commands"][0]
+    assert [item for item in calls if "--build" in item] == [
+        ("cmake", "--build", "build", "--parallel", "2"),
+        ("cmake", "--build", "build", "--parallel", "2"),
+        ("cmake", "--build", "build", "--parallel", "2", "--verbose"),
+        ("cmake", "--build", "build", "--parallel", "2", "--verbose")]
+    assert (workspace.paths.target / "native/build/sample").read_bytes() == native_bytes
+    assert (workspace.paths.target / "sibling/build/sibling").is_file()
+    assert all(path.read_bytes() == content for path, content in immutable_requests.items())
+    assert not tuple(target.rglob("build"))
+    assert launched
+    from appsec_review import cli
+    ledger = json.loads((run / "data/build/iterations/ledger.json").read_bytes())
+    completed = read_reference(run, ledger["nodes"][node_id]["completion"])
+    reference = completed["request"]
+    arguments = ["--config", str(tmp_path / "appsec-review.toml"), "run", "job_build_iteration",
+                 "--run-id", run_id, "--iteration-request"]
+    before_delivery = list(launched)
+    with pytest.raises(RuntimeError, match="build iteration invocation failed"):
+        cli.main([*arguments, json.dumps(reference)])
+    with pytest.raises(ValueError):
+        cli.main([*arguments, json.dumps({**reference, "sha256": "0" * 64})])
+    assert launched == before_delivery
 
 
 def test_native_compile_database_and_wrapper_without_exec_are_not_provenance(tmp_path: Path) -> None:
@@ -545,7 +673,6 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
     run_root = config.runtime.runs_dir / run_id
     accepted = dict(load_accepted_builds(run_root))
     native_dispatch = deepcopy(accepted["build_dispatches"][0])
-    native_probe = deepcopy(accepted["probe_receipts"][0])
 
     bad_id = "build-unit-" + "f" * 20
     bad_dispatch = deepcopy(native_dispatch)
@@ -556,13 +683,13 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
                            bad_dispatch["image"]["base_image_id"], bad_dispatch["image"]["user"])
     bad_identity = project_recipe_identity(
         {**bad_dispatch["recipe"], "build_system": bad_dispatch["build_system"]},
-        profile, dependencies)
+        profile, dependencies, releases=config.review_policy.releases)
     bad_dispatch["recipe_identity"] = bad_identity
-    bad_probe = {**native_probe, "build_unit_id": bad_id, "family": "java",
-                 "recipe_identity": bad_identity}
-    bad_dispatch["probe_identity"] = hashlib.sha256(canonical_json(bad_probe)).hexdigest()
+    preparation = {**deepcopy(accepted["images"]["native"]["entries"][0]),
+                   "action": deepcopy(bad_dispatch), "image": bad_dispatch["image"]}
+    bad_dispatch["preparation_identity"] = hashlib.sha256(canonical_json(preparation)).hexdigest()
     accepted["build_dispatches"] = [native_dispatch, bad_dispatch]
-    accepted["probe_receipts"] = [native_probe, bad_probe]
+    accepted["images"]["java"] = {"entries": [preparation]}
     monkeypatch.setattr(language_build_job, "load_accepted_builds", lambda _run_root: accepted)
     unit = SimpleNamespace(job=SimpleNamespace(
         run_root=run_root, target_root=target, source_fingerprint=fingerprint,
@@ -592,6 +719,10 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
+    if not declared_releases:
+        assert {item["terminal_status"] for item in receipts} == {"BLOCKED"}
+        assert all(any("missing release evidence" in gap for gap in item["gaps"]) for item in receipts)
+        return
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "native": "SUCCEEDED", "sibling": "FAILED"}
     from appsec_review.runtime.handoff import verify_handoff_integrity
@@ -611,7 +742,7 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
     assert by_root["native"]["checkpoint_reused"] is declared_releases
     assert by_root["sibling"]["checkpoint_reused"] is False
     assert (by_root["native"]["workspace"] == first_by_root["native"]["workspace"]) is declared_releases
-    assert by_root["sibling"]["workspace"] != first_by_root["sibling"]["workspace"]
+    assert by_root["sibling"]["workspace"] == first_by_root["native"]["workspace"]
     expected = [("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                       "-DCMAKE_BUILD_TYPE=RelWithDebInfo"),
                 ("cmake", "--build", "build", "--parallel", "2")]
@@ -633,7 +764,7 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
         executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     # Joern runs in the independent job_cpg_analysis, so the compiled analysis itself is complete.
-    assert outcome["status"] == "SUCCEEDED"
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     result_path = Path(outcome["jobs"]["job_cpp_compiled_analysis"]["attempt_root"]) / "result.json"
     outputs = json.loads(result_path.read_text(encoding="utf-8"))["outputs"]
     assert outputs["catalog.projects"]["project_count"] == 1
@@ -662,7 +793,10 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
 
 def _dotnet_fixture(tmp_path: Path, *, framework: str = "net8.0"):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
+        "[review_policy.releases]", '[review_policy.releases]\n'
+        'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\nvalidation = "fixture-validation"', 1)
+    config_path.write_text(text, encoding="utf-8")
     target = tmp_path / "target"
     project = target / "dotnet"
     project.mkdir(parents=True)
@@ -681,7 +815,8 @@ def _accepted_dotnet(config, target, calls):
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
         build_plan(infer=DotnetRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls),
-                             image_resolver_factory=lambda unit: ImageResolver(target))
+                             image_resolver_factory=lambda unit: ImageResolver(
+                                 target, releases=unit.job.review_policy.releases))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
     return upstream["run_id"], fingerprint
@@ -695,7 +830,7 @@ def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path
     outcome = GraphRunner(config, [build_language(
         executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "SUCCEEDED"
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     assert receipt["family"] == "dotnet" and receipt["terminal_status"] == "SUCCEEDED"
     assert {item["kind"] for item in receipt["artifacts"]} >= {
@@ -728,7 +863,7 @@ def test_dotnet_rsp_containment(tmp_path: Path) -> None:
     outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
         dotnet_language_executor(profile, calls, response_file=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "SUCCEEDED"
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     run_root = config.runtime.runs_dir / run_id
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     provenance = receipt["capture_provenance"]
@@ -803,7 +938,7 @@ def test_dotnet_envp_secret_is_redacted_scanned_and_never_retained(tmp_path: Pat
     outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
         SecretEnvironment(dotnet_language_executor(profile, [])))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "SUCCEEDED"
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     run_root = config.runtime.runs_dir / run_id
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["capture_provenance"]["redacted_exec_events"] == 0
@@ -813,7 +948,7 @@ def test_dotnet_envp_secret_is_redacted_scanned_and_never_retained(tmp_path: Pat
                for command in receipt["commands"])
     assert not any(SYNTHETIC_SECRET.encode() in path.read_bytes()
                    for path in run_root.rglob("*") if path.is_file())
-    assert tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+    assert (run_root / "data/build/iterations/ledger.json").is_file()
 
 
 def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_path: Path) -> None:
@@ -822,7 +957,8 @@ def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
         target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor([])),
-                             image_resolver_factory=lambda unit: ImageResolver(target))
+                             image_resolver_factory=lambda unit: ImageResolver(
+                                 target, releases=unit.job.review_policy.releases))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
     outcome = GraphRunner(config, [build_language(
@@ -831,7 +967,7 @@ def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_
     receipt = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"][0]
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     assert receipt["family"] == "dotnet" and receipt["terminal_status"] == "BLOCKED"
-    assert "validated inference build recipe is unavailable" in receipt["gaps"]
+    assert any("validated inference build recipe is unavailable" in gap for gap in receipt["gaps"])
 
 
 def test_dotnet_recipe_and_capture_helpers_allow_restore_but_forbid_run(tmp_path: Path) -> None:
@@ -888,9 +1024,9 @@ def test_failed_native_project_build_is_a_named_gap_in_every_native_lane_job(tmp
     config, target = _fixture(tmp_path)
     run_id, fingerprint = _blocked_project(config, target)
     run_root = config.runtime.runs_dir / run_id
-    probe = load_accepted_builds(run_root)["probe_receipts"][0]
-    assert probe["family"] == "native" and probe["terminal_status"] == "BLOCKED"
-    unit_id = probe["build_unit_id"]
+    preparation = load_accepted_builds(run_root)["images"]["native"]["entries"][0]
+    assert preparation["action"]["family"] == "native" and preparation["terminal_status"] == "FAILED"
+    unit_id = preparation["action"]["build_unit_id"]
     outcome = GraphRunner(config, [build_language(), build_cpp(), build_clang(), build_symbols()]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     receipt = load_accepted_language_build(run_root)["receipts"][0]
@@ -901,8 +1037,9 @@ def test_failed_native_project_build_is_a_named_gap_in_every_native_lane_job(tmp
                    "job_cpp_symbol_index"):
         status = outcome["jobs"][job_id]["status"]["status"]
         assert status == "COMPLETED_WITH_GAPS", (job_id, status)
-        handoff = outcome["jobs"][job_id]["handoff"]
-        gaps = [gap for output in handoff["outputs"].values() for gap in output.get("gaps", ())]
+        outputs = json.loads(
+            (Path(outcome["jobs"][job_id]["attempt_root"]) / "result.json").read_bytes())["outputs"]
+        gaps = [gap for output in outputs.values() for gap in output.get("gaps", ())]
         assert any(unit_id in gap and "job_project_build" in gap and "base build image identity changed" in gap
                    for gap in gaps), (job_id, gaps)
 

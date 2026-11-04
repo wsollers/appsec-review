@@ -5,6 +5,9 @@
 [exclusions]
 patterns = [".gitignore"]
 
+[build_workspaces]
+build_workspace_retention_runs = 3
+
 # Named build-output exclusions and discovery bounds for the build cataloguers
 # (docs/architecture/native-build-output-discovery.md). Patterns use [exclusions] semantics on the
 # workspace-relative path; each excluded path is recorded by name, never reported as a gap.
@@ -1038,6 +1041,7 @@ image_build_timeout_seconds = 1800
 # In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000
+# Deprecated compatibility spelling: only false is accepted; production never runs extra probes.
 force_buildability_probe = false
 repair_attempts = 3
 
@@ -1159,6 +1163,14 @@ workers = 8
 workers = 1
 [jobs.job_project_build.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_build_iteration]
+name = "build_iteration"
+workers = 1
+[jobs.job_build_iteration.steps.execute]
+workers = 1
+[jobs.job_build_iteration.steps.execute.tasks.node]
+workers = 1
+
 [jobs.job_language_build]
 name = "language_build"
 workers = 8
@@ -1276,6 +1288,11 @@ indicators = ["asc", "assemblyscript", ".wasm"]
 families = ["wasm"]
 tools = ["wasm-tools"]
 indicators = [".wat", ".wasm"]
+
+[jobs.job_language_build.steps.iterations]
+workers = 1
+[jobs.job_language_build.steps.iterations.tasks.dispatch]
+workers = 1
 
 [jobs.job_language_build.steps.load]
 workers = 1

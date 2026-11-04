@@ -45,6 +45,8 @@ class CaptureRoots:
     initial_directory: str
     ephemeral: tuple[str, ...] = ("/tmp", "/var/tmp", "/run", "/dev/shm")
     virtual: tuple[str, ...] = ("/proc", "/sys", "/dev")
+    install_host: Path | None = None
+    install_logical: str = "/install"
 
     def classify(self, path: str) -> tuple[str, str]:
         """Return (root, key): workspace keys are relative; other keys are absolute."""
@@ -56,11 +58,26 @@ class CaptureRoots:
         if under(self.workspace_logical):
             relative = path[len(self.workspace_logical):].lstrip("/")
             return ("workspace", relative) if relative else ("workspace-root", path)
+        if under(self.install_logical):
+            relative = path[len(self.install_logical):].lstrip("/")
+            return ("install", relative) if relative else ("install-root", path)
         if any(under(root) for root in self.ephemeral):
             return "ephemeral", path
         if any(under(root) for root in self.virtual):
             return "virtual", path
         return "image", path
+
+    def host_path(self, root: str, key: str) -> Path | None:
+        base = self.workspace_host if root == "workspace" else self.install_host if root == "install" else None
+        if base is None:
+            return None
+        relative = PurePosixPath(key)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("captured file escaped its mutable root")
+        path = base / Path(*relative.parts)
+        if not path.resolve().is_relative_to(base.resolve()):
+            raise ValueError("captured file escaped its mutable root")
+        return path
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,11 +213,11 @@ def snapshot_response_files(events: list[Mapping[str, Any]], roots: CaptureRoots
                 seen[path]["references"].append(reference)
                 continue
             root, key = roots.classify(path)
-            if root != "workspace":
+            if root not in {"workspace", "install"}:
                 gaps.append(f"response file outside the workspace was not retained: {path}")
                 continue
-            host = roots.workspace_host / Path(*PurePosixPath(key).parts)
-            if not host.is_file() or host.is_symlink():
+            host = roots.host_path(root, key)
+            if host is None or not host.is_file() or host.is_symlink():
                 gaps.append(f"response file was removed before it could be retained: {key}")
                 continue
             if host.stat().st_size > bytes_limit:
@@ -216,6 +233,8 @@ def snapshot_response_files(events: list[Mapping[str, Any]], roots: CaptureRoots
             entry = {"schema": RESPONSE_FILE_SCHEMA, "path": key,
                      "uri": member.relative_to(capture_root).as_posix(),
                      "references": [reference]}
+            if root == "install":
+                entry["root"] = root
             seen[path] = entry
             snapshots.append(entry)
     return snapshots, gaps
@@ -245,7 +264,7 @@ def build_file_inventory(events: Iterable[Mapping[str, Any]], roots: CaptureRoot
     resolve_seconds = time.monotonic() - started
     entries: dict[tuple[str, str], dict[str, Any]] = {}
     failed = 0
-    other: dict[str, int] = {"capture": 0, "virtual": 0, "workspace-root": 0}
+    other: dict[str, int] = {"capture": 0, "virtual": 0, "workspace-root": 0, "install-root": 0}
     for item in resolved:
         if not item.succeeded:
             failed += 1
@@ -299,9 +318,12 @@ def build_file_inventory(events: Iterable[Mapping[str, Any]], roots: CaptureRoot
                             and entry["last_mutation_ns"] > entry["first_read_ns"])
                 record["modified_after_read"] = modified
                 counts["modified_after_read"] += int(modified)
-                host = roots.workspace_host / Path(*PurePosixPath(key).parts)
-                known = (snapshot or {}).get(key)
-                if host.is_symlink():
+                host = roots.host_path(root, key)
+                known = (snapshot or {}).get(key) if root == "workspace" else None
+                if host is None:
+                    record["status"] = "unmapped"
+                    gaps.append(f"mutable capture root has no host mapping: {root}/{key}")
+                elif host.is_symlink():
                     record["status"] = "symlink"
                     counts["symlinks"] += 1
                 elif host.is_dir():

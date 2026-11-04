@@ -8,6 +8,7 @@ import threading
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
@@ -23,7 +24,11 @@ ROOT = Path(__file__).parents[1]
 
 def _fixture(tmp_path: Path):
     config = tmp_path / "appsec-review.toml"
-    config.write_bytes((ROOT / "appsec-review.toml").read_bytes())
+    source = (ROOT / "appsec-review.toml").read_text()
+    config.write_text(source.replace(
+        "[review_policy.releases]\n",
+        '[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n'
+        'build_toolchain = "fixture/1"\n'))
     target = tmp_path / "target"
     (target / "src").mkdir(parents=True)
     (target / "src" / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
@@ -57,7 +62,7 @@ def test_every_wave1_job_is_reused_without_handler_execution(tmp_path: Path) -> 
     assert calls == {"job_review_intake": 1, "job_target_catalog": 1}
 
 
-@pytest.mark.parametrize("field", ["implementation_identity", "schema_identity", "validation_identity"])
+@pytest.mark.parametrize("field", ["component_release", "schema_identity", "validator_release"])
 def test_identity_change_invalidates_exact_downstream_closure(tmp_path: Path, field: str) -> None:
     config, target = _fixture(tmp_path)
     jobs = [build_intake(), build_catalog()]
@@ -65,15 +70,25 @@ def test_identity_change_invalidates_exact_downstream_closure(tmp_path: Path, fi
     fingerprint = source_fingerprint(target)
     first = graph.run(target_root=target, source_fingerprint=fingerprint)
 
-    changed_catalog = replace(jobs[1], **{field: f"changed-{field}"})
-    downstream_plan = GraphRunner(config, [jobs[0], changed_catalog]).plan(first["run_id"], fingerprint)
-    assert [item.action for item in downstream_plan] == ["REUSE", "RUN"]
-    reason_label = {"implementation_identity": "implementation", "schema_identity": "schema",
-                    "validation_identity": "validator"}[field]
-    assert any(reason_label in reason for reason in downstream_plan[1].reasons)
-
-    changed_intake = replace(jobs[0], **{field: f"changed-upstream-{field}"})
-    upstream_plan = GraphRunner(config, [changed_intake, jobs[1]]).plan(first["run_id"], fingerprint)
+    if field == "schema_identity":
+        downstream = GraphRunner(config, [jobs[0], replace(jobs[1], schema_identity="changed-schema")])
+        upstream = GraphRunner(config, [replace(jobs[0], schema_identity="changed-schema"), jobs[1]])
+    else:
+        def declared(key):
+            releases = ComponentReleases({**config.review_policy.releases.view(), key: "fixture/2"})
+            return replace(config, review_policy=replace(config.review_policy, releases=releases))
+        downstream = GraphRunner(declared(
+            "validation" if field == "validator_release" else jobs[1].job_id), jobs)
+        upstream = GraphRunner(declared(
+            "validation" if field == "validator_release" else jobs[0].job_id), jobs)
+    downstream_plan = downstream.plan(first["run_id"], fingerprint)
+    expected = ["RUN", "INVALIDATE"] if field == "validator_release" else ["REUSE", "RUN"]
+    assert [item.action for item in downstream_plan] == expected
+    reason_label = {"component_release": "implementation", "schema_identity": "schema",
+                    "validator_release": "validator"}[field]
+    changed_index = 0 if field == "validator_release" else 1
+    assert any(reason_label in reason for reason in downstream_plan[changed_index].reasons)
+    upstream_plan = upstream.plan(first["run_id"], fingerprint)
     assert [item.action for item in upstream_plan] == ["RUN", "INVALIDATE"]
 
 
