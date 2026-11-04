@@ -325,3 +325,63 @@ def test_failed_build_readonly_directories_restore_without_traversing_links(tmp_
         assert (writer.paths.target / "gtest/samples/sample1.cc").read_bytes() == b"int main() { return 0; }\n"
         assert not (writer.paths.target / "external").exists()
         assert source.stat().st_mode == original_mode
+
+
+def test_committed_generation_verifies_durable_a_without_mutating_failed_b_tree(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    record, generation = build_a(workspace, initial)
+    with workspace.writer() as writer:
+        writer.begin_attempt(binding("B", (record.identity,)), "B-dirty", generation)
+        (writer.paths.install / "a.h").write_bytes(b"corrupted by B")
+        (writer.paths.target / "make.conf").unlink()
+        (writer.paths.target / "escaping-failed-link").symlink_to("/etc")
+        writer.fail_attempt("compiler_exit_2")
+        state_path = workspace.run_dir / workspace.state_relative
+        before_state = state_path.read_bytes()
+        before_generation = (workspace.run_dir / (
+            f"artifacts/build/workspace/generations/{generation}.json")).read_bytes()
+        manifest = writer.committed_generation()
+        assert manifest["accepted"] == {"A": dict(record.reference)}
+        assert manifest["entries"]["install/a.h"]["sha256"] == hashlib.sha256(b"int a(void);\n").hexdigest()
+        producer = json.loads((workspace.run_dir / manifest["accepted"]["A"]["path"]).read_bytes())
+        assert producer["binding"] == binding().view()
+        assert writer.committed_generation(generation) == manifest
+        assert writer.committed_generation(initial)["accepted"] == {}
+        assert state_path.read_bytes() == before_state
+        assert (workspace.run_dir / (
+            f"artifacts/build/workspace/generations/{generation}.json")).read_bytes() == before_generation
+        assert (writer.paths.install / "a.h").read_bytes() == b"corrupted by B"
+        assert not (writer.paths.target / "make.conf").exists()
+        assert os.readlink(writer.paths.target / "escaping-failed-link") == "/etc"
+        manifest["accepted"]["A"]["sha256"] = "0" * 64
+        manifest["entries"]["install/a.h"]["mode"] = 0
+        verified_again = writer.committed_generation()
+        assert verified_again["accepted"]["A"] == record.reference
+        assert verified_again["entries"]["install/a.h"]["mode"] != 0
+
+
+def test_committed_generation_refuses_missing_or_changed_cas_without_mutating_dirty_tree(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    record, generation = build_a(workspace, initial)
+    with workspace.writer() as writer:
+        digest = writer.committed_generation()["entries"]["install/a.h"]["sha256"]
+        writer.begin_attempt(binding("B", (record.identity,)), "B-interrupted", generation)
+        (writer.paths.install / "a.h").write_bytes(b"dirty evidence")
+        before_state = (workspace.run_dir / workspace.state_relative).read_bytes()
+        retained = workspace.run_dir / f"data/shared/objects/{digest}"
+        retained.write_bytes(b"tampered accepted product")
+        with pytest.raises(ReconstructionMiss, match="missing or changed"):
+            writer.committed_generation(generation)
+        retained.unlink()
+        with pytest.raises(ReconstructionMiss, match="missing or changed"):
+            writer.committed_generation(generation)
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == before_state
+        assert (writer.paths.install / "a.h").read_bytes() == b"dirty evidence"
+
+
+def test_committed_generation_requires_writer_claim(tmp_path):
+    workspace, _, _ = make_workspace(tmp_path)
+    with workspace.writer() as writer:
+        assert writer.committed_generation()["accepted"] == {}
+    with pytest.raises(WorkspaceError, match="released"):
+        writer.committed_generation()

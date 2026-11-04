@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
@@ -479,6 +480,15 @@ class WorkspaceWriter:
         identity = canonical_json_sha256(manifest)
         _immutable(self.run_dir, f"artifacts/build/workspace/generations/{identity}.json", manifest)
         return identity
+
+    def committed_generation(self, generation_identity: str | None = None) -> Mapping[str, Any]:
+        """Verify durable checkpoint custody without inspecting or changing the mounted tree.
+
+        This is not a mounted-product reuse check. Call ``verify_product`` before
+        execution; replay promotion can inspect these defensive-copy producer records
+        while the production attempt still holds uncommitted failed mutations.
+        """
+        return deepcopy(self._generation(generation_identity))
 
     def _generation(self, identity: str | None = None) -> dict[str, Any]:
         owner = self._owner()
