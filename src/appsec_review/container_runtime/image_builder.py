@@ -320,8 +320,7 @@ class ImageBuildSession:
 
 @contextmanager
 def bounded_image_preparation(*, identity: str, tag: str, timeout_seconds: int):
-    from appsec_review.config.native_dagster import native_execution_requested
-    if not review_resources_active() or (not builder_configured() and not native_execution_requested()):
+    if not review_resources_active():
         yield None
         return
     owner = require_builder()

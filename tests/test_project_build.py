@@ -10,7 +10,7 @@ import zipfile
 import pytest
 
 from appsec_review.config import ProcessingMode, load_config
-from appsec_review.container_runtime import BuildCommandResult, ProjectImage
+from appsec_review.container_runtime import BuildCommandResult, ProjectImage, ProjectImageResolver
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_project_build.job import (
@@ -164,6 +164,41 @@ def test_probe_and_repair_identity_bind_relevant_releases_target_and_run(tmp_pat
     assert _reuse_accepted_repair(unit, {"build_unit_id": "fixture"}, "recipe", None, None) is None
     assert events == [("CHECKPOINT_MISSED", {"scope_id": "fixture", "action": "image_repair",
                                            "reason": "missing_release_identity"})]
+
+
+def test_unavailable_cached_repair_keeps_original_baseline_candidate(tmp_path: Path) -> None:
+    from appsec_review.config.assurance import ComponentReleases
+    from appsec_review.container_runtime.image_builder import require_builder
+    from appsec_review.jobs.job_project_build.job import REPAIR_CACHE_SCHEMA, _repair_cache, _reuse_accepted_repair
+
+    config = load_config(ROOT / "appsec-review.toml")
+    events = []
+    unit = SimpleNamespace(job=SimpleNamespace(
+        metadata_root=tmp_path, run_root=tmp_path / "run", source_fingerprint="target",
+        config=config.job("job_project_build"),
+        review_policy=replace(config.review_policy, releases=ComponentReleases({
+            "platform": "fixture-platform", "build_toolchain": "fixture-build", "validation": "fixture-validation",
+        })),
+        events=SimpleNamespace(write=lambda event, **details: events.append((event, details))),
+    ))
+    action = {"build_unit_id": "build-unit-" + "a" * 20, "family": "native",
+              "build_system": "make", "root": "."}
+    recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
+        "image_profile": "native", "source_dir": ".", "build_dir": "build",
+        "system_packages": ["make"], "environment": {}, "dependency_files": ["Makefile"],
+        "configure_commands": [], "build_commands": [["make"]], "expected_outputs": ["build"],
+        "network_required": False, "reason": "fixture cached repair",
+    }
+    cache = _repair_cache(unit, "base")
+    cache.parent.mkdir(parents=True)
+    cache.write_text(json.dumps({
+        "schema": REPAIR_CACHE_SCHEMA, "base_recipe_identity": "base", "recipe": recipe,
+    }), encoding="utf-8")
+    resolver = SimpleNamespace(resolve=lambda recipe, profile: require_builder())
+    assert _reuse_accepted_repair(unit, action, "base", resolver, None) is None
+    assert events[0][0] == "CHECKPOINT_MISSED"
+    assert "derived_image_preparation_unavailable" in events[0][1]["reason"]
 
 
 class RecipeModel:
@@ -817,6 +852,98 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
     assert native["recipe_provenance"] == "deterministic-cmake-marker"
     assert native["recipe"]["system_packages"] == []
     assert native["descriptor_facts"] == {}
+
+
+@pytest.mark.parametrize("repair_baseline", (False, True))
+def test_missing_builder_is_per_unit_blocked_and_preserves_baseline_execution(tmp_path: Path, repair_baseline) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [
+        build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete),
+    ]).run(target_root=target, source_fingerprint=fingerprint)
+    tags = {value["tag"]: value["image_id"]
+            for value in config.job("job_project_build").settings["profiles"].values()}
+    image_calls, calls = [], []
+
+    def runner(argv, timeout):
+        image_calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            identity = tags.get(argv[3])
+            return (0, identity.encode(), b"", False) if identity else (1, b"", b"missing", False)
+        return 1, b"", b"unapproved default-network preparation was reached", False
+
+    def resolver(unit):
+        return ProjectImageResolver(
+            metadata_root=unit.job.metadata_root, target_root=unit.job.target_root,
+            run_root=unit.job.run_root, releases=unit.job.review_policy.releases, runner=runner,
+        )
+
+    model = RepairModel((["libfixture-dev"],))
+    job = build_projects(
+        executor_factory=lambda unit, profile: (
+            RepairingExecutor(calls, profile, success_package=None)
+            if repair_baseline else FakeBuildExecutor(calls)),
+        image_resolver_factory=resolver, infer=model.complete,
+    )
+    outcome = GraphRunner(config, [job]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    native = next(x for x in accepted["probe_receipts"] if x["family"] == "native")
+    rust = accepted["images"]["rust"]["entries"][0]
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert rust["terminal_status"] == "BLOCKED"
+    assert any("derived_image_preparation_unavailable" in gap for gap in rust["gaps"])
+    assert not any(argv[:3] == ("docker", "buildx", "build") for argv in image_calls)
+    assert calls and calls[0][0] == "cmake"
+    if repair_baseline:
+        assert native["terminal_status"] == "BLOCKED"
+        assert native["attempts"][0]["terminal_status"] == "FAILED"
+        assert native["attempts"][-1]["terminal_status"] == "BLOCKED"
+        assert any("derived_image_preparation_unavailable" in gap for gap in native["gaps"])
+        assert model.calls == 1
+        assert not accepted["build_dispatches"]
+    else:
+        assert native["terminal_status"] == "SUCCEEDED"
+        assert {x["family"] for x in accepted["build_dispatches"]} == {"native"}
+        assert model.calls == 0
+
+
+def test_native_windows_placeholder_is_blocked_without_hiding_alternate_cmake_authority(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    (target / "native/project.vcxproj").write_text(
+        "<Project><PropertyGroup><Platform>Win32</Platform></PropertyGroup></Project>", encoding="utf-8")
+
+    class Model(RecipeModel):
+        def complete(self, request, *, timeout_seconds):
+            if request.allowed_build_systems != ("msbuild",):
+                return super().complete(request, timeout_seconds=timeout_seconds)
+            unit = request.summary["build_units"][0]
+            return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [], "build_recipes": [{
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "native", "source_dir": unit["root"], "build_dir": unit["root"] + "/build",
+                "system_packages": [], "environment": {},
+                "dependency_files": [x["path"] for x in unit["markers"]],
+                "configure_commands": [], "build_commands": [["make", "-k"]], "expected_outputs": [],
+                "network_required": False, "reason": "placeholder for an unavailable Windows build",
+            }]})
+
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [
+        build_intake(), build_catalog(), build_plan(infer=Model().complete),
+    ]).run(target_root=target, source_fingerprint=fingerprint)
+    calls = []
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+        image_resolver_factory=lambda unit: FakeImageResolver(),
+    )]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    windows = next(x for x in accepted["images"]["native"]["entries"]
+                   if x["action"]["build_system"] == "msbuild")
+    assert windows["terminal_status"] == "BLOCKED"
+    assert any("unavailable_native_windows_toolchain" in gap for gap in windows["gaps"])
+    assert any(x["build_system"] == "cmake" for x in accepted["build_dispatches"])
+    assert not any(argv[0] == "make" for argv in calls)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
 
 
 def test_disabled_build_capture_records_policy_skips_without_execution(tmp_path: Path) -> None:

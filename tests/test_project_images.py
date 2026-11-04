@@ -16,6 +16,9 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.container_runtime.project_images import _restore_command
 from appsec_review.config.assurance import ComponentReleases
+from appsec_review.config.assurance import ResourceBudget
+from appsec_review.observability.events import EventLog
+from appsec_review.runtime.resources import ImagePreparationUnavailable, review_resource_scope
 
 
 @pytest.mark.parametrize(("manager", "expected"), (
@@ -71,7 +74,8 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
                                                                 "build_toolchain": "fixture/1"}))
     profile = BuildProfile("node", "node-base:local", base_id, "10001:10001")
     first, _, _ = resolver.resolve(recipe, profile)
-    second, _, _ = resolver.resolve(recipe, profile)
+    with review_resource_scope(tmp_path / "metadata", ResourceBudget(), EventLog(tmp_path / "events.jsonl")):
+        second, _, _ = resolver.resolve(recipe, profile)
     derived_visible = None
     rebuilt, _, _ = resolver.resolve(recipe, profile)
 
@@ -94,6 +98,54 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert build_call[build_call.index("--network") + 1] == "default"
     assert build_call[-1] == str(dockerfile_path.parent.resolve())
     assert first.dockerfile_sha256 is None
+
+
+@pytest.mark.parametrize("customization", ("packages", "network", "repair"))
+def test_review_image_cache_miss_never_reaches_unbounded_buildx(tmp_path: Path, customization: str) -> None:
+    (tmp_path / "go.mod").write_text("module fixture\n", encoding="utf-8")
+    base = "sha256:" + "a" * 64
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, base.encode(), b"", False
+        return 1, b"", b"unapproved image preparation was reached", False
+
+    recipe = {"source_dir": ".", "system_packages": [], "network_required": False,
+              "dependency_files": ["go.mod"], "build_system": "go", "environment": {}}
+    if customization == "packages":
+        recipe["system_packages"] = ["make"]
+    elif customization == "network":
+        recipe["network_required"] = True
+    else:
+        recipe["image_repairs"] = {
+            "environment": {"CGO_ENABLED": "0"}, "package_manager": None, "dependency_restores": [],
+        }
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=tmp_path, runner=runner)
+    profile = BuildProfile("go", "go-base:local", base, "10001:10001")
+    with review_resource_scope(tmp_path / "metadata", ResourceBudget(), EventLog(tmp_path / "events.jsonl")):
+        with pytest.raises(ImagePreparationUnavailable, match="no operator-approved builder"):
+            resolver.resolve(recipe, profile)
+    assert calls == [("docker", "image", "inspect", profile.tag, "--format", "{{.Id}}")]
+
+
+def test_review_image_allows_pinned_baseline_without_a_builder(tmp_path: Path) -> None:
+    base = "sha256:" + "a" * 64
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append(tuple(argv))
+        return 0, base.encode(), b"", False
+
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=tmp_path, runner=runner)
+    profile = BuildProfile("native", "native-base:local", base, "10001:10001")
+    recipe = {"source_dir": ".", "system_packages": [], "network_required": False,
+              "dependency_files": [], "build_system": "make", "environment": {}}
+    with review_resource_scope(tmp_path / "metadata", ResourceBudget(), EventLog(tmp_path / "events.jsonl")):
+        image, stdout, stderr = resolver.resolve(recipe, profile)
+    assert image.image_id == base and not image.customized and not stdout and not stderr
+    assert calls == [("docker", "image", "inspect", profile.tag, "--format", "{{.Id}}")]
 
 
 def test_node_workspace_image_restores_and_exposes_root_dependencies(tmp_path: Path) -> None:

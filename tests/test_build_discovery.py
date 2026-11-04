@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
+import json
+from pathlib import Path, PurePosixPath
+
+import pytest
 
 from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, android_descriptor_facts, build_recipe_inference_policy,
-    descriptor_package, discover_build_units, normalize_build_recipe, required_image_profile,
+    descriptor_package, discover_build_units, is_build_descriptor, normalize_build_recipe, required_image_profile,
     unsupported_build_gaps, validate_build_recipe,
 )
 
@@ -196,6 +199,112 @@ def test_lockless_node_recipe_normalizes_npm_ci_before_acceptance() -> None:
     normalized = normalize_build_recipe(recipe)
     assert normalized["configure_commands"] == []
     assert validate_build_recipe(normalized, unit) == []
+
+
+@pytest.mark.parametrize("script", ("build", "minify"))
+@pytest.mark.parametrize("commands", ([], [["npm", "ci", "--ignore-scripts"]]))
+def test_node_recipe_uses_declared_build_script_not_empty_or_restore_only_commands(script, commands) -> None:
+    unit = discover_build_units([_file("web/package.json")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "web/package.json", "content": json.dumps({"scripts": {script: "fixture-build"}}),
+    }]}
+    recipe = {
+        **_recipe(unit), "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+        "system_packages": [], "environment": {}, "configure_commands": [],
+        "build_commands": commands, "expected_outputs": [],
+    }
+    normalized = normalize_build_recipe(recipe, unit)
+    assert normalized["build_commands"] == [["npm", "run", script]]
+    assert validate_build_recipe(normalized, unit) == []
+
+
+@pytest.mark.parametrize("extra_task", (None, "serve", "watch", "test", "commented", "string"))
+def test_node_grunt_authority_is_retained_and_only_literal_build_tasks_are_executable(tmp_path, extra_task) -> None:
+    tasks = ["clean:dist", "concat", "uglify"]
+    if extra_task not in {None, "commented", "string"}:
+        tasks.append(extra_task)
+    grunt_text = "grunt.registerTask('buildApp', " + json.dumps(tasks) + ");"
+    if extra_task == "commented":
+        grunt_text = "/* " + grunt_text + " */"
+    elif extra_task == "string":
+        grunt_text = "var example = " + json.dumps(grunt_text) + ";"
+    files = [
+        _file("web/package.json", '{"devDependencies":{"grunt":"0.4.5"}}'),
+        _file("web/Gruntfile.js", grunt_text),
+        _file("web/gulpfile.js", "gulp.task('build', function () {});"),
+    ]
+    for item in files:
+        path = tmp_path / item["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = {
+            "package.json": '{"devDependencies":{"grunt":"0.4.5"}}',
+            "Gruntfile.js": grunt_text,
+            "gulpfile.js": "gulp.task('build', function () {});",
+        }[path.name]
+        path.write_text(content, encoding="utf-8")
+    assert is_build_descriptor(PurePosixPath("web/Gruntfile.js"))
+    assert is_build_descriptor(PurePosixPath("web/gulpfile.js"))
+    unit = discover_build_units(files)[0]
+    unit["descriptor_package"] = descriptor_package(tmp_path, unit, files)
+    assert {Path(x["path"]).name for x in unit["descriptor_package"]["documents"]} == {
+        "package.json", "Gruntfile.js", "gulpfile.js",
+    }
+    recipe = {
+        **_recipe(unit), "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+        "system_packages": [], "environment": {}, "configure_commands": [],
+        "build_commands": [], "expected_outputs": [],
+    }
+    normalized = normalize_build_recipe(recipe, unit)
+    if extra_task is None:
+        assert normalized["build_commands"] == [["npx", "--no-install", "grunt", "buildApp"]]
+        assert "web/Gruntfile.js" in normalized["dependency_files"]
+        assert validate_build_recipe(normalized, unit) == []
+    else:
+        assert normalized["build_commands"] == []
+        unsafe = {**normalized, "build_commands": [["npx", "--no-install", "grunt", "buildApp"]]}
+        assert any("literal build-only Grunt" in error for error in validate_build_recipe(unsafe, unit))
+
+
+def test_node_recipe_does_not_invent_builds_from_start_test_or_grunt_dependency() -> None:
+    unit = discover_build_units([_file("web/package.json")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "web/package.json", "content": json.dumps({
+            "scripts": {"start": "server", "test": "test-runner"}, "devDependencies": {"grunt": "0.4.5"},
+        }),
+    }]}
+    recipe = {
+        **_recipe(unit), "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+        "system_packages": [], "environment": {}, "configure_commands": [],
+        "build_commands": [], "expected_outputs": [],
+    }
+    normalized = normalize_build_recipe(recipe, unit)
+    assert normalized["build_commands"] == []
+    assert "build_commands must contain at least one build command" in validate_build_recipe(normalized, unit)
+
+
+@pytest.mark.parametrize("properties", (
+    "<Platform>Win32</Platform>",
+    "<Platform>x64</Platform><PlatformToolset>v142</PlatformToolset>",
+))
+def test_native_windows_authority_rejects_linux_placeholder_recipe(properties) -> None:
+    unit = discover_build_units([_file("native/project.vcxproj")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "native/project.vcxproj", "content": f"<Project><PropertyGroup>{properties}</PropertyGroup></Project>",
+    }]}
+    recipe = {**_recipe(unit), "configure_commands": [], "build_commands": [["make", "-k"]]}
+    assert any("unavailable_native_windows_toolchain" in error for error in validate_build_recipe(recipe, unit))
+
+
+def test_cross_platform_dotnet_msbuild_is_not_windows_native_authority() -> None:
+    unit = discover_build_units([_file("native/project.csproj")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "native/project.csproj", "content": "<Project><TargetFramework>net8.0</TargetFramework></Project>",
+    }]}
+    recipe = {
+        **_recipe(unit), "image_profile": "dotnet", "configure_commands": [],
+        "build_commands": [["dotnet", "build", "project.csproj"]],
+    }
+    assert validate_build_recipe(recipe, unit) == []
 
 
 def test_java_recipe_normalization_removes_host_specific_java_home() -> None:

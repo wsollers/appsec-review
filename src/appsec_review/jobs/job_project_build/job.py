@@ -37,7 +37,7 @@ from appsec_review.jobs.build_bookkeeping import (
 )
 from appsec_review.config.build_outputs import BuildOutputPolicy
 from appsec_review.jobs.build_discovery import (
-    copied_source_symlink, ensure_declared_build_dir, validate_build_recipe,
+    copied_source_symlink, ensure_declared_build_dir, native_build_capability_gap, validate_build_recipe,
 )
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
@@ -45,6 +45,7 @@ from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.runtime.resources import ImagePreparationUnavailable
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
 
 from .repair import REPAIR_SCHEMA, apply_repair, repair_options, validate_repair_proposal
@@ -908,8 +909,10 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                 # A rejected proposal changed nothing: keep the probe failure the next repair must fix.
                 diagnostics = {**_probe_diagnostics(unit, last_probe), "repair_error": {
                     "error_class": type(exc).__name__, "message": str(exc)[:4096]}}
+            unavailable = isinstance(exc, ImagePreparationUnavailable)
             attempts.append({"attempt_number": repair_number + 1, "kind": "inference-repair",
-                             "repair_number": repair_number, "terminal_status": "FAILED",
+                             "repair_number": repair_number,
+                             "terminal_status": "BLOCKED" if unavailable else "FAILED",
                              "error_class": type(exc).__name__, "gaps": [str(exc)[:4096]],
                              "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:repair:{repair_number}",
                              "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
@@ -918,9 +921,16 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                              "streams": image_streams,
                              "system_packages": list(current_recipe.get("system_packages", ())),
                              "image_repairs": dict(current_recipe.get("image_repairs", {}))})
-            unit.job.events.write("PROJECT_IMAGE_REPAIR_FAILED", unit_id=unit.unit_id,
+            unit.job.events.write("PROJECT_IMAGE_REPAIR_BLOCKED" if unavailable else "PROJECT_IMAGE_REPAIR_FAILED",
+                unit_id=unit.unit_id,
                 build_unit_id=action["build_unit_id"], family=action["family"],
                 repair_attempt=repair_number, error_class=type(exc).__name__)
+            if unavailable:
+                return {**last_probe, "terminal_status": "BLOCKED", "probe_disposition": "BLOCKED",
+                        "gaps": [*last_probe.get("gaps", ()), str(exc)],
+                        "accepted_recipe": accepted_recipe, "accepted_image": image,
+                        "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
+                        "attempts": attempts, "repair_attempt_count": repair_number}
     return {**last_probe, "terminal_status": "FAILED", "probe_disposition": "FAILED",
             "gaps": [*last_probe.get("gaps", ()),
                      f"build remained unavailable after {repair_limit} image repair attempts"],
@@ -1009,7 +1019,12 @@ def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_id
     errors = validate_build_recipe(recipe, _repair_validation_unit(action, recipe))
     if errors:
         raise ValueError("accepted build image repair recipe is invalid: " + "; ".join(errors))
-    image, _stdout, _stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profile)
+    try:
+        image, _stdout, _stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profile)
+    except ImagePreparationUnavailable as error:
+        unit.job.events.write("CHECKPOINT_MISSED", scope_id=str(action["build_unit_id"]),
+                              action="image_repair", reason=str(error))
+        return None
     if (image.recipe_identity != value.get("recipe_identity") or
             image.dockerfile_sha256 != value.get("dockerfile_sha256") or
             image.dockerfile_path != value.get("dockerfile_path")):
@@ -1193,6 +1208,11 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
             if decision.action is ApplicabilityAction.RUN:
                 actions.append({**action, "processing_facts": facts.as_dict(),
                                 "build_capture_decision": decision.as_dict()})
+                capability_gap = native_build_capability_gap(action)
+                if capability_gap is not None:
+                    gaps.append(f"{action['build_unit_id']}: {capability_gap}")
+                elif action.get("build_system") != "unity" and not isinstance(action.get("recipe"), Mapping):
+                    gaps.append(f"{action['build_unit_id']}: validated inference build recipe is unavailable")
             elif decision.action is ApplicabilityAction.GAP:
                 gaps.append(f"{decision.project_id}: {decision.reason_code.value}")
         artifact_policy = (unit.job.config.settings.get("compiler_artifact_collection_mode", "required")
@@ -1227,6 +1247,12 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
             entries, gaps = [], []
             for action in actions:
                 if action.get("build_system") == "unity":
+                    continue
+                capability_gap = native_build_capability_gap(action)
+                if capability_gap is not None:
+                    gap = f"{action['build_unit_id']}: {capability_gap}"
+                    entries.append({"action": action, "image": None, "terminal_status": "BLOCKED", "gaps": [gap]})
+                    gaps.append(gap)
                     continue
                 recipe = action.get("recipe")
                 if not isinstance(recipe, Mapping):
@@ -1285,14 +1311,16 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                         "stderr": _retained_stream(unit.job.run_root, logs / "image-build.stderr", stderr, stream_limit),
                     }
                     gap = f"{action['build_unit_id']}: project image resolution failed ({type(exc).__name__}: {exc})"
-                    unit.job.events.write("PROJECT_IMAGE_BUILD_FAILED", unit_id=unit.unit_id,
+                    unavailable = isinstance(exc, ImagePreparationUnavailable)
+                    unit.job.events.write("PROJECT_IMAGE_BUILD_BLOCKED" if unavailable else "PROJECT_IMAGE_BUILD_FAILED",
+                        unit_id=unit.unit_id,
                         build_unit_id=action["build_unit_id"], family=family, error_class=type(exc).__name__)
                     entries.append({"action": action, "image": None,
                         "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:image",
                         "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
                             "family": family, "build_unit_id": action["build_unit_id"]})).hexdigest(),
                         "duration_ms": int((time.monotonic() - image_started) * 1000), "streams": streams,
-                        "terminal_status": "FAILED", "gaps": [gap]})
+                        "terminal_status": "BLOCKED" if unavailable else "FAILED", "gaps": [gap]})
                     gaps.append(gap)
             return {"family": family, "entries": entries, "image_count": sum(value["image"] is not None for value in entries),
                     "terminal_status": "NOT_APPLICABLE" if not entries else "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED",
@@ -1427,7 +1455,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                 decision = finalize_processing(
                     decision, succeeded=successful,
                     evidence_complete=bool(receipt and not receipt.get("gaps")),
-                    toolchain_available=bool(receipt))
+                    toolchain_available=bool(receipt and receipt.get("terminal_status") != "BLOCKED"))
             processing_decisions.append(decision.as_dict())
         processing_gaps = [f"{item['project_id']}: {item['reason_code']}"
                            for item in processing_decisions if item.get("disposition") == "GAP"]

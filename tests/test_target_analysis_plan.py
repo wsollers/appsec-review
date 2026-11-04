@@ -170,6 +170,48 @@ def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: P
     assert list((run_root / "data/guidance").glob("*/role.md"))
 
 
+@pytest.mark.parametrize("with_grunt", (False, True))
+def test_node_rejection_preserves_descriptor_backed_builds_and_names_each_unresolved_unit(tmp_path: Path, with_grunt) -> None:
+    files = {
+        "static/package.json": '{"devDependencies":{"grunt":"0.4.5"}}',
+        "copy-static/package.json": '{"devDependencies":{"grunt":"0.4.5"}}',
+        "minify/package.json": '{"scripts":{"minify":"fixture-minifier"}}',
+        "copy-minify/package.json": '{"scripts":{"minify":"fixture-minifier"}}',
+        "dashboard/package.json": '{"scripts":{"build":"gulp build","start":"server","test":"tests"}}',
+    }
+    if with_grunt:
+        for root in ("static", "copy-static"):
+            files[f"{root}/Gruntfile.js"] = "grunt.registerTask('buildApp', ['clean:dist', 'concat', 'uglify']);"
+    config, target = _fixture(tmp_path, files, model_enabled=True)
+
+    def proposal(request):
+        value = _proposal(request)
+        for recipe in value["build_recipes"]:
+            recipe["build_commands"] = (
+                [["npm", "ci", "--ignore-scripts"]] if recipe["source_dir"] == "dashboard" else []
+            )
+        return value
+
+    model = _Model(proposal)
+    _outcome, plan = _run(config, target, build_job(infer=model.complete))
+    actions = {action["root"]: action for action in plan["build_topology"]["build_actions"]}
+    assert plan["model"]["status"] == ("ACCEPTED" if with_grunt else "PARTIAL")
+    assert model.calls == (1 if with_grunt else config.job("job_target_analysis_plan").settings["model"]["retries"] + 1)
+    for root, script in (("minify", "minify"), ("copy-minify", "minify"), ("dashboard", "build")):
+        assert actions[root]["recipe"]["build_commands"] == [["npm", "run", script]]
+    for root in ("static", "copy-static"):
+        if with_grunt:
+            assert actions[root]["recipe"]["build_commands"] == [["npx", "--no-install", "grunt", "buildApp"]]
+            assert f"{root}/Gruntfile.js" in actions[root]["recipe"]["dependency_files"]
+        else:
+            assert actions[root]["recipe"] is None
+            assert any(actions[root]["build_unit_id"] in gap and "build_commands" in gap
+                       for gap in plan["coverage_gaps"])
+    assert not any(command[-1] in {"start", "test"}
+                   for action in actions.values() if action["recipe"] is not None
+                   for command in action["recipe"]["build_commands"])
+
+
 def test_lockless_node_inference_is_normalized_before_plan_acceptance(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path, {
         "web/package.json": '{"scripts":{"build":"node --check index.js"}}',

@@ -144,6 +144,19 @@ def test_builder_configuration_requires_operator_project_and_preserves_default_p
     assert "image_builder" not in parse_review_policy({}).view()
 
 
+@pytest.mark.parametrize("entrypoint", ("require", "prepare"))
+def test_review_image_preparation_refuses_unconfigured_builder(tmp_path, entrypoint):
+    from appsec_review.runtime.resources import ImagePreparationUnavailable, require_bounded_image_builder
+
+    owner = context(tmp_path, policy=parse_review_policy({}))
+    with active(owner), pytest.raises(ImagePreparationUnavailable, match="no operator-approved builder"):
+        if entrypoint == "require":
+            require_bounded_image_builder()
+        else:
+            with builders.bounded_image_preparation(identity="fixture", tag="fixture:tag", timeout_seconds=10):
+                pytest.fail("unconfigured review builder must not yield a local-build fallback")
+
+
 def test_builder_tracks_intent_before_preparation_and_confirms_cleanup(tmp_path, backend):
     owner = context(tmp_path)
     with active(owner):

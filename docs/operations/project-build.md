@@ -62,6 +62,11 @@ name in that profile's `_PROFILE_COMMANDS` allowlist (for example `go` only for 
 `msbuild` for .NET). Test, run, and install subcommands, non-build Maven goals or Gradle tasks, and
 secret-like environment names are rejected.
 
+Native Visual C++ authority (`.vcxproj`/`.vcproj`) is not cross-platform .NET/MSBuild.
+Accepted Win32, MSVC toolset, compiler or Windows SDK evidence produces an explicit unavailable
+toolchain gap on the Linux native profile; a `make` placeholder or compiler-version probe is not
+a Windows build recipe. Generic .NET projects are not excluded by this rule.
+
 ## Default-image-first probing and repair
 
 Each unseen recipe is probed against the default family image first. If it fails and the model is
@@ -127,6 +132,16 @@ declares `dependencies`, `devDependencies`, or `optionalDependencies`, even with
 derived image then runs the script-disabled lockless restore (`npm install --ignore-scripts`), so a
 TypeScript build resolves the declared `typescript` and `@types/*` packages instead of failing with
 TS2688. The Node build image is defined in `containers/buildenv/typescript/`.
+An empty or installation-only inferred build command can be normalized to the accepted
+manifest's `build` or `minify` script, never its `start` or `test` script. Bounded descriptor
+discovery also retains `Gruntfile.js` and `gulpfile.js` independently of ordinary content limits.
+A Grunt dependency alone does not identify a safe task: fallback requires a literal, unique
+`build*` alias consisting solely of recognized build/minification tasks, invoked through
+`npx --no-install grunt <alias>`. Its accepted Gruntfile joins the recipe's dependency identity.
+Dynamic, unknown, test, watch and server tasks are not fallback build authority.
+After the configured inference retries, individually validated
+sibling recipes are retained and each unresolved unit has a marker/hash-resolving planning gap;
+one missing recipe does not erase the other projects' valid recipes.
 
 Concurrent image-repair telemetry identifies `family`, `root`, `build_system`, `build_unit_id`, and
 `repair_number`. Operators must use those correlation fields rather than adjacent log order when
@@ -138,11 +153,16 @@ namespace in `runs/metadata/project-images/`. Reuse requires operator-declared `
 unrelated query declarations do not. Supplied generator/Dockerfile payloads are not fingerprinted:
 `dockerfile_sha256` remains null, and the owner must update the relevant release declaration when
 the generator or build environment changes. Missing declarations disable image reuse.
-Without a configured `review_policy.image_builder` or native execution, a missing derived image
-is built with the local `docker buildx` client, and build and capture containers run without
-CPU/RAM caps so builds finish as fast as the host allows. When an authenticated builder is
-configured or native execution is requested, a missing image it cannot prepare is a named
-`derived_image_preparation_unavailable` gap. The builder's default
+Within an active review resource scope, a missing derived image requires the authenticated
+`review_policy.image_builder`; absent capability produces a per-project `BLOCKED`
+`derived_image_preparation_unavailable` gap, never a default-network local `docker buildx`
+fallback. This applies both to initial dependency preparation and conditional image repair.
+The failed baseline probe and the blocked repair remain recorded; a deterministic capability
+refusal does not spend the remaining model attempts. A missing cached repair may be refused
+while the original pinned baseline still proceeds. Pinned baselines and policy-valid prepared-image
+cache hits do not require new image preparation, and supported sibling work continues.
+This does not change build/capture container limits, model settings, retries or feature gates.
+The builder's default
 `bounded` policy retains CPU/RAM enforcement. The opt-in `concurrency_only` policy allows
 exactly one image build, without builder-specific CPU/RAM caps, while retaining deadlines,
 zero swap, private custody, provenance, independent cleanup and durable engine exclusivity.

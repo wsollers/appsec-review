@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import ast
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Callable, Mapping, Sequence
+import xml.etree.ElementTree as ET
 
 from appsec_review.jobs.engine_contracts import UNITY_BUILD_SYSTEM, UNITY_LANGUAGE_FAMILY
 
@@ -70,6 +72,7 @@ _CONTEXT_NAMES = {
     "rust-toolchain", "rust-toolchain.toml", "Directory.Build.props", "global.json",
     "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
     "binding.gyp", "config.m4", "go.sum", "go.work.sum",
+    "Gruntfile.js", "gulpfile.js",
     "Gemfile", "Gemfile.lock", "ReadMe.txt", "fbuild.bff", "build_ms.bat",
 }
 # Families whose own packaging tool drives a C/C++ compile inside the same build (node-gyp,
@@ -142,6 +145,10 @@ def build_recipe_inference_policy(unit: Mapping[str, Any]) -> dict[str, Any]:
                               "allowed_executables": sorted(_PROFILE_COMMANDS.get(profile, ()))}
     if profile == "php" and unit.get("build_system") == "phpize":
         policy["allowed_executables"].append("./configure")
+    if profile == "node":
+        authority = _node_build_authority(unit)
+        if authority is not None:
+            policy["descriptor_build_command"] = authority[0]
     components = [str(item.get("path")) for item in unit.get("native_components", ())
                   if isinstance(item, Mapping)]
     if components:
@@ -794,8 +801,7 @@ def _within(value: str, root: str) -> bool:
 _NODE_DEPENDENCY_FIELDS = ("dependencies", "devDependencies", "optionalDependencies")
 
 
-def node_manifest_declares_dependencies(unit: Mapping[str, Any]) -> bool:
-    """Return whether the build unit's own accepted package.json declares packages."""
+def _node_manifest(unit: Mapping[str, Any]) -> Mapping[str, Any]:
     root = PurePosixPath(str(unit.get("root", ".")))
     manifest = (root / "package.json").as_posix()
     for item in unit.get("descriptor_package", {}).get("documents", ()):
@@ -804,11 +810,100 @@ def node_manifest_declares_dependencies(unit: Mapping[str, Any]) -> bool:
         try:
             document = json.loads(str(item.get("content", "")))
         except json.JSONDecodeError:
-            return False
-        return isinstance(document, Mapping) and any(
-            isinstance(document.get(field), Mapping) and bool(document[field])
-            for field in _NODE_DEPENDENCY_FIELDS)
-    return False
+            return {}
+        return document if isinstance(document, Mapping) else {}
+    return {}
+
+
+def node_manifest_declares_dependencies(unit: Mapping[str, Any]) -> bool:
+    """Return whether the build unit's own accepted package.json declares packages."""
+    document = _node_manifest(unit)
+    return any(isinstance(document.get(field), Mapping) and bool(document[field])
+               for field in _NODE_DEPENDENCY_FIELDS)
+
+
+def _node_restore_only(argv: Any) -> bool:
+    return isinstance(argv, list) and argv[:2] in (
+        ["npm", "ci"], ["npm", "install"], ["pnpm", "install"], ["yarn", "install"],
+    )
+
+
+def _node_grunt_commands(unit: Mapping[str, Any]) -> list[tuple[list[str], str]]:
+    path = (PurePosixPath(str(unit.get("root", "."))) / "Gruntfile.js").as_posix()
+    build_tasks = {"clean", "copy", "concat", "ngAnnotate", "uglify", "rev", "useminPrepare", "usemin"}
+    commands = []
+    for document in unit.get("descriptor_package", {}).get("documents", ()):
+        if document.get("path") != path or not isinstance(document.get("content"), str):
+            continue
+        text = document["content"]
+        excluded = [match.span() for match in re.finditer(
+            r"""'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|//[^\r\n]*|/\*[\s\S]*?\*/""", text)]
+        registrations = [match.group(1) for match in re.finditer(
+            r"grunt\.registerTask\s*\(\s*['\"]([^'\"]+)['\"]\s*,", text)
+            if not any(start <= match.start() < end for start, end in excluded)]
+        for match in re.finditer(
+            r"grunt\.registerTask\s*\(\s*(['\"])(build[A-Za-z0-9_-]*)\1\s*,\s*(\[[^\]]*\])\s*\)", text,
+        ):
+            if any(start <= match.start() < end for start, end in excluded):
+                continue
+            _quote, name, literal = match.groups()
+            if registrations.count(name) != 1:
+                continue
+            try:
+                tasks = ast.literal_eval(literal)
+            except (ValueError, SyntaxError):
+                continue
+            if (isinstance(tasks, list) and tasks and
+                    all(isinstance(task, str) and re.fullmatch(r"[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*", task)
+                        and task.split(":", 1)[0] in build_tasks for task in tasks)):
+                commands.append((["npx", "--no-install", "grunt", name], path))
+    return sorted(commands, key=lambda value: (value[0][-1] != "build", value[0][-1]))
+
+
+def _node_build_authority(unit: Mapping[str, Any]) -> tuple[list[str], str] | None:
+    scripts = _node_manifest(unit).get("scripts", {})
+    for name in ("build", "minify"):
+        if isinstance(scripts, Mapping) and isinstance(scripts.get(name), str) and scripts[name].strip():
+            path = (PurePosixPath(str(unit.get("root", "."))) / "package.json").as_posix()
+            return ["npm", "run", name], path
+    commands = _node_grunt_commands(unit)
+    return commands[0] if commands else None
+
+
+def native_build_capability_gap(unit: Mapping[str, Any]) -> str | None:
+    """Separate Visual C++ authority from cross-platform .NET/MSBuild projects."""
+    if unit.get("family") != "native" or unit.get("build_system") not in {"msbuild", "vcbuild"}:
+        return None
+    markers = {str(item["path"]): item for item in unit.get("markers", ())
+               if PurePosixPath(str(item["path"])).suffix.lower() in {".vcxproj", ".vcproj"}}
+    if not markers:
+        return None
+    for document in unit.get("descriptor_package", {}).get("documents", ()):
+        path = str(document.get("path", ""))
+        if path not in markers or not isinstance(document.get("content"), str):
+            continue
+        try:
+            root = ET.fromstring(document["content"])
+        except ET.ParseError as error:
+            return f"unavailable_native_project_toolchain: {path}: descriptor XML cannot be resolved ({error})"
+        evidence = []
+        for element in root.iter():
+            tag = element.tag.rsplit("}", 1)[-1]
+            value = (element.text or "").strip()
+            if tag == "Platform" and (element.attrib.get("Name") or value).lower() == "win32":
+                evidence.append("Win32 platform")
+            elif tag == "PlatformToolset" and re.fullmatch(r"v[0-9]+(?:_xp)?", value):
+                evidence.append(f"MSVC toolset {value}")
+            elif tag == "Tool" and element.attrib.get("Name") in {"VCCLCompilerTool", "VCLinkerTool"}:
+                evidence.append(element.attrib["Name"])
+            elif tag == "WindowsTargetPlatformVersion" and value:
+                evidence.append("Windows SDK")
+        if evidence:
+            return (f"unavailable_native_windows_toolchain: {path}@{markers[path].get('sha256')}: "
+                    f"{', '.join(sorted(set(evidence)))} requires MSVC/Windows capability, "
+                    "not a Linux native placeholder or toolchain probe")
+    return ("unavailable_native_project_toolchain: accepted Visual C++ descriptor requires "
+            "MSBuild/VCBuild capability not supplied by the Linux native profile; Windows platform unproven")
 
 
 def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -886,6 +981,16 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
                     continue
                 normalized.append(argv)
             value[field] = normalized
+    if value.get("image_profile") == "node" and isinstance(unit, Mapping):
+        commands = value.get("build_commands")
+        if isinstance(commands, list) and all(_node_restore_only(argv) for argv in commands):
+            authority = _node_build_authority(unit)
+            if authority is not None:
+                command, path = authority
+                value["build_commands"] = [command]
+                if path not in value["dependency_files"]:
+                    value["dependency_files"].append(path)
+                value["reason"] = f"Accepted {path} declares the build-only command; dependency installation alone is not a build"
     return value
 
 
@@ -947,6 +1052,9 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
         errors.extend(image_repair_errors(recipe, str(unit.get("build_system", ""))))
     if recipe.get("build_unit_id") != unit.get("build_unit_id"):
         errors.append("recipe build_unit_id does not match the accepted unit")
+    capability_gap = native_build_capability_gap(unit)
+    if capability_gap is not None:
+        errors.append(capability_gap)
     profile = recipe.get("image_profile")
     required_profile = required_image_profile(unit)
     if profile not in _PROFILE_COMMANDS or profile != required_profile:
@@ -1023,8 +1131,19 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
                               for error in jvm_build_command_errors(str(profile), argv))
             if profile == "node" and executable == "node" and "--check" not in argv[1:]:
                 errors.append(f"{field}[{index}] may execute a target application")
+            if profile == "node" and executable == "npx" and "grunt" in argv[1:]:
+                if not any(argv == command for command, _path in _node_grunt_commands(unit)):
+                    errors.append(f"{field}[{index}] requires an accepted literal build-only Grunt task with --no-install")
+            if profile == "node" and executable == "npx" and "gulp" in argv[1:]:
+                scripts = _node_manifest(unit).get("scripts", {})
+                if (not isinstance(scripts, Mapping) or scripts.get("build") != "gulp build" or
+                        argv != ["npx", "--no-install", "gulp", "build"]):
+                    errors.append(f"{field}[{index}] requires the accepted build-only Gulp script with --no-install")
     if isinstance(recipe.get("build_commands"), list) and not recipe["build_commands"]:
         errors.append("build_commands must contain at least one build command")
+    elif (profile == "node" and isinstance(recipe.get("build_commands"), list) and
+          all(_node_restore_only(argv) for argv in recipe["build_commands"])):
+        errors.append("Node build_commands contain dependency installation only, not a build")
     outputs = recipe.get("expected_outputs")
     if (not isinstance(outputs, list) or len(outputs) > 64 or
             any(not isinstance(item, str) or not _relative(item) for item in outputs)):

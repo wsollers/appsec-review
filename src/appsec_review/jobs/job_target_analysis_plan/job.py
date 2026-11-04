@@ -424,8 +424,50 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     safety.fail(f"analysis-plan inference failed: {type(exc).__name__}",
                                 action="target_plan.inference")
             if errors:
+                accepted = []
+                unit_gaps = []
+                recipes = proposal.get("build_recipes", ())
+                counts: dict[str, int] = {}
+                subset_allowed = (
+                    set(proposal) == {"schema", "component_proposals", "build_recipes"}
+                    and proposal.get("schema") == PROPOSAL_SCHEMA
+                    and proposal.get("component_proposals") == []
+                    and isinstance(recipes, list) and len(recipes) <= 256
+                )
+                if subset_allowed:
+                    for recipe in recipes:
+                        if isinstance(recipe, Mapping):
+                            key = str(recipe.get("build_unit_id", ""))
+                            counts[key] = counts.get(key, 0) + 1
+                for build_unit in build_units:
+                    key = str(build_unit["build_unit_id"])
+                    candidates = [recipe for recipe in recipes if isinstance(recipe, Mapping)
+                                  and recipe.get("build_unit_id") == key] if subset_allowed else []
+                    candidate = candidates[0] if subset_allowed and counts.get(key) == 1 else None
+                    unit_errors = (validate_proposal(
+                        {**proposal, "build_recipes": [candidate]},
+                        catalog={**group_catalog, "build_units": [build_unit]},
+                        allowed_components=(), allowed_paths=request.allowed_paths,
+                    ) if candidate is not None else ["missing or duplicated recipe"])
+                    if not unit_errors:
+                        accepted.append(candidate)
+                    else:
+                        markers = ", ".join(f"{marker['path']}@{marker['sha256']}"
+                                            for marker in build_unit["markers"])
+                        unit_gaps.append(f"{family}/{build_system}/{key}: recipe proposal rejected after bounded repair "
+                                         f"({markers}): "
+                                         + "; ".join(unit_errors))
+                if accepted:
+                    return {"status": "PARTIAL", "proposal": {
+                        "schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                        "build_recipes": accepted,
+                    }, "calls": calls, "errors": errors[:20], "gap": "\n".join(unit_gaps or [
+                        f"{family}/{build_system}: rejected group validation retained as a coverage gap: "
+                        + "; ".join(errors[:20])
+                    ])}
                 return {"status": "REJECTED", "proposal": None, "calls": calls, "errors": errors[:20],
-                        "gap": f"{family}/{build_system}: recipe proposal rejected after bounded repair"}
+                        "gap": "\n".join(unit_gaps) or
+                               f"{family}/{build_system}: recipe proposal rejected after bounded repair"}
             return {"status": "FAILED", "proposal": None, "calls": calls, "errors": [],
                     "gap": f"{family}/{build_system}: recipe inference failed ({type(last_error).__name__})"}
 
