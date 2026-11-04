@@ -580,9 +580,9 @@ def build_job(*, fail_task: str | None = None) -> Job:
     units = (
         u("repository_discovery.partition_repository", partition),
         u("repository_discovery.census_languages", census, ("repository_discovery.partition_repository",)),
+        u("build_discovery.discover_build_systems", build_systems, ("repository_discovery.partition_repository",)),
         u("repository_discovery.discover_projects", projects, ("repository_discovery.partition_repository",
                                                              "build_discovery.discover_build_systems")),
-        u("build_discovery.discover_build_systems", build_systems, ("repository_discovery.partition_repository",)),
         u("build_discovery.discover_compile_commands", compile_commands, ("repository_discovery.partition_repository",)),
         u("build_discovery.catalog_build_targets", build_targets, ("build_discovery.discover_build_systems", "build_discovery.discover_compile_commands", "repository_discovery.partition_repository")),
         u("component_discovery.catalog_components", components, ("repository_discovery.discover_projects",)),
