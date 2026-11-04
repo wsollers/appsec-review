@@ -422,3 +422,360 @@ def test_committed_generation_refuses_unknown_tampered_or_missing_retained_state
             writer.committed_generation(requested)
         assert (state_path.read_bytes() if state_path.exists() else None) == state_after_damage
         assert (writer.paths.install / "a.h").read_bytes() == b"retain failed-build evidence"
+
+
+def accept_independent_nodes(workspace, initial, *, descendant=False, mutation=None):
+    invocations = {}
+    checkpoints = []
+    records = {}
+    generation = initial
+    for node in ("A", "B", "C", "D") if descendant else ("A", "B", "C"):
+        upstream = (records["A"].identity,) if node == "B" else (
+            (records["B"].identity,) if node == "D" else ())
+        with workspace.writer() as writer:
+            writer.begin_attempt(binding(node, upstream), f"{node}-initial", generation)
+            invocations[node] = invocations.get(node, 0) + 1
+            directory = writer.paths.target / node
+            directory.mkdir()
+            (directory / "output").write_bytes(f"compiled-{node}".encode())
+            library = writer.paths.install / f"lib{node}.a"
+            library.write_bytes(f"library-{node}".encode())
+            library.chmod(0o640)
+            (writer.paths.install / f"lib{node}.so").symlink_to(library.name)
+            if mutation:
+                mutation(writer, node)
+            record = writer.commit([product(f"target/{node}/output", "executable"),
+                                    product(f"install/lib{node}.so", "library")])
+            after = writer.state()["generation"]
+            checkpoints.append((node, generation, after))
+            records[node] = record
+            generation = after
+    return invocations, checkpoints, records
+
+
+def invalidate(writer, node_ids, checkpoints, operation_id=None):
+    return writer.invalidate_nodes(
+        node_ids, checkpoints, operation_id=operation_id or "invalidate-" + "-".join(node_ids),
+        expected_generation=writer.state()["generation"])
+
+
+def test_selective_invalidation_retries_b_without_rebuilding_a_or_later_independent_c(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    invocations, checkpoints, records = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        retained = {node: dict(records[node].reference) for node in ("A", "C")}
+        c_metadata = (writer.paths.target / "C/output").stat()
+        c_library_metadata = (writer.paths.install / "libC.a").stat()
+        c_link_metadata = (writer.paths.install / "libC.so").lstat()
+        operation = invalidate(writer, ["B"], checkpoints)
+        generation = operation["after_generation"]
+        assert writer.committed_generation()["accepted"] == retained
+        assert not (writer.paths.target / "B").exists()
+        assert not (writer.paths.install / "libB.a").exists()
+        assert not (writer.paths.install / "libB.so").exists()
+        assert (writer.paths.target / "C/output").read_bytes() == b"compiled-C"
+        assert (writer.paths.target / "C/output").stat().st_mtime_ns == c_metadata.st_mtime_ns
+        assert (writer.paths.install / "libC.a").stat().st_mtime_ns == c_library_metadata.st_mtime_ns
+        assert (writer.paths.install / "libC.a").stat().st_mode == c_library_metadata.st_mode
+        assert (writer.paths.install / "libC.so").lstat().st_mtime_ns == c_link_metadata.st_mtime_ns
+        assert os.readlink(writer.paths.install / "libC.so") == "libC.a"
+        assert writer.verify_product(records["A"], binding("A")) == records["A"]
+        assert writer.verify_product(records["C"], binding("C")) == records["C"]
+        fixed = replace(binding("B", (records["A"].identity,)), recipe_identity="recipe-B-r2")
+        writer.begin_attempt(fixed, "B-fixed", generation)
+        invocations["B"] += 1
+        (writer.paths.target / "B").mkdir()
+        (writer.paths.target / "B/output").write_bytes(b"compiled-B-r2")
+        new_b = writer.commit([product("target/B/output", "executable")])
+        assert writer.verify_product(new_b, fixed) == new_b
+        assert writer.verify_product(records["C"], binding("C")) == records["C"]
+    assert invocations == {"A": 1, "B": 2, "C": 1}
+    receipts = list((workspace.run_dir / "artifacts/build/workspace/invalidations").glob("*.json"))
+    assert len(receipts) == 1
+    receipt = json.loads(receipts[0].read_bytes())
+    assert receipt["invalid_nodes"] == ["B"]
+    assert receipt["retained"] == retained
+
+
+def test_selective_descendant_closure_preserves_independent_later_branch(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    invocations, checkpoints, records = accept_independent_nodes(workspace, initial, descendant=True)
+    with workspace.writer() as writer:
+        invalidate(writer, ["B", "D"], checkpoints)
+        assert set(writer.committed_generation()["accepted"]) == {"A", "C"}
+        assert not (writer.paths.target / "B").exists()
+        assert not (writer.paths.target / "D").exists()
+        assert writer.verify_product(records["A"], binding("A")) == records["A"]
+        assert writer.verify_product(records["C"], binding("C")) == records["C"]
+    assert invocations == {"A": 1, "B": 1, "C": 1, "D": 1}
+
+
+def test_repeated_selective_invalidation_accepts_noncontiguous_surviving_provenance(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    invocations, checkpoints, records = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        operation = invalidate(writer, ["B"], checkpoints)
+        recomposed = operation["after_generation"]
+        fixed = replace(binding("B", (records["A"].identity,)), recipe_identity="recipe-B-fixed")
+        writer.begin_attempt(fixed, "B-fixed", recomposed)
+        invocations["B"] += 1
+        (writer.paths.target / "B").mkdir()
+        (writer.paths.target / "B/output").write_bytes(b"new-B")
+        fixed_record = writer.commit([product("target/B/output", "executable")])
+        updated = [tuple(item) for item in operation["retained_checkpoints"]]
+        updated.append(("B", recomposed, writer.state()["generation"]))
+        invalidate(writer, ["C"], updated)
+        assert set(writer.committed_generation()["accepted"]) == {"A", "B"}
+        assert writer.verify_product(fixed_record, fixed) == fixed_record
+        assert writer.verify_product(records["A"], binding("A")) == records["A"]
+        assert not (writer.paths.target / "C").exists()
+    assert invocations == {"A": 1, "B": 2, "C": 1}
+
+
+def test_selective_invalidation_reconstructs_over_failed_uncommitted_attempt(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, records = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        generation = writer.state()["generation"]
+        writer.begin_attempt(binding("D"), "D-crashed", generation)
+        (writer.paths.target / "A/output").unlink()
+        (writer.paths.target / "C/output").write_bytes(b"tainted")
+        (writer.paths.target / "failed-link").symlink_to("/etc")
+        writer.fail_attempt("destructive-failure")
+        invalidate(writer, ["B"], checkpoints)
+        assert writer.verify_product(records["A"], binding("A")) == records["A"]
+        assert writer.verify_product(records["C"], binding("C")) == records["C"]
+        assert not (writer.paths.target / "failed-link").exists()
+        assert writer.state()["attempt"] is None
+
+
+@pytest.mark.parametrize("overlap", ["same_file", "shared_directory"])
+def test_overlapping_invalid_retained_mutations_refuse_without_touching_state(tmp_path, overlap):
+    workspace, _, initial = make_workspace(tmp_path)
+
+    def mutation(writer, node):
+        if node not in {"B", "C"}:
+            return
+        if overlap == "same_file":
+            (writer.paths.target / "shared.conf").write_bytes(node.encode())
+        else:
+            shared = writer.paths.target / "shared"
+            if node == "B":
+                shared.mkdir()
+            else:
+                (shared / "C-generated").write_bytes(b"C")
+
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial, mutation=mutation)
+    with workspace.writer() as writer:
+        before_state = (workspace.run_dir / workspace.state_relative).read_bytes()
+        with pytest.raises(ReconstructionMiss, match="overlapping"):
+            invalidate(writer, ["B"], checkpoints)
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == before_state
+        assert (writer.paths.target / "B/output").read_bytes() == b"compiled-B"
+        assert (writer.paths.target / "C/output").read_bytes() == b"compiled-C"
+
+
+def test_incomplete_descendant_closure_refuses_dangling_upstream_without_mutation(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial, descendant=True)
+    with workspace.writer() as writer:
+        state = writer.state()
+        with pytest.raises(ReconstructionMiss, match="missing or unordered upstream"):
+            invalidate(writer, ["B"], checkpoints)
+        assert writer.state() == state
+        assert (writer.paths.target / "D/output").read_bytes() == b"compiled-D"
+
+
+@pytest.mark.parametrize("damage", ["missing", "unknown", "duplicate", "wrong_transition", "wrong_order"])
+def test_selective_invalidation_refuses_incomplete_or_unproven_checkpoint_inputs(tmp_path, damage):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    if damage == "missing":
+        checkpoints = checkpoints[:-1]
+    elif damage == "unknown":
+        checkpoints[-1] = ("C", checkpoints[-1][1], "0" * 64)
+    elif damage == "duplicate":
+        checkpoints.append(checkpoints[0])
+    elif damage == "wrong_transition":
+        checkpoints[-1] = ("C", initial, checkpoints[-1][2])
+    else:
+        checkpoints[0], checkpoints[1] = checkpoints[1], checkpoints[0]
+    with workspace.writer() as writer:
+        state = writer.state()
+        with pytest.raises(ReconstructionMiss):
+            invalidate(writer, ["B"], checkpoints)
+        assert writer.state() == state
+        assert (writer.paths.target / "B/output").read_bytes() == b"compiled-B"
+
+
+def test_selective_invalidation_restores_invalid_node_input_deletion_and_mutation_metadata(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    original = (workspace.paths.target / "gtest/samples/sample1.cc").stat()
+
+    def mutation(writer, node):
+        if node == "B":
+            (writer.paths.target / "gtest/samples/sample1.cc").unlink()
+            (writer.paths.target / "make.conf").write_bytes(b"B-only config")
+            (writer.paths.target / "make.conf").chmod(0o600)
+        if node == "C":
+            (writer.paths.target / "C/config-link").symlink_to("../C/output")
+
+    _, checkpoints, records = accept_independent_nodes(workspace, initial, mutation=mutation)
+    with workspace.writer() as writer:
+        invalidate(writer, ["B"], checkpoints)
+        restored = writer.paths.target / "gtest/samples/sample1.cc"
+        assert restored.read_bytes() == b"int main() { return 0; }\n"
+        assert restored.stat().st_mode == original.st_mode
+        assert restored.stat().st_mtime_ns == original.st_mtime_ns
+        assert (writer.paths.target / "make.conf").read_bytes() == b"CC=cc\n"
+        assert os.readlink(writer.paths.target / "C/config-link") == "../C/output"
+        assert writer.verify_product(records["C"], binding("C")) == records["C"]
+
+
+@pytest.mark.parametrize("when", ["during_restore", "after_commit"])
+def test_selective_invalidation_crash_reopen_exact_retry_is_idempotent(tmp_path, monkeypatch, when):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, records = accept_independent_nodes(workspace, initial)
+    operation_id = "B-change-durable-operation"
+    with workspace.writer() as writer:
+        before = writer.state()["generation"]
+        if when == "during_restore":
+            actual_write = writer._write_state
+
+            def crash(value):
+                if value["condition"] == "clean":
+                    raise OSError("crash before committed pointer")
+                actual_write(value)
+
+            monkeypatch.setattr(writer, "_write_state", crash)
+        else:
+            actual_restore = writer.restore
+
+            def crash(identity=None):
+                actual_restore(identity)
+                raise OSError("crash after committed pointer but before caller ledger")
+
+            monkeypatch.setattr(writer, "restore", crash)
+        with pytest.raises(OSError, match="crash"):
+            writer.invalidate_nodes(["B"], checkpoints, operation_id=operation_id, expected_generation=before)
+    reopened = type(workspace)(workspace.run_dir)
+    with reopened.writer() as writer:
+        result = writer.invalidate_nodes(
+            ["B"], checkpoints, operation_id=operation_id, expected_generation=before)
+        assert writer.state()["generation"] == result["after_generation"]
+        assert writer.verify_product(records["A"], binding("A")) == records["A"]
+        assert writer.verify_product(records["C"], binding("C")) == records["C"]
+        assert not (writer.paths.install / "libB.a").exists()
+        state_bytes = (workspace.run_dir / workspace.state_relative).read_bytes()
+        receipt_files = list((workspace.run_dir / "artifacts/build/workspace/invalidations").glob("*.json"))
+        repeated = writer.invalidate_nodes(
+            ["B"], checkpoints, operation_id=operation_id, expected_generation=before)
+        assert repeated == result
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == state_bytes
+        assert list((workspace.run_dir / "artifacts/build/workspace/invalidations").glob("*.json")) == receipt_files
+        repeated["retained"]["A"]["sha256"] = "0" * 64
+        assert writer.invalidate_nodes(
+            ["B"], checkpoints, operation_id=operation_id, expected_generation=before) == result
+
+
+@pytest.mark.parametrize("newer", ["committed", "running", "untracked"])
+def test_stale_invalidation_retry_never_removes_newer_work(tmp_path, newer):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        before = writer.state()["generation"]
+        result = writer.invalidate_nodes(
+            ["B"], checkpoints, operation_id="B-change", expected_generation=before)
+        if newer != "untracked":
+            writer.begin_attempt(binding("D"), "newer-D", result["after_generation"])
+        (writer.paths.target / "newer-output").write_bytes(b"must not delete")
+        if newer == "committed":
+            writer.commit([product("target/newer-output", "executable")])
+        state = (workspace.run_dir / workspace.state_relative).read_bytes()
+        with pytest.raises(ReconstructionMiss, match="newer|uncommitted"):
+            writer.invalidate_nodes(["B"], checkpoints, operation_id="B-change", expected_generation=before)
+        assert (writer.paths.target / "newer-output").read_bytes() == b"must not delete"
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == state
+
+
+@pytest.mark.parametrize("damage", ["cas", "product_ref", "generation", "operation_ref"])
+def test_selective_invalidation_integrity_failure_preserves_working_tree(tmp_path, damage):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, records = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        before = writer.state()["generation"]
+        if damage == "cas":
+            digest = writer.committed_generation()["entries"]["install/libC.a"]["sha256"]
+            (workspace.run_dir / f"data/shared/objects/{digest}").write_bytes(b"changed")
+        elif damage == "product_ref":
+            (workspace.run_dir / records["C"].reference["path"]).unlink()
+        elif damage == "generation":
+            (workspace.run_dir / f"artifacts/build/workspace/generations/{checkpoints[1][1]}.json").unlink()
+        else:
+            writer.invalidate_nodes(["B"], checkpoints, operation_id="B-change", expected_generation=before)
+            operation = next((workspace.run_dir / (
+                "artifacts/build/workspace/invalidations/operations")).iterdir())
+            operation.write_bytes(b'{"receipt":{"path":"../../external","sha256":"wrong"}}\n')
+        state = (workspace.run_dir / workspace.state_relative).read_bytes()
+        c_bytes = (writer.paths.install / "libC.a").read_bytes()
+        with pytest.raises((ReconstructionMiss, WorkspaceError)):
+            writer.invalidate_nodes(["B"], checkpoints, operation_id="B-change", expected_generation=before)
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == state
+        assert (writer.paths.install / "libC.a").read_bytes() == c_bytes
+
+
+def test_invalidation_operation_identity_and_expected_generation_are_not_reusable_for_different_request(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        before = writer.state()["generation"]
+        with pytest.raises(ReconstructionMiss, match="expected generation"):
+            writer.invalidate_nodes(["B"], checkpoints, operation_id="wrong-base", expected_generation=initial)
+        writer.invalidate_nodes(["B"], checkpoints, operation_id="B-change", expected_generation=before)
+        state = writer.state()
+        with pytest.raises(ReconstructionMiss, match="different request"):
+            writer.invalidate_nodes(["C"], checkpoints, operation_id="B-change", expected_generation=before)
+        assert writer.state() == state
+
+
+def test_selective_invalidation_refuses_unknown_live_mutations_without_deleting_them(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        (writer.paths.target / "unknown-generated-input").write_bytes(b"not owned by an attempt")
+        before_state = (workspace.run_dir / workspace.state_relative).read_bytes()
+        with pytest.raises(ReconstructionMiss, match="untracked"):
+            invalidate(writer, ["B"], checkpoints)
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == before_state
+        assert (writer.paths.target / "unknown-generated-input").read_bytes() == b"not owned by an attempt"
+        assert (writer.paths.target / "B/output").read_bytes() == b"compiled-B"
+
+
+def test_selective_invalidation_refuses_current_durable_mutations_without_node_provenance(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        # Model a durable state publication not backed by a ledger node transition.
+        original = writer.committed_generation()
+        (writer.paths.target / "undeclared-input").write_bytes(b"no node provenance")
+        entries = writer._capture()
+        invalid_generation = writer._publish_generation(entries, dict(original["accepted"]),
+                                                         original["input_identity"])
+        state = writer.state()
+        state["generation"] = invalid_generation
+        writer._write_state(state)
+        before_state = (workspace.run_dir / workspace.state_relative).read_bytes()
+        with pytest.raises(ReconstructionMiss, match="outside the supplied checkpoints"):
+            invalidate(writer, ["B"], checkpoints)
+        assert (workspace.run_dir / workspace.state_relative).read_bytes() == before_state
+        assert (writer.paths.target / "undeclared-input").read_bytes() == b"no node provenance"
+
+
+def test_selective_invalidation_refuses_unknown_ids_without_mutation(tmp_path):
+    workspace, _, initial = make_workspace(tmp_path)
+    _, checkpoints, _ = accept_independent_nodes(workspace, initial)
+    with workspace.writer() as writer:
+        before_state = writer.state()
+        with pytest.raises(ReconstructionMiss, match="not in the committed"):
+            invalidate(writer, ["unknown-node"], checkpoints)
+        assert writer.state() == before_state

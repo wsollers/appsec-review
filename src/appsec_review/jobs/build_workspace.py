@@ -743,6 +743,165 @@ class WorkspaceWriter:
         identity = canonical_json_sha256({"attempt_id": attempt_id, "replay_id": self.workspace.replay_id})
         return f"artifacts/build/workspace/attempts/{identity}/{event}.json"
 
+    def invalidate_nodes(self, node_ids: Sequence[str],
+                         checkpoints: Sequence[tuple[str, str, str]], *,
+                         operation_id: str, expected_generation: str) -> Mapping[str, Any]:
+        """Recompose exact invalidations, preserving independent later accepted nodes.
+
+        Checkpoints name every currently accepted node in execution order, with
+        that node's durable before/after generation identities. They are provenance,
+        not a requirement for surviving transitions to remain globally contiguous.
+        No graph closure is inferred here: the caller supplies the invalid closure.
+        Missing descendants, overlapping meaningful writes, or undeclared mutations
+        require an explicit reconstruction/rebuild decision, never a guessed merge.
+        Persist the returned receipt and retained_checkpoints in the caller's ledger.
+        Retrying the identical operation after publication is idempotent; an old
+        operation cannot overwrite a newer accepted generation or attempt.
+        """
+        _identity(operation_id, "operation_id")
+        state = self.state()
+        current = self._generation()
+        if (isinstance(node_ids, (str, bytes)) or not node_ids
+                or any(not isinstance(node, str) or not node.strip() for node in node_ids)
+                or len(set(node_ids)) != len(node_ids)):
+            raise ValueError("node_ids must name unique accepted nodes to invalidate")
+        invalid = set(node_ids)
+        if isinstance(checkpoints, (str, bytes)):
+            raise ValueError("checkpoints must contain ordered node/before/after tuples")
+        for checkpoint in checkpoints:
+            if (not isinstance(checkpoint, (tuple, list)) or len(checkpoint) != 3
+                    or not isinstance(checkpoint[0], str)):
+                raise ValueError("each checkpoint must contain node_id, before_generation, after_generation")
+            _hash(checkpoint[1])
+            _hash(checkpoint[2])
+        request = {"operation_id": operation_id, "replay_id": self.workspace.replay_id,
+                   "node_ids": sorted(invalid), "checkpoints": [list(item) for item in checkpoints],
+                   "expected_generation": _hash(expected_generation)}
+        operation_key = canonical_json_sha256(
+            {"operation_id": operation_id, "replay_id": self.workspace.replay_id})
+        operation_path = f"artifacts/build/workspace/invalidations/operations/{operation_key}.json"
+
+        def finish(receipt: dict[str, Any], ref: Mapping[str, Any]) -> Mapping[str, Any]:
+            if receipt.get("schema") != _SCHEMA or receipt.get("request") != request:
+                raise ReconstructionMiss("invalidation operation identity was used for a different request")
+            result = _hash(receipt["after_generation"])
+            self._generation(result)
+            if state["generation"] == result:
+                if state["condition"] != "clean" or state["attempt"] is not None or state["purged"]:
+                    raise ReconstructionMiss("completed invalidation has newer uncommitted workspace state")
+                if _scan(self.workspace.root) != current["entries"]:
+                    raise ReconstructionMiss("completed invalidation has uncommitted workspace mutations")
+            elif (state["generation"] == expected_generation
+                  and state["attempt"] == receipt["before_attempt"]):
+                self.restore(result)
+            else:
+                raise ReconstructionMiss("invalidation retry is stale against a newer generation or attempt")
+            return deepcopy(dict(receipt, reference=dict(ref)))
+
+        index_path = safe_path(self.run_dir, operation_path)
+        if index_path.exists():
+            index = _json(index_path)
+            try:
+                ref = index["receipt"]
+                if ref["path"] != f"artifacts/build/workspace/invalidations/{_hash(ref['sha256'])}.json":
+                    raise ReconstructionMiss("invalidation operation receipt is not durable")
+                receipt = _json(verify_reference(self.run_dir, ref))
+            except (KeyError, TypeError, ValueError, OSError) as error:
+                raise ReconstructionMiss("invalidation operation receipt is missing or changed") from error
+            return finish(receipt, ref)
+        if state["generation"] != expected_generation:
+            raise ReconstructionMiss("invalidation expected generation changed before publication")
+        if (state["condition"] == "clean" and not state["purged"]
+                and _scan(self.workspace.root) != current["entries"]):
+            raise ReconstructionMiss("untracked clean-workspace mutations prevent invalidation")
+        if not invalid <= current["accepted"].keys():
+            raise ReconstructionMiss("invalidated node is not in the committed accepted generation")
+        transitions: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+        seen: set[str] = set()
+        for checkpoint in checkpoints:
+            node, before_id, after_id = checkpoint
+            if node in seen or node not in current["accepted"]:
+                raise ReconstructionMiss("duplicate or unaccepted checkpoint node")
+            seen.add(node)
+            before, after = self._generation(_hash(before_id)), self._generation(_hash(after_id))
+            if (set(after["accepted"]) - set(before["accepted"]) != {node}
+                    or node in before["accepted"]
+                    or any(after["accepted"].get(key) != ref for key, ref in before["accepted"].items())
+                    or after["accepted"][node] != current["accepted"][node]):
+                raise ReconstructionMiss("checkpoint does not prove exactly the accepted node transition")
+            transitions.append((node, before, after))
+        if seen != set(current["accepted"]):
+            raise ReconstructionMiss("checkpoints must cover every currently accepted node exactly once")
+
+        owner = self._owner()
+        snapshot = _json(verify_reference(self.run_dir, owner["input"]))
+        self._validate_entries(snapshot["entries"])
+
+        def meaningful(item: Mapping[str, Any] | None) -> dict[str, Any] | None:
+            if item is None:
+                return None
+            value = dict(item)
+            if value["kind"] == "directory":
+                value.pop("mtime_ns")
+            return value
+
+        changes: dict[str, dict[str, tuple[Any, Any]]] = {}
+        writes: dict[str, set[str]] = {}
+        for node, before, after in transitions:
+            delta = {path: (before["entries"].get(path), after["entries"].get(path))
+                     for path in before["entries"].keys() | after["entries"].keys()
+                     if before["entries"].get(path) != after["entries"].get(path)}
+            changes[node] = delta
+            writes[node] = {path for path, (old, new) in delta.items()
+                            if meaningful(old) != meaningful(new)}
+        invalid_writes = set().union(*(writes[node] for node in invalid))
+        for node in seen - invalid:
+            for path in writes[node]:
+                for removed in invalid_writes:
+                    if path == removed or path.startswith(removed + "/") or removed.startswith(path + "/"):
+                        raise ReconstructionMiss(
+                            f"overlapping invalidated and retained mutations: {node}:{path}, {removed}")
+
+        def compose(excluded: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+            entries = deepcopy(snapshot["entries"])
+            accepted: dict[str, Any] = {}
+            for node, _, after in transitions:
+                if node in excluded:
+                    continue
+                ref = after["accepted"][node]
+                record = self._record(ref)
+                if not set(record["binding"]["upstream_products"]) <= {
+                        item["sha256"] for item in accepted.values()}:
+                    raise ReconstructionMiss(f"retained node has missing or unordered upstream products: {node}")
+                for path, (old, _) in changes[node].items():
+                    if meaningful(entries.get(path)) != meaningful(old):
+                        raise ReconstructionMiss(f"unresolvable checkpoint mutation baseline: {node}:{path}")
+                for path, (_, new) in changes[node].items():
+                    if new is None:
+                        entries.pop(path, None)
+                    else:
+                        entries[path] = deepcopy(new)
+                accepted[node] = ref
+            self._validate_entries(entries)
+            for ref in accepted.values():
+                self._verify_entries(self._record(ref)["entries"], entries)
+            return entries, accepted
+
+        complete_entries, complete_accepted = compose(set())
+        if complete_entries != current["entries"] or complete_accepted != current["accepted"]:
+            raise ReconstructionMiss("current generation has mutations outside the supplied checkpoints")
+        entries, accepted = compose(invalid)
+        result = self._publish_generation(entries, accepted, current["input_identity"])
+        self._generation(result)
+        receipt = {"schema": _SCHEMA, "invalid_nodes": sorted(invalid),
+                   "request": request, "before_generation": state["generation"],
+                   "after_generation": result, "before_attempt": state["attempt"], "retained": accepted,
+                   "retained_checkpoints": [list(item) for item in checkpoints if item[0] not in invalid]}
+        identity = canonical_json_sha256(receipt)
+        ref = _immutable(self.run_dir, f"artifacts/build/workspace/invalidations/{identity}.json", receipt)
+        _immutable(self.run_dir, operation_path, {"schema": _SCHEMA, "receipt": ref})
+        return finish(receipt, ref)
+
     def restore(self, generation_identity: str | None = None) -> str:
         """Rehydrate all committed mutations, deletions and metadata without running a compiler."""
         state = self.state()
