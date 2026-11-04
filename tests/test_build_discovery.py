@@ -96,6 +96,20 @@ def test_descriptor_package_is_bounded_and_hash_identified(tmp_path: Path) -> No
     assert package["gaps"] == []
 
 
+def test_descriptor_authority_preserves_crlf_bytes_and_refuses_changed_hash(tmp_path: Path) -> None:
+    content = b"project(sample)\r\nadd_library(A STATIC a.c)\r\n"
+    path = tmp_path / "CMakeLists.txt"
+    path.write_bytes(content)
+    files = [{"path": path.name, "sha256": hashlib.sha256(content).hexdigest(),
+              "size_bytes": len(content)}]
+    unit = discover_build_units(files)[0]
+    package = descriptor_package(tmp_path, unit, files)
+    assert package["documents"][0]["content"].encode() == content
+    path.write_bytes(content.replace(b"\r\n", b"\n"))
+    with pytest.raises(ValueError, match="descriptor identity changed"):
+        descriptor_package(tmp_path, unit, files)
+
+
 def test_own_make_authority_precedes_nested_context_without_widening_bounds(tmp_path: Path) -> None:
     values = {f"wrapper/AA/{index}/README.md": "nested context" for index in range(25)}
     values["wrapper/Makefile"] = "all:\n\t$(MSBUILD) native.sln\n"

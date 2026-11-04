@@ -12,6 +12,7 @@ from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, DISCOVERED_BUILD_SYSTEMS, validate_build_recipe,
 )
 from appsec_review.jobs.component_ownership import resolve_ownership
+from appsec_review.jobs.build_topology import VARIANT_FIELDS, compile_build_topology, validate_build_topology
 from appsec_review.tool_inputs import SOURCE_SUFFIXES as TOOL_SOURCE_SUFFIXES, supports_path
 
 
@@ -249,11 +250,11 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
         gaps.append("build topology: no recognized build system in the accepted catalog")
     if not compile_databases:
         gaps.append("build topology: no accepted compile database; compiled-unit coverage is unavailable")
-    gaps.append("build topology: build targets and link outputs are not inferred without accepted build artifacts")
+    gaps.append("build topology: logical descriptor targets do not establish compiled link outputs without accepted build artifacts")
     generated = [{"path": item.get("path"), "status": "excluded", "reason": item.get("reason")}
                  for item in catalog.get("gaps", ()) if isinstance(item, Mapping) and
                  item.get("reason") == "generated_file_excluded"]
-    return {
+    plan = {
         "schema": PLAN_SCHEMA, "source_fingerprint": catalog["source_fingerprint"],
         "catalog_handoff_sha256": catalog["catalog_handoff_sha256"],
         "summary_sha256": summary["summary_sha256"], "provenance": "deterministic",
@@ -272,6 +273,7 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
                                "engine_project": dict(item.get("engine_project", {})),
                                "native_components": [dict(value) for value in item.get("native_components", ())],
                                "required_image_profile": item.get("required_image_profile", item["family"]),
+                               "build_variant": dict(item.get("build_variant", dict.fromkeys(VARIANT_FIELDS))),
                                "recipe": None, "requires_inference": item["build_system"] != "unity",
                                "executable": False}
                               for item in catalog.get("build_units", ())],
@@ -291,6 +293,20 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
         "coverage_gaps": list(dict.fromkeys(gaps)), "model": {"status": "NOT_NEEDED", "proposal_sha256": None},
         "history_priority": history_priority(history, catalog),
     }
+    _publish_build_graph(plan)
+    return plan
+
+
+def _publish_build_graph(plan: dict[str, Any]) -> None:
+    topology = plan["build_topology"]
+    graph = compile_build_topology(
+        topology["build_actions"], source_fingerprint=plan["source_fingerprint"],
+        component_relationships=topology["relationships"])
+    topology["executable_graph"] = graph
+    plan["coverage_gaps"] = list(dict.fromkeys([
+        *(gap for gap in plan["coverage_gaps"] if not gap.startswith("executable build graph: ")),
+        *(f"executable build graph: {gap['code']}: {gap['reason']}" for gap in graph["coverage_gaps"]),
+    ]))
 
 
 def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any],
@@ -424,6 +440,7 @@ def merge_proposal(plan: Mapping[str, Any], proposal: Mapping[str, Any], catalog
     result["scanner_non_selections"] = [item for item in result["scanner_non_selections"] if item["scanner_id"] not in chosen]
     result["provenance"] = "model-assisted"
     result["model"] = {"status": "ACCEPTED", "proposal_sha256": hashlib.sha256(canonical_json(proposal)).hexdigest()}
+    _publish_build_graph(result)
     return result
 
 
@@ -460,6 +477,10 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
     if any(item.get("executable") is not False for item in plan.get("build_topology", {}).get("build_actions", [])):
         raise ValueError("analysis planning may not authorize executable build actions")
     units = {str(item["build_unit_id"]): item for item in catalog.get("build_units", ())}
+    action_ids = [str(action.get("build_unit_id", ""))
+                  for action in plan.get("build_topology", {}).get("build_actions", [])]
+    if len(action_ids) != len(set(action_ids)) or set(action_ids) != set(units):
+        raise ValueError("analysis plan must account for every accepted build unit exactly once")
     for action in plan.get("build_topology", {}).get("build_actions", []):
         unit_id = str(action.get("build_unit_id", ""))
         if unit_id not in units:
@@ -471,6 +492,10 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
                 action.get("build_system") != accepted_unit.get("build_system") or
                 action.get("engine", {}) != accepted_unit.get("engine", {}) or
                 action.get("engine_project", {}) != accepted_unit.get("engine_project", {}) or
+                action.get("descriptor_facts", {}) != accepted_unit.get("descriptor_facts", {}) or
+                action.get("native_components", []) != list(accepted_unit.get("native_components", ())) or
+                action.get("required_image_profile") != accepted_unit.get("required_image_profile", accepted_unit["family"]) or
+                action.get("build_variant") != accepted_unit.get("build_variant", dict.fromkeys(VARIANT_FIELDS)) or
                 action.get("root") != accepted_unit.get("root")):
             raise ValueError("analysis plan build action facts differ from the accepted catalog")
         recipe = action.get("recipe")
@@ -480,3 +505,13 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
             errors = validate_build_recipe(recipe, units[unit_id])
             if errors:
                 raise ValueError("analysis plan build recipe is invalid: " + "; ".join(errors))
+    topology = plan.get("build_topology", {})
+    graph = topology.get("executable_graph")
+    if not isinstance(graph, Mapping):
+        raise ValueError("analysis plan requires an accepted executable build graph")
+    validate_build_topology(graph)
+    expected = compile_build_topology(
+        topology["build_actions"], source_fingerprint=catalog["source_fingerprint"],
+        component_relationships=topology["relationships"])
+    if graph != expected:
+        raise ValueError("analysis plan build graph differs from accepted descriptor declarations")

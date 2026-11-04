@@ -14,8 +14,9 @@ from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job, load_accepted_plan
 from appsec_review.jobs.job_target_analysis_plan.job import publish_guidance_bundle
 from appsec_review.jobs.job_target_analysis_plan.planning import (
-    PLAN_SCHEMA, PROPOSAL_SCHEMA, deterministic_plan, summarize_catalog, validate_proposal,
+    PLAN_SCHEMA, PROPOSAL_SCHEMA, deterministic_plan, summarize_catalog, validate_plan, validate_proposal,
 )
+from appsec_review.jobs.build_topology import topological_order, topology_identity
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.retrieval import RunIndexBackend, SearchRequest
 from appsec_review.retrieval import RetrievalCore
@@ -501,3 +502,77 @@ def test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path: Path) ->
     assert plan["model"]["status"] == "FAILED"
     assert any("recipe inference failed (TimeoutError)" in gap for gap in plan["coverage_gaps"])
     assert outcome["jobs"]["job_target_analysis_plan"]["status"]["status"] == "COMPLETED_WITH_GAPS"
+
+
+def test_accepted_plan_publishes_source_bound_executable_graph(tmp_path: Path) -> None:
+    import jsonschema
+
+    config, target = _fixture(tmp_path, {
+        "library/CMakeLists.txt": "project(lib)\nadd_library(A STATIC a.c)\n",
+        "app/CMakeLists.txt": "project(app)\nadd_executable(B b.c)\ntarget_link_libraries(B PRIVATE A)\n",
+    }, model_enabled=True)
+    outcome, plan = _run(config, target, build_job(infer=_Model(_proposal).complete))
+    graph = plan["build_topology"]["executable_graph"]
+    ids = {node["root"]: node["build_unit_id"] for node in graph["nodes"]}
+    assert graph["source_fingerprint"] == plan["source_fingerprint"]
+    assert topological_order(graph) == [ids["library"], ids["app"]]
+    assert graph["edges"][0]["producer_build_unit_id"] == ids["library"]
+    publication = outcome["jobs"]["job_target_analysis_plan"]["result"]["outputs"]["plan_acceptance.publish_handoff"]
+    assert publication["build_topology_id"] == graph["topology_id"]
+    assert publication["disposition_counts"]["build_units_independent"] == 2
+    assert all(action["executable"] is False for action in plan["build_topology"]["build_actions"])
+    schema = json.loads((ROOT / "docs/schemas/target-analysis-plan.schema.json").read_text())
+    jsonschema.Draft202012Validator.check_schema(schema)
+    jsonschema.validate(plan, schema)
+
+
+def test_graph_reuse_declares_releases_and_missing_release_still_refuses_reuse(tmp_path: Path) -> None:
+    from appsec_review.config.assurance import ComponentReleases
+
+    config, target = _fixture(tmp_path, {"CMakeLists.txt": "project(app)\n"})
+    config = replace(config, review_policy=replace(config.review_policy, releases=ComponentReleases({
+        "platform": "topology-fixture/1", "validation": "topology-fixture/1",
+    })))
+    runner = GraphRunner(config, [build_intake(), build_catalog(), build_job()])
+    first = runner.run(target_root=target, source_fingerprint=source_fingerprint(target))
+    graph = load_accepted_plan(config.runtime.runs_dir / first["run_id"])["build_topology"]["executable_graph"]
+    assert [item.action for item in runner.plan(first["run_id"], source_fingerprint(target))] == ["REUSE"] * 3
+    assert load_accepted_plan(config.runtime.runs_dir / first["run_id"])["build_topology"]["executable_graph"] == graph
+    undeclared = replace(config, review_policy=replace(config.review_policy, releases=ComponentReleases({})))
+    decisions = GraphRunner(undeclared, [build_intake(), build_catalog(), build_job()]).plan(
+        first["run_id"], source_fingerprint(target))
+    assert decisions[0].action != "REUSE"
+    assert "missing_release_identity" in decisions[0].reasons
+
+
+@pytest.mark.parametrize("mutation", ("graph", "missing", "duplicate", "root", "image_profile"))
+def test_plan_validation_rejects_unaccepted_graph_projection_or_authority(tmp_path: Path, mutation) -> None:
+    import hashlib
+    from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
+
+    content = "project(app)\nadd_executable(A a.c)\n"
+    (tmp_path / "CMakeLists.txt").write_text(content)
+    files = [{"path": "CMakeLists.txt", "sha256": hashlib.sha256(content.encode()).hexdigest(),
+              "size_bytes": len(content), "language": None}]
+    units = discover_build_units(files)
+    units[0]["descriptor_package"] = descriptor_package(tmp_path, units[0], files)
+    catalog = {"source_fingerprint": "snapshot", "catalog_handoff_sha256": "a" * 64,
+               "files": files, "components": [], "build_files": files, "compile_databases": [],
+               "build_units": units}
+    summary = summarize_catalog(catalog, max_items=100, max_bytes=65536, sample_per_prefix=1)
+    plan = deterministic_plan(catalog, summary)
+    validate_plan(plan, catalog)
+    if mutation == "graph":
+        graph = plan["build_topology"]["executable_graph"]
+        graph["nodes"][0]["family"] = "java"
+        graph["topology_id"] = topology_identity(graph)
+    elif mutation == "missing":
+        plan["build_topology"]["build_actions"] = []
+    elif mutation == "duplicate":
+        plan["build_topology"]["build_actions"] *= 2
+    elif mutation == "root":
+        plan["build_topology"]["build_actions"][0]["root"] = "elsewhere"
+    else:
+        plan["build_topology"]["build_actions"][0]["required_image_profile"] = "java"
+    with pytest.raises(ValueError):
+        validate_plan(plan, catalog)

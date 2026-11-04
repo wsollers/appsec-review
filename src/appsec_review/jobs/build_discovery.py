@@ -689,7 +689,11 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
         if target_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
             raise ValueError("build descriptor escaped the accepted target")
         try:
-            text = path.read_text(encoding="utf-8")
+            with path.open("rb") as stream:
+                content = stream.read(max_file_bytes + 1)
+            if hashlib.sha256(content).hexdigest() != item["sha256"] or len(content) != size:
+                raise ValueError(f"build descriptor identity changed: {item['path']}")
+            text = content.decode("utf-8")
         except UnicodeError:
             gaps.append(f"{item['path']}: descriptor is not UTF-8 text")
             continue
@@ -916,7 +920,8 @@ def _native_non_build_command(argv: Any) -> bool:
     return False
 
 
-def _make_default_capability_gap(unit: Mapping[str, Any]) -> str | None:
+def make_default_build_commands(unit: Mapping[str, Any]) -> tuple[Mapping[str, Any], str] | None:
+    """Resolve the default goal's literal rule closure without executing Make or includes."""
     root = PurePosixPath(str(unit.get("root", ".")))
     markers = {str(marker["path"]): marker for marker in unit.get("markers", ())
                if PurePosixPath(str(marker["path"])).parent == root}
@@ -963,8 +968,15 @@ def _make_default_capability_gap(unit: Mapping[str, Any]) -> str | None:
             prerequisites, target_commands = rules.get(target, ([], []))
             pending.extend(prerequisites)
             commands.extend(target_commands)
-        body = "\n".join(commands)
-        authority = f"{path}@{markers[path]['sha256']}"
+        return markers[path], "\n".join(commands)
+    return None
+
+
+def _make_default_capability_gap(unit: Mapping[str, Any]) -> str | None:
+    resolved = make_default_build_commands(unit)
+    if resolved is not None:
+        marker, body = resolved
+        authority = f"{marker['path']}@{marker['sha256']}"
         if (re.search(r"\bif\s+not\s+exist\b", body, re.I) and
                 re.search(r"\b(?:powershell|msbuild)\b", body, re.I)):
             return (f"unavailable_native_windows_toolchain: {authority}: "
@@ -972,7 +984,6 @@ def _make_default_capability_gap(unit: Mapping[str, Any]) -> str | None:
         if re.search(r"(?:^|[;&|])\s*[@+-]*docker\s+build\b", body, re.M):
             return (f"unsupported_native_orchestration: {authority}: "
                     "default Make target builds a Docker image, not a native compiler unit")
-        return None
     return None
 
 

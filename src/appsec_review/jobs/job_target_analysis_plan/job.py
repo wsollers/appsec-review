@@ -16,6 +16,7 @@ from appsec_review.application_paths import application_root
 from appsec_review.jobs.build_discovery import (
     build_recipe_inference_policy, normalize_build_recipe, required_image_profile,
 )
+from appsec_review.jobs.build_topology import validate_build_topology
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
@@ -145,6 +146,10 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
     plan = _read_artifact(Path(run_root), identity or {})
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError("accepted analysis plan schema is unsupported")
+    graph = plan.get("build_topology", {}).get("executable_graph")
+    if not isinstance(graph, Mapping) or graph.get("source_fingerprint") != plan.get("source_fingerprint"):
+        raise ValueError("accepted analysis plan has no source-bound executable build graph")
+    validate_build_topology(graph)
     reject_swift_derived(
         plan, enabled=swift_enabled_from_run(Path(run_root)),
         context="accepted target analysis plan")
@@ -587,6 +592,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         indexed = unit.output("plan_acceptance.index_plan")
         resolution = unit.output("analysis_decisions.resolve_ambiguity")
         plan = accepted["plan"]
+        build_graph = plan["build_topology"]["executable_graph"]
         unit.job.events.write("ANALYSIS_PLAN_COMPLETED",
             selected_scanner_count=len(plan["scanner_selections"]),
             skipped_scanner_count=len(plan["scanner_non_selections"]),
@@ -595,12 +601,16 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             validation_rejections=resolution["validation_rejections"],
             plan_sha256=accepted["artifact"]["sha256"], index_sha256=indexed["index_identity"]["sha256"])
         return {"schema": PLAN_SCHEMA, "artifact": accepted["artifact"],
+                 "build_topology_id": build_graph["topology_id"], "build_topology_schema": build_graph["schema"],
                 "index_manifest": indexed["index_manifest"], "index_identity": indexed["index_identity"],
                 "item_count": indexed["item_count"], "gaps": list(plan["coverage_gaps"]),
                 "terminal_status": resolution["terminal_status"],
                 "disposition_counts": {"selected_scanners": len(plan["scanner_selections"]),
                                        "skipped_scanners": len(plan["scanner_non_selections"]),
-                                       "model_calls": resolution["model_calls"]}}
+                                       "model_calls": resolution["model_calls"],
+                                       **{f"build_units_{disposition}": sum(
+                                           node["disposition"] == disposition for node in build_graph["nodes"])
+                                          for disposition in ("independent", "contained", "unsupported", "unresolved")}}}
 
     u = Unit
     units = (
