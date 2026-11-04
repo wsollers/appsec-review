@@ -68,7 +68,7 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
         relative = collection_path.relative_to(_REPOSITORY_ROOT / "tests")
     except ValueError:
         return None
-    if relative.parts and relative.parts[0] in {"integration", "live"}:
+    if relative.parts and relative.parts[0] in {"integration", "acceptance", "live"}:
         return True
     if len(relative.parts) == 1 and collection_path.match("test_live_*.py"):
         return True

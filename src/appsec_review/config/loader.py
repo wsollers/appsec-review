@@ -972,6 +972,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         if not isinstance(settings, dict):
             raise ValueError(f"jobs.{job_id}.settings must be a table")
         settings = copy.deepcopy(settings)
+        if job_id == "job_project_build":
+            from .unity import parse_unity_build_settings
+            parse_unity_build_settings(settings.get("unity"))
         capture_override = settings.get("build_capture")
         if capture_override is not None and job_id not in {"job_project_build", "job_language_build"}:
             raise ValueError(f"jobs.{job_id}.settings.build_capture is not a supported override target")

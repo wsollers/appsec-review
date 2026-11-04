@@ -8,6 +8,8 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Callable, Mapping, Sequence
 
+from appsec_review.jobs.engine_contracts import UNITY_BUILD_SYSTEM, UNITY_LANGUAGE_FAMILY
+
 
 BUILD_DESCRIPTOR_SCHEMA = "appsec-review/build-descriptor-package/1"
 BUILD_RECIPE_SCHEMA = "appsec-review/build-recipe/1"
@@ -58,7 +60,7 @@ _SOURCE_MARKERS: dict[str, tuple[str, str]] = {
 WASM_C_BUILD_SYSTEM = "clang"
 DISCOVERED_BUILD_SYSTEMS = frozenset(
     {system for _, system in (*_MARKERS.values(), *_SUFFIX_MARKERS.values(), *_SOURCE_MARKERS.values())}
-    | {WASM_C_BUILD_SYSTEM})
+    | {WASM_C_BUILD_SYSTEM, UNITY_BUILD_SYSTEM})
 _CONTEXT_NAMES = {
     "README", "README.md", "README.rst", "Dockerfile", "build.sh", "build.ps1",
     "build.gradle", "build.gradle.kts", "gradle.properties", "settings.gradle", "settings.gradle.kts", "gradle.lockfile",
@@ -124,6 +126,8 @@ _ANDROID_GRADLE_BUILD_TASKS = ("assemble", "assembleDebug")
 
 def required_image_profile(unit: Mapping[str, Any]) -> str:
     """Return the execution image selected from accepted deterministic build facts."""
+    if unit.get("build_system") == UNITY_BUILD_SYSTEM:
+        return "unity"
     facts = unit.get("descriptor_facts", {})
     if (unit.get("family") == "java" and unit.get("build_system") == "gradle" and
             isinstance(facts, Mapping) and facts.get("kind") == "android-gradle-application"):
@@ -207,7 +211,16 @@ def _marker(path: PurePosixPath) -> tuple[str, str] | None:
 
 def is_build_descriptor(path: PurePosixPath) -> bool:
     """Select project markers and build context before ordinary content-inventory limits."""
-    return path.suffix.lower() != ".wasm" and (_marker(path) is not None or _is_context_name(path.name))
+    engine_descriptor = (
+        path.parent.name == "ProjectSettings" and path.name in {
+            "ProjectVersion.txt", "ProjectSettings.asset", "EditorBuildSettings.asset"}
+        or path.parent.name == "Packages" and path.name in {"manifest.json", "packages-lock.json"}
+        or path.suffix.lower() in {".asmdef", ".asmref", ".uproject", ".uplugin"}
+        or path.suffix.lower() == ".meta" and PurePosixPath(path.stem).suffix.lower() in {
+            ".dll", ".so", ".dylib", ".a", ".bundle"}
+    )
+    return engine_descriptor or (
+        path.suffix.lower() != ".wasm" and (_marker(path) is not None or _is_context_name(path.name)))
 
 
 def _id(root: str, family: str, system: str) -> str:
@@ -227,18 +240,34 @@ def _component(item: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def discover_build_units(files: Sequence[Mapping[str, Any]], *,
-                         read_text: Callable[[str], str | None] | None = None) -> list[dict[str, Any]]:
+                         read_text: Callable[[str], str | None] | None = None,
+                         engine_discovery: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     """Group accepted build descriptors into stable, repository-independent build units.
 
     ``read_text`` returns the bounded text of a cataloged file. It lets a build script that
     targets wasm32 route its C sources to the wasm family instead of a direct-native unit.
     """
+    from appsec_review.jobs.engine_discovery import discover_unity
+
+    engines = (engine_discovery if engine_discovery is not None else
+               discover_unity(files, read_text=lambda descriptor, _limit:
+                              read_text(str(descriptor["path"])) if read_text is not None else None))
+    unity_roots = [PurePosixPath(project["root"]) for project in engines["projects"]]
+    def unity_owner(path: PurePosixPath) -> PurePosixPath | None:
+        return max((root for root in unity_roots if root.as_posix() == "." or root in path.parents),
+                   key=lambda root: len(root.parts), default=None)
+
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     components: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for item in files:
         path = PurePosixPath(str(item["path"]))
         marker = _marker(path)
         if marker is None:
+            continue
+        owner = unity_owner(path)
+        if owner is not None and (
+                path.suffix.lower() in {".csproj", ".vbproj", ".fsproj", ".sln", ".vcxproj", ".vcproj"}
+                or path.name == "package.json" and "Packages" in path.relative_to(owner).parts[:-1]):
             continue
         family, system = marker
         root = path.parent.as_posix()
@@ -272,9 +301,15 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
             # source tree. It is cataloged and analyzed by the CI lanes instead.
             continue
         family, system = fallback
-        if any(existing_family == family and
-               (root.as_posix() == "." or path == root or root in path.parents)
-               for root, existing_family in descriptor_roots):
+        matching_roots = [root for root, existing_family in descriptor_roots
+                          if existing_family == family and
+                          (root.as_posix() == "." or path == root or root in path.parents)]
+        owner = unity_owner(path)
+        if (owner is not None and family == "native" and
+                not any(len(root.parts) >= len(owner.parts) for root in matching_roots)):
+            components[(owner.as_posix(), UNITY_LANGUAGE_FAMILY, UNITY_BUILD_SYSTEM)].append(item)
+            continue
+        if matching_roots:
             continue
         if family == "native":
             owners = [key for key in groups if key[1] in NATIVE_COMPONENT_OWNER_FAMILIES and
@@ -306,6 +341,20 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
         if native:
             values[-1]["native_components"] = [
                 _component(value) for value in sorted(native, key=lambda value: str(value["path"]))]
+    for project in engines["projects"]:
+        root = str(project["root"])
+        values.append({
+            "build_unit_id": _id(root, UNITY_LANGUAGE_FAMILY, UNITY_BUILD_SYSTEM),
+            "root": root, "family": UNITY_LANGUAGE_FAMILY, "build_system": UNITY_BUILD_SYSTEM,
+            "engine": dict(project["engine"]), "markers": list(project["markers"]),
+            "descriptor_facts": dict(project["descriptor_facts"]),
+            "engine_project": project,
+            "native_components": sorted(
+                components.get((root, UNITY_LANGUAGE_FAMILY, UNITY_BUILD_SYSTEM), ()),
+                key=lambda value: str(value["path"])),
+            "provenance": "deterministic-engine-descriptors",
+        })
+    values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
     return values
 
 

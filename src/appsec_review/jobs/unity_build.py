@@ -400,6 +400,7 @@ def execute_unity_build(unit: UnitContext, action: Mapping[str, Any], settings: 
                 "recipe": {"execute_method": settings.execute_method or "reviewed-run-owned-bridge",
                            "output_path": settings.output_path, "settings_sha256": settings.identity},
                 "target_platform": settings.target or None,
+                "architecture": settings.architecture or None,
                 "scripting_backend": settings.scripting_backend or None,
             })
     if not settings.enabled:

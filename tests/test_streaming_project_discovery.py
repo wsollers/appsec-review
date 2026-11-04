@@ -186,8 +186,8 @@ def test_intake_catalog_and_metrics_share_verified_full_tree_discovery(tmp_path:
     task = next(unit for unit in build_intake().units if unit.unit_id == "prepare_target.validate_target")
     assert task.handler(context(task.unit_id))["file_discovery"] == expected
     handlers = {unit.unit_id: unit.handler for unit in build_catalog().units}
-    for name in ("repository_discovery.partition_repository", "repository_discovery.discover_projects",
-                 "build_discovery.discover_build_systems", "build_discovery.catalog_build_targets"):
+    for name in ("repository_discovery.partition_repository", "build_discovery.discover_build_systems",
+                 "repository_discovery.discover_projects", "build_discovery.catalog_build_targets"):
         outputs[name] = handlers[name](context(name))
     projects = outputs["repository_discovery.discover_projects"]
     assert projects["projects"][0]["manifest"] == "z-server/proj/login/login.vcxproj"

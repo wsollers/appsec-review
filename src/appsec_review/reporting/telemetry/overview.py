@@ -418,6 +418,29 @@ def _builds_and_findings(inputs: TelemetryInputs) -> Box:
              muted=True)))
 
 
+def _engine_builds(inputs: TelemetryInputs) -> Block:
+    builds = _mapping(_mapping(inputs.summary, "review"), "build_units")
+    discovered = _mapping(builds, "discovered_by_engine")
+    outcomes = _mapping(builds, "by_engine")
+    if not discovered and not outcomes:
+        return Note("No engine-specific build receipts were recorded; engine execution is not established.")
+    rows = []
+    for engine in sorted(set(discovered) | set(outcomes), key=clean):
+        result = outcomes.get(engine)
+        result = result if isinstance(result, Mapping) else {}
+        states = _mapping(result, "outcomes")
+        rows.append((Cell(_short(engine)), Cell(fmt.count(discovered.get(engine))),
+                    Cell(_short(", ".join(f"{clean(key)}: {fmt.count(value)}"
+                                          for key, value in sorted(states.items())) or fmt.UNAVAILABLE)),
+                    Cell(fmt.count(result.get("gap_count")))))
+    shown, omitted = _cap(rows, TOOL_LIMIT)
+    return Box(BoxKind.RESULT, "Engine build coverage", items=(
+        Table(("Engine", "Discovered", "Execution outcomes", "Gaps"), tuple(shown),
+             (0.15, 0.15, 0.55, 0.15), omitted=omitted),
+        Para("Detection and installed capability are not execution. Source inventories remain available "
+             "when engine builds are not requested, unavailable, or failed.", muted=True)))
+
+
 # --- triage reduction --------------------------------------------------------------------------
 
 TRIAGE_TITLE = "Triage reduction"
@@ -594,6 +617,7 @@ def overview_sections(inputs: TelemetryInputs) -> tuple[Block, ...]:
         _models(inputs),
         _tools(inputs),
         _builds_and_findings(inputs),
+        _engine_builds(inputs),
         _triage_reduction(inputs),
         Heading(2, "Data quality", anchor("telemetry", "quality")),
         _quality(inputs),

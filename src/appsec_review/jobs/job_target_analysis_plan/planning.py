@@ -156,7 +156,7 @@ def ambiguity_reasons(summary: Mapping[str, Any]) -> list[str]:
         reasons.append("mixed-language multi-component ownership may require contextual refinement")
     if any(str(gap).find("generated") >= 0 or str(gap).find("vendor") >= 0 for gap in summary["catalog_gaps"]):
         reasons.append("generated or vendored ownership is incomplete in the accepted catalog")
-    if summary.get("build_units"):
+    if any(item.get("build_system") != "unity" for item in summary.get("build_units", ())):
         reasons.append("buildable units require inference-derived build recipes")
     return reasons
 
@@ -267,9 +267,12 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
                                "descriptor_package": dict(item.get("descriptor_package", {})),
                                "project_type": item.get("project_type", "generic"),
                                "descriptor_facts": dict(item.get("descriptor_facts", {})),
+                               "engine": dict(item.get("engine", {})),
+                               "engine_project": dict(item.get("engine_project", {})),
                                "native_components": [dict(value) for value in item.get("native_components", ())],
                                "required_image_profile": item.get("required_image_profile", item["family"]),
-                               "recipe": None, "requires_inference": True, "executable": False}
+                               "recipe": None, "requires_inference": item["build_system"] != "unity",
+                               "executable": False}
                               for item in catalog.get("build_units", ())],
             "compile_databases": compile_databases,
             "compile_units": [{"compile_database": item["path"], "status": "cataloged-unexpanded"}
@@ -466,9 +469,13 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
                 action.get("descriptor_package") != accepted_unit.get("descriptor_package") or
                 action.get("family") != accepted_unit.get("family") or
                 action.get("build_system") != accepted_unit.get("build_system") or
+                action.get("engine", {}) != accepted_unit.get("engine", {}) or
+                action.get("engine_project", {}) != accepted_unit.get("engine_project", {}) or
                 action.get("root") != accepted_unit.get("root")):
             raise ValueError("analysis plan build action facts differ from the accepted catalog")
         recipe = action.get("recipe")
+        if action.get("build_system") == "unity" and recipe is not None:
+            raise ValueError("Unity builds require configured engine capability, not inferred recipes")
         if recipe is not None:
             errors = validate_build_recipe(recipe, units[unit_id])
             if errors:

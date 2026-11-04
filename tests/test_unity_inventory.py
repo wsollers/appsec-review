@@ -315,12 +315,13 @@ def test_fingerprint_canonical_inputs_unknowns_and_secret_redaction():
     partial = unity_configuration_fingerprint(project, SNAPSHOT)
     assert partial["schema"] == UNITY_FINGERPRINT_SCHEMA
     assert partial["status"] == "partial"
-    assert {"recipe", "toolchain", "target_platform", "scripting_backend", "sdk",
+    assert {"recipe", "toolchain", "target_platform", "architecture", "scripting_backend", "sdk",
             "dependency_resolution"} <= set(partial["unknown_inputs"])
     build = {"recipe": {"entrypoint": "Build.Perform", "password": "do-not-publish"},
              "toolchain": {"image_id": "sha256:abc", "modules": ["linux", "windows"],
                            "token": "do-not-publish"},
-             "target_platform": "StandaloneLinux64", "scripting_backend": "IL2CPP", "sdk": "sdk-1"}
+             "target_platform": "StandaloneLinux64", "architecture": "x86_64",
+             "scripting_backend": "IL2CPP", "sdk": "sdk-1"}
     original = unity_configuration_fingerprint(project, SNAPSHOT, build)
     shuffled = deepcopy(project)
     shuffled["inventory"]["assemblies"].reverse()
@@ -338,6 +339,9 @@ def test_fingerprint_canonical_inputs_unknowns_and_secret_redaction():
     assert original["status"] == "partial"  # unresolved declared Git request
     project["inventory"]["declarations"] = [
         item for item in project["inventory"]["declarations"] if item["name"] != "com.example.unresolved"]
+    assert {"plugin_version:Assets/Plugins/sample.dll", "plugin_provenance:Assets/Plugins/sample.dll"} <= set(
+        unity_configuration_fingerprint(project, SNAPSHOT, build)["unknown_inputs"])
+    project["inventory"]["plugins"] = []
     assert unity_configuration_fingerprint(project, SNAPSHOT, build)["status"] == "complete"
 
 
@@ -469,6 +473,37 @@ def test_builtin_spdx_keeps_requested_and_locked_versions_evidence_and_dependenc
     }
     assert expected_edges <= actual_edges
     assert not any(edge["relationshipType"] == "CONTAINS" for edge in document["relationships"])
+
+
+def test_spdx_preserves_mixed_editor_and_unknown_scopes_without_claiming_delivery():
+    unity = parse()
+    document = enrich_unity_spdx(base_result(), unity, source_fingerprint=SNAPSHOT, bounds=BOUNDS)["document"]
+    project = next(item for item in document["packages"] if item["name"] == "Unity project .")
+    metadata = json.loads(project["comment"])
+    assemblies = {item["path"]: item for item in metadata["assembly_scope_observations"]}
+    assert assemblies["Assets/Editor/EditorOnly.asmdef"]["contexts"] == ["editor"]
+    assert assemblies["Assets/Scripts/Mixed.asmdef"]["contexts"] == ["editor", "runtime-capable"]
+    assert assemblies["Assets/Scripts/Mixed.asmref"]["contexts"] == ["unknown"]
+    assert all(item["delivery_status"] == "unknown" for item in assemblies.values())
+    settings = metadata["configuration_observations"]
+    assert settings["raw_settings"]["iOSSDKVersion"] == 988
+    assert settings["basis"] == "configuration_presence_not_selected_targets_or_shipment"
+    assert settings["descriptor_evidence"]
+    assert all(json.loads(item["comment"])["delivery_status"] == "unknown" for item in document["packages"])
+    validate_spdx(document, bounds=BOUNDS)
+
+
+def test_invalid_assembly_filter_remains_a_gap_not_a_guessed_scope():
+    files = fixture_files()
+    files["Assets/Editor/EditorOnly.asmdef"] = b'{"name":"EditorOnly","includePlatforms":42}'
+    unity = parse(files)
+    assert any("invalid_assembly_platform_filter" in gap for gap in unity["gaps"])
+    result = enrich_unity_spdx(base_result(), unity, source_fingerprint=SNAPSHOT, bounds=BOUNDS)
+    package = next(item for item in result["document"]["packages"] if item["name"] == "Unity project .")
+    scopes = json.loads(package["comment"])["assembly_scope_observations"]
+    observed = next(item for item in scopes if item["path"] == "Assets/Editor/EditorOnly.asmdef")
+    assert observed["contexts"] == ["unknown"] and observed["basis"] == "invalid_assembly_platform_filters"
+    assert result["gaps"]
 
 
 @pytest.mark.parametrize("other_version,other_revision", [

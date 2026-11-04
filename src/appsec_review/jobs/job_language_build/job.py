@@ -1582,6 +1582,7 @@ def build_job(*, executor_factory=None) -> Job:
         selected_ids = {str(item["build_unit_id"]) for item in selected}
         unavailable = ([item for item in accepted.get("probe_receipts", ())
                         if item.get("family") == "dotnet"
+                        and item.get("build_system") != "unity"
                         and str(item.get("build_unit_id")) not in selected_ids]
                        if family == "dotnet" else [])
         # A planned unit of this family that project build could not build is a named gap here,
@@ -1643,6 +1644,9 @@ def build_job(*, executor_factory=None) -> Job:
         gaps.extend(f"{item['build_unit_id']}: {gap}" for item in upstream_failed for gap in item["gaps"])
         return {"dispatches": selected, "unavailable": unavailable, "accepted": accepted,
                 "non_run_receipts": [*non_run_receipts, *upstream_failed],
+                "engine_receipts": ([dict(item) for item in accepted.get("probe_receipts", ())
+                                     if item.get("build_system") == "unity"
+                                     and item.get("family") == family] if family == "dotnet" else []),
                 "processing_decisions": decisions, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
                                    "SUCCEEDED"}
@@ -1658,7 +1662,7 @@ def build_job(*, executor_factory=None) -> Job:
             raise ValueError("accepted build dispatch references an unknown dependency")
         pending = set(dispatches)
         completed = {str(item.get("build_unit_id")): dict(item)
-                     for item in loaded.get("non_run_receipts", ())}
+                     for item in (*loaded.get("non_run_receipts", ()), *loaded.get("engine_receipts", ()))}
         completed.update({str(item.get("build_unit_id")): _unavailable_dotnet_receipt(
                          unit, item, loaded["accepted"])
                      for item in loaded.get("unavailable", ())})

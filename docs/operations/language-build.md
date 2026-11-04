@@ -5,6 +5,12 @@ current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kot
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.
+Unity engine builds are performed once in `job_project_build` by its provisioned engine
+executor, not by replaying generated `.csproj` files through the .NET SDK. The .NET lane carries
+the accepted engine receipt, outputs and named coverage gaps into this job's publication and build
+index without rebuilding it. Engine identity supplements rather than replaces `family = "dotnet"`;
+see [Unity builds](unity-build.md). An engine build output or successful Editor process does not
+establish complete compiler capture or runtime shipment.
 A planned unit that `job_project_build` probed but could not build (for example its build image is
 unavailable) is never an absent lane: its family publishes a `BLOCKED` receipt with
 `upstream_failure` (`job_id`, `terminal_status`, `reason`) and a gap naming the unit, the failure and

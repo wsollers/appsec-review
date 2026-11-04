@@ -111,6 +111,12 @@ Exact source evidence, uncertain/conflicting versions, coverage gaps, provenance
 publication outcomes remain visible. It reuses the Syft image; see
 [`docs/operations/native-sbom.md`](docs/operations/native-sbom.md).
 
+**Unity projects** retain engine identity alongside their C#/native language inventory. Bounded
+project/package descriptors feed the source/build SPDX 2.3 inventory, deterministic planning, and
+an opt-in, explicitly provisioned Unity executor. No Editor, license, mobile SDK, or Unity image is
+installed automatically. Missing capability is a build-coverage gap, not missing source analysis;
+see [Unity builds](docs/operations/unity-build.md).
+
 **CodeQL** is not in the catalog. Its licensed payload (CLI, extractors, query packs) is not in this
 repository: on any Linux Docker host (native Linux or WSL 2, not Windows PowerShell)
 `containers/tools/codeql/build-source-image.sh` downloads the pinned CodeQL bundle and

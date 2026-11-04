@@ -398,6 +398,11 @@ def discover_unity(
                    and _under(other, root) is not None for other in all_roots):
                 continue
             if path.endswith((".asmdef", ".asmref")):
+                for field in ("includePlatforms", "excludePlatforms"):
+                    if field in value and (
+                            not isinstance(value[field], list) or
+                            any(not isinstance(item, str) for item in value[field])):
+                        local_gaps.append(f"invalid_assembly_platform_filter: {path}: {field}")
                 inventory["assemblies"].append({
                     "path": path, "evidence": catalog[path],
                     "facts": _public({key: value[key] for key in (
@@ -488,7 +493,7 @@ def unity_configuration_fingerprint(
         if isinstance(value, str):
             return value.strip().casefold() not in {"", "unknown", "noassertion", "unspecified"}
         return bool(value) if isinstance(value, (Mapping, list)) else True
-    unknown = [key for key in ("recipe", "toolchain", "target_platform", "scripting_backend", "sdk")
+    unknown = [key for key in ("recipe", "toolchain", "target_platform", "architecture", "scripting_backend", "sdk")
                if not known(supplied.get(key))]
     if not isinstance(source_fingerprint, str) or not _HASH.fullmatch(source_fingerprint):
         unknown.append("source_snapshot")
@@ -507,6 +512,11 @@ def unity_configuration_fingerprint(
             unknown.append("dependency_revision:" + item["name"])
         if item.get("source") in {None, "", "unknown"}:
             unknown.append("dependency_source:" + item["name"])
+    for item in inventory.get("plugins", []):
+        if not known(item.get("version")):
+            unknown.append("plugin_version:" + item["path"])
+        if not known(item.get("provenance")):
+            unknown.append("plugin_provenance:" + item["path"])
     if project["descriptor_facts"].get("engine_conflict"):
         unknown.append("engine_identity")
     if project["gaps"]:

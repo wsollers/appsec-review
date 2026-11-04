@@ -23,6 +23,25 @@ def _comment(**metadata: Any) -> str:
     return canonical_json({"schema": ENGINE_METADATA_SCHEMA, **metadata}).decode("utf-8").strip()
 
 
+def _assembly_scopes(assembly: Mapping[str, Any]) -> dict[str, Any]:
+    facts = assembly["facts"]
+    if "reference" in facts:
+        return {**assembly, "contexts": ["unknown"], "basis": "assembly_reference_scope_unresolved",
+                "delivery_status": "unknown"}
+    included, excluded = facts.get("includePlatforms", []), facts.get("excludePlatforms", [])
+    if any(not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+           for value in (included, excluded)):
+        return {**assembly, "contexts": ["unknown"], "basis": "invalid_assembly_platform_filters",
+                "delivery_status": "unknown"}
+    contexts = []
+    if "Editor" not in excluded and (not included or "Editor" in included):
+        contexts.append("editor")
+    if not included or any(platform != "Editor" for platform in included):
+        contexts.append("runtime-capable")
+    return {**assembly, "contexts": contexts or ["unknown"],
+            "basis": "assembly_platform_filters_not_execution", "delivery_status": "unknown"}
+
+
 def enrich_unity_spdx(
     result: Mapping[str, Any], unity: Mapping[str, Any], *,
     source_fingerprint: str, bounds: SbomBounds,
@@ -44,7 +63,8 @@ def enrich_unity_spdx(
     provenance.setdefault("gaps", []).extend(engine_gaps)
     for project in sorted(unity.get("projects", []), key=lambda item: item["root"]):
         root, engine, inventory = project["root"], project["engine"], project["inventory"]
-        common = {"engine": "unity", "root": root, "source_fingerprint": source_fingerprint}
+        common = {"engine": "unity", "root": root, "source_fingerprint": source_fingerprint,
+                  "inventory_basis": "source_metadata", "delivery_status": "unknown"}
 
         def package(kind: str, name: str, metadata: Mapping[str, Any], *,
                     version: str | None = None, identity: Any = None,
@@ -84,9 +104,20 @@ def enrich_unity_spdx(
             "engine_conflict": project["descriptor_facts"]["engine_conflict"],
             "builtin_module_count": len({item["name"] for item in inventory.get("engine_context", [])}),
             "builtin_module_inventory_field": "engine_context",
+            "assembly_scope_observations": [
+                _assembly_scopes(item) for item in inventory.get("assemblies", [])],
+            "configuration_observations": {
+                "raw_settings": project["descriptor_facts"].get("raw_settings", {}),
+                "scenes": project["descriptor_facts"].get("scenes", []),
+                "basis": "configuration_presence_not_selected_targets_or_shipment",
+                "descriptor_evidence": [item for item in project["markers"]
+                                        if item["path"].endswith(
+                                            ("ProjectSettings.asset", "EditorBuildSettings.asset"))],
+            },
         }, evidence=project["markers"])
         editor_id = package("declared-editor", "Unity Editor", {
             "declared_revision": engine.get("declared_revision"), "executed": False,
+            "contexts": ["editor", "build"],
         }, version=engine.get("declared_version"), evidence=[
             item for item in project["markers"] if item["path"].endswith("ProjectVersion.txt")])
         edge(editor_id, project_id, "BUILD_DEPENDENCY_OF", basis="declared_editor_not_execution")
@@ -186,6 +217,7 @@ def enrich_unity_spdx(
                 "scope_evidence": {"descriptor": plugin["evidence"],
                                    "selector": "/PluginImporter/platformData"},
                 "identity_status": "importer_metadata_only",
+                "contexts": ["unknown"], "platform_filters": plugin["importer"],
             }, identity=plugin["path"], evidence=[plugin["evidence"]])
             edge(project_id, plugin_id, "DEPENDS_ON", basis="cataloged_native_plugin_importer",
                  scope="importer_configuration_only")

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
@@ -25,6 +25,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import file_sha256
+from appsec_review.storage.shared import safe_path
 from appsec_review.jobs.job_target_catalog.datasets import CONSUMES, DATASETS
 
 
@@ -139,12 +140,26 @@ def build_job(*, fail_task: str | None = None) -> Job:
     def projects(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         found = []
+        engine_discovery = unit.output("build_discovery.discover_build_systems")["engine_discovery"]
+        engine_roots = [PurePosixPath(project["root"]) for project in engine_discovery["projects"]]
         for item in unit.output("repository_discovery.partition_repository")["files"]:
             path = Path(item["path"])
+            logical = PurePosixPath(item["path"])
+            owner = next((root for root in engine_roots if root.as_posix() == "." or root in logical.parents), None)
+            if owner is not None and (
+                    path.suffix.lower() in PROJECT_FILE_SUFFIXES or
+                    path.name == "package.json" and "Packages" in logical.relative_to(owner).parts[:-1]):
+                continue
             if path.name in PROJECT_FILES or path.suffix.lower() in PROJECT_FILE_SUFFIXES:
                 found.append({"manifest": item["path"], "root": path.parent.as_posix(), "sha256": item["sha256"]})
+        for project in engine_discovery["projects"]:
+            marker = next(item for item in project["markers"]
+                          if PurePosixPath(item["path"]).name == "ProjectVersion.txt")
+            found.append({"manifest": marker["path"], "root": project["root"],
+                          "sha256": marker["sha256"], "engine": project["engine"]})
         doc = {"schema": "appsec-review/project-catalog/1", "projects": found,
-               "gaps": [] if found else ["no recognized project manifests"]}
+               "engine_observations": engine_discovery["observations"],
+               "gaps": engine_discovery["gaps"] + ([] if found else ["no recognized project manifests"])}
         return {"artifact": _artifact(unit, "projects.json", doc), **doc}
 
     def build_systems(unit: UnitContext) -> Mapping[str, Any]:
@@ -156,23 +171,36 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 systems.append({"path": item["path"], "kind": name, "sha256": item["sha256"]})
         files = unit.output("repository_discovery.partition_repository")["files"]
         target = _target(unit).resolve()
-        sizes = {str(item["path"]): int(item.get("size_bytes", 0)) for item in files}
+        accepted = {str(item["path"]): item for item in files}
+        changed_descriptors = []
 
         def read_text(relative: str) -> str | None:
             # Bounded build-script read for routing only; the bytes never become instructions.
-            if sizes.get(relative, 0) > 64 * 1024:
+            identity = accepted.get(relative)
+            if identity is None or int(identity["size_bytes"]) > 64 * 1024:
                 return None
-            path = (target / relative).resolve()
-            if target not in path.parents or not path.is_file() or path.is_symlink():
+            path = safe_path(target, relative)
+            if not path.is_file():
                 return None
             try:
-                return path.read_text(encoding="utf-8")
+                raw = path.read_bytes()
+                if (len(raw) != identity["size_bytes"] or
+                        hashlib.sha256(raw).hexdigest() != identity["sha256"]):
+                    changed_descriptors.append(relative)
+                    raise ValueError("engine/build descriptor differs from the accepted catalog")
+                return raw.decode("utf-8")
             except (OSError, UnicodeError):
                 return None
 
-        units = discover_build_units(files, read_text=read_text)
-        gaps = unsupported_build_gaps(files, units)
+        from appsec_review.jobs.engine_discovery import discover_unity
+        engines = discover_unity(files, read_text=lambda descriptor, _limit: read_text(descriptor["path"]))
+        if changed_descriptors:
+            raise ValueError("engine/build descriptor differs from the accepted catalog: " +
+                             ", ".join(sorted(set(changed_descriptors))))
+        units = discover_build_units(files, read_text=read_text, engine_discovery=engines)
+        gaps = [*unsupported_build_gaps(files, units), *engines["gaps"]]
         doc = {"schema": "appsec-review/build-systems/2", "systems": systems, "build_units": units,
+               "engine_discovery": engines,
                "source_only_scopes": source_only_scopes(files, units),
                "gaps": gaps or ([] if units else ["no recognized build system"])}
         return {"artifact": _artifact(unit, "build-systems.json", doc), **doc}
@@ -191,13 +219,26 @@ def build_job(*, fail_task: str | None = None) -> Job:
         files = unit.output("repository_discovery.partition_repository")["files"]
         targets = []
         for item in build_units:
-            package = descriptor_package(_target(unit), item, files)
-            facts = android_descriptor_facts(package)
+            if item.get("build_system") == "unity":
+                from appsec_review.jobs.engine_discovery import unity_configuration_fingerprint
+                project = item["engine_project"]
+                fingerprint = unity_configuration_fingerprint(project, unit.job.source_fingerprint)
+                package = {"schema": "appsec-review/build-descriptor-package/1",
+                           "build_unit": {"build_unit_id": item["build_unit_id"]},
+                           "documents": [], "inventory": list(item["markers"]), "gaps": []}
+                facts = dict(item["descriptor_facts"])
+                facts["configuration_fingerprint"] = fingerprint
+            else:
+                package = descriptor_package(_target(unit), item, files)
+                facts = android_descriptor_facts(package)
             target = {**item, "descriptor_package": package,
-                      "project_type": facts["kind"] if facts else "generic",
+                      "project_type": facts.get("kind", "unity" if item.get("engine") else "generic") if facts else "generic",
                       "descriptor_facts": facts or {}}
             targets.append({**target, "required_image_profile": required_image_profile(target)})
         doc = {"schema": "appsec-review/build-targets/2", "targets": targets,
+               "engine_discovery": {
+                   key: unit.output("build_discovery.discover_build_systems")["engine_discovery"][key]
+                   for key in ("counts", "observations", "gaps")},
                "gaps": unit.output("build_discovery.discover_build_systems")["gaps"]}
         return {"artifact": _artifact(unit, "build-targets.json", doc), **doc}
 
@@ -539,7 +580,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
     units = (
         u("repository_discovery.partition_repository", partition),
         u("repository_discovery.census_languages", census, ("repository_discovery.partition_repository",)),
-        u("repository_discovery.discover_projects", projects, ("repository_discovery.partition_repository",)),
+        u("repository_discovery.discover_projects", projects, ("repository_discovery.partition_repository",
+                                                             "build_discovery.discover_build_systems")),
         u("build_discovery.discover_build_systems", build_systems, ("repository_discovery.partition_repository",)),
         u("build_discovery.discover_compile_commands", compile_commands, ("repository_discovery.partition_repository",)),
         u("build_discovery.catalog_build_targets", build_targets, ("build_discovery.discover_build_systems", "build_discovery.discover_compile_commands", "repository_discovery.partition_repository")),
