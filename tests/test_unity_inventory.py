@@ -90,6 +90,45 @@ def test_real_descriptors_validate_root_and_preserve_raw_configuration():
     assert result["gaps"] == []
 
 
+def test_regional_editor_source_stamp_and_revision_are_preserved_exactly():
+    files = fixture_files()
+    files["ProjectSettings/ProjectVersion.txt"] = (
+        b"m_EditorVersion: 2022.3.62f2c1\n"
+        b"m_EditorVersionWithRevision: 2022.3.62f2c1 (61c2feb0970d)\n")
+    unity = parse(files)
+    assert len(unity["projects"]) == 1
+    project = unity["projects"][0]
+    assert project["engine"] == {
+        "kind": "unity", "declared_version": "2022.3.62f2c1", "declared_revision": "61c2feb0970d"}
+    fingerprint = unity_configuration_fingerprint(project, SNAPSHOT)
+    assert fingerprint["inputs"]["engine"] == project["engine"]
+    spdx = enrich_unity_spdx(base_result(), unity, source_fingerprint=SNAPSHOT, bounds=BOUNDS)
+    editor = next(item for item in spdx["document"]["packages"] if item["name"] == "Unity Editor")
+    assert editor["versionInfo"] == "2022.3.62f2c1"
+    assert json.loads(editor["comment"])["declared_revision"] == "61c2feb0970d"
+
+
+@pytest.mark.parametrize("iphone_setting,expected", [
+    ("  iPhoneSdkVersion: 988\n", 988),
+    ("  iPhoneSdkVersion:\n    iPhone: 988\n    Simulator: 989\n", {"iPhone": 988, "Simulator": 989}),
+])
+def test_platform_architecture_and_iphone_sdk_raw_values_survive_discovery_and_fingerprint(
+    iphone_setting, expected,
+):
+    files = fixture_files()
+    files["ProjectSettings/ProjectSettings.asset"] += (
+        "  platformArchitecture:\n    Standalone: 1\n    iPhone: 2\n" + iphone_setting).encode()
+    project = parse(files)["projects"][0]
+    settings = project["descriptor_facts"]["raw_settings"]
+    assert settings["platformArchitecture"] == {"Standalone": 1, "iPhone": 2}
+    assert settings["iPhoneSdkVersion"] == expected
+    fingerprint = unity_configuration_fingerprint(project, SNAPSHOT)
+    assert fingerprint["inputs"]["settings"]["platformArchitecture"] == settings["platformArchitecture"]
+    assert fingerprint["inputs"]["settings"]["iPhoneSdkVersion"] == expected
+    project["descriptor_facts"]["raw_settings"]["platformArchitecture"]["Standalone"] = 0
+    assert unity_configuration_fingerprint(project, SNAPSHOT)["sha256"] != fingerprint["sha256"]
+
+
 def test_declarations_resolution_builtin_context_and_assembly_evidence_are_distinct():
     inventory = parse()["projects"][0]["inventory"]
     assert len(inventory["declarations"]) == 3
@@ -378,7 +417,96 @@ def test_builtin_source_is_context_even_without_unity_modules_prefix():
     inventory = unity["projects"][0]["inventory"]
     assert "com.unity.custom-builtin" not in {item["name"] for item in inventory["declarations"]}
     enriched = enrich_unity_spdx(base_result(), unity, source_fingerprint=SNAPSHOT, bounds=BOUNDS)
-    assert "com.unity.custom-builtin" not in {item["name"] for item in enriched["document"]["packages"]}
+    builtin = next(item for item in enriched["document"]["packages"]
+                   if item["name"] == "com.unity.custom-builtin")
+    assert builtin["versionInfo"] == "1.0.0"
+    metadata = json.loads(builtin["comment"])
+    assert metadata["kind"] == "builtin-module"
+    assert metadata["declared_engine"] == unity["projects"][0]["engine"]
+
+
+def test_builtin_spdx_keeps_requested_and_locked_versions_evidence_and_dependency_graph():
+    files = fixture_files()
+    manifest = json.loads(files["Packages/manifest.json"])
+    lock = json.loads(files["Packages/packages-lock.json"])
+    manifest["dependencies"]["com.unity.modules.physics"] = "0.9.0"
+    lock["dependencies"]["com.unity.modules.physics"]["dependencies"] = {
+        "com.unity.modules.submodule": "0.5.0"}
+    lock["dependencies"]["com.unity.modules.submodule"] = {
+        "version": "0.6.0", "source": "builtin", "depth": 1, "dependencies": {}}
+    files["Packages/manifest.json"] = json.dumps(manifest).encode()
+    files["Packages/packages-lock.json"] = json.dumps(lock).encode()
+    unity = parse(files)
+    enriched = enrich_unity_spdx(base_result(), unity, source_fingerprint=SNAPSHOT, bounds=BOUNDS)
+    document = enriched["document"]
+    validate_spdx(document, bounds=BOUNDS)
+    by_name = {item["name"]: item for item in document["packages"]}
+    physics, child = by_name["com.unity.modules.physics"], by_name["com.unity.modules.submodule"]
+    assert physics["versionInfo"] == "1.0.0"  # Not the editor stamp or manifest's requested version.
+    assert child["versionInfo"] == "0.6.0"
+    metadata = json.loads(physics["comment"])
+    assert metadata["requested"] == "0.9.0"
+    assert metadata["resolution"] == "1.0.0"
+    assert metadata["declared_engine"] == unity["projects"][0]["engine"]
+    source = enriched["provenance"]["packages"][physics["SPDXID"]]["engine_metadata"]
+    assert source["declaration_evidence"][0]["path"] == "Packages/manifest.json"
+    assert source["resolution_evidence"][0]["path"] == "Packages/packages-lock.json"
+    assert source["editor_evidence"][0]["path"] == "ProjectSettings/ProjectVersion.txt"
+    for package in (physics, child):
+        assert package["filesAnalyzed"] is False
+        assert package["downloadLocation"] == package["licenseDeclared"] == "NOASSERTION"
+        assert not {"checksums", "packageVerificationCode", "externalRefs", "hasFiles"} & package.keys()
+    expected_edges = {
+        ("Unity project .", "com.unity.modules.physics", "0.9.0"),
+        ("com.example.direct", "com.unity.modules.physics", "1.0.0"),
+        ("com.unity.modules.physics", "com.unity.modules.submodule", "0.5.0"),
+    }
+    id_to_name = {item["SPDXID"]: item["name"] for item in document["packages"]}
+    actual_edges = {
+        (id_to_name[edge["spdxElementId"]], id_to_name[edge["relatedSpdxElement"]],
+         json.loads(edge["comment"]).get("requested"))
+        for edge in document["relationships"] if edge["relationshipType"] == "DEPENDS_ON"
+    }
+    assert expected_edges <= actual_edges
+    assert not any(edge["relationshipType"] == "CONTAINS" for edge in document["relationships"])
+
+
+@pytest.mark.parametrize("other_version,other_revision", [
+    ("2022.3.62f2c1", "123456abcdef"),
+    ("2022.3.20f1", "123456abcdef"),
+])
+def test_builtin_package_identity_is_qualified_by_exact_declared_editor_context(
+    other_version, other_revision,
+):
+    first = parse()
+    files = fixture_files()
+    files["ProjectSettings/ProjectVersion.txt"] = (
+        f"m_EditorVersion: {other_version}\n"
+        f"m_EditorVersionWithRevision: {other_version} ({other_revision})\n").encode()
+    second = parse(files)
+    results = [enrich_unity_spdx(base_result(), unity, source_fingerprint=SNAPSHOT, bounds=BOUNDS)
+               for unity in (first, second)]
+    modules = [next(item for item in result["document"]["packages"]
+                    if item["name"] == "com.unity.modules.physics") for result in results]
+    assert modules[0]["SPDXID"] != modules[1]["SPDXID"]
+    assert all(item["versionInfo"] == "1.0.0" for item in modules)
+    assert json.loads(modules[0]["comment"])["declared_engine"] == first["projects"][0]["engine"]
+    assert json.loads(modules[1]["comment"])["declared_engine"] == second["projects"][0]["engine"]
+
+
+def test_builtin_declaration_without_lock_resolution_does_not_invent_a_resolved_release():
+    files = fixture_files()
+    lock = json.loads(files["Packages/packages-lock.json"])
+    del lock["dependencies"]["com.unity.modules.physics"]
+    files["Packages/packages-lock.json"] = json.dumps(lock).encode()
+    enriched = enrich_unity_spdx(base_result(), parse(files), source_fingerprint=SNAPSHOT, bounds=BOUNDS)
+    builtin = next(item for item in enriched["document"]["packages"]
+                   if item["name"] == "com.unity.modules.physics")
+    assert "versionInfo" not in builtin
+    metadata = json.loads(builtin["comment"])
+    assert metadata["requested"] == "1.0.0" and metadata["resolution"] is None
+
+
 
 
 def test_competing_embedded_identities_are_retained_not_silently_selected():
@@ -418,7 +546,7 @@ def test_spdx_metadata_only_packages_edges_comments_and_real_schema_validation()
     by_name = {item["name"]: item for item in document["packages"]}
     assert set(by_name) == {"Unity project .", "Unity Editor", "com.example.direct",
                             "com.example.transitive", "com.example.embedded",
-                            "com.example.unresolved", "sample.dll"}
+                            "com.example.unresolved", "com.unity.modules.physics", "sample.dll"}
     assert by_name["com.example.direct"]["versionInfo"] == "1.2.0"
     assert "versionInfo" not in by_name["com.example.unresolved"]
     assert by_name["Unity Editor"]["versionInfo"] == "2022.3.20f1"
@@ -441,7 +569,7 @@ def test_spdx_metadata_only_packages_edges_comments_and_real_schema_validation()
                        and edge["relatedSpdxElement"] == by_name["com.example.transitive"]["SPDXID"])
     assert json.loads(parent_edge["comment"])["requested"] == "2.0.0"
     assert set(result["provenance"]["packages"]) == {item["SPDXID"] for item in document["packages"]}
-    assert result["metrics"]["output_packages"] == 7
+    assert result["metrics"]["output_packages"] == 8
 
 
 def test_spdx_preserves_baseline_inventory_and_does_not_infer_package_scope_from_name():
@@ -512,7 +640,7 @@ def test_real_publication_keeps_inventory_without_unity_or_language_executor(tmp
     assert provenance["input_fingerprint"] == published["input_fingerprint"]
     assert provenance["unity_metadata"]["project_count"] == 1
     metrics = json.loads((run_root / published["metrics"]["path"]).read_bytes())
-    assert metrics["counters"]["output_packages"] == 7
+    assert metrics["counters"]["output_packages"] == 8
     # Validate exactly the same published artifact and its accepted Unity inventory binding.
     unity = {**values["inputs.load_accepted"]["unity_inventory"],
              "schema": "appsec-review/unity-inventory/1", "source_fingerprint": SNAPSHOT}

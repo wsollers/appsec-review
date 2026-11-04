@@ -27,7 +27,7 @@ MAX_TOTAL_BYTES = 4194304
 MAX_ITEMS = 4096
 MAX_DEPTH = 24
 MAX_FIELD_BYTES = 2048
-_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[abfp]\d+)?\Z")
+_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[abfp]\d+(?:c\d+)?)?\Z")
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,255}\Z")
 _HASH = re.compile(r"[a-f0-9]{64}\Z")
 _NATIVE = (".dll", ".so", ".dylib", ".a", ".bundle")
@@ -37,6 +37,7 @@ _SETTINGS = frozenset({
     "selectedStandaloneTarget", "activeInputHandler", "managedStrippingLevel",
     "stripEngineCode", "allowUnsafeCode", "AndroidTargetArchitectures",
     "AndroidMinSdkVersion", "AndroidTargetSdkVersion", "iOSSDKVersion",
+    "platformArchitecture", "iPhoneSdkVersion",
     "iOSTargetOSVersionString", "tvOSSDKVersion", "tvOSTargetOSVersionString",
     "scriptingEnabled", "scriptingStackTraceInformation", "il2cppCompilerConfiguration",
 })

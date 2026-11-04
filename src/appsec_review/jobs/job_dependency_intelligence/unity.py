@@ -95,13 +95,19 @@ def enrich_unity_spdx(
         for item in inventory.get("embedded_packages", []):
             embedded_groups.setdefault(item["name"], []).append(item)
         embedded = {name: items[0] for name, items in embedded_groups.items() if len(items) == 1}
-        builtin_names = {item["name"] for item in inventory.get("engine_context", [])}
+        engine_context = inventory.get("engine_context", [])
+        builtin_names = {item["name"] for item in engine_context}
+        builtin_declarations = {item["name"]: item for item in engine_context if "requested" in item}
+        builtin_resolutions = {item["name"]: item for item in engine_context if "version" in item}
         declarations = {item["name"]: item for item in inventory.get("declarations", [])}
         names = set(resolutions) | set(embedded_groups) | set(declarations)
         # A lockfile child is a request even when its own resolution entry is unavailable.
-        for item in [*resolutions.values(), *inventory.get("embedded_packages", [])]:
-            names.update(name for name in item.get("dependencies", {})
-                         if name not in builtin_names and not name.startswith("com.unity.modules."))
+        parents = [*resolutions.values(), *inventory.get("embedded_packages", []),
+                   *builtin_resolutions.values()]
+        for item in parents:
+            names.update(item.get("dependencies", {}))
+        builtin_names.update(name for name in names if name.startswith("com.unity.modules."))
+        names.difference_update(builtin_names)
         ids = {}
         for name in sorted(names):
             resolution, metadata, declaration = resolutions.get(name), embedded.get(name), declarations.get(name)
@@ -122,6 +128,29 @@ def enrich_unity_spdx(
                 "locked_version": resolution["version"] if version_conflict else None,
                 "metadata_version": metadata["version"] if version_conflict else None,
             }, version=version, evidence=evidence)
+        editor_evidence = [item for item in project["markers"]
+                           if item["path"].endswith("ProjectVersion.txt")]
+        for name in sorted(builtin_names):
+            declaration, resolution = builtin_declarations.get(name), builtin_resolutions.get(name)
+            release = resolution["version"] if resolution else None
+            declaration_evidence = [declaration["evidence"]] if declaration else []
+            resolution_evidence = [resolution["evidence"]] if resolution else []
+            requests = {canonical_json(item["evidence"]): item["evidence"]
+                        for item in parents if name in item.get("dependencies", {})}
+            request_evidence = [requests[key] for key in sorted(requests)]
+            evidence = {canonical_json(item): item for item in (
+                *declaration_evidence, *resolution_evidence, *request_evidence, *editor_evidence)}
+            ids[name] = package("builtin-module", name, {
+                "declared_engine": engine, "context_only": True,
+                "requested": declaration["requested"] if declaration else None,
+                "resolution": release, "source": "builtin",
+                "resolution_status": "locked" if resolution else "unresolved",
+            }, version=release, identity={"declared_engine": engine},
+                evidence=[evidence[key] for key in sorted(evidence)])
+            entries[ids[name]]["engine_metadata"].update(
+                declared_engine=deepcopy(engine), declaration_evidence=declaration_evidence,
+                resolution_evidence=resolution_evidence, request_evidence=request_evidence,
+                editor_evidence=editor_evidence)
         for name, items in sorted(embedded_groups.items()):
             if len(items) > 1:
                 for item in items:
@@ -133,7 +162,7 @@ def enrich_unity_spdx(
                         if child in ids:
                             edge(variant_id, ids[child], "DEPENDS_ON", requested=requested,
                                  basis="competing_embedded_package_metadata")
-        for name, declaration in sorted(declarations.items()):
+        for name, declaration in sorted({**declarations, **builtin_declarations}.items()):
             edge(project_id, ids[name], "DEPENDS_ON", requested=declaration["requested"],
                  basis="manifest_direct_declaration")
         for name, item in sorted(embedded.items()):
@@ -144,8 +173,10 @@ def enrich_unity_spdx(
                             "evidence_ids": []}
                 enriched["gaps"].append(conflict)
                 provenance.setdefault("gaps", []).append(conflict)
-        for source, parents in (("packages_lock", resolutions), ("package_metadata", embedded)):
-            for name, parent in sorted(parents.items()):
+        for source, source_parents in (
+            ("packages_lock", {**resolutions, **builtin_resolutions}), ("package_metadata", embedded),
+        ):
+            for name, parent in sorted(source_parents.items()):
                 for child, requested in sorted(parent.get("dependencies", {}).items()):
                     if child in ids:
                         edge(ids[name], ids[child], "DEPENDS_ON", requested=requested, basis=source)
