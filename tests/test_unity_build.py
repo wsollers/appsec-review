@@ -4,6 +4,8 @@ from dataclasses import FrozenInstanceError, replace
 import json
 import os
 from pathlib import Path
+import shutil
+import struct
 from types import SimpleNamespace
 
 import pytest
@@ -12,13 +14,37 @@ from appsec_review.config.unity import UnityBuildSettings, parse_unity_build_set
 from appsec_review.container_runtime import BuildContainerExecutor
 from appsec_review.jobs.artifact_kinds import ARTIFACT_KINDS
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.jobs.unity_build import execute_unity_build
+from appsec_review.jobs.unity_build import _managed_dll, _outputs, execute_unity_build
 from appsec_review.runtime import execution_safety as safety
 from appsec_review.storage import file_sha256
 
 
 IMAGE = "sha256:" + "1" * 64
 VERSION = "2022.3.62f1"
+
+
+def managed_dll_bytes(*, wide=False):
+    """Synthetic PE with bounded CLR/metadata headers; no compiler is invoked."""
+    data = bytearray(1536)
+    data[:2] = b"MZ"
+    struct.pack_into("<I", data, 60, 128)
+    data[128:132] = b"PE\0\0"
+    optional_size = 240 if wide else 224
+    struct.pack_into("<HH", data, 132, 0x8664 if wide else 0x14c, 1)
+    struct.pack_into("<HH", data, 148, optional_size, 0x2002)
+    optional = 152
+    directory = 112 if wide else 96
+    struct.pack_into("<H", data, optional, 0x20b if wide else 0x10b)
+    struct.pack_into("<I", data, optional + directory - 4, 16)
+    struct.pack_into("<II", data, optional + directory + 14 * 8, 0x2000, 72)
+    section = optional + optional_size
+    data[section:section + 5] = b".text"
+    struct.pack_into("<IIII", data, section + 8, 1024, 0x2000, 1024, 512)
+    struct.pack_into("<IHHII", data, 512, 72, 2, 5, 0x2080, 256)
+    data[640:644] = b"BSJB"
+    struct.pack_into("<HHII", data, 644, 1, 1, 0, 12)
+    data[656:668] = b"v4.0.30319\0\0"
+    return bytes(data)
 
 
 def configured(**changes) -> UnityBuildSettings:
@@ -74,6 +100,7 @@ class Docker:
         self.error = None
         self.on_build = None
         self.on_preflight = None
+        self.assembly_name = "Game.Runtime.dll"
         for key, value in changes.items():
             setattr(self, key, value)
 
@@ -125,9 +152,13 @@ class Docker:
         output.parent.mkdir(parents=True, exist_ok=True)
         if self.output_mode == "file":
             output.write_bytes(b"\x7fELF" + b"\0" * 60)
-            data = output.parent / (output.name + "_Data")
+            data = output.parent / (output.stem + "_Data")
             data.mkdir()
             (data / "globalgamemanagers").write_bytes(b"player data")
+            if self.settings.target.startswith("Standalone") and self.settings.scripting_backend == "Mono":
+                managed = data / "Managed"
+                managed.mkdir()
+                (managed / self.assembly_name).write_bytes(managed_dll_bytes())
         elif self.output_mode == "directory":
             output.mkdir()
             (output / "index.html").write_bytes(b"<html>game</html>")
@@ -167,12 +198,41 @@ def test_defaults_are_disabled_immutable_and_without_capabilities():
     assert parse_unity_build_settings(configured().view()) == configured()
 
 
+def test_regional_editor_stamp_is_preserved_in_configuration_source_and_runtime(tmp_path):
+    stamp = "2022.3.62f2c1"
+    settings = configured(editor_version=stamp, tag="local/unity:" + stamp)
+    assert settings.editor_version == stamp
+    assert settings.identity != configured(editor_version="2022.3.62f2").identity
+    unit, action, project = context(tmp_path)
+    (project / "ProjectSettings" / "ProjectVersion.txt").write_text(f"m_EditorVersion: {stamp}\n")
+    action["engine"]["declared_version"] = stamp
+    unit.job.source_fingerprint = source_fingerprint(unit.job.target_root)
+    runner = Docker(settings, version=stamp)
+    receipt = execute_unity_build(unit, action, settings, executor_factory=runner.factory)
+    assert receipt["terminal_status"] == "SUCCEEDED"
+    assert receipt["engine"]["declared_version"] == stamp
+    assert receipt["preflight"]["editor_version"] == stamp
+    assert "APPSEC_UNITY_VERSION=" + stamp in next(
+        argv for argv, _ in runner.calls if argv[:2] == ("docker", "run"))
+    other = tmp_path / "other"
+    other.mkdir()
+    unit, action, project = context(other)
+    (project / "ProjectSettings" / "ProjectVersion.txt").write_text(f"m_EditorVersion: {stamp}\n")
+    action["engine"]["declared_version"] = stamp
+    unit.job.source_fingerprint = source_fingerprint(unit.job.target_root)
+    receipt = execute_unity_build(
+        unit, action, settings, executor_factory=Docker(settings, version="2022.3.62f2").factory)
+    assert receipt["terminal_status"] == "BLOCKED"
+    assert len(receipt["commands"]) == 1
+
+
 @pytest.mark.parametrize("changes", [
     {"enabled": "true"}, {"license_ready": 1}, {"token": "private-token"},
     {"environment": {"UNITY_SERIAL": "private-serial"}}, {"command": ["Unity"]},
     {"tag": "registry:latest"}, {"tag": "https://user:password@registry/unity:1"},
     {"image_id": "local/unity:2022"}, {"user": "0:1000"}, {"user": "1000:0"},
-    {"editor_version": "latest"}, {"editor_revision": "non-hex-revision"},
+    {"editor_version": "latest"}, {"editor_version": "2022.3.62f2c"},
+    {"editor_version": "2022.3.62f2c1c2"}, {"editor_revision": "non-hex-revision"},
     {"editor_executable": "Unity"}, {"editor_executable": "/opt/../Unity"},
     {"editor_executable": "/opt/Unity --serial secret"}, {"target": "Unspecified"},
     {"architecture": "x86"}, {"scripting_backend": "any"},
@@ -269,7 +329,7 @@ def test_success_requires_actual_commands_outputs_and_workspace_identity(tmp_pat
         unit.job.run_root / receipt["workspace_manifest"]["path"])
     for name, digest in manifest["files"].items():
         assert digest == file_sha256(workspace / name)
-    assert len(receipt["artifacts"]) == 2
+    assert len(receipt["artifacts"]) == (3 if target.startswith("Standalone") and backend == "Mono" else 2)
     for artifact in receipt["artifacts"]:
         assert artifact["kind"] in ARTIFACT_KINDS
         assert artifact["sha256"] == file_sha256(unit.job.run_root / artifact["path"])
@@ -292,7 +352,8 @@ def test_success_requires_actual_commands_outputs_and_workspace_identity(tmp_pat
 def test_custom_method_nested_root_and_explicit_fixture_output(tmp_path):
     settings = configured(output_path="build/Case095.x86_64",
                           execute_method="AppSecCorpus.Editor.CorpusBuild.Build")
-    receipt, runner, unit, _, project = execute(tmp_path, settings=settings, relative="games/demo")
+    receipt, runner, unit, _, project = execute(
+        tmp_path, settings=settings, relative="games/demo", assembly_name="Assembly-CSharp.dll")
     assert receipt["terminal_status"] == "SUCCEEDED"
     build = [argv for argv, _ in runner.calls if argv[:2] == ("docker", "run")][-1]
     assert build[-1] == settings.execute_method
@@ -300,6 +361,9 @@ def test_custom_method_nested_root_and_explicit_fixture_output(tmp_path):
     assert "APPSEC_UNITY_OUTPUT=/workspace/games/demo/build/Case095.x86_64" in build
     assert build[build.index("--workdir") + 1] == "/workspace/games/demo"
     assert all(item["workspace_path"].startswith("games/demo/build/") for item in receipt["artifacts"])
+    managed = [item for item in receipt["artifacts"] if item["kind"] == "managed-assembly"]
+    assert [item["workspace_path"] for item in managed] == [
+        "games/demo/build/Case095_Data/Managed/Assembly-CSharp.dll"]
     assert not (project / "build").exists()
     bridge = unit.job.run_root / receipt["prepared_inputs"][0]["path"]
     source = bridge.read_text()
@@ -378,13 +442,112 @@ def test_missing_empty_escaped_symlink_and_nonregular_outputs_fail(tmp_path, mod
 
 
 def test_explicit_directory_output_has_hashes_and_cannot_exceed_artifact_bound(tmp_path):
-    receipt, *_ = execute(tmp_path, output_mode="directory", settings=configured(output_path="Build/WebGL"))
+    receipt, *_ = execute(tmp_path, output_mode="directory", settings=configured(
+        output_path="Build/WebGL", target="WebGL", modules=["WebGL"],
+        scripting_backend="IL2CPP", architecture="wasm32"))
     assert receipt["terminal_status"] == "SUCCEEDED"
     assert receipt["artifacts"][0]["workspace_path"] == "Build/WebGL/index.html"
     other = tmp_path / "other"
     other.mkdir()
     receipt, *_ = execute(other, settings=configured(artifact_count_limit=1))
     assert receipt["terminal_status"] == "FAILED" and not receipt["artifacts"]
+
+
+def test_output_traversal_bounds_empty_directories_during_streaming(tmp_path):
+    output = tmp_path / "workspace" / "Build" / "WebGL"
+    output.mkdir(parents=True)
+    for index in range(11):
+        (output / f"empty-{index}").mkdir()
+    with pytest.raises(ValueError, match="directory-entry bound exceeded"):
+        _outputs(tmp_path, tmp_path / "workspace", output, 1,
+                 target="WebGL", scripting_backend="IL2CPP")
+
+
+def test_output_traversal_stops_at_file_count_bound(tmp_path):
+    output = tmp_path / "workspace" / "Build" / "WebGL"
+    output.mkdir(parents=True)
+    for index in range(3):
+        (output / f"resource-{index}").write_bytes(b"resource")
+    with pytest.raises(ValueError, match="artifact-count bound exceeded"):
+        _outputs(tmp_path, tmp_path / "workspace", output, 2,
+                 target="WebGL", scripting_backend="IL2CPP")
+
+
+@pytest.mark.parametrize("target", ["StandaloneLinux64", "StandaloneWindows64"])
+@pytest.mark.parametrize("product", [
+    "launcher-only", "missing-managed", "empty-dll", "text-dll", "native-dll",
+    "misnamed-data", "misplaced-managed", "unrelated-managed",
+])
+def test_standalone_mono_requires_adjacent_nonempty_managed_player_product(tmp_path, target, product):
+    def incomplete(workspace, output):
+        data = output.parent / (output.stem + "_Data")
+        managed = data / "Managed"
+        assembly = managed / "Game.Runtime.dll"
+        if product == "launcher-only":
+            shutil.rmtree(data)
+        elif product == "missing-managed":
+            shutil.rmtree(managed)
+        elif product == "empty-dll":
+            assembly.write_bytes(b"")
+        elif product == "text-dll":
+            assembly.write_bytes(b"not a managed assembly, despite its DLL suffix")
+        elif product == "native-dll":
+            value = bytearray(managed_dll_bytes())
+            struct.pack_into("<II", value, 152 + 96 + 14 * 8, 0, 0)
+            assembly.write_bytes(value)
+        elif product == "misnamed-data":
+            data.rename(data.with_name("Wrong_Data"))
+        elif product == "misplaced-managed":
+            managed.rename(data / "NotManaged")
+        elif product == "unrelated-managed":
+            shutil.rmtree(managed)
+            unrelated = output.parent / "Other_Data" / "Managed"
+            unrelated.mkdir(parents=True)
+            (unrelated / "Other.dll").write_bytes(managed_dll_bytes())
+    receipt, *_ = execute(tmp_path, settings=configured(
+        target=target, modules=[target], output_path="Build/Game.x86_64" if target.endswith("Linux64") else "Build/Game.exe"),
+        on_build=incomplete)
+    assert receipt["terminal_status"] == "FAILED" and receipt["artifacts"] == []
+    assert any("Mono player is incomplete" in gap for gap in receipt["gaps"])
+    assert receipt["workspace_manifest"]
+
+
+def test_asmdef_only_mono_player_retains_actual_managed_dll_without_assuming_assembly_csharp(tmp_path):
+    receipt, _, unit, *_ = execute(tmp_path)
+    assert receipt["terminal_status"] == "SUCCEEDED"
+    managed = [item for item in receipt["artifacts"] if item["kind"] == "managed-assembly"]
+    assert [item["workspace_path"] for item in managed] == ["Build/app_Data/Managed/Game.Runtime.dll"]
+    assert all("Assembly-CSharp.dll" not in item["workspace_path"] for item in receipt["artifacts"])
+    assert _managed_dll(unit.job.run_root / managed[0]["path"])
+
+
+@pytest.mark.parametrize("wide", [False, True])
+def test_managed_dll_check_accepts_pe32_and_pe32plus_headers(tmp_path, wide):
+    path = tmp_path / "assembly.dll"
+    path.write_bytes(managed_dll_bytes(wide=wide))
+    assert _managed_dll(path)
+
+
+@pytest.mark.parametrize("contents", [
+    b"", b"MZ" + b"x" * 100 + b"BSJB", b"BSJB" + b"x" * 100,
+    managed_dll_bytes()[:500],
+])
+def test_managed_dll_check_rejects_suffix_magic_only_and_truncated_containers(tmp_path, contents):
+    path = tmp_path / "assembly.dll"
+    path.write_bytes(contents)
+    assert not _managed_dll(path)
+
+
+@pytest.mark.parametrize("offset,pattern", [
+    (60, "<I"), (152, "<H"), (152 + 92, "<I"), (152 + 96 + 14 * 8, "<I"),
+    (152 + 224 + 20, "<I"), (512, "<I"), (512 + 8, "<I"), (640 + 12, "<I"),
+])
+def test_managed_dll_check_rejects_invalid_pe_cli_and_metadata_ranges(tmp_path, offset, pattern):
+    value = bytearray(managed_dll_bytes())
+    struct.pack_into(pattern, value, offset, 0)
+    path = tmp_path / "assembly.dll"
+    path.write_bytes(value)
+    assert not _managed_dll(path)
 
 
 def test_nonempty_siblings_do_not_hide_an_empty_primary_player(tmp_path):

@@ -9,6 +9,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import struct
 import time
 from typing import Any
 
@@ -233,7 +234,67 @@ def _manifest(workspace: Path, limit: int, *, gaps: list[str] | None = None) -> 
     return files
 
 
-def _outputs(run_root: Path, workspace: Path, output: Path, limit: int) -> list[dict[str, Any]]:
+def _managed_dll(path: Path) -> bool:
+    """Check bounded PE/CLR headers, not a filename or an embedded BSJB string."""
+    size = path.stat().st_size
+    with path.open("rb") as stream:
+        dos = stream.read(64)
+        if len(dos) != 64 or dos[:2] != b"MZ":
+            return False
+        pe_offset = struct.unpack_from("<I", dos, 60)[0]
+        if not 64 <= pe_offset <= size - 24:
+            return False
+        stream.seek(pe_offset)
+        pe = stream.read(24)
+        sections = struct.unpack_from("<H", pe, 6)[0]
+        optional_size, characteristics = struct.unpack_from("<HH", pe, 20)
+        if (pe[:4] != b"PE\0\0" or not 1 <= sections <= 96
+                or not characteristics & 0x2000 or not 2 <= optional_size <= 4096):
+            return False
+        optional = stream.read(optional_size)
+        if len(optional) != optional_size:
+            return False
+        magic = struct.unpack_from("<H", optional)[0]
+        directory = {0x10b: 96, 0x20b: 112}.get(magic)
+        if (directory is None or len(optional) < directory + 15 * 8
+                or struct.unpack_from("<I", optional, directory - 4)[0] < 15):
+            return False
+        cli_rva, cli_size = struct.unpack_from("<II", optional, directory + 14 * 8)
+        table = stream.read(sections * 40)
+        if len(table) != sections * 40 or cli_size < 72:
+            return False
+
+        def file_offset(rva: int, length: int) -> int | None:
+            if not rva or length <= 0:
+                return None
+            for index in range(sections):
+                address, raw_size, raw_offset = struct.unpack_from("<III", table, index * 40 + 12)
+                delta = rva - address
+                if 0 <= delta and delta + length <= raw_size and raw_offset + delta + length <= size:
+                    return raw_offset + delta
+            return None
+
+        cli_offset = file_offset(cli_rva, 72)
+        if cli_offset is None:
+            return False
+        stream.seek(cli_offset)
+        cli = stream.read(72)
+        if len(cli) != 72 or not 72 <= struct.unpack_from("<I", cli)[0] <= cli_size:
+            return False
+        metadata_rva, metadata_size = struct.unpack_from("<II", cli, 8)
+        metadata_offset = file_offset(metadata_rva, metadata_size)
+        if metadata_offset is None or metadata_size < 20:
+            return False
+        stream.seek(metadata_offset)
+        header = stream.read(16)
+        if len(header) != 16 or header[:4] != b"BSJB":
+            return False
+        version_size = struct.unpack_from("<I", header, 12)[0]
+        return 0 < version_size <= min(1024, metadata_size - 20)
+
+
+def _outputs(run_root: Path, workspace: Path, output: Path, limit: int, *,
+             target: str, scripting_backend: str) -> list[dict[str, Any]]:
     if not output.exists() or output.is_symlink() or not output.resolve().is_relative_to(workspace.resolve()):
         raise _UnityError("Unity configured build output is missing or escaped the workspace")
     if output.is_file() and output.stat().st_size == 0:
@@ -241,27 +302,44 @@ def _outputs(run_root: Path, workspace: Path, output: Path, limit: int) -> list[
     # A standalone executable has adjacent player data and native libraries. Hash
     # the explicit output directory, not just its launcher's filename.
     output_root = output if output.is_dir() else output.parent
-    paths = sorted(output_root.rglob("*"))
     artifacts = []
-    for path in paths:
-        if path.is_symlink() or not path.resolve().is_relative_to(workspace.resolve()):
-            raise _UnityError("Unity build output contains a symlink or path escape")
-        if path.is_dir():
-            continue
-        if not stat.S_ISREG(path.lstat().st_mode):
-            raise _UnityError("Unity build output is not a regular file")
-        if len(artifacts) >= limit:
-            raise _UnityError("Unity output artifact-count bound exceeded")
-        kind, container = binary_role(path)
-        if path.suffix.lower() == ".dll" and "Managed" in path.relative_to(workspace).parts:
-            kind = "managed-assembly" if container == "pe" else kind
-        if path.suffix.lower() == ".apk":
-            kind, container = "android-apk", "zip"
-        artifacts.append({**_identity(run_root, path), "kind": kind or "resource",
-                          "format": container, "workspace_path": path.relative_to(workspace).as_posix(),
-                          "mapping": "exact-workspace-path", "mapping_confidence": 1.0})
+    pending = [output_root]
+    examined = 0
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                examined += 1
+                if examined > limit * 10:
+                    raise _UnityError("Unity output directory-entry bound exceeded")
+                path = Path(entry.path)
+                mode = entry.stat(follow_symlinks=False).st_mode
+                if stat.S_ISLNK(mode) or not path.resolve().is_relative_to(workspace.resolve()):
+                    raise _UnityError("Unity build output contains a symlink or path escape")
+                if stat.S_ISDIR(mode):
+                    pending.append(path)
+                    continue
+                if not stat.S_ISREG(mode):
+                    raise _UnityError("Unity build output is not a regular file")
+                if len(artifacts) >= limit:
+                    raise _UnityError("Unity output artifact-count bound exceeded")
+                kind, container = binary_role(path)
+                if path.suffix.lower() == ".dll" and _managed_dll(path):
+                    kind, container = "managed-assembly", "pe"
+                if path.suffix.lower() == ".apk":
+                    kind, container = "android-apk", "zip"
+                artifacts.append({**_identity(run_root, path), "kind": kind or "resource",
+                                  "format": container, "workspace_path": path.relative_to(workspace).as_posix(),
+                                  "mapping": "exact-workspace-path", "mapping_confidence": 1.0})
     if not artifacts or not any(item["size_bytes"] for item in artifacts):
         raise _UnityError("Unity configured build output contains no nonempty artifacts")
+    if target.startswith("Standalone") and scripting_backend == "Mono":
+        managed = output.parent / (output.stem + "_Data") / "Managed"
+        if not output.is_file() or not any(
+                item["kind"] == "managed-assembly" and item["size_bytes"] > 0
+                and (workspace / item["workspace_path"]).is_relative_to(managed)
+                for item in artifacts):
+            raise _UnityError("Unity standalone Mono player is incomplete: adjacent player _Data/Managed DLL is missing")
+    artifacts.sort(key=lambda item: item["workspace_path"])
     return artifacts
 
 
@@ -503,7 +581,9 @@ def execute_unity_build(unit: UnitContext, action: Mapping[str, Any], settings: 
         stage = "build"
         invoke("build", (*common, "-executeMethod", settings.execute_method or bridge_class + ".Build"))
         stage = "outputs"
-        receipt["artifacts"] = _outputs(unit.job.run_root, workspace, output, settings.artifact_count_limit)
+        receipt["artifacts"] = _outputs(
+            unit.job.run_root, workspace, output, settings.artifact_count_limit,
+            target=settings.target, scripting_backend=settings.scripting_backend)
         for artifact in receipt["artifacts"]:
             artifact["build_unit_id"] = identifier
         if source_fingerprint(target) != unit.job.source_fingerprint:

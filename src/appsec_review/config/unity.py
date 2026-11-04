@@ -16,7 +16,7 @@ from typing import Any
 from appsec_review.storage import canonical_json
 
 
-VERSION = re.compile(r"(?:20[0-9]{2}|6000)\.[0-9]+\.[0-9]+[abfp][0-9]+")
+VERSION = re.compile(r"(?:20[0-9]{2}|6000)\.[0-9]+\.[0-9]+[abfp][0-9]+(?:c[0-9]+)?")
 TARGETS = frozenset({
     "StandaloneLinux64", "StandaloneWindows64", "StandaloneOSX", "Android", "WebGL", "iOS", "tvOS",
 })
