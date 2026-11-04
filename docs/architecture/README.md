@@ -14,9 +14,11 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   shared and project-derived build images, conditional capture control design, the pinned
   `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
 - [`build-topology-and-iterations.md`](build-topology-and-iterations.md) - evidence-qualified
-  historical topology discovery and proposed, not-yet-implemented shared-workspace build graph,
-  bounded iterations, detached recipe recovery, restoration, and retention.
-- [`../operations/language-build.md`](../operations/language-build.md) — generic real-build execution, protected provenance, and checkpoints.
+  historical topology discovery and tested-source/prelanding shared-workspace producer graph,
+  registered bounded iterations, detached recipe recovery, restoration, and retention; canonical
+  integration and live acceptance remain separate evidence.
+- [`../operations/language-build.md`](../operations/language-build.md) — global registered build
+  iterations, family adapters, protected provenance, recovery CLI, checkpoints and workspace retention.
 - [`native-build-output-discovery.md`](native-build-output-discovery.md) — native build-layout
   discovery (CMake, Meson, Ninja, MSBuild, vcpkg, Conan, execution capture), dependency-tree
   classification, and named `[build_outputs]` exclusions; implemented, with implementation notes.
@@ -145,7 +147,8 @@ Operations pages not listed above:
 - [`../operations/wave1-review.md`](../operations/wave1-review.md) — direct CLI and `wave1_review` scope.
 - [`../operations/third-party-data-sync.md`](../operations/third-party-data-sync.md) — feed synchronization.
 - [`../operations/target-analysis-planning.md`](../operations/target-analysis-planning.md) — analysis planning.
-- [`../operations/project-build.md`](../operations/project-build.md) — project-image resolution, probes, and repair.
+- [`../operations/project-build.md`](../operations/project-build.md) — project-image preparation,
+  iterative dispatch, Unity's single execution, recipe validation, and image-capability gaps.
 - [`../operations/ci-configuration-analysis.md`](../operations/ci-configuration-analysis.md) — CI/CD configuration analysis.
 - [`../operations/tree-sitter-ast.md`](../operations/tree-sitter-ast.md) — Tree-sitter image and AST shards.
 - [`../operations/artifact-indexing.md`](../operations/artifact-indexing.md) — produced-artifact indexing.

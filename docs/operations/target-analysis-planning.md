@@ -5,7 +5,8 @@ The planner runs automatically after `job_target_catalog` and before evidence co
 
 `runs/<run-id>/data/jobs/job_target_analysis_plan/attempts/<attempt-id>/artifacts/analysis-plan/accepted-analysis-plan.json`
 
-Inspect `scanner_selections`, `scanner_non_selections`, `build_topology`, `contradictions`, and
+Inspect `scanner_selections`, `scanner_non_selections`, `build_topology.executable_graph`,
+`contradictions`, and
 `coverage_gaps` together. A skipped or unavailable family is not evidence that the target is clean.
 Mandatory baseline scanners remain selected whenever they have applicable catalog inputs;
 otherwise their non-selection is explicit.
@@ -51,76 +52,83 @@ as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
 
 ## Build-topology interpretation
 
-**CURRENT/OBSERVED:** the plan contains catalog build actions, component/build-root relationships,
-and validated model-proposed component `depends_on` edges. These do not prove exact build-unit
-ownership, artifact-producing prerequisites, or a complete executable target graph. Project-build
-currently projects component dependencies onto shortest-root candidate actions; language-build
-has later, family-local dependency readiness, not a shared cross-family product scheduler.
-The review-job DAG in `orchestration/topology.py` is a different graph.
+**Implemented in tested source, prelanding:** the accepted plan now carries
+`build_topology.executable_graph` (`appsec-review/build-topology/1`). Its source/status boundary
+and historical discovery evidence are recorded in the
+[topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md).
+This is not a claim of canonical integration, deployment, or a newly completed target review.
+
+Keep three graphs distinct: `orchestration/topology.py` orders review jobs; the executable target
+graph describes build ownership/product prerequisites; requests, receipts and selected recipe
+revisions describe build attempts. Container-image packaging order is separate again.
+
+The deterministic compiler in `jobs/build_topology.py` accounts for each catalog build unit as
+`independent`, `contained`, `unsupported`, or `unresolved`. Literal CMake subdirectory/target/link
+declarations and recursive Make `$(MAKE) -C` declarations can resolve ownership and cross-owner
+edges; accepted driver/default-goal evidence is required. An Autotools fragment without its own
+configure authority is not silently made standalone. Packaging markers identify drivers, not
+every prerequisite. Contained children are represented without duplicating their owning build.
+
+Edges use exact producer/consumer IDs and typed `requires_product` or `order_only` semantics.
+Ambiguity, cycles, unsupported dynamic/conditional/included declarations, unresolved products and
+external requirements are gaps, not invented ordering. Model-proposed component `depends_on`
+edges remain component evidence, recorded as nonblocking `unresolved_component_dependency`
+instead of shortest-root build-unit projection. Every nonempty graph also records
+`incomplete_dependency_discovery`; an absent edge is not proof of independence.
+
+Acceptance recompiles the graph from the exact catalog/accepted declarations and rejects a
+different graph. Old graphless plans require replanning. The source fingerprint, recipe revisions,
+markers, descriptor evidence, ownership and variant/product identities remain resolving inputs;
+a model cannot replace them with a plausible-looking graph.
+
+Variant fields are `configuration`, `target_arch`, `execution_role`, `linkage`, `toolchain`, and
+`abi`. Explicit `[jobs.job_project_build.settings.variants.<unit-id-or-family>]` entries may
+supply facts not contradicted by accepted descriptors. Missing ABI/architecture facts stay
+unknown; no filename, directory name, or default host guess resolves them. Product-dependent
+readiness requires compatible resolved facts and verified producer bytes/interfaces, and unknown
+variant fields prevent successful-node checkpoint reuse.
 
 Model/catalog-summary bounds control inference input, not compiler visibility into the reviewed
 repository. They are not a reason to omit source files needed by a build.
-The [topology and bounded-iteration design](../architecture/build-topology-and-iterations.md)
-records the historical discovery attempt and the **PROPOSED / NOT YET IMPLEMENTED** switch:
-explicit evidence-backed build-unit/artifact edges, a complete shared run-owned production tree,
-and separate recoverable build invocations. No new job names, schema, CLI, or retention setting
-is implemented by documenting that proposal.
+Production materializes the complete target into one run-owned shared target/install generation;
+it does not copy only the descriptors shown to inference.
 
-## Isolated project builds
+## Image preparation and bounded production iterations
 
-Steps, settings, recipe validation, repair, and recovery are summarized in
+Steps, settings, recipe validation, image capability and recovery are summarized in
 [`project-build.md`](project-build.md).
 
-`job_project_build` consumes only the accepted, hash-verified plan. Each language family has four
-explicit phases: resolve or build its project image, publish its static-analysis dispatch, probe
-buildability, and publish its downstream language-build dispatch. Static dispatch depends only on
-the accepted plan, so it can proceed while project images and probes are still running. In the
-composed Dagster graph the concrete evidence-collection job likewise branches immediately after
-planning; it does not wait for compiled analysis.
+`job_project_build` consumes only the accepted, hash-verified plan. It resolves/prepares images,
+publishes static dispatches and an immutable runtime execution graph with iterative build
+dispatches. Non-Unity `probe` tasks remain for topology compatibility but perform no compilation.
+Unity retains its existing single engine execution. Static dispatch and concrete evidence
+collection can still branch immediately after planning instead of waiting for compiled analysis.
 
 A project image is derived from the hash-pinned language baseline. Its identity covers the recipe,
 baseline image, generator contract, and dependency-file hashes. Supported dependency restoration
-can occur while building that image and again during the actual probe, which has dependency egress,
-uses direct argv, a read-only container root, a non-root user, dropped capabilities, and bounded
-resources. Images are reused only when both their manifest and runtime image identity still match.
+can occur while building that image and during accepted network-enabled production commands.
+Commands use direct argv, a read-only container root, a non-root user, dropped capabilities and
+bounded resources. Images are reused only when their manifest and runtime image identity match.
 Language-specific dependency cache locations embedded in the derived image accelerate Cargo, Go,
 Maven/Gradle, NuGet, npm, Composer, or Python dependency use. Project images use a digest-pinned
 Buildx/BuildKit client and load the result into the local engine. Docker image mutation is narrowly
-serialized as an additional engine-safety boundary; the language DAG and static dispatch remain
-parallel.
+serialized as an engine-safety boundary. Missing approved bounded image-builder capability is
+explicit `derived_image_preparation_unavailable`, never permission for unmanaged build fallback.
 
-Every previously unseen recipe is probed against the default language image first; package hints
-from planning do not silently mutate that baseline. If the probe fails, `job_project_build` copies
-the exact generated Dockerfile and bounded failure diagnostics into the run, then asks the
-configured repair model for typed package, allowlisted environment, pinned package-manager, and
-accepted-manifest restore changes. The exact existing contract is in
-[`project-build.md`](project-build.md). Each validated changed repair prepares/resolves its image
-and re-probes when preparation succeeds. Rejected/no-op proposals are recorded without pretending
-another compiler ran. Missing approved image-preparation capability is an explicit block; pinned
-baseline/prepared images can remain usable. Repair inference cannot alter accepted commands,
-paths, dependency files, outputs, base image, or container policy, or supply arbitrary environment
-variables.
+`job_language_build` evaluates the global graph before family publication and invokes registered
+`job_build_iteration` separately for each ready node. These production executions are authoritative;
+there is no non-Unity full-graph probe followed by a second full-graph build. Producers commit
+verified products and shared workspace generations; consumers receive real include/library,
+pkg-config and CMake interfaces rather than only an upstream-ready Boolean.
 
-After a repaired image passes the exact probe, its recipe, Dockerfile hash and retained path, image
-digest, and base-recipe identity are accepted under a run-scoped identity beneath
-`runs/metadata/project-build-repairs/`. Same-run reuse requires matching target, recipe, image,
-capture/limit bindings, and declared `platform`, `build_toolchain`, and `validation` releases.
-Another application run does not inherit accepted probe/repair checkpoints. Set
-`repair_attempts` to an integer from 3 through 10 and configure the bounded model under
-`[jobs.job_project_build.settings.model]`.
+Recipe recovery uses immutable failure contexts, detached full-context Docker trials and selected
+recipe revisions outside frozen configuration. Validated command/cwd/product-path changes are
+separate from the closed image-repair vocabulary. Promotion requires exact captured execution,
+products and cleanup, then B executes again in production; replay mutations are not accepted
+production outputs. Failed-write restoration and selective invalidation preserve verified A
+without silently rebuilding it. See [language-build recovery](language-build.md#bounded-iterations-and-recovery).
 
-The identity uses the recipe's operational fields; changing only the model's explanatory `reason`
-does not rebuild an identical image or invalidate its accepted probe.
-
-The probe answers only whether the accepted recipe can build. A successful probe or a verified
-same-run reuse receipt publishes `lang_jobflow_build`, carrying the recipe, exact project image,
-root, family, and requested capabilities. A failed probe publishes a coverage gap and no build
-dispatch, but it does not remove that project's static-analysis dispatch or successful sibling
-projects. Set `force_buildability_probe = true` in the central project-build settings to bypass the
-same-run accepted-probe checkpoint.
-
-Resume is per build unit. An accepted probe is reused only when the enriched recipe identity and
-resolved image ID still match. Missing dependencies, unsupported restoration, and build failures
-are explicit coverage gaps; they do not erase successful siblings and are never reported as clean
-coverage. Accepted dispatches and probe artifacts are stored beneath the run's `data/build/` tree;
-shared image/probe acceptance metadata is stored beneath `runs/metadata/`.
+`force_buildability_probe` is deprecated and accepts only `false`; `true` and retired
+`force_probes` are rejected. Neither enables the old probe/rebuild path. Legacy dispatches require
+replanning rather than a fabricated probe identity. Missing dependencies, unknown variants,
+unavailable images and failed builds remain coverage gaps; successful siblings are not erased.

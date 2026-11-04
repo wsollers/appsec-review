@@ -1,17 +1,17 @@
 # Project-build operations
 
 `job_project_build` consumes only the accepted, hash-verified target analysis plan and turns its
-build recipes into project images, buildability probes, and dispatches for downstream jobs. The
+build recipes into project-image preparations and dispatches for downstream production iterations. The
 planning-side narrative is in [`target-analysis-planning.md`](target-analysis-planning.md); the
 consumer is [`language-build.md`](language-build.md). Capture semantics are in
 [`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md).
 
-**CURRENT/OBSERVED:** probes iterate family entries in separate selected-root workspaces; they
-do not schedule an artifact-backed target build graph or preserve sibling-unit products in one
-shared tree. Component dependency projection is not verified build-unit ownership.
-The [topology and bounded-iteration design](../architecture/build-topology-and-iterations.md)
-records the discovery evidence and the **PROPOSED / NOT YET IMPLEMENTED** switch to a complete
-run-owned source tree, shared producer products, and separate recoverable job invocations.
+**Implemented in tested source, prelanding:** non-Unity project probes no longer compile the
+target before language-build. The accepted executable graph replaces shortest-root component
+projection; language-build runs registered per-node iterations in a complete shared target/install
+workspace. The [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
+records the exact tested source and evidence limits. Image preparation is not compiler success,
+deployment, or a completed target review.
 
 ## Steps
 
@@ -20,11 +20,11 @@ The configured topology must be exactly `plan`, `image`, `static_dispatch`, `pro
 
 | Step | Tasks | Purpose |
 | --- | --- | --- |
-| `plan` | `load_recipes` | load the accepted plan and validated recipes |
+| `plan` | `load_recipes` | verify the accepted executable graph and validated recipes |
 | `image` | one per family | resolve or build the derived project image |
 | `static_dispatch` | `global` plus one per family | publish `lang_jobflow_static` dispatches; depends only on `plan` |
-| `probe` | one per family | run the accepted recipe under capture against the image |
-| `build_dispatch` | one per family | publish `lang_jobflow_build` dispatches for successful probes |
+| `probe` | one per family | compatibility no-op for non-Unity units; retain Unity's one engine execution |
+| `build_dispatch` | one per family | publish `lang_jobflow_build` dispatches from successful image preparation, not successful probes |
 | `acceptance` | `publish_handoff` | write `accepted-project-build-dispatch.json` (`appsec-review/project-build-dispatch/2`) |
 
 Families are `native`, `rust`, `go`, `java`, `node`, `dotnet`, `python`, `php`, and `wasm`; each
@@ -43,19 +43,26 @@ lane continues independently. See [Unity configuration and coverage](unity-build
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `command_timeout_seconds` | 1800 | per probe command |
+| `command_timeout_seconds` | 1800 | retained project probe-helper command limit; production commands use language-build settings |
 | `image_build_timeout_seconds` | 1800 | per project-image build |
 | `output_bytes` | 8388608 | in-memory stream preview; complete streams are retained |
-| `artifact_count_limit` | 10000 | cataloged probe artifacts |
-| `force_buildability_probe` | false | Boolean; bypass the same-run accepted-probe checkpoint |
-| `repair_attempts` | 3 | integer 3-10; image-repair attempts after a failed default probe |
+| `artifact_count_limit` | 10000 | retained project probe-helper artifact bound |
+| `force_buildability_probe` | false | deprecated; only `false` accepted, `true` rejected |
+| `repair_attempts` | 3 | retained legacy image-repair helper bound, integer 3-10; not an automatic production retry loop |
 | `build_capture.event_count_limit` | 250000 | job override of the global `[build_capture]` limit |
 | `build_capture.retain_raw_traces` | true | keep secret-scanned, hashed raw strace files under `raw-traces/` (debug period; see language-build.md) |
 | `build_capture.raw_trace_bytes_limit` | 67108864 | retained raw-trace bytes per command; truncation is flagged in `record.json` |
 
 `settings.model` must define exactly `enabled`, `provider`, `model`, `reasoning`,
 `max_input_tokens`, `max_output_tokens`, and `timeout_seconds` (positive integers for the limits).
-It configures only image repair.
+It configures retained image-repair helpers, not topology inference or an automatic iteration
+repair loop. Retired `force_probes` is rejected. Legacy probe/rebuild dispatches and graphless plans
+require replanning rather than selecting the old execution path.
+
+`settings.variants` may contain entries keyed by build-unit ID or family, with
+`configuration`, `target_arch`, `execution_role`, `linkage`, `toolchain`, and `abi`.
+Entries must agree with accepted descriptor evidence; absent facts remain unknown. Unknown
+variant fields forbid successful-node checkpoint reuse and can block product-dependent readiness.
 
 ## Recipe validation
 
@@ -63,7 +70,12 @@ Every recipe, including a repaired one, passes `validate_build_recipe` in
 `src/appsec_review/jobs/build_discovery.py`. `image_profile` must equal the deterministic
 `required_image_profile` supplied to inference. This normally equals the language family; an
 accepted `com.android.application` Gradle unit remains in the Java family but requires the Android
-profile. `source_dir` must equal the build-unit root, and outputs stay beneath it. Commands are argv arrays
+profile. `source_dir` must equal the build-unit root; output paths remain validated run-owned
+paths. Optional `execution_cwd` selects configure/build directories without changing source
+ownership, and omitted phases default to `source_dir`. The common production/replay guard
+revalidates actual cwd, descriptor/driver and recognized Make/CMake source/output operands
+before every launch, including after configure changes the tree. Changed cwd is supported only
+for recognized native Make/CMake forms, not arbitrary drivers. Commands are argv arrays
 (at most 16 per list, 128 arguments each) without shell operators, and `argv[0]` must be a bare
 name in that profile's `_PROFILE_COMMANDS` allowlist (for example `go` only for Go, `dotnet` and
 `msbuild` for .NET). Test, run, and install subcommands, non-build Maven goals or Gradle tasks, and
@@ -74,21 +86,28 @@ Accepted Win32, MSVC toolset, compiler or Windows SDK evidence produces an expli
 toolchain gap on the Linux native profile; a `make` placeholder or compiler-version probe is not
 a Windows build recipe. Generic .NET projects are not excluded by this rule.
 
-## Default-image-first probing and repair
+## Typed image repair and detached recipe recovery
 
-Each unseen recipe is probed against the default family image first. If it fails and the model is
-enabled, the job copies the exact generated Dockerfile and bounded diagnostics into
-`repair-NNN/` under the probe task, sends an `appsec-review/build-image-repair-request/1` summary
-with the runtime skill `pipeline/skills/build-image-repair/SKILL.md` guidance, and accepts only an
-`appsec-review/build-image-repair/2` proposal
-([schema](../schemas/build-image-repair.schema.json)). The request carries `repair_options`, the
-closed vocabulary for that unit. A proposal is typed data in four parts, each the complete set for
-the next attempt, and must differ from the current repair set:
+The active non-Unity path prepares images and dispatches; it does not call the retained
+default-image probe/model-repair loop. Production failures are recorded by bounded iterations,
+then the operator can select failure context, try a detached recipe and promote a verified
+revision for a new production execution. See
+[bounded iterations and recovery](language-build.md#bounded-iterations-and-recovery).
+
+The retained image-only helper contract is `appsec-review/build-image-repair/3`
+([schema](../schemas/build-image-repair.schema.json)); `/2` remains accepted at its compatibility
+boundary. Its explicit `NOT_IMAGE_REPAIRABLE` outcome stops image repair. Typed failure diagnosis
+prioritizes capability/prerequisite/source/capture evidence; only resolved image/environment
+evidence establishes image repairability. A missing relative project header or library is not an
+apt-package diagnosis. `RepairStopped.reason_code` and normalized proposal identities stop
+non-image, repeated or no-op proposals without claiming another compiler ran.
+
+An image-repair proposal's four data parts remain the complete closed repair set:
 
 | Part | Bound | Applied as |
 | --- | --- | --- |
 | `system_packages` | 0-64 apt package specifiers | exec-form `apt-get install` in the derived image |
-| `environment` | 0-16 names from the family allowlist, each value matching that name's pattern | `ENV` before every restore, and merged into the recipe environment the probe and language build pass |
+| `environment` | 0-16 names from the family allowlist, each value matching that name's pattern | `ENV` before every restore, and merged into the accepted command environment |
 | `package_manager` | `null`, or a manager the family image pins (Node: npm, pnpm 9.15.9, Yarn 1.22.22) | the lockless Node restore; refused when a lockfile fixes the manager or the recipe runs another manager |
 | `dependency_restores` | 0-8 accepted dependency files | a restore by the family's own manager, built by code, run in the manifest's directory while the image builds |
 
@@ -111,31 +130,21 @@ restores keep `--ignore-scripts`, Composer keeps `--no-scripts --no-plugins`, an
 `-DskipTests`. There is no free-form command, path, URL, or Dockerfile text in a proposal.
 
 The applied repair is recorded on the recipe as `image_repairs` (environment, package manager, and
-normalized restores with their manager), so it is part of the recipe identity, the Dockerfile,
-every attempt record, the build dispatch, and the repair cache. `validate_build_recipe` re-checks
-it whenever the recipe is reused. Commands, paths, dependency files, outputs, base image, and
-container policy cannot change. A validated changed repair resolves/prepares its image and
-re-probes when preparation succeeds. Every attempt records its actual outcome; invalid or repeated
-proposals can fail before image preparation or another compiler invocation. Failed installation,
-timeout, and compiler failure also consume bounded attempts. An unavailable approved builder is a
-capability block, with the early-stop behavior described below, not another compiler failure.
-An image-only proposal cannot restore reviewed sibling source omitted by the workspace copy.
+normalized restores with their manager), so it is part of recipe/image identity.
+`validate_build_recipe` re-checks it whenever reused. This image-only vocabulary cannot change
+accepted commands, paths, dependency files, outputs, base image, or container policy.
+The separate detached recipe-candidate contract can revise validated commands, phase cwd,
+build directory and product paths with accepted evidence; it does not widen source authority or
+permit arbitrary environment, scripts, fetch URLs, product identities or interface variants.
+Promotion is recipe-only: B must execute again in production, with no replay-output transplant.
 
-Probe preparation is family-local and remains inside the run-owned workspace. For Maven units with
-a bounded legacy `src/*.java` source set, no conventional `src/main/java` tree, and no
-`<build><sourceDirectory>` in the pom, project-build materializes a duplicate conventional tree in that workspace before running the accepted Maven
-recipe; the target is not changed and the adaptation is recorded on the probe receipt. A pom that
-names its source directory already finds its sources, and a second copy would compile each class
-twice, so it is left as is. For a
-networked Node recipe whose configure phase already runs `npm ci`/`npm install`, `pnpm install`, or
-`yarn install`, the probe does not expose the immutable image-owned `node_modules` tree. The
-package manager restores into the writable workspace and uses bounded `/tmp` caches. Node recipes
-without an explicit restore continue to receive the image-owned dependency view. The language
-build applies the same rule, so a recipe's own installer never meets the read-only image tree.
-When a recipe declares a `build_dir` that the copied source does not contain, project-build creates
-it in the workspace before configure runs and records the adaptation on the probe receipt; the
-language build (including wasm units) does the same. An empty directory created this way does not
-satisfy an expected output by itself.
+Production adapter preparation remains run-owned. A networked Node recipe whose configure phase
+runs `npm ci`/`npm install`, `pnpm install`, or `yarn install` writes its own dependency tree using
+bounded temporary caches rather than a read-only image `node_modules` view. Without an explicit
+restore the supported image-owned view remains available. A declared missing `build_dir` is
+prepared only after path validation; an empty prepared directory is not an expected build product.
+The former probe helper's legacy Maven source-layout adaptation is not a new production guarantee:
+the accepted recipe and actual JVM adapter determine the source layout that is built.
 
 Recipe normalization marks a Node recipe `network_required` whenever the unit's own `package.json`
 declares `dependencies`, `devDependencies`, or `optionalDependencies`, even without a lockfile. The
@@ -176,9 +185,9 @@ native MSBuild/VCBuild capability, even when discovery places the solution in th
 This does not prove a Windows platform or disqualify neighboring C# projects or Linux Make
 alternatives. Missing include-chain authority remains unverified, not proof of portability.
 
-Concurrent image-repair telemetry identifies `family`, `root`, `build_system`, `build_unit_id`, and
-`repair_number`. Operators must use those correlation fields rather than adjacent log order when
-multiple family lanes repair simultaneously.
+Correlate preparation/iteration evidence by family, root, build-unit, recipe, attempt and
+invocation identities, not adjacent log order. Production nodes are serial across the global
+graph even though image preparation and static work have separate scheduling.
 
 Derived image manifests use `appsec-review/project-build-image/2` and live under a run-private
 namespace in `runs/metadata/project-images/`. Reuse requires operator-declared `platform` and
@@ -189,11 +198,10 @@ the generator or build environment changes. Missing declarations disable image r
 Within an active review resource scope, a missing derived image requires the authenticated
 `review_policy.image_builder`; absent capability produces a per-project `BLOCKED`
 `derived_image_preparation_unavailable` gap, never a default-network local `docker buildx`
-fallback. This applies both to initial dependency preparation and conditional image repair.
-The failed baseline probe and the blocked repair remain recorded; a deterministic capability
-refusal does not spend the remaining model attempts. A missing cached repair may be refused
-while the original pinned baseline still proceeds. Pinned baselines and policy-valid prepared-image
-cache hits do not require new image preparation, and supported sibling work continues.
+fallback. This applies to initial dependency preparation and image-changing recipe recovery.
+Pinned baselines and policy-valid prepared-image cache hits do not require new preparation, and
+supported sibling work continues. Replay `--prepared-image` consumes existing bounded approval
+evidence with the full image profile; it does not commission or invoke a builder itself.
 This does not change build/capture container limits, model settings, retries or feature gates.
 The builder's default
 `bounded` policy retains CPU/RAM enforcement. The opt-in `concurrency_only` policy allows
@@ -209,33 +217,25 @@ Eligible declared prepared images remain usable; platform image preparation is s
 Concurrency one bounds build count, not memory consumption or host contention; inherited
 host ceilings remain effective and must be reported truthfully.
 
-A repaired image that passes is accepted in
-`runs/metadata/project-build-repairs/<run-scoped-identity>/accepted.json`
-(`appsec-review/build-image-repair-cache/1`). Same-run reuse requires declared `platform`,
-`build_toolchain` and `validation` releases, an unchanged target snapshot and base recipe, and
-matching capture/limit settings. It revalidates the target recipe and resolves the image; a changed
-image ID repeats the probe sequence. Accepted probes use equivalent run-scoped identities under
-`runs/metadata/project-probes/`. Missing releases emit `CHECKPOINT_MISSED` rather than allowing
-an early hit. Another application run does not inherit these probe or repair checkpoints.
+Old `project-build-repairs/` and `project-probes/` metadata describe retained legacy helper
+checkpoints, not the new production success authority. Iteration reuse requires declared
+`platform`, `build_toolchain` and `validation` identities, exact source/configuration/graph,
+recipe/image/toolchain/upstream bindings, execution/output policy, and verified products and
+receipts. Missing identities are explicit misses, not fabricated successful probes.
 
 ## Outputs and recovery
 
-Probe workspaces and captures live under `runs/<run-id>/data/build/probes/<build-unit-id>/`; the
-dispatch document is under the attempt's `artifacts/project-build/`. A probe receipt lists each
-changed output with a role `kind` from the typed `ArtifactKind` vocabulary and its container
-`format` (`elf`, `ar`, `pe`, `macho`, `wasm`, `zip`, ...) separately, and counts CMake and Cargo
-build bookkeeping under `excluded_bookkeeping` instead of listing it (see
-[`language-build.md`](language-build.md)). The probe also applies the `[build_outputs]` policy
-for the action's family. Its receipt carries `build_output_dispositions`
-(`appsec-review/build-output-dispositions/1`) and `build_output_gaps`. A native probe classifies
-dependency trees without execution capture or a file API query: from the CMake cache, Meson
-introspection, static `build.ninja`, vcpkg and Conan records and the directory-name heuristic.
-Other families apply only the configured exclusions. Classification gaps go into
-`build_output_gaps`, not `gaps`, so they never change probe acceptance or repair; the language
-build re-classifies its own workspace and owns the unit's coverage gaps. The `[build_outputs]`
-policy identity is part of the accepted-probe identity. A failed probe, a disabled or
-unavailable repair model, or exhausted repairs is a named gap and publishes no build dispatch for
-that unit; static dispatch and sibling units continue. Resume the same run: accepted probes are
-reused only when the release, target and run bindings, recipe identity and resolved image ID still
-match. An invalid repair cache
-or a changed accepted repair identity fails the task instead of being silently rebuilt.
+The accepted dispatch is published beneath the attempt's `artifacts/project-build/`. It records
+`execution_mode = "iterative"`, the runtime execution graph/actions, image preparations and
+`preparation_identity` on non-Unity dispatches; that field is not a compiler-probe identity.
+Failed preparation yields an explicit omitted-unit/upstream gap, not an absent family or a
+successful build. Static dispatch remains available independently.
+
+Language-build owns the authoritative production receipts, captured command/tool provenance,
+typed artifacts and `[build_outputs]` classifications. Mutable production state lives at
+`runs/<run-id>/workspace/build/{target,install}`; immutable iterations/products/generations and
+durable artifact copies remain run-owned outside disposable state. Failed writes are restored
+before retry, and selected recipe changes invalidate the affected node/consumers without
+recompiling an unchanged verifiable producer. JVM/Wasm retain their existing specialized
+provenance semantics; sharing mounts is not a claim that every family uses standardized syscall
+capture. See [language-build](language-build.md) for publication, replay CLI, retention and gaps.

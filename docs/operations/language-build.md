@@ -11,19 +11,22 @@ the accepted engine receipt, outputs and named coverage gaps into this job's pub
 index without rebuilding it. Engine identity supplements rather than replaces `family = "dotnet"`;
 see [Unity builds](unity-build.md). An engine build output or successful Editor process does not
 establish complete compiler capture or runtime shipment.
-A planned unit that `job_project_build` probed but could not build (for example its build image is
+A planned unit whose project-image preparation failed (for example its build image is
 unavailable) is never an absent lane: its family publishes a `BLOCKED` receipt with
 `upstream_failure` (`job_id`, `terminal_status`, `reason`) and a gap naming the unit, the failure and
-`job_project_build`, so the job is `COMPLETED_WITH_GAPS`. `NOT_APPLICABLE` means the target has no
-planned unit of that family.
+`job_project_build`, so the job is `COMPLETED_WITH_GAPS`. A family with no planned units is
+`NOT_APPLICABLE`; a platform-specific unit may also be `NOT_APPLICABLE` with explicit Windows/
+.NET Framework/toolchain evidence, empty commands and named gaps. That is not successful Linux
+compilation and must not satisfy a producer requirement. Proven native MSVC/VCBuild-only drivers
+remain explicit unavailable capabilities; missing platform evidence is not a guessed Windows label.
 Bundler is intentionally not an execution lane: an accepted `Gemfile` produces a named gap stating
 that no pinned Ruby build profile or executor exists and that gem installation, lifecycle hooks,
 packaging, and native extensions were not run. Ruby source-mode Tree-sitter and CodeQL coverage do
 not imply Bundler or target-code execution.
-Each load lane revalidates only the accepted dispatch families it can consume. Handoff hashes,
-the target snapshot, workflow envelopes, and unique build-unit identities remain shared integrity
-checks; probe, image, recipe, descriptor, and dependency validation is lane-owned. An invalid
-recipe therefore fails its consuming family without aborting unrelated language loads.
+The global iteration controller validates the accepted graph/dispatch before family publication.
+Handoff hashes, target snapshot, workflow envelopes, unique build-unit identities, recipes,
+descriptors and image dependencies remain resolving integrity checks. Ordinary unavailable units
+retain explicit receipts; malformed shared authority is not silently downgraded to an absent lane.
 Native, Rust, and .NET commands share one captured-build driver and the generic
 `reconcile_captured_build` successful-exec reconciliation through `CapturedBuildDescriptor`
 instances; the descriptors classify observed tools and map language-specific inputs, outputs,
@@ -31,11 +34,14 @@ artifacts, and metadata. Go runs under the same executor/collector boundary and 
 syscall capture records but reconciles them in its own `go.capture_invocations`, with the same
 authority rule: only successful process-exec events establish that a tool ran.
 
-**PROPOSED / NOT YET IMPLEMENTED:** the
-[topology and bounded-iteration design](../architecture/build-topology-and-iterations.md)
-replaces per-unit source copies and family-long recovery with one compatible shared run-owned
-production tree and separate bounded job invocations. The current behavior below remains
-per-attempt; the proposal is not evidence that shared products or a replay/adoption API exist.
+**Implemented in tested source, prelanding:** the
+[topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
+identifies the independently tested execution commit. `iterations.dispatch` schedules one global,
+serial dependency-aware production graph through separate registered `job_build_iteration`
+invocations before family load/publication. Family adapters use one shared complete source/install
+generation; family execution steps consume those receipts without rebuilding the graph. Unity's
+existing single execution remains separate. These source/unit facts are not deployment, live
+compiler/review or accepted-SPDX proof.
 
 ## Conditional-capture operator flow
 
@@ -75,16 +81,21 @@ The reason codes operators will see are `POLICY_REQUIRED`, `POLICY_DISABLED`,
 `ARTIFACT_VALIDATION_FAILED`, and `PROCESSING_SUCCEEDED`. Inventory/configuration identity errors
 are framework-integrity failures; ordinary unavailable tools and failed processing remain `GAP`.
 
-Native CMake dispatches use the validated deterministic marker command recipe. A failed default
-project-build probe may add only typed repairs through the bounded image-repair workflow: apt
-packages, allowlisted environment variables, a pinned package manager, and restores of accepted
-manifests (see [`project-build.md`](project-build.md)); model output cannot change the accepted
-command, path, dependency-file, or output contract.
+Native dispatches retain validated accepted command/source authority. Image-only repairs have
+their closed package/environment/manager/manifest vocabulary; separate evidence-backed detached
+recipe candidates may revise validated commands, phase cwd and product paths. Neither permits
+arbitrary source roots, shell scripts or product-interface changes (see
+[`project-build.md`](project-build.md)).
 
-For every native unit the job revalidates the target snapshot, successful probe identity, recipe,
-dependency hashes, build-unit root, derived image identity, and dependency edges. It then copies
-the bounded source root into the receipt-bound native build workspace and
-executes the accepted configure/build argv without a shell. The pinned container uses Docker's
+For every native node the job revalidates source, accepted graph/preparation, recipe,
+dependency hashes, build-unit root, immutable image, compatible variants and producer products.
+The complete target is at `workspace/build/target`, mounted at `/workspace`; the shared mutable
+prefix is `workspace/build/install`, mounted at `/install`. Node readiness passes verified
+include/library/tool/pkg-config/CMake interfaces to execution; it does not merely announce an
+upstream Boolean. There is no fresh source-only copy for each production node.
+Commands use accepted phase directories, checked by the common production/replay source/driver
+guard immediately before every launch, then execute without an introduced shell.
+The pinned container uses Docker's
 bridge network so declared package-manager dependencies can be downloaded,
 runs non-root with dropped capabilities and `no-new-privileges`, has a read-only root, and receives
 central CPU, memory, PID, timeout, tmpfs, and output limits. Target binaries and tests are never run.
@@ -93,7 +104,8 @@ each command and binds `TMPDIR`, `TMP`, and `TEMP` to it. Compiler and build-sys
 including MSBuild response files, therefore remain inside the workspace boundary until capture can
 retain their bounded content. MSBuild's tool-temporary preservation switch prevents it from deleting
 response files before that snapshot. A target collision cannot select this directory because creation is
-atomic; a response path outside the workspace, an over-limit or removed response file, or malformed
+atomic; a response path outside the verified workspace/install roots, an over-limit or removed
+response file, or malformed
 response identity is an explicit coverage gap or integrity failure rather than silently omitted
 provenance.
 
@@ -127,8 +139,8 @@ carries argv/envp/connect capture and a gitleaks receipt. Capture loss, a redact
 wrapper call, or an unobserved compiler is a named gap, makes provenance incomplete, and prevents
 checkpointing. Exact recipe and compiler/linker argv are retained only under
 the unit's `protected-commands/` directory; searchable records retain argv hashes, sanitized
-environment facts, resolved inputs/outputs, artifact hashes, and mapping confidence. A complete
-workspace manifest protects the handoff consumed by later language-specific analysis.
+environment facts, resolved inputs/outputs, artifact hashes, and mapping confidence. A complete committed generation and durable artifact copies protect downstream references;
+accepted evidence cannot depend only on a mutable workspace path.
 
 Every catalogued artifact's `kind` comes from one typed vocabulary,
 `ArtifactKind` in `src/appsec_review/jobs/artifact_kinds.py`; a kind outside it fails the receipt.
@@ -214,9 +226,11 @@ Generated execution records have a separate writable mount at `/appsec-jvm-evide
 executor closes that write window on completion or failure. Neither mount overlaps `/workspace`.
 Target snapshots therefore retain target-owned lookalike paths without hashing the supplied
 instrumentation. Generated records remain verified evidence; transient JDK mirrors are removed
-and excluded from review payload hashing. JVM/Wasm reuse requires declared platform,
-validation, build-toolchain and `jvm_instrumentation`/`wasm_instrumentation` releases; missing
-declarations disable reuse rather than falling back to supplied-file hashes.
+and excluded from review payload hashing. The adapters' retained private-cache path requires
+declared platform, validation, build-toolchain and `jvm_instrumentation`/`wasm_instrumentation`
+releases; it is bypassed for shared production execution. Active iteration reuse instead verifies
+the global binding, frozen settings/releases and durable products described below; neither path
+uses supplied-file hashes as a substitute for declared implementation identity.
 
 - **Java (`JavaCompile`, including AGP's `compile*JavaWithJavac`).** Each task's `javaCompiler` is
   replaced lazily by a mirror of the JDK the task would have used: an explicit task toolchain, the
@@ -562,20 +576,101 @@ environment values, stdout/stderr, and diagnostic tails remain protected. The sa
 retrieval shard exposes only command hashes and outcomes, bounded stream facts, package/artifact
 identities, and dependency relationships.
 
-**CURRENT/OBSERVED:** build-unit dependencies execute in topological layers within each family,
-after project-build probes have succeeded. A failed same-family dependency blocks its dependents,
-but unrelated units continue in the configured worker pool. This is not a cross-family target
-scheduler, and generic/native execution still creates an independent source workspace rather
-than materializing the ready node's upstream products.
+## Bounded iterations and recovery
 
-A checkpoint is reusable only when its
-target snapshot, recipe, dependency hashes, image, executor/capture identity, toolchain, probe,
-`[build_outputs]` policy identity, and upstream handoff are unchanged and every retained artifact
-still verifies. Checkpoint namespaces
-are run-private and require operator-declared `platform`, `build_toolchain` and `validation`
-releases. A missing declaration emits `CHECKPOINT_MISSED` with `missing_release_identity` and
-reruns the applicable build; changing any required release invalidates the checkpoint without
-fingerprinting installed software. Unrelated query-pack declarations do not invalidate it.
+The global controller schedules actual producer-to-consumer edges before family partitioning,
+serializing production writes. Registered `job_build_iteration` (`build_iteration`,
+`execute.node`) executes one immutable request/node transaction per distinct in-process Dagster
+invocation/UUID. Display labels `build_cpp`, `build_cpp1`, etc. use same-family traversal positions,
+not a persistent retry counter; attempt/request/UUID identities distinguish retries.
+Static work and image preparation retain their independent scheduling.
+
+The accepted graph accounts for independent/contained/unsupported/unresolved units and typed
+`requires_product`/`order_only` edges. Incomplete topology discovery remains a named gap.
+Readiness requires successful producers, exact declared interfaces and retained product
+verification. Six variant fields (`configuration`, `target_arch`, `execution_role`, `linkage`,
+`toolchain`, `abi`) come only from explicit descriptor/configuration evidence. Unknown required
+compatibility blocks consumers; any unknown variant field forbids checkpoint reuse.
+
+Reuse additionally binds source, structural graph, frozen configuration, recipe revision,
+image/toolchain, exact upstream products, execution/capture and `[build_outputs]` identities,
+and operator-declared `platform`, `build_toolchain`, `validation` releases. Every retained receipt
+and artifact must verify. Missing declarations/products or changed bindings are explicit misses;
+unrelated query-pack declarations are not substitutes for release proof. The mutable ledger is
+an index, not success authority.
+
+Successful A commits a content-addressed workspace generation and product record. Failed B may
+overwrite/delete A's target or install files: recovery restores committed bytes, modes/mtime and
+removes failed-only writes before retry. It verifies A instead of accepting an old success label
+or recompiling A merely because B failed. A changed B recipe invalidates B and its descendants;
+retained independent checkpoints keep their original provenance during recomposition.
+
+`data/build/iterations/pending.json` records in-flight requests; `prepared/` supports a result
+committed before ledger publication; exact-name `leases/<attempt-id>/` support worker cleanup.
+`pending-invalidation.json` points to an immutable invalidation intent before generation/ledger
+recomposition. Recovery verifies expected generations and before/after ledger states. Uncertain
+cleanup or tainted state is unfinished, never reusable success.
+
+Failure blocks dependent nodes while unrelated ready nodes may continue; family/aggregate results
+can be `COMPLETED_WITH_GAPS`. There is no durable `AWAITING_RECIPE` state or mandatory whole-review
+pause. Image preparation, a completed invocation, or an intermediate successful node does not
+establish overall target/SPDX completion.
+
+### Detached recipe selection
+
+The CLI consumes JSON reference objects for `--context`, `--trial`, `--prepared-image`, and
+`--iteration-request`; product/candidate arguments are JSON file paths:
+
+```text
+appsec-review build-failure-context --run-id <id> --node-id <B> --products <products.json>
+appsec-review replay-build-recipe --run-id <id> --context <reference-json> --candidate <candidate.json>
+appsec-review promote-build-recipe --run-id <id> --context <reference-json> --trial <reference-json>
+```
+
+The failure context pins the original failed request/generation and evidence. A selected current
+generation is permitted only with identical input identity, every original accepted product
+retained, and compatible source/graph/configuration bindings. It records both generation
+identities; compatible unrelated successes do not force rollback of accepted A. Producer
+interfaces and products are verified again in the reconstructed full-context replay tree.
+
+`RecipeCandidate` (`appsec-review/build-recipe-candidate/1`) supplies the full validated recipe,
+bounded accepted evidence/reason and optional product path declarations. Product IDs, kinds,
+interfaces and variants cannot change. `ReplayInvocation.prepare_command(index)` is zero-based
+and runs before **each** captured command, delegating to the same Make/CMake source/driver guard
+as production. Source-subdirectory cwd needs accepted descriptor evidence; build cwd must stay
+inside the declared build directory. Configure-created symlink or wrong-source operands fail
+before the next launch, and arbitrary target names are not rebased.
+Changed cwd is currently supported only for recognized native Make/CMake commands; a different
+driver cannot silently opt into the same transformation.
+
+Replay uses owned `workspace/build-replays/` target/install trees with the same logical mounts,
+not a compiler view restricted to descriptors. Durable contexts/candidates/intents/trials,
+captures and promotions stay under `artifacts/build/recipe-replay/`, outside disposable state.
+Normalized no-ops/duplicates stop without a new container. A winning trial requires exact
+argv/cwd/image, successful complete captures/streams, expected outputs, new/changed retained
+product bytes, verified interfaces/variants and explicit cleanup. Exit zero alone is insufficient.
+
+Promotion (`appsec-review/build-recipe-promotion/1`) selects recipe/products/image-profile
+evidence, not trial output bytes. `selection.json` references immutable selections; consumption
+revalidates source/node/graph/configuration, releases, toolchain, upstreams and generation custody.
+Frozen run configuration is not edited. B must execute again in a new production invocation;
+verified A remains reusable, and no opaque replay mutation is transplanted.
+Promotion alone does not advance production; the next explicitly authorized controller entry
+consumes the selection. These command examples are not authorization to resume a stopped review.
+
+Unchanged-image replay uses the failed dispatch's exact profile. Image changes need bounded
+operator-approved preparation evidence with full `BuildProfile`
+(`name`, `tag`, `image_id`, `user`, `derived_from_image_id`) preserved through selection/retry.
+`--prepared-image <reference-json>` consumes this evidence, never builds an image; missing
+approved preparation is `derived_image_preparation_unavailable`. Typed failure diagnosis and
+`NOT_IMAGE_REPAIRABLE` prevent a missing project header/library from becoming a speculative apt
+repair. Retained legacy model-repair helpers are not an automatic production loop.
+
+Detached recovery is not inherently network-disabled. Explicit replay `--offline` uses network
+`none`, no image pulling/hidden preparation and refuses declared fetching. Its dependencies must
+already be prepared. CLI configuration must match the frozen run. The narrow
+`run job_build_iteration --run-id <id> --iteration-request <reference-json>` only consumes a
+controller-claimed immutable request; it cannot start an arbitrary free-standing node.
 
 ### Build-output dispositions
 
@@ -650,30 +745,48 @@ Classification gaps:
 | `build-output-capture-incomplete: ...` | capture was incomplete, so capture-based classification is off; layout facts and the heuristic still apply |
 
 `node.catalog` and `php.catalog` accept the dispositions but do not walk them yet. Node and PHP
-units therefore apply no `[build_outputs]` rule in this job (the shipped `node-bundler-cache` rule
-takes effect in project-build probes only), and their dispositions and counts are empty. Their
+units therefore apply no `[build_outputs]` rule in this job, and their dispositions and counts
+are empty. Non-Unity project probes no longer run, so the shipped `node-bundler-cache` rule is
+not applied there as a substitute production classification. Their
 installer-record classifiers are separate work.
 
 ### Immutable retry publication
 
-Fresh generic, JVM, and WASM builds use the attempt-scoped execution root
-`data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/` within the run, with `workspace/`,
-workspace manifests, protected commands, and JVM instrumentation/evidence under that attempt.
+Generic, JVM, and WASM evidence uses the attempt-scoped execution root
+`data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/` within the run, with
+protected commands, manifests and specialized instrumentation/evidence. Production source/install
+state is shared under `workspace/build/`, not a private `workspace/` beneath every node attempt.
 Execution capture keeps its existing
 `data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/execution-capture/` path; the
 attempt segment must not be added twice.
 
-Attempt isolation applies even when a sibling unit failed: forcing a later attempt does not rewrite
-workspace manifests, artifacts, or other bytes bound by an earlier accepted partial handoff.
-Successful checkpoint reuse verifies and returns the prior pinned workspace and artifact references
-rather than copying a previously accepted workspace into a new mutable unit directory. Read the
-receipt's workspace reference rather than constructing a path from the latest attempt ID.
-Existing `build_workspaces` protected dataset declarations cover these family trees.
+Immutable iteration documents live under `artifacts/build/iterations/`; ledger, pending/prepared
+records, failures, selections, leases and recomposition pointers live under
+`data/build/iterations/`. Committed generations and product records resolve through durable
+content-addressed storage. Adapter artifact references are pinned to durable copies before
+publication, so later shared-tree writes or retention cannot change accepted evidence.
+Read verified receipt/product references instead of constructing mutable paths from a latest
+attempt ID. Reuse verifies products and restores committed state; it does not recreate a private
+per-unit source copy.
 
-The [proposed shared-tree replacement](../architecture/build-topology-and-iterations.md#committed-progress-and-restoration-after-failed-writes)
-must retain immutable accepted evidence while restoring overwritten/deleted prerequisite state
-after a failed node. Existing per-attempt isolation and checkpoints do not themselves implement
-that restoration or separately completed per-node jobs.
+JVM still uses its specialized instrumentation trace and WebAssembly without native components
+still uses plain execution. Shared `/install` and cleanup propagation do not establish standardized
+syscall/envp/gitleaks capture for those adapters. Native-component WASM retains its existing
+captured path.
+
+### Workspace retention
+
+`[build_workspaces] build_workspace_retention_runs = 3` is central operational policy, range
+0-10000, with **0 disabling automatic deletion**; Boolean values are invalid. It is excluded from
+semantic resolved configuration identity. On graph completion the owner is marked terminal and
+swept: retain newest N terminal owners first, then retain older active/locked/held/preserved/
+resumable/unfinished/tainted state or registered active replay state. Exclusions mean this is
+not a hard directory/byte cap. Resume reestablishes holds and verifies/reconstructs state.
+
+Only exact owned disposable production/replay trees are removed after durable inventory and
+purged-state marking. Captures, logs, receipts, generations/CAS and artifacts survive.
+`data/build/iterations/retention.json` records the report; failures are surfaced, not silently
+ignored. No historical-run cleanup is authorized or proved by this policy description.
 
 Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_COMPLETED`,
 `BUILD_OUTPUT_CLASSIFIED`, `LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events
@@ -716,7 +829,7 @@ it is 0-1 MiB for Go, Python, Rust, PHP, and Node and positive for JVM:
 | `wasm` | `workspace_file_limit` (100000), `producers.<name>` with `families`, `tools`, `indicators` arrays | at least one producer; limit positive |
 
 The WebAssembly adapter reuses the job-level timeout, `output_bytes`, and `artifact_count_limit`.
-Project images, probes, and recipes come from `job_project_build`; see
+Project-image preparations, iterative dispatches and recipes come from `job_project_build`; see
 [`project-build.md`](project-build.md).
 
 ### `[build_outputs]`
@@ -725,7 +838,7 @@ A top-level table (`src/appsec_review/config/build_outputs.py`) shared by `job_p
 `job_language_build` and `job_sanitizer_build`. Unknown keys fail loading, and so does a
 `jobs.<id>.build_outputs` or `jobs.<id>.settings.build_outputs` table. Without the table, the
 discovery defaults apply with no exclusion rules. Its canonical SHA-256 is the policy identity:
-it is part of the language-build checkpoint fingerprint and the accepted-probe identity, and the
+it is part of the language-build iteration/checkpoint identity, and the
 sanitizer summary records it as `build_outputs_policy`.
 
 | Key | Shipped value | Meaning |
@@ -751,7 +864,13 @@ every family). Shipped rules:
 
 ## Live acceptance
 
-The bounded non-Dagster Rust fixture acceptance is current for this tree: both the ordinary and
+The following are historical family-fixture records, not fresh acceptance of the changed
+shared-workspace iteration path. The current rework has independently tested source/unit evidence
+as recorded in [topology and iterations](../architecture/build-topology-and-iterations.md);
+definitions-load and controlled Docker-boundary units do not prove deployment or a live review.
+Manual live validation still requires explicit user authorization.
+
+The bounded non-Dagster Rust fixture acceptance recorded that both the ordinary and
 synthetic-secret language-build runs succeed without capture gaps, and the pinned CodeQL Rust
 source/no-build database executes the default `rust-security-and-quality` and independently hashed
 `rust-security-extended` suites. The benign fixture produces zero normalized CodeQL observations;

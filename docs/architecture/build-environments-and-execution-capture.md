@@ -5,6 +5,11 @@ project images, executes accepted build commands, captures their process behavio
 resulting evidence with gitleaks. It documents the active implementation outside `old/`; it is not
 guidance for review workers.
 
+The shared-workspace/iteration changes described here are **implemented in tested source,
+prelanding**. The [topology and iteration record](build-topology-and-iterations.md) identifies
+the exact independently tested execution commit and unresolved evidence. No canonical main
+integration, image deployment, fresh compiler execution or live review acceptance is claimed.
+
 ## Scope and current integration
 
 There are three distinct image and execution layers. They have different authorities and must not
@@ -18,13 +23,16 @@ be treated as one container lifecycle:
    `execute_captured` is used, surrounds that command with process capture and a post-command
    gitleaks scan.
 
-Captured execution is an acceptance requirement for `job_project_build` probes and for every
-command of the native C/C++, Rust/Cargo, Go, .NET SDK, Python, PHP and Node adapters in
+The authoritative non-Unity production build now runs in language-build iterations, not once
+as project probes and again as a language rebuild. Standardized captured execution is an
+acceptance requirement for every command of the native C/C++, Rust/Cargo, Go, .NET SDK, Python, PHP and Node adapters in
 `job_language_build` (`_CAPTURED_FAMILIES` in `job_language_build/job.py`), and for the
 WebAssembly lane when a unit has `native_components`. The JVM adapter (Java, Kotlin, Android)
 still uses its own instrumentation trace, and a WebAssembly unit without native components uses the
-plain executor; neither must be described as producing the standardized syscall/envp/secret-scan
-record until it is explicitly migrated and tested. The current capture backend is in-container
+plain executor; both now receive shared target/install paths and cleanup propagation, but
+neither must be described as producing the standardized syscall/envp/secret-scan record until
+explicitly migrated and tested. Unity retains its existing single engine execution.
+The current capture backend is in-container
 `ptrace` through `strace`. Configuration reserves `ebpf` as a future backend, but the executor
 rejects it because a safe, build-cgroup-scoped implementation has not been completed.
 
@@ -138,7 +146,10 @@ manifest, or more than 48 members is an inventory gap, and build capture records
 `node_modules` and re-points workspace links (links from `node_modules` into the project tree) at
 `/workspace`, where the build workspace holds member sources. The build links both the workspace
 root's and the unit's `node_modules` to the image. Installed `node_modules` links in a target
-checkout are never copied, so they are not build-source symlinks. A recipe that runs its own npm
+checkout are not authority for introducing escaping image links: the complete source materializer
+accepts only supported in-tree relative links and rejects escaping/broken links rather than
+silently filtering trees named `node_modules`. Image views are adapter preparation, not a
+source-only-copy limit. A recipe that runs its own npm
 install instead writes a real `node_modules` into the workspace. The Node catalog scopes that tree
 only from npm's installer record, `node_modules/.package-lock.json`, and keeps one supply-chain row
 per verified package rather than one row per file (see
@@ -154,21 +165,46 @@ family work can remain parallel.
 
 ## Executing an accepted build
 
-`job_project_build` copies the bounded source scope into a run-owned workspace and invokes only the
-validated configure/build argv. The executor does not interpolate a command string or introduce a
-shell around the accepted command. The build sandbox has Docker bridge networking so package
-managers can reach dependency services, but it remains non-root with all capabilities dropped,
-`no-new-privileges`, a read-only container root, bounded resources, and a writable run-owned source
-copy. Produced applications and test suites are not executed.
+`job_project_build` prepares images and publishes an immutable execution graph/dispatch.
+Non-Unity `probe` tasks are compatibility no-ops; Unity still executes once. Language-build's
+global controller invokes registered `job_build_iteration` separately for each ready production
+node, before family publication. Each invocation has a request, attempt ID and distinct Dagster
+UUID. This is one authoritative build, not two whole-graph probe/rebuild passes.
 
-**CURRENT/OBSERVED:** the copied scope is the selected build-unit root plus accepted dependency
-files, not the complete target. Probes and later generic language builds use separate
-per-unit/per-attempt workspaces. Correct working directories and downstream dependency readiness
-do not restore omitted sibling sources or transfer producer artifacts.
-The [target topology and iteration design](build-topology-and-iterations.md) describes the
-**PROPOSED / NOT YET IMPLEMENTED** replacement: one complete run-owned production tree shared by
-compatible nodes, durable producer products, restoration after failed writes, and separate bounded
-build/recovery invocations. This does not claim that a new mount, schema, or replay API exists.
+The complete target is materialized in `runs/<run-id>/workspace/build/target`, mounted at
+`/workspace`; `workspace/build/install` is the run-owned mutable `/install` prefix. Compatible
+nodes share these trees across disposable containers, including generated headers, libraries,
+CMake/pkg-config products and committed source context. Only Git metadata is excluded by the
+source materializer; required files are not dropped because a directory is named `build`, `bin`,
+`obj` or `target`. Source-copy stability, relative symlink custody and disjoint original/run roots
+are verified. The reviewed target itself remains untouched.
+
+Verified producer interfaces configure include/library/tool/pkg-config/CMake search paths.
+Readiness requires compatible variants and real retained products; a topological-ready Boolean
+does not create those files. Shared generations/products are content-addressed outside the mutable
+trees. A writer claim, pending intent and committed checkpoints support restoration after a failed
+B overwrites/deletes A's bytes or prefix contents. Accepted receipts and artifact references remain
+immutable while a restored shared production tree advances.
+
+The executor uses direct validated argv without an introduced shell. `source_dir` retains accepted
+source authority; optional phase `execution_cwd` is checked by the common production/replay
+Make/CMake source/driver guard before every launch. Configure-created symlinks cannot redirect
+the next build launch. This does not add arbitrary export/install commands.
+
+The sandbox retains non-root identity, dropped capabilities, `no-new-privileges`, a read-only root,
+resource/time/cancellation bounds and dependency egress policy. `execute`/`execute_captured` accept
+the separate validated `install_dir`; mutable install bytes cannot be labeled read-only image
+content. Temporary mount-permission windows close before explicit `cleanup_complete` acceptance,
+without changing upstream committed modes/mtime/bytes. Exact-name run-owned leases support crash
+cleanup; uncertain cleanup leaves unfinished state, not reusable success. Produced applications
+and test suites are not executed.
+
+Detached recipe replay reconstructs the committed full-context target/install generation in a
+separate owned subtree at the same logical paths. Its captured callback uses this executor and
+the same prelaunch guard. Trial promotion revalidates exact inputs, commands, captures, products
+and cleanup, selects recipe/profile evidence, and requires fresh production execution; it never
+transplants trial outputs. Explicit replay `--offline` uses network `none` and prohibits fetching,
+unlike ordinary detached recovery. See [topology and iterations](build-topology-and-iterations.md).
 
 For captured execution, the container entrypoint is the thin
 `containers/build-capture/build-driver.sh`. The driver prepends generated wrappers to `PATH`, saves
@@ -232,7 +268,9 @@ evidence from the normalized events (`container_runtime/capture_files.py`):
 2. **Response files.** For every successful exec, an `@file` argument that the same process then
    opened for reading is copied into `response-files/` in the capture *before* the secret scan, so
    the scan covers its contents. Each snapshot is listed under the execution record's
-   `response_files.records` with schema `appsec-review/build-response-file/1`. A response file outside the workspace, removed before the
+   `response_files.records` with schema `appsec-review/build-response-file/1`. Workspace and
+   mutable install response files have verified host mappings; install records identify their
+   root. A response file outside those retained roots, removed before the
    snapshot, or over `response_file_bytes_limit` is a named coverage gap, as is reaching
    `response_file_count_limit`.
 3. **File inventory** (`files.jsonl`, schema `appsec-review/build-file-inventory/1`), built *after*
@@ -241,12 +279,13 @@ evidence from the normalized events (`container_runtime/capture_files.py`):
      counted and never listed;
    - workspace files are keyed by workspace-relative path, because every review builds in a new
      directory. A file the build did not write, whose size and mtime still match the pre-build
-     workspace snapshot that `job_project_build` already hashes, reuses that SHA-256. Every other
-     workspace file is hashed once;
+     per-command workspace snapshot provides, reuses that SHA-256. Every other workspace file is
+     hashed once. `/install` is a distinct mutable root: its files are mapped beneath the owned
+     install directory and hashed, never identified merely by image ID plus path;
    - files on the read-only image filesystem are identified by image ID plus path and never
      hashed. Ephemeral tmpfs paths are listed without hashes; capture-own and virtual
      (`/proc`, `/sys`, `/dev`) paths are only counted;
-   - a workspace file modified after a process read it is flagged `modified_after_read` and
+   - a mutable workspace/install file modified after a process read it is flagged `modified_after_read` and
      counted. Build systems routinely rewrite files they read, so this is not a coverage gap, but
      consumers must not treat its post-build hash as what was read;
    - counts, hashed bytes, and `resolve`/`hash`/`total` timings are recorded in the execution
@@ -463,8 +502,8 @@ The shared evaluator consumes the resolved policy, project/language identity, ac
 package, declared artifact types and CodeQL capabilities, and exact descriptor path/hash
 identities. It records the inspected facts, selected capability, reason code, action, disposition,
 and configuration SHA-256 in `appsec-review/applicability-decision/1`. Project build, language
-build, and CodeQL all use that record. Applicability facts and decisions participate in probe,
-language-build, database, handoff, implementation, and resume identities.
+build, and CodeQL all use that record. Applicability facts and decisions participate in
+preparation/iteration, language-build, database, handoff, implementation, and resume identities.
 
 `auto` recognizes only bounded descriptor facts: known compiled-project markers, package lifecycle
 or build hooks, native-extension declarations, transpilers, bundlers, code generation, Android
@@ -819,6 +858,13 @@ The conditional tri-state controls are typed fields of the same schema: `[build_
 `compiler_artifact_collection_mode` setting, both validated by `config/loader.py` and frozen in the
 resolved run configuration.
 
+The separate operational `[build_workspaces] build_workspace_retention_runs` policy defaults to
+3, accepts integers 0-10000 and disables automatic deletion at 0. It is excluded from semantic
+resolved configuration identity, unlike capture/recipe inputs. Completion sweeping retains the
+newest terminal owners and older held/active/leased/resumable/tainted state; durable evidence and
+CAS products survive disposable-tree removal. Details and limits are in
+[workspace retention](build-topology-and-iterations.md#implemented-tunable-workspace-retention).
+
 Global `[build_capture]` limits (shipped value; allowed range):
 
 | Key | Default | Range | Meaning |
@@ -853,6 +899,11 @@ The main implementation surfaces are:
 - `src/appsec_review/container_runtime/raw_traces.py` and `capture_files.py` — redacted raw-trace
   retention and the post-build file inventory/response-file snapshots;
 - `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
+- `src/appsec_review/jobs/build_topology.py`, `build_workspace.py`, `build_iterations.py`, and
+  `job_build_iteration/job.py` — accepted ownership/product graph, shared generations, recoverable
+  controller and separate registered node invocations;
+- `src/appsec_review/jobs/build_recipe_commands.py` and `build_recipe_replay.py` — common
+  source/driver/cwd authority and detached recipe-only promotion;
 - `src/appsec_review/jobs/job_language_build/capture.py` — the typed descriptor and generic
   successful-exec reconciliation used by native, Rust, and .NET (Go reconciles in `go.py`);
 - `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`,
@@ -878,6 +929,11 @@ The main implementation surfaces are:
   only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.
 
 ## Acceptance sequence
+
+The iteration rework currently has source and focused-unit evidence, not fresh live acceptance.
+The historical benchmarks/fixture records elsewhere on this page do not establish the changed
+shared-workspace path against a newly reviewed target. Live container/Dagster validation remains
+manual and requires explicit user authorization; documentation reconciliation does not run it.
 
 Changes advance in language order with small fixture projects. For a family, focused unit tests must
 first prove configuration, parsing, caps, redaction, failure behavior, hash repair, and job

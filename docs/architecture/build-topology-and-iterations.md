@@ -2,36 +2,46 @@
 
 ## Status and evidence boundary
 
-**CURRENT/OBSERVED** below describes source commit
+**IMPLEMENTED IN TESTED SOURCE, PRELANDING:** this reconciliation describes execution commit
+`be6ca91d0745128feddfddb438a14c62473e3824`, tree
+`739c0b2ad534c60073a16f58cf92292bb0cdd8e6`. The coordinator released documentation work after
+independent focused verification: 253 collected, 252 passed, one explicit authenticated-live
+skip, 575.06 seconds pytest / 576.405 seconds wall. That evidence includes actual registered
+in-process job/controller/replay paths with controlled external boundaries; it is not a new
+Docker/compiler execution, deployment, live Dagster review, complete target topology, or accepted
+SPDX endpoint. Canonical WSL main integration and its exact selected SHA remain **PENDING**.
+
+**HISTORICAL/OBSERVED** sections describe source
 `1c7b38e1c927a1b5c46036df26e2da988e70557a`, tree
-`80ad9506d23eea107a99f163e2c606557183c6ad`, and the coordinator-verified historical
-run evidence identified below. This documentation pass inspected source, not raw model responses
-or the target checkout. **PROPOSED** describes the agreed switch and is **NOT YET IMPLEMENTED**.
-No implementation merge, complete target build topology, successful overall build, or accepted
-SPDX endpoint is established by this page.
+`80ad9506d23eea107a99f163e2c606557183c6ad`, and coordinator-verified run evidence.
+**NOT YET ESTABLISHED** identifies coverage or acceptance that source implementation and unit
+evidence do not prove. This documentation pass inspected source, not raw model responses or the
+target checkout.
 
 The operational descriptions remain in [project-build](../operations/project-build.md),
 [language-build](../operations/language-build.md), and
 [target analysis planning](../operations/target-analysis-planning.md).
-This page records the proposed change and the limits of the discovery attempt, not new worker
-guidance or executable commands.
+This page records the implemented switch and the limits of the discovery attempt, not new worker
+guidance or permission to launch a review.
 
-## CURRENT/OBSERVED: topology and source-visibility gaps
+## Three graphs, with different authorities
 
 Keep three different graphs distinct:
 
-| Graph | Meaning | Status at the source baseline |
+| Graph | Meaning | Tested-source status |
 | --- | --- | --- |
 | Review-job DAG | Ordering application producers such as planning, project-build, language-build, and artifact indexing | Implemented in `orchestration/topology.py`; does not establish target build prerequisites |
-| Target build graph | Build-unit ownership and actual producer-to-consumer prerequisites, including generated inputs and dependency products | Partial catalog/component relationships and downstream family-local readiness; not a verified complete artifact-backed graph |
-| Attempt/iteration graph | Separate bounded executions, failures, replay candidates, accepted recipe revisions, and retries | The replacement described below is proposed; current per-attempt receipts and checkpoints are not independently completed per-node jobs |
+| Target build graph | Build-unit ownership and actual producer-to-consumer prerequisites, including generated inputs and dependency products | Accepted `build_topology.executable_graph`, conservative descriptor-backed discovery, typed product readiness, and explicit unresolved relationships |
+| Attempt/iteration graph | Separate bounded executions, failures, replay candidates, selected recipe revisions, and retries | Registered `job_build_iteration` requests, distinct Dagster invocation IDs, immutable receipts/products, recoverable ledger, and recipe-only replay promotion |
 
 Container catalog image dependencies are a separate packaging concern. Building the right
 toolchain image does not establish that a target library was built before its consumer.
 
-The source establishes the following narrower behavior:
+## HISTORICAL/OBSERVED: baseline topology and source-visibility gaps
 
-| Surface | CURRENT/OBSERVED behavior | Remaining gap |
+The original source established the following narrower behavior:
+
+| Surface at `1c7b38e1` | Historical behavior | Gap motivating the switch |
 | --- | --- | --- |
 | `job_target_analysis_plan/planning.py:264-286` | Creates `build_actions` for catalog build units and `component_build_root` relationships | A directory/build-root inventory is not an executable producer/consumer topology |
 | Same file, `validate_proposal` and `merge_proposal`, lines 296-425 | Validates component identities and proposal cycles; merges component-level `depends_on` edges and recipes | Does not establish which exact build unit produces a required header, archive, generated source, or package interface |
@@ -48,7 +58,7 @@ Static dispatch can proceed from the accepted plan independently of compiled wor
 Unity already performs one engine build and forwards its receipt, rather than doing the generic
 probe/rebuild sequence.
 
-## CURRENT/OBSERVED: historical discovery and build attempt
+## HISTORICAL/OBSERVED: discovery and build attempt
 
 The historical application run is `2026-11-04-0003`, controller
 `barracuda-spdx-1c7b38e1-cd42-20261104T1600Z`. It was **OPERATOR_STOPPED**.
@@ -91,185 +101,234 @@ This attempt found build roots, recipes, real compiler/artifact evidence, source
 and repair-capability limits. It did not resolve every owner or producer/consumer edge.
 Historical target paths and unit identities are examples, never generic runtime constants.
 
-## PROPOSED / NOT YET IMPLEMENTED: evidence-backed build order
+## IMPLEMENTED: conservative ownership and producer readiness
 
-Resolve explicit build-unit identities and output ownership instead of projecting component
-dependencies onto a shortest-root candidate. A nested Makefile, directory ancestry, or model
-suggestion alone does not establish an independently executable product. A parent build may own
-several subdirectories; schedule that owning build once and retain resolving membership for its
-children rather than rebuilding overlapping units and double-counting coverage.
+`jobs/build_topology.py` compiles `appsec-review/build-topology/1` from accepted catalog
+declarations. Every catalog unit is accounted for once as `independent`, `contained`,
+`unsupported`, or `unresolved`. Literal CMake declarations can resolve ownership through
+`add_subdirectory`, target declarations, and linking; recursive Make `$(MAKE) -C` declarations
+can establish contained ownership, with accepted default-goal build-driver evidence. An
+Autotools unit needs its own configure authority. Merely finding a nested file or a package
+marker does not prove a separate build or every dependency edge.
 
-For each node, identify the accepted driver, source/configuration/target tuple, recipe revision,
-image/toolchain, working directories, expected products, and exported dependency interface.
-Resolve producer-to-consumer edges from accepted descriptors and include chains, project
-references, generators, package metadata, and captured compiler/linker/file-access evidence.
-Distinguish source-layout needs, generated-source/host-tool prerequisites, required library
-products, ordering-only constraints, containment, and external prepared requirements.
-These meanings are design requirements, not implemented schema fields.
+Cross-owner edges are `requires_product` or `order_only`, not shortest-root component
+projection. CMake target interfaces use `cmake-target:<name>` and product IDs `cmake:<name>`.
+Cycles, ambiguous ownership, unresolved/external requirements, and dynamic or unsupported
+declarations remain named gaps. Component `depends_on` is retained as nonblocking
+`unresolved_component_dependency`, not silently turned into a verified build prerequisite.
+Every nonempty graph also records `incomplete_dependency_discovery`: no discovered edge is
+not proof that two units are independent. The accepted graph must equal recompilation from
+the accepted declarations; graphless old plans require replanning.
 
-Do not let different versions, ABIs, debug/release modes, host/target architectures, or static/shared
-variants satisfy one another merely because a filename matches. Reject unknown endpoints and
-self-edges; report cycles and unresolved ownership rather than inventing an order.
-New evidence that changes an edge needs an identified graph revision and affected-consumer
-revalidation, not an unrecorded mid-command graph mutation.
+Readiness evaluates the global graph before family publication. A successful producer must
+supply the exact interface, graph/recipe identity, compatible variant, and independently
+verified retained product bytes. Supported product kinds are `library`, `executable`, `headers`,
+`package_metadata`, and `generated_source`; products resolve under `target/` or `install/`.
+Ordering alone never materializes a library.
 
-Evaluate prerequisites across the compatible target graph before filtering by language family.
-Start with one production writer and deterministic topological ready selection; stable IDs
-are only tie-breaks between genuinely ready nodes. A producer is satisfied only when its required
-products and compatibility bindings verify. Parallel production writes remain deferred until
-write-set safety is demonstrated.
+Variants have six fields: `configuration`, `target_arch`, `execution_role`, `linkage`,
+`toolchain`, and `abi`. Explicit central `settings.variants` entries may be keyed by unit ID or
+family; contradictions with descriptor facts are rejected. Unknown facts are not guessed.
+Unknown required compatibility blocks product-dependent readiness, and any unknown variant
+field forbids successful-node checkpoint reuse. A basename match cannot substitute an ABI,
+architecture, toolchain, host/target role, or configuration.
 
-## PROPOSED / NOT YET IMPLEMENTED: one shared run-owned production tree
+## IMPLEMENTED: one shared run-owned production tree
 
-Leave the original target untouched. Copy the complete reviewed target into a mutable workspace
-under `runs/<run-id>` and preserve its relative source layout. All compatible production nodes
-share that tree across disposable build containers. Do not isolate each node into another
-source-only or full-repository private copy that loses upstream artifacts.
-Preserve required checked-in inputs even when a directory is named `build`, `bin`, `obj`, or
-`target`; metadata and safe in-tree symlink handling need explicit path-custody rules.
-Never follow an escaping link into the host.
+`jobs/build_workspace.py` materializes the complete target, excluding Git control metadata,
+into `runs/<run-id>/workspace/build/target`; its shared install prefix is
+`runs/<run-id>/workspace/build/install`. All compatible production nodes use those same trees,
+mounted as `/workspace` and `/install` in successive disposable containers. Source inputs
+named `build`, `bin`, `obj`, or `target` are not filtered out by directory name. Materialization
+verifies stable source bytes, keeps supported in-tree relative links, and rejects absolute,
+escaping, broken, or cyclic links and overlapping original/run roots.
 
-The original target, other runs, application credentials, and host credentials remain isolated.
-Model descriptor limits constrain inference input, not compiler visibility into the reviewed
-repository. Complete source visibility does not widen resource, network, cancellation, or
-capture policy.
+The original target is not a writable build mount. Other runs, application/host credentials,
+container resource policy, and cancellation boundaries do not become shared. Descriptor/model
+input bounds constrain inference, not compiler visibility.
 
-Keep stable logical source/install paths inside containers. Preserve generated headers, libraries,
-code-generator products, pkg-config records, CMake products, and the shared run-owned install
-prefix where required. Preserve relevant modes and library symlink chains.
-Outputs installed only inside a disposable container will not survive for the next node.
-Downstream commands must receive the real include/library and package-resolution interfaces;
-ordering by itself does not materialize them.
+Verified product interfaces populate include/library/tool/pkg-config paths and the CMake prefix
+environment (`CPATH`, `LIBRARY_PATH`, `PATH`, `PKG_CONFIG_PATH`, `CMAKE_PREFIX_PATH`).
+Generated files and install-prefix products survive container disposal. This does not invent an
+export/install command: accepted configure/build argv and declared product paths remain the
+execution authority, and installation alone is not compilation.
 
-Run each command in its source-backed correct directory. Configure, build, and export can require
-different directories; complete filesystem visibility is not permission to move every command
-to the repository root. Any new typed export/install action needs validated run-owned
-destinations. It cannot bypass the current recipe restrictions with arbitrary shell or host writes.
-Installation or configuration alone does not establish compilation success.
+`source_dir` stays equal to the accepted unit root. Optional
+`execution_cwd = {"configure": "...", "build": "..."}` changes phase directories without
+changing that source origin; omitted phases default to `source_dir`. The common
+`jobs/build_recipe_commands.py` guard is used in production and replay before every launch.
+It validates recognized Make/CMake source/driver/output operands, accepted descriptor hashes,
+actual directories and symlink custody, including changes made by configure. Arbitrary target
+names are not rebased as paths; wrong-source CMake `-S` and mismatched build/cache origins fail
+before launch. Changed-cwd support is limited to recognized native Make/CMake forms; other
+drivers cannot silently change cwd. This is not permission for free-form scripts, arbitrary
+source roots, or an unvalidated separate export phase.
 
 ### Committed progress and restoration after failed writes
 
-Sharing a tree means failed B can overwrite or delete A's files, generated configuration, or
-shared install-prefix contents. A's prior success cannot be reused merely because its receipt
-still says success.
+Successful nodes publish content-addressed products and committed generations before acceptance.
+The durable input identity is `artifacts/build/workspace/input.json`; workspace state and owner
+metadata live under `data/build/workspace/`. A writer claim protects the shared tree.
+Unfinished writes are tainted, not reusable success. Failure/crash recovery restores overwritten
+and deleted target/install bytes and relevant modes/mtime from the committed state, removes
+failed-only writes, and verifies prerequisites before another attempt. The executor's temporary
+permission windows must not change accepted upstream bytes or metadata.
 
-Maintain committed workspace generations and durable successful-node state. Treat uncommitted
-changes after failure, cancellation, or a worker crash as tainted. Before retrying B, verify the
-last committed generation and restore overwritten/deleted state, including A's required artifacts,
-inputs, metadata, and shared-prefix contents; remove failed-attempt-only outputs.
-Restoration must not need to recompile an unchanged valid A.
-If required state cannot be verified or restored, report the miss and rebuild the affected
-prerequisite instead of claiming reuse.
+Requests bind source, graph/configuration, recipe, image/toolchain/releases, exact upstream
+products, execution/capture and output-policy identities. The ledger is an index, not proof:
+retained products, generations, receipts, and references are verified on reuse.
+Changing B invalidates B and its graph descendants, not unchanged A. A durable
+`pending-invalidation.json` points to an immutable intent before recomposition; recovery checks
+the expected generation and ledger and preserves surviving checkpoints' original provenance.
+An interrupted worker uses `pending.json`, prepared records and exact-name container leases to
+reconcile cleanup and restore or finish a committed result, rather than deleting arbitrary
+containers or accepting an uncertain success.
 
-Publish durable product identities before accepting a node: bind producer/attempt, graph/recipe
-revision, source/configuration, toolchain/image, exact upstream products, paths, sizes/hashes, and
-relevant symlink facts. Earlier accepted evidence must remain immutable even as the production
-workspace changes. The storage and atomic publication/restoration mechanism is not implemented
-by documenting this requirement.
+## IMPLEMENTED: separate bounded build invocations
 
-## PROPOSED / NOT YET IMPLEMENTED: separate bounded build jobs
+The registered generic job is `job_build_iteration` (Dagster name `build_iteration`, step/task
+`execute.node`). `job_language_build` starts `iterations.dispatch` before family load/publication.
+Its controller evaluates dependency-ready nodes serially, each through a distinct actual
+in-process Dagster invocation and UUID with one immutable request/node transaction.
+There are no unlimited generated job definitions and no concurrent production writers.
 
-The desired display is a sequence such as:
+The operational sequence is:
 
 ```text
-build_cpp   : A succeeds; commit A's progress and products
-build_cpp1  : B/r1 fails; retain A; block B's consumers
-replay B/r2 : detached Docker trial; no review advancement
-build_cpp2  : verified winning B/r2 runs in restored production state
-build_cpp3  : C runs using accepted A and B products
-finalize    : aggregate the requested scope's real terminal dispositions
+A production request : succeeds; commit A and verified products
+B/r1 request         : fails; restore committed state; block B's consumers
+B/r2 detached trial  : verify candidate without advancing production
+B/r2 new request     : consume selected revision; rerun B in production
+C production request : use verified A/B products
+family publication   : normalize receipts, without rebuilding the graph
 ```
 
-These are illustrative iteration labels, not registered job names, a CLI, or an implemented schema.
-Use separate bounded Dagster invocations of a registered iteration job or small fixed family
-wrappers, not unlimited generated Python job definitions or a renamed family-long inner loop.
-The proposed first increment executes one node's configure/build/export/capture transaction per
-production invocation, with its own invocation ID, iteration request, and immutable receipt.
-Registry, central TOML, and Dagster must stay in parity; current enforcement is in
-`src/appsec_review/runtime/registry.py:33-42` and
-`src/appsec_review/orchestration/dagster/adapter.py:385-386`.
+Display labels are `build_cpp`, `build_cpp1`, etc. for native, and equivalent family labels.
+Their suffix counts same-family nodes encountered in a controller traversal, not a durable global
+retry counter. Requests, attempt IDs and Dagster UUIDs distinguish retries; do not assume B's
+next attempt must be named `build_cpp2`.
 
-Persist each node's accepted progress independently of the family's eventual aggregate.
-After B fails, preserve its real failure/cleanup record, stop that advancing branch, and expose
-the need for a recipe revision. Keep A usable after verification/restoration. Do not burn the
-remaining family budget on identical image guesses or silently restart A.
-Separate scheduler state, build outcome, and invocation status; a successful image build or
-finished invocation alone does not satisfy a consumer prerequisite.
+Iteration/request schemas are `appsec-review/build-iterations/1` and
+`appsec-review/build-iteration-request/1`. Immutable documents live under
+`artifacts/build/iterations/`; recoverable indices, pending/prepared/failure records, selections
+and leases live under `data/build/iterations/`. The narrow CLI
+`run job_build_iteration --run-id <id> --iteration-request <reference-json>` requires an existing
+controller-claimed immutable request. It is not a general arbitrary-node launch command.
 
-Bind reuse to source, graph/configuration, accepted recipe revision, image/toolchain/releases,
-exact upstream products, and execution/capture/output-policy identities. A change to B invalidates
-B and affected descendants, not unchanged A. Changed A products invalidate its consumers.
-Missing required releases or products remain named reuse/restoration gaps.
-Keep recipe revisions as immutable run-owned inputs; do not edit the frozen resolved run
-configuration to change B's recipe.
+`job_project_build` now prepares images and publishes an immutable execution graph/dispatch.
+Its non-Unity `probe` tasks are compatibility no-ops, not a first whole-graph compilation.
+Unity retains its existing single engine execution. Language-build consumes the authoritative
+production receipts rather than rebuilding once per family. JVM still uses its instrumentation
+trace; WebAssembly without native components still uses its plain executor. Shared workspace
+wiring does not claim their migration to standardized syscall/envp capture.
 
-Choose one authoritative captured production build. Do not require two complete graph executions
-just to reproduce today's project probes followed by fresh language builds. Project-build should
-coordinate preparation and iterations, and downstream consumers should normalize/use verified
-production receipts. A genuinely different required build configuration needs a distinct identity.
-Preserve existing single-build engine behavior.
+A failed node is recorded, restored and exposed through failure context; dependent nodes block,
+while unrelated ready work may continue. Aggregate outcomes include `COMPLETED_WITH_GAPS`.
+There is no persisted `AWAITING_RECIPE` state or universal whole-review pause in this increment.
+An intermediate success or completed Dagster invocation is not an overall build/SPDX acceptance.
+Legacy probe/rebuild dispatches require replanning; `force_buildability_probe = true` and
+`force_probes` are rejected, not a way to select the old production path.
 
-An intermediate node's success is not the aggregate build handoff or permission to launch
-dependency/SPDX work as though the requested scope were complete. Finalization must distinguish
-successful completion, terminal coverage with gaps, awaiting repair/in-progress, and stopped or
-canceled work. Static work that does not need compiled products can remain independent.
+## IMPLEMENTED: detached Docker recipe recovery
 
-## PROPOSED / NOT YET IMPLEMENTED: detached Docker recipe recovery
+The operator-facing sequence is:
 
-"Offline" means outside the advancing review, not necessarily network-disabled package
-acquisition. It does not authorize an unmanaged builder, broader credentials, host writes, or
-resource widening.
+```text
+appsec-review build-failure-context --run-id <id> --node-id <B> --products <products.json>
+appsec-review replay-build-recipe --run-id <id> --context <reference-json> --candidate <candidate.json>
+appsec-review promote-build-recipe --run-id <id> --context <reference-json> --trial <reference-json>
+```
 
-Select B's exact failed attempt, graph/workspace generation, original streams/capture, and verified
-upstream products. A detached replay context must contain the same complete source layout and
-A's required products at the same logical container paths. This recovery copy is separate from
-the shared production graph: it is not per-node production isolation and must not mutate
-production while trials run.
+Reference arguments are JSON reference objects, not arbitrary filesystem paths. Product/candidate
+files supply typed evidence-backed declarations. CLI configuration must match the frozen run.
+Failure context binds the original failed request and generation, plus a selected current committed
+generation only if it preserves every original accepted product and compatible source, graph and
+configuration. Unrelated compatible successes may therefore survive B's failure without forcing
+A to recompile. Both original and selected generation provenance are retained.
 
-Record a new typed recipe candidate and run one bounded Docker trial with the required capture,
-real streams, deadlines, cancellation, and cleanup. Recipe correction can address validated
-command/cwd/export choices where supported; it is not inherently limited to today's four-field
-image-repair proposal. Distinguish source-context, prerequisite, recipe, toolchain/image-preparation,
-and compiler/linker failures, including a non-image-repairable outcome.
-Reject repeated normalized candidates and exit-zero help commands as winning builds.
+`jobs/build_recipe_replay.py` reconstructs a separate full-context replay under
+`workspace/build-replays/`, with the same `/workspace` and `/install` paths and verified upstream
+interfaces. This is recovery isolation, not a private source-only workspace for each production
+node. Durable contexts/candidates/intents/trials/promotions and captures live under
+`artifacts/build/recipe-replay/`, outside disposable replay subtrees.
 
-Adopt only a winning revision whose exact inputs, real products, and capture verify. Promote the
-recipe and replay evidence, then execute B in a new production invocation after restoring/verifying
-committed production state. Do not transplant opaque replay-directory mutations as accepted
-production outputs. Stale source, graph, recipe, image, or upstream products reject promotion.
+Candidates cannot change the accepted source root, product IDs, kinds, interface/variant contract,
+or arbitrary environment. Supported command/build-directory/output-path/cwd revisions need
+accepted context/failure/upstream evidence; a foreign durable artifact is not authority.
+Normalized no-ops and duplicates stop without another Docker launch. The shared source/driver
+guard runs before every actual replay command, not just before configure.
 
-Prepared pinned images remain usable. A candidate needing a new image must use the existing
-approved bounded-builder contract; absent capability is an explicit block, not an unmanaged
-Docker fallback. A specifically network-offline replay additionally needs prepared images and
-locally available dependency material; that mode is not established by the word "offline".
+Typed `FailureKind`/`FailureDiagnosis` separate capability, prerequisite, source-context, capture,
+image/environment, command-recipe, compiler/linker and unknown failures. Only resolved image
+evidence opens image repair; a missing relative project header/library is not an apt diagnosis.
+The image-repair `/3` contract has explicit `NOT_IMAGE_REPAIRABLE`, and `RepairStopped`
+terminates normalized no-op/non-image proposals. Retained legacy model-repair helpers are not
+an automatic production retry loop in the new preparation/iteration path.
 
-## PROPOSED / NOT YET IMPLEMENTED: tunable workspace retention
+A winning trial requires exact successful argv/cwd/image, complete verified captures and streams,
+expected outputs, new/changed retained product bytes, declared interfaces/variants, and explicit
+cleanup proof. Exit zero alone is insufficient. Promotion revalidates the trial, publishes only
+recipe/products/image-profile revision evidence, and requires B to run again in production.
+Replay output bytes are never transplanted as production success. Selected revisions remain
+outside frozen configuration; consumption revalidates source/node/graph/configuration,
+implementation/validation releases, toolchain, upstream products and generation custody.
+Promotion itself does not advance the review. The next explicitly authorized production
+controller entry consumes the selection and creates a fresh request for B.
 
-The proposed central typed policy defaults to retaining the latest **three eligible terminal
-run workspaces**, sweeping on completion. Exclude active, leased, preserved, and resumable
-workspaces. These exclusions mean the policy is not a hard cap of three directories.
-Preserve durable logs, receipts, and accepted artifacts even when disposable workspace state is
-purged; consumers must not depend solely on deleted mutable paths. Missing state is an explicit
-recovery condition, never a successful reuse.
+Unchanged-image replay reuses the failed dispatch's exact profile. A changed image requires
+operator-approved bounded preparation evidence and the full `BuildProfile`
+(`name`, `tag`, `image_id`, `user`, `derived_from_image_id`), preserved through promotion and retry.
+CLI `--prepared-image <reference-json>` consumes that evidence; it does not build an image.
+Absent approved preparation yields `derived_image_preparation_unavailable`, never an unmanaged
+builder fallback.
 
-The configuration key/location, enablement/default, custody checks, and sweep implementation
-remain proposed. No current retention setting or purge execution is asserted here.
+"Offline" recovery ordinarily means detached from review advancement. Explicit replay `--offline`
+selects network `none`, prohibits image pulling/hidden preparation and refuses declared fetching;
+prepared dependencies must already be available. Neither mode widens credentials or resource policy.
 
-## Reconciliation after implementation: pending
+## IMPLEMENTED: tunable workspace retention
 
-Phase 1 records the proposed switch and evidence limits. Phase 2 requires tested implementation
-receipts and the exact merged canonical WSL main SHA. Reconcile this page and linked operations
-pages against that source before marking any proposal implemented.
+Central TOML now has:
 
-Record the real discovered owners/nodes/edges and unresolved relationships; actual command
-directories and executions; produced artifacts; failed and retried iterations; adopted recipe
-revisions; A's verified reuse/restoration after B's failed writes; invalidated consumers; and
-observed retention behavior. Distinguish authored code, focused unit results, definitions-load
-checks, and user-requested live validation. A definitions-load check is not a live Dagster run.
+```toml
+[build_workspaces]
+build_workspace_retention_runs = 3
+```
 
-The coordinator reports a pre-existing failure in
+The integer range is 0-10000; Boolean values are invalid, and **0 disables automatic deletion**.
+This operational policy is excluded from semantic resolved configuration identity, so adjusting
+retention does not revise a frozen recipe or invalidate semantic build inputs.
+
+Graph completion marks eligible workspace owners terminal and sweeps, retaining the newest N
+terminal run owners first. Older owners are also retained if held/preserved/resumable, locked,
+unfinished or tainted, or if a registered replay is active/held. Holds are checked after choosing
+the newest N: this is not "three eligible directories after exclusions" or a hard disk-usage cap.
+Resume reestablishes holds and verifies/reconstructs state.
+
+Only exact owned disposable production/replay trees are swept, after durable inventory and
+purged-state marking. Run data, CAS products, captures, logs and receipts survive; failures surface
+in the retention report, including `data/build/iterations/retention.json`.
+No purge execution against the historical review is established by these implementation details.
+
+## Remaining evidence and integration record
+
+Prelanding reconciliation is complete against the tested source named above. **Postmerge
+reconciliation is pending** the coordinator's exact canonical WSL main SHA; no merge is claimed.
+The historical discovery counts and GoogleTest/hiredis/Lua evidence remain unchanged. The new
+source has not established a complete Barracuda topology, successful repaired target build,
+accepted SPDX output, deployment, or live review restart.
+
+Independent focused units cover the shared-workspace destructive-B/revision retry, A-count-one,
+actual registered production-to-replay-to-selection-to-retry boundaries, provenance, cleanup,
+families, GraphRunner, definitions and downstream readers. Controlled Docker boundaries and
+definitions-load checks do not prove real toolchain or live service acceptance.
+
+The historical selector
 `tests/test_target_analysis_plan.py::test_plan_is_resumable_indexed_and_has_exact_dag_position`
-with `missing_release_identity` on the base and repaired SHA; do not report all tests green
-or weaken the assertion. This documentation work does not execute build tests or live workloads.
-No main merge, review restart, builder commissioning, cleanup, provisioning, or deployment follows
-from this design document.
+was rerun separately once on the final tested code and still fails with `missing_release_identity`:
+`RUN / INVALIDATE / INVALIDATE` for intake/catalog/planning, identical to the original baseline.
+It is **NOT GREEN**, not part of the 252 passing cases. The full documentation link check also
+retains two unchanged missing target-owned references in the capture architecture page:
+`../../targets/appsec-multi-vuln/support/project-matrix.json` and
+`../../targets/appsec-multi-vuln/README.md`. These are named gaps, not permission to provision a target
+or remove links. Final integrated documentation-link verification belongs to the integration owner.
