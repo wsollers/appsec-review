@@ -1,11 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "appsec-review/build-image-repair/2",
+  "$id": "appsec-review/build-image-repair/3",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "system_packages", "environment", "package_manager", "dependency_restores", "reason"],
+  "required": ["schema", "reason"],
+  "oneOf": [
+    {
+      "required": ["system_packages", "environment", "package_manager", "dependency_restores"],
+      "properties": {"outcome": {"const": "IMAGE_REPAIR"}}
+    },
+    {
+      "required": ["outcome"],
+      "properties": {"outcome": {"const": "NOT_IMAGE_REPAIRABLE"}},
+      "not": {"anyOf": [
+        {"required": ["system_packages"]}, {"required": ["environment"]},
+        {"required": ["package_manager"]}, {"required": ["dependency_restores"]}
+      ]}
+    }
+  ],
   "properties": {
-    "schema": {"const": "appsec-review/build-image-repair/2"},
+    "schema": {"enum": ["appsec-review/build-image-repair/3", "appsec-review/build-image-repair/2"]},
+    "outcome": {"enum": ["IMAGE_REPAIR", "NOT_IMAGE_REPAIRABLE"]},
     "system_packages": {
       "type": "array",
       "maxItems": 64,

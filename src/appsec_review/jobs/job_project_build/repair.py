@@ -16,7 +16,9 @@ identity, the generated Dockerfile, the repair cache, and every attempt record.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import PurePosixPath
 import re
 from typing import Any
@@ -26,9 +28,11 @@ from appsec_review.container_runtime.project_images import (
     repair_restore_commands,
     restore_manager,
 )
+from appsec_review.storage.atomic import canonical_json_sha256
 
 
-REPAIR_SCHEMA = "appsec-review/build-image-repair/2"
+REPAIR_SCHEMA = "appsec-review/build-image-repair/3"
+LEGACY_REPAIR_SCHEMA = "appsec-review/build-image-repair/2"
 REPAIR_FIELDS = frozenset({"schema", "system_packages", "environment", "package_manager",
                            "dependency_restores", "reason"})
 MAX_SYSTEM_PACKAGES = 64
@@ -36,6 +40,85 @@ MAX_REPAIR_ENVIRONMENT = 16
 MAX_DEPENDENCY_RESTORES = 8
 _PACKAGE = re.compile(
     r"^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?(?:=[A-Za-z0-9.+:~_-]+)?$")
+
+
+class FailureKind(StrEnum):
+    IMAGE_ENVIRONMENT = "IMAGE_ENVIRONMENT"
+    COMMAND_RECIPE = "COMMAND_RECIPE"
+    MISSING_PREREQUISITE = "MISSING_PREREQUISITE"
+    SOURCE_CONTEXT = "SOURCE_CONTEXT"
+    UNSUPPORTED_CAPABILITY = "UNSUPPORTED_CAPABILITY"
+    COMPILER_LINKER = "COMPILER_LINKER"
+    CAPTURE = "CAPTURE"
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass(frozen=True, slots=True)
+class FailureDiagnosis:
+    kind: FailureKind
+    reason: str
+    evidence: tuple[str, ...]
+
+    @property
+    def image_repairable(self) -> bool:
+        return self.kind == FailureKind.IMAGE_ENVIRONMENT
+
+    def view(self) -> dict[str, Any]:
+        return {"kind": self.kind.value, "reason": self.reason,
+                "evidence": list(self.evidence), "image_repairable": self.image_repairable}
+
+
+def diagnose_failure(*, exit_code: int | None, timed_out: bool = False, stderr: str = "",
+                     gaps: Sequence[str] = (), image_evidence: Sequence[str] = (),
+                     prerequisite_gaps: Sequence[str] = (), source_context_gaps: Sequence[str] = (),
+                     capability_gaps: Sequence[str] = (),
+                     capture_gaps: Sequence[str] = ()) -> FailureDiagnosis:
+    """Classify accepted evidence, not a missing-file spelling guessed from stderr.
+
+    The caller resolves workspace, prerequisite, image and capture evidence first.
+    Explicit contradictory context takes precedence over a proposed image change.
+    """
+    for kind, evidence, reason in (
+        (FailureKind.UNSUPPORTED_CAPABILITY, capability_gaps, "required capability is unavailable"),
+        (FailureKind.MISSING_PREREQUISITE, prerequisite_gaps, "required producer products are unavailable"),
+        (FailureKind.SOURCE_CONTEXT, source_context_gaps, "the required source layout is unavailable"),
+        (FailureKind.CAPTURE, capture_gaps, "build capture is incomplete or invalid"),
+        (FailureKind.IMAGE_ENVIRONMENT, image_evidence, "accepted evidence identifies an image/environment gap"),
+    ):
+        if evidence:
+            return FailureDiagnosis(kind, reason, tuple(str(item) for item in evidence))
+    evidence = tuple(str(item) for item in gaps)
+    if timed_out:
+        return FailureDiagnosis(FailureKind.UNKNOWN, "bounded command timed out; cause is unproven", evidence)
+    if re.search(r"unknown (?:target|option|argument)|unrecognized (?:option|argument)|"
+                 r"no rule to make target|invalid (?:command|option)", stderr, re.IGNORECASE):
+        return FailureDiagnosis(FailureKind.COMMAND_RECIPE, "command or build target was rejected", evidence)
+    if re.search(r"(?:fatal )?error:|undefined reference|linker command failed|"
+                 r"cannot find -l", stderr, re.IGNORECASE):
+        return FailureDiagnosis(FailureKind.COMPILER_LINKER,
+                                "compiler/linker failed; an image repair is not established", evidence)
+    return FailureDiagnosis(FailureKind.UNKNOWN,
+                            f"failure cause is unproven (exit_code={exit_code})", evidence)
+
+
+class RepairStopped(ValueError):
+    """A terminal proposal disposition; callers must not spend another identical retry."""
+
+    def __init__(self, reason_code: str, reason: str):
+        super().__init__(reason)
+        self.reason_code = reason_code
+
+
+def proposal_identity(proposal: Mapping[str, Any]) -> str:
+    """Normalize set-like choices and omit explanation-only changes before deduplication."""
+    value = {key: item for key, item in proposal.items() if key not in {"reason", "schema"}}
+    value.setdefault("outcome", "IMAGE_REPAIR")
+    if isinstance(value.get("system_packages"), list):
+        value["system_packages"] = sorted(value["system_packages"])
+    if isinstance(value.get("dependency_restores"), list):
+        value["dependency_restores"] = sorted(value["dependency_restores"],
+                                             key=lambda item: str(item.get("manifest", "")))
+    return canonical_json_sha256(value)
 
 
 def _choice(*values: str) -> re.Pattern[str]:
@@ -133,10 +216,23 @@ def validate_repair_proposal(proposal: Mapping[str, Any], *, recipe: Mapping[str
                              build_system: str) -> tuple[str, ...]:
     """Return every reason the proposal is outside the typed repair vocabulary for this recipe."""
     errors: list[str] = []
-    if not isinstance(proposal, Mapping) or set(proposal) != REPAIR_FIELDS:
+    if not isinstance(proposal, Mapping):
         return ("repair proposal fields are invalid",)
-    if proposal.get("schema") != REPAIR_SCHEMA:
+    refusal = proposal.get("outcome") == "NOT_IMAGE_REPAIRABLE"
+    expected = {"schema", "outcome", "reason"} if refusal else REPAIR_FIELDS
+    if not refusal and "outcome" in proposal:
+        expected = expected | {"outcome"}
+    if set(proposal) != expected:
+        return ("repair proposal fields are invalid",)
+    if proposal.get("schema") not in {REPAIR_SCHEMA, LEGACY_REPAIR_SCHEMA}:
         errors.append("repair proposal schema is unsupported")
+    reason = proposal.get("reason")
+    if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:
+        errors.append("repair reason must be non-empty and at most 4096 bytes")
+    if refusal:
+        return tuple(errors)
+    if proposal.get("outcome", "IMAGE_REPAIR") != "IMAGE_REPAIR":
+        errors.append("repair outcome is unsupported")
     packages = proposal.get("system_packages")
     if not isinstance(packages, list) or len(packages) > MAX_SYSTEM_PACKAGES:
         errors.append(f"system_packages must contain at most {MAX_SYSTEM_PACKAGES} packages")
@@ -193,9 +289,6 @@ def validate_repair_proposal(proposal: Mapping[str, Any], *, recipe: Mapping[str
                               f"{manifest[:512]}")
             elif restore_manager(build_system, recipe, manifest) is None:
                 errors.append(f"{build_system} cannot restore dependencies from {manifest[:512]}")
-    reason = proposal.get("reason")
-    if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:
-        errors.append("repair reason must be non-empty and at most 4096 bytes")
     return tuple(errors)
 
 
@@ -247,6 +340,8 @@ def apply_repair(recipe: Mapping[str, Any], proposal: Mapping[str, Any], *,
     errors = validate_repair_proposal(proposal, recipe=recipe, build_system=build_system)
     if errors:
         raise ValueError("; ".join(errors))
+    if proposal.get("outcome") == "NOT_IMAGE_REPAIRABLE":
+        raise RepairStopped("not_image_repairable", str(proposal["reason"]))
     previous = recipe.get("image_repairs") if isinstance(recipe.get("image_repairs"), Mapping) else {}
     environment = {key: value for key, value in dict(recipe.get("environment", {})).items()
                    if key not in dict(previous.get("environment", {}))}
@@ -267,7 +362,7 @@ def apply_repair(recipe: Mapping[str, Any], proposal: Mapping[str, Any], *,
     current_packages = sorted({str(value) for value in recipe.get("system_packages", ())})
     current_repairs = previous or {"environment": {}, "package_manager": None, "dependency_restores": []}
     if packages == current_packages and image_repairs == dict(current_repairs):
-        raise ValueError("repair proposal repeated the current repair set")
+        raise RepairStopped("normalized_no_op", "repair proposal repeated the current repair set")
     result = {key: value for key, value in recipe.items() if key != "image_repairs"}
     result.update(system_packages=packages, environment=environment,
                   reason=f"{recipe.get('reason', 'accepted recipe')} Image repair: {proposal['reason']}")
