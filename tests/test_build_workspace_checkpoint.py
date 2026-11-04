@@ -385,3 +385,40 @@ def test_committed_generation_requires_writer_claim(tmp_path):
         assert writer.committed_generation()["accepted"] == {}
     with pytest.raises(WorkspaceError, match="released"):
         writer.committed_generation()
+
+
+@pytest.mark.parametrize("damage", [
+    "unknown_generation", "missing_generation", "tampered_generation",
+    "missing_state", "tampered_state", "missing_product", "tampered_product",
+])
+def test_committed_generation_refuses_unknown_tampered_or_missing_retained_state(tmp_path, damage):
+    workspace, _, initial = make_workspace(tmp_path)
+    record, generation = build_a(workspace, initial)
+    with workspace.writer() as writer:
+        writer.begin_attempt(binding("B", (record.identity,)), "B-uncommitted", generation)
+        (writer.paths.install / "a.h").write_bytes(b"retain failed-build evidence")
+        generation_path = workspace.run_dir / f"artifacts/build/workspace/generations/{generation}.json"
+        product_path = workspace.run_dir / record.reference["path"]
+        state_path = workspace.run_dir / workspace.state_relative
+        requested = None
+        if damage == "unknown_generation":
+            requested = "0" * 64
+        elif damage == "missing_generation":
+            generation_path.unlink()
+        elif damage == "tampered_generation":
+            manifest = json.loads(generation_path.read_bytes())
+            manifest["accepted"].clear()
+            generation_path.write_text(json.dumps(manifest))
+        elif damage == "missing_state":
+            state_path.unlink()
+        elif damage == "tampered_state":
+            state_path.write_bytes(b'{"schema":"wrong"}\n')
+        elif damage == "missing_product":
+            product_path.unlink()
+        else:
+            product_path.write_bytes(b'{"forged":"accepted-product"}\n')
+        state_after_damage = state_path.read_bytes() if state_path.exists() else None
+        with pytest.raises(ReconstructionMiss):
+            writer.committed_generation(requested)
+        assert (state_path.read_bytes() if state_path.exists() else None) == state_after_damage
+        assert (writer.paths.install / "a.h").read_bytes() == b"retain failed-build evidence"
