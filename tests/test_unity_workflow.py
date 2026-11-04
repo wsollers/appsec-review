@@ -136,6 +136,13 @@ def test_build_discovery_rejects_descriptor_changes_after_catalog(tmp_path: Path
         handler(unit)
 
 
+def test_catalog_declares_engine_discovery_before_project_consumers() -> None:
+    available = set()
+    for unit in build_catalog().units:
+        assert set(unit.dependencies) <= available, unit.unit_id
+        available.add(unit.unit_id)
+
+
 def test_engine_telemetry_and_report_preserve_nonexecution_and_failure(tmp_path: Path) -> None:
     def receipt(name, document):
         path = tmp_path / "data" / name
