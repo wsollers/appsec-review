@@ -955,6 +955,8 @@ def load_accepted_builds(run_root: Path) -> Mapping[str, Any]:
 
 
 def _validate_config(context, _result) -> None:
+    from appsec_review.config.unity import parse_unity_build_settings
+    parse_unity_build_settings(context.config.settings.get("unity"))
     expected = ("plan", "image", "static_dispatch", "probe", "build_dispatch", "acceptance")
     if tuple(context.config.steps) != expected:
         raise ValueError("project-build topology does not match central configuration")
@@ -1135,7 +1137,7 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
         raise ValueError("deterministic JVM recipe is invalid: " + "; ".join(errors))
     return recipe
 
-def build_job(*, executor_factory=None, image_resolver_factory=None,
+def build_job(*, executor_factory=None, image_resolver_factory=None, unity_executor_factory=None,
               infer: Infer | None = None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
@@ -1224,6 +1226,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                 output_bytes=int(unit.job.config.settings["output_bytes"]))
             entries, gaps = [], []
             for action in actions:
+                if action.get("build_system") == "unity":
+                    continue
                 recipe = action.get("recipe")
                 if not isinstance(recipe, Mapping):
                     gap = f"{action['build_unit_id']}: validated inference build recipe is unavailable"
@@ -1343,6 +1347,16 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     receipts.append(_probe_with_repairs(unit, entry, profile=profiles[profile_name],
                                                         resolver=resolver, infer=infer,
                                                         executor_factory=executor_factory))
+            if family == "dotnet":
+                from appsec_review.config.unity import parse_unity_build_settings
+                from appsec_review.jobs.unity_build import execute_unity_build
+                settings = parse_unity_build_settings(unit.job.config.settings.get("unity"))
+                for action in unit.output("plan.load_recipes")["actions"]:
+                    if action.get("build_system") == "unity":
+                        receipt = execute_unity_build(
+                            unit, action, settings, executor_factory=unity_executor_factory)
+                        receipts.append({**receipt, "probe_disposition": receipt.get(
+                            "probe_disposition", "COMPUTED")})
             gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value["gaps"]]
             return {"family": family, "receipts": receipts, "probe_count": len(receipts),
                     "reused_count": sum(value.get("probe_disposition") == "REUSED" for value in receipts),
@@ -1356,6 +1370,9 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
             images = {value["action"]["build_unit_id"]: value for value in unit.output(f"image.{family}")["entries"]}
             dispatches, gaps = [], []
             for receipt in receipts:
+                if receipt.get("build_system") == "unity":
+                    gaps.extend(receipt.get("gaps", ()))
+                    continue
                 if receipt["terminal_status"] != "SUCCEEDED":
                     gaps.extend(receipt["gaps"])
                     continue

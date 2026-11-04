@@ -1,0 +1,15 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  scriptingBackend:
+    Standalone: 0
+    Android: 1
+    iPhone: 1
+  AndroidTargetArchitectures: 2
+  AndroidMinSdkVersion: 23
+  AndroidTargetSdkVersion: 0
+  iOSTargetOSVersionString: 12.0
+  iPhoneSdkVersion: 988
+  scriptingDefineSymbols:
+    Standalone: FIXTURE_FIRST;FIXTURE_SECOND

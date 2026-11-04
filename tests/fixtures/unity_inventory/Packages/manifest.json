@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "com.example.direct": "^1.0.0",
+    "com.example.embedded": "file:com.example.embedded",
+    "com.example.unresolved": "git+https://example.invalid/repo.git#release",
+    "com.unity.modules.physics": "1.0.0"
+  }
+}

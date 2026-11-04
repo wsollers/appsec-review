@@ -52,6 +52,8 @@ def manifest_ecosystem(manifest: str | None) -> str | None:
     if not manifest:
         return None
     path = Path(manifest)
+    if path.name == "ProjectVersion.txt" and path.parent.name == "ProjectSettings":
+        return "dotnet"
     return MANIFEST_ECOSYSTEMS.get(path.name) or MANIFEST_SUFFIX_ECOSYSTEMS.get(path.suffix.lower())
 
 

@@ -298,11 +298,18 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         persona = persona_path.read_text(encoding="utf-8")
         grouped: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
         for raw_unit in summary.get("build_units", ()):
+            if raw_unit.get("build_system") == "unity":
+                continue
             image_profile = required_image_profile(raw_unit)
             build_unit = {**dict(raw_unit), "required_image_profile": image_profile,
                           "command_policy": build_recipe_inference_policy(raw_unit)}
             grouped.setdefault((str(build_unit["family"]), str(build_unit["build_system"]),
                                 image_profile), []).append(build_unit)
+
+        if not grouped:
+            plan["model"] = {"status": "NOT_NEEDED", "proposal_sha256": None}
+            return {"plan": plan, "gaps": [], "model_calls": 0, "validation_rejections": 0,
+                    "terminal_status": "SUCCEEDED"}
 
         def infer_group(item: tuple[tuple[str, str, str], list[Mapping[str, Any]]]) -> dict[str, Any]:
             (family, build_system, image_profile), build_units = item

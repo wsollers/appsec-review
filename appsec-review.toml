@@ -1041,6 +1041,9 @@ artifact_count_limit = 10000
 force_buildability_probe = false
 repair_attempts = 3
 
+[jobs.job_project_build.settings.unity]
+enabled = false
+
 [jobs.job_project_build.settings.build_capture]
 event_count_limit = 250000
 retain_raw_traces = true

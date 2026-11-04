@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  scriptingBackend:
+    Standalone: 1
+    Android: 0
+  scriptingDefineSymbols:
+    Standalone: UNITY_EDITOR;FEATURE_GAME
+    Android: FEATURE_MOBILE
+  apiCompatibilityLevelPerPlatform:
+    Standalone: 6
+  AndroidMinSdkVersion: 23
+  AndroidTargetSdkVersion: 0
+  iOSSDKVersion: 988
+  unrelatedDisplayName: Not package metadata
+  licenseKey: NEVER_PUBLISH_ME

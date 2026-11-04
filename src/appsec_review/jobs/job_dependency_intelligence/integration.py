@@ -273,6 +273,11 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
     created = datetime.fromisoformat(str(catalog_handoff["started_at"]).replace("Z", "+00:00"))
     if created.tzinfo is None:
         raise ValueError("accepted catalog timestamp lacks timezone")
+    unity_inventory = collect_unity_inventory(unit, files)
+    unity_path = unit.unit_root / "unity-inventory.json"
+    atomic_json(unity_path, unity_inventory)
+    unity_ref = reference(run_root, unity_path)
+    inputs.append(unity_ref)
     return {
         "native_files": files, "native_invocations": commands, "native_artifacts": artifacts,
         "native_workspace_roots": workspace_roots, "native_input_identities": inputs,
@@ -280,7 +285,37 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
         "native_catalog_gaps": partition.get("gaps", []),
         "native_created": created.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "source_syft": source,
+        "unity_inventory": unity_inventory, "unity_inventory_artifact": unity_ref,
     }
+
+
+def collect_unity_inventory(unit: UnitContext, files: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Use only the accepted target partition, independently of catalog engine annotations."""
+    from appsec_review.jobs.engine_discovery import discover_unity, unity_configuration_fingerprint
+
+    def read_descriptor(record: Mapping[str, Any], limit: int) -> bytes:
+        root = unit.job.target_root
+        if root is None:
+            raise ValueError("Unity target source root is unavailable")
+        lexical = root
+        for component in PurePosixPath(record["path"]).parts:
+            lexical = lexical / component
+            if lexical.is_symlink():
+                raise ValueError("Unity accepted descriptor traverses a symlink")
+        native_record = {**record, "domain": "target", "root_id": "target"}
+        return read_native_file(unit, native_record, limit, {})
+
+    unity = discover_unity(
+        ({key: item[key] for key in ("path", "sha256", "size_bytes")}
+         for item in files if item.get("domain") == "target"),
+        read_text=read_descriptor,
+    )
+    for project in unity["projects"]:
+        project["configuration_fingerprint"] = unity_configuration_fingerprint(
+            project, unit.job.source_fingerprint)
+    unity.update(schema="appsec-review/unity-inventory/1",
+                 source_fingerprint=unit.job.source_fingerprint)
+    return unity
 
 
 def read_native_file(unit: UnitContext, record: NativeFile, limit: int,
@@ -422,6 +457,10 @@ def publish_sbom(unit: UnitContext, converter: Converter | None) -> dict[str, An
                 input_identities=[*loaded["native_input_identities"], *computation["native_inference"]],
                 bounds=sbom_bounds(settings),
             )
+            from .unity import enrich_unity_spdx
+            result = enrich_unity_spdx(
+                result, loaded.get("unity_inventory", {}),
+                source_fingerprint=unit.job.source_fingerprint, bounds=sbom_bounds(settings))
             gaps.extend(result["gaps"])
             counters.update(result["metrics"])
             document_path = unit.unit_root / "enriched.spdx.json"
@@ -505,6 +544,17 @@ def validate_publication(run_root: Path, framework: Mapping[str, Any],
     if (provenance.get("source_fingerprint") != document["source_fingerprint"]
             or provenance.get("input_fingerprint") != sbom["input_fingerprint"]):
         raise NativeInputIntegrityError("accepted native SPDX provenance snapshot/input changed")
+    if document.get("unity_inventory") is not None:
+        unity = read_json(run_root, member(framework, document["unity_inventory"]), bounds.output_bytes)
+        if (unity.get("schema") != "appsec-review/unity-inventory/1"
+                or unity.get("source_fingerprint") != document["source_fingerprint"]):
+            raise NativeInputIntegrityError("accepted Unity inventory schema/snapshot changed")
+        engine_metadata = provenance.get("unity_metadata")
+        if sbom.get("artifact") and (unity.get("projects") or unity.get("gaps")):
+            if (not isinstance(engine_metadata, Mapping)
+                    or engine_metadata.get("inventory_sha256")
+                    != hashlib.sha256(canonical_json(unity)).hexdigest()):
+                raise NativeInputIntegrityError("accepted Unity inventory provenance differs")
     for identity in (sbom.get("conversion") or {}).values():
         verify_reference(run_root, member(framework, identity))
     metrics = read_json(run_root, member(framework, sbom["metrics"]), bounds.output_bytes)

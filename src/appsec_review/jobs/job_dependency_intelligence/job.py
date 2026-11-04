@@ -481,6 +481,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                     "raw_native_discovery": unit.output("resolution.detect_dependencies")["native_discovery"],
                     "native_curation": unit.output("resolution.curate_components")["artifact"],
                     "native_metadata": unit.output("resolution.investigate_components")["artifact"],
+                    "unity_inventory": loaded["unity_inventory_artifact"],
                     "sbom": sbom,
                     "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
         path = unit.unit_root / "dependency-intelligence-handoff.json"

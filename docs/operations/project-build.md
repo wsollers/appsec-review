@@ -23,6 +23,13 @@ The configured topology must be exactly `plan`, `image`, `static_dispatch`, `pro
 Families are `native`, `rust`, `go`, `java`, `node`, `dotnet`, `python`, `php`, and `wasm`; each
 needs a `settings.profiles.<family>` entry with a pinned `tag`, `image_id`, and non-root `user`.
 
+Unity is an engine, not another language family. Its accepted units remain `dotnet` with
+`build_system = "unity"` and additional engine identity. They bypass generic .NET recipe
+inference, project-image construction/repair and the second language build. The `probe.dotnet`
+task performs the configured Unity build once, publishes its real execution receipt, and the
+language-build lane forwards that receipt to artifact and dependency consumers. The static C#
+lane continues independently. See [Unity configuration and coverage](unity-build.md).
+
 ## Settings
 
 `[jobs.job_project_build.settings]` (shipped values):

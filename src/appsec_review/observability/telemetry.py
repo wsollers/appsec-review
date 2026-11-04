@@ -305,6 +305,7 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
     source_gaps: list[object] = []
     projects: list[Mapping[str, Any]] = []
     targets: list[Mapping[str, Any]] = []
+    engine_discovery: Mapping[str, Any] | None = None
     build_receipts: list[Mapping[str, Any]] = []
     codeql_scopes: list[Mapping[str, Any]] = []
     receipt_refs: set[tuple[str, str]] = set()
@@ -345,6 +346,13 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
                                       ("semantics", "descriptor_coverage", *counters)}
                 projects = list(project_doc.get("projects", ()))
                 targets = list(target_doc.get("targets", ()))
+                engine_discovery = target_doc.get("engine_discovery")
+                if engine_discovery is not None and (
+                        not isinstance(engine_discovery, Mapping) or
+                        not isinstance(engine_discovery.get("counts"), Mapping) or
+                        any(type(value) is not int or value < 0
+                            for value in engine_discovery["counts"].values())):
+                    raise ValueError("engine discovery metrics receipt is invalid")
                 for key in ("source_receipt", "project_receipt", "build_target_receipt"):
                     item = details[key]
                     receipt_refs.add((str(item["path"]), str(item["sha256"])))
@@ -401,7 +409,7 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
             counter["reuse"] += 1
         elif status == "SUCCEEDED":
             counter["success"] += 1
-        elif status in {"NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}:
+        elif status in {"NOT_APPLICABLE", "NOT_REQUESTED", "SKIPPED_NA", "SKIPPED_POLICY"}:
             counter["not_applicable"] += 1
         else:
             counter["failure"] += 1
@@ -443,6 +451,17 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
     discovered_by_language = Counter(str(item.get("family") or item.get("language") or "unknown")
                                      for item in targets)
     selected_by_language = Counter(str(item.get("family") or "unknown") for item in build_receipts)
+    discovered_by_engine = Counter(str(item["engine"]["kind"]) for item in targets
+                                   if isinstance(item.get("engine"), Mapping) and item["engine"].get("kind"))
+    engine_outcomes: dict[str, Counter[str]] = {}
+    engine_gaps: dict[str, int] = {}
+    for receipt in build_receipts:
+        engine = receipt.get("engine")
+        if not isinstance(engine, Mapping) or not engine.get("kind"):
+            continue
+        kind = str(engine["kind"])
+        engine_outcomes.setdefault(kind, Counter())[str(receipt.get("terminal_status") or "GAP")] += 1
+        engine_gaps[kind] = engine_gaps.get(kind, 0) + len(receipt.get("gaps", ()))
 
     timings: dict[tuple[str, str, str, str, str, str, str, str, str], dict[str, Any]] = {}
     starts: dict[tuple[str, ...], list[datetime]] = {}
@@ -531,6 +550,11 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
                 "outcomes": dict(sorted(total_statuses.items())),
                 "discovered_by_language": dict(sorted(discovered_by_language.items())),
                 "selected_by_language": dict(sorted(selected_by_language.items())),
+                "discovered_by_engine": dict(sorted(discovered_by_engine.items())),
+                "engine_discovery": engine_discovery,
+                "by_engine": {key: {"outcomes": dict(sorted(value.items())),
+                                   "gap_count": engine_gaps[key]}
+                              for key, value in sorted(engine_outcomes.items())},
                 "by_language": {key: dict(sorted(value.items())) for key, value in sorted(statuses.items())}},
             "artifacts": {"groups": artifact_groups, "reference_count": sum(
                 item["reference_count"] for item in artifact_groups),
