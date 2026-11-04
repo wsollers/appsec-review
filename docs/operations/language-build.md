@@ -34,9 +34,10 @@ artifacts, and metadata. Go runs under the same executor/collector boundary and 
 syscall capture records but reconciles them in its own `go.capture_invocations`, with the same
 authority rule: only successful process-exec events establish that a tool ran.
 
-**Implemented in tested source, prelanding:** the
+**Source-integrated:** the
 [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
-identifies the independently tested execution commit. `iterations.dispatch` schedules one global,
+identifies the initial Windows/canonical WSL source publication and independently tested
+execution commit. `iterations.dispatch` schedules one global,
 serial dependency-aware production graph through separate registered `job_build_iteration`
 invocations before family load/publication. Family adapters use one shared complete source/install
 generation; family execution steps consume those receipts without rebuilding the graph. Unity's

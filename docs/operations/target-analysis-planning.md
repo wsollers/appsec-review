@@ -52,11 +52,12 @@ as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
 
 ## Build-topology interpretation
 
-**Implemented in tested source, prelanding:** the accepted plan now carries
+**Source-integrated:** the accepted plan now carries
 `build_topology.executable_graph` (`appsec-review/build-topology/1`). Its source/status boundary
-and historical discovery evidence are recorded in the
+and historical discovery evidence, including the initial Windows/canonical WSL source publication,
+are recorded in the
 [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md).
-This is not a claim of canonical integration, deployment, or a newly completed target review.
+Source integration is not deployment or a newly completed target review.
 
 Keep three graphs distinct: `orchestration/topology.py` orders review jobs; the executable target
 graph describes build ownership/product prerequisites; requests, receipts and selected recipe

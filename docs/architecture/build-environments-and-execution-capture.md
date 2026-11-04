@@ -5,10 +5,11 @@ project images, executes accepted build commands, captures their process behavio
 resulting evidence with gitleaks. It documents the active implementation outside `old/`; it is not
 guidance for review workers.
 
-The shared-workspace/iteration changes described here are **implemented in tested source,
-prelanding**. The [topology and iteration record](build-topology-and-iterations.md) identifies
-the exact independently tested execution commit and unresolved evidence. No canonical main
-integration, image deployment, fresh compiler execution or live review acceptance is claimed.
+The shared-workspace/iteration changes described here are **source-integrated**. The
+[topology and iteration record](build-topology-and-iterations.md) identifies the initial Windows
+and canonical WSL main publication, independently tested execution commit and unresolved evidence.
+Source integration does not establish image deployment, fresh compiler execution or live review
+acceptance.
 
 ## Scope and current integration
 

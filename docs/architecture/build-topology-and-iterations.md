@@ -2,14 +2,21 @@
 
 ## Status and evidence boundary
 
-**IMPLEMENTED IN TESTED SOURCE, PRELANDING:** this reconciliation describes execution commit
+**SOURCE INTEGRATED; LIVE ACCEPTANCE UNESTABLISHED:** the initial source publication is
+`8ea90ee18bd16798d91d4ce3aceaa8ddc93c157a`, tree
+`f9f6b20ae09c17c6aaaed588b83de8c301d5c3a5`. Windows and canonical WSL `main` were separately
+fast-forwarded to that publication on 2026-11-04, as recorded below. This is a fixed source-history
+anchor, not a claim that later documentation descendants or current Git HEAD must retain that SHA.
+
+The execution implementation was independently tested at commit
 `be6ca91d0745128feddfddb438a14c62473e3824`, tree
 `739c0b2ad534c60073a16f58cf92292bb0cdd8e6`. The coordinator released documentation work after
 independent focused verification: 253 collected, 252 passed, one explicit authenticated-live
 skip, 575.06 seconds pytest / 576.405 seconds wall. That evidence includes actual registered
 in-process job/controller/replay paths with controlled external boundaries; it is not a new
 Docker/compiler execution, deployment, live Dagster review, complete target topology, or accepted
-SPDX endpoint. Canonical WSL main integration and its exact selected SHA remain **PENDING**.
+SPDX endpoint. Source integration is complete; runtime deployment and live acceptance are not
+established by that integration.
 
 **HISTORICAL/OBSERVED** sections describe source
 `1c7b38e1c927a1b5c46036df26e2da988e70557a`, tree
@@ -312,8 +319,32 @@ No purge execution against the historical review is established by these impleme
 
 ## Remaining evidence and integration record
 
-Prelanding reconciliation is complete against the tested source named above. **Postmerge
-reconciliation is pending** the coordinator's exact canonical WSL main SHA; no merge is claimed.
+The initial source publication integrated execution code and its reconciled documentation at
+`8ea90ee18bd16798d91d4ce3aceaa8ddc93c157a`, tree
+`f9f6b20ae09c17c6aaaed588b83de8c301d5c3a5`, into both Windows and canonical WSL `main`.
+The coordinator's immutable initial-publication receipt was complete by
+`2026-11-04T18:12:47.137-05:00`. It pins the independently checked landing reports; this
+documentation followup records that publication, not its own commit identity.
+
+Both source-only fast-forwards verified 15 linear commits, zero merge commits and 58 changed
+paths with LF and exact HEAD/index/worktree bytes plus range whitespace checks. All 2,913 tracked
+mode/blob entries outside these six documentation paths match execution commit `be6ca91d`. Windows was clean;
+canonical WSL retained only its pre-existing untracked `data/feeds/` directory, with custody
+metadata unchanged and contents never read. No runtime release follows from moving these source refs.
+
+| Publication evidence | Identity |
+| --- | --- |
+| Coordinator's `barracuda-initial-source-publication-8ea90ee1.json` | 4650 bytes; SHA-256 `439d239ac804be0c538c7d24c3088a9389bf1d9b9fb3abe751816b3de590c255` |
+| Windows main owner's `verification-receipt-8ea90ee1.json` | SHA-256 `9bfdecc420bbe81c08cd66d030b8e90369a4b4406faa12b62ce2226c49595808` |
+| Canonical WSL `runs/metadata/barracuda-source-landing-8ea90ee1-cd42/source-landing-receipt.json` | 209059 bytes; SHA-256 `7b0c7398eb349768866c982b63037881e996584a9fb7196eb298523e17a5d765` |
+
+The documentation owner verified the coordinator receipt's bytes/hash; the coordinator directly
+checked both underlying report hashes. Neither main checkout was inspected by this documentation
+pass. The main owner also independently ran 253 focused cases in its own clean Linux clone/venv:
+252 passed, one forced authenticated-live skip, 585.75 seconds pytest / 589.14 seconds wall,
+with no dependency installation and imports bound to that clone. These are unit/source receipts,
+not new external Docker/compiler or live-review evidence.
+
 The historical discovery counts and GoogleTest/hiredis/Lua evidence remain unchanged. The new
 source has not established a complete Barracuda topology, successful repaired target build,
 accepted SPDX output, deployment, or live review restart.
@@ -325,10 +356,14 @@ definitions-load checks do not prove real toolchain or live service acceptance.
 
 The historical selector
 `tests/test_target_analysis_plan.py::test_plan_is_resumable_indexed_and_has_exact_dag_position`
-was rerun separately once on the final tested code and still fails with `missing_release_identity`:
+was rerun separately once at execution commit `be6ca91d` and still fails with
+`missing_release_identity`:
 `RUN / INVALIDATE / INVALIDATE` for intake/catalog/planning, identical to the original baseline.
-It is **NOT GREEN**, not part of the 252 passing cases. The full documentation link check also
-retains two unchanged missing target-owned references in the capture architecture page:
+It is **NOT GREEN**, not part of the 252 passing cases. The initial publication's final
+documentation-link selector was actually run once by the integration owner: one failure,
+0.72 seconds pytest / 1.144 seconds wall, with exactly two unchanged missing target-owned
+references in the capture architecture page and no additional regressions:
 `../../targets/appsec-multi-vuln/support/project-matrix.json` and
 `../../targets/appsec-multi-vuln/README.md`. These are named gaps, not permission to provision a target
-or remove links. Final integrated documentation-link verification belongs to the integration owner.
+or remove links. Changed-document verification for this followup remains with the integration
+owner; the documentation owner did not duplicate it or rerun code/historical selectors.

@@ -6,12 +6,12 @@ planning-side narrative is in [`target-analysis-planning.md`](target-analysis-pl
 consumer is [`language-build.md`](language-build.md). Capture semantics are in
 [`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md).
 
-**Implemented in tested source, prelanding:** non-Unity project probes no longer compile the
-target before language-build. The accepted executable graph replaces shortest-root component
+**Source-integrated:** non-Unity project probes no longer compile the target before
+language-build. The accepted executable graph replaces shortest-root component
 projection; language-build runs registered per-node iterations in a complete shared target/install
 workspace. The [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
-records the exact tested source and evidence limits. Image preparation is not compiler success,
-deployment, or a completed target review.
+records the initial Windows/canonical WSL source publication, tested code and evidence limits.
+Image preparation is not compiler success, deployment, or a completed target review.
 
 ## Steps
 

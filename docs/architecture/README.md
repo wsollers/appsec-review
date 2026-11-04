@@ -14,9 +14,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   shared and project-derived build images, conditional capture control design, the pinned
   `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
 - [`build-topology-and-iterations.md`](build-topology-and-iterations.md) - evidence-qualified
-  historical topology discovery and tested-source/prelanding shared-workspace producer graph,
-  registered bounded iterations, detached recipe recovery, restoration, and retention; canonical
-  integration and live acceptance remain separate evidence.
+  historical topology discovery, the initial Windows/canonical WSL source publication and
+  shared-workspace producer graph, registered bounded iterations, detached recipe recovery,
+  restoration, and retention; deployment and live acceptance remain unestablished.
 - [`../operations/language-build.md`](../operations/language-build.md) — global registered build
   iterations, family adapters, protected provenance, recovery CLI, checkpoints and workspace retention.
 - [`native-build-output-discovery.md`](native-build-output-discovery.md) — native build-layout
