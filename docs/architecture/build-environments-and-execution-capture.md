@@ -161,6 +161,15 @@ managers can reach dependency services, but it remains non-root with all capabil
 `no-new-privileges`, a read-only container root, bounded resources, and a writable run-owned source
 copy. Produced applications and test suites are not executed.
 
+**CURRENT/OBSERVED:** the copied scope is the selected build-unit root plus accepted dependency
+files, not the complete target. Probes and later generic language builds use separate
+per-unit/per-attempt workspaces. Correct working directories and downstream dependency readiness
+do not restore omitted sibling sources or transfer producer artifacts.
+The [target topology and iteration design](build-topology-and-iterations.md) describes the
+**PROPOSED / NOT YET IMPLEMENTED** replacement: one complete run-owned production tree shared by
+compatible nodes, durable producer products, restoration after failed writes, and separate bounded
+build/recovery invocations. This does not claim that a new mount, schema, or replay API exists.
+
 For captured execution, the container entrypoint is the thin
 `containers/build-capture/build-driver.sh`. The driver prepends generated wrappers to `PATH`, saves
 the original tool path, and runs the command under `strace --seccomp-bpf -ff -y`. Capture is

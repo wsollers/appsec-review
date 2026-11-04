@@ -31,6 +31,12 @@ artifacts, and metadata. Go runs under the same executor/collector boundary and 
 syscall capture records but reconciles them in its own `go.capture_invocations`, with the same
 authority rule: only successful process-exec events establish that a tool ran.
 
+**PROPOSED / NOT YET IMPLEMENTED:** the
+[topology and bounded-iteration design](../architecture/build-topology-and-iterations.md)
+replaces per-unit source copies and family-long recovery with one compatible shared run-owned
+production tree and separate bounded job invocations. The current behavior below remains
+per-attempt; the proposal is not evidence that shared products or a replay/adoption API exist.
+
 ## Conditional-capture operator flow
 
 The authoritative control semantics and fixture matrix live in
@@ -556,8 +562,13 @@ environment values, stdout/stderr, and diagnostic tails remain protected. The sa
 retrieval shard exposes only command hashes and outcomes, bounded stream facts, package/artifact
 identities, and dependency relationships.
 
-Build-unit dependencies execute in topological layers. A failed dependency blocks its dependents,
-but unrelated units continue in the configured worker pool. A checkpoint is reusable only when its
+**CURRENT/OBSERVED:** build-unit dependencies execute in topological layers within each family,
+after project-build probes have succeeded. A failed same-family dependency blocks its dependents,
+but unrelated units continue in the configured worker pool. This is not a cross-family target
+scheduler, and generic/native execution still creates an independent source workspace rather
+than materializing the ready node's upstream products.
+
+A checkpoint is reusable only when its
 target snapshot, recipe, dependency hashes, image, executor/capture identity, toolchain, probe,
 `[build_outputs]` policy identity, and upstream handoff are unchanged and every retained artifact
 still verifies. Checkpoint namespaces
@@ -658,6 +669,11 @@ Successful checkpoint reuse verifies and returns the prior pinned workspace and 
 rather than copying a previously accepted workspace into a new mutable unit directory. Read the
 receipt's workspace reference rather than constructing a path from the latest attempt ID.
 Existing `build_workspaces` protected dataset declarations cover these family trees.
+
+The [proposed shared-tree replacement](../architecture/build-topology-and-iterations.md#committed-progress-and-restoration-after-failed-writes)
+must retain immutable accepted evidence while restoring overwritten/deleted prerequisite state
+after a failed node. Existing per-attempt isolation and checkpoints do not themselves implement
+that restoration or separately completed per-node jobs.
 
 Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_COMPLETED`,
 `BUILD_OUTPUT_CLASSIFIED`, `LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events

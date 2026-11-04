@@ -49,6 +49,23 @@ as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
 | `summary_max_bytes` | 524288 | maximum summary bytes; at least 1024 |
 | `summary_sample_per_prefix` | 20 | sampled files per path prefix; 1 to `summary_max_items` |
 
+## Build-topology interpretation
+
+**CURRENT/OBSERVED:** the plan contains catalog build actions, component/build-root relationships,
+and validated model-proposed component `depends_on` edges. These do not prove exact build-unit
+ownership, artifact-producing prerequisites, or a complete executable target graph. Project-build
+currently projects component dependencies onto shortest-root candidate actions; language-build
+has later, family-local dependency readiness, not a shared cross-family product scheduler.
+The review-job DAG in `orchestration/topology.py` is a different graph.
+
+Model/catalog-summary bounds control inference input, not compiler visibility into the reviewed
+repository. They are not a reason to omit source files needed by a build.
+The [topology and bounded-iteration design](../architecture/build-topology-and-iterations.md)
+records the historical discovery attempt and the **PROPOSED / NOT YET IMPLEMENTED** switch:
+explicit evidence-backed build-unit/artifact edges, a complete shared run-owned production tree,
+and separate recoverable build invocations. No new job names, schema, CLI, or retention setting
+is implemented by documenting that proposal.
+
 ## Isolated project builds
 
 Steps, settings, recipe validation, repair, and recovery are summarized in
@@ -75,16 +92,20 @@ parallel.
 Every previously unseen recipe is probed against the default language image first; package hints
 from planning do not silently mutate that baseline. If the probe fails, `job_project_build` copies
 the exact generated Dockerfile and bounded failure diagnostics into the run, then asks the
-configured repair model only for a complete validated apt package set. It builds and probes up to
-three distinct repaired images before declaring the build unavailable. Invalid model output,
-failed apt installation, timeout, and compiler failure each remain in the per-attempt record and
-consume a bounded repair attempt. Repair inference cannot alter commands, paths, environment,
-dependency files, outputs, base image, or container policy.
+configured repair model for typed package, allowlisted environment, pinned package-manager, and
+accepted-manifest restore changes. The exact existing contract is in
+[`project-build.md`](project-build.md). Each validated changed repair prepares/resolves its image
+and re-probes when preparation succeeds. Rejected/no-op proposals are recorded without pretending
+another compiler ran. Missing approved image-preparation capability is an explicit block; pinned
+baseline/prepared images can remain usable. Repair inference cannot alter accepted commands,
+paths, dependency files, outputs, base image, or container policy, or supply arbitrary environment
+variables.
 
 After a repaired image passes the exact probe, its recipe, Dockerfile hash and retained path, image
-digest, and base-recipe identity are accepted under `runs/metadata/project-build-repairs/`. A later
-run with the same operational recipe, dependency hashes, and base image revalidates and reuses that
-definition and image; a changed identity starts again from the default image. Set
+digest, and base-recipe identity are accepted under a run-scoped identity beneath
+`runs/metadata/project-build-repairs/`. Same-run reuse requires matching target, recipe, image,
+capture/limit bindings, and declared `platform`, `build_toolchain`, and `validation` releases.
+Another application run does not inherit accepted probe/repair checkpoints. Set
 `repair_attempts` to an integer from 3 through 10 and configure the bounded model under
 `[jobs.job_project_build.settings.model]`.
 
@@ -92,11 +113,11 @@ The identity uses the recipe's operational fields; changing only the model's exp
 does not rebuild an identical image or invalidate its accepted probe.
 
 The probe answers only whether the accepted recipe can build. A successful probe or a verified
-cross-run reuse receipt publishes `lang_jobflow_build`, carrying the recipe, exact project image,
+same-run reuse receipt publishes `lang_jobflow_build`, carrying the recipe, exact project image,
 root, family, and requested capabilities. A failed probe publishes a coverage gap and no build
 dispatch, but it does not remove that project's static-analysis dispatch or successful sibling
 projects. Set `force_buildability_probe = true` in the central project-build settings to bypass the
-cross-run probe cache.
+same-run accepted-probe checkpoint.
 
 Resume is per build unit. An accepted probe is reused only when the enriched recipe identity and
 resolved image ID still match. Missing dependencies, unsupported restoration, and build failures

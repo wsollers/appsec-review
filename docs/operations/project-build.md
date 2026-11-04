@@ -6,6 +6,13 @@ planning-side narrative is in [`target-analysis-planning.md`](target-analysis-pl
 consumer is [`language-build.md`](language-build.md). Capture semantics are in
 [`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md).
 
+**CURRENT/OBSERVED:** probes iterate family entries in separate selected-root workspaces; they
+do not schedule an artifact-backed target build graph or preserve sibling-unit products in one
+shared tree. Component dependency projection is not verified build-unit ownership.
+The [topology and bounded-iteration design](../architecture/build-topology-and-iterations.md)
+records the discovery evidence and the **PROPOSED / NOT YET IMPLEMENTED** switch to a complete
+run-owned source tree, shared producer products, and separate recoverable job invocations.
+
 ## Steps
 
 The configured topology must be exactly `plan`, `image`, `static_dispatch`, `probe`,
@@ -40,7 +47,7 @@ lane continues independently. See [Unity configuration and coverage](unity-build
 | `image_build_timeout_seconds` | 1800 | per project-image build |
 | `output_bytes` | 8388608 | in-memory stream preview; complete streams are retained |
 | `artifact_count_limit` | 10000 | cataloged probe artifacts |
-| `force_buildability_probe` | false | Boolean; bypass the cross-run probe cache |
+| `force_buildability_probe` | false | Boolean; bypass the same-run accepted-probe checkpoint |
 | `repair_attempts` | 3 | integer 3-10; image-repair attempts after a failed default probe |
 | `build_capture.event_count_limit` | 250000 | job override of the global `[build_capture]` limit |
 | `build_capture.retain_raw_traces` | true | keep secret-scanned, hashed raw strace files under `raw-traces/` (debug period; see language-build.md) |
@@ -107,9 +114,12 @@ The applied repair is recorded on the recipe as `image_repairs` (environment, pa
 normalized restores with their manager), so it is part of the recipe identity, the Dockerfile,
 every attempt record, the build dispatch, and the repair cache. `validate_build_recipe` re-checks
 it whenever the recipe is reused. Commands, paths, dependency files, outputs, base image, and
-container policy cannot change. Each attempt rebuilds the image, re-probes it, and is recorded with
-its outcome; invalid output, failed installation, timeout, and compiler failure each consume one
-attempt.
+container policy cannot change. A validated changed repair resolves/prepares its image and
+re-probes when preparation succeeds. Every attempt records its actual outcome; invalid or repeated
+proposals can fail before image preparation or another compiler invocation. Failed installation,
+timeout, and compiler failure also consume bounded attempts. An unavailable approved builder is a
+capability block, with the early-stop behavior described below, not another compiler failure.
+An image-only proposal cannot restore reviewed sibling source omitted by the workspace copy.
 
 Probe preparation is family-local and remains inside the run-owned workspace. For Maven units with
 a bounded legacy `src/*.java` source set, no conventional `src/main/java` tree, and no

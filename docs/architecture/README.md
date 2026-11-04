@@ -13,6 +13,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`build-environments-and-execution-capture.md`](build-environments-and-execution-capture.md) —
   shared and project-derived build images, conditional capture control design, the pinned
   `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
+- [`build-topology-and-iterations.md`](build-topology-and-iterations.md) - evidence-qualified
+  historical topology discovery and proposed, not-yet-implemented shared-workspace build graph,
+  bounded iterations, detached recipe recovery, restoration, and retention.
 - [`../operations/language-build.md`](../operations/language-build.md) — generic real-build execution, protected provenance, and checkpoints.
 - [`native-build-output-discovery.md`](native-build-output-discovery.md) — native build-layout
   discovery (CMake, Meson, Ninja, MSBuild, vcpkg, Conan, execution capture), dependency-tree
