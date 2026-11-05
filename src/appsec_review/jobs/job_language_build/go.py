@@ -504,6 +504,9 @@ def verify_target_facts(facts: Mapping[str, Any], selected: Mapping[str, Any],
             raise ValueError(f"produced Go {key} differs from accepted enforcement: "
                              f"{settings.get(key)!r} != {expected!r}")
     binary = facts.get("binary_target")
+    if (not isinstance(binary, Mapping) or recipe["environment"].get("GOOS") != "linux"
+            or binary.get("format") != "elf"):
+        raise ValueError("produced Go binary format has no supported match for accepted OS")
     expected_arch = recipe["environment"]["GOARCH"]
     if (not isinstance(binary, Mapping) or binary.get("isa") != {
             "amd64": "x86_64", "386": "x86", "arm64": "arm64"}.get(expected_arch)

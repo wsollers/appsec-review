@@ -13,7 +13,7 @@ import shlex
 from typing import Any
 
 from appsec_review.jobs.build_discovery import (
-    make_default_build_commands, native_build_capability_gap, validate_build_recipe,
+    make_default_build_commands, native_build_capability_gap, recipe_execution_cwd, validate_build_recipe,
 )
 from appsec_review.storage import canonical_json
 
@@ -1281,10 +1281,12 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
     effective_paths = {fact["path"] for fact in facts}
     if direct_compilers:
         effective_paths = set()
-        for argv in commands:
+        command_contexts = [(phase, argv) for phase, key in (
+            ("configure", "configure_commands"), ("build", "build_commands")) for argv in recipe[key]]
+        for phase, argv in command_contexts:
             for arg in argv[1:]:
                 if PurePosixPath(arg).suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}:
-                    path = _resolve(str(recipe.get("execution_cwd", recipe["source_dir"])), arg)
+                    path = _resolve(recipe_execution_cwd(recipe, phase), arg)
                     if path not in documents:
                         unresolved.append("compiler_source_closure_unknown")
                     elif path:
@@ -1705,6 +1707,8 @@ def ready_build_units(graph, states, *, products=(), verify_product=None, refine
                                          "reasons": ["legacy_graph_requires_accepted_replanning"]}
                                         for node in graph["nodes"]]}
     validate_build_topology(graph)
+    if set(states) - {node["build_unit_id"] for node in graph["nodes"]}:
+        raise ValueError("state names an unknown build unit")
     if refinement is None:
         return {"ready": [], "blocked": [{"build_unit_id": node["build_unit_id"],
                                          "reasons": ["accepted_refinement_missing"]} for node in graph["nodes"]]}
@@ -1722,11 +1726,26 @@ def ready_build_units(graph, states, *, products=(), verify_product=None, refine
             if states.get(producer) != "SUCCEEDED":
                 reasons.append("producer_not_succeeded:" + producer)
             elif edge["kind"] != "order_only":
+                requirement = edge["requirement"]
+                if any(value is None for value in requirement["variant"].values()):
+                    reasons.append("unresolved_product_variant:" + producer)
+                    continue
+                if edge["kind"] == "requires_product" and requirement["kind"] == "library":
+                    consumer_variant = next(node["variant"] for node in graph["nodes"]
+                                            if node["build_unit_id"] == uid)
+                    compatibility = ("configuration", "target_arch", "execution_role", "toolchain", "abi")
+                    if any(consumer_variant[key] is None for key in compatibility):
+                        reasons.append("unresolved_consumer_variant:" + producer)
+                        continue
+                    if any(consumer_variant[key] != requirement["variant"][key] for key in compatibility):
+                        reasons.append("incompatible_consumer_variant:" + producer)
+                        continue
                 producer_bound = refinement_unit(graph, refinement, producer)
                 records = [record for record in products if
                            record.get("producer_build_unit_id") == producer
                            and record.get("topology_id") == graph["topology_id"]
                            and record.get("recipe_revision") == producer_bound["recipe_digest"]
+                           and _product_path(record.get("path")) and _hash(record.get("sha256"))
                            and all(record.get(key) == value for key, value in edge["requirement"].items())]
                 declaration = next((item for item in graph["declarations"] if
                                     item["owner_build_unit_id"] == producer and

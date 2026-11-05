@@ -488,7 +488,7 @@ def test_go_produced_facts_match_every_accepted_setting_and_machine_axis(field, 
         verify_target_facts(facts, selected, recipe)
 
 
-@pytest.mark.parametrize("scenario", ["valid", "settings", "machine", "pe"])
+@pytest.mark.parametrize("scenario", ["valid", "settings", "machine", "windows-elf", "pe"])
 def test_go_actual_output_admission_rejects_mismatch_before_typed_success(tmp_path, scenario):
     from appsec_review.jobs.job_language_build.go import admit_build_outputs
     from tests.capture_fakes import go_build_info, go_elf
@@ -496,6 +496,8 @@ def test_go_actual_output_admission_rejects_mismatch_before_typed_success(tmp_pa
               "build\tGOOS=linux\nbuild\tGOARCH=amd64\nbuild\tCGO_ENABLED=0\n")
     if scenario == "settings":
         module = module.replace("GOARCH=amd64", "GOARCH=386")
+    elif scenario == "windows-elf":
+        module = module.replace("GOOS=linux", "GOOS=windows")
     raw = bytearray(go_elf(build_info=go_build_info(module_text=module))[0])
     if scenario == "machine":
         struct.pack_into("<H", raw, 18, 183)
@@ -505,7 +507,7 @@ def test_go_actual_output_admission_rejects_mismatch_before_typed_success(tmp_pa
     path.write_bytes(raw)
     artifacts = [{"kind": "executable", "path": path.name, "workspace_path": "build/control",
                   "sha256": hashlib.sha256(raw).hexdigest()}]
-    platform = "windows" if scenario == "pe" else "linux"
+    platform = "windows" if scenario in {"windows-elf", "pe"} else "linux"
     unit = _go({"GOOS": platform, "GOARCH": "amd64", "CGO_ENABLED": "0"})
     graph = compile_build_topology([unit], source_fingerprint="synthetic-go-output")
     policy = {
@@ -529,3 +531,5 @@ def test_go_actual_output_admission_rejects_mismatch_before_typed_success(tmp_pa
         assert len(result["gaps"]) == 1
         assert artifacts[0]["go_build_status"] == ("unparsed" if scenario == "pe" else "target_mismatch")
         assert ("metadata was not parseable" if scenario == "pe" else "target enforcement failed") in result["gaps"][0]
+        if scenario == "windows-elf":
+            assert "binary format has no supported match for accepted OS" in result["gaps"][0]

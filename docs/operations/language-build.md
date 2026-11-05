@@ -5,7 +5,9 @@ workers and workspace reconstruction require the same accepted recipe-bound refi
 Selected promoted recipes cannot reuse an old recipe/image result. Native retained roles and
 producer/consumer axes are checked independently of capture success; Windows import libraries
 are not interchangeable with runtime DLLs. Go metadata that cannot be parsed or contradicts
-accepted settings/binary machine/class fails typed successful publication. Graph/1 artifacts
+accepted settings/binary machine/class fails typed successful publication. Produced Go facts
+currently admit only Linux ELF with matching selected OS; Windows-claimed ELF is rejected,
+and PE metadata remains unparsed rather than assumed compatible. Graph/1 artifacts
 remain inspection-only. These controls are authored source, not a claim of unit/live acceptance
 or acquired native compiler metadata.
 
