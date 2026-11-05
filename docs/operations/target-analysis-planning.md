@@ -80,8 +80,16 @@ every prerequisite. Contained children are represented without duplicating their
 
 Edges use exact producer/consumer IDs and typed `requires_product` or `order_only` semantics.
 Ambiguity, cycles, unsupported dynamic/conditional/included declarations, unresolved products and
-external requirements are gaps, not invented ordering. Proposal/3 cannot alter component ownership, scanner choices or scheduling edges; its component
-proposal list must be empty. Every nonempty graph also records
+external requirements are gaps, not invented ordering. The actual worker request keeps empty
+component/scanner allowlists and requires an empty component proposal list. The bounded helper/API
+contract retains nonempty proposals grounded in exact accepted component ownership and applicable
+scanner paths, accepted component build systems and compiler-derived dependency relationships.
+Foreign identities, another component's scope, non-derivable dependencies and cycles are rejected.
+Explicit request allowlists constrain both new responses and complete-cache reads; the whole
+catalog is not implicit authority to exceed them. Compatible component proposals can add advisory
+scanner annotations but cannot alter ownership or the canonical build graph. Empty, all, subset
+and reordered proposals/hints still use the same whole-bundle deterministic compiler, never model
+native proof or scheduling authority. Every nonempty graph also records
 `incomplete_dependency_discovery`; an absent edge is not proof of independence.
 
 Acceptance recompiles the graph from the exact catalog/accepted declarations and rejects a

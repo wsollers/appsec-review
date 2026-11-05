@@ -129,12 +129,23 @@ def test_typed_bounds_reject_loosening_and_nonintegers(kind, key, value):
                                else PlanningFeedbackSettings)
 
 
-def _published(tmp_path):
+def _published(tmp_path, *, reusable=False, mode="strict"):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_bytes((ROOT / "appsec-review.toml").read_bytes())
-    config = load_config(config_path)
     target = tmp_path / "target"
     target.mkdir()
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if reusable:
+        policy = '[review_policy]\nmode = "strict"\napproved_first_party_projects = []'
+        assert text.count(policy) == 1 and text.count("[review_policy.releases]\n") == 1
+        text = text.replace(policy,
+            f'[review_policy]\nmode = "{mode}"\nproject_id = "synthetic-environment"\n'
+            'approved_first_party_projects = ["synthetic-environment"]\n'
+            f'target_root = {json.dumps(str(target))}\ncustody = "application_private_v1"')
+        text = text.replace("[review_policy.releases]\n",
+            '[review_policy.releases]\nplatform = "synthetic-environment-platform/1"\n'
+            'validation = "synthetic-environment-validation/1"\n')
+    config_path.write_bytes(text.encode("utf-8"))
+    config = load_config(config_path)
     (target / "setup.sh").write_bytes(b"SDK_ROOT=tools/sdk\n")
     fingerprint = source_fingerprint(target)
     result = GraphRunner(config, [intake_job(), catalog_job(), build_job()]).run(
@@ -158,15 +169,142 @@ def test_real_static_producer_publication_and_strict_current_reader(tmp_path):
 
 
 def test_optional_prior_stale_is_unavailable_but_expected_current_blocks(tmp_path):
-    _, root, _, contract = _published(tmp_path)
-    optional = {**contract, "mode": "OPTIONAL_PRIOR", "expected_producer": None,
-                "workflow": "standalone"}
+    config, root, source, contract = _published(tmp_path)
+    optional = environment_contract(config, {"environment_mode": "OPTIONAL_PRIOR"},
+                                    {JOB_ID: contract["reference"]})
+    assert optional["mode"] == "OPTIONAL_PRIOR" and optional["expected_producer"] is None
+    assert optional["workflow"] == "standalone" and optional["reference"] == contract["reference"]
+    current = load_environment(root, source, optional)
+    assert current["availability"] == "AVAILABLE" and current["evidence"]["declarations"]
     value = load_environment(root, "other-source", optional)
     assert value["availability"] == "UNAVAILABLE"
     assert value["evidence"] is None and value["artifact"] is None
     assert value["reason"] == "STALE optional prior source"
     with pytest.raises(ValueError, match="wrong source"):
         load_environment(root, "other-source", contract)
+    (root / current["artifact"]["path"]).write_bytes(b"{}")
+    with pytest.raises(ValueError, match="identity mismatch"):
+        load_environment(root, "other-source", optional)
+
+
+@pytest.mark.parametrize("workflow", ["wave1_review", "project_build_review"])
+def test_scheduled_environment_cannot_be_downgraded_to_optional_prior(workflow):
+    config = load_config(ROOT / "appsec-review.toml")
+    with pytest.raises(ValueError, match="scheduled environment producer cannot be optional"):
+        environment_contract(config, {"workflow": workflow, "environment_mode": "OPTIONAL_PRIOR"},
+                             {JOB_ID: "a" * 64})
+
+
+@pytest.mark.parametrize("stale", [False, True])
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("reference_source", ["upstream", "host"])
+def test_optional_prior_host_identity_survives_direct_launch_and_reuse(
+        tmp_path, stale, mode, reference_source):
+    from appsec_review.jobs.job_target_analysis_plan import build_job as planner_job, load_accepted_plan
+    from appsec_review.runtime import JobRunner
+    from appsec_review.runtime.resume import ResumePlanner
+    config, root, source, environment = _published(tmp_path, reusable=True, mode=mode)
+    prior = load_environment(root, source, environment)
+    target = tmp_path / "target"
+    if stale:
+        (target / "README.md").write_bytes(b"synthetic new source after accepted optional environment\n")
+        source = source_fingerprint(target)
+        GraphRunner(config, [intake_job(), catalog_job()]).run(
+            target_root=target, source_fingerprint=source, run_id=root.name)
+    upstream = {name: json.loads((root / "data/jobs" / name / "latest.json").read_bytes())["handoff_sha256"]
+                for name in ("job_review_intake", "job_target_catalog", JOB_ID)}
+    orchestration = {"workflow": "standalone", "environment_mode": "OPTIONAL_PRIOR"}
+    if reference_source == "host":
+        upstream.pop(JOB_ID)
+        orchestration["environment_reference"] = environment["reference"]
+    job = planner_job(infer=lambda *_args, **_kwargs: pytest.fail("environment-only fixture cannot call a model"))
+    runner = JobRunner(config)
+    result = runner.run(job, run_id=root.name, target_root=target, source_fingerprint=source,
+                        upstream_handoffs=upstream, orchestration=orchestration)
+    plan = load_accepted_plan(root)
+    stored = plan["build_environment"]
+    assert stored["mode"] == "OPTIONAL_PRIOR" and stored["expected_producer"] is None
+    assert stored["reference"] == environment["reference"]
+    assert stored["availability"] == ("UNAVAILABLE" if stale else "AVAILABLE")
+    assert (stored["evidence"] is None) is stale
+    assert (stored["artifact"] is None) is stale
+    original = json.loads((Path(result["attempt_root"]) / "claim.json").read_bytes())
+    launch = environment_contract(config, orchestration, upstream)
+    assert json.loads(original["orchestration"]["build_environment_contract"]) == launch
+    required = {key: value for key, value in upstream.items() if key != JOB_ID}
+    assert original["upstream_handoffs"] == result["handoff"]["upstream_handoff_sha256"] == required
+    assert environment["reference"] not in json.dumps(json.loads(
+        (root / original["input_manifest_path"]).read_bytes()))
+    resumed = ResumePlanner(config, root, [job], source, target_root=target,
+                            orchestration=orchestration)
+    assert resumed.accepted(job, upstream) == ((), result["handoff_sha256"])
+    claim = runner.begin_or_reuse_attempt(job, run_id=root.name, target_root=target,
+        source_fingerprint=source, upstream_handoffs=upstream, orchestration=orchestration)
+    assert claim["reused"] is True and claim["attempt_id"] == original["attempt_id"]
+    assert claim["upstream_handoffs"] == required
+    assert json.loads(claim["orchestration"]["build_environment_contract"]) == launch
+    assert load_accepted_plan(root) == plan
+    if stale and reference_source == "upstream":
+        with pytest.raises(ValueError, match="current catalog|wrong source"):
+            ResumePlanner(config, root, [job], source, target_root=target).accepted(job, upstream)
+    else:
+        reasons, _ = ResumePlanner(config, root, [job], source,
+                                   target_root=target).accepted(job, upstream)
+        assert "planning environment availability identity changed" in reasons
+    assert not (root / "data/jobs/job_target_analysis_plan/attempts/attempt_0002").exists()
+    artifact = root / prior["artifact"]["path"]
+    artifact.write_bytes(artifact.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="identity mismatch"):
+        runner.begin_or_reuse_attempt(job, run_id=root.name, target_root=target,
+            source_fingerprint=source, upstream_handoffs=upstream, orchestration=orchestration)
+    assert not (root / "data/jobs/job_target_analysis_plan/attempts/attempt_0002").exists()
+
+
+@pytest.mark.parametrize("stale", [False, True])
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+def test_unscheduled_optional_host_reference_survives_actual_graph_plan_and_run(tmp_path, stale, mode):
+    from appsec_review.jobs.job_target_analysis_plan import build_job as planner_job, load_accepted_plan
+    config, root, source, environment = _published(tmp_path, reusable=True, mode=mode)
+    target = tmp_path / "target"
+    if stale:
+        (target / "README.md").write_bytes(b"synthetic new graph source\n")
+        source = source_fingerprint(target)
+    orchestration = {"workflow": "standalone", "environment_mode": "OPTIONAL_PRIOR",
+                     "environment_reference": environment["reference"]}
+    job = planner_job(infer=lambda *_args, **_kwargs: pytest.fail("environment-only fixture cannot call a model"))
+    graph = GraphRunner(config, [intake_job(), catalog_job(), job])
+    first = graph.run(target_root=target, source_fingerprint=source, run_id=root.name,
+                      orchestration=orchestration)
+    stored = load_accepted_plan(root)["build_environment"]
+    assert stored["reference"] == environment["reference"] and stored["mode"] == "OPTIONAL_PRIOR"
+    assert stored["availability"] == ("UNAVAILABLE" if stale else "AVAILABLE")
+    assert (stored["evidence"] is None) is stale
+    planned = graph.plan(root.name, source, target_root=target, orchestration=orchestration)
+    assert [decision.action for decision in planned] == ["REUSE", "REUSE", "REUSE"]
+    again = graph.run(target_root=target, source_fingerprint=source, run_id=root.name,
+                      orchestration=orchestration)
+    assert [decision["action"] for decision in again["decisions"]] == ["REUSE", "REUSE", "REUSE"]
+    assert again["jobs"]["job_target_analysis_plan"]["handoff_sha256"] == (
+        first["jobs"]["job_target_analysis_plan"]["handoff_sha256"])
+    without_prior = graph.plan(root.name, source, target_root=target)
+    assert without_prior[-1].action == "RUN"
+    assert "planning environment availability identity changed" in without_prior[-1].reasons
+    with pytest.raises(ValueError, match="no accepted handoff"):
+        graph.plan(root.name, source, target_root=target, orchestration={"workflow": "wave1_review"})
+
+
+@pytest.mark.parametrize("orchestration,upstream", [
+    ({"environment_mode": "OPTIONAL_PRIOR"}, {}),
+    ({"environment_reference": "a" * 64}, {}),
+    ({"environment_mode": "OPTIONAL_PRIOR", "environment_reference": "not-a-hash"}, {}),
+    ({"environment_mode": "OPTIONAL_PRIOR", "environment_reference": "a" * 64}, {JOB_ID: "b" * 64}),
+    ({"environment_mode": "NOT_RUN", "environment_reference": "a" * 64}, {}),
+])
+def test_explicit_optional_host_references_reject_missing_conflicting_or_contradictory_identity(
+        orchestration, upstream):
+    config = load_config(ROOT / "appsec-review.toml")
+    with pytest.raises(ValueError):
+        environment_contract(config, orchestration, upstream)
 
 
 @pytest.mark.parametrize("mode,availability", [("NOT_RUN", "ABSENT"), ("DISABLED", "DISABLED")])
@@ -177,8 +315,10 @@ def test_explicit_absent_or_disabled_needs_no_producer(tmp_path, mode, availabil
         jobs = dict(config.jobs)
         jobs[JOB_ID] = replace(jobs[JOB_ID], settings={**jobs[JOB_ID].settings, "enabled": False})
         config = replace(config, jobs=jobs)
-    contract = environment_contract(config, orchestration, {})
+    upstream = {JOB_ID: "a" * 64} if mode == "DISABLED" else {}
+    contract = environment_contract(config, orchestration, upstream)
     assert contract["mode"] == mode and contract["reason"]
+    assert contract["expected_producer"] is None
     assert load_environment(tmp_path, "s", contract)["availability"] == availability
 
 
@@ -225,6 +365,22 @@ def test_redaction_preserves_unmodified_raw_line_endings_and_withholds_container
     text = "FROM pinned-base\r\nENV SDK=tools/sdk\r\n"
     assert redact(text) == text
     assert redact("ENV API_TOKEN=value\r\n") == "[REDACTED assignment]\r\n"
+
+
+@pytest.mark.parametrize("prefix", ['@set "', 'set "'])
+@pytest.mark.parametrize("ending", ["\n", "\r\n"])
+def test_quoted_batch_assignments_preserve_safe_bytes_but_never_publish_sensitive_values(prefix, ending):
+    safe = prefix + 'SDK_ROOT=tools/sdk"' + ending
+    sensitive = prefix + 'API_TOKEN=SYNTHETIC_BOUNDARY_SENTINEL"' + ending
+    assert redact(safe) == safe
+    assert redact(sensitive) == "[REDACTED assignment]" + ending
+    value = _static({"setup.cmd": safe + sensitive})
+    first, second = value["declarations"]
+    assert first["name"] == "SDK_ROOT" and first["value"] == "tools/sdk"
+    assert first["status"] == "declared"
+    assert second["status"] == "redacted" and second["value"] is None
+    assert second["sha256"] == hashlib.sha256((safe + sensitive).encode()).hexdigest()
+    assert "SYNTHETIC_BOUNDARY_SENTINEL" not in json.dumps(value)
 
 
 def test_environment_publication_matches_the_checked_in_offline_schema():

@@ -317,13 +317,13 @@ def _publish_build_graph(plan: dict[str, Any]) -> None:
 
 def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any],
                       allowed_components: Collection[str] | None = None,
-                      allowed_paths: Collection[str] | None = None) -> list[str]:
+                      allowed_paths: Collection[str] | None = None,
+                      allowed_scanners: Collection[str] | None = None,
+                      allowed_build_systems: Collection[str] | None = None) -> list[str]:
     errors: list[str] = []
     if (set(proposal) != {"schema", "action", "component_proposals", "build_recipes", "hints", "abstentions"}
             or proposal.get("schema") != PROPOSAL_SCHEMA or proposal.get("action") != "final"):
         return ["proposal must be a closed proposal/3 final response"]
-    if proposal.get("component_proposals") != []:
-        return ["component ownership and scanner choices are deterministic, not model authority"]
     graph = compile_build_topology(catalog.get("build_units", ()),
                                    source_fingerprint=catalog["source_fingerprint"])
     fact_ids = {fact["fact_id"] for fact in graph["facts"]}
@@ -352,8 +352,24 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
     paths = {str(item["path"]) for item in catalog["files"]}
     component_boundary = set(allowed_components) if allowed_components is not None else set(components)
     path_boundary = set(allowed_paths) if allowed_paths is not None else paths
+    scanner_boundary = set(allowed_scanners) if allowed_scanners is not None else set(SCANNERS)
+    system_boundary = set(allowed_build_systems) if allowed_build_systems is not None else set(BUILD_SYSTEMS)
     files = tuple(catalog["files"])
     artifacts = tuple(catalog.get("accepted_artifacts", ()))
+    owned_paths = _component_paths(files, tuple(components.values()))
+    unit_owners = {}
+    component_systems = defaultdict(set)
+    for node in graph["nodes"]:
+        ownership = resolve_ownership(node["root"], components.values())
+        if ownership.status == "owned":
+            owner = ownership.component_ids[0]
+            unit_owners[node["build_unit_id"]] = owner
+            component_systems[owner].add(node["build_system"])
+    derived_dependencies = {(unit_owners[edge["consumer_build_unit_id"]],
+                             unit_owners[edge["producer_build_unit_id"]])
+                            for edge in graph["edges"]
+                            if edge["consumer_build_unit_id"] in unit_owners
+                            and edge["producer_build_unit_id"] in unit_owners}
     seen_components: set[str] = set()
     edges: dict[str, set[str]] = {}
     for index, item in enumerate(values):
@@ -372,18 +388,21 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
         systems = item["build_systems"]
         scope = item["scope_paths"]
         dependencies = item["dependencies"]
-        if (not isinstance(scanners, list) or len(scanners) > len(SCANNERS) or
-                any(not isinstance(value, str) or value not in SCANNERS for value in scanners) or
+        if (not isinstance(scanners, list) or len(scanners) > min(20, len(SCANNERS)) or
+                any(not isinstance(value, str) or value not in SCANNERS or value not in scanner_boundary
+                    for value in scanners) or
                 len(scanners) != len(set(scanners))):
             errors.append(f"{where}: scanner selection is not allowlisted")
-        if (not isinstance(systems, list) or len(systems) > len(BUILD_SYSTEMS) or
-                any(not isinstance(value, str) or value not in BUILD_SYSTEMS for value in systems) or
+        if (not isinstance(systems, list) or len(systems) > min(24, len(BUILD_SYSTEMS)) or
+                any(not isinstance(value, str) or value not in BUILD_SYSTEMS or value not in system_boundary
+                    for value in systems) or
                 len(systems) != len(set(systems))):
             errors.append(f"{where}: build system is not allowlisted")
-        root = str(components.get(component_id, {}).get("root", ""))
-        scope_valid = (isinstance(scope, list) and len(scope) <= len(paths) and
-                       all(isinstance(value, str) and value in paths and value in path_boundary and
-                           _under(value, root) for value in scope) and
+        elif not set(systems) <= component_systems[component_id]:
+            errors.append(f"{where}: build system is not derived from accepted component build units")
+        scope_valid = (isinstance(scope, list) and len(scope) <= min(10000, len(paths)) and
+                       all(isinstance(value, str) and len(value) <= 512 and value in paths and value in path_boundary and
+                           value in owned_paths.get(component_id, ()) for value in scope) and
                        len(scope) == len(set(scope)))
         if not scope_valid:
             errors.append(f"{where}: scope is not an accepted bounded path beneath the component")
@@ -398,6 +417,10 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
             errors.append(f"{where}: dependency is not an accepted component identity")
         else:
             edges[component_id] = set(dependencies)
+            if any(dependency not in component_boundary for dependency in dependencies):
+                errors.append(f"{where}: dependency is outside the bounded component request")
+            if any((component_id, dependency) not in derived_dependencies for dependency in dependencies):
+                errors.append(f"{where}: dependency is not derived from deterministic source relationships")
         reason = item["reason"]
         if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 2048:
             errors.append(f"{where}: reason is missing or exceeds the bound")
@@ -442,7 +465,9 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
 
 def merge_proposal(plan: Mapping[str, Any], proposal: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any]:
     if proposal.get("component_proposals") != []:
-        raise ValueError("component ownership and scanner choices are deterministic, not model authority")
+        errors = validate_proposal(proposal, catalog=catalog)
+        if errors:
+            raise ValueError("invalid bounded component proposal: " + "; ".join(errors))
     result = copy.deepcopy(dict(plan))
     path_hashes = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
     components = {item["component_id"]: item for item in result["components"]}
@@ -581,9 +606,13 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                 or len({item["path"] for item in documents}) != len(documents)
                 or sum(len(item["content"].encode()) for item in documents) > limits.max_evidence_bytes
                 or any(len(item["content"].encode()) > limits.max_document_bytes for item in documents)
+                or any(item["path"] not in request.allowed_paths for item in documents)
                 or model_safe(documents) != documents or model_safe(cached["proposal"]) != cached["proposal"]
                 or cached["proposal"].get("abstentions") != []
-                or validate_proposal(cached["proposal"], catalog=augmented)):
+                or validate_proposal(cached["proposal"], catalog=augmented,
+                    allowed_components=request.allowed_components, allowed_paths=request.allowed_paths,
+                    allowed_scanners=request.allowed_scanners,
+                    allowed_build_systems=request.allowed_build_systems)):
             raise ValueError("feedback cache is not a complete validated final")
         metrics["evidence_bytes"] = sum(len(item["content"].encode()) for item in documents)
         return finish({"status": "ACCEPTED", "proposal": cached["proposal"], "documents": documents,
@@ -655,6 +684,7 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                             or not isinstance(item["reason"], str) or not item["reason"].strip()
                             or len(item["reason"].encode()) > 2048
                             or item["path"] not in inventory
+                            or item["path"] not in current.allowed_paths
                             or inventory[item["path"]]["sha256"] != item["sha256"]
                             or not any(_under(item["path"], root) for root in roots)):
                         request_errors.append("evidence_identity_or_scope_rejected")
@@ -701,7 +731,10 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                 proposal["build_recipes"] = [
                     normalize_build_recipe(recipe, units.get(str(recipe.get("build_unit_id"))))
                     if isinstance(recipe, Mapping) else recipe for recipe in recipes]
-            errors = validate_proposal(proposal, catalog=augmented)
+            errors = validate_proposal(proposal, catalog=augmented,
+                allowed_components=current.allowed_components, allowed_paths=current.allowed_paths,
+                allowed_scanners=current.allowed_scanners,
+                allowed_build_systems=current.allowed_build_systems)
             if not errors:
                 withheld = proposal["abstentions"]
                 status = "PARTIAL" if withheld else "ACCEPTED"

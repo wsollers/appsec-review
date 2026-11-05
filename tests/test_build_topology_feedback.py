@@ -85,6 +85,177 @@ def test_proposal3_final_uses_actual_validator_and_immutable_complete_cache(tmp_
     assert cached["proposal"] == result["proposal"]
 
 
+def _component_inputs():
+    texts = {
+        "CMakeLists.txt": "project(control)\n",
+        "lib/CMakeLists.txt": "project(lib)\nadd_library(control_lib STATIC core.c)\n",
+        "lib/core.c": "int control(void) { return 1; }\n",
+        "app/CMakeLists.txt": "project(app)\nadd_executable(control_app main.c)\ntarget_link_libraries(control_app control_lib)\n",
+        "app/main.c": "int main(void) { return 0; }\n",
+    }
+    files = [{"path": path, "sha256": hashlib.sha256(text.encode()).hexdigest(),
+              "size_bytes": len(text.encode())} for path, text in texts.items()]
+    units = discover_build_units(files)
+    for unit in units:
+        unit["descriptor_package"] = {"documents": [
+            {"path": item["path"], "sha256": item["sha256"], "content": texts[item["path"]]}
+            for item in files if str(Path(item["path"]).parent) == unit["root"]],
+            "bounds": {}, "gaps": []}
+    components = [{"component_id": "component:" + name, "root": root,
+                   "manifest": "CMakeLists.txt" if root == "." else root + "/CMakeLists.txt"}
+                  for name, root in (("root", "."), ("lib", "lib"), ("app", "app"))]
+    catalog = {"source_fingerprint": "synthetic-component-source", "catalog_handoff_sha256": "c" * 64,
+               "files": files, "components": components, "projects": [], "build_files": [],
+               "build_units": units, "gaps": [], "accepted_artifacts": [], "compile_databases": []}
+    proposal = {"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "build_recipes": [],
+                "abstentions": [{"build_unit_id": unit["build_unit_id"],
+                                 "reason": "component API proposal does not supply a recipe"}
+                                for unit in units],
+                "component_proposals": [
+                    {"component_id": "component:app", "scanner_ids": ["tool-semgrep"],
+                     "build_systems": ["cmake"], "scope_paths": ["app/main.c"],
+                     "dependencies": ["component:lib"], "reason": "accepted descriptor relationship"},
+                    {"component_id": "component:lib", "scanner_ids": ["tool-semgrep"],
+                     "build_systems": ["cmake"], "scope_paths": ["lib/core.c"],
+                     "dependencies": [], "reason": "accepted source component"}]}
+    return catalog, proposal
+
+
+def test_catalog_grounded_component_api_preserves_the_single_whole_bundle_compiler():
+    catalog, proposal = _component_inputs()
+    original = copy.deepcopy(catalog)
+    plan = deterministic_plan(catalog, summarize_catalog(
+        catalog, max_items=100, max_bytes=65536, sample_per_prefix=10))
+    graph = plan["build_topology"]["executable_graph"]
+    roots = {node["build_unit_id"]: node["root"] for node in graph["nodes"]}
+    assert any(roots[edge["consumer_build_unit_id"]] == "app" and
+               roots[edge["producer_build_unit_id"]] == "lib" for edge in graph["edges"])
+    assert validate_proposal(proposal, catalog=catalog) == []
+    assert validate_proposal(proposal, catalog=catalog,
+        allowed_components=("component:app", "component:lib"),
+        allowed_paths=("app/main.c", "lib/core.c"), allowed_scanners=("tool-semgrep",),
+        allowed_build_systems=("cmake",)) == []
+    variants = [proposal, {**proposal, "component_proposals": []},
+                {**proposal, "component_proposals": proposal["component_proposals"][:1]},
+                {**proposal, "component_proposals": list(reversed(proposal["component_proposals"]))}]
+    for value in variants:
+        merged = merge_proposal(plan, value, catalog)
+        validate_plan(merged, catalog)
+        assert merged["build_topology"]["executable_graph"] == graph
+        assert merged["components"][0]["scope"] == plan["components"][0]["scope"]
+    assert catalog == original
+
+
+@pytest.mark.parametrize("change,expected", [
+    ("foreign_component", "accepted bounded catalog identity"),
+    ("foreign_path", "accepted bounded path"),
+    ("unsupported_scanner", "scanner selection is not allowlisted"),
+    ("inapplicable_scanner", "deterministic safety rules"),
+    ("non_derived_system", "not derived from accepted component"),
+    ("foreign_dependency", "accepted component identity"),
+    ("non_derived_dependency", "not derived from deterministic"),
+    ("self_dependency", "accepted component identity"),
+    ("cycle", "contain a cycle"),
+    ("component_boundary", "accepted bounded catalog identity"),
+    ("path_boundary", "accepted bounded path"),
+    ("scanner_boundary", "scanner selection is not allowlisted"),
+    ("system_boundary", "build system is not allowlisted"),
+])
+def test_component_api_rejects_foreign_non_derived_cyclic_and_request_boundary_claims(change, expected):
+    catalog, proposal = _component_inputs()
+    item = proposal["component_proposals"][0]
+    boundaries = {}
+    if change == "foreign_component":
+        item["component_id"] = "component:foreign"
+    elif change == "foreign_path":
+        item["scope_paths"] = ["lib/core.c"]
+    elif change == "unsupported_scanner":
+        item["scanner_ids"] = ["tool-arbitrary-shell"]
+    elif change == "inapplicable_scanner":
+        item["scanner_ids"] = ["tool-mobsfscan"]
+    elif change == "non_derived_system":
+        item["build_systems"] = ["go"]
+    elif change == "foreign_dependency":
+        item["dependencies"] = ["component:foreign"]
+    elif change == "self_dependency":
+        item["dependencies"] = ["component:app"]
+    elif change in {"non_derived_dependency", "cycle"}:
+        proposal["component_proposals"][1]["dependencies"] = ["component:app"]
+        if change == "non_derived_dependency":
+            item["dependencies"] = []
+    else:
+        boundaries[{"component_boundary": "allowed_components", "path_boundary": "allowed_paths",
+                    "scanner_boundary": "allowed_scanners", "system_boundary": "allowed_build_systems"}[change]] = ()
+    errors = validate_proposal(proposal, catalog=catalog, **boundaries)
+    assert any(expected in error for error in errors)
+    if not boundaries:
+        plan = deterministic_plan(catalog, summarize_catalog(
+            catalog, max_items=100, max_bytes=65536, sample_per_prefix=10))
+        with pytest.raises(ValueError, match="invalid bounded component proposal"):
+            merge_proposal(plan, proposal, catalog)
+
+
+@pytest.mark.parametrize("boundary", ["components", "scanners"])
+def test_actual_feedback_enforces_empty_request_component_and_scanner_allowlists(tmp_path, boundary):
+    catalog, request, final, texts = _inputs()
+    catalog["components"] = [{"component_id": "component:native", "root": "native", "manifest": None}]
+    final["component_proposals"] = [{
+        "component_id": "component:native", "scanner_ids": ["tool-semgrep"],
+        "build_systems": ["cmake"], "scope_paths": ["native/main.c"], "dependencies": [],
+        "reason": "catalog-grounded but outside this actual worker request"}]
+    assert validate_proposal(final, catalog=catalog) == []
+    if boundary == "scanners":
+        request = replace(request, allowed_components=("component:native",))
+    calls = []
+    def infer(current, *, timeout_seconds):
+        calls.append(current)
+        return ModelResult(final)
+    result = bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
+        read_document=lambda *_: pytest.fail("final cannot request evidence"), cache_root=tmp_path / "cache",
+        identity={"environment": "ABSENT"})
+    assert result["status"] == "BUDGET_EXCEEDED" and result["calls"] == len(calls) == 4
+    expected = "accepted bounded catalog identity" if boundary == "components" else "scanner selection"
+    assert any(expected in error for error in result["errors"])
+    assert not list((tmp_path / "cache").glob("*.json"))
+    cached = {"key": result["cache_key"], "status": "COMPLETE", "proposal": final, "documents": []}
+    (tmp_path / "cache" / (result["cache_key"] + ".json")).write_bytes(json.dumps(cached).encode())
+    with pytest.raises(ValueError, match="complete validated final"):
+        bounded_feedback(lambda *_a, **_kw: pytest.fail("out-of-request cache must not call a model"),
+            request, catalog=catalog, limits=PlanningFeedbackSettings(),
+            read_document=lambda *_: pytest.fail("out-of-request cache cannot retrieve evidence"),
+            cache_root=tmp_path / "cache", identity={"environment": "ABSENT"})
+
+
+def test_actual_feedback_evidence_and_cache_honor_explicit_request_paths(tmp_path):
+    catalog, request, final, texts = _inputs()
+    request = replace(request, allowed_paths=("native/CMakeLists.txt", "native/main.c"))
+    document = next(item for item in catalog["files"] if item["path"] == "native/extra.h")
+    need = {"schema": PROPOSAL_SCHEMA, "action": "need_evidence", "requests": [{
+        "path": document["path"], "sha256": document["sha256"], "reason": "outside explicit request"}]}
+    calls = []
+    def infer(current, *, timeout_seconds):
+        calls.append(current)
+        if len(calls) == 1:
+            return ModelResult(need)
+        assert current.repair_errors == ("evidence_identity_or_scope_rejected",)
+        return ModelResult(final)
+    result = bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
+        read_document=lambda *_: pytest.fail("unoffered source must not be read"),
+        cache_root=tmp_path / "cache", identity={})
+    assert result["status"] == "ACCEPTED" and result["calls"] == len(calls) == 2
+    assert result["documents"] == []
+    cache = tmp_path / "cache" / (result["cache_key"] + ".json")
+    cached = json.loads(cache.read_bytes())
+    cached["documents"] = [{"path": document["path"], "sha256": document["sha256"],
+                            "content": texts[document["path"]]}]
+    cache.write_bytes(json.dumps(cached).encode())
+    with pytest.raises(ValueError, match="complete validated final"):
+        bounded_feedback(lambda *_a, **_kw: pytest.fail("out-of-request cache must not call a model"),
+            request, catalog=catalog, limits=PlanningFeedbackSettings(),
+            read_document=lambda *_: pytest.fail("cache cannot retrieve unoffered evidence"),
+            cache_root=tmp_path / "cache", identity={})
+
+
 def test_evidence_round_resolves_exact_bytes_without_model_graph_authority(tmp_path):
     catalog, _, final, texts = _inputs()
     item = next(item for item in catalog["files"] if item["path"] == "native/extra.h")
@@ -516,3 +687,58 @@ def test_transport_success_keeps_one_dispatch_and_the_original_result(tmp_path, 
     assert infer(request, timeout_seconds=30) is result
     assert calls == [(request, 30)] and not list((tmp_path / "data/execution-failures").glob("*.json"))
     assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == [True]
+
+
+@pytest.mark.parametrize("prefix", ['@set "', 'set "'])
+@pytest.mark.parametrize("sensitive", [False, True])
+@pytest.mark.parametrize("ending", ["\n", "\r\n"])
+def test_quoted_batch_evidence_is_byte_exact_or_withheld_before_model_and_cache(
+        tmp_path, prefix, sensitive, ending):
+    catalog, request, final, _ = _inputs()
+    text = prefix + ("API_TOKEN=SYNTHETIC_BOUNDARY_SENTINEL" if sensitive else
+                     "SDK_ROOT=tools/sdk") + '"' + ending
+    data = text.encode()
+    document = {"path": "native/setup.cmd", "sha256": hashlib.sha256(data).hexdigest(),
+                "size_bytes": len(data)}
+    catalog["files"].append(document)
+    before = copy.deepcopy(catalog)
+    need = {"schema": PROPOSAL_SCHEMA, "action": "need_evidence", "requests": [{
+        "path": document["path"], "sha256": document["sha256"], "reason": "exact synthetic batch evidence"}]}
+    calls = []
+    def infer(current, *, timeout_seconds):
+        calls.append(current)
+        assert "SYNTHETIC_BOUNDARY_SENTINEL" not in repr(current)
+        if len(calls) == 1:
+            return ModelResult(need)
+        if sensitive:
+            assert current.repair_errors == ("sensitive_evidence_withheld",)
+            assert "evidence" not in current.summary
+        else:
+            assert current.summary["evidence"] == [{
+                "path": document["path"], "sha256": document["sha256"], "content": text}]
+        return ModelResult(final)
+    result = bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
+        read_document=lambda item, bound: data, cache_root=tmp_path / "cache", identity={})
+    assert result["status"] == "ACCEPTED" and result["calls"] == len(calls) == 2
+    assert result["documents"] == ([] if sensitive else [{
+        "path": document["path"], "sha256": document["sha256"], "content": text}])
+    assert catalog == before and document["sha256"] == hashlib.sha256(data).hexdigest()
+    cache = tmp_path / "cache" / (result["cache_key"] + ".json")
+    contents = cache.read_bytes()
+    assert b"SYNTHETIC_BOUNDARY_SENTINEL" not in contents
+    if sensitive:
+        # A hash-consistent but sensitive old cache must fail, not replay its raw document.
+        cached = json.loads(contents)
+        cached["documents"] = [{"path": document["path"], "sha256": document["sha256"], "content": text}]
+        cache.write_text(json.dumps(cached), encoding="utf-8")
+        with pytest.raises(ValueError, match="complete validated final"):
+            bounded_feedback(lambda *_a, **_kw: pytest.fail("corrupt cache must not call a model"),
+                request, catalog=catalog, limits=PlanningFeedbackSettings(),
+                read_document=lambda *_: pytest.fail("corrupt cache must not read evidence"),
+                cache_root=tmp_path / "cache", identity={})
+    else:
+        cached = bounded_feedback(lambda *_a, **_kw: pytest.fail("complete cache should replay"),
+            request, catalog=catalog, limits=PlanningFeedbackSettings(),
+            read_document=lambda *_: pytest.fail("complete cache must retain exact bytes"),
+            cache_root=tmp_path / "cache", identity={})
+        assert cached["cache_hit"] is True and cached["documents"] == result["documents"]

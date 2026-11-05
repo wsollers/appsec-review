@@ -218,10 +218,12 @@ class JobRunner:
         else:
             raise RuntimeError(f"attempt id space exhausted for {run_id}/{job.job_id}")
         correlation = dict(orchestration or {})
+        required_upstream = dict(upstream_handoffs or {})
         if job.job_id == "job_target_analysis_plan":
-            from appsec_review.jobs.job_build_environment_analysis.job import environment_contract
-            correlation["build_environment_contract"] = canonical_json(
-                environment_contract(self.config, correlation, upstream_handoffs or {})).decode()
+            from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
+            contract, required_upstream = planning_environment_inputs(
+                self.config, run_root, source_fingerprint, correlation, required_upstream)
+            correlation["build_environment_contract"] = canonical_json(contract).decode()
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
             raise ValueError("orchestration correlation must contain string keys and values")
         claim = {
@@ -234,7 +236,7 @@ class JobRunner:
             "repository_root": str(self.config.runtime.repository_root),
             "resolved_config_sha256": self.config.resolved_sha256,
             "review_policy": self.config.review_policy.view(),
-            "upstream_handoffs": dict(upstream_handoffs or {}),
+            "upstream_handoffs": required_upstream,
             "input_identity": job.probe_input_identity(target_root, run_root),
             "job_config_sha256": job_config_sha256(self.config, job.job_id),
             "unit_ids": [unit.unit_id for unit in job.units],
@@ -303,13 +305,17 @@ class JobRunner:
             run_root = self.runs.resolve(str(run_id))
             if job.job_id == "job_target_analysis_plan":
                 from appsec_review.jobs.job_build_environment_analysis.job import (
-                    environment_contract, load_environment,
+                    load_environment, planning_environment_inputs,
                 )
-                load_environment(run_root, source_fingerprint, environment_contract(
-                    self.config, kwargs.get("orchestration") or {}, upstream))
+                contract, required_upstream = planning_environment_inputs(
+                    self.config, run_root, source_fingerprint, kwargs.get("orchestration") or {}, upstream)
+                load_environment(run_root, source_fingerprint, contract)
+            else:
+                required_upstream = upstream
             reasons, handoff_hash = ResumePlanner(
                 self.config, run_root, (job,), source_fingerprint,
-                target_root=kwargs.get("target_root")).accepted(job, upstream)
+                target_root=kwargs.get("target_root"),
+                orchestration=kwargs.get("orchestration")).accepted(job, upstream)
             if not reasons and handoff_hash is not None:
                 pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
                 handoff_path = safe_path(run_root, pointer["handoff_path"])
@@ -336,12 +342,14 @@ class JobRunner:
                          "trigger": str(kwargs.get("trigger", "manual")),
                          "orchestration": dict(kwargs.get("orchestration") or {}),
                          "target_root": str(kwargs["target_root"].resolve()) if kwargs.get("target_root") else None,
-                         "source_fingerprint": source_fingerprint, "upstream_handoffs": upstream,
+                         "source_fingerprint": source_fingerprint, "upstream_handoffs": required_upstream,
                          "started_at": handoff["started_at"], "reused": True,
                          "handoff_path": handoff_path.relative_to(run_root).as_posix(),
                          "handoff_sha256": handoff_hash,
                          "repository_root": str(self.config.runtime.repository_root),
                          "resolved_config_sha256": self.config.resolved_sha256}
+                if job.job_id == "job_target_analysis_plan":
+                    claim["orchestration"]["build_environment_contract"] = canonical_json(contract).decode()
                 for key in ("evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256"):
                     if key in original_claim:
                         claim[key] = original_claim[key]

@@ -26,12 +26,22 @@ SUPPORTED = {".sh", ".bash", ".bat", ".cmd"}
 WORKFLOWS = {"wave1_review", "project_build_review"}
 
 
+def _assignment(line: str):
+    declaration = line.strip()
+    quoted = re.fullmatch(r'(?i)@?set\s+"([^"]*)"', declaration)
+    if quoted:
+        declaration = quoted[1]
+    else:
+        declaration = re.sub(r"(?i)^@set\s+", "set ", declaration)
+    return ASSIGNMENT.fullmatch(declaration)
+
+
 def redact(text: str) -> str:
     lines = []
     for original in text.splitlines(keepends=True):
         line = original.rstrip("\r\n")
         declaration = re.sub(r"(?i)^\s*(?:ENV|ARG)\s+", "", line)
-        match = ASSIGNMENT.fullmatch(declaration.strip())
+        match = _assignment(declaration)
         sensitive = ((match and SECRET.search(match[1]))
                      or re.search(r"(?i)\b(?:ENV|ARG)\s+.*\b(?:password|passwd|secret|token|"
                                   r"credential|private[_-]?key|api[_-]?key)\b", line))
@@ -46,18 +56,44 @@ def environment_contract(config, orchestration, upstream):
     configured = config.jobs.get(JOB_ID)
     enabled = configured is not None and configured.settings.get("enabled", True)
     expected = enabled and (workflow in WORKFLOWS or JOB_ID in upstream)
-    optional = orchestration.get("environment_mode") == "OPTIONAL_PRIOR"
+    requested_mode = orchestration.get("environment_mode")
+    if requested_mode not in {None, "OPTIONAL_PRIOR"}:
+        raise ValueError("unsupported explicit environment mode")
+    optional = requested_mode == "OPTIONAL_PRIOR"
+    supplied_reference = orchestration.get("environment_reference")
+    if supplied_reference is not None and (not optional or not isinstance(supplied_reference, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", supplied_reference)):
+        raise ValueError("explicit environment reference requires optional prior mode and an exact hash")
+    if optional and configured is not None and not enabled:
+        raise ValueError("disabled environment producer cannot supply optional prior evidence")
     if optional and workflow in WORKFLOWS:
         raise ValueError("scheduled environment producer cannot be optional prior evidence")
+    reference = upstream.get(JOB_ID)
+    if optional:
+        if supplied_reference is not None and reference is not None and supplied_reference != reference:
+            raise ValueError("conflicting optional environment references")
+        reference = supplied_reference if supplied_reference is not None else reference
+        if not isinstance(reference, str) or not re.fullmatch(r"[a-f0-9]{64}", reference):
+            raise ValueError("optional prior environment requires an explicitly supplied exact reference")
     mode = ("DISABLED" if configured is not None and not enabled else
             "OPTIONAL_PRIOR" if optional else "EXPECTED_CURRENT" if expected else "NOT_RUN")
     return {"schema": "appsec-review/build-environment-availability/1",
-            "workflow": workflow, "expected_producer": JOB_ID if expected else None,
-            "mode": mode, "reference": upstream.get(JOB_ID),
+            "workflow": workflow, "expected_producer": JOB_ID if mode == "EXPECTED_CURRENT" else None,
+            "mode": mode, "reference": reference,
             "reason": {"DISABLED": "explicit configuration disables the producer",
                        "NOT_RUN": "trusted standalone launch does not schedule the producer",
                        "OPTIONAL_PRIOR": "trusted standalone launch supplied optional prior evidence",
                        "EXPECTED_CURRENT": "workflow requires the current accepted producer"}[mode]}
+
+
+def planning_environment_inputs(config, run_root, source_fingerprint, orchestration, upstream):
+    contract = environment_contract(config, orchestration, upstream)
+    required = dict(upstream)
+    if contract["mode"] == "OPTIONAL_PRIOR":
+        load_environment(run_root, source_fingerprint, contract)
+        # Optional evidence keeps its signed reference but grants no required target lineage.
+        required.pop(JOB_ID, None)
+    return contract, required
 
 
 def _read(run_root, identity, *, byte_limit=16 * 1024 * 1024):
@@ -238,7 +274,7 @@ def analyze_environment(catalog, read_document, settings, *, clock=time.monotoni
                         pending.append((target, depth + 1, True))
                 else:
                     gaps.append(f"{path}: unresolved_sourcing")
-            match = ASSIGNMENT.fullmatch(line.strip())
+            match = _assignment(line)
             if not match:
                 if line.strip() and not line.lstrip().startswith(("#", "::", "REM ", "rem ")) and not source:
                     gaps.append(f"{path}: unsupported_script_statement")

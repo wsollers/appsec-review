@@ -17,6 +17,9 @@ or native target proof.
 4096 assignments, source depth four and a 30-second internal deadline. Settings may tighten,
 not exceed, these ceilings. Long declaration values are withheld with a named gap.
 Credential-bearing URLs and sensitive assignments are redacted before publication or inference.
+Literal batch `set "NAME=value"` and `@set "NAME=value"` use the same assignment boundary:
+safe bytes and line endings are preserved, sensitive values are withheld from additive evidence
+and complete caches, and the original source hash is never rewritten to accept redacted bytes.
 Raw script content is not the environment output.
 
 The accepted sensitive artifact is `build-environment.json` beneath the producer's publication
@@ -38,6 +41,18 @@ Optional prior evidence must pass integrity validation before staleness is consi
 current publication must bind the current accepted catalog. Accepted-plan readers and planner
 reuse admission compare these identities again. Disabling this producer does not disable native
 recipe/refinement guards, and declared developer settings never replace compiler enforcement.
+Optional-prior mode and its exact reference come from the trusted launch metadata, including on
+resume; they are not inferred from an old artifact or replaced with expected-current semantics.
+An unscheduled producer is supplied explicitly as `environment_mode = "OPTIONAL_PRIOR"` and
+`environment_reference = "<accepted handoff SHA-256>"` in host orchestration metadata. A supplied
+producer upstream reference may express the same identity; conflicting references, unsupported
+modes and attempts to downgrade a scheduled producer block. Without either explicit prior
+reference, an unscheduled producer remains `NOT_RUN`, not an inferred previous publication.
+After integrity validation, only deliberately optional environment evidence is omitted from
+required target-evidence/manifest lineage. Its exact reference and availability remain pinned in
+the signed launch contract, accepted plan, evidence/cache identity and reuse comparisons.
+Required current producers and all other upstream dependencies remain unchanged. Graph plan
+and run propagate the same host orchestration identity on initial and deferred resume paths.
 
 ## Verification boundary
 

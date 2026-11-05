@@ -243,8 +243,11 @@ marker does not prove a separate build or every dependency edge.
 Cross-owner edges are `requires_product` or `order_only`, not shortest-root component
 projection. CMake target interfaces use `cmake-target:<name>` and product IDs `cmake:<name>`.
 Cycles, ambiguous ownership, unresolved/external requirements, and dynamic or unsupported
-declarations remain named gaps. Component `depends_on` is retained as nonblocking
-`unresolved_component_dependency`, not silently turned into a verified build prerequisite.
+declarations remain named gaps. The compatible component-proposal helper may retain only
+relationships already derived by that compiler; foreign, non-derivable or cyclic dependencies
+are rejected. These advisory component annotations never create scheduling edges or native proof.
+The actual model worker has empty component/scanner request allowlists, independent of the
+bounded helper/API contract.
 Every nonempty graph also records `incomplete_dependency_discovery`: no discovered edge is
 not proof that two units are independent. The accepted graph must equal recompilation from
 the accepted declarations; graphless old plans require replanning.

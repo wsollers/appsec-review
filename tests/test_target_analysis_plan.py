@@ -635,7 +635,7 @@ def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path
     assert all(value["status"] == "BUDGET_EXCEEDED" and value["calls"] == 4
                for value in plan["feedback"])
     assert all(action["recipe"] is None for action in plan["build_topology"]["build_actions"])
-    assert any("component ownership and scanner choices are deterministic" in gap
+    assert any("component is not an accepted bounded catalog identity" in gap
                for gap in plan["coverage_gaps"])
     assert {"tool-gitleaks", "tool-semgrep", "tool-syft"} <= {
         item["scanner_id"] for item in plan["scanner_selections"]}
@@ -678,10 +678,18 @@ def test_summary_bounds_and_prompt_injection_names_are_data() -> None:
     final = {"schema": PROPOSAL_SCHEMA, "action": "final", "component_proposals": [],
              "build_recipes": [], "hints": [], "abstentions": []}
     assert validate_proposal(final, catalog=catalog) == []
-    assert validate_proposal({**final, "component_proposals": [{
+    proposal = {**final, "component_proposals": [{
         "component_id": "component:0001", "scanner_ids": ["tool-semgrep"], "build_systems": [],
-        "scope_paths": [files[0]["path"]], "dependencies": [], "reason": "data only"}],
-        }, catalog=catalog) == ["component ownership and scanner choices are deterministic, not model authority"]
+        "scope_paths": [files[0]["path"]], "dependencies": [], "reason": "data only"}]}
+    assert validate_proposal(proposal, catalog=catalog) == []
+    merged = merge_proposal(first, proposal, catalog)
+    validate_plan(merged, catalog)
+    assert merged["build_topology"]["executable_graph"] == first["build_topology"]["executable_graph"]
+    assert merged["components"][0]["scope"] == first["components"][0]["scope"]
+    assert next(item for item in merged["scanner_selections"]
+                if item["scanner_id"] == "tool-semgrep")["scope"] == (
+                    next(item for item in first["scanner_selections"]
+                         if item["scanner_id"] == "tool-semgrep")["scope"])
 
 
 def test_summary_trimming_does_not_mutate_accepted_descriptor_authority() -> None:
@@ -870,7 +878,8 @@ def test_optional_execution_cwd_survives_plan_acceptance_without_changing_catalo
               "execution_cwd": {"configure": "build", "build": "build"},
               "expected_outputs": ["build"], "network_required": False,
               "reason": "accepted configure/build phase execution directory"}
-    proposal = {"schema": PROPOSAL_SCHEMA, "component_proposals": [], "build_recipes": [recipe]}
+    proposal = {"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                "component_proposals": [], "build_recipes": [recipe]}
     assert validate_proposal(proposal, catalog=catalog) == []
     accepted = merge_proposal(plan, proposal, catalog)
     validate_plan(accepted, catalog)

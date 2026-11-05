@@ -54,14 +54,20 @@ def job_config_sha256(config: AppConfig, job_id: str) -> str:
 
 class ResumePlanner:
     def __init__(self, config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str,
-                 target_root: Path | None = None):
+                 target_root: Path | None = None, *, orchestration: Mapping[str, str] | None = None):
         self.config = config
         self.target_root = target_root
         self.run_root = Path(run_root)
         self.jobs = tuple(jobs)
         self.source_fingerprint = source_fingerprint
+        self.orchestration = dict(orchestration or {})
 
     def _accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[list[str], str | None]:
+        contract = None
+        if job.job_id == "job_target_analysis_plan":
+            from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
+            contract, upstream = planning_environment_inputs(
+                self.config, self.run_root, self.source_fingerprint, self.orchestration, upstream)
         if job.always_execute:
             return ["job requires a fresh execution for every graph dispatch"], None
         latest = self.run_root / "data" / "jobs" / job.job_id / "latest.json"
@@ -105,15 +111,11 @@ class ResumePlanner:
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
         if job.job_id == "job_target_analysis_plan":
             from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
-            from appsec_review.jobs.job_build_environment_analysis.job import (
-                environment_contract, load_environment,
-            )
+            from appsec_review.jobs.job_build_environment_analysis.job import load_environment
             # A planner reused by a graph still consumes the current accepted environment.
-            current = load_environment(self.run_root, self.source_fingerprint,
-                                       environment_contract(self.config, {}, upstream))
+            current = load_environment(self.run_root, self.source_fingerprint, contract)
             stored = load_accepted_plan(self.run_root).get("build_environment")
-            if stored is None or any(stored[key] != current[key] for key in
-                                     ("availability", "artifact", "evidence", "reference", "mode")):
+            if stored != current:
                 reasons.append("planning environment availability identity changed")
         if job.job_id in {"job_project_build", "job_language_build", "job_build_iteration"}:
             try:

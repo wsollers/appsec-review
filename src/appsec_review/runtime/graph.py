@@ -46,15 +46,16 @@ class GraphRunner:
         return position
 
     def plan(self, run_id: str, source_fingerprint: str | None, *, force_from: str | None = None,
-             target_root: Path | None = None):
+             target_root: Path | None = None, orchestration: Mapping[str, str] | None = None):
         """Explain resume decisions; ``None`` plans the target-reading suffix against the current
         target, and the leading live gates always run."""
         run_root = JobRunner(self.config).runs.resolve(run_id)
         if source_fingerprint is not None:
             return ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
-                                 target_root=target_root).plan(force_from=force_from)
+                                 target_root=target_root, orchestration=orchestration).plan(force_from=force_from)
         position = self._split()
-        head = ResumePlanner(self.config, run_root, self.jobs[:position], "none").plan(
+        head = ResumePlanner(self.config, run_root, self.jobs[:position], "none",
+                             orchestration=orchestration).plan(
             force_from=force_from if force_from in {job.job_id for job in self.jobs[:position]} else None,
             emit_event=False)
         from appsec_review.jobs.cataloging import source_fingerprint as fingerprint_of
@@ -64,7 +65,7 @@ class GraphRunner:
             return head + tail
         suffix_force = force_from if force_from in {job.job_id for job in self.jobs[position:]} else None
         return head + ResumePlanner(self.config, run_root, self.jobs[position:], fingerprint_of(target_root),
-                                    target_root=target_root).plan(
+                                    target_root=target_root, orchestration=orchestration).plan(
             force_from=suffix_force, invalidated=force_from is not None and suffix_force is None)
 
     def run(
@@ -145,10 +146,10 @@ class GraphRunner:
                 details={"source_fingerprint": source_fingerprint or "deferred"})
             head_ids = {job.job_id for job in self.jobs[:position]}
             decisions: list[ResumeDecision] = list(ResumePlanner(
-                self.config, run_root, self.jobs[:position], "none").plan(
+                self.config, run_root, self.jobs[:position], "none", orchestration=orchestration).plan(
                 force_from=force_from if force_from in head_ids else None)) if deferred else list(
                 ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
-                              target_root=target_root).plan(force_from=force_from))
+                              target_root=target_root, orchestration=orchestration).plan(force_from=force_from))
             upstream: dict[str, str] = {}
             completed_handoffs: dict[str, str] = {}
             outcomes: dict[str, Any] = {}
@@ -165,7 +166,7 @@ class GraphRunner:
                         suffix_force = force_from if force_from not in head_ids else None
                         decisions.extend(ResumePlanner(
                             self.config, run_root, self.jobs[position:], source_fingerprint,
-                            target_root=target_root).plan(
+                            target_root=target_root, orchestration=orchestration).plan(
                             force_from=suffix_force, initial_upstream=upstream,
                             invalidated=force_from is not None and suffix_force is None))
                     job, decision = self.jobs[index], decisions[index]
