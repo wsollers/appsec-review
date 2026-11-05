@@ -168,6 +168,46 @@ def test_real_static_producer_publication_and_strict_current_reader(tmp_path):
         (root / value["artifact"]["path"]).read_bytes()).hexdigest()
 
 
+def test_real_environment_publication_uses_registered_build_dataset_contract(tmp_path):
+    from appsec_review.jobs.job_build_environment_analysis.datasets import CONSUMES, DATASETS
+    from appsec_review.runtime.datasets import FAMILIES, METADATA_ROUTE, read_dataset_contract
+
+    producer = build_job()
+    assert producer.datasets == DATASETS and producer.consumes == CONSUMES == ("job_target_catalog",)
+    declaration, = producer.datasets
+    assert declaration.family == "build" and declaration.family in FAMILIES
+    assert "build_environment" not in FAMILIES
+    assert declaration.output_kind == "build_environment"
+    assert declaration.step == "environment_analysis"
+    assert declaration.schema == producer.schema_identity == "appsec-review/build-environment-analysis/1"
+    assert declaration.sensitivity == "sensitive" and declaration.disposition == "artifact_only"
+    assert declaration.query_route == METADATA_ROUTE
+    assert declaration.reason == "advisory source declarations; never recipe-enforced target proof"
+    assert declaration.artifacts == (
+        "data/jobs/job_build_environment_analysis/attempts/*/steps/"
+        "environment_analysis/tasks/publish_handoff/build-environment.json",)
+    with pytest.raises(ValueError, match="unknown dataset family: build_environment"):
+        replace(declaration, family="build_environment")
+
+    _, root, source, contract = _published(tmp_path)
+    environment = load_environment(root, source, contract)
+    pointer = json.loads((root / "data/jobs" / JOB_ID / "latest.json").read_bytes())
+    handoff_bytes = (root / pointer["handoff_path"]).read_bytes()
+    assert hashlib.sha256(handoff_bytes).hexdigest() == contract["reference"]
+    handoff = json.loads(handoff_bytes)
+    claim = json.loads((root / handoff["resolving_paths"]["attempt"] / "claim.json").read_bytes())
+    steps, published = read_dataset_contract(claim["dataset_contract"], JOB_ID)
+    assert steps == ("environment_analysis",) and published == DATASETS
+    assert handoff["dataset_contract_sha256"] == claim["dataset_contract"]["sha256"]
+    artifact = handoff["outputs"]["environment_analysis.publish_handoff"]["artifact"]
+    assert artifact == environment["artifact"] and Path(artifact["path"]).match(declaration.artifacts[0])
+    assert artifact in handoff["artifacts"]
+    raw = (root / artifact["path"]).read_bytes()
+    assert len(raw) == artifact["size_bytes"] and hashlib.sha256(raw).hexdigest() == artifact["sha256"]
+    assert environment["availability"] == "AVAILABLE"
+    assert environment["evidence"]["declarations"][0]["reason"] == "static_literal_advisory_only"
+
+
 def test_optional_prior_stale_is_unavailable_but_expected_current_blocks(tmp_path):
     config, root, source, contract = _published(tmp_path)
     optional = environment_contract(config, {"environment_mode": "OPTIONAL_PRIOR"},
