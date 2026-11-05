@@ -1,0 +1,308 @@
+{
+  "assertion_semantics": {
+    "adapter": "A later reviewed evaluator may map production output to these semantic predicates without changing frozen labels.",
+    "expected": "Each subject/predicate/value assertion must hold on its own evidence and selected subcase; match is exact equality.",
+    "forbidden": "No listed subject/predicate/value assertion may hold; absence is not a completeness claim.",
+    "unknown": "Named missing inputs are unknown; model agreement, family labels, policy defaults and skipped coverage do not prove facts."
+  },
+  "base_commit": "acf973f8a0d7ca78548ad619ba4b5691c5b93678",
+  "base_tree": "c0fccbff9660dac913ff46314dcb63c40e8f6aac",
+  "contract_sha256": {
+    "C1_C2": "cd4c2d3eeeba3abb6daffa16bf69a78034c960d426d1ed17fa8f6393426120ef",
+    "J4": "5936094e55a4d278a36affc21d5691ab77197d5a3b7e5f2dd93e3509f057fb5d"
+  },
+  "counts": {
+    "first_use_records": 16,
+    "first_use_subcases": 16,
+    "public_records": 32,
+    "public_subcases": 64,
+    "reserve_records": 16,
+    "reserve_subcases": 17
+  },
+  "custody": {
+    "candidate_inspected": false,
+    "compiler_generated_ground_truth": false,
+    "feature_ready": false,
+    "fixtures_only": true,
+    "integration_acceptance_authored": false,
+    "private_inputs_in_public_files": false,
+    "production_parent_rebinding": false,
+    "repository_imports": false,
+    "target_payload_collection": false,
+    "tests_collected_or_executed": false
+  },
+  "disclosure_policy": "Feedback-exposed cases permanently become public/exposed; only untouched frozen reserves may support later held-out claims. No renamed reviewed case is held-out.",
+  "files": {
+    "expected-forbidden.json": {
+      "bytes": 356754,
+      "sha256": "2d09cd73f61dc9de6d97801326937a46c31a5c55ee91c8626fb310bc3a5e4e2c"
+    },
+    "origin-catalog.json": {
+      "bytes": 612,
+      "sha256": "7320e223b6b0a04beb9a3220e1eed942c8bb77f1b82c7bc52f5a2102d2553dc8"
+    },
+    "public-cases.json": {
+      "bytes": 61743,
+      "sha256": "895e6da3701aeae3987542f190b521d353d94dc2f8abc8ffc5ff67911c9a6e1e"
+    },
+    "source-documents.json": {
+      "bytes": 36979,
+      "sha256": "e2b7c5df27ce4d4a8377f133a93eb3d587f40fe3f9b2097a5b7d8a37da6b1ce4"
+    },
+    "synthetic-cases.json": {
+      "bytes": 12477,
+      "sha256": "208751d5eeecf3a54ae597a3e799376df606ffc298b5308e85cdcb30ccd3c4c8"
+    }
+  },
+  "identity_kind": "independent_research_fixture",
+  "limits": {
+    "absolute_file_observation_bytes": 33554432,
+    "additive_scope_bytes": 262144,
+    "doc_bytes": 65536,
+    "docs_per_request": 8,
+    "evidence_rounds": 3,
+    "graph_bytes": 16777216,
+    "offline_295_unit_provisional_seconds": 120,
+    "request_bytes": 131072,
+    "response_bytes": 65536,
+    "scope_calls": 4
+  },
+  "origin": {
+    "attempt": "attempt_0001",
+    "bytes": 3228085,
+    "distinct_path_hash_pairs": 458,
+    "inline_document_occurrences": 661,
+    "job": "job_target_catalog",
+    "run_id": "2026-11-05-0001",
+    "sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+    "units": 295
+  },
+  "private": {
+    "commitment_scheme": "sha256(domain_NUL || private_256bit_nonce || exact_private_bytes)",
+    "first_use_records": 16,
+    "heldout_labels_committed_or_disclosed": false,
+    "opaque_cases": [
+      {
+        "commitment_sha256": "f6c48d5ca010269cd3689ce2433294e5bd37c0085ed1f440dcd971468ea9f17d",
+        "opaque_id": "94e48ab19dadd39e93e775a68f21b7a8",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "9dcd6406bb0ef85a9466b1b897ecad735cf263fb5f1c69f020105101f68b7cbe",
+        "opaque_id": "36fb9b7618011ed2418b7b1bc1f9141d",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "c0cca1a27afe58c588ef3376450e1473d16328595098a62ebd543df573f39c6e",
+        "opaque_id": "0e5d8d27d1296d1d033266a3ff3e70c0",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "490833254c42cbee242fd7fd1db6bac0f267936272ba026143a55531134cfdf5",
+        "opaque_id": "b898030caf44e1317b66a3428334154b",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "b02f33506732d6d6acb29915a2b1ab69dbd022b48efb965563e7ff004eb9fa79",
+        "opaque_id": "1c70b0738cbb0edc0896f35a2d770473",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "8848f76fc0e60ecaddf9b1ab230e773406366ea971e05be26a35232ede7b8f2f",
+        "opaque_id": "4edfbd1784f57c7035c6bf62640ff218",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "8a94e96a789c77480ea853bca3aa91960cb6ed6720a4efbf9003c4d865faf77d",
+        "opaque_id": "eb55e5a1cdc2b27197bfffb691b540ea",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "94e000f686f701f52d822a89b813016e136c5af7d9f2aadd158cf7023bd73988",
+        "opaque_id": "ff9ddd00a9619246a467a2e503b2d556",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "a85cef76c9c2c283315108e23bd79c9e1a2b63dae47acb8779f65e24fa52c443",
+        "opaque_id": "d31524ee77c18a2fd65e66f656f47fbc",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "ce1d266d61182776aca87b7fd8125547040927d0cf45df65bfdf826c2782bde4",
+        "opaque_id": "77a7be2f8b35d80c2f884c15af1ab2eb",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "7b2e61a35e22a3323aea540c351754482f064ed41b730d9f6439af38da00e2dc",
+        "opaque_id": "6abff53aadd788fdf81cda19f380dc4f",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "638f0c19aeae155643629e8fe4f866be9d97eb5859df1bfbe66e531fd4878830",
+        "opaque_id": "8d8bd874ddc0224a30146ff5f2e2fe84",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "37c974ff28c7a19491dca1361fd78be79224a7d30c0ada913b3a9bcabf475215",
+        "opaque_id": "8caae4b8ff1420cbeb87b57f82fdf68d",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "09c9e9787f999ca8c32ffe36c81609b2664aa728bc7d7b6f280e63eea5f5fe15",
+        "opaque_id": "b55656d3b9b637d249b0622b42dcfd74",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "de2549f48d80de5a4032bf42a09fb336c2b541dbef91a421bb1fb4f2dd432a49",
+        "opaque_id": "512a7940790dfbe488d07a9969e68ef5",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "1b1004dc26ca88ec238f32bedd89ca57ca3f813e83fbc55a297f5fba676f8d1e",
+        "opaque_id": "4aa04dc0865de322ffde101c1aaf849f",
+        "split": "first_use",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "4f7afe879c0e07cbe0c0cf5d04e5442374d5232728223ffeaceb38aa229b06d5",
+        "opaque_id": "cc7a3949fe15d18e32b05cf117f8ac84",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "3e583ad1c88e18bfad74e67943bc9b0cb6e35796bcd3819f9275b10b78b7a67a",
+        "opaque_id": "50da3e74b75e6b6fb918397624ca9e11",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "1fba6f70328e8e7878ed36b44b41ccfc422c22b56c3f96d0a16ded24f5be1104",
+        "opaque_id": "5f2d6326126540135fb19fefe858a5a3",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "1e94dfa16f87d2da10a4b95d194eaa46c6e52268e3e9794e750c98ea8c87fbbc",
+        "opaque_id": "cdd14f5ebe1ea08c8c3986bb953e9608",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "c00cfa42b181ce87cab75078218c75fcc5617e4a52f0fb15b91c2c055a86b87f",
+        "opaque_id": "a4b042cdc154723c7ea992928cb3a917",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "97e4fec60d444f1afc0d4206cfd402382e8f4ec6cb3b97ac4afc1e8f5736a379",
+        "opaque_id": "dca03d11894e2fdd4dedaf7506e4b2ad",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "1cd36b06f05ad169e536540e791a322679bb9f379175a3b40f1843d6c0d97bbd",
+        "opaque_id": "d3b3859bbe18844152ed4851e06e5dfc",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "05f8987117b3c0c2e15e2d974342f28960ce2ddbbb7afde6b7902bc31b580a25",
+        "opaque_id": "84f42d9624733a5900414adca3dcda5b",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "8481ee2dfabf6a96d942bafc719df45ceee31aeb3112fd9f00424b2ab34678aa",
+        "opaque_id": "6cd156f259a7bdef4115f7f727837af2",
+        "split": "reserve",
+        "subcases": 2
+      },
+      {
+        "commitment_sha256": "6ec92938cb55d8a873d582364bc600e315d3310f2b6ecc615fa4ff92d34aab58",
+        "opaque_id": "bf7d652ec47eebabfcbad247f48e8893",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "7bd6af275ce0f4c1b69ef83bef887c8674cbd9e5533fb00a9d7867a2b33e5d2a",
+        "opaque_id": "93c8981c52dd8481a8325128ae5c6fe4",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "8dec8f93d67b2a69623e5721823ae8366aa8f078497c48868a069ebc5836ff96",
+        "opaque_id": "4d74d8ae3f08019f773a4b426a09c078",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "a6a470decd23e5d0efcc2d064bf4f0f588cc1f34d7b6f8d878e46af742ec3476",
+        "opaque_id": "af62d70db172237e768d60a39e5360c6",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "327c8434e24897ab12c68141872f7e4f20b4ba59dafb54a03379f1b826d486ee",
+        "opaque_id": "94821e5b28e8d60cc8146309e35c271a",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "6ba3ce144db9a8bc88af44e3b538d464c085604e14018c0cbe2193c36bdcbf95",
+        "opaque_id": "91f95a0fc2a18b0cea623e3d0e72d8f3",
+        "split": "reserve",
+        "subcases": 1
+      },
+      {
+        "commitment_sha256": "19abc0beba4ded1ee4b3beda1bcab71b744efd85e4e68332884855daba207cf4",
+        "opaque_id": "cada42a14dfdd517a7ad748d8dbf349b",
+        "split": "reserve",
+        "subcases": 1
+      }
+    ],
+    "reserve_records": 16,
+    "root_commitment_sha256": "6c0f851a18e5c8001be2eaf52a618b057184b439302ba24619a1c708e896bfa2",
+    "strata_coverage": [
+      "msbuild",
+      "vcbuild",
+      "make",
+      "autotools",
+      "cmake",
+      "gradle",
+      "unity",
+      "maven",
+      "dotnet",
+      "node",
+      "go",
+      "python",
+      "composer",
+      "environment",
+      "lifecycle_cache",
+      "cross_domain_products"
+    ]
+  },
+  "public_label_revision": {
+    "authoritative_addendum_sha256": "0c9a8eb814787345444dde6e4056d06a1ee99a0f379be631a54c51c93fa3d724",
+    "private_inputs_labels_nonces_and_commitments_unchanged": true,
+    "production_tuning_or_candidate_inspection_between_revisions": false,
+    "revision": 2,
+    "supersedes_manifest_sha256": "86b23b521998fe8bfe982372e815e7c1283d1fcf0ff8d9b685ebc0c11e00b43c",
+    "supersedes_receipt_sha256": "039941eac20cf7f8fe891550a566789d91b8080acf3cbf1b72d3ca2cdee0619e"
+  },
+  "schema": "appsec-review/topology-public-freeze/1"
+}

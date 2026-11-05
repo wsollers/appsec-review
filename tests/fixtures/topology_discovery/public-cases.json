@@ -1,0 +1,2068 @@
+{
+  "records": [
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-fd2a87140861642fae1f",
+          "catalog_index": 185,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj",
+          "sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+          "span": [
+            4,
+            19
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-fd2a87140861642fae1f",
+          "catalog_index": 185,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj",
+          "sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+          "span": [
+            27,
+            44
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-fd2a87140861642fae1f",
+          "catalog_index": 185,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj",
+          "sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+          "span": [
+            90,
+            110
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-fd2a87140861642fae1f",
+          "catalog_index": 185,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj",
+          "sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+          "span": [
+            113,
+            134
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-fd2a87140861642fae1f",
+          "catalog_index": 185,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj",
+          "sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+          "span": [
+            137,
+            157
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-fd2a87140861642fae1f",
+          "catalog_index": 185,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj",
+          "sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+          "span": [
+            160,
+            179
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-45821c9cfef8b0514b5f",
+          "catalog_index": 189,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/testDLL/testDLL.vcxproj",
+          "sha256": "931df1060f2450a5959fee38a291dbef1d0038ce27297d93c10aade6ee475ca7",
+          "span": [
+            4,
+            12
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-45821c9cfef8b0514b5f",
+          "catalog_index": 189,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/testDLL/testDLL.vcxproj",
+          "sha256": "931df1060f2450a5959fee38a291dbef1d0038ce27297d93c10aade6ee475ca7",
+          "span": [
+            142,
+            145
+          ]
+        }
+      ],
+      "family": "msbuild",
+      "id": "P01",
+      "requirements": [
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R9"
+      ],
+      "subcases": [
+        {
+          "id": "x64-policy-excludes-Win32",
+          "inputs": {
+            "catalog_indices": [
+              185,
+              189
+            ],
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Win32 reference and distinct import/runtime interfaces"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-f7406e70763cc62dee3f",
+          "catalog_index": 263,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/game/game.vcxproj",
+          "sha256": "56cd42f22bf3d23f121c24243f75f5b3914ee03ade3313faa6861b3a57c879ea",
+          "span": [
+            57,
+            66
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-f7406e70763cc62dee3f",
+          "catalog_index": 263,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/game/game.vcxproj",
+          "sha256": "56cd42f22bf3d23f121c24243f75f5b3914ee03ade3313faa6861b3a57c879ea",
+          "span": [
+            115,
+            115
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-f7406e70763cc62dee3f",
+          "catalog_index": 263,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/game/game.vcxproj",
+          "sha256": "56cd42f22bf3d23f121c24243f75f5b3914ee03ade3313faa6861b3a57c879ea",
+          "span": [
+            132,
+            133
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-f7406e70763cc62dee3f",
+          "catalog_index": 263,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/game/game.vcxproj",
+          "sha256": "56cd42f22bf3d23f121c24243f75f5b3914ee03ade3313faa6861b3a57c879ea",
+          "span": [
+            174,
+            174
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-f7406e70763cc62dee3f",
+          "catalog_index": 263,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/game/game.vcxproj",
+          "sha256": "56cd42f22bf3d23f121c24243f75f5b3914ee03ade3313faa6861b3a57c879ea",
+          "span": [
+            194,
+            195
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-2cbcda829a63e7f97478",
+          "catalog_index": 272,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/login/login.vcxproj",
+          "sha256": "43cda8db6975f9ba2ec8417154c77a7d80ea31e5cf1296c4e8caf722ca5019e9",
+          "span": [
+            57,
+            66
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-2cbcda829a63e7f97478",
+          "catalog_index": 272,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/login/login.vcxproj",
+          "sha256": "43cda8db6975f9ba2ec8417154c77a7d80ea31e5cf1296c4e8caf722ca5019e9",
+          "span": [
+            109,
+            109
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-2cbcda829a63e7f97478",
+          "catalog_index": 272,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/login/login.vcxproj",
+          "sha256": "43cda8db6975f9ba2ec8417154c77a7d80ea31e5cf1296c4e8caf722ca5019e9",
+          "span": [
+            127,
+            128
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-2cbcda829a63e7f97478",
+          "catalog_index": 272,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/login/login.vcxproj",
+          "sha256": "43cda8db6975f9ba2ec8417154c77a7d80ea31e5cf1296c4e8caf722ca5019e9",
+          "span": [
+            159,
+            159
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-2cbcda829a63e7f97478",
+          "catalog_index": 272,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/login/login.vcxproj",
+          "sha256": "43cda8db6975f9ba2ec8417154c77a7d80ea31e5cf1296c4e8caf722ca5019e9",
+          "span": [
+            180,
+            181
+          ]
+        }
+      ],
+      "family": "msbuild",
+      "id": "P02",
+      "requirements": [
+        "R1",
+        "R2",
+        "R3",
+        "R5",
+        "R9"
+      ],
+      "subcases": [
+        {
+          "id": "Debug-x64",
+          "inputs": {
+            "catalog_indices": [
+              263,
+              272
+            ],
+            "configuration": "Debug",
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "Release-x64",
+          "inputs": {
+            "catalog_indices": [
+              263,
+              272
+            ],
+            "configuration": "Release",
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Conditioned game/login x64 interfaces retain unresolved owner"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-707faa0e342345f9bc2c",
+          "catalog_index": 207,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/mysql/mymysql/makefile",
+          "sha256": "1f06470f0508f780b4d0738ead4de68f64de0562eb452711dd425cb7062936b5",
+          "span": [
+            7,
+            11
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-707faa0e342345f9bc2c",
+          "catalog_index": 207,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/mysql/mymysql/makefile",
+          "sha256": "1f06470f0508f780b4d0738ead4de68f64de0562eb452711dd425cb7062936b5",
+          "span": [
+            25,
+            28
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-707faa0e342345f9bc2c",
+          "catalog_index": 207,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/mysql/mymysql/makefile",
+          "sha256": "1f06470f0508f780b4d0738ead4de68f64de0562eb452711dd425cb7062936b5",
+          "span": [
+            31,
+            41
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-ed91ac5142624c687f80",
+          "catalog_index": 249,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/protobuf/build/makefile",
+          "sha256": "7bc6ecb3caaab5aeb4e0be87cf0d121c536b02190c28cc7ab8ed76edfe628af1",
+          "span": [
+            7,
+            10
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-ed91ac5142624c687f80",
+          "catalog_index": 249,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/protobuf/build/makefile",
+          "sha256": "7bc6ecb3caaab5aeb4e0be87cf0d121c536b02190c28cc7ab8ed76edfe628af1",
+          "span": [
+            27,
+            33
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-ed91ac5142624c687f80",
+          "catalog_index": 249,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/protobuf/build/makefile",
+          "sha256": "7bc6ecb3caaab5aeb4e0be87cf0d121c536b02190c28cc7ab8ed76edfe628af1",
+          "span": [
+            40,
+            45
+          ]
+        }
+      ],
+      "family": "make",
+      "id": "P03",
+      "requirements": [
+        "R1",
+        "R3",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "active-library-tokens",
+          "inputs": {
+            "catalog_indices": [
+              207,
+              249
+            ],
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Make comment negatives and uncaptured include closure"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-205189da91680dfb9da1",
+          "catalog_index": 149,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/protobuf/protobuf-2.7.0/protoc-artifacts/Dockerfile",
+          "sha256": "065c302524f1d22d96334d77a1784b3cb818579b10643c8f754668ff0651c5ff",
+          "span": [
+            1,
+            14
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-205189da91680dfb9da1",
+          "catalog_index": 149,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/protobuf/protobuf-2.7.0/protoc-artifacts/Dockerfile",
+          "sha256": "065c302524f1d22d96334d77a1784b3cb818579b10643c8f754668ff0651c5ff",
+          "span": [
+            28,
+            35
+          ]
+        }
+      ],
+      "family": "shared",
+      "id": "P04",
+      "requirements": [
+        "R2",
+        "R3",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "same-declaring-document",
+          "inputs": {
+            "declaring_path": "fsh-server/Server/lib/libs/protobuf/protobuf-2.7.0/protoc-artifacts/Dockerfile",
+            "declaring_sha256": "065c302524f1d22d96334d77a1784b3cb818579b10643c8f754668ff0651c5ff"
+          }
+        }
+      ],
+      "title": "Shared Docker descriptor is context, not i686 output"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-dd13bfd66f526dac9df2",
+          "catalog_index": 0,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/FrontendTools/SourceProject/ShelterAndroidProj/app/build.gradle",
+          "sha256": "d2ec0dee244a956b02e0d828344ccf89e50d29030557df9e4fc11181c09247a2",
+          "span": [
+            1,
+            9
+          ]
+        }
+      ],
+      "family": "gradle",
+      "id": "P05",
+      "requirements": [
+        "R2",
+        "R4"
+      ],
+      "subcases": [
+        {
+          "id": "application",
+          "inputs": {
+            "catalog_indices": [
+              0
+            ],
+            "requested_operations": [
+              "package"
+            ]
+          }
+        }
+      ],
+      "title": "Android application SDK declaration"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-1b3408e4f013e0efd4a9",
+          "catalog_index": 2,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/deps_projs/android_as/app/build.gradle",
+          "sha256": "80fc4d009c4374a3304a7aca19b4d34f8115bcb87751735ea4c3791d8bb9ce4c",
+          "span": [
+            1,
+            10
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-1b3408e4f013e0efd4a9",
+          "catalog_index": 2,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/deps_projs/android_as/app/build.gradle",
+          "sha256": "80fc4d009c4374a3304a7aca19b4d34f8115bcb87751735ea4c3791d8bb9ce4c",
+          "span": [
+            20,
+            25
+          ]
+        }
+      ],
+      "family": "gradle",
+      "id": "P06",
+      "requirements": [
+        "R2",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "library-comment-negative",
+          "inputs": {
+            "catalog_indices": [
+              2
+            ]
+          }
+        }
+      ],
+      "title": "Android library and commented application plugin"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-6f8a2d85437ac6b2d441",
+          "catalog_index": 3,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/deps_projs/ghome_google_android_as/app/build.gradle",
+          "sha256": "7090231cc63724cd8722c1d6d2e5d4962881e0fb0784d8c9f9d87fa0d43e3d4a",
+          "span": [
+            1,
+            15
+          ]
+        }
+      ],
+      "family": "gradle",
+      "id": "P07",
+      "requirements": [
+        "R3",
+        "R4",
+        "R5",
+        "R9"
+      ],
+      "subcases": [
+        {
+          "id": "preserve-and-exclude-ARM32",
+          "inputs": {
+            "catalog_indices": [
+              3
+            ],
+            "forbid_32bit_execution": true
+          }
+        }
+      ],
+      "title": "Android ABI eligibility is not selected hardware"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-1b3408e4f013e0efd4a9",
+          "catalog_index": 2,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/deps_projs/android_as/depsAAR/GHOME_SDK/build.gradle",
+          "sha256": "7b826edaadf35e63c1d3b511e39ea05157c363a8fe4dfe8cdbe809f06914f33a",
+          "span": [
+            1,
+            2
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-1b3408e4f013e0efd4a9",
+          "catalog_index": 2,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/deps_projs/android_as/app/build.gradle",
+          "sha256": "80fc4d009c4374a3304a7aca19b4d34f8115bcb87751735ea4c3791d8bb9ce4c",
+          "span": [
+            55,
+            55
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-1b3408e4f013e0efd4a9",
+          "catalog_index": 2,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-client/deps_projs/android_as/settings.gradle",
+          "sha256": "8df886117e29edbc6c494285323ce131cadde2d1704c0a55f97f0251a3ecabb6",
+          "span": [
+            1,
+            2
+          ]
+        }
+      ],
+      "family": "gradle",
+      "id": "P08",
+      "requirements": [
+        "R2",
+        "R4",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "uninspected-container",
+          "inputs": {
+            "catalog_indices": [
+              2
+            ],
+            "consumer_project": ":app",
+            "project_scope": "fsh-client/deps_projs/android_as",
+            "referenced_project": ":depsAAR:GHOME_SDK",
+            "requested_operations": [
+              "prebuilt_import"
+            ]
+          }
+        }
+      ],
+      "title": "Declared AAR does not prove native members or absence"
+    },
+    {
+      "evidence": [
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/targets/1/descriptor_facts/raw_settings/AndroidTargetArchitectures",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/targets/1/descriptor_facts/raw_settings/AndroidTargetSdkVersion",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/targets/1/descriptor_facts/raw_settings/iPhoneSdkVersion",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "f1a054096d0f26a66f468ab2f7480439b14897146ca52b8be8c48df740714b55"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/targets/1/descriptor_facts/scenes",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "4069dc7ac650a31edc41a94755ac0f47ae21764ed51f0dfbef01c77c92d8c6a0"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/4",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "762799cfc814f8751cf8bdcb7f82da181bc9ba7b56a40ff71d60709fcf69bd9e"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/5",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "a4adf51fd6e311289b8bab615591ef0a8f561169af6e433db26c9b1fae2daac7"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/6",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "722288bb8f02af025d6cf156faeca345b14d5f20206bcb064461f6eb53339d8c"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/7",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "0591077cfa6da008186e3a0713c10256dd8e0516bf78b827c0a1c5585eb2ea5a"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/8",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "0a9a85c8a2fb0871ab874e06a0f569e6bb615053784643d5416d75aee07cf4bc"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/9",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "ce73e488360d8c9bf7d837b9e2437f82e7137a37eabd81a4d59713f58de8ff4a"
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/engine_discovery/gaps/27",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "5cad46942ad65b7a34a128d081a8373a52301e75270b6a0236632a170583343c"
+        }
+      ],
+      "family": "unity",
+      "id": "P09",
+      "requirements": [
+        "R2",
+        "R3",
+        "R4",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "structured-observation-only",
+          "inputs": {
+            "catalog_indices": [
+              1
+            ]
+          }
+        }
+      ],
+      "title": "Unity raw enums, scene inventory, and exact plugin gaps"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-66874d4bd45808d715bd",
+          "catalog_index": 184,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/msvc10.sln",
+          "sha256": "4727d63d8883ce5bc711786483da836ec96817d41b88ae7fec499bdaef3d1793",
+          "span": [
+            3,
+            9
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-66874d4bd45808d715bd",
+          "catalog_index": 184,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/msvc10.sln",
+          "sha256": "4727d63d8883ce5bc711786483da836ec96817d41b88ae7fec499bdaef3d1793",
+          "span": [
+            22,
+            28
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P10",
+      "requirements": [
+        "R3",
+        "R4",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "native-solution",
+          "inputs": {
+            "catalog_indices": [
+              184
+            ],
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Native Win32-only solution is not a managed exemption"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-594d569b0d0dd64e5540",
+          "catalog_index": 251,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/alltool.sln",
+          "sha256": "9187f199263bd8beec1549a96de84cc52b1cda3668a9cb9da72ba0ec5a945266",
+          "span": [
+            8,
+            8
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-594d569b0d0dd64e5540",
+          "catalog_index": 251,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/proj/alltool.sln",
+          "sha256": "9187f199263bd8beec1549a96de84cc52b1cda3668a9cb9da72ba0ec5a945266",
+          "span": [
+            62,
+            63
+          ]
+        },
+        {
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "json_pointer": "/targets/251/descriptor_package/gaps",
+          "origin": "accepted_structured_observation",
+          "raw_source_bytes_inspected": false,
+          "value_sha256": "c75406f92fa76b5c1de94942084ced2ebfe662b527594f186e88a3ab955fea8f"
+        }
+      ],
+      "family": "dotnet",
+      "id": "P11",
+      "requirements": [
+        "R3",
+        "R5",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "Release-x64-to-Debug-x64",
+          "inputs": {
+            "catalog_indices": [
+              251
+            ],
+            "configuration": "Release",
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            },
+            "solution": "alltool.sln"
+          }
+        }
+      ],
+      "title": "Selected solution configuration can map to another label"
+    },
+    {
+      "evidence": [
+        {
+          "build_unit_id": "build-unit-55dc313345811026df38",
+          "catalog_index": 287,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/tool/ReplayServer/ReplayServer.sln",
+          "sha256": "cfc862fcb9775bb8f0868ffed57b5241843e1503d607a8910c32c31e96ca614e",
+          "span": [
+            6,
+            17
+          ]
+        },
+        {
+          "build_unit_id": "build-unit-a4bd566df1681182c48b",
+          "catalog_index": 289,
+          "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+          "origin": "captured_descriptor",
+          "path": "fsh-server/Server/tool/UnitTest/UnitTest.sln",
+          "sha256": "0da71ba7937fd937aa797241e61d069a756c93d2425989aeb778eb9ad3755365",
+          "span": [
+            6,
+            17
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P12",
+      "requirements": [
+        "R3",
+        "R5",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "AnyCPU-solution-not-positive-project-evidence",
+          "inputs": {
+            "catalog_indices": [
+              287,
+              289
+            ]
+          }
+        }
+      ],
+      "title": "Uncaptured csproj members remain unknown"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/managed/App.csproj",
+          "sha256": "7bc3af831cbdf0b819ac8ad82a52f545ff084512fcec3d5f02a36ec1b07d50d5",
+          "span": [
+            1,
+            7
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P13",
+      "requirements": [
+        "R3",
+        "R4",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "managed-no-native-effects",
+          "inputs": {
+            "descriptor": "synthetic/managed/App.csproj",
+            "recipe": {
+              "commands": [
+                "dotnet build App.csproj -p:PlatformTarget=AnyCPU -p:Prefer32Bit=false -p:PublishAot=false"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "requested_operations": [
+              "managed_compile"
+            ],
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Positive captured managed descriptor/operation basis"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/managed/X86.csproj",
+          "sha256": "3a921cbdb85f48a7fd7527f1504898ca7d368ba53c0033bd49f43e5d870b4897",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P14",
+      "requirements": [
+        "R3",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "selected-x86",
+          "inputs": {
+            "descriptor": "synthetic/managed/X86.csproj",
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Selected x86 managed executable stays managed and blocks"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/managed/Prefer.csproj",
+          "sha256": "a94d2108dbc1ce0ab54e099cc11520b43b43ae4c6c01f8241ac5864955bd1894",
+          "span": [
+            1,
+            6
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P15",
+      "requirements": [
+        "R3",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "Release-netframework-executable",
+          "inputs": {
+            "configuration": "Release",
+            "descriptor": "synthetic/managed/Prefer.csproj",
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Applicable AnyCPU Prefer32Bit executable is incompatible"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/managed/Unselected.csproj",
+          "sha256": "f934abebf3224bc324b2fe87ca25843a7adf2846d6572c1a0b0d1325c798996f",
+          "span": [
+            1,
+            5
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P16",
+      "requirements": [
+        "R3",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "Release-library",
+          "inputs": {
+            "configuration": "Release",
+            "descriptor": "synthetic/managed/Unselected.csproj"
+          }
+        }
+      ],
+      "title": "Unselected preference does not create a blocker"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/managed/Unknown.csproj",
+          "sha256": "be862988c9ef70a19fd27ba5c20e81b7a08adb837ad9f22866b36a092f4ad61c",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "dotnet",
+      "id": "P17",
+      "requirements": [
+        "R3",
+        "R5"
+      ],
+      "subcases": [
+        {
+          "id": "unknown-framework-output-kind",
+          "inputs": {
+            "descriptor": "synthetic/managed/Unknown.csproj"
+          }
+        }
+      ],
+      "title": "Unknown managed preference applicability is a named gap"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/go/go.mod",
+          "sha256": "3a4d60a248ad501ce7bcbee5ed84f5ddc7b6cc7ff1cecf259dfc0f5a152cd4e3",
+          "span": [
+            1,
+            3
+          ]
+        }
+      ],
+      "family": "go",
+      "id": "P18",
+      "requirements": [
+        "R3",
+        "R6",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "explicit-windows",
+          "inputs": {
+            "capability": {
+              "isa": "x86_64",
+              "os": "windows",
+              "status": "admitted"
+            },
+            "descriptor": "synthetic/go/go.mod",
+            "recipe": {
+              "commands": [
+                "go build -o app ."
+              ],
+              "environment": {
+                "CGO_ENABLED": "0",
+                "GOARCH": "amd64",
+                "GOOS": "windows"
+              },
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "windows",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "explicit-linux",
+          "inputs": {
+            "capability": {
+              "isa": "x86_64",
+              "os": "linux",
+              "status": "admitted"
+            },
+            "descriptor": "synthetic/go/go.mod",
+            "recipe": {
+              "commands": [
+                "go build -o app ."
+              ],
+              "environment": {
+                "CGO_ENABLED": "0",
+                "GOARCH": "amd64",
+                "GOOS": "linux"
+              },
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "missing-GOARCH",
+          "inputs": {
+            "recipe": {
+              "commands": [
+                "go build ."
+              ],
+              "environment": {
+                "CGO_ENABLED": "0",
+                "GOOS": "linux"
+              },
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "post-build-386-mismatch",
+          "inputs": {
+            "preflight_recipe": {
+              "commands": [
+                "go build ."
+              ],
+              "environment": {
+                "CGO_ENABLED": "0",
+                "GOARCH": "amd64",
+                "GOOS": "linux"
+              },
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "reported_buildinfo": {
+              "CGO_ENABLED": "0",
+              "GOARCH": "386",
+              "GOOS": "linux"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "Go explicit Windows/Linux target and mismatch controls"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/go/go.mod",
+          "sha256": "3a4d60a248ad501ce7bcbee5ed84f5ddc7b6cc7ff1cecf259dfc0f5a152cd4e3",
+          "span": [
+            1,
+            3
+          ]
+        },
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/go/native.go",
+          "sha256": "73afedfe842551fd222953b8785828c7e94ccc68cfc0ced45fe335d8c52f7657",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "go",
+      "id": "P19",
+      "requirements": [
+        "R3",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "cgo-unenforced-compiler",
+          "inputs": {
+            "recipe": {
+              "commands": [
+                "go build ."
+              ],
+              "environment": {
+                "CC": "cc",
+                "CGO_ENABLED": "1",
+                "GOARCH": "amd64",
+                "GOOS": "linux"
+              },
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "cgo-closed-explicit-target",
+          "inputs": {
+            "closure": {
+              "compiler_identity": "synthetic-pinned-clang",
+              "unknown_inputs": [],
+              "wrappers": []
+            },
+            "recipe": {
+              "commands": [
+                "go build ."
+              ],
+              "environment": {
+                "CC": "clang --target=x86_64-unknown-linux-gnu",
+                "CGO_ENABLED": "1",
+                "GOARCH": "amd64",
+                "GOOS": "linux"
+              },
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "cgo adds C/C++ target closure rather than a family exemption"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/native/makefile",
+          "sha256": "dfb673af99ef2637b3ba9ed9e5612541226d9d70fc6cab0627024332961126e9",
+          "span": [
+            1,
+            6
+          ]
+        },
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/native/compiler-profile.json",
+          "sha256": "319f30011bbf4458799be778d9d7f5cd6995398148127e2c5e8a5d4cdcc47392",
+          "span": [
+            1,
+            3
+          ]
+        }
+      ],
+      "family": "native",
+      "id": "P20",
+      "requirements": [
+        "R3",
+        "R5",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "m64-unknown-makeconf",
+          "inputs": {
+            "descriptor": "synthetic/native/makefile",
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "admitted-default-closed-inputs",
+          "inputs": {
+            "closure": {
+              "dynamic_overrides": [],
+              "imports": [],
+              "unknown_inputs": [],
+              "wrapper_chain": []
+            },
+            "profile": "synthetic/native/compiler-profile.json",
+            "recipe": {
+              "commands": [
+                "/opt/compiler/bin/clang -c app.c -o app.o",
+                "/opt/compiler/bin/clang app.o -o app"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "conflicting-m32",
+          "inputs": {
+            "profile": "synthetic/native/compiler-profile.json",
+            "recipe": {
+              "commands": [
+                "/opt/compiler/bin/clang -m32 app.c -o app"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        }
+      ],
+      "title": "m64 is not OS proof; only admitted static target with closed inputs proves axes"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/maven/pom.xml",
+          "sha256": "43189f4d82f49249dc2cf2c6cd14090188e5641c41a3d636270dbf5fe75fcd50",
+          "span": [
+            1,
+            4
+          ]
+        },
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/maven/native-pom.xml",
+          "sha256": "0a0a70445258004ac056d0b6ac8ae6c974a7839e6b067590e51ccc6d2b4850fa",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "maven",
+      "id": "P21",
+      "requirements": [
+        "R3",
+        "R4",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "managed-compiler",
+          "inputs": {
+            "descriptor": "synthetic/maven/pom.xml",
+            "recipe": {
+              "commands": [
+                "mvn compiler:compile"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "relevant_plugin_coverage": "complete",
+            "requested_operations": [
+              "managed_compile"
+            ]
+          }
+        },
+        {
+          "id": "requested-nar-native-stage",
+          "inputs": {
+            "descriptor": "synthetic/maven/native-pom.xml",
+            "recipe": {
+              "commands": [
+                "mvn nar:nar"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "requested_operations": [
+              "native_compile"
+            ]
+          }
+        }
+      ],
+      "title": "Maven admission requires positive requested-stage basis"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/node/package.json",
+          "sha256": "aefd071207965db2bb3052b0984acd0d3e65f56d42d248572f1851f4d0275eaf",
+          "span": [
+            1,
+            1
+          ]
+        },
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/node/binding.gyp",
+          "sha256": "365c24521ae9815ada105c49964daa99aea9b34fdb445ae84861e06f27e1d229",
+          "span": [
+            1,
+            1
+          ]
+        }
+      ],
+      "family": "node",
+      "id": "P22",
+      "requirements": [
+        "R3",
+        "R4",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "package-only",
+          "inputs": {
+            "descriptor": "synthetic/node/package.json",
+            "recipe": {
+              "commands": [
+                "npm pack --ignore-scripts"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "requested_operations": [
+              "package"
+            ],
+            "scripts_enforced_disabled": true
+          }
+        },
+        {
+          "id": "requested-node-gyp",
+          "inputs": {
+            "descriptor": "synthetic/node/binding.gyp",
+            "recipe": {
+              "commands": [
+                "node-gyp rebuild"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "requested_operations": [
+              "native_compile"
+            ]
+          }
+        }
+      ],
+      "title": "Node requested package and native addon remain distinct"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/payload/operations.json",
+          "sha256": "0f80b4dd5b39ee02ccfaed0a0db0bd3ff55b81942b1ce852667a8a45b0e03f5b",
+          "span": [
+            1,
+            3
+          ]
+        }
+      ],
+      "family": "shared",
+      "id": "P23",
+      "requirements": [
+        "R2",
+        "R3",
+        "R4"
+      ],
+      "subcases": [
+        {
+          "id": "prebuilt-and-package",
+          "inputs": {
+            "operation_fixture": "synthetic/payload/operations.json",
+            "requested_operations": [
+              "package",
+              "prebuilt_import"
+            ]
+          }
+        }
+      ],
+      "title": "RID/JNI/AAR package inputs are not native compilation proof"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/containers/members.json",
+          "sha256": "39eb46adaa13f3acc8b7d833c249304450b6645272afdc64147b34156ed85ea4",
+          "span": [
+            1,
+            5
+          ]
+        },
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/containers/consumer-bindings.json",
+          "sha256": "761dd6e725592fa5da0115e1b9b800882ece5da0d3be7061de9a8323b404e0fe",
+          "span": [
+            1,
+            1
+          ]
+        }
+      ],
+      "family": "shared",
+      "id": "P24",
+      "requirements": [
+        "R1",
+        "R2",
+        "R3",
+        "R9"
+      ],
+      "subcases": [
+        {
+          "id": "cross-domain-members",
+          "inputs": {
+            "consumer_bindings_fixture": "synthetic/containers/consumer-bindings.json",
+            "container_fixture": "synthetic/containers/members.json"
+          }
+        }
+      ],
+      "title": "Mixed containers retain canonical provenance and distinct target domains"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/ordering/relations.json",
+          "sha256": "32bd3df1eb5bd58f26a71956fb9231c5a51f5e0d64d5588bb38a1e308194512b",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "shared",
+      "id": "P25",
+      "requirements": [
+        "R1",
+        "R2",
+        "R5",
+        "R6"
+      ],
+      "subcases": [
+        {
+          "id": "candidate-cycle-and-order-only",
+          "inputs": {
+            "relations_fixture": "synthetic/ordering/relations.json"
+          }
+        }
+      ],
+      "title": "Candidate cycles do not schedule; required unknowns still block"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/lifecycle/refinement.json",
+          "sha256": "dfcbe2fc8a6ef6290a8b5047fc279ca568d0fb0e5e0cc033c38dc06da87b994f",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "lifecycle",
+      "id": "P26",
+      "requirements": [
+        "R6",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "unbound-planning",
+          "inputs": {
+            "operation_binding": null,
+            "recipe": null,
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "late-deterministic-recipe",
+          "inputs": {
+            "closure": {
+              "unknown_inputs": []
+            },
+            "previous_refinement": "unbound",
+            "recipe": {
+              "commands": [
+                "clang --target=x86_64-unknown-linux-gnu main.c -o main"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            }
+          }
+        }
+      ],
+      "title": "Recipe-less discovery accepts unknown and late recipe creates immutable refinement"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/lifecycle/refinement.json",
+          "sha256": "dfcbe2fc8a6ef6290a8b5047fc279ca568d0fb0e5e0cc033c38dc06da87b994f",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "lifecycle",
+      "id": "P27",
+      "requirements": [
+        "R6",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "same-graph-different-recipes",
+          "inputs": {
+            "recipe_a": {
+              "commands": [
+                "clang --target=x86_64-unknown-linux-gnu a.c -o a"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "recipe_b": {
+              "commands": [
+                "clang --target=x86_64-unknown-linux-gnu -O2 a.c -o a"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "source_bundle": "same"
+          }
+        },
+        {
+          "id": "promotion-conflicting-target",
+          "inputs": {
+            "promoted_recipe": {
+              "commands": [
+                "clang -m32 a.c -o a"
+              ],
+              "environment": {},
+              "identity_kind": "synthetic_unaccepted_recipe_input"
+            },
+            "selection": {
+              "abi": null,
+              "deployment": null,
+              "device_kind": null,
+              "hardware_generation": null,
+              "isa": "x86_64",
+              "os": "linux",
+              "sdk": null
+            }
+          }
+        },
+        {
+          "id": "stale-cache",
+          "inputs": {
+            "entrypoint": "cache",
+            "recipe_digest": "changed",
+            "refinement_recipe_digest": "old"
+          }
+        },
+        {
+          "id": "stale-reconstruction",
+          "inputs": {
+            "entrypoint": "reconstruction",
+            "recipe_digest": "changed",
+            "refinement_recipe_digest": "old"
+          }
+        },
+        {
+          "id": "stale-recovery",
+          "inputs": {
+            "entrypoint": "recovery",
+            "recipe_digest": "changed",
+            "refinement_recipe_digest": "old"
+          }
+        },
+        {
+          "id": "stale-reuse",
+          "inputs": {
+            "entrypoint": "reuse",
+            "recipe_digest": "changed",
+            "refinement_recipe_digest": "old"
+          }
+        },
+        {
+          "id": "stale-direct_dispatch",
+          "inputs": {
+            "entrypoint": "direct_dispatch",
+            "recipe_digest": "changed",
+            "refinement_recipe_digest": "old"
+          }
+        },
+        {
+          "id": "stale-replay",
+          "inputs": {
+            "entrypoint": "replay",
+            "recipe_digest": "changed",
+            "refinement_recipe_digest": "old"
+          }
+        }
+      ],
+      "title": "C1 immutable graph and all-entrypoint proof identity guards"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/environment/env.sh",
+          "sha256": "170718d6c01c0a6307d6ba55e2f1ca56999ac82b38ae9e0d6bc740aee20d5b3a",
+          "span": [
+            1,
+            6
+          ]
+        }
+      ],
+      "family": "environment",
+      "id": "P28",
+      "requirements": [
+        "R5",
+        "R7",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "declared-not-enforced",
+          "inputs": {
+            "descriptor": "synthetic/environment/env.sh",
+            "recipe_sources_script": false
+          }
+        },
+        {
+          "id": "bounded-exhaustion",
+          "inputs": {
+            "calls_requested": 5,
+            "eligible_scripts": 65,
+            "scope_call_cap": 4,
+            "script_cap": 64
+          }
+        }
+      ],
+      "title": "Static environment is scoped advisory evidence, with taint and redaction"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/environment/availability.json",
+          "sha256": "cbd50d3b8d784f3c32dbdfb873c065780cfd2664eb88cd3367513fbf686bcdb9",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "environment",
+      "id": "P29",
+      "requirements": [
+        "R5",
+        "R6",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "wiring-wave1",
+          "inputs": {
+            "workflow": "wave1"
+          }
+        },
+        {
+          "id": "wiring-project_build_review",
+          "inputs": {
+            "workflow": "project_build_review"
+          }
+        },
+        {
+          "id": "accepted_partial",
+          "inputs": {
+            "authoritative_launch_identity": true,
+            "outcome": "accepted_partial"
+          }
+        },
+        {
+          "id": "bounded_completed_with_gaps",
+          "inputs": {
+            "authoritative_launch_identity": true,
+            "outcome": "bounded_completed_with_gaps"
+          }
+        },
+        {
+          "id": "disabled",
+          "inputs": {
+            "authoritative_launch_identity": true,
+            "outcome": "disabled"
+          }
+        },
+        {
+          "id": "authoritative_not_scheduled",
+          "inputs": {
+            "authoritative_launch_identity": true,
+            "outcome": "authoritative_not_scheduled"
+          }
+        },
+        {
+          "id": "optional_wrong_snapshot",
+          "inputs": {
+            "authoritative_launch_identity": true,
+            "outcome": "optional_wrong_snapshot"
+          }
+        },
+        {
+          "id": "expected_current_missing",
+          "inputs": {
+            "authoritative_expected_current_producer": true,
+            "outcome": "expected_current_missing"
+          }
+        },
+        {
+          "id": "wrong_source_current",
+          "inputs": {
+            "authoritative_expected_current_producer": true,
+            "outcome": "wrong_source_current"
+          }
+        },
+        {
+          "id": "integrity_error",
+          "inputs": {
+            "authoritative_expected_current_producer": true,
+            "outcome": "integrity_error"
+          }
+        },
+        {
+          "id": "unexpected_exception",
+          "inputs": {
+            "authoritative_expected_current_producer": true,
+            "outcome": "unexpected_exception"
+          }
+        },
+        {
+          "id": "publication_failure",
+          "inputs": {
+            "authoritative_expected_current_producer": true,
+            "outcome": "publication_failure"
+          }
+        }
+      ],
+      "title": "E1 both workflow graphs and authoritative absence versus failure"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/versions/identity.json",
+          "sha256": "36bdc3ac4af95d01bf43e0588b731a681061d5bb8b08d4490e396298b013c4fb",
+          "span": [
+            1,
+            2
+          ]
+        }
+      ],
+      "family": "lifecycle",
+      "id": "P30",
+      "requirements": [
+        "R6",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "valid-graph1",
+          "inputs": {
+            "accepted_hash_matches": true,
+            "schema_version": 1
+          }
+        },
+        {
+          "id": "corrupt-or-unsupported",
+          "inputs": {
+            "accepted_hash_matches": false,
+            "schema_version": 999
+          }
+        },
+        {
+          "id": "changed-release",
+          "inputs": {
+            "current_release": "new",
+            "receipt_release": "old"
+          }
+        }
+      ],
+      "title": "Historical readability does not manufacture typed authority"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/inference/bounds.json",
+          "sha256": "8005957e61d6e77778287c6e1f56fd0feaa81670b4d6bc0c0fc5ee7833b6f3af",
+          "span": [
+            1,
+            3
+          ]
+        }
+      ],
+      "family": "inference",
+      "id": "P31",
+      "requirements": [
+        "R7",
+        "R10",
+        "R11"
+      ],
+      "subcases": [
+        {
+          "id": "all-hint-forms",
+          "inputs": {
+            "bundle": "same",
+            "hint_forms": [
+              "all",
+              "empty",
+              "subset",
+              "reordered"
+            ]
+          }
+        },
+        {
+          "id": "response-or-evidence-overflow",
+          "inputs": {
+            "request_bytes": 131073,
+            "scope_calls_requested": 5
+          }
+        }
+      ],
+      "title": "Hints cannot change canonical facts and exhaustion cannot become complete"
+    },
+    {
+      "evidence": [
+        {
+          "origin": "synthetic_declaration",
+          "path": "synthetic/feedback/replay.json",
+          "sha256": "1c2ddaf5f6d38889e836a8d0c5e0beee63e53e563ff5752707a3c1dd8a681ec3",
+          "span": [
+            1,
+            4
+          ]
+        }
+      ],
+      "family": "feedback",
+      "id": "P32",
+      "requirements": [
+        "R8",
+        "R10",
+        "R11",
+        "R12"
+      ],
+      "subcases": [
+        {
+          "id": "pinned-offline-measurements",
+          "inputs": {
+            "catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+            "limits": "synthetic/feedback/replay.json"
+          }
+        }
+      ],
+      "title": "R8 bounded offline real-path evidence contract, not a live review"
+    }
+  ],
+  "schema": "appsec-review/topology-evaluation-inputs/1"
+}

@@ -1,0 +1,16 @@
+{
+  "artifact_relative_path": "artifacts/catalog/build-targets.json",
+  "attempt": "attempt_0001",
+  "bytes": 3228085,
+  "complete_catalog_committed": false,
+  "complete_catalog_sealed_local": true,
+  "distinct_path_hash_pairs": 458,
+  "identity_kind": "research_input_reference_not_production_publication",
+  "inline_document_occurrences": 661,
+  "job": "job_target_catalog",
+  "old_accepted_parent_rebinding": false,
+  "run_id": "2026-11-05-0001",
+  "schema": "appsec-review/topology-fixture-origin-reference/1",
+  "sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+  "units": 295
+}

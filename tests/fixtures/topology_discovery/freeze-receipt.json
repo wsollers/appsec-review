@@ -1,0 +1,25 @@
+{
+  "base_commit": "acf973f8a0d7ca78548ad619ba4b5691c5b93678",
+  "base_tree": "c0fccbff9660dac913ff46314dcb63c40e8f6aac",
+  "counts": {
+    "first_use_records": 16,
+    "first_use_subcases": 16,
+    "public_records": 32,
+    "public_subcases": 64,
+    "reserve_records": 16,
+    "reserve_subcases": 17
+  },
+  "feature_ready": false,
+  "fixtures_only": true,
+  "input_catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+  "manifest_sha256": "94ed041b2d86dc6994950af3111f9792b03983d241666f094c23f47b63c70807",
+  "private_labels_disclosed": false,
+  "private_root_commitment_sha256": "6c0f851a18e5c8001be2eaf52a618b057184b439302ba24619a1c708e896bfa2",
+  "public_input_sha256": "895e6da3701aeae3987542f190b521d353d94dc2f8abc8ffc5ff67911c9a6e1e",
+  "public_label_revision": 2,
+  "public_label_sha256": "2d09cd73f61dc9de6d97801326937a46c31a5c55ee91c8626fb310bc3a5e4e2c",
+  "remaining_validation": "Finite selector/import/fixture admission and native unit execution remain solely with custodian; I/A not authored or run.",
+  "schema": "appsec-review/topology-freeze-receipt/1",
+  "status": "independent_labels_frozen_before_production_tuning",
+  "unit_tested": false
+}

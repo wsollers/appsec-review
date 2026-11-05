@@ -1,0 +1,167 @@
+{
+  "actual_target_source_or_metadata": false,
+  "documents": [
+    {
+      "content": "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>\n    <PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit>\n    <PublishAot>false</PublishAot>\n  </PropertyGroup>\n</Project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/managed/App.csproj",
+      "sha256": "7bc3af831cbdf0b819ac8ad82a52f545ff084512fcec3d5f02a36ec1b07d50d5"
+    },
+    {
+      "content": "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>\n<TargetFramework>net8.0</TargetFramework><OutputType>Exe</OutputType>\n<PlatformTarget>x86</PlatformTarget>\n</PropertyGroup></Project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/managed/X86.csproj",
+      "sha256": "3a921cbdb85f48a7fd7527f1504898ca7d368ba53c0033bd49f43e5d870b4897"
+    },
+    {
+      "content": "<Project ToolsVersion=\"15.0\">\n<PropertyGroup Condition=\"'$(Configuration)'=='Release'\">\n<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion><OutputType>Exe</OutputType>\n<PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>true</Prefer32Bit>\n</PropertyGroup>\n</Project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/managed/Prefer.csproj",
+      "sha256": "a94d2108dbc1ce0ab54e099cc11520b43b43ae4c6c01f8241ac5864955bd1894"
+    },
+    {
+      "content": "<Project Sdk=\"Microsoft.NET.Sdk\">\n<PropertyGroup><OutputType>Library</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n<PropertyGroup Condition=\"'$(Configuration)'=='Debug'\"><Prefer32Bit>true</Prefer32Bit></PropertyGroup>\n<PropertyGroup Condition=\"'$(Configuration)'=='Release'\"><Prefer32Bit>false</Prefer32Bit></PropertyGroup>\n</Project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/managed/Unselected.csproj",
+      "sha256": "f934abebf3224bc324b2fe87ca25843a7adf2846d6572c1a0b0d1325c798996f"
+    },
+    {
+      "content": "<Project><PropertyGroup>\n<OutputType>$(OutputKind)</OutputType><TargetFrameworkVersion>$(Framework)</TargetFrameworkVersion>\n<PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>true</Prefer32Bit>\n</PropertyGroup><Import Project=\"$(ExternalFrameworkRules)\" /></Project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/managed/Unknown.csproj",
+      "sha256": "be862988c9ef70a19fd27ba5c20e81b7a08adb837ad9f22866b36a092f4ad61c"
+    },
+    {
+      "content": "module example.invalid/golden\n\ngo 1.22\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/go/go.mod",
+      "sha256": "3a4d60a248ad501ce7bcbee5ed84f5ddc7b6cc7ff1cecf259dfc0f5a152cd4e3"
+    },
+    {
+      "content": "package main\n// #include <stdint.h>\nimport \"C\"\nfunc main() {}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/go/native.go",
+      "sha256": "73afedfe842551fd222953b8785828c7e94ccc68cfc0ced45fe335d8c52f7657"
+    },
+    {
+      "content": "include make.conf\nall: app\napp: app.o\n\t$(CC) $(LDFLAGS) app.o -o app\napp.o: app.c\n\t$(CC) $(CFLAGS) -m64 -c app.c -o app.o\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/native/makefile",
+      "sha256": "dfb673af99ef2637b3ba9ed9e5612541226d9d70fc6cab0627024332961126e9"
+    },
+    {
+      "content": "{\"identity_kind\":\"synthetic_static_profile\",\"image_digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\n\"compiler_path\":\"/opt/compiler/bin/clang\",\"compiler_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\n\"target_default\":\"x86_64-unknown-linux-gnu\",\"wrapper_chain\":[],\"admitted\":true}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/native/compiler-profile.json",
+      "sha256": "319f30011bbf4458799be778d9d7f5cd6995398148127e2c5e8a5d4cdcc47392"
+    },
+    {
+      "content": "<project><modelVersion>4.0.0</modelVersion><groupId>example</groupId><artifactId>managed</artifactId>\n<version>1</version><packaging>jar</packaging>\n<build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId>\n<version>3.11.0</version></plugin></plugins></build></project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/maven/pom.xml",
+      "sha256": "43189f4d82f49249dc2cf2c6cd14090188e5641c41a3d636270dbf5fe75fcd50"
+    },
+    {
+      "content": "<project><modelVersion>4.0.0</modelVersion><groupId>example</groupId><artifactId>native</artifactId>\n<version>1</version><packaging>nar</packaging><build><plugins><plugin>\n<groupId>com.github.maven-nar</groupId><artifactId>nar-maven-plugin</artifactId><version>3.10.1</version>\n<extensions>true</extensions></plugin></plugins></build></project>\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/maven/native-pom.xml",
+      "sha256": "0a0a70445258004ac056d0b6ac8ae6c974a7839e6b067590e51ccc6d2b4850fa"
+    },
+    {
+      "content": "{\"name\":\"package-only\",\"version\":\"1.0.0\",\"scripts\":{\"pack\":\"npm pack\"}}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/node/package.json",
+      "sha256": "aefd071207965db2bb3052b0984acd0d3e65f56d42d248572f1851f4d0275eaf"
+    },
+    {
+      "content": "{\"targets\":[{\"target_name\":\"addon\",\"sources\":[\"addon.cc\"]}]}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/node/binding.gyp",
+      "sha256": "365c24521ae9815ada105c49964daa99aea9b34fdb445ae84861e06f27e1d229"
+    },
+    {
+      "content": "{\"operations\":[{\"id\":\"rid-pack\",\"kind\":\"package\",\"RuntimeIdentifier\":\"linux-x64\",\"PublishAot\":false},\n{\"id\":\"jni-import\",\"kind\":\"prebuilt_import\",\"path\":\"jni/libbridge.so\"},\n{\"id\":\"aar-import\",\"kind\":\"prebuilt_import\",\"path\":\"bridge.aar\"}],\"payload_inspection\":\"unknown\"}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/payload/operations.json",
+      "sha256": "0f80b4dd5b39ee02ccfaed0a0db0bd3ff55b81942b1ce852667a8a45b0e03f5b"
+    },
+    {
+      "content": "{\"canonical\":{\"path\":\"libshared.a\",\"members\":[{\"id\":\"server\",\"os\":\"linux\",\"isa\":\"x86_64\",\"abi\":\"gnu\"},\n{\"id\":\"phone\",\"os\":\"ios\",\"isa\":\"arm64\",\"abi\":\"darwin\",\"device_kind\":\"device\"},\n{\"id\":\"sim\",\"os\":\"ios\",\"isa\":\"arm64\",\"abi\":\"darwin\",\"device_kind\":\"simulator\"}]},\n\"alias\":{\"path\":\"shared_alias.a\",\"canonical\":\"libshared.a\",\"provenance\":\"captured_alias\"},\n\"uninspected\":{\"path\":\"unknown.aar\",\"members\":null}}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/containers/members.json",
+      "sha256": "39eb46adaa13f3acc8b7d833c249304450b6645272afdc64147b34156ed85ea4"
+    },
+    {
+      "content": "{\"relations\":[{\"id\":\"a-b\",\"consumer\":\"a\",\"candidate_producer\":\"b\",\"resolution\":\"candidate\",\"required\":true,\"role\":\"import_library\"},\n{\"id\":\"b-a\",\"consumer\":\"b\",\"candidate_producer\":\"a\",\"resolution\":\"candidate\",\"required\":false},\n{\"id\":\"prepare-build\",\"producer\":\"prepare\",\"consumer\":\"build\",\"resolution\":\"resolved\",\"kind\":\"order_only\",\"required\":true}],\n\"products\":{\"prepare\":[]},\"requested\":[\"build\",\"a\"]}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/ordering/relations.json",
+      "sha256": "32bd3df1eb5bd58f26a71956fb9231c5a51f5e0d64d5588bb38a1e308194512b"
+    },
+    {
+      "content": "{\"source_bundle\":\"synthetic-fixed-source\",\"graph\":\"synthetic-source-derived-graph\",\"initial_recipe\":null,\n\"later_recipe\":{\"commands\":[\"clang --target=x86_64-unknown-linux-gnu main.c -o main\"],\"environment\":{}},\n\"replacement_recipe\":{\"commands\":[\"clang -m32 main.c -o main\"],\"environment\":{}},\n\"entrypoints\":[\"cache\",\"reconstruction\",\"recovery\",\"reuse\",\"direct_dispatch\",\"replay\"]}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/lifecycle/refinement.json",
+      "sha256": "dfcbe2fc8a6ef6290a8b5047fc279ca568d0fb0e5e0cc033c38dc06da87b994f"
+    },
+    {
+      "content": "#!/bin/sh\nexport PREFIX=\"$ROOT/sdk\"\nexport PATH=\"$PREFIX/bin:$PATH\"\n. \"$EXTERNAL_ENV\"\nexport CFLAGS=\"$DYNAMIC_FLAGS\"\nexport TOKEN=\"synthetic-secret\"\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/environment/env.sh",
+      "sha256": "170718d6c01c0a6307d6ba55e2f1ca56999ac82b38ae9e0d6bc740aee20d5b3a"
+    },
+    {
+      "content": "{\"workflows\":[\"wave1\",\"project_build_review\"],\"producer\":\"job_build_environment_analysis\",\n\"planner\":\"job_target_analysis_plan\",\"producer_default_enabled\":true,\n\"producer_lifecycle\":[\"AVAILABLE\",\"COMPLETED_WITH_GAPS\",\"DISABLED\",\"NOT_RUN\",\"STALE\",\"FAILED\"],\n\"authoritative_launch_identity_required\":true}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/environment/availability.json",
+      "sha256": "cbd50d3b8d784f3c32dbdfb873c065780cfd2664eb88cd3367513fbf686bcdb9"
+    },
+    {
+      "content": "{\"historical_schema\":\"appsec-review/build-topology/1\",\"new_schema\":\"appsec-review/build-topology/2\",\n\"historical_evidence_limitations\":[\"untyped products\",\"no enforcement\"],\"release\":\"synthetic-release-a\"}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/versions/identity.json",
+      "sha256": "36bdc3ac4af95d01bf43e0588b731a681061d5bb8b08d4490e396298b013c4fb"
+    },
+    {
+      "content": "{\"scope_calls\":4,\"evidence_rounds\":3,\"documents_per_request\":8,\"document_bytes\":65536,\n\"additive_scope_bytes\":262144,\"request_bytes\":131072,\"response_bytes\":65536,\n\"hints_variants\":[\"all\",\"empty\",\"subset\",\"reordered\"],\"same_accepted_bundle\":true}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/inference/bounds.json",
+      "sha256": "8005957e61d6e77778287c6e1f56fd0feaa81670b4d6bc0c0fc5ee7833b6f3af"
+    },
+    {
+      "content": "{\"input_catalog_units\":295,\"provisional_seconds\":120,\"max_graph_bytes\":16777216,\n\"external_boundaries\":[\"scripted_model\",\"fake_executor\"],\"production_functions_not_faked\":true,\n\"record\":[\"baseline_candidate_commit\",\"input_hash\",\"prompt_context\",\"call_count\",\"evidence_bytes\",\"graph_bytes\",\"elapsed\",\"gaps\"],\n\"integration_if_transitive_behavior_is_not_unit\":true}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/feedback/replay.json",
+      "sha256": "1c2ddaf5f6d38889e836a8d0c5e0beee63e53e563ff5752707a3c1dd8a681ec3"
+    },
+    {
+      "content": "{\"identity_kind\":\"synthetic_captured_interface_declarations\",\"canonical_owner\":\"libshared.a\",\"members\":[{\"id\":\"server\",\"role\":\"static_archive\",\"os\":\"linux\",\"isa\":\"x86_64\",\"abi\":\"gnu\"},{\"id\":\"phone\",\"role\":\"static_archive\",\"os\":\"ios\",\"isa\":\"arm64\",\"abi\":\"darwin\",\"device_kind\":\"device\"}],\"consumers\":[{\"id\":\"server-app\",\"required_role\":\"static_archive\",\"selected\":{\"os\":\"linux\",\"isa\":\"x86_64\",\"abi\":\"gnu\"}},{\"id\":\"phone-app\",\"required_role\":\"static_archive\",\"selected\":{\"os\":\"ios\",\"isa\":\"arm64\",\"abi\":\"darwin\",\"device_kind\":\"device\"}}],\"capability\":\"unknown\",\"hardware_generation\":null}\n",
+      "identity_kind": "synthetic_declaration",
+      "live_refreshable": false,
+      "path": "synthetic/containers/consumer-bindings.json",
+      "sha256": "761dd6e725592fa5da0115e1b9b800882ece5da0d3be7061de9a8323b404e0fe"
+    }
+  ],
+  "schema": "appsec-review/topology-fixture-synthetic-documents/1"
+}

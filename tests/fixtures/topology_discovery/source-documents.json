@@ -1,0 +1,566 @@
+{
+  "documents": [
+    {
+      "excerpts": [
+        {
+          "content": "apply plugin: 'com.android.application'\r\n\r\nandroid {\r\n    compileSdkVersion 29\r\n\r\n    defaultConfig {\r\n        applicationId \"com.example.myapplication\"\r\n        minSdkVersion 16\r\n        targetSdkVersion 29\r\n",
+          "derived_utf8_sha256": "466d885463b2185b69901ed051adacc74bbe420e4e19425213d3583ee7f745c9",
+          "span": [
+            1,
+            9
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "d2ec0dee244a956b02e0d828344ccf89e50d29030557df9e4fc11181c09247a2",
+      "path": "fsh-client/FrontendTools/SourceProject/ShelterAndroidProj/app/build.gradle"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "//apply plugin: 'com.android.application'\r\napply plugin: 'com.android.library'\r\n\r\nandroid {\r\n    compileSdkVersion 30\r\n    defaultConfig {\r\n//        applicationId \"com.shandagames.android_project\"\r\n        minSdkVersion 23\r\n        //noinspection ExpiredTargetSdkVersion\r\n        targetSdkVersion 30\r\n",
+          "derived_utf8_sha256": "4ec60e538bd79a7ff438e5842f92d87852a54468195560d6a59b47751c46e39a",
+          "span": [
+            1,
+            10
+          ]
+        },
+        {
+          "content": "    }\r\n\r\n    libraryVariants.all{ aarFile ->\r\n        aarFile.outputs.all{\r\n            outputFileName = \"Main.aar\"\r\n        }\r\n",
+          "derived_utf8_sha256": "816f5f1cbe04a846c87b726f4a1d73bfb6f91ba714611c3c049a41b13559a5c2",
+          "span": [
+            20,
+            25
+          ]
+        },
+        {
+          "content": "    implementation project(':depsAAR:GHOME_SDK')\r\n",
+          "derived_utf8_sha256": "9a7b813d0dfe996cc549f70c810149f0f936f06157e5316863eff1aefeb1a578",
+          "span": [
+            55,
+            55
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "80fc4d009c4374a3304a7aca19b4d34f8115bcb87751735ea4c3791d8bb9ce4c",
+      "path": "fsh-client/deps_projs/android_as/app/build.gradle"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "configurations.maybeCreate(\"default\")\r\nartifacts.add(\"default\",file(\"MY_GHOME_SDK_v10.0.0.5_20240621.aar\"))",
+          "derived_utf8_sha256": "7b826edaadf35e63c1d3b511e39ea05157c363a8fe4dfe8cdbe809f06914f33a",
+          "span": [
+            1,
+            2
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "7b826edaadf35e63c1d3b511e39ea05157c363a8fe4dfe8cdbe809f06914f33a",
+      "path": "fsh-client/deps_projs/android_as/depsAAR/GHOME_SDK/build.gradle"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "include ':app'\r\ninclude ':depsAAR:GHOME_SDK'\r\n",
+          "derived_utf8_sha256": "6457a2a96fb254ccf06ea9666e9aada2b506273f7565c72f8feaed2375df7a95",
+          "span": [
+            1,
+            2
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "8df886117e29edbc6c494285323ce131cadde2d1704c0a55f97f0251a3ecabb6",
+      "path": "fsh-client/deps_projs/android_as/settings.gradle"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "apply plugin: 'com.android.library'\r\n//apply plugin: 'com.google.gms.google-services'\r\n\r\nandroid {\r\n    compileSdk 34\r\n    namespace(\"com.gaea.sdg.shelter\")\r\n\r\n    defaultConfig {\r\n        minSdkVersion 23\r\n        targetSdkVersion 34\r\n        versionCode 12\r\n        versionName \"12\"\r\n        multiDexEnabled true\r\n        ndk {\r\n            abiFilters \"armeabi-v7a\", \"armeabi\", \"arm64-v8a\"\r\n",
+          "derived_utf8_sha256": "b2b8d9a87e523fa28477e061a6dba1ef3df134b203126a2f33c15f43c5c97fe9",
+          "span": [
+            1,
+            15
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "7090231cc63724cd8722c1d6d2e5d4962881e0fb0784d8c9f9d87fa0d43e3d4a",
+      "path": "fsh-client/deps_projs/ghome_google_android_as/app/build.gradle"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "    <ProjectConfiguration Include=\"Debug with Boost|Win32\">\n      <Configuration>Debug with Boost</Configuration>\n      <Platform>Win32</Platform>\n    </ProjectConfiguration>\n    <ProjectConfiguration Include=\"Debug|Win32\">\n      <Configuration>Debug</Configuration>\n      <Platform>Win32</Platform>\n    </ProjectConfiguration>\n    <ProjectConfiguration Include=\"Release with Boost|Win32\">\n      <Configuration>Release with Boost</Configuration>\n      <Platform>Win32</Platform>\n    </ProjectConfiguration>\n    <ProjectConfiguration Include=\"Release|Win32\">\n      <Configuration>Release</Configuration>\n      <Platform>Win32</Platform>\n    </ProjectConfiguration>\n",
+          "derived_utf8_sha256": "a3c77e90db5cc256e8e3f9807fea602f11c07da560b129db934cbd825dfda85c",
+          "span": [
+            4,
+            19
+          ]
+        },
+        {
+          "content": "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release with Boost|Win32'\" Label=\"Configuration\">\n    <ConfigurationType>DynamicLibrary</ConfigurationType>\n    <CharacterSet>MultiByte</CharacterSet>\n    <PlatformToolset>v120</PlatformToolset>\n  </PropertyGroup>\n  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug with Boost|Win32'\" Label=\"Configuration\">\n    <ConfigurationType>DynamicLibrary</ConfigurationType>\n    <CharacterSet>MultiByte</CharacterSet>\n    <PlatformToolset>v120</PlatformToolset>\n  </PropertyGroup>\n  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|Win32'\" Label=\"Configuration\">\n    <ConfigurationType>DynamicLibrary</ConfigurationType>\n    <CharacterSet>MultiByte</CharacterSet>\n    <PlatformToolset>v120</PlatformToolset>\n  </PropertyGroup>\n  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|Win32'\" Label=\"Configuration\">\n    <ConfigurationType>DynamicLibrary</ConfigurationType>\n    <CharacterSet>MultiByte</CharacterSet>\n",
+          "derived_utf8_sha256": "354f805b8c011b18ff67a92be59d228b33af48cf86ae4f77a8b3a1b8f6bc83c3",
+          "span": [
+            27,
+            44
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|Win32'\">\n    <ClCompile>\n      <Optimization>Disabled</Optimization>\n      <AdditionalIncludeDirectories>../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_DLL;_USRDLL;LOG4CPP_HAS_DLL;LOG4CPP_BUILD_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n      <MinimalRebuild>true</MinimalRebuild>\n      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>\n      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>\n      <PrecompiledHeader>\n      </PrecompiledHeader>\n      <WarningLevel>Level3</WarningLevel>\n      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>\n    </ClCompile>\n    <Link>\n      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>\n      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>\n      <GenerateDebugInformation>true</GenerateDebugInformation>\n      <ProgramDatabaseFile>$(OutDir)log4cpp.pdb</ProgramDatabaseFile>\n      <SubSystem>Windows</SubSystem>\n      <ImportLibrary>$(OutDir)log4cpp.lib</ImportLibrary>\n      <TargetMachine>MachineX86</TargetMachine>\n",
+          "derived_utf8_sha256": "6136bceed73a15863a443e126137ca5d1301d5f215dc5a5b89d2508467abcaa6",
+          "span": [
+            90,
+            110
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|Win32'\">\n    <ClCompile>\n      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_DLL;_USRDLL;LOG4CPP_HAS_DLL;LOG4CPP_BUILD_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>\n      <PrecompiledHeader>\n      </PrecompiledHeader>\n      <WarningLevel>Level3</WarningLevel>\n      <DebugInformationFormat>\n      </DebugInformationFormat>\n      <AdditionalIncludeDirectories>../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n    </ClCompile>\n    <Link>\n      <RegisterOutput>false</RegisterOutput>\n      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>\n      <ShowProgress>NotSet</ShowProgress>\n      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>\n      <GenerateDebugInformation>true</GenerateDebugInformation>\n      <SubSystem>Windows</SubSystem>\n      <OptimizeReferences>true</OptimizeReferences>\n      <EnableCOMDATFolding>true</EnableCOMDATFolding>\n      <ImportLibrary>$(OutDir)log4cpp.lib</ImportLibrary>\n      <TargetMachine>MachineX86</TargetMachine>\n",
+          "derived_utf8_sha256": "9a9dc24e41e6f093b0f5f09809ee1d7d4252b7033a45ac49d70fab8450f59c79",
+          "span": [
+            113,
+            134
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug with Boost|Win32'\">\n    <ClCompile>\n      <Optimization>Disabled</Optimization>\n      <AdditionalIncludeDirectories>../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_DLL;_USRDLL;LOG4CPP_HAS_DLL;LOG4CPP_BUILD_DLL;LOG4CPP_HAVE_BOOST;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n      <MinimalRebuild>true</MinimalRebuild>\n      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>\n      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>\n      <PrecompiledHeader>\n      </PrecompiledHeader>\n      <WarningLevel>Level3</WarningLevel>\n      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>\n    </ClCompile>\n    <Link>\n      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>\n      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>\n      <GenerateDebugInformation>true</GenerateDebugInformation>\n      <ProgramDatabaseFile>$(OutDir)log4cpp.pdb</ProgramDatabaseFile>\n      <SubSystem>Windows</SubSystem>\n      <ImportLibrary>$(OutDir)log4cpp.lib</ImportLibrary>\n      <TargetMachine>MachineX86</TargetMachine>\n",
+          "derived_utf8_sha256": "cfc65673f35f067cab292dfcdf596963a28394e1eefda2b15324a7880a953a74",
+          "span": [
+            137,
+            157
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release with Boost|Win32'\">\n    <ClCompile>\n      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_DLL;_USRDLL;LOG4CPP_HAS_DLL;LOG4CPP_BUILD_DLL;LOG4CPP_HAVE_BOOST;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>\n      <PrecompiledHeader>\n      </PrecompiledHeader>\n      <WarningLevel>Level3</WarningLevel>\n      <DebugInformationFormat>\n      </DebugInformationFormat>\n    </ClCompile>\n    <Link>\n      <RegisterOutput>false</RegisterOutput>\n      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>\n      <ShowProgress>NotSet</ShowProgress>\n      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>\n      <GenerateDebugInformation>true</GenerateDebugInformation>\n      <SubSystem>Windows</SubSystem>\n      <OptimizeReferences>true</OptimizeReferences>\n      <EnableCOMDATFolding>true</EnableCOMDATFolding>\n      <ImportLibrary>$(OutDir)log4cpp.lib</ImportLibrary>\n",
+          "derived_utf8_sha256": "50cb85327040d0e8f22c2538311b2e64f4ea78106fe93a28778dfcff67d38bb2",
+          "span": [
+            160,
+            179
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "15454e450c323a98310604bfee96d79b084ebfc0bf1f63b214e1725f95c2b35b",
+      "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/log4cpp/log4cpp.vcxproj"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "Project(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"log4cpp\", \"log4cpp\\log4cpp.vcxproj\", \"{8C796FDD-5BB9-41D5-8471-DDC897C8C486}\"\nEndProject\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"testCategory\", \"testCategory\\testCategory.vcxproj\", \"{0347D7FB-ECBD-E461-D1A7-3900286ADB39}\"\nEndProject\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"testDLL\", \"testDLL\\testDLL.vcxproj\", \"{813F4A72-111B-54B9-FF71-20FFE82BD199}\"\nEndProject\nProject(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"testMain\", \"testMain\\testMain.vcxproj\", \"{E1D631EF-17BF-0DEF-7051-F548524209B8}\"\n",
+          "derived_utf8_sha256": "360d4a2f81c208fc4a6ebcf2745df7bd84622aa9f6a9a78f7dd2a0cb2ea3552c",
+          "span": [
+            3,
+            9
+          ]
+        },
+        {
+          "content": "\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n\t\tDebug with Boost|Win32 = Debug with Boost|Win32\n\t\tDebug|Win32 = Debug|Win32\n\t\tRelease with Boost|Win32 = Release with Boost|Win32\n\t\tRelease|Win32 = Release|Win32\n\tEndGlobalSection\n\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n",
+          "derived_utf8_sha256": "ea598bfa4b21a669d881902b5a6fa7304f5705245034f7771b0836aef96ee5f0",
+          "span": [
+            22,
+            28
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "4727d63d8883ce5bc711786483da836ec96817d41b88ae7fec499bdaef3d1793",
+      "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/msvc10.sln"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "    <ProjectConfiguration Include=\"Debug|Win32\">\n      <Configuration>Debug</Configuration>\n      <Platform>Win32</Platform>\n    </ProjectConfiguration>\n    <ProjectConfiguration Include=\"Release|Win32\">\n      <Configuration>Release</Configuration>\n      <Platform>Win32</Platform>\n    </ProjectConfiguration>\n  </ItemGroup>\n",
+          "derived_utf8_sha256": "96f19f9d5bd33986ac0a55576800f3f315ec17ffb9158ed9ccff084a91cad9f9",
+          "span": [
+            4,
+            12
+          ]
+        },
+        {
+          "content": "    <ProjectReference Include=\"..\\log4cpp\\log4cpp.vcxproj\">\n      <Project>{8c796fdd-5bb9-41d5-8471-ddc897c8c486}</Project>\n      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n    </ProjectReference>\n",
+          "derived_utf8_sha256": "5e1de50bc60319143afcc274241bf4b9c91a2e2cc0d08c711776355a4b8aa74f",
+          "span": [
+            142,
+            145
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "931df1060f2450a5959fee38a291dbef1d0038ce27297d93c10aade6ee475ca7",
+      "path": "fsh-server/Server/lib/libs/log4cpp/msvc10/testDLL/testDLL.vcxproj"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "include ../../../linuxlib/make.conf\n\n# Object name you want to make\nLIBNAME\t= libmymysql.a\nPROG\t= libmymysql$(OUT_SFX)\n",
+          "derived_utf8_sha256": "bf85ac63a83ddf9e2ed24ea414c50283accc417c794f11d9259caf8f8b97de57",
+          "span": [
+            7,
+            11
+          ]
+        },
+        {
+          "content": "# Lib file\nLIB\t= -luuid\t#-L/usr/lib64/mysql -lmysqlclient\n\nMAKE_MOD += -std=c++11\n",
+          "derived_utf8_sha256": "257cb5bfe87e56a4f71133fb9d6b676aaf7b96cc0828534cad841485f96f071b",
+          "span": [
+            25,
+            28
+          ]
+        },
+        {
+          "content": "all:depend $(PROG)\ndepend:\n\t@$(CC) $(MAKE_MOD) $(INCLUDE) -MM $(SRC) >.depend\n-include .depend\n\n$(PROG):$(OBJ)\n\tar rcs $(PROG) $(OBJ)\n\tcp $(PROG) $(LIB_DIR_A)/$(LIBNAME)\n\n%$(OBJ_SFX):%$(SFX)\n\t$(CC) $(MAKE_MOD) $(INCLUDE) $< -o $@\n",
+          "derived_utf8_sha256": "0466220e8bfc1413fb8e13adb80bb935625649d966f0a223cc49f6587428ec35",
+          "span": [
+            31,
+            41
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "1f06470f0508f780b4d0738ead4de68f64de0562eb452711dd425cb7062936b5",
+      "path": "fsh-server/Server/lib/libs/mysql/mymysql/makefile"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "FROM centos:6.6\n\nRUN yum install -y git \\\n                   tar \\\n                   wget \\\n                   make \\\n                   autoconf \\\n                   curl-devel \\\n                   unzip \\\n                   automake \\\n                   libtool \\\n                   glibc-static.i686 \\\n                   glibc-devel \\\n                   glibc-devel.i686\n",
+          "derived_utf8_sha256": "0fda5e4e05864a22623ccff64f26841a7366dfaba60bf34925328a38c4b55939",
+          "span": [
+            1,
+            14
+          ]
+        },
+        {
+          "content": "# Install GCC 4.7 to support -static-libstdc++\nRUN wget http://people.centos.org/tru/devtools-1.1/devtools-1.1.repo -P /etc/yum.repos.d\nRUN bash -c 'echo \"enabled=1\" >> /etc/yum.repos.d/devtools-1.1.repo'\nRUN bash -c \"sed -e 's/\\$basearch/i386/g' /etc/yum.repos.d/devtools-1.1.repo > /etc/yum.repos.d/devtools-i386-1.1.repo\"\nRUN sed -e 's/testing-/testing-i386-/g' -i /etc/yum.repos.d/devtools-i386-1.1.repo\nRUN yum install -y devtoolset-1.1 \\\n                   devtoolset-1.1-libstdc++-devel \\\n                   devtoolset-1.1-libstdc++-devel.i686\n",
+          "derived_utf8_sha256": "6ce2592e479edeb6a97bdbe229588188e7103c661afb4a6455512a55bf3ce664",
+          "span": [
+            28,
+            35
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "065c302524f1d22d96334d77a1784b3cb818579b10643c8f754668ff0651c5ff",
+      "path": "fsh-server/Server/lib/libs/protobuf/protobuf-2.7.0/protoc-artifacts/Dockerfile"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "include ../../linuxlib/make.conf\n\n# Object name you want to make\nPROG\t= libbufbuild$(OUT_SFX)\n",
+          "derived_utf8_sha256": "6caa739a5e0253117a33ade22bbbe24e5529091320aa4af6c72679d71a25ca95",
+          "span": [
+            7,
+            10
+          ]
+        },
+        {
+          "content": "# Lib file\nLIB\t= -luuid\t#-L/usr/lib64/mysql -lmysqlclient\n\n# Debug or Release\nMKFLAG\t\t= -D LINUX -c -Wall -std=c++11 -lprotobuf\nMAKE_MOD\t= -D_DEBUG -g $(MKFLAG)\nMOD_RELEASE\t= -DNDEBUG -O2 $(MKFLAG)\n",
+          "derived_utf8_sha256": "6d9339d8d4d99eea117f0007014a8ef2bd5be651cdc1c8457c0f0da0829fc44b",
+          "span": [
+            27,
+            33
+          ]
+        },
+        {
+          "content": "$(PROG):$(OBJ)\n\tar rcs $(PROG) $(OBJ)\n\t#cp $(PROG) $(LIB_DIR)\n\n%$(OBJ_SFX):%$(SFX)\n\t$(CC) $(MAKE_MOD) $(INCLUDE) $< -o $@\n",
+          "derived_utf8_sha256": "9d3b070dbcb7bc884525206f712d564aa99e235f24e734cb535fceec4fbb83dd",
+          "span": [
+            40,
+            45
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "7bc6ecb3caaab5aeb4e0be87cf0d121c536b02190c28cc7ab8ed76edfe628af1",
+      "path": "fsh-server/Server/lib/protobuf/build/makefile"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "Project(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"MonitorTool\", \"monitor\\MonitorTool.vcxproj\", \"{41178C2F-FE67-4FEE-9B54-77BDD857F417}\"\n",
+          "derived_utf8_sha256": "28abfba2d31a80c1ff1739902e0d531b20d43acb3b55ae16e250688c685e4f0d",
+          "span": [
+            8,
+            8
+          ]
+        },
+        {
+          "content": "\t\t{41178C2F-FE67-4FEE-9B54-77BDD857F417}.Release|x64.ActiveCfg = Debug|x64\n\t\t{41178C2F-FE67-4FEE-9B54-77BDD857F417}.Release|x64.Build.0 = Debug|x64\n",
+          "derived_utf8_sha256": "56e0ff93bfe0adb47debac3eae59f61a8bc6c44d06a4f9614db3c6bd4cdec5f3",
+          "span": [
+            62,
+            63
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "9187f199263bd8beec1549a96de84cc52b1cda3668a9cb9da72ba0ec5a945266",
+      "path": "fsh-server/Server/proj/alltool.sln"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n  </ImportGroup>\n  <ImportGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\" Label=\"PropertySheets\">\n    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n  </ImportGroup>\n  <ImportGroup Label=\"PropertySheets\" Condition=\"'$(Configuration)|$(Platform)'=='Release|Win32'\">\n    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n  </ImportGroup>\n  <ImportGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\" Label=\"PropertySheets\">\n    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n",
+          "derived_utf8_sha256": "aa81dd5ab6a555f4a7d7e314c239fd87fd112456c23e35fb71fecfd42005d2bc",
+          "span": [
+            57,
+            66
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n",
+          "derived_utf8_sha256": "6f426cb8cb772d5c55e83f7b5c18f70ba7759bd1e24155cb3944fa7bf2388911",
+          "span": [
+            115,
+            115
+          ]
+        },
+        {
+          "content": "      <AdditionalLibraryDirectories>..\\..\\lib\\log4cpp\\$(Platform)\\$(Configuration);..\\..\\lib\\net\\$(Platform)\\$(Configuration);..\\..\\lib\\protobuf\\$(Platform)\\$(Configuration);..\\..\\lib\\tcmalloc\\$(Platform)\\$(Configuration);..\\..\\lib\\jsoncpp\\$(Platform)\\$(Configuration);..\\..\\lib\\zlib\\$(Platform)\\$(Configuration);..\\..\\lib\\dblog\\$(Platform)\\$(Configuration);..\\..\\lib\\hiredis\\$(Platform)\\$(Configuration);..\\..\\lib\\mysql\\$(Platform)\\$(Configuration);..\\..\\lib\\syslog\\$(Platform)\\$(Configuration);..\\..\\lib\\csvparse\\$(Platform)\\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n      <AdditionalDependencies>libtcmalloc_minimal.lib;libprotobuf.lib;mynet.lib;log4cppLIB.lib;jsoncpp.lib;ws2_32.lib;zdll.lib;hiredis-vip.lib;mymysql.lib;syslog.lib;proto.lib;csvparse.lib;%(AdditionalDependencies)</AdditionalDependencies>\n",
+          "derived_utf8_sha256": "342aded3daa9989cc6026309f2c63da44b59de5f37a6f2315aaa26c66f9e62ee",
+          "span": [
+            132,
+            133
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n",
+          "derived_utf8_sha256": "d61f68045a2707a02d822d66185fd6beead254cc89929e27dd30ee4ca5f4f8ed",
+          "span": [
+            174,
+            174
+          ]
+        },
+        {
+          "content": "      <AdditionalLibraryDirectories>..\\..\\lib\\log4cpp\\$(Platform)\\$(Configuration);..\\..\\lib\\net\\$(Platform)\\$(Configuration);..\\..\\lib\\protobuf\\$(Platform)\\$(Configuration);..\\..\\lib\\tcmalloc\\$(Platform)\\$(Configuration);..\\..\\lib\\jsoncpp\\$(Platform)\\$(Configuration);..\\..\\lib\\zlib\\$(Platform)\\$(Configuration);..\\..\\lib\\dblog\\$(Platform)\\$(Configuration);..\\..\\lib\\hiredis\\$(Platform)\\$(Configuration);..\\..\\lib\\mysql\\$(Platform)\\$(Configuration);..\\..\\lib\\syslog\\$(Platform)\\$(Configuration);..\\..\\lib\\csvparse\\$(Platform)\\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n      <AdditionalDependencies>libtcmalloc_minimal.lib;libprotobuf.lib;mynet.lib;log4cppLIB.lib;jsoncpp.lib;ws2_32.lib;zdll.lib;hiredis-vip.lib;mymysql.lib;syslog.lib;proto.lib;csvparse.lib;%(AdditionalDependencies)</AdditionalDependencies>\n",
+          "derived_utf8_sha256": "342aded3daa9989cc6026309f2c63da44b59de5f37a6f2315aaa26c66f9e62ee",
+          "span": [
+            194,
+            195
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "56cd42f22bf3d23f121c24243f75f5b3914ee03ade3313faa6861b3a57c879ea",
+      "path": "fsh-server/Server/proj/game/game.vcxproj"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n  </ImportGroup>\n  <ImportGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\" Label=\"PropertySheets\">\n    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n  </ImportGroup>\n  <ImportGroup Label=\"PropertySheets\" Condition=\"'$(Configuration)|$(Platform)'=='Release|Win32'\">\n    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n  </ImportGroup>\n  <ImportGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\" Label=\"PropertySheets\">\n    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n",
+          "derived_utf8_sha256": "aa81dd5ab6a555f4a7d7e314c239fd87fd112456c23e35fb71fecfd42005d2bc",
+          "span": [
+            57,
+            66
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n",
+          "derived_utf8_sha256": "6f426cb8cb772d5c55e83f7b5c18f70ba7759bd1e24155cb3944fa7bf2388911",
+          "span": [
+            109,
+            109
+          ]
+        },
+        {
+          "content": "      <AdditionalLibraryDirectories>..\\..\\lib\\log4cpp\\$(Platform)\\$(Configuration);..\\..\\lib\\net\\$(Platform)\\$(Configuration);..\\..\\lib\\protobuf\\$(Platform)\\$(Configuration);..\\..\\lib\\tcmalloc\\$(Platform)\\$(Configuration);..\\..\\lib\\jsoncpp\\$(Platform)\\$(Configuration);..\\..\\lib\\dblog\\$(Platform)\\$(Configuration);..\\..\\lib\\zlib\\$(Platform)\\$(Configuration);..\\..\\lib\\mysql\\$(Platform)\\$(Configuration);..\\..\\lib\\hiredis\\$(Platform)\\$(Configuration);..\\..\\lib\\libcurl\\$(Platform)\\$(Configuration);..\\..\\lib\\syslog\\$(Platform)\\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n      <AdditionalDependencies>libtcmalloc_minimal.lib;libprotobuf.lib;mynet.lib;log4cppLIB.lib;jsoncpp.lib;ws2_32.lib;zdll.lib;mymysql.lib;hiredis-vip.lib;libcurl_a_debug.lib;syslog.lib;proto.lib;%(AdditionalDependencies)</AdditionalDependencies>\n",
+          "derived_utf8_sha256": "d7324e630bbea07c71364e6a83fbefd397220e933983d9b6e4f07169264ad781",
+          "span": [
+            127,
+            128
+          ]
+        },
+        {
+          "content": "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n",
+          "derived_utf8_sha256": "d61f68045a2707a02d822d66185fd6beead254cc89929e27dd30ee4ca5f4f8ed",
+          "span": [
+            159,
+            159
+          ]
+        },
+        {
+          "content": "      <AdditionalLibraryDirectories>..\\..\\lib\\log4cpp\\$(Platform)\\$(Configuration);..\\..\\lib\\net\\$(Platform)\\$(Configuration);..\\..\\lib\\protobuf\\$(Platform)\\$(Configuration);..\\..\\lib\\tcmalloc\\$(Platform)\\$(Configuration);..\\..\\lib\\jsoncpp\\$(Platform)\\$(Configuration);..\\..\\lib\\dblog\\$(Platform)\\$(Configuration);..\\..\\lib\\zlib\\$(Platform)\\$(Configuration);..\\..\\lib\\mysql\\$(Platform)\\$(Configuration);..\\..\\lib\\hiredis\\$(Platform)\\$(Configuration);..\\..\\lib\\libcurl\\$(Platform)\\$(Configuration);..\\..\\lib\\syslog\\$(Platform)\\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n      <AdditionalDependencies>libtcmalloc_minimal.lib;libprotobuf.lib;mynet.lib;log4cppLIB.lib;jsoncpp.lib;ws2_32.lib;zdll.lib;mymysql.lib;hiredis-vip.lib;libcurl_a.lib;syslog.lib;proto.lib;%(AdditionalDependencies)</AdditionalDependencies>\n",
+          "derived_utf8_sha256": "8c734124a350c40690a4c73304c34ad54a3616c4ea69afb340bfcac16f474341",
+          "span": [
+            180,
+            181
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "43cda8db6975f9ba2ec8417154c77a7d80ea31e5cf1296c4e8caf722ca5019e9",
+      "path": "fsh-server/Server/proj/login/login.vcxproj"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"ReplayServer\", \"ReplayServer\\ReplayServer.csproj\", \"{9D6CF641-82AA-40C4-A851-02CB747D1FF6}\"\nEndProject\nGlobal\n\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n\t\tDebug|Any CPU = Debug|Any CPU\n\t\tRelease|Any CPU = Release|Any CPU\n\tEndGlobalSection\n\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n\t\t{9D6CF641-82AA-40C4-A851-02CB747D1FF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU\n\t\t{9D6CF641-82AA-40C4-A851-02CB747D1FF6}.Debug|Any CPU.Build.0 = Debug|Any CPU\n\t\t{9D6CF641-82AA-40C4-A851-02CB747D1FF6}.Release|Any CPU.ActiveCfg = Release|Any CPU\n\t\t{9D6CF641-82AA-40C4-A851-02CB747D1FF6}.Release|Any CPU.Build.0 = Release|Any CPU\n",
+          "derived_utf8_sha256": "c200bcf39e77d73509812ec59d1dae0e408f6b804aea66ba8f0786b378bbef9e",
+          "span": [
+            6,
+            17
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "cfc862fcb9775bb8f0868ffed57b5241843e1503d607a8910c32c31e96ca614e",
+      "path": "fsh-server/Server/tool/ReplayServer/ReplayServer.sln"
+    },
+    {
+      "excerpts": [
+        {
+          "content": "Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"UnitTest\", \"UnitTest\\UnitTest.csproj\", \"{DF14AF4D-21DF-4E0F-8811-F1737AE03CBC}\"\nEndProject\nGlobal\n\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n\t\tDebug|Any CPU = Debug|Any CPU\n\t\tRelease|Any CPU = Release|Any CPU\n\tEndGlobalSection\n\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n\t\t{DF14AF4D-21DF-4E0F-8811-F1737AE03CBC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU\n\t\t{DF14AF4D-21DF-4E0F-8811-F1737AE03CBC}.Debug|Any CPU.Build.0 = Debug|Any CPU\n\t\t{DF14AF4D-21DF-4E0F-8811-F1737AE03CBC}.Release|Any CPU.ActiveCfg = Release|Any CPU\n\t\t{DF14AF4D-21DF-4E0F-8811-F1737AE03CBC}.Release|Any CPU.Build.0 = Release|Any CPU\n",
+          "derived_utf8_sha256": "bec98cd16b05c2b472f595942d646ab04756f92c90f6a32bcf767e2b4614b6d0",
+          "span": [
+            6,
+            17
+          ]
+        }
+      ],
+      "identity_kind": "bounded_research_excerpt",
+      "original_sha256": "0da71ba7937fd937aa797241e61d069a756c93d2425989aeb778eb9ad3755365",
+      "path": "fsh-server/Server/tool/UnitTest/UnitTest.sln"
+    }
+  ],
+  "identity_kind": "research_projection",
+  "origin_catalog_sha256": "823e0f4959cb719ecf464bf0b11386d4ea54284d66c9377e444a773948559d43",
+  "schema": "appsec-review/topology-fixture-source-documents/1",
+  "structured_observations": [
+    {
+      "derived_value_sha256": "5cad46942ad65b7a34a128d081a8373a52301e75270b6a0236632a170583343c",
+      "json_pointer": "/engine_discovery/gaps/27",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/iOS/libxlua.a"
+    },
+    {
+      "derived_value_sha256": "762799cfc814f8751cf8bdcb7f82da181bc9ba7b56a40ff71d60709fcf69bd9e",
+      "json_pointer": "/engine_discovery/gaps/4",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/Android/libs/armeabi-v7a/libDNAUtil.so"
+    },
+    {
+      "derived_value_sha256": "a4adf51fd6e311289b8bab615591ef0a8f561169af6e433db26c9b1fae2daac7",
+      "json_pointer": "/engine_discovery/gaps/5",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/Android/libs/armeabi-v7a/libsqlite3.so"
+    },
+    {
+      "derived_value_sha256": "722288bb8f02af025d6cf156faeca345b14d5f20206bcb064461f6eb53339d8c",
+      "json_pointer": "/engine_discovery/gaps/6",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/Android/libs/armeabi-v7a/libxlua.so"
+    },
+    {
+      "derived_value_sha256": "0591077cfa6da008186e3a0713c10256dd8e0516bf78b827c0a1c5585eb2ea5a",
+      "json_pointer": "/engine_discovery/gaps/7",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/Android/libs/x86/libDNAUtil.so"
+    },
+    {
+      "derived_value_sha256": "0a9a85c8a2fb0871ab874e06a0f569e6bb615053784643d5416d75aee07cf4bc",
+      "json_pointer": "/engine_discovery/gaps/8",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/Android/libs/x86/libsqlite3.so"
+    },
+    {
+      "derived_value_sha256": "ce73e488360d8c9bf7d837b9e2437f82e7137a37eabd81a4d59713f58de8ff4a",
+      "json_pointer": "/engine_discovery/gaps/9",
+      "value": "plugin_binary_not_cataloged: fsh-client/UnityClient/Shelter/Assets/Plugins/Android/libs/x86/libxlua.so"
+    },
+    {
+      "derived_value_sha256": "18bc74acc29e8f3c2c90a1777921d4ba182cc5e157940571c5a9a7a491beb1a9",
+      "json_pointer": "/targets/1/descriptor_facts/configuration_fingerprint/unknown_inputs",
+      "value": [
+        "architecture",
+        "metadata_coverage",
+        "plugin_provenance:fsh-client/UnityClient/Shelter/Assets/zxing.unity.dll",
+        "plugin_version:fsh-client/UnityClient/Shelter/Assets/zxing.unity.dll",
+        "recipe",
+        "scripting_backend",
+        "sdk",
+        "target_platform",
+        "toolchain"
+      ]
+    },
+    {
+      "derived_value_sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+      "json_pointer": "/targets/1/descriptor_facts/raw_settings/AndroidTargetArchitectures",
+      "value": 2
+    },
+    {
+      "derived_value_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "json_pointer": "/targets/1/descriptor_facts/raw_settings/AndroidTargetSdkVersion",
+      "value": 0
+    },
+    {
+      "derived_value_sha256": "f1a054096d0f26a66f468ab2f7480439b14897146ca52b8be8c48df740714b55",
+      "json_pointer": "/targets/1/descriptor_facts/raw_settings/iPhoneSdkVersion",
+      "value": 988
+    },
+    {
+      "derived_value_sha256": "4069dc7ac650a31edc41a94755ac0f47ae21764ed51f0dfbef01c77c92d8c6a0",
+      "json_pointer": "/targets/1/descriptor_facts/scenes",
+      "value": [
+        {
+          "enabled": 1,
+          "guid": "7c2224d081aeb3947ac9316525c0e094",
+          "path": "Assets/Art/Scenes/Launch.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "f500fba750b736c46b3d0157c52217c4",
+          "path": "Assets/Art/Scenes/Login.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "a78e83e9d8b1331409a18b8cf3246158",
+          "path": "Assets/Art/Scenes/MainVault.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "b8c9c09ffa0a5214c97cda4b66d9c749",
+          "path": "Assets/Art/Scenes/Battle.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "9ebb01006f5a95242af12054fab20e36",
+          "path": "Assets/Art/Scenes/Force.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "62d3f8c090382bd44b5d87ad9eed8bc7",
+          "path": "Assets/Art/Scenes/GuildBuild.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "44a02cf7d6d8fea438c7e3b2e854877f",
+          "path": "Assets/Art/Scenes/Adventure.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "77bee4f796a57a44dae560e156a222e2",
+          "path": "Assets/Art/Scenes/Barrier.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "932b506972ac0f94793d451988d6051a",
+          "path": "Assets/Art/Scenes/GuildGVG.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "73ce7710438da8e4a906d36b62537e33",
+          "path": "Assets/Art/Scenes/NukaWorld.unity"
+        },
+        {
+          "enabled": 1,
+          "guid": "e0953b05316d5274a8d8862e78324636",
+          "path": "Assets/Art/Scenes/UnionBuild.unity"
+        }
+      ]
+    },
+    {
+      "derived_value_sha256": "c75406f92fa76b5c1de94942084ced2ebfe662b527594f186e88a3ab955fea8f",
+      "json_pointer": "/targets/251/descriptor_package/gaps",
+      "value": [
+        "descriptor file-count bound reached"
+      ]
+    }
+  ]
+}
