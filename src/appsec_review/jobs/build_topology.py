@@ -692,9 +692,12 @@ def _document_declarations(document):
             result.append({"predicate": "include", "value": include[2],
                            "condition": None, "line": index})
         elif make_rule:
+            literal = (all(re.fullmatch(r"[A-Za-z0-9_./+\t -]*", value) for value in make_rule.group(1, 2))
+                       and not re.search(r"[$%]", make_rule[0]))
             result.append({"predicate": "make:rule", "value": {
-                "targets": make_rule[1].split(), "prerequisites": make_rule[2].split()},
-                "condition": "unresolved" if re.search(r"[$%]", make_rule[0]) else None, "line": index})
+                "targets": make_rule[1].split() if literal else [],
+                "prerequisites": make_rule[2].split() if literal else [], "raw": line},
+                "condition": None if literal else "unresolved", "line": index})
         elif re.match(r"(?:ifn?def|ifeq|ifneq|else|endif)\b", stripped):
             result.append({"predicate": "condition", "value": stripped,
                            "condition": "unresolved", "line": index})
@@ -1289,12 +1292,18 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
     environment = {} if recipe is None else recipe["environment"]
     closure = {"schema": "appsec-review/effective-input-closure/1", "rules": RULES,
                "commands": commands, "environment": environment,
-               "fact_ids": sorted(fact["fact_id"] for fact in facts), "profiles": profiles}
+               "profiles": profiles}
+    if any(fact["predicate"] == "make:rule" and fact["condition"] is not None for fact in facts):
+        unresolved.append("make_rule_scope_unresolved")
     documents = {ref["path"] for ref in unit.get("descriptor_package", {}).get("documents", [])}
     direct_compilers = bool(commands) and all(argv[0] in {"clang", "clang++", "gcc", "g++"} for argv in commands)
     effective_paths = {fact["path"] for fact in facts}
     if direct_compilers:
         effective_paths = set()
+        source_facts = {}
+        for fact in graph["facts"]:
+            if fact["path"] in documents:
+                source_facts.setdefault(fact["path"], []).append(fact)
         command_contexts = [(phase, argv) for phase, key in (
             ("configure", "configure_commands"), ("build", "build_commands")) for argv in recipe[key]]
         for phase, argv in command_contexts:
@@ -1308,8 +1317,11 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
         pending = list(effective_paths)
         while pending:
             path = pending.pop()
-            for fact in facts:
-                if fact["path"] != path or fact["predicate"] != "cpp:include":
+            accepted = source_facts.get(path, [])
+            if not any(fact["predicate"] == "cpp:translation_unit" for fact in accepted):
+                unresolved.append("compiler_source_facts_unknown")
+            for fact in accepted:
+                if fact["predicate"] != "cpp:include":
                     continue
                 included = _resolve(str(PurePosixPath(path).parent), fact["value"]["path"])
                 if fact["value"]["system"] or included not in documents:
@@ -1317,6 +1329,9 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
                 elif included not in effective_paths:
                     effective_paths.add(included)
                     pending.append(included)
+        selected_ids = {fact["fact_id"] for fact in facts}
+        facts = [*facts, *[{**fact, "selected_contexts": []} for fact in graph["facts"]
+                          if fact["path"] in effective_paths and fact["fact_id"] not in selected_ids]]
         for argv in commands:
             index = 1
             while index < len(argv):
@@ -1336,6 +1351,7 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
                     continue
                 unresolved.append("unsupported_effective_compiler_option")
                 index += 1
+    closure["fact_ids"] = sorted(fact["fact_id"] for fact in facts)
     for fact in facts:
         if fact["path"] not in effective_paths:
             continue

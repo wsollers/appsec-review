@@ -49,7 +49,7 @@ def _units(tmp_path: Path, values: dict[str, str], *, recipes=True):
         unit["descriptor_package"] = descriptor_package(tmp_path, unit, files)
         package = unit["descriptor_package"]
         for item in files:
-            if (Path(item["path"]).parent.as_posix() == unit["root"] and item["path"].endswith(".c")
+            if (Path(item["path"]).parent.as_posix() == unit["root"] and item["path"].endswith((".c", ".h"))
                     and item["path"] not in {doc["path"] for doc in package["documents"]}):
                 package["documents"].append({**item, "content": values[item["path"]]})
         package["bounds"]["actual_files"] = len(package["documents"])
@@ -538,6 +538,91 @@ def test_make_source_closure_cannot_borrow_explicit_target_past_missing_or_condi
     assert all(proof["status"] == "unknown" and unresolved in proof["unresolved_inputs"]
                for proof in bound["enforcement"])
     assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
+
+
+@pytest.mark.parametrize("target,prerequisite", [
+    ("main.o", r"actual\ source.c"), ("main.o", '"actual source.c"'),
+    (r"actual\ target.o", "source.c"), ('"actual target.o"', "source.c"),
+    ("main.o", "$(SOURCE)"), ("main.o", "%.c"),
+])
+def test_unsupported_make_names_never_bind_a_colliding_literal_tail(tmp_path, target, prerequisite):
+    units = _units(tmp_path, {
+        "standalone/Makefile": f"all: {target}\n{target}: {prerequisite}\n\t$(CC) -c 'actual source.c' -o main.o\n",
+        "standalone/actual source.c": "int actual(void) { return 1; }\n",
+        "standalone/source.c": "int unrelated(void) { return 0; }\n",
+    })
+    unit = units[0]
+    unit["recipe"]["build_commands"][0][3] = "actual source.c"
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    graph_bytes = canonical_json(graph)
+    declared = next(fact for fact in graph["facts"] if fact["predicate"] == "make:rule" and fact["line"] == 2)
+    assert declared["condition"] == "unresolved"
+    assert declared["value"] == {"targets": [], "prerequisites": [], "raw": f"{target}: {prerequisite}"}
+    assert not any(fact["predicate"] == "make:rule" and fact["line"] == 3 for fact in graph["facts"])
+    paths = {fact["fact_id"]: fact["path"] for fact in graph["facts"]}
+    assert not any(binding["stage"] == "source_input" and paths[binding["fact_id"]].endswith(".c")
+                   for binding in graph["bindings"])
+    refinement = _refinement(graph, units)
+    bound = refinement["units"][0]
+    assert [operation["kind"] for operation in bound["operations"]] == ["native_compile"]
+    assert len(bound["enforcement"]) == 1
+    assert "unenforced_native_target" in bound["blockers"]
+    assert all(proof["status"] == "unknown" and "make_rule_scope_unresolved" in proof["unresolved_inputs"]
+               for proof in bound["enforcement"])
+    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
+    assert canonical_json(graph) == graph_bytes
+
+
+@pytest.mark.parametrize("location,text,reason", [
+    ("source", "int actual(void) { return 1; }\n", None),
+    ("source", '#include "uncaptured.h"\nint actual(void) { return 1; }\n', "effective_import_unknown"),
+    ("source", "#if FEATURE\nint actual(void) { return 1; }\n#endif\n",
+     "effective_input_condition_or_parse_unknown"),
+    ("header", '#include "uncaptured.h"\n', "effective_import_unknown"),
+    ("header", "#if FEATURE\nint declared(void);\n#endif\n", "effective_input_condition_or_parse_unknown"),
+])
+def test_actual_compiler_inputs_use_whole_bundle_facts_not_unrelated_make_bindings(
+        tmp_path, location, text, reason):
+    values = {
+        "standalone/Makefile": "all: source.o\nsource.o: source.c\n\t$(CC) -c source.c -o source.o\n",
+        "standalone/source.c": "int unrelated(void) { return 0; }\n",
+        "standalone/actual source.c": text if location == "source" else
+        '#include "actual header.h"\nint actual(void) { return 1; }\n',
+    }
+    if location == "header":
+        values["standalone/actual header.h"] = text
+    units = _units(tmp_path, values)
+    units[0]["recipe"]["build_commands"][0][3] = "actual source.c"
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    graph_bytes = canonical_json(graph)
+    facts = {fact["fact_id"]: fact for fact in graph["facts"]}
+    scoped_paths = {facts[binding["fact_id"]]["path"] for binding in graph["bindings"]
+                    if binding["stage"] == "source_input"}
+    assert scoped_paths == {"standalone/source.c"}
+    refinement = _refinement(graph, units)
+    bound = refinement["units"][0]
+    assert [operation["kind"] for operation in bound["operations"]] == ["native_compile"]
+    assert len(bound["enforcement"]) == 1
+    inspected_paths = {"standalone/actual source.c"}
+    if location == "header":
+        inspected_paths.add("standalone/actual header.h")
+    inspected_ids = {identity for identity, fact in facts.items() if fact["path"] in inspected_paths}
+    assert inspected_ids
+    for proof in bound["enforcement"]:
+        assert inspected_ids <= set(proof["source_evidence_refs"])
+        assert inspected_ids <= set(proof["closure_manifest"]["fact_ids"])
+        assert set(proof["source_evidence_refs"]) <= set(facts)
+        assert "make_rule_scope_unresolved" not in proof["unresolved_inputs"]
+        if reason is None:
+            assert proof["status"] == "proven" and proof["unresolved_inputs"] == []
+        else:
+            assert proof["status"] == "unknown" and reason in proof["unresolved_inputs"]
+    result = ready_build_units(graph, {}, refinement=refinement)
+    if reason is None:
+        assert bound["blockers"] == [] and result["ready"] == [units[0]["build_unit_id"]]
+    else:
+        assert "unenforced_native_target" in bound["blockers"] and result["ready"] == []
+    assert canonical_json(graph) == graph_bytes
 
 
 def test_recursive_make_invocation_is_not_unproven_whole_unit_precedence(tmp_path: Path):
