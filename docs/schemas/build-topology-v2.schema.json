@@ -32,7 +32,7 @@
           "line": {"type": "integer", "minimum": 1},
           "path": {"type": "string", "minLength": 1},
           "sha256": {"$ref": "#/$defs/hash"},
-          "rule": {"const": "source-scoped-topology/2"},
+          "rule": {"const": "source-scoped-topology/3"},
           "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 1}},
           "fact_id": {"$ref": "#/$defs/hash"}
         }
@@ -48,7 +48,7 @@
           "subject": {"type": "string"},
           "stage": {"type": "string"},
           "condition": {"type": ["string", "null"]},
-          "scope_rule": {"const": "source-scoped-topology/2"},
+          "scope_rule": {"const": "source-scoped-topology/3"},
           "binding_id": {"$ref": "#/$defs/hash"}
         }
       }

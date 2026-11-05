@@ -674,6 +674,10 @@ def test_durable_logical_paths_are_supported_but_arbitrary_host_paths_are_not(tm
 
 def test_topology_document_matches_versioned_schema(tmp_path: Path):
     graph = compile_build_topology(_pair(tmp_path), source_fingerprint="snapshot")
+    assert graph["facts"] and graph["bindings"]
+    assert graph["rules"] == "source-scoped-topology/3"
+    assert all(fact["rule"] == graph["rules"] for fact in graph["facts"])
+    assert all(binding["scope_rule"] == graph["rules"] for binding in graph["bindings"])
     directory = Path(__file__).parents[1] / "docs" / "schemas"
     schemas = {}
     resources = []
@@ -685,7 +689,15 @@ def test_topology_document_matches_versioned_schema(tmp_path: Path):
         schemas[name] = schema
         resources.append((path.as_uri(), Resource.from_contents(schema)))
     registry = Registry().with_resources(resources)
-    jsonschema.Draft202012Validator(schemas["build-topology-v2"], registry=registry).validate(graph)
+    validator = jsonschema.Draft202012Validator(schemas["build-topology-v2"], registry=registry)
+    validator.validate(graph)
+    for collection, field in (("facts", "rule"), ("bindings", "scope_rule")):
+        old_rule = copy.deepcopy(graph)
+        old_rule[collection][0][field] = "source-scoped-topology/2"
+        error, = validator.iter_errors(old_rule)
+        assert list(error.absolute_path) == [collection, 0, field]
+        assert error.validator == "const" and error.validator_value == graph["rules"]
+    validator.validate(graph)
     assert not jsonschema.Draft202012Validator(schemas["build-topology"], registry=registry).is_valid(graph)
 
 
