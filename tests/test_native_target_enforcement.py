@@ -11,6 +11,16 @@ from appsec_review.jobs.build_topology import (
 from appsec_review.storage import canonical_json
 
 
+WINDOWS_SELECTION = {
+    "schema": "appsec-review/build-selection-policy/1",
+    "policy_id": "synthetic-explicit-windows/1",
+    "ambiguity_policy": "block",
+    "rules": [{"selectors": {"build_system": "dotnet"},
+               "axes": {"os": "windows", "isa": "x86_64"},
+               "provenance": "explicitly-synthetic-unit-local"}],
+}
+
+
 def _native(*, commands=None, extra_documents=None):
     texts = {"CMakeLists.txt": "project(control)\nadd_executable(control main.c)\n",
              "main.c": "int main(void) { return 0; }\n", **(extra_documents or {})}
@@ -137,7 +147,7 @@ def test_release_solution_can_select_a_captured_debug_x64_native_member():
     profile = {**_profile(), "windows_capability": True, "driver_semantics": "msbuild-mapping/1",
                "target_axes": {"os": "windows", "isa": "x86_64", "abi": "msvc"}}
     graph = compile_build_topology([unit], source_fingerprint="synthetic-solution", profiles=profile)
-    refined = refine_build_topology(graph, [unit], profiles=profile)
+    refined = refine_build_topology(graph, [unit], profiles=profile, policy=WINDOWS_SELECTION)
     operations = refined["units"][0]["operations"]
     assert {operation["kind"] for operation in operations} == {"native_compile", "native_link"}
     assert operations[0]["selected_members"][0]["configuration"] == "Debug"
@@ -148,7 +158,7 @@ def test_uncaptured_selected_member_is_unknown_not_a_managed_solution_exemption(
     unit = _solution(".vcxproj", "")
     unit["descriptor_package"]["documents"] = unit["descriptor_package"]["documents"][:1]
     graph = compile_build_topology([unit], source_fingerprint="synthetic-solution")
-    bound = refine_build_topology(graph, [unit])["units"][0]
+    bound = refine_build_topology(graph, [unit], policy=WINDOWS_SELECTION)["units"][0]
     assert {operation["kind"] for operation in bound["operations"]} == {"unknown"}
     assert "selected_member_uncaptured" in bound["blockers"]
     assert "operation_unknown" in bound["blockers"]
@@ -163,7 +173,7 @@ def test_managed_32bit_overrides_are_blocked_without_misclassifying_native(overr
                      "<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>")
     unit["recipe"]["build_commands"][0].append(override)
     graph = compile_build_topology([unit], source_fingerprint="synthetic-managed")
-    bound = refine_build_topology(graph, [unit])["units"][0]
+    bound = refine_build_topology(graph, [unit], policy=WINDOWS_SELECTION)["units"][0]
     assert {operation["kind"] for operation in bound["operations"]} == {"managed_compile"}
     assert bound["enforcement"] == []
     assert reason in bound["blockers"]
@@ -174,7 +184,7 @@ def test_unknown_additional_native_options_cannot_borrow_selected_x64_mapping():
     profile = {**_profile(), "windows_capability": True, "driver_semantics": "msbuild-mapping/1",
                "target_axes": {"os": "windows", "isa": "x86_64", "abi": "msvc"}}
     graph = compile_build_topology([unit], source_fingerprint="synthetic-solution", profiles=profile)
-    bound = refine_build_topology(graph, [unit], profiles=profile)["units"][0]
+    bound = refine_build_topology(graph, [unit], profiles=profile, policy=WINDOWS_SELECTION)["units"][0]
     assert all(proof["status"] == "unknown" for proof in bound["enforcement"])
     assert all("msbuild_effective_option_closure_unknown" in proof["unresolved_inputs"]
                for proof in bound["enforcement"])
@@ -195,7 +205,7 @@ def test_nested_false_condition_does_not_activate_an_unresolved_import():
     profile = {**_profile(), "windows_capability": True, "driver_semantics": "msbuild-mapping/1",
                "target_axes": {"os": "windows", "isa": "x86_64", "abi": "msvc"}}
     graph = compile_build_topology([unit], source_fingerprint="synthetic-solution", profiles=profile)
-    bound = refine_build_topology(graph, [unit], profiles=profile)["units"][0]
+    bound = refine_build_topology(graph, [unit], profiles=profile, policy=WINDOWS_SELECTION)["units"][0]
     assert all(proof["status"] == "proven" for proof in bound["enforcement"])
     assert all("effective_import_unknown" not in proof["unresolved_inputs"] for proof in bound["enforcement"])
 
@@ -255,12 +265,12 @@ def test_managed_library_does_not_activate_executable_prefer32bit_policy():
     unit = _solution(".csproj", "<OutputType>Library</OutputType><PlatformTarget>AnyCPU</PlatformTarget>"
                      "<Prefer32Bit>true</Prefer32Bit><TargetFrameworkVersion>v4.8</TargetFrameworkVersion>")
     graph = compile_build_topology([unit], source_fingerprint="synthetic-managed-library")
-    bound = refine_build_topology(graph, [unit])["units"][0]
+    bound = refine_build_topology(graph, [unit], policy=WINDOWS_SELECTION)["units"][0]
     assert {operation["kind"] for operation in bound["operations"]} == {"managed_compile"}
     assert not any(reason.startswith("managed_prefer32bit") for reason in bound["blockers"])
 
 
-def test_unconditional_android_source_declaration_selects_mobile_not_linux_default():
+def test_explicit_mobile_policy_uses_unconditional_android_source_declaration():
     text = "plugins { id 'com.android.application' }\n"
     unit = _native()
     document = {"path": "build.gradle", "content": text,
@@ -269,7 +279,13 @@ def test_unconditional_android_source_declaration_selects_mobile_not_linux_defau
                 markers=[{key: document[key] for key in ("path", "sha256", "size_bytes")}],
                 descriptor_package={"documents": [document], "bounds": {}, "gaps": []})
     graph = compile_build_topology([unit], source_fingerprint="synthetic-android")
-    bound = refine_build_topology(graph, [unit])["units"][0]
+    policy = {
+        "schema": "appsec-review/build-selection-policy/1", "policy_id": "synthetic-explicit-mobile/1",
+        "ambiguity_policy": "block",
+        "rules": [{"selectors": {"declared_platform": "android"}, "axes": {"os": "android"},
+                   "provenance": "explicitly-synthetic-unit-local"}],
+    }
+    bound = refine_build_topology(graph, [unit], policy=policy)["units"][0]
     assert bound["selection"]["required_axes"]["os"] == "android"
     assert bound["selection"]["required_axes"]["hardware_generation"] is None
     assert "recipe_missing" in bound["blockers"]
@@ -338,6 +354,6 @@ def test_unselected_32bit_runtime_identifier_does_not_block_selected_managed_mem
     unit = _solution(".csproj", "<OutputType>library</OutputType><PlatformTarget>AnyCPU</PlatformTarget>"
                      """<RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">win-x86</RuntimeIdentifier>""")
     graph = compile_build_topology([unit], source_fingerprint="synthetic-unselected-runtime")
-    bound = refine_build_topology(graph, [unit])["units"][0]
+    bound = refine_build_topology(graph, [unit], policy=WINDOWS_SELECTION)["units"][0]
     assert {operation["kind"] for operation in bound["operations"]} == {"managed_compile"}
     assert not any("runtime" in reason.lower() for reason in bound["blockers"])

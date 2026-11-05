@@ -75,12 +75,9 @@ def parse_build_selection(value: object = None) -> BuildSelectionPolicy:
                             "axes": {"os": platform, "isa": "x86_64"},
                             "provenance": "confirmed-user-intent"}
                            for platform, systems in (
-                               ("windows", ("msbuild", "vcbuild", "dotnet")),
-                               ("linux", ("make", "autotools", "cmake", "direct-native", "go", "cargo", "rustc")))
-                           for system in systems] + [
-                     {"selectors": {"declared_platform": platform}, "axes": {"os": platform},
-                      "provenance": "confirmed-project-declared-mobile-scope"}
-                     for platform in ("android", "ios")]}
+                               ("windows", ("msbuild", "vcbuild")),
+                               ("linux", ("make", "autotools", "cmake")))
+                           for system in systems]}
     if (not isinstance(value, Mapping)
             or set(value) != {"schema", "policy_id", "rules", "ambiguity_policy"}
             or value["schema"] != SCHEMA or value["ambiguity_policy"] != "block"

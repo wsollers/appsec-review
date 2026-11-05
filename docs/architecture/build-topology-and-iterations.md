@@ -9,9 +9,12 @@ cannot change graph bytes. Conditional, candidate and unresolved relations do no
 unconditional scheduling edges; active required unknowns block execution before caches.
 
 Selection intent is a typed policy, not an observation. Its OS, ISA, ABI, SDK, deployment,
-device/simulator and hardware-generation axes are distinct and nullable. The default policy
-requests Windows x64 for MSBuild/.NET and Linux x64 for supported native/Go/Rust systems;
-explicit unit/root rules can select another confirmed platform. Equal-specificity conflicts
+device/simulator and hardware-generation axes are distinct and nullable. With no policy table,
+legacy defaults request Windows x64 only for MSBuild/VCBuild and Linux x64 only for
+Make/Autotools/CMake. Other native operations, including Go, require an explicit applicable
+rule or override; missing policy is not a host fallback or mobile selection. The shipped TOML
+separately supplies explicit .NET/Go/Rust/mobile rules. Explicit unit/root rules can select
+another confirmed platform. Equal-specificity conflicts
 block. Project declarations, including 32-bit ones, remain in the graph without granting
 permission to select or build prohibited 32-bit code. Mobile hardware/device policy is not
 fabricated.

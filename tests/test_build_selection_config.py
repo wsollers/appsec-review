@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 
 from appsec_review.config.build_selection import AXES, SCHEMA, parse_build_selection
@@ -67,8 +69,52 @@ def test_unrecognized_isa_does_not_create_an_unbounded_policy_escape():
 
 @pytest.mark.parametrize("platform", ["android", "ios"])
 def test_declared_mobile_scope_does_not_invent_device_or_hardware_policy(platform):
-    selected = parse_build_selection().select({"build_unit_id": "mobile", "build_system": "cmake",
-                                               "declared_platform": platform})
+    selected = _policy([_rule({"declared_platform": platform}, {"os": platform})]).select(
+        {"build_unit_id": "mobile", "build_system": "cmake", "declared_platform": platform})
     assert selected["required_axes"]["os"] == platform
     for axis in ("isa", "sdk", "deployment", "device_kind", "hardware_generation"):
         assert selected["required_axes"][axis] is None
+
+
+@pytest.mark.parametrize("system,platform", [
+    ("msbuild", "windows"), ("vcbuild", "windows"),
+    ("make", "linux"), ("autotools", "linux"), ("cmake", "linux"),
+])
+def test_missing_policy_retains_only_confirmed_legacy_defaults(system, platform):
+    policy = parse_build_selection(None)
+    assert {rule["selectors"]["build_system"] for rule in policy.rules} == {
+        "msbuild", "vcbuild", "make", "autotools", "cmake"}
+    selected = policy.select({"build_unit_id": "legacy", "build_system": system})
+    assert selected["status"] == "selected"
+    assert selected["required_axes"]["os"] == platform
+    assert selected["required_axes"]["isa"] == "x86_64"
+    assert selected["reasons"] == []
+
+
+@pytest.mark.parametrize("system,declared_platform", [
+    ("dotnet", None), ("direct-native", None), ("go", None),
+    ("cargo", None), ("rustc", None), ("gradle", "android"), ("xcode", "ios"),
+])
+def test_missing_policy_leaves_other_build_systems_unbound(system, declared_platform):
+    unit = {"build_unit_id": "unbound", "build_system": system,
+            "declared_platform": declared_platform, "observed_arch": "x86"}
+    original = copy.deepcopy(unit)
+    selected = parse_build_selection(None).select(unit)
+    assert selected["reasons"] == ["selection_unbound"]
+    assert all(value is None for value in selected["required_axes"].values())
+    assert selected["status"] != "selected"
+    assert unit == original
+
+
+@pytest.mark.parametrize("platform", ["windows", "linux"])
+def test_explicit_go_selection_preserves_observed_source_facts(platform):
+    unit = {"build_unit_id": "explicit-go", "build_system": "go", "family": "go",
+            "build_variant": {"target_arch": None}, "descriptor_facts": {"declared_os": None}}
+    original = copy.deepcopy(unit)
+    selected = _policy([_rule({"build_unit_id": unit["build_unit_id"]},
+                              {"os": platform, "isa": "x86_64"})]).select(unit)
+    assert selected["status"] == "selected"
+    assert selected["required_axes"]["os"] == platform
+    assert selected["required_axes"]["isa"] == "x86_64"
+    assert selected["reasons"] == []
+    assert unit == original
