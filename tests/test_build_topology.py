@@ -13,7 +13,7 @@ from referencing import Registry, Resource
 from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
 from appsec_review.jobs.build_topology import (
     compile_build_topology as source_graph, ready_build_units, topological_order, topology_identity,
-    validate_build_topology, refine_build_topology, refinement_unit, proven_product_axes,
+    validate_build_topology, refine_build_topology, validate_refinement, refinement_unit, proven_product_axes,
     verify_product_contract, topology_evidence_bundle,
 )
 from appsec_review.storage import canonical_json
@@ -280,8 +280,14 @@ def test_b_recipe_revision_does_not_invalidate_structural_graph_or_a_product(tmp
     before = compile_build_topology(units, source_fingerprint="snapshot")
     initial = _refinement(before, units)
     retained_initial = copy.deepcopy(initial)
+    graph_bytes, initial_bytes = canonical_json(before), canonical_json(initial)
     consumer = next(unit for unit in units if unit["root"] == "a-consumer")
+    accepted_recipe = copy.deepcopy(consumer["recipe"])
     consumer["recipe"]["build_commands"][0].append("-O2")
+    assert canonical_json(before) == graph_bytes
+    assert canonical_json(initial) == initial_bytes and initial == retained_initial
+    validate_refinement(before, initial)
+    assert refinement_unit(before, initial, consumer["build_unit_id"], accepted_recipe)["blockers"] == []
     after = compile_build_topology(units, source_fingerprint="snapshot")
     assert canonical_json(before) == canonical_json(after)
     replacement = _refinement(after, units)
@@ -295,7 +301,12 @@ def test_b_recipe_revision_does_not_invalidate_structural_graph_or_a_product(tmp
                              verify_product=lambda _: True, refinement=replacement)["ready"] == [_ids(after)["a-consumer"]]
     assert initial == retained_initial
     producer_unit = next(unit for unit in units if unit["root"] == "z-library")
+    replacement_bytes = canonical_json(replacement)
     producer_unit["recipe"]["build_commands"][0].append("-O3")
+    assert canonical_json(initial) == initial_bytes
+    assert canonical_json(replacement) == replacement_bytes
+    validate_refinement(before, initial)
+    validate_refinement(before, replacement)
     changed_producer = compile_build_topology(units, source_fingerprint="snapshot")
     assert canonical_json(changed_producer) == canonical_json(before)
     changed = _refinement(changed_producer, units)
@@ -304,6 +315,8 @@ def test_b_recipe_revision_does_not_invalidate_structural_graph_or_a_product(tmp
     assert ready_build_units(changed_producer, {producer: "SUCCEEDED"},
                              products=[_record(changed_producer, changed)], verify_product=lambda _: True,
                              refinement=changed)["ready"] == [_ids(after)["a-consumer"]]
+    assert canonical_json(initial) == initial_bytes and canonical_json(before) == graph_bytes
+    assert canonical_json(replacement) == replacement_bytes
 
 
 def test_b_execution_cwd_changes_only_recipe_revision_not_structure_or_a_readiness(tmp_path: Path):
@@ -311,10 +324,15 @@ def test_b_execution_cwd_changes_only_recipe_revision_not_structure_or_a_readine
     original = copy.deepcopy(units)
     before = compile_build_topology(units, source_fingerprint="snapshot")
     initial = _refinement(before, units)
+    graph_bytes, initial_bytes = canonical_json(before), canonical_json(initial)
     consumer = next(unit for unit in units if unit["root"] == "a-consumer")
+    accepted_recipe = copy.deepcopy(consumer["recipe"])
     consumer["recipe"]["execution_cwd"] = {"configure": "a-consumer", "build": "a-consumer/build"}
     consumer["recipe"]["build_commands"][0][3] = "../b.c"
     consumer["recipe"]["build_commands"][0][-1] = "control.o"
+    assert canonical_json(before) == graph_bytes and canonical_json(initial) == initial_bytes
+    validate_refinement(before, initial)
+    assert refinement_unit(before, initial, consumer["build_unit_id"], accepted_recipe)["blockers"] == []
     after = compile_build_topology(units, source_fingerprint="snapshot")
     assert canonical_json(before) == canonical_json(after)
     replacement = _refinement(after, units)
@@ -332,6 +350,70 @@ def test_b_execution_cwd_changes_only_recipe_revision_not_structure_or_a_readine
     assert ready_build_units(after, {producer_id: "SUCCEEDED"}, products=[_record(before, initial)],
                              verify_product=lambda _: True, refinement=replacement)["ready"] == [consumer_id]
     assert original != units and all("execution_cwd" not in unit["recipe"] for unit in original)
+    assert canonical_json(initial) == initial_bytes and canonical_json(before) == graph_bytes
+
+
+@pytest.mark.parametrize("input_owner", [
+    "build_argv", "configure_argv", "recipe_environment", "profile_metadata",
+    "context_environment", "release_mapping",
+])
+def test_refinement_snapshot_detaches_every_nested_caller_input(tmp_path, input_owner):
+    units = _pair(tmp_path)
+    selected = next(unit for unit in units if unit["root"] == "a-consumer")
+    selected["recipe"]["configure_commands"] = [copy.deepcopy(selected["recipe"]["build_commands"][0])]
+    selected["recipe"]["environment"] = {"LANG": "C"}
+    profiles, releases = copy.deepcopy(PROFILE), dict(RELEASES)
+    environment = {"context": {"sdk": "synthetic-sdk/1"}}
+    inputs_before = copy.deepcopy([units, profiles, environment, releases])
+    graph = source_graph(units, source_fingerprint="snapshot", profiles=profiles, environment=environment)
+    graph_bytes = canonical_json(graph)
+    initial = refine_build_topology(
+        graph, units, profiles=profiles, environment=environment, releases=releases)
+    assert [units, profiles, environment, releases] == inputs_before
+    assert all(unit["blockers"] == [] for unit in initial["units"])
+    snapshot = canonical_json(initial)
+    accepted_recipe = copy.deepcopy(selected["recipe"])
+    if input_owner == "build_argv":
+        selected["recipe"]["build_commands"][0].append("-O2")
+    elif input_owner == "configure_argv":
+        selected["recipe"]["configure_commands"][0].append("-O2")
+    elif input_owner == "recipe_environment":
+        selected["recipe"]["environment"]["LANG"] = "C.UTF-8"
+    elif input_owner == "profile_metadata":
+        profiles["provenance"]["revision"] = "2"
+        profiles["wrapper_closure"].append("different-wrapper")
+    elif input_owner == "context_environment":
+        environment["context"]["sdk"] = "synthetic-sdk/2"
+    else:
+        releases["platform"] = "synthetic-platform/2"
+    assert canonical_json(initial) == snapshot and canonical_json(graph) == graph_bytes
+    assert initial["refinement_id"] == hashlib.sha256(
+        canonical_json({key: value for key, value in initial.items() if key != "refinement_id"})).hexdigest()
+    validate_refinement(graph, initial)
+    assert refinement_unit(graph, initial, selected["build_unit_id"], accepted_recipe)["blockers"] == []
+    if input_owner in {"build_argv", "configure_argv", "recipe_environment"}:
+        with pytest.raises(ValueError, match="matching immutable refinement"):
+            refinement_unit(graph, initial, selected["build_unit_id"], selected["recipe"])
+
+
+@pytest.mark.parametrize("closure_field", ["commands", "environment", "profiles"])
+def test_returned_proof_mutation_cannot_mutate_caller_inputs_or_graph(tmp_path, closure_field):
+    units = _pair(tmp_path)
+    profiles = copy.deepcopy(PROFILE)
+    graph = source_graph(units, source_fingerprint="snapshot", profiles=profiles)
+    inputs_before, graph_bytes = copy.deepcopy([units, profiles]), canonical_json(graph)
+    initial = refine_build_topology(graph, units, profiles=profiles, releases=RELEASES)
+    assert all(unit["blockers"] == [] for unit in initial["units"])
+    closure = initial["units"][0]["enforcement"][0]["closure_manifest"]
+    if closure_field == "commands":
+        closure["commands"][0].append("-m32")
+    elif closure_field == "environment":
+        closure["environment"]["PATH"] = "/different-toolchain"
+    else:
+        closure["profiles"]["provenance"]["revision"] = "corrupted"
+    assert [units, profiles] == inputs_before and canonical_json(graph) == graph_bytes
+    with pytest.raises(ValueError, match="refinement has changed or foreign accepted identities"):
+        validate_refinement(graph, initial)
 
 
 def test_cross_family_host_projection_preserves_order_but_requires_source_bound_refinement(tmp_path: Path):
@@ -420,8 +502,42 @@ def test_standalone_make_remains_ready_with_partial_topology_but_fragment_does_n
     })
     graph = compile_build_topology(units, source_fingerprint="snapshot")
     ids = _ids(graph)
-    assert ready_build_units(graph, {}, refinement=_refinement(graph, units))["ready"] == [ids["standalone"]]
+    refinement = _refinement(graph, units)
+    standalone = refinement_unit(graph, refinement, ids["standalone"])
+    assert standalone["blockers"] == []
+    assert [operation["kind"] for operation in standalone["operations"]] == ["native_compile"]
+    assert all(proof["status"] == "proven" and proof["unresolved_inputs"] == []
+               for proof in standalone["enforcement"])
+    assert any(fact["path"] == "standalone/Makefile" and fact["predicate"] == "make:rule"
+               for fact in graph["facts"])
+    assert any(binding["build_unit_id"] == ids["standalone"] and binding["stage"] == "source_input"
+               and next(fact["path"] for fact in graph["facts"] if fact["fact_id"] == binding["fact_id"])
+               == "standalone/main.c" for binding in graph["bindings"])
+    result = ready_build_units(graph, {}, refinement=refinement)
+    assert result["ready"] == [ids["standalone"]]
     assert next(node for node in graph["nodes"] if node["root"] == "fragment")["disposition"] == "unresolved"
+    fragment = refinement_unit(graph, refinement, ids["fragment"])
+    assert fragment["blockers"] and any(row["build_unit_id"] == ids["fragment"] for row in result["blocked"])
+
+
+@pytest.mark.parametrize("source,unresolved", [
+    ('#include "uncaptured.h"\nint main(void) { return 0; }\n', "effective_import_unknown"),
+    ("#if FEATURE\nint main(void) { return 0; }\n#endif\n", "effective_input_condition_or_parse_unknown"),
+])
+def test_make_source_closure_cannot_borrow_explicit_target_past_missing_or_conditional_inputs(
+        tmp_path, source, unresolved):
+    units = _units(tmp_path, {
+        "standalone/Makefile": "all: main.o\nmain.o: main.c\n\t$(CC) -c main.c -o main.o\n",
+        "standalone/main.c": source,
+    })
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    refinement = _refinement(graph, units)
+    bound = refinement["units"][0]
+    assert [operation["kind"] for operation in bound["operations"]] == ["native_compile"]
+    assert "unenforced_native_target" in bound["blockers"]
+    assert all(proof["status"] == "unknown" and unresolved in proof["unresolved_inputs"]
+               for proof in bound["enforcement"])
+    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
 
 
 def test_recursive_make_invocation_is_not_unproven_whole_unit_precedence(tmp_path: Path):

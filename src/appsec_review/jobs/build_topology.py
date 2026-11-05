@@ -681,6 +681,9 @@ def _document_declarations(document):
             continue
         assignment = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*([:+?]?=)\s*(.*)", stripped)
         include = re.match(r"(-?include|sinclude)\s+(.+)", stripped)
+        make_rule = (re.match(r"^([^#\s:=][^:=]*?)\s*:(?!=)([^;#]*)(?:;(.*))?$", line)
+                     if PurePosixPath(document["path"]).name in {"GNUmakefile", "makefile", "Makefile"}
+                     else None)
         if assignment:
             result.append({"predicate": "assignment", "value": {
                 "name": assignment[1], "operator": assignment[2], "value": assignment[3]},
@@ -688,6 +691,10 @@ def _document_declarations(document):
         elif include:
             result.append({"predicate": "include", "value": include[2],
                            "condition": None, "line": index})
+        elif make_rule:
+            result.append({"predicate": "make:rule", "value": {
+                "targets": make_rule[1].split(), "prerequisites": make_rule[2].split()},
+                "condition": "unresolved" if re.search(r"[$%]", make_rule[0]) else None, "line": index})
         elif re.match(r"(?:ifn?def|ifeq|ifneq|else|endif)\b", stripped):
             result.append({"predicate": "condition", "value": stripped,
                            "condition": "unresolved", "line": index})
@@ -780,6 +787,13 @@ def _scoped_documents(unit, facts_by_document):
             elif fact["predicate"] in {"cmake:add_library", "cmake:add_executable"}:
                 for value in fact["value"][1:]:
                     resolved = _resolve(str(PurePosixPath(path).parent), value.replace("\\", "/"))
+                    context = ("source_input", fact["fact_id"])
+                    if resolved in available and context not in scoped.get(resolved, set()):
+                        scoped.setdefault(resolved, set()).add(context)
+                        pending.append((resolved, *context))
+            elif fact["predicate"] == "make:rule" and fact["condition"] is None:
+                for value in fact["value"]["prerequisites"]:
+                    resolved = _resolve(str(PurePosixPath(path).parent), value)
                     context = ("source_input", fact["fact_id"])
                     if resolved in available and context not in scoped.get(resolved, set()):
                         scoped.setdefault(resolved, set()).add(context)
@@ -1598,10 +1612,10 @@ def refine_build_topology(graph, units, *, policy=None, profiles=None, environme
                 consumer["blockers"].append("required_product_axis_incompatible:" + key)
     for unit in values:
         unit["blockers"] = sorted(set(unit["blockers"]))
-    value = {"schema": REFINEMENT_SCHEMA, "graph_identity": graph["topology_id"],
+    value = copy.deepcopy({"schema": REFINEMENT_SCHEMA, "graph_identity": graph["topology_id"],
              "bundle_identity": graph["bundle_identity"], "source_fingerprint": graph["source_fingerprint"],
-             "rules": RULES, "policy": policy.view(), "environment": copy.deepcopy(environment),
-             "profiles": copy.deepcopy(profiles), "releases": dict(releases or {}), "units": values}
+             "rules": RULES, "policy": policy.view(), "environment": environment,
+             "profiles": profiles, "releases": dict(releases or {}), "units": values})
     value["refinement_id"] = _digest(value)
     return value
 
