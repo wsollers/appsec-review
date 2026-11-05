@@ -128,7 +128,7 @@ def _safe_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_accepted_language_build(run_root: Path) -> Mapping[str, Any]:
+def load_accepted_language_build(run_root: Path, *, for_execution: bool = False) -> Mapping[str, Any]:
     pointer_path = run_root / "data" / "jobs" / "job_language_build" / "latest.json"
     if not pointer_path.is_file():
         raise ValueError("accepted job_language_build handoff is required")
@@ -143,6 +143,13 @@ def load_accepted_language_build(run_root: Path) -> Mapping[str, Any]:
     document = _safe_artifact(run_root, identity)
     if document.get("schema") != SCHEMA:
         raise ValueError("language-build handoff schema is unsupported")
+    if type(for_execution) is not bool:
+        raise ValueError("language-build execution reader mode must be explicit")
+    if for_execution:
+        from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+        for receipt in document.get("receipts", ()):
+            if receipt.get("terminal_status") == "SUCCEEDED":
+                guard_cache_action(run_root, receipt)
     reject_swift_derived(
         document, enabled=swift_enabled_from_run(run_root),
         context="accepted language-build handoff")
@@ -158,7 +165,7 @@ def _dispatches(
     integrity boundaries. Probe, image, recipe, and dependency validation is family-owned so one
     producer cannot fail unrelated language lanes.
     """
-    accepted = load_accepted_builds(unit.job.run_root)
+    accepted = load_accepted_builds(unit.job.run_root, for_execution=True)
     iterative = accepted.get("execution_mode") == "iterative"
     reject_swift_derived(
         accepted, enabled=swift_enabled_from_run(unit.job.run_root),
@@ -704,8 +711,8 @@ def _platform_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
 def _unavailable_dotnet_receipt(unit: UnitContext, probe: Mapping[str, Any],
                                 accepted: Mapping[str, Any]) -> dict[str, Any]:
     root = str(probe.get("root", "."))
-    projects, topology_gaps, platform_gaps = dotnet.project_topology(
-        _safe_root(unit.job.target_root or Path(), root))
+    projects, topology_gaps, platform_gaps = dotnet.selected_project_topology(
+        unit.job.run_root, probe)
     gaps = list(dict.fromkeys([*topology_gaps, *platform_gaps, *probe.get("gaps", ())]))
     status = "NOT_APPLICABLE" if platform_gaps else "BLOCKED"
     fingerprint = hashlib.sha256(canonical_json({
@@ -857,6 +864,8 @@ def _verify_retained_capture(run_root: Path, identity: Mapping[str, Any]) -> Non
 
 
 def _validate_checkpoint_artifacts(run_root: Path, receipt: Mapping[str, Any]) -> None:
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+    guard_cache_action(run_root, receipt)
     identities: list[Mapping[str, Any]] = []
     identities.extend(item for item in receipt.get("artifacts", ()) if isinstance(item, Mapping))
     for key in ("workspace_manifest", "protected_compile_commands", "link_database"):
@@ -934,6 +943,9 @@ def _recipe_command(workspace: Path, recipe: Mapping[str, Any], phase: str,
 
 def _production_iteration(unit: UnitContext, request: Mapping[str, Any], dagster_run_id: str,
                           accepted: Mapping[str, Any], executor_factory=None) -> IterationOutcome:
+    from appsec_review.jobs.build_topology_artifacts import guard_action
+    guard_action(unit.job.run_root, request["dispatch"],
+                 releases=unit.job.review_policy.releases.view())
     workspace = BuildWorkspace(unit.job.run_root)
     install_before = install_inventory(workspace.paths.install)
     graph = read_reference(unit.job.run_root, request["graph"])
@@ -992,7 +1004,10 @@ def _production_iteration(unit: UnitContext, request: Mapping[str, Any], dagster
                                shared_paths=workspace.paths, interfaces=request["interfaces"])
     specs = ((tuple(ProductSpec(**value) for value in request["products"])
               if request.get("products") is not None else product_specs(
-                  node, receipt, workspace, install_before=install_before))
+                  node, receipt, workspace, install_before=install_before,
+                  bound=guard_action(unit.job.run_root, dispatch,
+                                     releases=unit.job.review_policy.releases.view()),
+                  declarations=graph["declarations"]))
              if receipt.get("terminal_status") == "SUCCEEDED" else ())
     receipt = durable_artifacts(unit.job.run_root, receipt)
     decisions = [finalize_processing(
@@ -1013,10 +1028,16 @@ def _production_iteration(unit: UnitContext, request: Mapping[str, Any], dagster
 def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any], executor_factory=None,
                  *, shared_paths: WorkspacePaths | None = None,
                  interfaces: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    if interfaces and shared_paths is None:
+        raise ValueError("product-dependent execution requires an admitted shared workspace")
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+    selected_target = guard_cache_action(unit.job.run_root, dispatch,
+                                   releases=unit.job.review_policy.releases.view(), interfaces=interfaces)
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     family = str(dispatch["family"])
     fingerprint = _fingerprint(dispatch, accepted, unit.job.config.settings,
                                releases=unit.job.review_policy.releases, build_outputs=_build_output_policy(unit))
+    fingerprint = hashlib.sha256(canonical_json({"build": fingerprint, "interfaces": list(interfaces)})).hexdigest()
     root = (unit.job.run_root / "data" / "build" / family / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
     workspace = shared_paths.target if shared_paths is not None else root / "workspace"
@@ -1089,7 +1110,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if dispatch.get("build_system") == "composer":
             php_metadata, php_metadata_gaps = php.composer_metadata(workspace, str(recipe["source_dir"]))
     if family == "dotnet":
-        projects, topology_gaps, platform_gaps = dotnet.project_topology(workspace)
+        projects, topology_gaps, platform_gaps = dotnet.selected_project_topology(
+            unit.job.run_root, dispatch)
         recipe_gaps = list(dotnet.validate_recipe(recipe, workspace))
         if platform_gaps:
             return _platform_receipt(unit, dispatch, accepted,
@@ -1342,6 +1364,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     native_rows = native_components.invocation_rows(
         captures, family=family, source_dir=str(recipe["source_dir"])) if native_database else []
     build_metadata: list[dict[str, Any]] = []
+    go_target_failure = False
     if family == "go":
         # Build facts are read by the bounded in-repository parser; no produced file is executed
         # or handed to a toolchain command.
@@ -1353,9 +1376,18 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             except (OSError, ValueError, struct.error) as exc:
                 artifact["go_build_status"] = "unparsed"
                 gaps.append(f"{artifact['workspace_path']}: Go build metadata was not parseable: {exc}")
+                go_target_failure = True
                 continue
             artifact.update(go_build_status="resolved", build_id_sha256=facts["build_id_sha256"],
                             go_build_parser=facts["parser"])
+            from .go import verify_target_facts
+            try:
+                verify_target_facts(facts, selected_target, recipe)
+            except ValueError as error:
+                go_target_failure = True
+                artifact["go_build_status"] = "target_mismatch"
+                gaps.append(f"{artifact['workspace_path']}: Go target enforcement failed: {error}")
+                continue
             build_metadata.append({"workspace_path": artifact["workspace_path"],
                                    "sha256": artifact["sha256"], **facts})
     package_members: list[dict[str, Any]] = []
@@ -1469,7 +1501,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     workspace_files = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     atomic_json(workspace_manifest_path, {"schema": "appsec-review/build-workspace-manifest/1",
                 "build_unit_id": build_unit_id, "files": workspace_files})
-    status = "FAILED" if any("build command" in gap for gap in gaps) else "SUCCEEDED"
+    status = "FAILED" if go_target_failure or any("build command" in gap for gap in gaps) else "SUCCEEDED"
     if status == "FAILED":
         # A failed command may leave plausible-looking partial outputs behind. Preserve the
         # command, capture, and workspace evidence for diagnosis, but do not publish those files
@@ -1482,6 +1514,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not (
         family in _CAPTURED_FAMILIES and provenance_gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
+        "topology_refinement": dispatch["topology_refinement"],
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"], "build_unit_id": build_unit_id,
         "family": family, "root": dispatch["root"], "build_system": dispatch.get("recipe", {}).get("build_system", dispatch.get("build_system")),
         "recipe": recipe, "recipe_identity": dispatch["recipe_identity"],
@@ -1729,8 +1762,8 @@ def iteration_controller(unit: UnitContext):
         pair = [build.as_dict(), artifacts.as_dict()]
         if build.action is ApplicabilityAction.RUN:
             if dispatch["family"] == "dotnet":
-                projects, topology_gaps, platform_gaps = dotnet.project_topology(
-                    _safe_root(unit.job.target_root, str(dispatch["root"])))
+                projects, topology_gaps, platform_gaps = dotnet.selected_project_topology(
+                    unit.job.run_root, dispatch)
                 if platform_gaps:
                     skipped.append(_platform_receipt(
                         unit, dispatch, accepted, [*topology_gaps, *platform_gaps], projects))

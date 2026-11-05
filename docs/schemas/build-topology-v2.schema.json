@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/build-topology/2",
+  "title": "Recipe-independent whole-bundle source graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_fingerprint", "bundle_identity", "rules", "nodes", "edges", "external_requirements", "coverage_gaps", "facts", "bindings", "declarations", "relations", "topology_id"],
+  "properties": {
+    "schema": {"const": "appsec-review/build-topology/2"},
+    "source_fingerprint": {"type": "string", "minLength": 1},
+    "bundle_identity": {"$ref": "#/$defs/hash"},
+    "rules": {"const": "source-scoped-topology/2"},
+    "nodes": {
+      "type": "array", "items": {
+        "allOf": [
+          {"$ref": "build-topology.schema.json#/$defs/node"},
+          {"properties": {"recipe_revision": {"type": "null"}}}
+        ]
+      }
+    },
+    "edges": {"$ref": "build-topology.schema.json#/properties/edges"},
+    "external_requirements": {"$ref": "build-topology.schema.json#/properties/external_requirements"},
+    "coverage_gaps": {"$ref": "build-topology.schema.json#/properties/coverage_gaps"},
+    "facts": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["predicate", "value", "condition", "line", "path", "sha256", "rule", "span", "fact_id"],
+        "properties": {
+          "predicate": {"type": "string", "minLength": 1},
+          "value": {},
+          "condition": {"type": ["string", "null"]},
+          "line": {"type": "integer", "minimum": 1},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"$ref": "#/$defs/hash"},
+          "rule": {"const": "source-scoped-topology/2"},
+          "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 1}},
+          "fact_id": {"$ref": "#/$defs/hash"}
+        }
+      }
+    },
+    "bindings": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["fact_id", "build_unit_id", "subject", "stage", "condition", "scope_rule", "binding_id"],
+        "properties": {
+          "fact_id": {"$ref": "#/$defs/hash"},
+          "build_unit_id": {"type": "string", "minLength": 1},
+          "subject": {"type": "string"},
+          "stage": {"type": "string"},
+          "condition": {"type": ["string", "null"]},
+          "scope_rule": {"const": "source-scoped-topology/2"},
+          "binding_id": {"$ref": "#/$defs/hash"}
+        }
+      }
+    },
+    "declarations": {"type": "array", "items": {"type": "object"}},
+    "relations": {"type": "array", "items": {"type": "object"}},
+    "topology_id": {"$ref": "#/$defs/hash"}
+  },
+  "$defs": {"hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+  "$comment": "Graph/1 remains an inspection format. Runtime rederivation from the accepted bounded evidence bundle, not schema validity alone, grants graph/2 identity."
+}

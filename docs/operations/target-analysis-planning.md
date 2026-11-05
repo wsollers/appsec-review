@@ -133,3 +133,15 @@ without silently rebuilding it. See [language-build recovery](language-build.md#
 `force_probes` are rejected. Neither enables the old probe/rebuild path. Legacy dispatches require
 replanning rather than a fabricated probe identity. Missing dependencies, unknown variants,
 unavailable images and failed builds remain coverage gaps; successful siblings are not erased.
+# Graph/2 refinement boundary
+
+Accepted planning now publishes a complete recipe-independent source graph and its bounded
+evidence bundle. A null recipe is an honest planning unknown. Model hints cannot add scheduling
+authority or change graph bytes. Selected operations and native target enforcement live in a
+separate immutable recipe-bound refinement, not in `node.recipe_revision`.
+
+Choosing a late deterministic recipe requires a new accepted refinement before any cache or
+execution path. Old graph/1 artifacts remain inspectable but require accepted replanning for
+execution. Missing source members, conditional effective inputs and unresolved native compiler
+metadata remain named blockers, not managed/family exemptions. See
+[the current source contract](../architecture/build-topology-and-iterations.md#current-graph2-source-contract).

@@ -673,7 +673,12 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
 def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
                     executor_factory: Any = None, *, shared_paths: WorkspacePaths | None = None,
                     interfaces: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    if interfaces and shared_paths is None:
+        raise ValueError("product-dependent execution requires an admitted shared workspace")
     from .job import _copy_source, _interface_environment
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action as guard_action
+    guard_action(unit.job.run_root, dispatch, releases=unit.job.review_policy.releases.view(),
+                 interfaces=interfaces)
 
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = unit.job.config.settings["jvm"]
@@ -690,6 +695,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
                     "compiler_artifact_collection_mode", "required")),
         },
     }, releases=releases, policy=unit.job.review_policy.view())
+    fingerprint = hashlib.sha256(canonical_json({"build": fingerprint, "interfaces": list(interfaces)})).hexdigest()
     root = (unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
     workspace = shared_paths.target if shared_paths else root / "workspace"
@@ -887,6 +893,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     status = "FAILED" if any(gap.startswith("JVM build command") for gap in gaps) else "SUCCEEDED"
     receipt: dict[str, Any] = {"schema": JVM_RECEIPT_SCHEMA, "fingerprint": fingerprint,
         "source_fingerprint": unit.job.source_fingerprint,
+        "topology_refinement": dispatch["topology_refinement"],
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
         "build_unit_id": build_unit_id, "family": "java", "root": dispatch["root"],
         "build_system": dispatch.get("build_system"), "recipe": recipe,

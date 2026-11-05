@@ -439,6 +439,14 @@ class JobRunner:
         if claim.get("reused"):
             result = json.loads((context.attempt_root / "result.json").read_text(encoding="utf-8"))
             output = dict(result.get("outputs", {}).get(unit_id, {}))
+            if job.job_id in {"job_project_build", "job_language_build", "job_build_iteration"}:
+                from appsec_review.jobs.build_topology_artifacts import guard_build_cache
+                guard_build_cache(
+                    context.run_root, job.job_id, output,
+                    configuration={"build_selection": self.config.job(
+                        "job_project_build").settings["build_selection"]},
+                    releases=context.review_policy.releases.view(),
+                    source_fingerprint=context.source_fingerprint, unit_id=unit_id)
             context.events.write("TASK_REUSED", unit_id=unit_id, producer=output.get("tool_id"),
                                  disposition=output.get("terminal_status"),
                                  shard_identity=output.get("index_identity"),
@@ -455,10 +463,23 @@ class JobRunner:
             status = json.loads(status_path.read_text(encoding="utf-8"))
             if status.get("status") == "SUCCEEDED" and status.get("result_sha256") == file_sha256(result_path):
                 result = json.loads(result_path.read_text(encoding="utf-8"))
-                context.events.write("TASK_REUSED", unit_id=unit_id,
-                                     producer=result.get("tool_id"), disposition=result.get("terminal_status"),
-                                     shard_identity=result.get("index_identity"))
-                return result
+                try:
+                    if job.job_id in {"job_project_build", "job_language_build", "job_build_iteration"}:
+                        from appsec_review.jobs.build_topology_artifacts import guard_build_cache
+                        guard_build_cache(
+                            context.run_root, job.job_id, result,
+                            configuration={"build_selection": self.config.job(
+                                "job_project_build").settings["build_selection"]},
+                            releases=context.review_policy.releases.view(),
+                            source_fingerprint=context.source_fingerprint, unit_id=unit_id)
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    context.events.write("CHECKPOINT_MISSED", unit_id=unit_id,
+                                         details={"reason": f"build topology admission failed: {error}"})
+                else:
+                    context.events.write("TASK_REUSED", unit_id=unit_id,
+                                         producer=result.get("tool_id"), disposition=result.get("terminal_status"),
+                                         shard_identity=result.get("index_identity"))
+                    return result
         units_by_id = {candidate.unit_id: candidate for candidate in job.units}
         required_outputs: set[str] = set()
         stack = list(unit.dependencies)
@@ -731,6 +752,14 @@ class JobRunner:
                 raise ValueError("reused handoff changed during Dagster execution")
             result = json.loads((context.attempt_root / "result.json").read_text(encoding="utf-8"))
             status = json.loads((context.attempt_root / "status.json").read_text(encoding="utf-8"))
+            if job.job_id in {"job_project_build", "job_language_build", "job_build_iteration"}:
+                from appsec_review.jobs.build_topology_artifacts import guard_build_cache
+                guard_build_cache(
+                    context.run_root, job.job_id, result,
+                    configuration={"build_selection": self.config.job(
+                        "job_project_build").settings["build_selection"]},
+                    releases=context.review_policy.releases.view(),
+                    source_fingerprint=context.source_fingerprint)
             return {"status": status, "result": result, "attempt_root": str(context.attempt_root),
                     "handoff": handoff, "handoff_sha256": claim["handoff_sha256"], "reused": True}
         receipts: dict[str, Mapping[str, Any]] = {}

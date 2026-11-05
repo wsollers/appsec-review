@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import replace
 from dataclasses import asdict
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -84,9 +85,12 @@ def _read_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
     path = (run_root / str(identity.get("path", ""))).resolve()
     if run_root.resolve() not in path.parents or not path.is_file():
         raise ValueError("accepted upstream artifact is unavailable or outside the run")
-    if file_sha256(path) != identity.get("sha256"):
+    if path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError("accepted upstream artifact exceeds its byte bound")
+    data = path.read_bytes()
+    if len(data) > 16 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != identity.get("sha256"):
         raise ValueError("accepted upstream artifact identity changed")
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = json.loads(data)
     if not isinstance(value, Mapping):
         raise ValueError("accepted upstream artifact must be a JSON object")
     return value
@@ -135,6 +139,23 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=2)
+def _verify_source_topology(plan_bytes: bytes) -> None:
+    from appsec_review.jobs.build_topology import (
+        compile_build_topology, topology_evidence_bundle, refine_build_topology,
+    )
+    plan = json.loads(plan_bytes)
+    topology = plan["build_topology"]
+    graph, actions, bundle = topology["executable_graph"], topology["build_actions"], topology["evidence_bundle"]
+    if (compile_build_topology(actions, source_fingerprint=plan["source_fingerprint"],
+                               environment=bundle["environment"], profiles=bundle["profiles"]) != graph
+            or bundle != topology_evidence_bundle(actions, source_fingerprint=plan["source_fingerprint"],
+                                                 environment=bundle["environment"], profiles=bundle["profiles"])
+            or topology["planning_refinement"] != refine_build_topology(
+                graph, actions, environment=bundle["environment"], profiles=bundle["profiles"])):
+        raise ValueError("accepted graph/refinement does not reproduce from its whole evidence bundle")
+
+
 def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
     pointer_path = Path(run_root) / "data" / "jobs" / "job_target_analysis_plan" / "latest.json"
     if not pointer_path.is_file():
@@ -150,6 +171,8 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
     if not isinstance(graph, Mapping) or graph.get("source_fingerprint") != plan.get("source_fingerprint"):
         raise ValueError("accepted analysis plan has no source-bound executable build graph")
     validate_build_topology(graph)
+    if graph["schema"] == "appsec-review/build-topology/2":
+        _verify_source_topology(canonical_json(plan))
     reject_swift_derived(
         plan, enabled=swift_enabled_from_run(Path(run_root)),
         context="accepted target analysis plan")
@@ -521,7 +544,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         plan = accepted["plan"]
         fingerprint = index_fingerprint(name="analysis", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=[accepted["artifact"]], tool_identity={"producer": "job_target_analysis_plan"},
-            parser_identity="analysis-plan-parser/1", normalizer_identity="analysis-plan-normalizer/1",
+            parser_identity="analysis-plan-parser/2", normalizer_identity="analysis-plan-normalizer/2",
             mapping_identity="catalog-identity/1")
         path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}-target-analysis-plan.sqlite"
         reused = path.exists()
@@ -562,6 +585,23 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                         {"path": manifest["path"], "sha256": manifest["sha256"]})
                     builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value,
                                                         source_id.value, True, 1.0))
+            graph = plan["build_topology"]["executable_graph"]
+            bindings_by_fact = {}
+            for binding in graph.get("bindings", []):
+                bindings_by_fact.setdefault(binding["fact_id"], []).append({
+                    key: binding[key] for key in ("binding_id", "build_unit_id", "subject", "stage", "scope_rule")})
+            for fact in graph.get("facts", []):
+                identity = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,
+                                                   {"topology": graph["topology_id"], "fact": fact["fact_id"]})
+                payload = {key: fact[key] for key in ("fact_id", "predicate", "path", "sha256", "span", "rule")}
+                payload["bindings"] = bindings_by_fact.get(fact["fact_id"], [])
+                builder.add_entity(EntityRecord(identity, "build-fact:" + fact["fact_id"][:16],
+                                                 fact["predicate"], fact["path"], payload))
+                source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                                    {"path": fact["path"], "sha256": fact["sha256"]})
+                builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value,
+                                                    source_id.value, True, 1.0,
+                                                    payload={"span": fact["span"]}))
             builder.add_coverage("analysis-plan", "complete" if not plan["coverage_gaps"] else "partial",
                                  None if not plan["coverage_gaps"] else "; ".join(plan["coverage_gaps"][:10]))
             sha256 = builder.build()
@@ -583,7 +623,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 "index_identity": asdict(identity),
                 "index_manifest": {"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
                                    "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size},
-                "item_count": len(plan["components"]) + len(plan["scanner_selections"]) + len(plan["build_topology"]["build_actions"]),
+                "item_count": len(plan["components"]) + len(plan["scanner_selections"])
+                              + len(plan["build_topology"]["build_actions"])
+                              + len(plan["build_topology"]["executable_graph"].get("facts", [])),
                 "gaps": list(plan["coverage_gaps"]), "index_reused": reused}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:

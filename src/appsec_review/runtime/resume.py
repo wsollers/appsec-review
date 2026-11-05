@@ -103,6 +103,19 @@ class ResumePlanner:
         if job.input_identity is not None or job.run_input_identity is not None:
             checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root, self.run_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
+        if job.job_id in {"job_project_build", "job_language_build", "job_build_iteration"}:
+            try:
+                from appsec_review.jobs.build_topology_artifacts import _read, guard_build_cache
+                result_path = handoff["resolving_paths"]["result"]
+                result_ref = next(item for item in handoff["artifacts"] if item["path"] == result_path)
+                guard_build_cache(
+                    self.run_root, job.job_id, _read(self.run_root, result_ref),
+                    configuration={"build_selection": self.config.job(
+                        "job_project_build").settings["build_selection"]},
+                    releases=self.config.review_policy.releases.view(),
+                    source_fingerprint=self.source_fingerprint)
+            except (OSError, ValueError, KeyError, TypeError, StopIteration) as error:
+                reasons.append(f"build topology cache admission failed: {error}")
         if not handoff.get("artifacts"):
             reasons.append("accepted handoff has no artifact identities")
         try:

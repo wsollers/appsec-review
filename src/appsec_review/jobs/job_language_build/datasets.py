@@ -12,6 +12,12 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 _A = "data/jobs/job_language_build/attempts/*"
 CONSUMES = ('job_project_build',)
 DATASETS = (
+    protected("topology_refinement_inputs", "execute", "build",
+              "appsec-review/build-topology-refinement/1",
+              "Immutable replacement and promotion refinements, including their complete accepted inputs.",
+              artifacts=("artifacts/build/topology/**", "data/build/topology/**"),
+              reason="closures retain source documents and exact effective environment values; "
+                     "only sanitized identities and coverage are retrieval metadata"),
     indexed("build_actions", "acceptance", "build", "appsec-review/retrieval-index/2",
             "Sanitized build commands, produced artifacts and package relationships per build unit.",
             indexes=("build",), prefixes=("language-build",),

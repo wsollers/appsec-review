@@ -303,6 +303,10 @@ def _publish_build_graph(plan: dict[str, Any]) -> None:
         topology["build_actions"], source_fingerprint=plan["source_fingerprint"],
         component_relationships=topology["relationships"])
     topology["executable_graph"] = graph
+    from appsec_review.jobs.build_topology import topology_evidence_bundle, refine_build_topology
+    topology["evidence_bundle"] = topology_evidence_bundle(
+        topology["build_actions"], source_fingerprint=plan["source_fingerprint"])
+    topology["planning_refinement"] = refine_build_topology(graph, topology["build_actions"])
     plan["coverage_gaps"] = list(dict.fromkeys([
         *(gap for gap in plan["coverage_gaps"] if not gap.startswith("executable build graph: ")),
         *(f"executable build graph: {gap['code']}: {gap['reason']}" for gap in graph["coverage_gaps"]),

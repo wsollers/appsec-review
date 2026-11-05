@@ -326,7 +326,7 @@ def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerp
             blocking=False)
     for node in nodes.values():
         node["products"] = _ordered(node["products"])
-    graph = {"schema": BUILD_TOPOLOGY_SCHEMA, "source_fingerprint": source_fingerprint,
+    graph = {"schema": "appsec-review/build-topology/1", "source_fingerprint": source_fingerprint,
              "nodes": _ordered(list(nodes.values())), "edges": _ordered(edges),
              "external_requirements": _ordered(external), "coverage_gaps": _ordered(gaps)}
     graph["topology_id"] = topology_identity(graph)
@@ -338,7 +338,7 @@ def validate_build_topology(graph: Mapping[str, Any]) -> None:
     """Fail closed on identity, endpoint, ownership, product and cycle errors."""
     if (set(graph) != {"schema", "source_fingerprint", "topology_id", "nodes", "edges",
                        "external_requirements", "coverage_gaps"}
-            or graph.get("schema") != BUILD_TOPOLOGY_SCHEMA
+            or graph.get("schema") != "appsec-review/build-topology/1"
             or not isinstance(graph.get("source_fingerprint"), str) or not graph["source_fingerprint"]):
         raise ValueError("unsupported build topology document")
     if any(not isinstance(graph[key], list)
@@ -521,4 +521,1221 @@ def ready_build_units(graph: Mapping[str, Any], states: Mapping[str, str], *,
             blocked.append({"build_unit_id": uid, "reasons": sorted(set(reasons))})
         else:
             ready.append(uid)
+    return {"ready": ready, "blocked": blocked}
+
+
+_compile_graph1 = compile_build_topology
+_validate_graph1 = validate_build_topology
+_identity_graph1 = topology_identity
+_ready_graph1 = ready_build_units
+BUILD_TOPOLOGY_SCHEMA = "appsec-review/build-topology/2"
+BUNDLE_SCHEMA = "appsec-review/build-topology-evidence/1"
+REFINEMENT_SCHEMA = "appsec-review/build-topology-refinement/1"
+ENFORCEMENT_SCHEMA = "appsec-review/native-target-enforcement/1"
+RULES = "source-scoped-topology/2"
+OPERATIONS = frozenset({"managed_compile", "bytecode_transform", "native_aot",
+                       "native_compile", "native_link", "package", "prebuilt_import", "unknown"})
+PROOF_KINDS = frozenset({"msbuild_selected_mapping", "compiler_explicit_target",
+                        "compiler_pinned_default", "go_explicit_target"})
+_SOURCE_KEYS = ("build_unit_id", "root", "family", "build_system", "markers", "build_variant",
+                "project_type", "descriptor_facts", "engine", "engine_project", "native_components")
+
+
+def topology_evidence_bundle(units, *, source_fingerprint, environment=None, profiles=None):
+    documents = {}
+    sources = []
+    for unit in sorted(units, key=lambda item: item["build_unit_id"]):
+        source = {key: copy.deepcopy(unit[key]) for key in _SOURCE_KEYS if key in unit}
+        source["documents"] = []
+        package = unit.get("descriptor_package", {})
+        source["coverage"] = {"bounds": copy.deepcopy(package.get("bounds", {})),
+                              "gaps": copy.deepcopy(package.get("gaps", []))}
+        for document in package.get("documents", []):
+            if (not _relative(document.get("path")) or not _hash(document.get("sha256"))
+                    or not isinstance(document.get("content"), str)
+                    or _digest_bytes(document["content"].encode()) != document["sha256"]):
+                raise ValueError("topology descriptor does not resolve its accepted bytes")
+            key = document["path"]
+            if key in documents and documents[key] != document:
+                raise ValueError("conflicting accepted declaring document")
+            documents[key] = copy.deepcopy(document)
+            source["documents"].append({"path": key, "sha256": document["sha256"]})
+        source["documents"] = _ordered(source["documents"])
+        sources.append(source)
+    bundle = {"schema": BUNDLE_SCHEMA, "source_fingerprint": source_fingerprint, "rules": RULES,
+              "units": sources, "documents": _ordered(list(documents.values())),
+              "environment": copy.deepcopy(environment), "profiles": copy.deepcopy(profiles)}
+    if len(canonical_json(bundle)) > 16 * 1024 * 1024:
+        raise ValueError("topology evidence exceeds the accepted graph byte budget")
+    return bundle
+
+
+def _digest_bytes(value):
+    return hashlib.sha256(value).hexdigest()
+
+
+def bundle_units(bundle):
+    if bundle.get("schema") != BUNDLE_SCHEMA or bundle.get("rules") != RULES:
+        raise ValueError("unsupported topology evidence bundle")
+    documents = {item["path"]: item for item in bundle["documents"]}
+    units = []
+    for source in bundle["units"]:
+        unit = {key: copy.deepcopy(source[key]) for key in _SOURCE_KEYS if key in source}
+        selected = []
+        for ref in source["documents"]:
+            document = documents.get(ref["path"])
+            if document is None or document["sha256"] != ref["sha256"]:
+                raise ValueError("bundle document binding changed")
+            selected.append(copy.deepcopy(document))
+        unit["descriptor_package"] = {
+            "documents": selected, "gaps": source["coverage"]["gaps"],
+            "bounds": source["coverage"]["bounds"]}
+        units.append(unit)
+    if topology_evidence_bundle(
+            units, source_fingerprint=bundle["source_fingerprint"],
+            environment=bundle["environment"], profiles=bundle["profiles"]) != bundle:
+        raise ValueError("topology bundle is not canonical or has unresolved document identities")
+    return units
+
+
+def _xml_declarations(document):
+    import xml.etree.ElementTree as ET
+    from xml.parsers import expat
+    try:
+        root = ET.fromstring(document["content"])
+        parser = expat.ParserCreate()
+        locations = []
+        parser.StartElementHandler = lambda name, attrs: locations.append(parser.CurrentLineNumber)
+        parser.Parse(document["content"], True)
+    except (ET.ParseError, expat.ExpatError):
+        return [{"predicate": "coverage_gap", "value": "unparsed_xml", "condition": None,
+                 "line": 1}]
+    declarations = []
+    location = iter(locations)
+
+    def visit(element, inherited):
+        line = next(location)
+        tag = element.tag.rsplit("}", 1)[-1]
+        own_condition = element.attrib.get("Condition")
+        condition = (f"({inherited}) AND ({own_condition})"
+                     if inherited is not None and own_condition is not None
+                     else own_condition if own_condition is not None else inherited)
+        value = (element.text or "").strip()
+        if tag in {"ProjectReference", "Import", "PackageReference", "ClCompile", "ClInclude",
+                   "Compile", "Reference", "Content", "NativeReference", "EmbeddedResource", "Exec"}:
+            value = dict(element.attrib)
+        elif tag in {"Configuration", "ProjectConfiguration", "Platform", "Tool"}:
+            value = dict(element.attrib)
+        if value and tag not in {"Project", "ItemGroup", "PropertyGroup", "ItemDefinitionGroup"}:
+            declarations.append({"predicate": tag, "value": value, "condition": condition, "line": line})
+        for child in element:
+            visit(child, condition)
+    visit(root, None)
+    declarations.append({"predicate": "project_descriptor", "value": {
+        "sdk": root.attrib.get("Sdk"), "kind": PurePosixPath(document["path"]).suffix.lower()},
+        "condition": None, "line": 1})
+    return declarations
+
+
+def _document_declarations(document):
+    suffix = PurePosixPath(document["path"]).suffix.lower()
+    if suffix in {".vcxproj", ".vcproj", ".csproj", ".vbproj", ".fsproj", ".props", ".targets"}:
+        return _xml_declarations(document)
+    result = []
+    if suffix in {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}:
+        result.append({"predicate": "cpp:translation_unit", "value": suffix,
+                       "condition": None, "line": 1})
+        for index, line in enumerate(document["content"].splitlines(), 1):
+            include = re.match(r'\s*#\s*include\s*([<"])([^>"]+)[>"]', line)
+            if include:
+                result.append({"predicate": "cpp:include", "value": {
+                    "path": include[2], "system": include[1] == "<"}, "condition": None, "line": index})
+            elif re.match(r"\s*#\s*(?:if|ifdef|ifndef|elif)\b", line):
+                result.append({"predicate": "cpp:condition", "value": line.strip(),
+                               "condition": "unresolved", "line": index})
+        return result
+    if suffix == ".sln":
+        for index, line in enumerate(document["content"].splitlines(), 1):
+            member = re.match(
+                r'\s*Project\("(\{[^"]+\})"\)\s*=\s*"([^"]+)",\s*"([^"]+)",\s*"(\{[^"]+\})"', line)
+            mapping = re.match(r"\s*(\{[^}]+\})\.(.+?)\.(ActiveCfg|Build\.0)\s*=\s*(.+?)\s*$", line)
+            if member:
+                result.append({"predicate": "solution_member", "value": {
+                    "type": member[1].lower(), "name": member[2], "path": member[3].replace("\\", "/"),
+                    "guid": member[4].lower()}, "condition": None, "line": index})
+            elif mapping:
+                result.append({"predicate": "solution_mapping", "value": {
+                    "guid": mapping[1].lower(), "solution": mapping[2],
+                    "kind": mapping[3], "project": mapping[4]}, "condition": None, "line": index})
+        return result
+    if PurePosixPath(document["path"]).name == "CMakeLists.txt":
+        for name, arguments, literal, evidence in _cmake_calls(document):
+            result.append({"predicate": "cmake:" + name, "value": arguments,
+                           "condition": None if literal else "unresolved",
+                           "line": evidence["line"] or 1})
+        return result
+    text = document["content"]
+    for index, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "//", "/*", "*")):
+            continue
+        assignment = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*([:+?]?=)\s*(.*)", stripped)
+        include = re.match(r"(-?include|sinclude)\s+(.+)", stripped)
+        if assignment:
+            result.append({"predicate": "assignment", "value": {
+                "name": assignment[1], "operator": assignment[2], "value": assignment[3]},
+                "condition": None, "line": index})
+        elif include:
+            result.append({"predicate": "include", "value": include[2],
+                           "condition": None, "line": index})
+        elif re.match(r"(?:ifn?def|ifeq|ifneq|else|endif)\b", stripped):
+            result.append({"predicate": "condition", "value": stripped,
+                           "condition": "unresolved", "line": index})
+        elif stripped.startswith(("AC_", "AM_")):
+            result.append({"predicate": "autotools_declaration", "value": stripped,
+                           "condition": "unresolved" if "$" in stripped else None, "line": index})
+        if PurePosixPath(document["path"]).name.startswith(("build.gradle", "settings.gradle")):
+            include_modules = re.match(r"\s*include\s*(?:\((.*?)\)|(.*))", stripped)
+            if include_modules:
+                arguments = include_modules[1] if include_modules[1] is not None else include_modules[2]
+                modules = re.findall(r"""["'](:[A-Za-z0-9_:-]+)["']""", arguments)
+                literal = bool(modules) and not re.sub(r"""["']:[A-Za-z0-9_:-]+["']|[\s,]""", "", arguments)
+                result.append({"predicate": "gradle:include", "value": modules,
+                               "condition": None if literal else "unresolved", "line": index})
+            project_dir = re.search(
+                r"""project\s*\(\s*["'](:[^"']+)["']\s*\)\.projectDir\s*=\s*(?:file\s*\(\s*|(?:new\s+)?File\s*\(\s*rootDir\s*,\s*)["']([^"']+)["']\s*\)""",
+                stripped)
+            if project_dir:
+                result.append({"predicate": "gradle:project_dir", "value": {
+                    "module": project_dir[1], "path": project_dir[2]},
+                    "condition": None, "line": index})
+            elif ".projectDir" in stripped:
+                result.append({"predicate": "coverage_gap", "value": "gradle_project_dir_dynamic",
+                               "condition": "unresolved", "line": index})
+            if re.search(r"\bexternalNativeBuild\b|\bndkBuild\b", stripped):
+                result.append({"predicate": "android:external_native", "value": stripped,
+                               "condition": None, "line": index})
+            applied = re.search(r"""apply\s*(?:\(\s*)?from\s*[=:]\s*["']([^"']+)["']""", stripped)
+            if applied:
+                result.append({"predicate": "gradle:apply_from", "value": applied[1],
+                               "condition": None, "line": index})
+            for key in ("compileSdk", "minSdk", "targetSdk", "abiFilters"):
+                match = re.search(r"\b" + key + r"(?:Version)?\s*(?:[=(]\s*)?([^\n}]+)", stripped)
+                if match:
+                    value = match[1].strip().rstrip(")")
+                    literal = bool(re.fullmatch(r"\d+", value)) if key != "abiFilters" else bool(
+                        re.fullmatch(r"""["'][A-Za-z0-9_-]+["'](?:\s*,\s*["'][A-Za-z0-9_-]+["'])*""", value))
+                    result.append({"predicate": "android:" + key, "value": value,
+                                   "condition": None if literal else "unresolved", "line": index})
+            plugin = re.search(r"com\.android\.(application|library)", stripped)
+            if plugin:
+                result.append({"predicate": "android:plugin", "value": plugin[1],
+                               "condition": "apply_false" if re.search(r"\bapply\s+false\b", stripped) else None,
+                               "line": index})
+            for module in re.findall(r"project\s*\(\s*[\"'](:[^\"']+)", stripped):
+                if project_dir:
+                    continue
+                result.append({"predicate": "gradle:project", "value": module,
+                               "condition": None, "line": index})
+    return result
+
+
+def _scoped_documents(unit, facts_by_document):
+    available = {item["path"] for item in unit["descriptor_package"]["documents"]}
+    scoped = {marker["path"]: {("driver", marker["path"])} for marker in unit.get("markers", [])
+              if marker["path"] in available}
+    pending = [(path, role, subject) for path, scopes in scoped.items() for role, subject in scopes]
+    while pending:
+        path, inherited_role, inherited_subject = pending.pop()
+        for fact in facts_by_document.get(path, []):
+            relative, role, subject = None, "imported_descriptor", inherited_subject
+            if fact["predicate"] == "solution_member":
+                relative = fact["value"]["path"]
+                role, subject = "member_declaration", fact["value"]["guid"]
+            elif fact["predicate"] == "Import":
+                relative = fact["value"].get("Project")
+            elif fact["predicate"] == "gradle:apply_from":
+                relative = fact["value"]
+            elif fact["predicate"] == "gradle:include" and fact["condition"] is None:
+                overrides = {item["value"]["module"]: item["value"]["path"]
+                             for item in facts_by_document[path] if item["predicate"] == "gradle:project_dir"}
+                for module in fact["value"]:
+                    directory = overrides.get(module, module.lstrip(":").replace(":", "/"))
+                    for name in ("build.gradle", "build.gradle.kts"):
+                        resolved = _resolve(str(PurePosixPath(path).parent), directory.rstrip("/") + "/" + name)
+                        context = ("module_declaration", module)
+                        if resolved in available and context not in scoped.get(resolved, set()):
+                            scoped.setdefault(resolved, set()).add(context)
+                            pending.append((resolved, *context))
+            elif fact["predicate"] in {"ClCompile", "ClInclude", "Compile"}:
+                relative = fact["value"].get("Include")
+                role = "source_input"
+            elif fact["predicate"] in {"cmake:add_library", "cmake:add_executable"}:
+                for value in fact["value"][1:]:
+                    resolved = _resolve(str(PurePosixPath(path).parent), value.replace("\\", "/"))
+                    context = ("source_input", fact["fact_id"])
+                    if resolved in available and context not in scoped.get(resolved, set()):
+                        scoped.setdefault(resolved, set()).add(context)
+                        pending.append((resolved, *context))
+            elif fact["predicate"] in {"cmake:include", "cmake:add_subdirectory"} and fact["value"]:
+                relative = fact["value"][0]
+                if fact["predicate"] == "cmake:add_subdirectory":
+                    relative = relative.rstrip("/") + "/CMakeLists.txt"
+            elif fact["predicate"] == "cpp:include" and not fact["value"]["system"]:
+                relative = fact["value"]["path"]
+                role = "source_input"
+            if not isinstance(relative, str):
+                continue
+            resolved = _resolve(str(PurePosixPath(path).parent), relative.replace("\\", "/"))
+            context = (role, subject)
+            if resolved in available and context not in scoped.get(resolved, set()):
+                scoped.setdefault(resolved, set()).add(context)
+                pending.append((resolved, *context))
+    return scoped
+
+
+def compile_build_topology(units, *, source_fingerprint, component_relationships=(),
+                           environment=None, profiles=None, hints=()):
+    """Compile the complete accepted bundle. Hints have no authority over declaration bytes."""
+    bundle = topology_evidence_bundle(units, source_fingerprint=source_fingerprint,
+                                      environment=environment, profiles=profiles)
+    sources = bundle_units(bundle)
+    legacy_inputs = [{**unit, "recipe": None} for unit in sources]
+    legacy = _compile_graph1(legacy_inputs, source_fingerprint=source_fingerprint)
+    nodes = copy.deepcopy(legacy["nodes"])
+    facts, bindings, declarations, relations = [], [], [], []
+    seen_facts = set()
+    facts_by_document = {}
+    for document in bundle["documents"]:
+        values = []
+        for declaration in _document_declarations(document):
+            fact = {**declaration, "path": document["path"], "sha256": document["sha256"],
+                    "rule": RULES, "span": [declaration["line"], declaration["line"]]}
+            fact["fact_id"] = _digest(fact)
+            if fact["fact_id"] not in seen_facts:
+                facts.append(fact)
+                seen_facts.add(fact["fact_id"])
+            values.append(fact)
+        facts_by_document[document["path"]] = values
+    by_root = {}
+    for unit in sources:
+        by_root.setdefault(unit["root"], []).append(unit["build_unit_id"])
+    for unit in sources:
+        uid = unit["build_unit_id"]
+        node = next(item for item in nodes if item["build_unit_id"] == uid)
+        node["recipe_revision"] = None
+        scoped = _scoped_documents(unit, facts_by_document)
+        own_facts = [fact for path in scoped for fact in facts_by_document[path]]
+        if node["build_system"] == "make":
+            resolved = make_default_build_commands(unit)
+            if resolved is not None:
+                marker, commands = resolved
+                if re.search(r"(?m)^[@+-]*(?:gcc|g\+\+|clang|clang\+\+|cc|c\+\+|\$\(CC\)|\$\(CXX\))\s+\S+", commands):
+                    node.update(disposition="independent", owner_build_unit_id=uid)
+                    legacy["coverage_gaps"] = [gap for gap in legacy["coverage_gaps"] if not (
+                        gap["code"] == "unresolved_ownership" and uid in gap["build_unit_ids"])]
+                for match in re.finditer(r"\$\(MAKE\)\s+-C\s+([A-Za-z0-9_./-]+)", commands):
+                    path = _resolve(unit["root"], match[1])
+                    candidates = by_root.get(path, [])
+                    relation = {"consumer_build_unit_id": uid,
+                                "producer_build_unit_id": candidates[0] if len(candidates) == 1 else None,
+                                "interface": path, "kind": "invokes_unit", "operation": "unknown",
+                                "required": False, "condition": None, "resolution": "candidate",
+                                "reason": "recursive invocation does not establish whole-unit precedence",
+                                "fact_ids": [fact["fact_id"] for fact in own_facts if fact["path"] == marker["path"]]}
+                    relation["relation_id"] = _digest(relation)
+                    relations.append(relation)
+        for fact in own_facts:
+            for stage, subject in sorted(scoped[fact["path"]]):
+                binding = {"fact_id": fact["fact_id"], "build_unit_id": uid,
+                           "subject": subject, "stage": stage,
+                           "condition": fact["condition"], "scope_rule": RULES}
+                binding["binding_id"] = _digest(binding)
+                bindings.append(binding)
+        for product in node["products"]:
+            role = ("static_archive" if product["variant"]["linkage"] == "static" else
+                    "runtime_shared" if product["variant"]["linkage"] == "shared" else None
+                    ) if product["kind"] == "library" else "executable"
+            declarations.append({**product, "owner_build_unit_id": uid, "role": role,
+                                 "origin": "source_declaration", "declared_path": None,
+                                 "evidence": copy.deepcopy(node["evidence"])})
+        descriptor = any(fact["predicate"] == "project_descriptor" for fact in own_facts)
+        if descriptor and node["disposition"] == "unsupported":
+            node.update(disposition="independent", owner_build_unit_id=uid)
+        for fact in own_facts:
+            if fact["predicate"] in {"ProjectReference", "gradle:project"}:
+                value = fact["value"]
+                relative = value.get("Include") if isinstance(value, Mapping) else value
+                if not isinstance(relative, str):
+                    continue
+                path = _resolve(str(PurePosixPath(fact["path"]).parent), relative.replace("\\", "/"))
+                owners = by_root.get(str(PurePosixPath(path).parent), []) if path else []
+                producer = owners[0] if len(owners) == 1 else None
+                relation = {"consumer_build_unit_id": uid, "producer_build_unit_id": producer,
+                            "interface": relative, "kind": "requires_product",
+                            "operation": "unknown", "required": True, "condition": fact["condition"],
+                            "resolution": "declared_conditional" if fact["condition"] else
+                            "candidate" if producer else "unresolved",
+                            "reason": "selected operation and product role require binding",
+                            "fact_ids": [fact["fact_id"]]}
+                relation["relation_id"] = _digest(relation)
+                relations.append(relation)
+            if fact["predicate"] in {"TargetName", "OutputFile", "ImportLibrary", "ConfigurationType"}:
+                role = "import_library" if fact["predicate"] == "ImportLibrary" else "metadata"
+                declarations.append({"product_id": _digest({"owner": uid, "fact": fact["fact_id"]}),
+                                     "kind": "library" if role == "import_library" else "package_metadata",
+                                     "interface": str(fact["value"]), "variant": dict(node["variant"]),
+                                     "owner_build_unit_id": uid, "role": role,
+                                     "origin": "source_declaration", "declared_path": fact["value"],
+                                     "condition": fact["condition"],
+                                     "evidence": [{"path": fact["path"], "sha256": fact["sha256"],
+                                                   "line": fact["line"], "relationship": fact["predicate"],
+                                                   "declaration": str(fact["value"])}]})
+    edges = []
+    for edge in legacy["edges"]:
+        if any(re.search(r"\b(?:DEBUG|OPTIMIZED|GENERAL)\b", evidence["declaration"] or "", re.IGNORECASE)
+               for evidence in edge["evidence"]):
+            relation = {"consumer_build_unit_id": edge["consumer_build_unit_id"],
+                        "producer_build_unit_id": edge["producer_build_unit_id"],
+                        "interface": edge["requirement"]["interface"] if edge["requirement"] else None,
+                        "kind": edge["kind"], "operation": "native_link", "required": True,
+                        "condition": "cmake_configuration_qualified", "resolution": "declared_conditional",
+                        "reason": "configuration-qualified declaration is not unconditional scheduling",
+                        "fact_ids": [fact["fact_id"] for fact in facts if any(
+                            fact["path"] == evidence["path"] and fact["line"] == evidence["line"]
+                            for evidence in edge["evidence"])]}
+            relation["relation_id"] = _digest(relation)
+            relations.append(relation)
+        else:
+            edges.append(edge)
+    graph = {"schema": BUILD_TOPOLOGY_SCHEMA, "source_fingerprint": source_fingerprint,
+             "bundle_identity": _digest(bundle), "rules": RULES, "nodes": _ordered(nodes),
+             "edges": _ordered(edges), "external_requirements": legacy["external_requirements"],
+             "coverage_gaps": legacy["coverage_gaps"], "facts": _ordered(facts),
+             "bindings": _ordered(bindings), "declarations": _ordered(declarations),
+             "relations": _ordered(relations)}
+    graph["topology_id"] = topology_identity(graph)
+    validate_build_topology(graph)
+    return graph
+
+
+def topology_identity(graph):
+    if graph.get("schema") == "appsec-review/build-topology/1":
+        return _identity_graph1(graph)
+    return _digest({key: value for key, value in graph.items() if key != "topology_id"})
+
+
+def validate_build_topology(graph):
+    if graph.get("schema") == "appsec-review/build-topology/1":
+        return _validate_graph1(graph)
+    keys = {"schema", "source_fingerprint", "bundle_identity", "rules", "topology_id", "nodes",
+            "edges", "external_requirements", "coverage_gaps", "facts", "bindings",
+            "declarations", "relations"}
+    if (set(graph) != keys or graph.get("schema") != BUILD_TOPOLOGY_SCHEMA
+            or graph.get("rules") != RULES or not _hash(graph.get("bundle_identity"))
+            or graph.get("topology_id") != topology_identity(graph)):
+        raise ValueError("unsupported or changed graph/2 identity")
+    view = {key: copy.deepcopy(graph[key]) for key in (
+        "schema", "source_fingerprint", "nodes", "edges", "external_requirements", "coverage_gaps")}
+    view["schema"] = "appsec-review/build-topology/1"
+    view["topology_id"] = _identity_graph1(view)
+    _validate_graph1(view)
+    if any(node["recipe_revision"] is not None for node in graph["nodes"]):
+        raise ValueError("canonical graph cannot contain recipe-dependent bindings")
+    facts = {fact["fact_id"]: fact for fact in graph["facts"]}
+    if len(facts) != len(graph["facts"]):
+        raise ValueError("duplicate source fact")
+    for identity, fact in facts.items():
+        if identity != _digest({key: value for key, value in fact.items() if key != "fact_id"}):
+            raise ValueError("source fact identity changed")
+    nodes = {node["build_unit_id"] for node in graph["nodes"]}
+    for binding in graph["bindings"]:
+        if (binding["fact_id"] not in facts or binding["build_unit_id"] not in nodes
+                or binding["binding_id"] != _digest({
+                    key: value for key, value in binding.items() if key != "binding_id"})):
+            raise ValueError("unresolved source fact binding")
+    if len(canonical_json(graph)) > 16 * 1024 * 1024:
+        raise ValueError("graph exceeds its byte budget")
+
+
+def _condition_applies(condition, configuration, platform):
+    if condition is None:
+        return True
+    if not isinstance(condition, str) or len(condition) > 8192:
+        return None
+    text = condition
+    for name, value in (("Configuration", configuration), ("Platform", platform)):
+        if value is not None:
+            text = text.replace("$(" + name + ")", value)
+    token_pattern = re.compile(r"""\s*(==|!=|\(|\)|\bAND\b|\bOR\b|'[^']*'|"[^"]*")""", re.I)
+    tokens, offset = [], 0
+    while offset < len(text.rstrip()):
+        match = token_pattern.match(text, offset)
+        if match is None or len(tokens) >= 256:
+            return None
+        tokens.append(match[1])
+        offset = match.end()
+    position = 0
+
+    def primary(depth):
+        nonlocal position
+        if depth > 32 or position >= len(tokens):
+            raise ValueError("unsupported selected condition")
+        if tokens[position] == "(":
+            position += 1
+            value = expression(depth + 1)
+            if position >= len(tokens) or tokens[position] != ")":
+                raise ValueError("unclosed selected condition")
+            position += 1
+            return value
+        if position + 2 >= len(tokens):
+            raise ValueError("incomplete selected comparison")
+        left, operator, right = tokens[position:position + 3]
+        if left[0] not in "'\"" or right[0] not in "'\"" or operator not in {"==", "!="}:
+            raise ValueError("unsupported selected comparison")
+        position += 3
+        if "$(" in left or "$(" in right:
+            return None
+        equal = left[1:-1].casefold() == right[1:-1].casefold()
+        return equal if operator == "==" else not equal
+
+    def conjunction(depth):
+        nonlocal position
+        value = primary(depth)
+        while position < len(tokens) and tokens[position].upper() == "AND":
+            position += 1
+            other = primary(depth)
+            value = False if value is False or other is False else None if (
+                value is None or other is None) else True
+        return value
+
+    def expression(depth):
+        nonlocal position
+        value = conjunction(depth)
+        while position < len(tokens) and tokens[position].upper() == "OR":
+            position += 1
+            other = conjunction(depth)
+            value = True if value is True or other is True else None if (
+                value is None or other is None) else False
+        return value
+
+    try:
+        value = expression(0)
+        return value if position == len(tokens) else None
+    except ValueError:
+        return None
+
+
+def _selected_operations(unit, graph, recipe, selected):
+    uid = unit["build_unit_id"]
+    fact_ids = {binding["fact_id"] for binding in graph["bindings"] if binding["build_unit_id"] == uid}
+    facts = [fact for fact in graph["facts"] if fact["fact_id"] in fact_ids]
+    configuration = unit.get("build_variant", {}).get("configuration")
+    platform = "x64" if selected["required_axes"]["isa"] == "x86_64" else None
+    commands = [] if recipe is None else [*recipe["configure_commands"], *recipe["build_commands"]]
+    property_overrides = {}
+    for argv in commands:
+        for index, arg in enumerate(argv):
+            if re.match(r"(?i)[/-]p:Configuration=", arg):
+                configuration = arg.partition("=")[2]
+            elif arg in {"--configuration", "-c"} and index + 1 < len(argv):
+                configuration = argv[index + 1]
+            elif re.match(r"(?i)[/-]p:Platform=", arg):
+                platform = arg.partition("=")[2]
+            property_arg = re.fullmatch(r"(?i)[/-]p:([A-Za-z][A-Za-z0-9_]*)=(.+)", arg)
+            if property_arg:
+                name, value = property_arg[1], property_arg[2]
+                name = {key.lower(): key for key in (
+                    "Configuration", "Platform", "PlatformTarget", "Prefer32Bit", "PublishAot",
+                    "NativeAot", "RuntimeIdentifier")}.get(name.lower(), name)
+                if name in property_overrides and property_overrides[name] != value:
+                    property_overrides[name] = None
+                else:
+                    property_overrides[name] = value
+    kinds, reasons = set(), []
+    gradle_modules = set()
+    if unit["build_system"] == "gradle":
+        requested = {arg.rsplit(":", 1)[0] for argv in commands for arg in argv[1:]
+                     if arg.startswith(":") and ":" in arg[1:]}
+        included = {module for fact in facts if fact["predicate"] == "gradle:include"
+                    for module in fact["value"]}
+        gradle_modules = requested or included
+        selected_ids = {binding["fact_id"] for binding in graph["bindings"] if binding["build_unit_id"] == uid
+                        and (not binding["subject"].startswith(":") or binding["subject"] in gradle_modules)}
+        facts = [fact for fact in facts if fact["fact_id"] in selected_ids]
+        captured_modules = {binding["subject"] for binding in graph["bindings"]
+                            if binding["build_unit_id"] == uid and binding["stage"] == "module_declaration"}
+        if gradle_modules - captured_modules:
+            reasons.append("requested_gradle_module_uncaptured")
+    native_suffixes = {".vcxproj", ".vcproj"}
+    managed_suffixes = {".csproj", ".vbproj", ".fsproj"}
+    descriptors = [fact for fact in facts if fact["predicate"] == "project_descriptor"]
+    members = [fact for fact in facts if fact["predicate"] == "solution_member"]
+    mappings = [fact for fact in facts if fact["predicate"] == "solution_mapping"]
+    selected_members = []
+    for member in members:
+        builds = [mapping for mapping in mappings if mapping["value"]["guid"] == member["value"]["guid"]
+                  and mapping["value"]["kind"] == "Build.0"
+                  and mapping["value"]["solution"] == f"{configuration}|{platform}"]
+        if not configuration:
+            reasons.append("selected_solution_configuration_unknown")
+            continue
+        if not builds:
+            continue
+        mapped_configuration, _, mapped_platform = builds[0]["value"]["project"].partition("|")
+        active = [mapping for mapping in mappings if mapping["value"]["guid"] == member["value"]["guid"]
+                  and mapping["value"]["kind"] == "ActiveCfg"
+                  and mapping["value"]["solution"] == f"{configuration}|{platform}"]
+        if len(builds) != 1 or len(active) != 1 or active[0]["value"]["project"] != builds[0]["value"]["project"]:
+            reasons.append("selected_solution_mapping_unclosed")
+        path = _resolve(str(PurePosixPath(member["path"]).parent), member["value"]["path"])
+        captured = [fact for fact in descriptors if fact["path"] == path]
+        selected_members.append({"path": path, "configuration": mapped_configuration,
+                                 "platform": mapped_platform, "captured": bool(captured),
+                                 "subject": member["value"]["guid"],
+                                 "fact_ids": [member["fact_id"], *[item["fact_id"] for item in builds]]})
+        if not captured:
+            kinds.add("unknown")
+            reasons.append("selected_member_uncaptured")
+        elif PurePosixPath(path).suffix.lower() in native_suffixes:
+            kinds.update({"native_compile", "native_link"})
+        elif PurePosixPath(path).suffix.lower() in managed_suffixes:
+            kinds.add("managed_compile")
+        else:
+            kinds.add("unknown")
+    if not members:
+        if any(fact["value"]["kind"] in native_suffixes for fact in descriptors):
+            kinds.update({"native_compile", "native_link"})
+        elif any(fact["value"]["kind"] in managed_suffixes for fact in descriptors):
+            kinds.add("managed_compile")
+        elif unit["build_system"] in {"cmake", "make", "autotools"} and any(
+                fact["predicate"].startswith(("cmake:", "autotools")) or
+                PurePosixPath(fact["path"]).name in {"Makefile", "Makefile.am"} for fact in facts):
+            kinds.update({"native_compile", "native_link"})
+        elif unit["build_system"] in {"maven", "gradle"} and any(
+                PurePosixPath(ref["path"]).name in {"pom.xml", "build.gradle", "build.gradle.kts"}
+                for ref in unit.get("descriptor_package", {}).get("documents", [])):
+            kinds.add("managed_compile")
+        elif unit["family"] == "go" and commands and any(argv[0] == "go" for argv in commands):
+            kinds.add("native_compile")
+        elif unit["family"] == "rust" and commands and any(argv[0] == "cargo" for argv in commands):
+            kinds.add("native_compile")
+        elif unit["family"] in {"node", "python", "php"} and commands:
+            kinds.add("package")
+        else:
+            kinds.add("unknown")
+    property_facts = facts
+    if members:
+        paths = {member["path"]: member for member in selected_members if member["captured"]}
+        subjects = {member["subject"]: member for member in selected_members if member["captured"]}
+        selected_ids = {binding["fact_id"] for binding in graph["bindings"]
+                        if binding["build_unit_id"] == uid and binding["subject"] in subjects}
+        property_facts = [fact for fact in facts if fact["fact_id"] in selected_ids]
+        properties_by_id = {fact["fact_id"]: fact for fact in property_facts}
+        for binding in graph["bindings"]:
+            if binding["build_unit_id"] == uid and binding["subject"] in subjects:
+                fact = properties_by_id[binding["fact_id"]]
+                paths.setdefault(fact["path"], subjects[binding["subject"]])
+        facts = [fact for fact in facts if fact["fact_id"] in selected_ids
+                 or fact["predicate"] in {"solution_member", "solution_mapping"}]
+    else:
+        paths = {}
+    publishing = any(argv and argv[0] == "dotnet" and "publish" in argv for argv in commands)
+    override_properties = {"PlatformTarget", "Prefer32Bit", "PublishAot", "NativeAot", "RuntimeIdentifier"}
+    property_facts = [{**fact, "value": property_overrides[fact["predicate"]], "condition": None}
+                      if fact["predicate"] in override_properties and fact["predicate"] in property_overrides
+                      else fact for fact in property_facts]
+    existing_properties = {fact["predicate"] for fact in property_facts}
+    property_facts += [{"predicate": name, "value": value, "condition": None, "path": "@recipe"}
+                       for name, value in property_overrides.items()
+                       if name in override_properties and name not in existing_properties]
+    for fact in property_facts:
+        member = paths.get(fact["path"])
+        member_configuration = member["configuration"] if member else configuration
+        member_platform = member["platform"] if member else platform
+        applicable = _condition_applies(fact["condition"], member_configuration, member_platform)
+        if applicable is False:
+            continue
+        if fact["predicate"] in override_properties and fact["value"] is None:
+            kinds.add("unknown")
+            reasons.append("contradictory_selected_property_override")
+        if fact["predicate"] == "Exec":
+            kinds.add("unknown")
+            reasons.append("selected_custom_task_operation_unresolved")
+        if publishing and fact["predicate"] in {"PublishAot", "NativeAot"} and str(fact["value"]).lower() == "true":
+            kinds.add("native_aot" if applicable else "unknown")
+        if ("managed_compile" in kinds and fact["predicate"] == "PlatformTarget"
+                and str(fact["value"]).lower() == "x86"):
+            reasons.append("managed_x86_incompatible" if applicable else "managed_axis_applicability_unknown")
+        if "managed_compile" in kinds and fact["predicate"] == "Prefer32Bit" and str(fact["value"]).lower() == "true":
+            properties = {item["predicate"]: item["value"] for item in property_facts
+                          if (item["path"] == fact["path"] or fact["path"] == "@recipe") and _condition_applies(
+                              item["condition"], member_configuration, member_platform) is True}
+            output_type = properties.get("OutputType")
+            target = properties.get("PlatformTarget", member_platform)
+            framework = str(properties.get("TargetFramework", properties.get("TargetFrameworkVersion", "")))
+            applicable_framework = framework.startswith("v") or bool(re.fullmatch(r"net[1-4][0-9]{1,2}", framework))
+            if output_type == "Library" or target not in {None, "AnyCPU", "Any CPU"}:
+                continue
+            if framework.startswith(("netcoreapp", "netstandard")) or re.match(r"net[5-9]\.", framework):
+                continue
+            reasons.append("managed_prefer32bit_incompatible" if applicable and
+                           output_type in {"Exe", "WinExe"} and target in {"AnyCPU", "Any CPU"}
+                           and applicable_framework else "managed_prefer32bit_applicability_unknown")
+    native_markers = any(PurePosixPath(ref["path"]).name == "binding.gyp" for ref in
+                         unit.get("descriptor_package", {}).get("documents", []))
+    if native_markers and any(argv and argv[0] in {"npm", "node-gyp"} for argv in commands):
+        kinds.add("native_compile")
+    if unit.get("native_components"):
+        kinds.add("unknown")
+        reasons.append("native_component_requested_stage_unresolved")
+    if any(fact["predicate"] == "android:plugin" and fact["condition"] is None for fact in facts):
+        kinds.add("bytecode_transform")
+    if unit["build_system"] == "gradle":
+        if any(fact["predicate"] == "coverage_gap" for fact in facts):
+            reasons.append("gradle_effective_input_unknown")
+        native_stage = any(re.search(r"(?:assemble|bundle|build|externalNativeBuild|install)", arg, re.I)
+                           for argv in commands for arg in argv[1:] if not arg.startswith("-"))
+        if native_stage and any(fact["predicate"] == "android:external_native" for fact in facts):
+            kinds.update({"native_compile", "native_link"})
+    if commands and all(argv[0] in {"clang", "clang++", "gcc", "g++"} for argv in commands):
+        if all("-c" in argv for argv in commands):
+            kinds.discard("native_link")
+        if any(any(arg in {"--version", "--help", "-E"} for arg in argv) for argv in commands):
+            kinds = {"unknown"}
+            reasons.append("unsupported_requested_compiler_stage")
+    if commands and all(argv[0] == "dotnet" and len(argv) > 1 and argv[1] == "restore" for argv in commands):
+        kinds = {"prebuilt_import"}
+        reasons = [reason for reason in reasons if not reason.startswith("managed_")]
+    for fact in property_facts:
+        if fact["predicate"] == "RuntimeIdentifier" and str(fact["value"]).endswith(("-x86", "-arm")):
+            reasons.append("32bit_runtime_selection_forbidden")
+    if unit["family"] == "go" and recipe and recipe["environment"].get("CGO_ENABLED") == "1":
+        kinds.add("native_link")
+    operations = []
+    for kind in sorted(kinds):
+        operation = {"build_unit_id": uid, "kind": kind, "requested": bool(commands),
+                     "basis": sorted(fact_ids), "selected_members": selected_members,
+                     "property_overrides": property_overrides,
+                     "selected_modules": sorted(gradle_modules),
+                     "reasons": sorted(set(reasons))}
+        operation["operation_id"] = _digest(operation)
+        operations.append(operation)
+    contexts = {}
+    for binding in graph["bindings"]:
+        if binding["build_unit_id"] != uid:
+            continue
+        member = next((member for member in selected_members
+                       if member["subject"] == binding["subject"]), None)
+        context = {"configuration": member["configuration"] if member else configuration,
+                   "platform": member["platform"] if member else platform}
+        contexts.setdefault(binding["fact_id"], []).append(context)
+    facts = [{**fact, "selected_contexts": _ordered(contexts.get(fact["fact_id"], []))}
+             for fact in facts]
+    return operations, facts
+
+
+def _compiler_axes(target):
+    words = target.lower().split("-")
+    isa = {"amd64": "x86_64", "x86_64": "x86_64", "aarch64": "arm64",
+           "arm64": "arm64", "i686": "x86", "i386": "x86"}.get(words[0])
+    android = next((word for word in words if re.fullmatch(r"android\d*", word)), None)
+    ios = next((word for word in words if re.fullmatch(r"ios(?:\d+(?:\.\d+)*)?", word)), None)
+    platform = ("android" if android else "ios" if ios else "linux" if "linux" in words else
+                "windows" if any(word in {"windows", "win32", "mingw32"} for word in words) else None)
+    abi = ("android" if android else "apple" if ios else "msvc" if "msvc" in words else
+           "gnu" if "gnu" in words else "musl" if "musl" in words else None)
+    axes = {"os": platform, "isa": isa, "abi": abi}
+    if ios or android:
+        version = (ios[3:] if ios else android[7:])
+        axes["deployment"] = version or None
+    if ios:
+        axes["device_kind"] = "simulator" if "simulator" in words else "device"
+    return axes
+
+
+def _native_enforcement(unit, graph, recipe, selection, operation, facts, profiles):
+    unresolved, axes, kind = [], {}, "compiler_explicit_target"
+    uid = unit["build_unit_id"]
+    commands = [] if recipe is None else [*recipe["configure_commands"], *recipe["build_commands"]]
+    environment = {} if recipe is None else recipe["environment"]
+    closure = {"schema": "appsec-review/effective-input-closure/1", "rules": RULES,
+               "commands": commands, "environment": environment,
+               "fact_ids": sorted(fact["fact_id"] for fact in facts), "profiles": profiles}
+    documents = {ref["path"] for ref in unit.get("descriptor_package", {}).get("documents", [])}
+    direct_compilers = bool(commands) and all(argv[0] in {"clang", "clang++", "gcc", "g++"} for argv in commands)
+    effective_paths = {fact["path"] for fact in facts}
+    if direct_compilers:
+        effective_paths = set()
+        for argv in commands:
+            for arg in argv[1:]:
+                if PurePosixPath(arg).suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}:
+                    path = _resolve(str(recipe.get("execution_cwd", recipe["source_dir"])), arg)
+                    if path not in documents:
+                        unresolved.append("compiler_source_closure_unknown")
+                    elif path:
+                        effective_paths.add(path)
+        pending = list(effective_paths)
+        while pending:
+            path = pending.pop()
+            for fact in facts:
+                if fact["path"] != path or fact["predicate"] != "cpp:include":
+                    continue
+                included = _resolve(str(PurePosixPath(path).parent), fact["value"]["path"])
+                if fact["value"]["system"] or included not in documents:
+                    unresolved.append("effective_import_unknown")
+                elif included not in effective_paths:
+                    effective_paths.add(included)
+                    pending.append(included)
+        for argv in commands:
+            index = 1
+            while index < len(argv):
+                arg = argv[index]
+                if not arg.startswith("-") and PurePosixPath(arg).suffix.lower() in {".o", ".obj"}:
+                    unresolved.append("prebuilt_compiler_input_target_unknown")
+                if arg in {"-o", "-target", "--target"}:
+                    if index + 1 >= len(argv):
+                        unresolved.append("compiler_option_operand_missing")
+                    index += 2
+                    continue
+                if (arg in {"-c", "-g", "-m32", "-m64", "-Wall", "-Wextra", "-Werror"}
+                        or re.fullmatch(r"-O[0-3gsz]", arg) or arg.startswith("--target=")
+                        or not arg.startswith("-") and PurePosixPath(arg).suffix.lower() in {
+                            ".c", ".cc", ".cpp", ".cxx", ".o", ".obj"}):
+                    index += 1
+                    continue
+                unresolved.append("unsupported_effective_compiler_option")
+                index += 1
+    for fact in facts:
+        if fact["path"] not in effective_paths:
+            continue
+        applicability = [_condition_applies(fact["condition"], context["configuration"], context["platform"])
+                         for context in fact["selected_contexts"]]
+        if applicability and all(value is False for value in applicability):
+            continue
+        if any(value is None for value in applicability):
+            unresolved.append("effective_input_condition_or_parse_unknown")
+        if fact["predicate"] in {"condition", "coverage_gap", "cpp:condition"}:
+            unresolved.append("effective_input_condition_or_parse_unknown")
+        if fact["predicate"] in {"include", "Import"}:
+            value = fact["value"].get("Project") if isinstance(fact["value"], Mapping) else fact["value"]
+            path = _resolve(str(PurePosixPath(fact["path"]).parent), str(value).replace("\\", "/"))
+            if not path or path not in documents:
+                unresolved.append("effective_import_unknown")
+    unresolved.extend(unit.get("descriptor_package", {}).get("gaps", []))
+    if recipe is None:
+        unresolved.append("recipe_missing")
+    elif unit["family"] == "go":
+        kind = "go_explicit_target"
+        axes = {"os": environment.get("GOOS"),
+                "isa": "x86_64" if environment.get("GOARCH") == "amd64" else
+                "x86" if environment.get("GOARCH") == "386" else None}
+        if environment.get("CGO_ENABLED") not in {"0", "1"}:
+            unresolved.append("explicit_cgo_mode_missing")
+        if environment.get("CGO_ENABLED") == "1":
+            unresolved.append("cgo_c_compiler_enforcement_required")
+        if any("=" in arg and arg.split("=", 1)[0] in {"GOOS", "GOARCH", "CGO_ENABLED"}
+               for argv in commands for arg in argv):
+            unresolved.append("go_target_override_unknown")
+        if (set(environment) & {"PATH", "LD_PRELOAD", "GCC_EXEC_PREFIX"}
+                or any("-toolexec" in arg or "-compiler" in arg for argv in commands for arg in argv)
+                or "-toolexec" in environment.get("GOFLAGS", "")):
+            unresolved.append("go_toolchain_closure_unknown")
+    elif (operation["selected_members"] or unit["build_system"] in {"msbuild", "vcbuild"}) and operation["kind"] != "native_aot":
+        kind = "msbuild_selected_mapping"
+        platforms = [member["platform"] for member in operation["selected_members"]]
+        if any(not member["captured"] for member in operation["selected_members"]):
+            unresolved.append("selected_member_uncaptured")
+        raw = [arg for argv in commands for arg in argv]
+        platform_args = [arg.partition("=")[2] for arg in raw if
+                         re.match(r"(?i)[/-]p:Platform=", arg)]
+        config_args = [arg.partition("=")[2] for arg in raw if
+                       re.match(r"(?i)[/-]p:Configuration=", arg)]
+        config_args.extend(raw[index + 1] for index, arg in enumerate(raw[:-1])
+                           if arg in {"--configuration", "-c"})
+        unresolved.extend(operation["reasons"])
+        if not platform_args or not config_args:
+            unresolved.append("explicit_msbuild_configuration_platform_missing")
+        elif len(set(platform_args)) != 1 or len(set(config_args)) != 1:
+            unresolved.append("contradictory_msbuild_overrides")
+        else:
+            platforms = platforms or platform_args
+            axes = {"os": "windows", "isa": "x86_64" if set(platforms) == {"x64"} else "x86"
+                    if any(value.lower() == "win32" for value in platforms) else None}
+        if not profiles or not isinstance(profiles, Mapping) or profiles.get("windows_capability") is not True:
+            unresolved.append("windows_native_capability_unavailable")
+        if (not isinstance(profiles, Mapping)
+                or profiles.get("schema") != "appsec-review/static-compiler-profile/1"
+                or profiles.get("driver_semantics") != "msbuild-mapping/1"
+                or not _hash(profiles.get("compiler_sha256"))
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(profiles.get("image_digest")))
+                or profiles.get("wrapper_closure") != [] or not profiles.get("provenance")):
+            unresolved.append("msbuild_compiler_metadata_unverified")
+        else:
+            axes.update({key: value for key, value in profiles.get("target_axes", {}).items()
+                         if key not in {"os", "isa"}})
+            if profiles.get("target_axes", {}).get("os") != "windows":
+                unresolved.append("msbuild_compiler_os_unknown")
+        for fact in facts:
+            applicability = [_condition_applies(fact["condition"], context["configuration"], context["platform"])
+                             for context in fact["selected_contexts"]]
+            if applicability and all(value is False for value in applicability):
+                continue
+            if fact["predicate"] in {"AdditionalOptions", "AdditionalDependencies",
+                                     "AdditionalIncludeDirectories", "AdditionalLibraryDirectories",
+                                     "ExecutablePath", "IncludePath", "LibraryPath", "CustomBuild",
+                                     "Exec", "Tool"}:
+                unresolved.append("msbuild_effective_option_closure_unknown")
+            if fact["predicate"] == "TargetMachine":
+                machine = str(fact["value"]).lower()
+                if machine in {"machinex86", "1"}:
+                    axes["isa"] = "x86"
+                elif machine not in {"machinex64", "17"}:
+                    unresolved.append("msbuild_link_target_unknown")
+        if set(environment) & {"CL", "_CL_", "LINK", "_LINK_", "PATH", "INCLUDE", "LIB", "LIBPATH"}:
+            unresolved.append("msbuild_environment_override_unknown")
+        if set(operation["property_overrides"]) - {"Configuration", "Platform"}:
+            unresolved.append("msbuild_effective_property_override_unknown")
+    else:
+        metadata = (profiles if isinstance(profiles, Mapping) and
+                    profiles.get("schema") == "appsec-review/static-compiler-profile/1" else {})
+        pinned_driver = (bool(metadata.get("provenance"))
+                         and _hash(metadata.get("compiler_sha256"))
+                         and re.fullmatch(r"sha256:[0-9a-f]{64}", str(metadata.get("image_digest")))
+                         and metadata.get("wrapper_closure") == []
+                         and metadata.get("driver_semantics") == "clang-target/1")
+        candidates = []
+        for argv in commands:
+            if not argv or not pinned_driver or argv[0] != metadata.get("executable"):
+                continue
+            targets = [arg.split("=", 1)[1] for arg in argv if arg.startswith("--target=")]
+            targets += [argv[index + 1] for index, arg in enumerate(argv[:-1]) if arg in {"-target", "--target"}]
+            if len(set(targets)) == 1:
+                candidates.append(_compiler_axes(targets[0]))
+            elif targets:
+                unresolved.append("conflicting_compiler_targets")
+        if candidates and all(value == candidates[0] for value in candidates):
+            axes = candidates[0]
+            if len(candidates) != len(commands):
+                unresolved.append("uncontrolled_noncompiler_command")
+        elif profiles:
+            kind = "compiler_pinned_default"
+            if (isinstance(profiles, Mapping)
+                    and profiles.get("schema") == "appsec-review/static-compiler-profile/1"
+                    and _hash(profiles.get("compiler_sha256"))
+                    and re.fullmatch(r"sha256:[0-9a-f]{64}", str(profiles.get("image_digest")))
+                    and profiles.get("provenance") and profiles.get("wrapper_closure") == []
+                    and profiles.get("driver_semantics") in {"clang-target/1", "gcc-default/1"}
+                    and commands and all(argv[0] == profiles.get("executable") for argv in commands)):
+                axes = dict(profiles.get("target_axes", {}))
+            else:
+                unresolved.append("static_compiler_profile_unverified")
+        else:
+            unresolved.append("compiler_target_unknown")
+        if any("$" in str(arg) for argv in commands for arg in argv):
+            unresolved.append("dynamic_effective_command")
+        if set(environment) & {"PATH", "CCC_OVERRIDE_OPTIONS", "COMPILER_PATH", "GCC_EXEC_PREFIX",
+                               "LD_PRELOAD", "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "SDKROOT"}:
+            unresolved.append("uncontrolled_compiler_resolution_or_override")
+    if direct_compilers and any(arg == "-m32" for argv in commands for arg in argv):
+        axes["isa"] = "x86"
+    elif direct_compilers and any(arg == "-m64" for argv in commands for arg in argv):
+        if axes.get("isa") in {"x86", "x86_64"}:
+            axes["isa"] = "x86_64"
+        else:
+            unresolved.append("bitness_flag_semantics_unknown")
+    from appsec_review.config.build_selection import AXES
+    if set(axes) - set(AXES) or any(value is not None and not isinstance(value, str) for value in axes.values()):
+        unresolved.append("compiler_profile_axes_malformed")
+        axes = {}
+    axes = {key: axes.get(key) for key in AXES}
+    required = selection["required_axes"]
+    incompatible = (axes["isa"] in {"x86", "armv7", "wasm32"} or any(
+        value is not None and axes.get(key) is not None and axes[key] != value
+        for key, value in required.items()))
+    for key in ("os", "isa"):
+        if axes[key] is None:
+            unresolved.append("native_target_axis_unknown:" + key)
+    for key, value in required.items():
+        if value is not None and axes.get(key) is None:
+            unresolved.append("unenforced_axis:" + key)
+    value = {"schema": ENFORCEMENT_SCHEMA, "build_unit_id": uid,
+             "operation_id": operation["operation_id"], "required_axes": required,
+             "proof_kind": kind, "status": "incompatible" if incompatible else
+             "unknown" if unresolved else "proven", "proven_axes": axes,
+             "unresolved_inputs": sorted(set(unresolved)), "scope_rule": RULES,
+             "source_evidence_refs": sorted(fact["fact_id"] for fact in facts),
+             "closure_manifest": closure, "source_fingerprint": graph["source_fingerprint"],
+             "catalog_bundle_identity": graph["bundle_identity"],
+             "selection_id": selection["selection_id"], "recipe_digest": _digest(recipe) if recipe else None,
+             "operation_binding": operation["operation_id"] if recipe else None,
+             "profile_identity": _digest(profiles) if profiles else None}
+    value["enforcement_id"] = _digest(value)
+    return value
+
+
+def refine_build_topology(graph, units, *, policy=None, profiles=None, environment=None, releases=None):
+    from appsec_review.config.build_selection import parse_build_selection
+    validate_build_topology(graph)
+    if graph["schema"] != BUILD_TOPOLOGY_SCHEMA:
+        raise ValueError("graph/1 is inspectable but requires replanning for graph/2 execution")
+    if compile_build_topology(units, source_fingerprint=graph["source_fingerprint"],
+                              environment=environment, profiles=profiles) != graph:
+        raise ValueError("refinement inputs differ from the complete accepted source bundle")
+    policy = parse_build_selection(policy)
+    values = []
+    for unit in sorted(units, key=lambda item: item["build_unit_id"]):
+        fact_ids = {item["fact_id"] for item in graph["bindings"]
+                    if item["build_unit_id"] == unit["build_unit_id"]}
+        declarations = [fact for fact in graph["facts"]
+                        if fact["fact_id"] in fact_ids and fact["condition"] is None]
+        platforms = {"android" for fact in declarations if fact["predicate"] == "android:plugin"}
+        for fact in declarations:
+            if fact["predicate"] in {"TargetFramework", "TargetFrameworks"}:
+                for framework in str(fact["value"]).split(";"):
+                    match = re.fullmatch(r"net[0-9]+\.[0-9]+-(android|ios)[0-9.]*", framework.strip())
+                    if match:
+                        platforms.add(match.group(1))
+        selection = policy.select({**unit, **({"declared_platform": next(iter(platforms))}
+                                              if len(platforms) == 1 else {})})
+        if len(platforms) > 1:
+            selection["reasons"].append("declared_platform_selection_ambiguous")
+            selection["status"] = "ambiguous"
+            selection["selection_id"] = _digest({key: value for key, value in selection.items()
+                                                if key != "selection_id"})
+        recipe = unit.get("recipe")
+        operations, facts = _selected_operations(unit, graph, recipe, selection)
+        enforcement = [_native_enforcement(unit, graph, recipe, selection, operation, facts, profiles)
+                       for operation in operations if operation["kind"] in {
+                           "native_compile", "native_link", "native_aot"}]
+        requires_native = any(operation["kind"] in {"native_compile", "native_link", "native_aot"}
+                              for operation in operations)
+        blockers = [reason for reason in selection["reasons"]
+                    if reason != "selection_unbound" or requires_native]
+        if recipe is None:
+            blockers.append("recipe_missing")
+        elif errors := validate_build_recipe(recipe, unit):
+            blockers.extend("invalid_recipe:" + error for error in errors)
+        for operation in operations:
+            blockers.extend(operation["reasons"])
+            if operation["kind"] == "unknown":
+                blockers.append("operation_unknown")
+        for proof in enforcement:
+            if proof["status"] != "proven":
+                blockers.append("unenforced_native_target")
+        for relation in graph["relations"]:
+            if relation["consumer_build_unit_id"] != unit["build_unit_id"] or not relation["required"]:
+                continue
+            applicable = _condition_applies(relation["condition"],
+                                            unit.get("build_variant", {}).get("configuration"),
+                                            "x64" if selection["required_axes"]["isa"] == "x86_64" else None)
+            if (relation["operation"] == "native_link"
+                    and not any(operation["kind"] == "native_link" for operation in operations)):
+                continue
+            if applicable is not False and relation["resolution"] != "resolved":
+                blockers.append("required_interface_unresolved:" + relation["relation_id"])
+        for requirement in graph["external_requirements"]:
+            if requirement["consumer_build_unit_id"] == unit["build_unit_id"]:
+                blockers.append("required_external_interface_unresolved:" + requirement["interface"])
+        for gap in graph["coverage_gaps"]:
+            if gap["blocking"] and unit["build_unit_id"] in gap["build_unit_ids"]:
+                blockers.append("active_coverage_gap:" + gap["code"])
+        capability = native_build_capability_gap(unit)
+        if capability:
+            blockers.append(capability)
+        values.append({"build_unit_id": unit["build_unit_id"], "selection": selection,
+                       "recipe_digest": _digest(recipe) if recipe else None,
+                       "operations": operations, "enforcement": enforcement,
+                       "blockers": sorted(set(blockers))})
+    by_unit = {unit["build_unit_id"]: unit for unit in values}
+    for edge in graph["edges"]:
+        if edge["kind"] == "order_only":
+            continue
+        consumer = by_unit[edge["consumer_build_unit_id"]]
+        producer = by_unit[edge["producer_build_unit_id"]]
+        declaration = next((item for item in graph["declarations"] if
+                            item["owner_build_unit_id"] == edge["producer_build_unit_id"]
+                            and item["product_id"] == edge["requirement"]["product_id"]), None)
+        if declaration is None:
+            consumer["blockers"].append("required_product_role_unresolved")
+            continue
+        if any(proof["status"] != "proven" for proof in [
+                *producer["enforcement"], *consumer["enforcement"]]):
+            consumer["blockers"].append("required_product_target_unproven")
+            continue
+        producer_axes, consumer_axes = proven_product_axes(producer), proven_product_axes(consumer)
+        if declaration["role"] not in {"static_archive", "import_library", "runtime_shared",
+                                       "executable", "native_object"}:
+            continue
+        if edge["kind"] == "requires_host_tool":
+            producer_node = next(node for node in graph["nodes"]
+                                 if node["build_unit_id"] == edge["producer_build_unit_id"])
+            if producer_node["variant"]["execution_role"] != "host" or declaration["role"] != "executable":
+                consumer["blockers"].append("required_host_tool_role_unresolved")
+            consumer_axes = producer_axes
+        required = {"os", "isa"} | ({"abi"} if edge["requirement"]["kind"] == "library" else set())
+        required.update(key for key, value in consumer_axes.items() if value is not None)
+        for key in sorted(required):
+            if producer_axes[key] is None or consumer_axes[key] is None:
+                consumer["blockers"].append("required_product_axis_unresolved:" + key)
+            elif producer_axes[key] != consumer_axes[key]:
+                consumer["blockers"].append("required_product_axis_incompatible:" + key)
+    for unit in values:
+        unit["blockers"] = sorted(set(unit["blockers"]))
+    value = {"schema": REFINEMENT_SCHEMA, "graph_identity": graph["topology_id"],
+             "bundle_identity": graph["bundle_identity"], "source_fingerprint": graph["source_fingerprint"],
+             "rules": RULES, "policy": policy.view(), "environment": copy.deepcopy(environment),
+             "profiles": copy.deepcopy(profiles), "releases": dict(releases or {}), "units": values}
+    value["refinement_id"] = _digest(value)
+    return value
+
+
+def validate_refinement(graph, refinement):
+    validate_build_topology(graph)
+    if (not isinstance(refinement, Mapping) or refinement.get("schema") != REFINEMENT_SCHEMA
+            or graph["schema"] != BUILD_TOPOLOGY_SCHEMA
+            or refinement.get("graph_identity") != graph["topology_id"]
+            or refinement.get("bundle_identity") != graph["bundle_identity"]
+            or refinement.get("source_fingerprint") != graph["source_fingerprint"]
+            or refinement.get("rules") != RULES
+            or refinement.get("refinement_id") != _digest({
+                key: value for key, value in refinement.items() if key != "refinement_id"})
+            or {unit["build_unit_id"] for unit in refinement["units"]} !=
+            {node["build_unit_id"] for node in graph["nodes"]}):
+        raise ValueError("refinement has changed or foreign accepted identities")
+    expected_fields = {"schema", "graph_identity", "bundle_identity", "source_fingerprint", "rules",
+                       "policy", "environment", "profiles", "releases", "units", "refinement_id"}
+    if set(refinement) != expected_fields or len(refinement["units"]) != len(graph["nodes"]):
+        raise ValueError("refinement must exactly cover the immutable whole graph")
+    fact_ids = {fact["fact_id"] for fact in graph["facts"]}
+    native_kinds = {"native_compile", "native_link", "native_aot"}
+    from appsec_review.config.build_selection import AXES
+    for unit in refinement["units"]:
+        if set(unit) != {"build_unit_id", "selection", "recipe_digest", "operations", "enforcement", "blockers"}:
+            raise ValueError("unsupported refinement unit shape")
+        operations = {operation["operation_id"]: operation for operation in unit["operations"]}
+        if len(operations) != len(unit["operations"]):
+            raise ValueError("duplicate selected operation")
+        for identity, operation in operations.items():
+            if (identity != _digest({key: value for key, value in operation.items() if key != "operation_id"})
+                    or operation["build_unit_id"] != unit["build_unit_id"]
+                    or set(operation["basis"]) - fact_ids):
+                raise ValueError("selected operation has unresolved source or recipe identity")
+        if {proof["operation_id"] for proof in unit["enforcement"]} != {
+                identity for identity, operation in operations.items() if operation["kind"] in native_kinds}:
+            raise ValueError("native enforcement does not cover every selected native operation")
+        for proof in unit["enforcement"]:
+            if (proof["schema"] != ENFORCEMENT_SCHEMA or proof["proof_kind"] not in PROOF_KINDS
+                    or proof["enforcement_id"] != _digest({
+                        key: value for key, value in proof.items() if key != "enforcement_id"})
+                    or proof["recipe_digest"] != unit["recipe_digest"]
+                    or proof["source_fingerprint"] != graph["source_fingerprint"]
+                    or proof["catalog_bundle_identity"] != graph["bundle_identity"]
+                    or proof["selection_id"] != unit["selection"]["selection_id"]
+                    or proof["required_axes"] != unit["selection"]["required_axes"]
+                    or set(proof["proven_axes"]) != set(AXES)
+                    or set(proof["source_evidence_refs"]) - fact_ids
+                    or proof["status"] not in {"proven", "unknown", "incompatible"}
+                    or proof["operation_binding"] != (
+                        proof["operation_id"] if unit["recipe_digest"] is not None else None)
+                    or unit["recipe_digest"] is None and proof["status"] != "unknown"
+                    or proof["status"] == "proven" and proof["unresolved_inputs"]):
+                raise ValueError("native enforcement identity or recipe binding changed")
+
+
+def refinement_unit(graph, refinement, uid, recipe=None):
+    validate_refinement(graph, refinement)
+    unit = next(item for item in refinement["units"] if item["build_unit_id"] == uid)
+    if recipe is not None and unit["recipe_digest"] != _digest(recipe):
+        raise ValueError("selected recipe has no matching immutable refinement")
+    return unit
+
+
+def proven_product_axes(bound):
+    from appsec_review.config.build_selection import AXES
+    axes = dict.fromkeys(AXES)
+    for proof in bound["enforcement"]:
+        if proof["status"] != "proven":
+            raise ValueError("unproven native enforcement cannot authorize retained product axes")
+        for key, value in proof["proven_axes"].items():
+            if key not in axes or value is None:
+                continue
+            if axes[key] is not None and axes[key] != value:
+                raise ValueError("selected native operations disagree on a retained product axis")
+            axes[key] = value
+    return axes
+
+
+def verify_product_contract(bound, products):
+    from appsec_review.config.build_selection import AXES
+    expected = proven_product_axes(bound)
+    roles = {"static_archive", "import_library", "runtime_shared", "executable", "native_object",
+             "headers", "metadata", "generated_source", "managed_assembly", "package"}
+    for product in products:
+        role = product.role if hasattr(product, "role") else product.get("role")
+        axes = product.axes if hasattr(product, "axes") else product.get("axes")
+        if role not in roles or not isinstance(axes, Mapping) or set(axes) != set(AXES):
+            raise ValueError("legacy untyped products have no graph/2 reuse or promotion authority")
+        if role in {"static_archive", "import_library", "runtime_shared", "executable", "native_object"}:
+            required = {"os", "isa"} | ({"abi"} if role != "executable" else set())
+            required.update(key for key, value in expected.items() if value is not None)
+            for key in sorted(required):
+                if expected[key] is None or axes.get(key) != expected[key]:
+                    raise ValueError("native retained product axis is unresolved or incompatible: " + key)
+
+
+def ready_build_units(graph, states, *, products=(), verify_product=None, refinement=None):
+    if graph["schema"] == "appsec-review/build-topology/1":
+        _validate_graph1(graph)
+        return {"ready": [], "blocked": [{"build_unit_id": node["build_unit_id"],
+                                         "reasons": ["legacy_graph_requires_accepted_replanning"]}
+                                        for node in graph["nodes"]]}
+    validate_build_topology(graph)
+    if refinement is None:
+        return {"ready": [], "blocked": [{"build_unit_id": node["build_unit_id"],
+                                         "reasons": ["accepted_refinement_missing"]} for node in graph["nodes"]]}
+    validate_refinement(graph, refinement)
+    ready, blocked = [], []
+    for uid in topological_order(graph):
+        if states.get(uid, "PENDING") not in {"PENDING", "READY", "BLOCKED_BY_DEPENDENCY"}:
+            continue
+        bound = refinement_unit(graph, refinement, uid)
+        reasons = list(bound["blockers"])
+        for edge in graph["edges"]:
+            if edge["consumer_build_unit_id"] != uid:
+                continue
+            producer = edge["producer_build_unit_id"]
+            if states.get(producer) != "SUCCEEDED":
+                reasons.append("producer_not_succeeded:" + producer)
+            elif edge["kind"] != "order_only":
+                producer_bound = refinement_unit(graph, refinement, producer)
+                records = [record for record in products if
+                           record.get("producer_build_unit_id") == producer
+                           and record.get("topology_id") == graph["topology_id"]
+                           and record.get("recipe_revision") == producer_bound["recipe_digest"]
+                           and all(record.get(key) == value for key, value in edge["requirement"].items())]
+                declaration = next((item for item in graph["declarations"] if
+                                    item["owner_build_unit_id"] == producer and
+                                    item["product_id"] == edge["requirement"]["product_id"]), None)
+                required_role = declaration["role"] if declaration else None
+                axes = proven_product_axes(producer_bound if edge["kind"] == "requires_host_tool" else bound)
+                if required_role == "runtime_shared" and axes["os"] == "windows":
+                    required_role = "import_library"
+                required_axes = ({"os", "isa"} | ({"abi"} if edge["requirement"]["kind"] == "library" else set())
+                                 if required_role in {"static_archive", "import_library", "runtime_shared",
+                                                      "executable", "native_object"} else set())
+                required_axes.update(key for key, value in axes.items() if value is not None)
+                records = [record for record in records if required_role is not None and
+                           record.get("role") == required_role and isinstance(record.get("axes"), Mapping)
+                           and all(axes[key] is not None and record["axes"].get(key) == axes[key]
+                                   for key in required_axes)]
+                if verify_product is None or not any(verify_product(record) for record in records):
+                    reasons.append("required_product_unverified:" + producer)
+        if reasons:
+            blocked.append({"build_unit_id": uid, "reasons": sorted(set(reasons))})
+        else:
+            ready.append(uid)
+    for node in graph["nodes"]:
+        if node["disposition"] != "independent":
+            blocked.append({"build_unit_id": node["build_unit_id"], "reasons": [node["disposition"]]})
     return {"ready": ready, "blocked": blocked}

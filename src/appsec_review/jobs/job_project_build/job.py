@@ -501,6 +501,9 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     if not isinstance(image, Mapping) or image.get("terminal_status") != "SUCCEEDED":
         return {**base, "terminal_status": "BLOCKED", "probe_disposition": "BLOCKED",
                 "gaps": list(entry.get("gaps", ())) or ["project build image is unavailable"]}
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+    guard_cache_action(unit.job.run_root, {**action, "image": image},
+                       releases=unit.job.review_policy.releases.view())
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed after the accepted review snapshot")
     recipe_identity = str(image["recipe_identity"])
@@ -844,6 +847,14 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
             if errors:
                 raise ValueError("repaired build recipe is invalid: " + "; ".join(errors))
             current_recipe = candidate
+            from appsec_review.jobs.build_topology_artifacts import bind_actions, guard_action
+            candidate_action = bind_actions(
+                unit.job.run_root, [{**action, "recipe": candidate,
+                                      "recipe_provenance": "inference-image-repair"}],
+                policy=unit.job.config.settings["build_selection"],
+                releases=unit.job.review_policy.releases.view())[0]
+            guard_action(unit.job.run_root, candidate_action,
+                         releases=unit.job.review_policy.releases.view(), image_identity=profile.image_id)
             image_started = time.monotonic()
             repaired_image, stdout, stderr = resolver.resolve(
                 {**candidate, "build_system": action["build_system"]}, profile)
@@ -853,8 +864,8 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                 "stderr": _retained_stream(unit.job.run_root, repair_root / "image-build.stderr", stderr, stream_limit),
             }
             image_value = _image_dict(repaired_image, profile.user)
-            candidate_action = {**action, "recipe": candidate,
-                                "recipe_provenance": "inference-image-repair"}
+            guard_action(unit.job.run_root, {**candidate_action, "image": image_value},
+                         releases=unit.job.review_policy.releases.view())
             candidate_entry = {"action": candidate_action, "image": image_value,
                                "terminal_status": "SUCCEEDED", "gaps": []}
             last_probe = _probe_one(unit, candidate_entry, executor_factory,
@@ -940,7 +951,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
             "attempts": attempts, "repair_attempt_count": repair_limit}
 
 
-def load_accepted_builds(run_root: Path) -> Mapping[str, Any]:
+def load_accepted_builds(run_root: Path, *, for_execution: bool = False) -> Mapping[str, Any]:
     pointer = run_root / "data" / "jobs" / "job_project_build" / "latest.json"
     if not pointer.is_file():
         raise ValueError("accepted job_project_build handoff is required")
@@ -961,6 +972,12 @@ def load_accepted_builds(run_root: Path) -> Mapping[str, Any]:
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema") != SCHEMA:
         raise ValueError("project-build dispatch schema is unsupported")
+    if type(for_execution) is not bool:
+        raise ValueError("project-build execution reader mode must be explicit")
+    if for_execution:
+        from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+        for dispatch in document.get("build_dispatches", ()):
+            guard_cache_action(run_root, dispatch, graph=document["execution_graph"])
     return {**document, "project_build_handoff_sha256": value["handoff_sha256"],
             "project_build_artifact_sha256": artifact["sha256"]}
 
@@ -1003,6 +1020,9 @@ def _image_dict(image: Any, user: str) -> dict[str, Any]:
 
 def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_identity: str,
                            resolver: Any, profile: BuildProfile) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    from appsec_review.jobs.build_topology_artifacts import bind_actions, guard_action
+    guard_action(unit.job.run_root, action, releases=unit.job.review_policy.releases.view(),
+                 image_identity=profile.image_id)
     reusable, reason = unit.job.review_policy.releases.require("platform", "build_toolchain", "validation")
     if not reusable:
         unit.job.events.write("CHECKPOINT_MISSED", scope_id=action["build_unit_id"],
@@ -1020,6 +1040,12 @@ def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_id
     errors = validate_build_recipe(recipe, _repair_validation_unit(action, recipe))
     if errors:
         raise ValueError("accepted build image repair recipe is invalid: " + "; ".join(errors))
+    replaced = bind_actions(
+        unit.job.run_root, [{**dict(action), "recipe": dict(recipe)}],
+        policy=unit.job.config.settings["build_selection"],
+        releases=unit.job.review_policy.releases.view())[0]
+    guard_action(unit.job.run_root, replaced, releases=unit.job.review_policy.releases.view(),
+                 image_identity=profile.image_id)
     try:
         image, _stdout, _stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profile)
     except ImagePreparationUnavailable as error:
@@ -1032,7 +1058,9 @@ def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_id
         raise ValueError("accepted build image repair identity changed")
     if image.image_id != value.get("image_id"):
         return None  # A rebuilt image must pass the default/repair probe sequence before acceptance.
-    return ({**dict(action), "recipe": dict(recipe), "recipe_provenance": "reused-image-repair"},
+    guard_action(unit.job.run_root, {**replaced, "image": _image_dict(image, profile.user)},
+                 releases=unit.job.review_policy.releases.view())
+    return ({**replaced, "recipe_provenance": "reused-image-repair"},
             _image_dict(image, profile.user))
 
 
@@ -1166,6 +1194,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         for edge in accepted_graph["edges"]:
             dependencies[edge["consumer_build_unit_id"]].add(edge["producer_build_unit_id"])
         resolved_actions = []
+        from appsec_review.jobs.build_topology_artifacts import selected_cache_actions
+        selected_promotions = selected_cache_actions(unit.job.run_root)
         for item in actions:
             deterministic = (_deterministic_native_recipe(unit, item) or
                              _deterministic_jvm_recipe(unit, item) or
@@ -1185,6 +1215,12 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                 }
             resolved_actions.append({**dict(item), **recipe_fields,
                 "build_dependencies": sorted(dependencies[str(item["build_unit_id"])])})
+            if item["build_unit_id"] in selected_promotions:
+                resolved_actions[-1]["recipe"] = selected_promotions[item["build_unit_id"]]["recipe"]
+        from appsec_review.jobs.build_topology_artifacts import bind_actions
+        resolved_actions = bind_actions(
+            unit.job.run_root, resolved_actions, policy=unit.job.config.settings["build_selection"],
+            releases=unit.job.review_policy.releases.view())
         decisions = []
         actions = []
         gaps = []
@@ -1224,7 +1260,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         graph = selected_graph(
             actions, source_fingerprint=unit.job.source_fingerprint,
             relationships=accepted["build_topology"].get("relationships", ()),
-            variants=unit.job.config.settings.get("variants", {}))
+            variants=unit.job.config.settings.get("variants", {}), accepted_graph=accepted_graph)
         return {"actions": actions, "execution_graph": graph,
                 "scanner_selections": accepted["scanner_selections"],
                 "action_count": len(actions), "processing_decisions": decisions,
@@ -1234,11 +1270,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         def execute(unit: UnitContext) -> Mapping[str, Any]:
             actions = [value for value in unit.output("plan.load_recipes")["actions"] if value.get("family") == family]
             profiles = profiles_from_settings(unit.job.config.settings["profiles"])
-            resolver = image_resolver_factory(unit) if image_resolver_factory else ProjectImageResolver(
-                metadata_root=unit.job.metadata_root, target_root=unit.job.target_root or Path(),
-                releases=unit.job.review_policy.releases, run_root=unit.job.run_root,
-                timeout_seconds=int(unit.job.config.settings["image_build_timeout_seconds"]),
-                output_bytes=int(unit.job.config.settings["output_bytes"]))
+            resolver = None
             entries, gaps = [], []
             for action in actions:
                 if action.get("build_system") == "unity":
@@ -1255,12 +1287,30 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                     entries.append({"action": action, "image": None, "terminal_status": "BLOCKED", "gaps": [gap]})
                     gaps.append(gap)
                     continue
+                from appsec_review.jobs.build_topology_artifacts import guard_action
+                profile = profiles[str(recipe.get("image_profile", family))]
                 try:
+                    guard_action(unit.job.run_root, action,
+                                 releases=unit.job.review_policy.releases.view(),
+                                 image_identity=profile.image_id)
+                except ValueError as error:
+                    gap = f"{action['build_unit_id']}: {error}"
+                    entries.append({"action": action, "image": None, "terminal_status": "BLOCKED", "gaps": [gap]})
+                    gaps.append(gap)
+                    continue
+                try:
+                    if resolver is None:
+                        resolver = image_resolver_factory(unit) if image_resolver_factory else ProjectImageResolver(
+                            metadata_root=unit.job.metadata_root, target_root=unit.job.target_root or Path(),
+                            releases=unit.job.review_policy.releases, run_root=unit.job.run_root,
+                            timeout_seconds=int(unit.job.config.settings["image_build_timeout_seconds"]),
+                            output_bytes=int(unit.job.config.settings["output_bytes"]))
                     image_started = time.monotonic()
                     unit.job.events.write("PROJECT_IMAGE_BUILD_STARTED", unit_id=unit.unit_id,
                                           build_unit_id=action["build_unit_id"], family=family)
-                    profile = profiles[str(recipe.get("image_profile", family))]
                     image, stdout, stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profile)
+                    guard_action(unit.job.run_root, {**action, "image": {"image_id": image.image_id}},
+                                 releases=unit.job.review_policy.releases.view())
                     base_recipe_identity = image.recipe_identity
                     cached = _reuse_accepted_repair(unit, action, base_recipe_identity,
                                                     resolver, profile)
@@ -1387,6 +1437,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                 value = {"workflow": "lang_jobflow_build", "family": family, "build_unit_id": action["build_unit_id"],
                          "root": action["root"], "build_system": action["build_system"],
                          "recipe": accepted_recipe,
+                         "topology_refinement": action["topology_refinement"],
+                         "build_variant": dict(action.get("build_variant", {})),
                          "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
                          "recipe_identity": accepted_image["recipe_identity"], "image": accepted_image,
                          "source_fingerprint": unit.job.source_fingerprint,
@@ -1403,6 +1455,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                          "processing_facts": dict(entry["action"].get("processing_facts", {})),
                          "build_capture_decision": dict(entry["action"].get("build_capture_decision", {})),
                          "capabilities": list(_BUILD_CAPABILITIES[family])}
+                from appsec_review.jobs.build_topology_artifacts import guard_action
+                guard_action(unit.job.run_root, value, releases=unit.job.review_policy.releases.view())
                 dispatches.append(value)
                 unit.job.events.write("LANGUAGE_BUILD_WORKFLOW_DISPATCHED", unit_id=unit.unit_id, family=family,
                     workflow="lang_jobflow_build", build_unit_id=action["build_unit_id"],

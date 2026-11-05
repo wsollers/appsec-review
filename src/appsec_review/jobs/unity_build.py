@@ -346,6 +346,8 @@ def _outputs(run_root: Path, workspace: Path, output: Path, limit: int, *,
 def execute_unity_build(unit: UnitContext, action: Mapping[str, Any], settings: UnityBuildSettings,
                         *, executor_factory=None) -> dict[str, Any]:
     """Execute a configured editor, not a capability probe promoted to build success."""
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action as guard_action
+    guard_action(unit.job.run_root, action, releases=unit.job.review_policy.releases.view())
     identifier = action.get("build_unit_id")
     relative = action.get("root")
     if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", identifier):

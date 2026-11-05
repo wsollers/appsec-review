@@ -268,12 +268,18 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                  upstream: Mapping[str, str], executor_factory=None, *,
                  shared_paths: WorkspacePaths | None = None,
                  interfaces: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    if interfaces and shared_paths is None:
+        raise ValueError("product-dependent execution requires an admitted shared workspace")
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action as guard_action
+    guard_action(unit.job.run_root, dispatch, releases=unit.job.review_policy.releases.view(),
+                 interfaces=interfaces)
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = _runtime_settings(unit)
     releases = unit.job.review_policy.releases
     reusable, reuse_reason = releases.require(*_RELEASE_COMPONENTS)
     fingerprint = _fingerprint(dispatch, accepted, producer, upstream, settings,
                                releases=releases, policy=unit.job.review_policy.view())
+    fingerprint = hashlib.sha256(canonical_json({"build": fingerprint, "interfaces": list(interfaces)})).hexdigest()
     root = (unit.job.run_root / "data" / "build" / "wasm" / "units" / build_unit_id /
             "attempts" / unit.job.attempt_id)
     workspace = shared_paths.target if shared_paths else root / "workspace"
@@ -450,6 +456,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
         "upstream_build_fingerprints": dict(sorted(upstream.items())), "build_unit_id": build_unit_id,
         "source_family": dispatch["family"], "producer": producer, "root": dispatch["root"],
+        "topology_refinement": dispatch["topology_refinement"],
         "build_system": dispatch.get("build_system"), "recipe_identity": dispatch["recipe_identity"],
         "preparation_identity": dispatch.get("preparation_identity"), "image": image,
         "family": "wasm", "recipe": dict(recipe),

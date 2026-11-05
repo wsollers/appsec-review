@@ -237,11 +237,12 @@ def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
     if not reusable or any(releases.values.get(key) == "undeclared" for key in (implementation, "validation")):
         raise ReplayRefused(reason or "missing_release_identity",
                             "declared implementation and validation releases are required")
-    if (set(context.variant) != _VARIANT or any(not isinstance(value, str) or not value.strip()
+    if (set(context.variant) != _VARIANT or any(value is not None and (
+            not isinstance(value, str) or not value.strip())
                                              for value in context.variant.values())
-            or context.variant.get("execution_role") not in {"host", "target"}):
-        raise ReplayRefused("missing_variant_identity", "all six resolved variant values are required")
-    if context.variant["toolchain"] != context.binding.toolchain_identity:
+            or context.variant.get("execution_role") not in {"host", "target", None}):
+        raise ReplayRefused("missing_variant_identity", "six exact nullable source variant fields are required")
+    if context.variant["toolchain"] not in {None, context.binding.toolchain_identity}:
         raise ReplayRefused("toolchain_mismatch", "variant does not name the bound toolchain")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", context.binding.image_identity):
         raise ReplayRefused("missing_image_identity", "an immutable image identity is required")
@@ -268,9 +269,15 @@ def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
     if (graph["topology_id"] != context.binding.graph_identity
             or graph["source_fingerprint"] != context.binding.source_identity):
         raise ReplayRefused("graph_mismatch", "structural graph or source changed")
+    from appsec_review.jobs.build_topology_artifacts import guard_action
+    failed_request = _read(workspace.run_dir, failure["request"])
+    try:
+        guard_action(workspace.run_dir, failed_request["dispatch"], graph=graph, releases=context.releases)
+    except ValueError as error:
+        raise ReplayRefused("accepted_refinement_missing", str(error)) from error
     node = next((node for node in graph["nodes"] if node["build_unit_id"] == context.binding.node_id), None)
     if (node is None or node["variant"] != dict(context.variant)
-            or node["recipe_revision"] != context.binding.recipe_identity
+            or graph["schema"] != "appsec-review/build-topology/2"
             or canonical_json_sha256(context.accepted_recipe) != context.binding.recipe_identity
             or context.validation_unit.get("build_unit_id") != context.binding.node_id
             or context.validation_unit.get("root") != node["root"]
@@ -323,6 +330,22 @@ def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
         raise ReplayRefused("upstream_mismatch", "exact upstream product identities are required")
     _validate_products(context.products, context, node)
     return graph
+
+
+def _refine_candidate(workspace: BuildWorkspace, context: ReplayContext,
+                      candidate: RecipeCandidate) -> Mapping[str, Any]:
+    from appsec_review.jobs.build_topology_artifacts import bind_actions, guard_action, load_refinement
+    failure = _read(workspace.run_dir, context.inputs["failure"])
+    dispatch = _read(workspace.run_dir, failure["request"])["dispatch"]
+    base = load_refinement(workspace.run_dir, dispatch["topology_refinement"])
+    action = bind_actions(workspace.run_dir, [{**dispatch, "recipe": dict(candidate.recipe)}],
+                          policy=base["policy"], profiles=base["profiles"],
+                          environment=base["environment"], releases=context.releases)[0]
+    try:
+        guard_action(workspace.run_dir, action, releases=context.releases)
+    except ValueError as error:
+        raise ReplayRefused("candidate_target_unenforced", str(error)) from error
+    return action
 
 
 def _validate_products(products: tuple[ProductSpec, ...], context: ReplayContext,
@@ -382,9 +405,10 @@ def _validate_candidate(context: ReplayContext, candidate: RecipeCandidate, run:
     if {spec.product_id for spec in products} != {spec.product_id for spec in context.products}:
         raise ReplayRefused("product_contract_mismatch", "candidate cannot add or remove accepted product declarations")
     baseline = {spec.product_id: spec for spec in context.products}
-    if any((spec.kind, spec.interface, dict(spec.variant)) !=
+    if any((spec.kind, spec.interface, dict(spec.variant), spec.role, spec.axes) !=
            (baseline[spec.product_id].kind, baseline[spec.product_id].interface,
-            dict(baseline[spec.product_id].variant)) for spec in products):
+            dict(baseline[spec.product_id].variant), baseline[spec.product_id].role,
+            baseline[spec.product_id].axes) for spec in products):
         raise ReplayRefused("product_contract_mismatch", "only evidence-backed product paths may change")
     return products
 
@@ -469,10 +493,16 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
         with workspace.writer() as writer:
             graph = _validate_context(workspace, context, writer)
             products = _validate_candidate(context, candidate, run, graph)
+            refined_candidate = _refine_candidate(workspace, context, candidate)
+            from appsec_review.jobs.build_topology import verify_product_contract
+            from appsec_review.jobs.build_topology_artifacts import guard_action
+            verify_product_contract(guard_action(
+                run, refined_candidate, releases=context.releases), products)
             context_ref = _publish(run, "contexts", context.view())
             candidate_ref = _publish(run, "candidates", candidate.view())
             base = {"schema": REPLAY_SCHEMA, "context": context_ref, "candidate": candidate_ref,
-                    "candidate_key": key, "network": "none" if network_offline else "bridge"}
+                    "candidate_key": key, "network": "none" if network_offline else "bridge",
+                    "topology_refinement": refined_candidate["topology_refinement"]}
             seen = safe_path(run, f"{_ROOT}/selected/{key}.json")
             no_op = (_recipe_key(candidate.recipe) == _recipe_key(context.accepted_recipe)
                      and _product_views(products) == _product_views(context.products))
@@ -522,8 +552,11 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
                 producer = producer_by_node[product["producer_build_unit_id"]]
                 return trial.verify_product(product["workspace_product"], producer.binding).identity == producer.reference["sha256"]
 
+            from appsec_review.jobs.build_topology_artifacts import load_refinement
             readiness = ready_build_units(graph, {node: "SUCCEEDED" for node in producer_by_node},
-                                          products=interfaces, verify_product=verify)
+                                          products=interfaces, verify_product=verify,
+                                          refinement=load_refinement(
+                                              run, refined_candidate["topology_refinement"], graph=graph))
             if context.binding.node_id not in readiness["ready"]:
                 raise ReplayRefused("prerequisites_not_ready", str(readiness["blocked"]))
             binding = replace(context.binding, recipe_identity=canonical_json_sha256(candidate.recipe),
@@ -591,6 +624,9 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
     candidate = RecipeCandidate(value["recipe"], tuple(value["evidence"]), value["reason"],
                                 None if value["products"] is None else
                                 tuple(ProductSpec(**spec) for spec in value["products"]))
+    refined_candidate = _refine_candidate(workspace, context, candidate)
+    if trial.get("topology_refinement") != refined_candidate["topology_refinement"]:
+        raise ReplayRefused("trial_refinement_changed", "trial lacks the matching accepted candidate refinement")
     products = _validate_candidate(context, candidate, run, graph)
     expected_binding = replace(context.binding, recipe_identity=canonical_json_sha256(candidate.recipe),
                                image_identity=intent["image_identity"])
@@ -647,11 +683,101 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
         if any(interface.get(key) != value for key, value in {
             "producer_build_unit_id": context.binding.node_id, "kind": spec.kind,
             "interface": spec.interface, "variant": dict(spec.variant), "path": spec.container_path,
+            "role": spec.role, "axes": spec.axes,
             "topology_id": expected_binding.graph_identity, "recipe_revision": expected_binding.recipe_identity,
             "workspace_product": trial["products"],
         }.items()):
             raise ReplayRefused("unverified_interfaces", "trial interface identity differs from verified products")
     return trial, dict(candidate.recipe), profile
+
+
+def verify_selected_trial(run: Path, context: ReplayContext, promotion: Mapping[str, Any],
+                          trial: Mapping[str, Any]) -> None:
+    """Recheck immutable trial evidence without acquiring or reconstructing the production writer."""
+    if (trial.get("schema") != REPLAY_SCHEMA or trial.get("status") != "SUCCEEDED"
+            or trial.get("cleanup_complete") is not True
+            or _load(run, "contexts", trial["context"]) != context.view()
+            or promotion["context"] != trial["context"]):
+        raise ReplayRefused("unverified_trial", "selected recipe requires an exact successful cleaned trial")
+    intent = _load(run, "intents", trial["intent"])
+    if any(intent.get(key) != trial.get(key) for key in ("context", "candidate", "candidate_key", "network")):
+        raise ReplayRefused("trial_identity_mismatch", "selected trial differs from its immutable intent")
+    candidate = _load(run, "candidates", trial["candidate"])
+    recipe = candidate["recipe"]
+    from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
+    graph = load_accepted_plan(run)["build_topology"]["executable_graph"]
+    proposed = RecipeCandidate(recipe, tuple(candidate["evidence"]), candidate["reason"],
+                               None if candidate["products"] is None else
+                               tuple(ProductSpec(**item) for item in candidate["products"]))
+    specs = _validate_candidate(context, proposed, run, graph)
+    candidate_key = canonical_json_sha256({
+        "context": canonical_json_sha256(context.view()), "recipe": _recipe_key(recipe),
+        "products": _product_views(specs), "network_offline": trial["network"] == "none"})
+    if trial["network"] not in {"none", "bridge"} or trial["candidate_key"] != candidate_key:
+        raise ReplayRefused("trial_identity_mismatch", "selected trial recipe/products/network key changed")
+    expected = replace(context.binding, recipe_identity=canonical_json_sha256(recipe),
+                       image_identity=intent["image_identity"])
+    if (candidate.get("schema") != CANDIDATE_SCHEMA or promotion["recipe"] != recipe
+            or promotion["recipe_identity"] != expected.recipe_identity
+            or promotion["image_identity"] != expected.image_identity
+            or trial["binding"] != expected.view()
+            or len(trial["commands"]) != len(_command_plan(recipe))):
+        raise ReplayRefused("trial_binding_mismatch", "selected recipe/image/commands changed")
+    from appsec_review.jobs.build_topology_artifacts import guard_action
+    failure = _read(run, context.inputs["failure"])
+    original = _read(run, failure["request"])["dispatch"]
+    action = {**original, "recipe": recipe, "image": {"image_id": expected.image_identity},
+              "topology_refinement": trial["topology_refinement"]}
+    bound = guard_action(run, action, releases=context.releases)
+    if intent.get("image_evidence") is not None:
+        profile = BuildProfile(**intent["image_profile"])
+        image = _read(run, intent["image_evidence"])
+        if (image.get("operator_approved") is not True or image.get("image_id") != expected.image_identity
+                or image.get("profile") != asdict(profile) or profile.image_id != expected.image_identity
+                or image.get("recipe_identity") != expected.recipe_identity
+                or promotion.get("image_profile") != asdict(profile)
+                or trial["network"] == "none" and (
+                    image.get("network") != "none" or image.get("prepared") is not True)):
+            raise ReplayRefused("image_mismatch", "selected image preparation evidence changed")
+    elif (expected.image_identity != context.binding.image_identity
+          or intent.get("image_profile") is not None or promotion.get("image_profile") is not None
+          or any(recipe.get(field) != context.accepted_recipe.get(field) for field in _IMAGE_FIELDS)):
+        raise ReplayRefused("image_mismatch", "selected changed image requires bounded preparation evidence")
+    scope = CaptureScope(context.run_id, "job_project_build", intent["attempt_id"],
+                         context.binding.node_id, str(context.validation_unit["family"]))
+    for argv, cwd, command in zip(_command_plan(recipe), _working_directories(recipe), trial["commands"], strict=True):
+        for name in ("stdout", "stderr", "capture"):
+            _verify_evidence(run, command[name])
+        captured = verify_capture_record(verify_reference(run, command["capture"]), run_root=run, scope=scope)
+        if (command["argv"] != list(argv) or command["exit_code"] != 0 or command["timed_out"] is not False
+                or captured.gaps or captured.findings["findings"]
+                or captured.document["command"]["argv"] != list(argv)
+                or captured.document["command"]["exit_code"] != 0
+                or captured.document["command"]["timed_out"] is not False
+                or captured.document["command"].get("working_directory") != cwd
+                or captured.document.get("collector", {}).get("image_id") != expected.image_identity):
+            raise ReplayRefused("unverified_command", "selected trial command evidence changed")
+    from appsec_review.jobs.build_workspace import verify_retained_product
+    products = verify_retained_product(run, trial["generation_identity"], trial["products"], expected)
+    if (products["products"] != promotion["products"]
+            or products["products"] != _product_views(specs)):
+        raise ReplayRefused("unverified_products", "selected trial product binding changed")
+    from appsec_review.jobs.build_topology import verify_product_contract
+    verify_product_contract(bound, products["products"])
+    if not trial["verified_interfaces"] or len(trial["verified_interfaces"]) != len(products["products"]):
+        raise ReplayRefused("unverified_interfaces", "selected trial lacks exact verified product interfaces")
+    interfaces = {item["product_id"]: item for item in trial["verified_interfaces"]}
+    for value in products["products"]:
+        spec = ProductSpec(**value)
+        interface = interfaces.get(spec.product_id, {})
+        if any(interface.get(key) != expected_value for key, expected_value in {
+            "producer_build_unit_id": context.binding.node_id, "kind": spec.kind,
+            "interface": spec.interface, "variant": dict(spec.variant), "path": spec.container_path,
+            "role": spec.role, "axes": spec.axes,
+            "topology_id": expected.graph_identity, "recipe_revision": expected.recipe_identity,
+            "workspace_product": trial["products"],
+        }.items()):
+            raise ReplayRefused("unverified_interfaces", "selected interface differs from its trial product")
 
 
 def promote_recipe(workspace: BuildWorkspace, context: ReplayContext,

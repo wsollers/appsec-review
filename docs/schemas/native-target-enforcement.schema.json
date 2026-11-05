@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/native-target-enforcement/1",
+  "title": "Recipe-bound closed native enforcement sidecar",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "build_unit_id", "operation_id", "required_axes", "proof_kind", "status", "proven_axes", "unresolved_inputs", "scope_rule", "source_evidence_refs", "closure_manifest", "source_fingerprint", "catalog_bundle_identity", "selection_id", "recipe_digest", "operation_binding", "profile_identity", "enforcement_id"],
+  "properties": {
+    "schema": {"const": "appsec-review/native-target-enforcement/1"},
+    "build_unit_id": {"type": "string", "minLength": 1},
+    "operation_id": {"$ref": "#/$defs/hash"},
+    "required_axes": {"$ref": "build-selection-policy.schema.json#/$defs/axes"},
+    "proof_kind": {"enum": ["msbuild_selected_mapping", "compiler_explicit_target", "compiler_pinned_default", "go_explicit_target"]},
+    "status": {"enum": ["proven", "unknown", "incompatible"]},
+    "proven_axes": {"$ref": "build-selection-policy.schema.json#/$defs/axes"},
+    "unresolved_inputs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "scope_rule": {"const": "source-scoped-topology/2"},
+    "source_evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/hash"}, "uniqueItems": true},
+    "closure_manifest": {"type": "object"},
+    "source_fingerprint": {"type": "string", "minLength": 1},
+    "catalog_bundle_identity": {"$ref": "#/$defs/hash"},
+    "selection_id": {"$ref": "#/$defs/hash"},
+    "recipe_digest": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]},
+    "operation_binding": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]},
+    "profile_identity": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]},
+    "enforcement_id": {"$ref": "#/$defs/hash"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"recipe_digest": {"type": "null"}}},
+      "then": {"properties": {"status": {"const": "unknown"}, "operation_binding": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "proven"}}},
+      "then": {"properties": {"recipe_digest": {"$ref": "#/$defs/hash"}, "operation_binding": {"$ref": "#/$defs/hash"}, "unresolved_inputs": {"maxItems": 0}}}
+    }
+  ],
+  "$defs": {"hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

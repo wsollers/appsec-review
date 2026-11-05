@@ -488,6 +488,29 @@ def parse_build_info(data: bytes) -> dict[str, Any]:
     return info
 
 
+def verify_target_facts(facts: Mapping[str, Any], selected: Mapping[str, Any],
+                        recipe: Mapping[str, Any]) -> None:
+    """Refuse typed publication when produced Go settings contradict the accepted proof."""
+    proofs = [proof for proof in selected["enforcement"]
+              if proof["proof_kind"] == "go_explicit_target" and proof["status"] == "proven"]
+    if not proofs:
+        raise ValueError("produced Go output has no accepted Go target proof")
+    settings = facts.get("build_settings")
+    if not isinstance(settings, Mapping):
+        raise ValueError("produced Go output has no resolving build information")
+    for key in ("GOOS", "GOARCH", "CGO_ENABLED"):
+        expected = recipe["environment"].get(key)
+        if expected is None or settings.get(key) != expected:
+            raise ValueError(f"produced Go {key} differs from accepted enforcement: "
+                             f"{settings.get(key)!r} != {expected!r}")
+    binary = facts.get("binary_target")
+    expected_arch = recipe["environment"]["GOARCH"]
+    if (not isinstance(binary, Mapping) or binary.get("isa") != {
+            "amd64": "x86_64", "386": "x86", "arm64": "arm64"}.get(expected_arch)
+            or binary.get("bits") != (32 if expected_arch == "386" else 64)):
+        raise ValueError("produced Go binary machine/class differs from accepted enforcement")
+
+
 def parse_build_id_note(data: bytes) -> str:
     """Return the Go build ID from one complete `.note.go.buildid` section."""
     if len(data) > _NOTE_LIMIT:
@@ -521,6 +544,7 @@ def build_facts(path: Path) -> dict[str, Any]:
         image = elf.read_image(stream)
         if image.order != "<":
             raise ValueError("Go build facts are supported for little-endian ELF files only")
+        machine = struct.unpack("<H", elf.read_exact(stream, 18, 2, image.file_size))[0]
         sections = elf.read_sections(stream, image)
         if not sections:
             raise ValueError("ELF file has no section header table")
@@ -547,6 +571,8 @@ def build_facts(path: Path) -> dict[str, Any]:
                 "go_version": info["go_version"], "main_package": info["path"],
                 "main_module": info["main"], "dependency_modules": info["dependencies"],
                 "build_settings": info["settings"],
+                "binary_target": {"format": "elf", "bits": 64 if image.wide else 32,
+                                  "isa": {62: "x86_64", 3: "x86", 183: "arm64"}.get(machine)},
                 "debug_data": {"dwarf": "embedded" if dwarf else "absent",
                                "dwarf_compressed": any(item.name.startswith(".zdebug_") or
                                                        item.flags & _SHF_COMPRESSED for item in dwarf),

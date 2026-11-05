@@ -47,19 +47,15 @@ def read_reference(run_root: Path, reference: Mapping[str, Any]) -> dict[str, An
 
 def selected_graph(actions: Sequence[Mapping[str, Any]], *, source_fingerprint: str,
                    relationships: Sequence[Mapping[str, Any]],
-                   variants: Mapping[str, Mapping[str, str]]) -> dict[str, Any]:
-    """Only explicit accepted runtime declarations fill previously unknown variant facts."""
-    copied = copy.deepcopy(list(actions))
-    for action in copied:
-        variant = dict(action.get("build_variant", dict.fromkeys(VARIANT_FIELDS)))
-        declared = variants.get(str(action["build_unit_id"]), variants.get(str(action["family"]), {}))
-        for key, value in declared.items():
-            if variant[key] is not None and variant[key] != value:
-                raise ValueError(f"runtime variant contradicts descriptor: {action['build_unit_id']}:{key}")
-            variant[key] = value
-        action["build_variant"] = variant
-    return compile_build_topology(copied, source_fingerprint=source_fingerprint,
-                                  component_relationships=relationships)
+                   variants: Mapping[str, Mapping[str, str]],
+                   accepted_graph: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Selection is a sidecar; it cannot rewrite observed facts or a complete source graph."""
+    if accepted_graph is not None:
+        validate_build_topology(accepted_graph)
+        if accepted_graph["source_fingerprint"] != source_fingerprint:
+            raise ValueError("selected graph has a different accepted source identity")
+        return copy.deepcopy(dict(accepted_graph))
+    return compile_build_topology(actions, source_fingerprint=source_fingerprint)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +115,12 @@ class BuildIterations:
 
     def _binding(self, uid: str, upstreams: Sequence[str]) -> NodeBinding:
         dispatch = self.dispatches[uid]
+        from appsec_review.jobs.build_topology_artifacts import guard_cache_action as guard_action
+        try:
+            selected_proof = guard_action(self.run_root, dispatch, graph=self.graph,
+                                          configuration=self.configuration, releases=self.releases)
+        except ValueError as error:
+            raise ReconstructionMiss(str(error)) from error
         missing = {"platform", "build_toolchain", "validation"} - self.releases.keys()
         missing.update(key for key in ("platform", "build_toolchain", "validation")
                        if self.releases.get(key) in {"", "undeclared"})
@@ -136,8 +138,13 @@ class BuildIterations:
             digest(self.configuration), digest(dispatch["recipe"]), str(image["image_id"]),
             self.releases["build_toolchain"], tuple(sorted(upstreams)),
             self.execution_identity, digest({"policy": self.output_policy_identity,
-                                             "products": self.product_overrides.get(uid)}),
+                                             "products": self.product_overrides.get(uid),
+                                             "selected_proof": selected_proof}),
         )
+
+    def _refinement(self, uid: str) -> Mapping[str, Any]:
+        from appsec_review.jobs.build_topology_artifacts import load_refinement
+        return load_refinement(self.run_root, self.dispatches[uid]["topology_refinement"], graph=self.graph)
 
     @staticmethod
     def _decode_binding(value: Mapping[str, Any]) -> NodeBinding:
@@ -171,6 +178,8 @@ class BuildIterations:
                 or request["target"] != str(self.target)
                 or digest(request.get("products")) != digest(self.product_overrides.get(binding.node_id))):
             raise ValueError("immutable iteration request differs from selected execution inputs")
+        if binding.view() != self._binding(binding.node_id, binding.upstream_products).view():
+            raise WorkspaceError("iteration target admission changed before workspace recovery")
         with self.workspace.writer() as writer:
             products = []
             producer_bindings = {key: self._decode_binding(value)
@@ -189,7 +198,8 @@ class BuildIterations:
             readiness = ready_build_units(
                 self.graph, {uid: "SUCCEEDED" for uid in producer_bindings},
                 products=products, verify_product=lambda record: bool(writer.verify_product(
-                    record["workspace_product"], producer_bindings[record["producer_build_unit_id"]])))
+                    record["workspace_product"], producer_bindings[record["producer_build_unit_id"]])),
+                refinement=self._refinement(binding.node_id))
             if binding.node_id not in readiness["ready"]:
                 raise WorkspaceError("iteration prerequisites changed before writer acquisition")
             if list(request["interfaces"]) != [value for value in products
@@ -242,6 +252,10 @@ class BuildIterations:
                     raise WorkspaceError("iteration worker/container cleanup is unconfirmed")
                 if receipt.get("terminal_status") != "SUCCEEDED":
                     raise WorkspaceError("iteration build did not succeed")
+                from appsec_review.jobs.build_topology import refinement_unit, verify_product_contract
+                verify_product_contract(
+                    refinement_unit(self.graph, self._refinement(binding.node_id), binding.node_id),
+                    outcome.products)
                 product = writer.commit(outcome.products)
                 completed = retain(self.run_root, "completed", {
                     "request": dict(request_ref), "receipt": receipt_ref, "prepared": prepared,
@@ -256,6 +270,55 @@ class BuildIterations:
                 raise
 
     def run(self, worker: Worker, *, invoke: Invoker | None = None) -> dict[str, Any]:
+        refusals = {}
+        for uid in self.dispatches:
+            try:
+                self._binding(uid, ())
+            except ReconstructionMiss as error:
+                refusals[uid] = str(error)
+        if not refusals and self.dispatches:
+            for uid, entry in self._ledger()["nodes"].items():
+                if uid not in self.dispatches:
+                    refusals[uid] = "retained producer has no selected recipe admission for workspace reconstruction"
+                    continue
+                try:
+                    from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+                    from appsec_review.jobs.build_topology import verify_product_contract
+                    completion = read_reference(self.run_root, entry["completion"])
+                    request = read_reference(self.run_root, completion["request"])
+                    bound = guard_cache_action(
+                        self.run_root, request["dispatch"], graph=self.graph,
+                        configuration=self.configuration, releases=self.releases)
+                    binding = self._decode_binding(entry["binding"])
+                    if self._binding(uid, binding.upstream_products).view() != binding.view():
+                        raise ReconstructionMiss("retained producer differs from the selected recipe binding")
+                    from appsec_review.jobs.build_workspace import verify_retained_product
+                    product = verify_retained_product(
+                        self.run_root, entry["generation"], entry["product"], binding)
+                    if product["binding"] != entry["binding"]:
+                        raise ReconstructionMiss("retained product differs from its admitted producer")
+                    verify_product_contract(bound, product["products"])
+                    if self.validate_receipt is not None:
+                        self.validate_receipt(read_reference(self.run_root, entry["receipt"]))
+                except (ValueError, WorkspaceError, OSError, KeyError, TypeError) as error:
+                    refusals[uid] = str(error)
+        if not self.dispatches:
+            receipts = [copy.deepcopy(self.omitted_receipts.get(
+                node["build_unit_id"], self._gap(node["build_unit_id"], "no admitted build dispatch")))
+                for node in self.graph["nodes"] if node["disposition"] != "contained"]
+            return {"schema": SCHEMA, "graph": self.graph_ref,
+                    "states": {receipt["build_unit_id"]: receipt["terminal_status"] for receipt in receipts},
+                    "receipts": receipts, "gaps": [gap for receipt in receipts for gap in receipt.get("gaps", ())],
+                    "terminal_status": "COMPLETED_WITH_GAPS"}
+        if refusals:
+            receipts = [self._gap(node["build_unit_id"], refusals.get(
+                node["build_unit_id"], "shared workspace recovery withheld until selected inputs are admitted"))
+                for node in self.graph["nodes"] if node["disposition"] != "contained"]
+            return {"schema": SCHEMA, "graph": self.graph_ref,
+                    "states": {receipt["build_unit_id"]: receipt["terminal_status"] for receipt in receipts},
+                    "receipts": receipts,
+                    "gaps": [f"{uid}: {reason}" for uid, reason in sorted(refusals.items())],
+                    "terminal_status": "BLOCKED_BY_DEPENDENCY"}
         if invoke is None:
             from appsec_review.jobs.job_build_iteration.job import invoke_iteration
             invoke = invoke_iteration
@@ -280,6 +343,10 @@ class BuildIterations:
         if not pointer.exists():
             return
         intent = read_reference(self.run_root, json.loads(pointer.read_bytes())["intent"])
+        for uid, state in intent["after_ledger"]["nodes"].items():
+            binding = self._decode_binding(state["binding"])
+            if self._binding(uid, binding.upstream_products).view() != binding.view():
+                raise WorkspaceError("invalidation recovery has no matching accepted refinement")
         ledger = self._ledger()
         if digest(ledger) not in {intent["before_ledger"], digest(intent["after_ledger"])}:
             raise WorkspaceError("invalidation ledger changed outside its pinned transaction")
@@ -334,6 +401,9 @@ class BuildIterations:
             return
         pending = json.loads(pending_path.read_bytes())
         request = read_reference(self.run_root, pending["request"])
+        selected_binding = self._decode_binding(request["binding"])
+        if self._binding(selected_binding.node_id, selected_binding.upstream_products).view() != selected_binding.view():
+            raise WorkspaceError("worker recovery has no matching accepted recipe refinement")
         attempt = request["attempt_id"]
         prepared_path = self.run_root / "data/build/iterations/prepared" / f"{attempt}.json"
         if not prepared_path.exists():
@@ -422,10 +492,14 @@ class BuildIterations:
                 try:
                     if prior["binding"] != binding.view():
                         raise ReconstructionMiss("selected node inputs changed")
-                    if any(value is None for value in nodes[uid]["variant"].values()):
+                    if self.graph["schema"] == "appsec-review/build-topology/1" and any(
+                            value is None for value in nodes[uid]["variant"].values()):
                         raise ReconstructionMiss("missing ABI/variant evidence forbids reuse")
                     with self.workspace.writer() as writer:
-                        writer.verify_product(prior["product"], binding)
+                        product = writer.verify_product(prior["product"], binding)
+                        from appsec_review.jobs.build_topology import refinement_unit, verify_product_contract
+                        verify_product_contract(refinement_unit(
+                            self.graph, self._refinement(uid), uid), product.products)
                         found = writer.product_interfaces(prior["product"], binding)
                     receipt = read_reference(self.run_root, prior["receipt"])
                     if self.validate_receipt is not None:
@@ -446,7 +520,8 @@ class BuildIterations:
                     writer.verify_product(record["workspace_product"], bindings[producer])
                 return True
 
-            readiness = ready_build_units(self.graph, states, products=interfaces, verify_product=verify)
+            readiness = ready_build_units(self.graph, states, products=interfaces, verify_product=verify,
+                                          refinement=self._refinement(uid))
             if uid not in readiness["ready"]:
                 reasons = next((item["reasons"] for item in readiness["blocked"]
                                 if item["build_unit_id"] == uid), ["prerequisites unavailable"])
@@ -503,6 +578,7 @@ class BuildIterations:
                     writer.restore(before)
                 self.workspace.set_hold(hold, held=False)
                 states[uid] = "FAILED"
+                (self.run_root / "data/build/iterations/pending.json").unlink()
                 failed_receipt = read_reference(self.run_root, prepared["receipt"])
                 receipts[uid] = {
                     **failed_receipt, "terminal_status": "FAILED", "artifacts": [],
@@ -536,6 +612,50 @@ def resume_build_workspace(run_root: Path) -> None:
     workspace = BuildWorkspace(run_root)
     if not (run_root / workspace.owner_relative).exists():
         return
+    from appsec_review.config.build_selection import parse_build_selection
+    from appsec_review.jobs.build_topology_artifacts import (
+        _read, guard_cache_action, selected_cache_actions,
+    )
+    manifest_path = run_root / "data/configuration/manifest.json"
+    if not manifest_path.is_file() or manifest_path.stat().st_size > 16 * 1024 * 1024:
+        raise WorkspaceError("workspace reconstruction has no bounded frozen configuration")
+    manifest = json.loads(manifest_path.read_bytes())
+    resolved_path = run_root / "data/configuration/resolved.json"
+    resolved = _read(run_root, {"path": resolved_path.relative_to(run_root).as_posix(),
+                               "sha256": manifest["resolved_sha256"],
+                               "size_bytes": resolved_path.stat().st_size})
+    settings = resolved["jobs"]["job_project_build"]["settings"]
+    bindings = {"configuration": {"build_selection": parse_build_selection(
+        settings.get("build_selection")).view()}, "releases": resolved["review_policy"]["releases"]}
+    for action in selected_cache_actions(run_root).values():
+        guard_cache_action(run_root, action, **bindings)
+    ledger_path = run_root / "data/build/iterations/ledger.json"
+    pending_path = run_root / "data/build/iterations/pending.json"
+    if not ledger_path.exists() and not pending_path.exists():
+        raise WorkspaceError("workspace reconstruction lacks accepted or pending recipe admission")
+    if ledger_path.exists():
+        ledger = json.loads(ledger_path.read_bytes())
+        if ledger.get("schema") != SCHEMA:
+            raise WorkspaceError("workspace reconstruction ledger has changed schema")
+        for entry in ledger["nodes"].values():
+            completion = read_reference(run_root, entry["completion"])
+            request = read_reference(run_root, completion["request"])
+            bound = guard_cache_action(run_root, request["dispatch"], **bindings)
+            if request["binding"] != entry["binding"]:
+                raise WorkspaceError("workspace ledger differs from its admitted request binding")
+            from appsec_review.jobs.build_topology import verify_product_contract
+            from appsec_review.jobs.build_workspace import verify_retained_product
+            product = verify_retained_product(
+                run_root, entry["generation"], entry["product"],
+                BuildIterations._decode_binding(entry["binding"]))
+            if product["binding"] != entry["binding"]:
+                raise WorkspaceError("workspace product differs from its admitted producer binding")
+            verify_product_contract(bound, product["products"])
+            receipt = read_reference(run_root, entry["receipt"])
+            guard_cache_action(run_root, receipt, **bindings)
+    if pending_path.exists():
+        request = read_reference(run_root, json.loads(pending_path.read_bytes())["request"])
+        guard_cache_action(run_root, request["dispatch"], **bindings)
     workspace.set_hold("resume", held=True)
     with workspace.writer() as writer:
         if writer.state()["attempt"] is None:
@@ -587,13 +707,35 @@ def install_inventory(root: Path) -> dict[str, tuple[str, int]]:
 
 def product_specs(graph_node: Mapping[str, Any], receipt: Mapping[str, Any],
                   workspace: BuildWorkspace, *,
-                  install_before: Mapping[str, tuple[str, int]] | None = None) -> tuple[ProductSpec, ...]:
+                  install_before: Mapping[str, tuple[str, int]] | None = None,
+                  bound: Mapping[str, Any] | None = None,
+                  declarations: Sequence[Mapping[str, Any]] = ()) -> tuple[ProductSpec, ...]:
     """Resolve descriptor interfaces to actual retained outputs, never a successful attempt ID."""
     variant = dict(graph_node["variant"])
     candidates = list(receipt.get("artifacts", ()))
     installed = [relative for relative, identity in install_inventory(workspace.paths.install).items()
                  if install_before is None or install_before.get(relative) != identity]
     result: list[ProductSpec] = []
+    from appsec_review.jobs.artifact_kinds import binary_role
+    from appsec_review.jobs.build_workspace import native_product_axes, verify_native_product
+    from appsec_review.jobs.build_topology import proven_product_axes
+    axes = proven_product_axes(bound) if bound is not None else None
+    native_roles = {"static-library": ("library", "static_archive"),
+                    "shared-library": ("library", "runtime_shared"),
+                    "executable": ("executable", "executable"),
+                    "object": ("generated_source", "native_object")}
+
+    def physical_role(path: str) -> tuple[str, str] | None:
+        root, _, relative = path.partition("/")
+        base = workspace.paths.target if root == "target" else workspace.paths.install
+        candidate = base / relative
+        if candidate.is_file() and not candidate.resolve(strict=True).is_relative_to(base.resolve(strict=True)):
+            raise WorkspaceError("retained product escapes its admitted workspace")
+        kind, _ = binary_role(candidate) if candidate.is_file() else (None, None)
+        if kind == "static-library" and native_product_axes(candidate)["import_library"]:
+            return ("library", "import_library")
+        return native_roles.get(kind)
+
     for product in graph_node["products"]:
         interface = str(product["interface"]).removeprefix("cmake-target:")
         names = {interface, f"lib{interface}.a", f"lib{interface}.so", f"{interface}.dll",
@@ -602,10 +744,18 @@ def product_specs(graph_node: Mapping[str, Any], receipt: Mapping[str, Any],
         if not choices:
             choices = [("target/" + str(item["workspace_path"])) for item in candidates
                        if PurePosixPath(str(item.get("workspace_path", ""))).name in names]
+        declaration = next((value for value in declarations if
+                            value["owner_build_unit_id"] == graph_node["build_unit_id"]
+                            and value["product_id"] == product["product_id"]), None)
+        role = declaration["role"] if declaration is not None else None
+        if role == "runtime_shared" and axes is not None and axes["os"] == "windows":
+            role = "import_library"
+        if bound is not None:
+            choices = [path for path in choices if physical_role(path) == (product["kind"], role)]
         if len(choices) != 1:
             raise WorkspaceError(f"product interface does not resolve one captured output: {interface}")
         result.append(ProductSpec(choices[0], product["kind"], product["product_id"],
-                                  product["interface"], product["variant"]))
+                                  product["interface"], product["variant"], role, axes))
     used = {spec.path for spec in result}
     for item in candidates:
         path = str(item.get("workspace_path", ""))
@@ -636,7 +786,42 @@ def product_specs(graph_node: Mapping[str, Any], receipt: Mapping[str, Any],
                                   relative, variant))
     if not result:
         raise WorkspaceError("build produced no verifiable product bytes")
-    return tuple(result)
+    if bound is None:
+        return tuple(result)
+    typed = []
+    for spec in result:
+        if spec.role is not None:
+            typed.append(spec)
+            continue
+        physical = physical_role(spec.path)
+        artifact = next((value for value in candidates if
+                         "target/" + str(value.get("workspace_path", "")) == spec.path), {})
+        kind = artifact.get("kind")
+        if physical is not None and kind != "managed-assembly":
+            product_kind, role = physical
+        elif kind == "managed-assembly":
+            product_kind, role = "package_metadata", "managed_assembly"
+        elif kind == "object":
+            product_kind, role = "generated_source", "native_object"
+        elif kind in {"jar", "aar", "apk", "package", "python-wheel"}:
+            product_kind, role = "package_metadata", "package"
+        elif spec.kind == "headers":
+            product_kind, role = "headers", "headers"
+        elif kind in {"generated-source", "generated-java-source", "generated-kotlin-source", "generated-code"}:
+            product_kind, role = "generated_source", "generated_source"
+        elif spec.kind == "library":
+            raise WorkspaceError("native library role is unresolved; suffixes cannot authorize a product")
+        elif spec.kind == "executable":
+            raise WorkspaceError("native executable role is unresolved; capture labels cannot authorize a product")
+        else:
+            product_kind, role = "package_metadata", "metadata"
+        typed.append(ProductSpec(spec.path, product_kind, spec.product_id, spec.interface,
+                                 spec.variant, role, axes))
+    for spec in typed:
+        root, _, relative = spec.path.partition("/")
+        base = workspace.paths.target if root == "target" else workspace.paths.install
+        verify_native_product(base / relative, spec)
+    return tuple(typed)
 
 
 def decode_replay_context(value: Mapping[str, Any]):
@@ -815,7 +1000,16 @@ def selected_revisions(run_root: Path, accepted: Mapping[str, Any],
             revision.recipe, profile, image["dependency_hashes"], releases=ComponentReleases(context.releases))
         copied[uid]["recipe_promotion"] = dict(revision.reference)
         overrides[uid] = [asdict(spec) for spec in revision.products]
-        next(node for node in selected["nodes"] if node["build_unit_id"] == uid)["recipe_revision"] = digest(revision.recipe)
+    from appsec_review.jobs.build_topology_artifacts import bind_actions, guard_action, load_refinement
+    base_dispatch = next(iter(copied.values()), None)
+    if base_dispatch is not None:
+        base = load_refinement(run_root, base_dispatch["topology_refinement"], graph=graph)
+        refined = bind_actions(run_root, list(copied.values()), policy=base["policy"],
+                               profiles=base["profiles"], environment=base["environment"],
+                               releases=base["releases"])
+        copied = {item["build_unit_id"]: item for item in refined}
+        for action in copied.values():
+            guard_action(run_root, action, graph=graph, releases=base["releases"])
     validate_build_topology(selected)
     if selected["topology_id"] != graph["topology_id"]:
         raise ValueError("recipe promotion changed structural build topology")

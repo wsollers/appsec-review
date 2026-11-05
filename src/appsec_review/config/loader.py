@@ -977,6 +977,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             raise ValueError(f"jobs.{job_id}.settings must be a table")
         settings = copy.deepcopy(settings)
         if job_id == "job_project_build":
+            from .build_selection import parse_build_selection
+            typed_settings = parse_build_selection(settings.get("build_selection"))
+            settings["build_selection"] = typed_settings.view()
             from .unity import parse_unity_build_settings
             parse_unity_build_settings(settings.get("unity"))
         capture_override = settings.get("build_capture")

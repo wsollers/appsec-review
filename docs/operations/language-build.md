@@ -1,5 +1,20 @@
 # Generic language-build operations
 
+**Graph/2 source admission:** actual dispatch, local build caches, task checkpoints, direct
+workers and workspace reconstruction require the same accepted recipe-bound refinement.
+Selected promoted recipes cannot reuse an old recipe/image result. Native retained roles and
+producer/consumer axes are checked independently of capture success; Windows import libraries
+are not interchangeable with runtime DLLs. Go metadata that cannot be parsed or contradicts
+accepted settings/binary machine/class fails typed successful publication. Graph/1 artifacts
+remain inspection-only. These controls are authored source, not a claim of unit/live acceptance
+or acquired native compiler metadata.
+
+Product-dependent generic/JVM/Wasm execution requires the admitted shared workspace and exact
+retained producer interfaces; those interfaces also participate in private cache identities.
+Retained native bytes are checked for machine/class and bounded archive-member closure, in
+addition to the seven-axis product contract. A runtime DLL cannot satisfy an import-library
+requirement. Unsupported native containers/closure and Go PE build settings remain named gaps.
+
 `job_language_build` consumes only the accepted, hash-verified `job_project_build` handoff. The
 current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kotlin, Go,
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and

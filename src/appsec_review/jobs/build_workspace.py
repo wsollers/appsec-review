@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
+import struct
 import time
 from typing import Any
 import uuid
@@ -37,6 +38,13 @@ _INPUT = "artifacts/build/workspace/input.json"
 _DISPOSABLE = "workspace/build"
 _HASH = re.compile(r"[0-9a-f]{64}")
 _PRODUCT_KINDS = frozenset({"library", "executable", "headers", "package_metadata", "generated_source"})
+_PRODUCT_ROLES = {
+    "static_archive": "library", "import_library": "library", "runtime_shared": "library",
+    "executable": "executable", "headers": "headers", "metadata": "package_metadata",
+    "generated_source": "generated_source", "native_object": "generated_source",
+    "managed_assembly": "package_metadata", "package": "package_metadata",
+}
+_TARGET_AXES = frozenset({"os", "isa", "abi", "sdk", "deployment", "device_kind", "hardware_generation"})
 _VARIANT_KEYS = frozenset({"configuration", "target_arch", "execution_role", "linkage", "toolchain", "abi"})
 TARGET_CONTAINER_PATH = "/workspace"
 INSTALL_CONTAINER_PATH = "/install"
@@ -115,6 +123,8 @@ class ProductSpec:
     product_id: str
     interface: str
     variant: Mapping[str, str | None]
+    role: str | None = None
+    axes: Mapping[str, str | None] | None = None
 
     def __post_init__(self) -> None:
         _relative(self.path)
@@ -130,6 +140,15 @@ class ProductSpec:
                 or self.variant["execution_role"] not in {"host", "target", None}):
             raise ValueError("variant must supply the six exact accepted topology variant fields")
         object.__setattr__(self, "variant", dict(self.variant))
+        if self.role is not None and (
+                not isinstance(self.role, str) or _PRODUCT_ROLES.get(self.role) != self.kind):
+            raise ValueError("product role is unknown or conflicts with its kind")
+        if self.axes is not None and (
+                not isinstance(self.axes, Mapping) or set(self.axes) != _TARGET_AXES or any(
+                    value is not None and (not isinstance(value, str) or not value.strip())
+                    for value in self.axes.values())):
+            raise ValueError("product axes must retain the seven exact nullable target axes")
+        object.__setattr__(self, "axes", dict(self.axes) if self.axes is not None else None)
 
     @property
     def container_path(self) -> str:
@@ -169,6 +188,150 @@ def _json(path: Path) -> dict[str, Any]:
         raise ReconstructionMiss(f"missing or malformed workspace metadata: {path}") from error
     if not isinstance(value, dict):
         raise ReconstructionMiss(f"workspace metadata must be an object: {path}")
+    return value
+
+
+def native_product_axes(path: Path) -> dict[str, Any]:
+    """Read machine/class from bounded headers, including every retained archive member."""
+    machines = {0x14C: ("x86", 32), 0x8664: ("x86_64", 64), 0xAA64: ("arm64", 64)}
+
+    def header(head: bytes) -> tuple[str, int, bool]:
+        if head.startswith(b"\x7fELF") and len(head) >= 20:
+            order = {1: "<", 2: ">"}.get(head[5])
+            bits = {1: 32, 2: 64}.get(head[4])
+            machine = struct.unpack_from(order + "H", head, 18)[0] if order else None
+            target = {3: ("x86", 32), 62: ("x86_64", 64), 183: ("arm64", 64)}.get(machine)
+            if target and target[1] == bits:
+                return (*target, False)
+        if head[:4] in {b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf",
+                         b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xce"} and len(head) >= 16:
+            order = "<" if head[0] in {0xCF, 0xCE} else ">"
+            machine = struct.unpack_from(order + "I", head, 4)[0]
+            target = {7: ("x86", 32), 0x01000007: ("x86_64", 64),
+                      0x0100000C: ("arm64", 64)}.get(machine)
+            if target and (head[:4] in {b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf"}) == (target[1] == 64):
+                return (*target, False)
+        if len(head) >= 20:
+            if head[:4] == b"\0\0\xff\xff" and struct.unpack_from("<H", head, 4)[0] == 0:
+                target = machines.get(struct.unpack_from("<H", head, 6)[0])
+                if target and struct.unpack_from("<I", head, 12)[0] > 0:
+                    return (*target, True)
+            target = machines.get(struct.unpack_from("<H", head)[0])
+            if target and 0 < struct.unpack_from("<H", head, 2)[0] <= 1024:
+                return (*target, False)
+        raise WorkspaceError("native retained binary machine/class is unresolved")
+
+    size = path.stat().st_size
+    with path.open("rb") as stream:
+        head = stream.read(64)
+        if head.startswith(b"MZ") and len(head) == 64:
+            offset = struct.unpack_from("<I", head, 60)[0]
+            if not 64 <= offset <= min(size - 24, 1024 * 1024):
+                raise WorkspaceError("native PE header is outside its bounded container")
+            stream.seek(offset)
+            pe = stream.read(26)
+            if pe[:4] != b"PE\0\0":
+                raise WorkspaceError("native PE signature is unresolved")
+            target = machines.get(struct.unpack_from("<H", pe, 4)[0])
+            magic = struct.unpack_from("<H", pe, 24)[0] if len(pe) >= 26 else None
+            if not target or magic != (0x20B if target[1] == 64 else 0x10B):
+                raise WorkspaceError("native PE machine/class is inconsistent")
+            return {"isa": target[0], "bits": target[1], "import_library": False}
+        if not head.startswith(b"!<arch>\n"):
+            isa, bits, imported = header(head)
+            return {"isa": isa, "bits": bits, "import_library": imported}
+        offset, targets, imports, members = 8, set(), False, 0
+        while offset < size:
+            members += 1
+            if members > 4096:
+                raise WorkspaceError("native archive exceeds its bounded member closure")
+            stream.seek(offset)
+            member = stream.read(60)
+            if len(member) != 60 or member[58:] != b"`\n":
+                raise WorkspaceError("native archive member header is malformed")
+            try:
+                length = int(member[48:58].decode("ascii").strip())
+                name = member[:16].decode("ascii").strip()
+            except (ValueError, UnicodeError) as error:
+                raise WorkspaceError("native archive member identity is malformed") from error
+            start, end = offset + 60, offset + 60 + length
+            if length < 0 or end > size:
+                raise WorkspaceError("native archive member escapes its container")
+            if name not in {"/", "//", "/SYM64/", "__.SYMDEF", "__.SYMDEF SORTED"}:
+                if name.startswith("#1/"):
+                    try:
+                        name_size = int(name[3:])
+                    except ValueError as error:
+                        raise WorkspaceError("native BSD archive name is malformed") from error
+                    if not 0 < name_size <= min(length, 4096):
+                        raise WorkspaceError("native BSD archive name is outside its bound")
+                    stream.seek(start)
+                    try:
+                        name = stream.read(name_size).rstrip(b"\0").decode("ascii")
+                    except UnicodeError as error:
+                        raise WorkspaceError("native BSD archive name is malformed") from error
+                    start += name_size
+                if not offset + 60 <= start <= end:
+                    raise WorkspaceError("native archive name escapes its member")
+                stream.seek(start)
+                if name not in {"__.SYMDEF", "__.SYMDEF SORTED"}:
+                    isa, bits, imported = header(stream.read(min(64, end - start)))
+                    targets.add((isa, bits))
+                    imports |= imported
+            offset = end + length % 2
+        if offset != size or len(targets) != 1:
+            raise WorkspaceError("native archive member targets are absent, mixed or unresolved")
+        isa, bits = targets.pop()
+        return {"isa": isa, "bits": bits, "import_library": imports}
+
+
+def verify_native_product(path: Path, spec: ProductSpec) -> None:
+    if spec.role not in {"static_archive", "import_library", "runtime_shared", "executable", "native_object"}:
+        return
+    actual = native_product_axes(path)
+    if not isinstance(spec.axes, Mapping) or actual["isa"] != spec.axes.get("isa"):
+        raise WorkspaceError("native retained binary target differs from its accepted enforcement")
+    if spec.role in {"static_archive", "import_library"} and (
+            actual["import_library"] != (spec.role == "import_library")):
+        raise WorkspaceError("native archive/import-library role differs from its actual members")
+
+
+def verify_retained_product(run_dir: Path, generation_identity: str,
+                            ref: Mapping[str, Any], binding: NodeBinding) -> dict[str, Any]:
+    """Verify immutable generation/CAS custody without taking a writer or restoring mounts."""
+    identity = _hash(generation_identity)
+    generation = _json(safe_path(run_dir, f"artifacts/build/workspace/generations/{identity}.json"))
+    snapshot_path = safe_path(run_dir, _INPUT)
+    snapshot = _json(snapshot_path)
+    if (canonical_json_sha256(generation) != identity or generation.get("schema") != _SCHEMA
+            or not isinstance(generation.get("entries"), dict)
+            or not isinstance(generation.get("accepted"), dict)
+            or snapshot.get("schema") != _SCHEMA
+            or snapshot.get("source_identity") != binding.source_identity
+            or generation.get("input_identity") != hashlib.sha256(snapshot_path.read_bytes()).hexdigest()):
+        raise ReconstructionMiss("retained product has no matching immutable source generation")
+    WorkspaceWriter.validate_retained_entries(run_dir, generation["entries"])
+    accepted = generation["accepted"]
+    accepted_identities = {item["sha256"] for item in accepted.values()}
+    for node, product_ref in accepted.items():
+        product = WorkspaceWriter.read_retained_record(run_dir, product_ref)
+        if (product["binding"]["node_id"] != node
+                or product["binding"]["source_identity"] != binding.source_identity
+                or product.get("input_identity") != generation["input_identity"]
+                or not set(product["binding"]["upstream_products"]) <= accepted_identities):
+            raise ReconstructionMiss("retained generation contains a changed producer or upstream")
+        WorkspaceWriter._verify_entries(product["entries"], generation["entries"])
+    value = WorkspaceWriter.read_retained_record(run_dir, ref)
+    if value["binding"] != binding.view() or accepted.get(binding.node_id) != dict(ref):
+        raise ReconstructionMiss("retained product is not the exact generation-bound producer")
+    for item in value["products"]:
+        spec = ProductSpec(**item)
+        resolved = WorkspaceWriter._link_target(spec.path, generation["entries"])
+        entry = value["entries"].get(resolved)
+        if spec.role in {"static_archive", "import_library", "runtime_shared", "executable", "native_object"}:
+            if not isinstance(entry, Mapping) or entry.get("kind") != "file":
+                raise ReconstructionMiss("native retained product has no exact physical file")
+            verify_native_product(safe_path(run_dir, f"data/shared/objects/{entry['sha256']}"), spec)
     return value
 
 
@@ -515,6 +678,10 @@ class WorkspaceWriter:
         return manifest
 
     def _validate_entries(self, entries: Mapping[str, Any]) -> None:
+        self.validate_retained_entries(self.run_dir, entries)
+
+    @staticmethod
+    def validate_retained_entries(run_dir: Path, entries: Mapping[str, Any]) -> None:
         for relative, item in entries.items():
             _relative(relative)
             if relative.split("/")[0] not in {"target", "install"} or not isinstance(item, dict):
@@ -529,12 +696,12 @@ class WorkspaceWriter:
             if item["kind"] == "file":
                 try:
                     digest = _hash(item["sha256"])
-                    verify_reference(self.run_dir, {"path": f"data/shared/objects/{digest}",
+                    verify_reference(run_dir, {"path": f"data/shared/objects/{digest}",
                                                     "sha256": digest, "size_bytes": item["size_bytes"]})
                 except (KeyError, OSError, TypeError, ValueError) as error:
                     raise ReconstructionMiss(f"retained file is missing or changed: {relative}") from error
             elif item["kind"] == "symlink":
-                self._link_target(relative, entries)
+                WorkspaceWriter._link_target(relative, entries)
         if any(entries.get(name, {}).get("kind") != "directory" for name in ("target", "install")):
             raise ReconstructionMiss("manifest lacks target/install roots")
 
@@ -574,11 +741,15 @@ class WorkspaceWriter:
         return WorkspaceWriter._link_chain(relative, entries)[-1]
 
     def _record(self, ref: Mapping[str, Any]) -> dict[str, Any]:
+        return self.read_retained_record(self.run_dir, ref)
+
+    @staticmethod
+    def read_retained_record(run_dir: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
         try:
             identity = _hash(ref["sha256"])
             if ref["path"] != f"artifacts/build/workspace/products/{identity}.json":
                 raise ReconstructionMiss("accepted product reference is not durable")
-            value = _json(verify_reference(self.run_dir, ref))
+            value = _json(verify_reference(run_dir, ref))
             if (value.get("schema") != _SCHEMA or not isinstance(value.get("entries"), dict)
                     or not isinstance(value.get("binding"), dict)
                     or not isinstance(value.get("products"), list)):
@@ -634,6 +805,7 @@ class WorkspaceWriter:
             digest = entry["sha256"] if entry["kind"] == "file" else canonical_json_sha256(footprint)
             interfaces.append({"producer_build_unit_id": binding.node_id, "product_id": spec.product_id,
                                "kind": spec.kind, "interface": spec.interface, "variant": dict(spec.variant),
+                               "role": spec.role, "axes": spec.axes,
                                "path": spec.container_path, "sha256": digest,
                                "topology_id": binding.graph_identity, "recipe_revision": binding.recipe_identity,
                                "workspace_product": dict(verified.reference)})
@@ -725,6 +897,7 @@ class WorkspaceWriter:
             if not any(item["kind"] == "file" and (path == resolved or path.startswith(resolved + "/"))
                        for path, item in selected.items()):
                 raise WorkspaceError(f"expected product has no regular file bytes: {spec.path}")
+            verify_native_product(safe_path(self.workspace.root, resolved), spec)
         if not any(item["kind"] == "file" for item in selected.values()):
             raise WorkspaceError("product set contains no regular file bytes")
         attempt = state["attempt"]

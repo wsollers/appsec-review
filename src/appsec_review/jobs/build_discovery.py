@@ -774,26 +774,39 @@ def descriptor_inventory_paths(unit: Mapping[str, Any]) -> list[str]:
 
 
 def android_descriptor_facts(package: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Return bounded Android Gradle facts from accepted descriptor bytes."""
-    documents = package.get("documents", ())
-    texts = [str(item.get("content", "")) for item in documents if isinstance(item, Mapping)]
-    joined = "\n".join(texts)
-    if not re.search(
-            r"(?:id\s*\(\s*[\"']com\.android\.application[\"']\s*\)|id\s+[\"']com\.android\.application[\"'])",
-            joined):
+    """Keep Android facts in their physical declaring Gradle document, not pooled text."""
+    declarations = []
+    for document in package.get("documents", ()):
+        if PurePosixPath(document["path"]).name not in {"build.gradle", "build.gradle.kts"}:
+            continue
+        text = document.get("content", "")
+        plugin = re.search(
+            r"""(?:id\s*\(\s*["']com\.android\.(application|library)["']\s*\)|id\s+["']com\.android\.(application|library)["'])([^\n}]*)""",
+            text)
+        if not plugin or re.search(r"\bapply\s+false\b", plugin[3]):
+            continue
+        def observed(pattern):
+            match = re.search(pattern, text)
+            return match[1] if match else None
+        declarations.append({
+            "path": document["path"], "sha256": document["sha256"],
+            "plugin_id": "com.android." + (plugin[1] or plugin[2]),
+            "plugin_version": observed(r"""com\.android\.(?:application|library)["']\s*\)?\s*version\s*["']([^"']+)"""),
+            "compile_sdk": observed(r"\bcompileSdk(?:Version)?\s*(?:=\s*)?(\d+)\b"),
+            "target_sdk": observed(r"\btargetSdk(?:Version)?\s*(?:=\s*)?(\d+)\b"),
+            "build_tools": observed(r"""buildToolsVersion\s*(?:=\s*)?["']([^"']+)"""),
+        })
+    applications = [item for item in declarations if item["plugin_id"] == "com.android.application"]
+    if not applications:
         return None
-
-    def match(pattern: str) -> str | None:
-        found = re.search(pattern, joined)
-        return found.group(1) if found else None
-
+    fields = {}
+    for name in ("plugin_version", "compile_sdk", "target_sdk", "build_tools"):
+        values = {item[name] for item in applications}
+        fields[name] = next(iter(values)) if len(values) == 1 else None
     return {
         "kind": "android-gradle-application",
         "plugin_id": "com.android.application",
-        "plugin_version": match(r"com\.android\.application[\"']\s*\)?\s*version\s*[\"']([^\"']+)") or "declared-in-parent",
-        "compile_sdk": match(r"compileSdk\s*=\s*(\d+)"),
-        "target_sdk": match(r"targetSdk\s*=\s*(\d+)"),
-        "build_tools": match(r"buildToolsVersion\s*=\s*[\"']([^\"']+)"),
+        **fields, "declarations": declarations,
     }
 
 def _relative(value: Any, *, allow_dot: bool = True) -> bool:

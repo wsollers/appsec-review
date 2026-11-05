@@ -1,5 +1,89 @@
 # Target build topology and bounded iterations
 
+## Current graph/2 source contract
+
+The current source introduces `appsec-review/build-topology/2`, compiled once from the complete
+accepted bounded descriptor bundle. Physical path, raw SHA-256, declaring line/span, rule,
+subject and stage remain attached to facts/bindings. Recipe choices and model-proposed edges
+cannot change graph bytes. Conditional, candidate and unresolved relations do not become
+unconditional scheduling edges; active required unknowns block execution before caches.
+
+Selection intent is a typed policy, not an observation. Its OS, ISA, ABI, SDK, deployment,
+device/simulator and hardware-generation axes are distinct and nullable. The default policy
+requests Windows x64 for MSBuild/.NET and Linux x64 for supported native/Go/Rust systems;
+explicit unit/root rules can select another confirmed platform. Equal-specificity conflicts
+block. Project declarations, including 32-bit ones, remain in the graph without granting
+permission to select or build prohibited 32-bit code. Mobile hardware/device policy is not
+fabricated.
+
+`appsec-review/build-topology-refinement/1` binds the complete graph, source/bundle identity,
+selection policy, exact chosen recipe, releases, selected operations and compiler metadata.
+Accepted planning with a null recipe records `recipe_missing`, null recipe/operation bindings
+and unknown enforcement. Choosing a deterministic recipe, repairing it or selecting a promotion
+creates a new immutable accepted refinement; the original plan, graph and previous receipts
+are not rewritten. Accepted entries live in `data/build/topology/accepted-refinements.json`
+and resolve immutable artifacts beneath `artifacts/build/topology/`.
+
+```mermaid
+flowchart LR
+  B[Accepted whole descriptor bundle] --> G[Deterministic source graph/2]
+  G --> P[Accepted planning: recipe may be null]
+  P --> R[Chosen or changed exact recipe]
+  S[Typed selection and pinned metadata] --> A[New immutable accepted refinement]
+  R --> A
+  G --> A
+  A --> C[Shared admission guard]
+  C --> I[Image / repair / build cache]
+  C --> W[Workspace reconstruction / checkpoint / resume]
+  C --> D[Direct worker / JVM / Wasm / replay]
+  C --> M[Recipe-only promotion / product reuse]
+```
+
+Native enforcement has four closed proof kinds: selected MSBuild mapping, explicit compiler
+target, pinned compiler default and explicit Go target. A selected `.sln` member, its captured
+descriptor and requested operation determine managed/native classification; the driver's
+family does not. A Release solution can legitimately map to a Debug x64 project. Uncaptured
+members stay unknown. Managed x86 and applicable AnyCPU executable Prefer32Bit remain managed
+incompatibilities. Unresolved imports, options, wrappers or dynamic conditions taint proof.
+Compiler basenames, image labels, host hints and `-m64` alone never prove Linux native targets.
+
+Android declarations retain their declaring module/path. `apply false` is not plugin execution;
+literal settings modules and project-directory mappings scope module facts. D8/R8 and ABI filters
+are not native-compilation proof. Requested external-native stages require their own enforced
+target, not an Android family exemption.
+
+Retained products carry an exact role and seven-axis contract. Static archives, Windows import
+libraries, runtime DLLs, executables, native objects and metadata cannot substitute for each
+other. Byte-derived native roles and accepted producer/consumer axes are checked before reuse.
+ELF, PE/COFF and thin Mach-O machine/class headers are checked against the accepted ISA.
+Archive checks cover every bounded member, not only the first object or a `.lib` suffix.
+Unknown, mixed or 32-bit members cannot inherit an x64 label. Import libraries require positive
+import-member evidence; native symlink products resolve through their pinned generation.
+Direct generic/JVM/Wasm workers admit exact retained interfaces before cache access, and their
+cache keys include those interfaces. Selected replay verification reads immutable generation/CAS
+custody without acquiring a nested production writer or restoring trial products into production.
+Produced Go build settings and binary machine/class must agree with accepted target proof;
+unparseable or mismatched metadata fails before typed successful publication.
+
+Graph/1 remains readable and auditable; it grants neither graph/2 readiness nor authority to
+reuse old build receipts. Generic unrelated job caches retain their previous lifecycle.
+Content-keyed derivation memoization follows bounded raw-artifact integrity reads, never mutable
+pointer/mtime trust.
+
+**Verification limit:** this vertical source batch is authored, not yet unit-tested or live
+accepted. Real compiler-profile acquisition is absent; optional metadata intake and explicitly
+synthetic unit controls are not a probe or provisioning path. Unsupported compiler/wrapper
+closure remains a named unknown. The 295-unit/120-second offline budget and 16 MiB graph bound
+are requirements, not measured acceptance results. Later environment-analysis/proposal lifecycle
+work is not described here as delivered. The source-history receipts below describe the earlier
+implementation only.
+
+Native image derivation also requires prebound compiler/recipe metadata before image cache
+access; knowing only the base image does not authorize a newly derived image. Thin archives,
+fat/universal native containers, unsupported archive members and absent compiler closure remain
+explicit unsupported/unknown inputs. Go's build-facts intake remains ELF-only; Windows PE Go
+build settings are not silently synthesized. CGO needs separately closed C compiler/linker proof.
+
 ## Status and evidence boundary
 
 **SOURCE INTEGRATED; LIVE ACCEPTANCE UNESTABLISHED:** the initial source publication is

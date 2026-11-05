@@ -19,14 +19,13 @@
       "required": ["executable_graph"],
       "properties": {
         "executable_graph": {
-          "$comment": "Full graph shape is defined in build-topology.schema.json; the source-bound runtime validator also checks ownership, endpoints, products, cycles and structural identity.",
-          "type": "object",
-          "required": ["schema", "source_fingerprint", "topology_id", "nodes", "edges", "external_requirements", "coverage_gaps"],
-          "properties": {
-            "schema": {"const": "appsec-review/build-topology/1"},
-            "topology_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-          }
-        }
+          "oneOf": [
+            {"$ref": "build-topology-v2.schema.json"},
+            {"$ref": "build-topology.schema.json"}
+          ]
+        },
+        "evidence_bundle": {"type": "object"},
+        "planning_refinement": {"$ref": "build-topology-refinement.schema.json"}
       }
     },
     "prerequisites": {"type": "array", "items": {"type": "string"}},

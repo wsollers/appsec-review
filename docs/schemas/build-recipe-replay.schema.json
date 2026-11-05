@@ -14,6 +14,7 @@
     "status": {"enum": ["STOPPED", "BLOCKED", "FAILED", "UNFINISHED", "SUCCEEDED"]},
     "reason": {"type": ["string", "null"]},
     "intent": {"$ref": "#/$defs/reference"},
+    "topology_refinement": {"$ref": "#/$defs/reference"},
     "cleanup_complete": {"type": "boolean"},
     "binding": {"type": "object"},
     "generation_identity": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -42,7 +43,7 @@
   "allOf": [
     {
       "if": {"properties": {"status": {"enum": ["SUCCEEDED", "FAILED", "UNFINISHED"]}}},
-      "then": {"required": ["intent", "cleanup_complete", "binding", "generation_identity", "products", "verified_interfaces", "commands"]}
+      "then": {"required": ["intent", "topology_refinement", "cleanup_complete", "binding", "generation_identity", "products", "verified_interfaces", "commands"]}
     },
     {
       "if": {"properties": {"status": {"const": "SUCCEEDED"}}},

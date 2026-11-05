@@ -14,6 +14,15 @@ The upgraded job JSON contract, native scanner provenance, migration rules, and 
 Schema are documented in [job interchange](docs/architecture/job-interchange.md).
 Admission, execution, and coverage are separate; scanner observations are not confirmed findings.
 
+Build discovery now separates the recipe-independent whole-bundle **graph/2** from immutable,
+recipe-bound selection/refinement receipts. Null recipes remain accepted planning unknowns, not
+execution authority. Windows/Linux x64 intent and project-declared mobile facts do not substitute
+for compiler, selected-member, product-role or effective-input proof. Cached builds and resumed
+work must re-admit those receipts before reuse or reconstruction. See
+[build topology and iterations](docs/architecture/build-topology-and-iterations.md).
+This source change does not establish live acceptance, acquired compiler metadata, new images,
+builder provisioning, or the later build-environment-analysis lifecycle.
+
 ## Contents
 
 - [What you need](#what-you-need)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 import hashlib
+import re
 from pathlib import Path, PurePosixPath
 import xml.etree.ElementTree as ET
 from typing import Any
@@ -93,6 +94,74 @@ def project_topology(workspace: Path) -> tuple[list[dict[str, Any]], list[str], 
             platform_gaps.append(
                 f"{relative}: Windows-only or .NET Framework target is not executable in the Linux build boundary")
     return projects, gaps, platform_gaps
+
+
+def selected_project_topology(run_root: Path, action: Mapping[str, Any], *,
+                             execution_os: str = "linux") -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    from appsec_review.jobs.build_topology import _condition_applies, refinement_unit
+    from appsec_review.jobs.build_topology_artifacts import load_refinement
+    from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
+    plan = load_accepted_plan(run_root)
+    graph = plan["build_topology"]["executable_graph"]
+    if graph["schema"] != "appsec-review/build-topology/2":
+        return [], ["legacy graph needs selected-member replanning"], []
+    refinement = (load_refinement(run_root, action["topology_refinement"], graph=graph)
+                  if action.get("topology_refinement") else plan["build_topology"]["planning_refinement"])
+    selected = refinement_unit(graph, refinement, action["build_unit_id"], action.get("recipe"))
+    members = {member["path"]: member for operation in selected["operations"]
+               for member in operation["selected_members"]}
+    if not members:
+        members = {marker["path"]: {"path": marker["path"],
+                                   "configuration": action.get("build_variant", {}).get("configuration"),
+                                   "platform": "x64" if selected["selection"]["required_axes"]["isa"] == "x86_64" else None,
+                                   "captured": True}
+                   for marker in action.get("markers", [])
+                   if PurePosixPath(marker["path"]).suffix.lower() in _PROJECT_SUFFIXES}
+    projects, gaps, platform_gaps = [], [], []
+    for path, member in sorted(members.items()):
+        if not member["captured"]:
+            gaps.append(f"{path}: selected solution member descriptor was not captured")
+            continue
+        if PurePosixPath(path).suffix.lower() not in _PROJECT_SUFFIXES:
+            continue
+        facts = [fact for fact in graph["facts"] if fact["path"] == path]
+        values = {}
+        references, packages = [], []
+        for fact in facts:
+            applies = _condition_applies(fact["condition"], member["configuration"], member["platform"])
+            if applies is None:
+                gaps.append(f"{path}:{fact['line']}: selected property applicability is unresolved")
+                continue
+            if not applies:
+                continue
+            if fact["predicate"] == "ProjectReference":
+                references.append(fact["value"].get("Include"))
+            elif fact["predicate"] == "PackageReference":
+                packages.append({"name": fact["value"].get("Include"),
+                                 "version": fact["value"].get("Version")})
+            elif isinstance(fact["value"], str):
+                values[fact["predicate"]] = fact["value"]
+        frameworks = [framework.strip() for key in ("TargetFramework", "TargetFrameworks", "TargetFrameworkVersion")
+                      for framework in values.get(key, "").split(";") if framework.strip()]
+        descriptors = [fact for fact in facts if fact["predicate"] == "project_descriptor"]
+        sdk = str(descriptors[0]["value"].get("sdk") or "") if descriptors else ""
+        windows_only = any(
+            re.match(r"^(?:v4|net4)", framework, re.IGNORECASE) or "-windows" in framework.lower()
+            for framework in frameworks) or "windowsdesktop" in sdk.lower()
+        runtime_ids = [item for key in ("RuntimeIdentifier", "RuntimeIdentifiers")
+                       for item in values.get(key, "").split(";") if item]
+        windows_only = windows_only or any(item.startswith("win-") for item in runtime_ids)
+        projects.append({"path": path, "sha256": descriptors[0]["sha256"] if descriptors else None,
+                         "sdk": sdk, "frameworks": sorted(set(frameworks)),
+                         "project_references": sorted(set(value for value in references if value)),
+                         "package_references": packages, "runtime_identifiers": runtime_ids,
+                         "windows_only": windows_only, "selected_configuration": member["configuration"],
+                         "selected_platform": member["platform"], "operation_kinds": sorted({
+                             operation["kind"] for operation in selected["operations"]})})
+        if windows_only and execution_os != "windows":
+            platform_gaps.append(f"{path}: selected Windows-only managed target lacks Windows execution capability")
+    gaps.extend(reason for operation in selected["operations"] for reason in operation["reasons"])
+    return projects, sorted(set(gaps)), sorted(set(platform_gaps))
 
 
 def artifact_kind(path: Path) -> str | None:

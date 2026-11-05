@@ -13,6 +13,18 @@ workspace. The [topology and bounded-iteration architecture](../architecture/bui
 records the initial Windows/canonical WSL source publication, tested code and evidence limits.
 Image preparation is not compiler success, deployment, or a completed target review.
 
+**Graph/2 source admission:** `plan.load_recipes` publishes a new immutable accepted refinement
+after choosing deterministic, inferred or selected promoted recipes. Native image admission
+precedes resolver creation and image/repair cache access. Returned images must match the pinned
+compiler metadata; an image tag or family label is not proof. Missing recipe, selected member,
+effective compiler closure or required interface produces a named blocker. Recipe-null planning
+remains valid, while graph/1 builds require accepted replanning. No metadata collector, builder
+provisioning, new deployment or live acceptance is implied by this source update.
+An image-changing recipe without matching prebound compiler/recipe metadata is blocked before
+image derivation/cache access, even if its base image is known. Project-declared Android/iOS
+scope does not supply an ISA, SDK, deployment target, device kind or hardware generation;
+native stages still need explicit supported target proof, and 32-bit proof remains incompatible.
+
 ## Steps
 
 The configured topology must be exactly `plan`, `image`, `static_dispatch`, `probe`,

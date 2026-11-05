@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/build-topology-refinement/1",
+  "title": "Immutable whole-bundle selection and recipe refinement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "graph_identity", "bundle_identity", "source_fingerprint", "rules", "policy", "environment", "profiles", "releases", "units", "refinement_id"],
+  "properties": {
+    "schema": {"const": "appsec-review/build-topology-refinement/1"},
+    "graph_identity": {"$ref": "#/$defs/hash"},
+    "bundle_identity": {"$ref": "#/$defs/hash"},
+    "source_fingerprint": {"type": "string", "minLength": 1},
+    "rules": {"const": "source-scoped-topology/2"},
+    "policy": {"$ref": "build-selection-policy.schema.json"},
+    "environment": {"type": ["object", "null"]},
+    "profiles": {"type": ["object", "array", "null"]},
+    "releases": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+    "units": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["build_unit_id", "selection", "recipe_digest", "operations", "enforcement", "blockers"],
+        "properties": {
+          "build_unit_id": {"type": "string", "minLength": 1},
+          "selection": {"type": "object"},
+          "recipe_digest": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]},
+          "operations": {"type": "array", "items": {"type": "object"}},
+          "enforcement": {"type": "array", "items": {"$ref": "native-target-enforcement.schema.json"}},
+          "blockers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        }
+      }
+    },
+    "refinement_id": {"$ref": "#/$defs/hash"}
+  },
+  "$comment": "Runtime additionally requires exact one-to-one whole-graph coverage, source resolving facts, selected-operation equality, recipe digest equality and complete rederivation before accepted indexing.",
+  "$defs": {"hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

@@ -1045,6 +1045,25 @@ artifact_count_limit = 10000
 force_buildability_probe = false
 repair_attempts = 3
 
+[jobs.job_project_build.settings.build_selection]
+schema = "appsec-review/build-selection-policy/1"
+policy_id = "confirmed-x64/1"
+ambiguity_policy = "block"
+rules = [
+  { selectors = { build_system = "msbuild" }, axes = { os = "windows", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "vcbuild" }, axes = { os = "windows", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "dotnet" }, axes = { os = "windows", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "make" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "autotools" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "cmake" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "direct-native" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "go" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "cargo" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { build_system = "rustc" }, axes = { os = "linux", isa = "x86_64" }, provenance = "confirmed-user-intent" },
+  { selectors = { declared_platform = "android" }, axes = { os = "android" }, provenance = "confirmed-project-declared-mobile-scope" },
+  { selectors = { declared_platform = "ios" }, axes = { os = "ios" }, provenance = "confirmed-project-declared-mobile-scope" },
+]
+
 [jobs.job_project_build.settings.unity]
 enabled = false
 
