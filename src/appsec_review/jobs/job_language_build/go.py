@@ -511,6 +511,32 @@ def verify_target_facts(facts: Mapping[str, Any], selected: Mapping[str, Any],
         raise ValueError("produced Go binary machine/class differs from accepted enforcement")
 
 
+def admit_build_outputs(run_root: Path, artifacts: Sequence[dict[str, Any]],
+                        selected: Mapping[str, Any], recipe: Mapping[str, Any]) -> dict[str, Any]:
+    metadata, gaps = [], []
+    for artifact in artifacts:
+        if artifact.get("kind") != "executable":
+            continue
+        try:
+            facts = build_facts(run_root / str(artifact["path"]))
+        except (OSError, ValueError, struct.error) as error:
+            artifact["go_build_status"] = "unparsed"
+            gaps.append(f"{artifact['workspace_path']}: Go build metadata was not parseable: {error}")
+            continue
+        try:
+            verify_target_facts(facts, selected, recipe)
+        except ValueError as error:
+            artifact["go_build_status"] = "target_mismatch"
+            gaps.append(f"{artifact['workspace_path']}: Go target enforcement failed: {error}")
+            continue
+        artifact.update(go_build_status="resolved", build_id_sha256=facts["build_id_sha256"],
+                        go_build_parser=facts["parser"])
+        metadata.append({"workspace_path": artifact["workspace_path"],
+                         "sha256": artifact["sha256"], **facts})
+    return {"terminal_status": "FAILED" if gaps else "SUCCEEDED", "gaps": gaps,
+            "artifacts": [] if gaps else list(artifacts), "build_metadata": [] if gaps else metadata}
+
+
 def parse_build_id_note(data: bytes) -> str:
     """Return the Go build ID from one complete `.note.go.buildid` section."""
     if len(data) > _NOTE_LIMIT:

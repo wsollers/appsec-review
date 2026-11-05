@@ -51,6 +51,21 @@ def _profile():
             "provenance": {"origin": "explicitly-synthetic-unit-local", "revision": "control/1"}}
 
 
+def _go(environment):
+    unit = _native()
+    text = "module synthetic.invalid/control\n\ngo 1.23\n"
+    document = {"path": "go.mod", "content": text,
+                "sha256": hashlib.sha256(text.encode()).hexdigest(), "size_bytes": len(text.encode())}
+    unit.update(build_unit_id="go-control", family="go", build_system="go",
+                markers=[{key: document[key] for key in ("path", "sha256", "size_bytes")}],
+                descriptor_package={"documents": [document], "bounds": {}, "gaps": []})
+    unit["recipe"].update(build_unit_id="go-control", image_profile="go",
+                          environment=environment, dependency_files=["go.mod"],
+                          build_commands=[["go", "build", "-o", "build/control", "."]],
+                          expected_outputs=["build/control"])
+    return unit
+
+
 def test_null_recipe_planning_is_unknown_without_execution_authority():
     unit = _native()
     unit["recipe"] = None
@@ -357,3 +372,160 @@ def test_unselected_32bit_runtime_identifier_does_not_block_selected_managed_mem
     bound = refine_build_topology(graph, [unit], policy=WINDOWS_SELECTION)["units"][0]
     assert {operation["kind"] for operation in bound["operations"]} == {"managed_compile"}
     assert not any("runtime" in reason.lower() for reason in bound["blockers"])
+
+
+@pytest.mark.parametrize("captured", [True, False])
+def test_gradle_sibling_settings_binds_only_captured_requested_modules(captured):
+    texts = {
+        "build.gradle.kts": 'plugins { id("com.android.application") apply false }\n',
+        "settings.gradle.kts": 'include(":app")\n',
+    }
+    if captured:
+        texts["app/build.gradle.kts"] = 'plugins { id("com.android.application") }\n'
+    documents = [{"path": path, "content": text, "sha256": hashlib.sha256(text.encode()).hexdigest(),
+                  "size_bytes": len(text.encode())} for path, text in texts.items()]
+    unit = _native()
+    unit.update(family="java", build_system="gradle",
+                descriptor_facts={"kind": "android-gradle-application"},
+                markers=[{key: documents[0][key] for key in ("path", "sha256", "size_bytes")}],
+                descriptor_package={"documents": documents, "bounds": {}, "gaps": []})
+    unit["recipe"].update(image_profile="android", dependency_files=list(texts),
+                          build_commands=[["gradle", "--no-daemon", ":app:assembleDebug"]],
+                          expected_outputs=["app/build"])
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-gradle-settings")
+    policy = {
+        "schema": "appsec-review/build-selection-policy/1", "policy_id": "synthetic-android/1",
+        "ambiguity_policy": "block",
+        "rules": [{"selectors": {"declared_platform": "android"}, "axes": {"os": "android"},
+                   "provenance": "synthetic-inline-intent"}],
+    }
+    bound = refine_build_topology(graph, [unit], policy=policy)["units"][0]
+    settings_ids = {fact["fact_id"] for fact in graph["facts"] if fact["path"] == "settings.gradle.kts"}
+    assert any(binding["fact_id"] in settings_ids for binding in graph["bindings"])
+    if captured:
+        assert any(binding["subject"] == ":app" and binding["stage"] == "module_declaration"
+                   for binding in graph["bindings"])
+        assert {operation["kind"] for operation in bound["operations"]} == {
+            "managed_compile", "bytecode_transform"}
+        assert bound["enforcement"] == [] and bound["blockers"] == []
+    else:
+        assert "requested_gradle_module_uncaptured" in bound["blockers"]
+
+
+@pytest.mark.parametrize("platform", ["windows", "linux"])
+def test_explicit_go_cgo0_target_is_proven_only_for_applicable_selection(platform):
+    unit = _go({"GOOS": platform, "GOARCH": "amd64", "CGO_ENABLED": "0"})
+    before = copy.deepcopy(unit)
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-go-preflight")
+    policy = {
+        "schema": "appsec-review/build-selection-policy/1", "policy_id": "synthetic-go/1",
+        "ambiguity_policy": "block",
+        "rules": [{"selectors": {"build_system": "go"}, "axes": {"os": platform, "isa": "x86_64"},
+                   "provenance": "synthetic-explicit-platform-intent"}],
+    }
+    bound = refine_build_topology(graph, [unit], policy=policy)["units"][0]
+    assert bound["blockers"] == []
+    assert len(bound["enforcement"]) == 1
+    proof = bound["enforcement"][0]
+    assert proof["proof_kind"] == "go_explicit_target" and proof["status"] == "proven"
+    assert proof["proven_axes"]["os"] == platform and proof["proven_axes"]["isa"] == "x86_64"
+    assert proof["recipe_digest"] == bound["recipe_digest"] and proof["operation_binding"]
+    assert proof["unresolved_inputs"] == []
+    assert unit == before
+
+
+@pytest.mark.parametrize("key,value,status,reason", [
+    ("GOOS", None, "unknown", "native_target_axis_unknown:os"),
+    ("GOOS", "windows", "incompatible", None),
+    ("GOARCH", None, "unknown", "native_target_axis_unknown:isa"),
+    ("GOARCH", "386", "incompatible", None),
+    ("CGO_ENABLED", None, "unknown", "explicit_cgo_mode_missing"),
+    ("CGO_ENABLED", "invalid", "unknown", "explicit_cgo_mode_missing"),
+    ("CGO_ENABLED", "1", "unknown", "cgo_c_compiler_enforcement_required"),
+])
+def test_go_missing_or_conflicting_target_and_unproven_cgo_never_admit(key, value, status, reason):
+    environment = {"GOOS": "linux", "GOARCH": "amd64", "CGO_ENABLED": "0"}
+    if value is None:
+        del environment[key]
+    else:
+        environment[key] = value
+    unit = _go(environment)
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-go-negative")
+    policy = {
+        "schema": "appsec-review/build-selection-policy/1", "policy_id": "synthetic-go-linux/1",
+        "ambiguity_policy": "block",
+        "rules": [{"selectors": {"build_system": "go"}, "axes": {"os": "linux", "isa": "x86_64"},
+                   "provenance": "synthetic-explicit-platform-intent"}],
+    }
+    bound = refine_build_topology(graph, [unit], policy=policy)["units"][0]
+    assert "unenforced_native_target" in bound["blockers"]
+    assert bound["enforcement"]
+    assert all(proof["proof_kind"] == "go_explicit_target" and proof["status"] == status
+               for proof in bound["enforcement"])
+    if reason:
+        assert all(reason in proof["unresolved_inputs"] for proof in bound["enforcement"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("GOOS", "windows"), ("GOARCH", "386"), ("CGO_ENABLED", "1"),
+    ("GOOS", None), ("GOARCH", None), ("CGO_ENABLED", None),
+    ("isa", "arm64"), ("bits", 32),
+])
+def test_go_produced_facts_match_every_accepted_setting_and_machine_axis(field, value):
+    from appsec_review.jobs.job_language_build.go import verify_target_facts
+    facts = {"build_settings": {"GOOS": "linux", "GOARCH": "amd64", "CGO_ENABLED": "0"},
+             "binary_target": {"format": "elf", "isa": "x86_64", "bits": 64}}
+    recipe = _go(dict(facts["build_settings"]))["recipe"]
+    selected = {"enforcement": [{"proof_kind": "go_explicit_target", "status": "proven"}]}
+    verify_target_facts(facts, selected, recipe)
+    if field in {"isa", "bits"}:
+        facts["binary_target"][field] = value
+    elif value is None:
+        del facts["build_settings"][field]
+    else:
+        facts["build_settings"][field] = value
+    with pytest.raises(ValueError, match="differs from accepted enforcement"):
+        verify_target_facts(facts, selected, recipe)
+
+
+@pytest.mark.parametrize("scenario", ["valid", "settings", "machine", "pe"])
+def test_go_actual_output_admission_rejects_mismatch_before_typed_success(tmp_path, scenario):
+    from appsec_review.jobs.job_language_build.go import admit_build_outputs
+    from tests.capture_fakes import go_build_info, go_elf
+    module = ("path\tsynthetic.invalid/control\nmod\tsynthetic.invalid/control\t(devel)\t\n"
+              "build\tGOOS=linux\nbuild\tGOARCH=amd64\nbuild\tCGO_ENABLED=0\n")
+    if scenario == "settings":
+        module = module.replace("GOARCH=amd64", "GOARCH=386")
+    raw = bytearray(go_elf(build_info=go_build_info(module_text=module))[0])
+    if scenario == "machine":
+        struct.pack_into("<H", raw, 18, 183)
+    elif scenario == "pe":
+        raw = bytearray(b"MZ" + bytes(126))
+    path = tmp_path / "synthetic-go-output"
+    path.write_bytes(raw)
+    artifacts = [{"kind": "executable", "path": path.name, "workspace_path": "build/control",
+                  "sha256": hashlib.sha256(raw).hexdigest()}]
+    platform = "windows" if scenario == "pe" else "linux"
+    unit = _go({"GOOS": platform, "GOARCH": "amd64", "CGO_ENABLED": "0"})
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-go-output")
+    policy = {
+        "schema": "appsec-review/build-selection-policy/1", "policy_id": "synthetic-go-output/1",
+        "ambiguity_policy": "block",
+        "rules": [{"selectors": {"build_system": "go"}, "axes": {"os": platform, "isa": "x86_64"},
+                   "provenance": "synthetic-inline-intent"}],
+    }
+    selected = refine_build_topology(graph, [unit], policy=policy)["units"][0]
+    assert selected["blockers"] == []
+    recipe = unit["recipe"]
+    result = admit_build_outputs(tmp_path, artifacts, selected, recipe)
+    if scenario == "valid":
+        assert result["terminal_status"] == "SUCCEEDED" and result["gaps"] == []
+        assert len(result["artifacts"]) == 1 and len(result["build_metadata"]) == 1
+        assert result["build_metadata"][0]["binary_target"] == {
+            "format": "elf", "bits": 64, "isa": "x86_64"}
+    else:
+        assert result["terminal_status"] == "FAILED"
+        assert result["artifacts"] == [] and result["build_metadata"] == []
+        assert len(result["gaps"]) == 1
+        assert artifacts[0]["go_build_status"] == ("unparsed" if scenario == "pe" else "target_mismatch")
+        assert ("metadata was not parseable" if scenario == "pe" else "target enforcement failed") in result["gaps"][0]

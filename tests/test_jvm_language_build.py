@@ -261,6 +261,9 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     }
     plan = load_accepted_plan(run_root)
     inferred_recipe = plan["build_topology"]["build_actions"][0]["recipe"]
+    graph = plan["build_topology"]["executable_graph"]
+    assert any(binding["subject"] == ":app" and binding["stage"] == "module_declaration"
+               for binding in graph["bindings"])
     dispatch = load_accepted_builds(run_root)["build_dispatches"][0]
     assert dispatch["recipe"]["image_profile"] == "android"
     assert dispatch["recipe"] == inferred_recipe

@@ -1368,28 +1368,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     if family == "go":
         # Build facts are read by the bounded in-repository parser; no produced file is executed
         # or handed to a toolchain command.
-        for artifact in artifacts:
-            if artifact.get("kind") != "executable":
-                continue
-            try:
-                facts = go.build_facts(unit.job.run_root / str(artifact["path"]))
-            except (OSError, ValueError, struct.error) as exc:
-                artifact["go_build_status"] = "unparsed"
-                gaps.append(f"{artifact['workspace_path']}: Go build metadata was not parseable: {exc}")
-                go_target_failure = True
-                continue
-            artifact.update(go_build_status="resolved", build_id_sha256=facts["build_id_sha256"],
-                            go_build_parser=facts["parser"])
-            from .go import verify_target_facts
-            try:
-                verify_target_facts(facts, selected_target, recipe)
-            except ValueError as error:
-                go_target_failure = True
-                artifact["go_build_status"] = "target_mismatch"
-                gaps.append(f"{artifact['workspace_path']}: Go target enforcement failed: {error}")
-                continue
-            build_metadata.append({"workspace_path": artifact["workspace_path"],
-                                   "sha256": artifact["sha256"], **facts})
+        admission = go.admit_build_outputs(unit.job.run_root, artifacts, selected_target, recipe)
+        go_target_failure = admission["terminal_status"] == "FAILED"
+        artifacts, build_metadata = admission["artifacts"], admission["build_metadata"]
+        gaps.extend(admission["gaps"])
     package_members: list[dict[str, Any]] = []
     if family == "python":
         for artifact in artifacts:

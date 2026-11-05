@@ -814,30 +814,44 @@ def test_project_build_prepares_dispatch_without_a_second_build_or_fake_probe(tm
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
         target_root=target, source_fingerprint=fingerprint)
-    calls = []
+    calls, image_resolver_calls = [], []
+
+    def image_resolver(unit):
+        image_resolver_calls.append(unit.unit_id)
+        return FakeImageResolver()
+
     job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
-                         image_resolver_factory=lambda unit: FakeImageResolver())
+                         image_resolver_factory=image_resolver)
     outcome = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                              run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
+    # These descriptors/recipes carry no closed compiler target proof. Preparation must
+    # publish the exact block without deriving an image or inventing a probe/build.
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
     assert accepted["probe_artifact_count"] == 0
     assert accepted["probe_receipts"] == []
     assert accepted["execution_mode"] == "iterative"
     assert accepted["execution_graph"]["source_fingerprint"] == fingerprint
-    assert {item["family"] for item in accepted["build_dispatches"]} == {"native", "rust"}
+    assert accepted["build_dispatches"] == []
     assert {item["family"] for item in accepted["static_dispatches"]
             if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
-    assert {item["workflow"] for item in accepted["build_dispatches"]} == {"lang_jobflow_build"}
+    prepared = []
     for family in ("native", "rust"):
         image_entry = accepted["images"][family]["entries"][0]
-        assert image_entry["attempt_identity"] and image_entry["command_identity"]
-        assert all(stream["sha256"] and stream["capture_limit"]
-                   for stream in image_entry["streams"].values())
-    assert calls == []
-    assert all(item["preparation_identity"] and "probe_identity" not in item
-               for item in accepted["build_dispatches"])
-    native = next(item for item in accepted["build_dispatches"] if item["family"] == "native")
+        action = image_entry["action"]
+        prepared.append(action)
+        assert image_entry["terminal_status"] == "BLOCKED" and image_entry["image"] is None
+        assert image_entry["gaps"] == [
+            f"{action['build_unit_id']}: build execution blocked: unenforced_native_target"]
+        assert action["executable"] is False
+        assert action["topology_refinement"]
+    assert sorted(accepted["gaps"]) == sorted(
+        f"{action['build_unit_id']}: build execution blocked: unenforced_native_target"
+        for action in prepared)
+    assert calls == [] and image_resolver_calls == []
+    assert all("preparation_identity" not in item and "probe_identity" not in item
+               for item in prepared)
+    native = next(item for item in prepared if item["family"] == "native")
     assert native["recipe_provenance"] == "deterministic-cmake-marker"
     assert native["recipe"]["system_packages"] == []
     assert native["descriptor_facts"] == {}

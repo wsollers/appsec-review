@@ -744,6 +744,13 @@ def _scoped_documents(unit, facts_by_document):
     available = {item["path"] for item in unit["descriptor_package"]["documents"]}
     scoped = {marker["path"]: {("driver", marker["path"])} for marker in unit.get("markers", [])
               if marker["path"] in available}
+    if unit["build_system"] == "gradle":
+        for marker in unit.get("markers", []):
+            parent = PurePosixPath(marker["path"]).parent
+            for name in ("settings.gradle", "settings.gradle.kts"):
+                path = str(parent / name)
+                if path in available:
+                    scoped.setdefault(path, set()).add(("driver", path))
     pending = [(path, role, subject) for path, scopes in scoped.items() for role, subject in scopes]
     while pending:
         path, inherited_role, inherited_subject = pending.pop()

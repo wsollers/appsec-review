@@ -550,8 +550,16 @@ def test_unsupported_and_unresolved_iteration_receipts_survive_publication(tmp_p
     receipts = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
     assert set(receipts) == {"native", "unsupported", "unresolved"}
     assert not calls
-    assert receipts["unsupported"]["gaps"] == ["unsupported"]
-    assert receipts["unresolved"]["gaps"] == ["unresolved"]
+    assert receipts["unsupported"]["gaps"] == [
+        "native build unit at unsupported was not built: job_project_build reported BLOCKED: "
+        "unavailable_native_project_toolchain: accepted Visual C++ descriptor requires "
+        "MSBuild/VCBuild capability not supplied by the Linux native profile; Windows platform unproven"]
+    assert receipts["unresolved"]["gaps"] == [
+        "native build unit at unresolved was not built: job_project_build reported BLOCKED: "
+        "build execution blocked: active_coverage_gap:unresolved_ownership; unenforced_native_target"]
+    assert receipts["native"]["gaps"] == [
+        "native build unit at native was not built: job_project_build reported BLOCKED: "
+        "build execution blocked: unenforced_native_target"]
     assert all(item["terminal_status"] == "BLOCKED" and not item["artifacts"]
                and not item["commands"] for item in receipts.values())
     GraphRunner(config, [build_artifact_index()]).run(

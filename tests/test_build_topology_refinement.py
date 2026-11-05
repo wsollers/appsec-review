@@ -59,7 +59,7 @@ name = "synthetic native cache producer"
         atomic_json(path, plan)
         return {"artifact": reference(context.job.run_root, path), "terminal_status": "SUCCEEDED"}
 
-    job = Job("job_target_analysis_plan", "synthetic source producer", lambda _: {},
+    job = Job("job_target_analysis_plan", "synthetic accepted source producer", lambda _: {},
               units=(Unit("plan_acceptance.publish_handoff", publish),))
     outcome = runner.run(job, source_fingerprint="synthetic-source")
     root = config.runtime.runs_dir / outcome["status"]["run_id"]
@@ -75,7 +75,7 @@ def native_cache_job(action, calls):
     def output(_):
         calls.append("executed")
         return {"dispatches": [copy.deepcopy(action)], "terminal_status": "SUCCEEDED"}
-    return Job("job_project_build", "synthetic native cache", lambda _: {},
+    return Job("job_project_build", "synthetic native cache producer", lambda _: {},
                units=(Unit("build.native", output),))
 
 

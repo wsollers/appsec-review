@@ -9,6 +9,12 @@ accepted settings/binary machine/class fails typed successful publication. Graph
 remain inspection-only. These controls are authored source, not a claim of unit/live acceptance
 or acquired native compiler metadata.
 
+Native/Rust recipes without closed target proof now publish a precise preparation block,
+not a ready dispatch; language publication preserves that upstream reason and its empty
+commands/artifacts. The same applies to Visual C++ without an admitted MSBuild/VCBuild
+capability. Captured Gradle settings beside the selected driver bind declared modules;
+a captured Android managed/bytecode module is not blanket-classified as native.
+
 Product-dependent generic/JVM/Wasm execution requires the admitted shared workspace and exact
 retained producer interfaces; those interfaces also participate in private cache identities.
 Retained native bytes are checked for machine/class and bounded archive-member closure, in
