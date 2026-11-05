@@ -59,7 +59,8 @@ from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.build_iterations import (
-    BuildIterations, IterationOutcome, durable_artifacts, install_inventory, product_specs, read_reference,
+    LANGUAGE_RECEIPT_SCHEMA, BuildIterations, IterationOutcome, durable_artifacts, install_inventory,
+    product_specs, read_reference,
 )
 from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec, WorkspacePaths
 from appsec_review.observability.spans import operation_phase
@@ -68,7 +69,7 @@ from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
-RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
+RECEIPT_SCHEMA = LANGUAGE_RECEIPT_SCHEMA
 EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/4+" + POLICY_IDENTITY
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (

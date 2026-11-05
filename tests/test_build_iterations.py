@@ -19,7 +19,7 @@ VARIANT = {"configuration": "release", "target_arch": "x86_64", "execution_role"
 RELEASES = {"platform": "fixture/1", "build_toolchain": "fixture/1", "validation": "fixture/1"}
 
 
-def fixture(tmp_path, *, independent=False):
+def fixture(tmp_path, *, independent=False, ambiguous=False):
     source = tmp_path / "source"
     documents = {
         "a/CMakeLists.txt": "project(a)\nadd_library(A STATIC a.c)\n",
@@ -36,6 +36,12 @@ def fixture(tmp_path, *, independent=False):
         documents.update({
             "later-independent/CMakeLists.txt": "project(C)\nadd_executable(C c.c)\n",
             "later-independent/c.c": "int main(void) { return 0; }\n",
+        })
+    if ambiguous:
+        documents.update({
+            "unsupported/legacy.vcproj": '<VisualStudioProject ProjectType="Visual C++"/>\n',
+            "unresolved/CMakeLists.txt": "add_library(C STATIC c.c)\n",
+            "unresolved/c.c": "int c(void) { return 0; }\n",
         })
     files = []
     for relative, content in documents.items():
@@ -134,6 +140,22 @@ def test_missing_release_evidence_never_dispatches_or_reuses(tmp_path):
     worker.assert_not_called()
     assert all(item["terminal_status"] == "BLOCKED" for item in result["receipts"])
     assert any("missing release evidence" in gap for gap in result["gaps"])
+
+
+@pytest.mark.parametrize("family", ["native", "dotnet", "go", "java", "node", "php", "python", "ruby"])
+@pytest.mark.parametrize("failed", [False, True])
+def test_gap_receipt_preserves_language_contract_and_negative_evidence(tmp_path, family, failed):
+    source, _documents, run, graph, dispatches = fixture(tmp_path)
+    dispatches[0]["family"] = family
+    scheduler = controller(source, run, graph, dispatches)
+    receipt = scheduler._gap(dispatches[0]["build_unit_id"], "unavailable prerequisite", failed=failed)
+    assert receipt == {
+        "schema": "appsec-review/language-build-receipt/1",
+        "source_fingerprint": graph["source_fingerprint"],
+        "build_unit_id": dispatches[0]["build_unit_id"], "family": family,
+        "root": dispatches[0]["root"], "terminal_status": "FAILED" if failed else "BLOCKED",
+        "artifacts": [], "commands": [], "gaps": ["unavailable prerequisite"],
+    }
 
 
 @pytest.mark.parametrize("terminal", ["BLOCKED", "SKIPPED_POLICY"])

@@ -3,7 +3,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+import shutil
 import sqlite3
+from unittest.mock import Mock
 
 import pytest
 
@@ -243,7 +245,8 @@ def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], acc
     handoff["outputs"]["acceptance.publish_handoff"]["artifact"] = identity
     handoff["artifacts"] = [
         identity, handoff["outputs"]["acceptance.publish_handoff"]["index_manifest"],
-        *(receipt["workspace_manifest"] for receipt in receipts),
+        *(receipt["workspace_manifest"] for receipt in receipts
+          if isinstance(receipt.get("workspace_manifest"), dict)),
         *(receipt["protected_compile_commands"] for receipt in receipts
           if isinstance(receipt.get("protected_compile_commands"), dict)),
     ]
@@ -254,6 +257,181 @@ def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], acc
     write_fixture_handoff(run_root, handoff_path, handoff)
     atomic_json(latest, {"handoff_path": handoff_path.relative_to(run_root).as_posix(),
                          "handoff_sha256": file_sha256(handoff_path)})
+
+
+@pytest.mark.parametrize("scenario", [
+    "missing-dispatch", "missing-releases", "missing-image", "blocked-dependency",
+    "worker-failed", "product-rejected", "NOT_APPLICABLE", "NOT_REQUESTED",
+    "SKIPPED_NA", "SKIPPED_POLICY",
+])
+def test_iteration_terminal_receipts_cross_accepted_artifact_index(tmp_path: Path, scenario: str) -> None:
+    from appsec_review.jobs.build_iterations import BuildIterations, IterationOutcome, selected_graph
+    from appsec_review.jobs.job_language_build.job import upstream_build_failure_receipt
+    from tests.test_build_iterations import RELEASES, fixture
+
+    _, documents, _, _, dispatches = fixture(tmp_path / "scheduler", ambiguous=True)
+    config, target, snapshot, run, _, accepted_path, handoff_path, latest = _seed(
+        tmp_path, source_files=documents, build_families=())
+    graph = selected_graph(dispatches, source_fingerprint=snapshot, relationships=[], variants={})
+    dispositions = {item["root"]: item["disposition"] for item in graph["nodes"]}
+    assert dispositions["unsupported"] == "unsupported"
+    assert dispositions["unresolved"] == "unresolved"
+    selected = [item for item in dispatches if dispositions[item["root"]] == "independent"]
+    omitted = {}
+    releases = RELEASES
+    if scenario == "missing-dispatch":
+        selected = []
+    elif scenario == "missing-releases":
+        releases = {}
+    elif scenario == "missing-image":
+        selected = [{**item, "image": {"image_id": ""}} for item in selected]
+    elif scenario in {"blocked-dependency", "NOT_APPLICABLE", "NOT_REQUESTED", "SKIPPED_NA",
+                      "SKIPPED_POLICY"}:
+        producer = next(item for item in selected if item["root"] == "a")
+        selected = [item for item in selected if item["root"] != "a"]
+        receipt = upstream_build_failure_receipt(
+            {**producer, "terminal_status": "FAILED", "gaps": ["image preparation failed"]}, {})
+        if scenario != "blocked-dependency":
+            receipt.update(terminal_status=scenario, gaps=[])
+        omitted[receipt["build_unit_id"]] = receipt
+    scheduler = BuildIterations(
+        run, target, graph, selected, configuration={"fixture": 1}, releases=releases,
+        execution_identity="fixture/1", output_policy_identity="outputs/1", omitted_receipts=omitted)
+    worker = Mock()
+    invoke = Mock()
+    if scenario in {"worker-failed", "product-rejected"}:
+        def execute(request, _run_id):
+            receipt = scheduler._gap(request["node_id"], "worker failure", failed=True)
+            if scenario == "product-rejected":
+                receipt.update(terminal_status="SUCCEEDED", artifacts=[{"path": "partial-output"}])
+            return IterationOutcome(receipt, (), True)
+        worker = Mock(side_effect=execute)
+        invoke = Mock(side_effect=lambda ref, _label, execute: execute(ref, "fixture-worker"))
+    result = scheduler.run(worker, invoke=invoke)
+    if scenario not in {"worker-failed", "product-rejected"}:
+        worker.assert_not_called()
+        invoke.assert_not_called()
+    receipts = result["receipts"]
+    assert len(receipts) == 4
+    assert not any(item["terminal_status"] == "SUCCEEDED" for item in receipts)
+    assert all(item["artifacts"] == [] and item["commands"] == [] for item in receipts)
+    if scenario == "product-rejected":
+        from appsec_review.jobs.build_iterations import read_reference
+        prepared_path, = (run / "data/build/iterations/prepared").glob("*.json")
+        prepared = read_reference(run, json.loads(prepared_path.read_bytes())["prepared"])
+        original = read_reference(run, prepared["receipt"])
+        assert original["terminal_status"] == "SUCCEEDED"
+        assert original["artifacts"] == [{"path": "partial-output"}]
+    _publish_changed_language_receipts(run, receipts, accepted_path, handoff_path, latest)
+    outcome = GraphRunner(config, [build_job()]).run(
+        target_root=target, source_fingerprint=snapshot, run_id=RUN_ID)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_artifact_index(run)
+    assert accepted["artifact_count"] == 0
+    assert all(f"{item['build_unit_id']}: {gap}" in accepted["gaps"]
+               for item in receipts for gap in item["gaps"])
+
+
+@pytest.mark.parametrize("retained", [False, True], ids=["workspace", "retained"])
+def test_accepted_artifact_index_preserves_workspace_and_retained_locations(
+        tmp_path: Path, retained: bool) -> None:
+    from appsec_review.storage.shared import put_file
+
+    config, target, snapshot, run, receipts, accepted_path, handoff_path, latest = _seed(
+        tmp_path, build_families=("native",))
+    if retained:
+        for artifact in receipts[0]["artifacts"]:
+            artifact.update(put_file(run, run / artifact["path"]))
+    _publish_changed_language_receipts(run, receipts, accepted_path, handoff_path, latest)
+    GraphRunner(config, [build_job()]).run(
+        target_root=target, source_fingerprint=snapshot, run_id=RUN_ID)
+    accepted = load_accepted_artifact_index(run)
+    assert accepted["artifact_count"] == 2
+    assert set(accepted["gaps"]) == {
+        "accepted target artifact intake is unavailable",
+        "build/app: producing action mapping is ambiguous",
+        "build/main.o: producing action mapping is ambiguous",
+    }
+
+
+@pytest.mark.parametrize("mutation", [
+    "missing-schema", "invalid-schema", "duplicate-unit", "wrong-snapshot", "invalid-artifacts",
+    "failed-artifacts", "missing-manifest", "missing-manifest-entry", "wrong-manifest-entry",
+    "hash", "size", "missing-size", "arbitrary-path", "noncanonical-path", "wrong-object-name",
+    "outside-run", "symlink-file", "symlink-parent", "symlink-outside",
+])
+def test_accepted_reader_rejects_malformed_or_unbound_retained_receipts(
+        tmp_path: Path, mutation: str) -> None:
+    from appsec_review.storage.shared import put_file
+
+    config, target, snapshot, run, receipts, accepted_path, handoff_path, latest = _seed(
+        tmp_path, build_families=("native",))
+    receipt = receipts[0]
+    artifact = receipt["artifacts"][0]
+    original = run / artifact["path"]
+    artifact.update(put_file(run, original))
+    blob = run / artifact["path"]
+    if mutation == "missing-schema":
+        receipt.pop("schema")
+    elif mutation == "invalid-schema":
+        receipt["schema"] = "appsec-review/language-build-receipt/unknown"
+    elif mutation == "duplicate-unit":
+        receipts.append(dict(receipt))
+    elif mutation == "wrong-snapshot":
+        receipt["source_fingerprint"] = "0" * 64
+    elif mutation == "invalid-artifacts":
+        receipt["artifacts"] = {}
+    elif mutation == "failed-artifacts":
+        receipt["terminal_status"] = "FAILED"
+    elif mutation == "missing-manifest":
+        receipt.pop("workspace_manifest")
+    elif mutation in {"missing-manifest-entry", "wrong-manifest-entry"}:
+        manifest_path = run / receipt["workspace_manifest"]["path"]
+        manifest = json.loads(manifest_path.read_bytes())
+        if mutation == "missing-manifest-entry":
+            del manifest["files"][artifact["workspace_path"]]
+        else:
+            manifest["files"][artifact["workspace_path"]] = "0" * 64
+        atomic_json(manifest_path, manifest)
+        receipt["workspace_manifest"] = _identity(run, manifest_path)
+    elif mutation == "hash":
+        blob.write_bytes(b"tampered")
+    elif mutation == "size":
+        artifact["size_bytes"] += 1
+    elif mutation == "missing-size":
+        artifact.pop("size_bytes")
+    elif mutation in {"arbitrary-path", "wrong-object-name"}:
+        copy = run / ("data/arbitrary-output" if mutation == "arbitrary-path"
+                      else "data/shared/objects/" + "0" * 64)
+        shutil.copyfile(blob, copy)
+        artifact["path"] = copy.relative_to(run).as_posix()
+    elif mutation == "noncanonical-path":
+        artifact["path"] = artifact["path"].replace("/objects/", "//objects/")
+    elif mutation == "outside-run":
+        outside = tmp_path / "outside-output"
+        shutil.copyfile(blob, outside)
+        artifact["path"] = str(outside.resolve())
+    elif mutation == "symlink-file":
+        blob.unlink()
+        blob.symlink_to(original)
+    elif mutation == "symlink-parent":
+        objects = blob.parent
+        moved = objects.with_name("moved-objects")
+        objects.rename(moved)
+        objects.symlink_to(moved, target_is_directory=True)
+    elif mutation == "symlink-outside":
+        outside = tmp_path / "outside-output"
+        shutil.copyfile(blob, outside)
+        blob.unlink()
+        blob.symlink_to(outside)
+    _publish_changed_language_receipts(run, receipts, accepted_path, handoff_path, latest)
+    job = build_job()
+    runner = JobRunner(config)
+    claim = runner.begin_attempt(
+        job, run_id=RUN_ID, target_root=target, source_fingerprint=snapshot,
+        upstream_handoffs={"job_language_build": file_sha256(handoff_path)})
+    with pytest.raises(ValueError, match="schema|duplicate|snapshot|artifact|manifest"):
+        runner.execute_or_reuse_unit(job, claim, "load.accepted_builds")
 
 
 def test_canonical_artifact_and_archive_member_identities_are_stable_and_strict() -> None:

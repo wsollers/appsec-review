@@ -492,6 +492,76 @@ def test_native_dispatch_executes_real_build_and_publishes_provenance(tmp_path: 
     assert len(calls) == 2
 
 
+@pytest.mark.parametrize("scenario", ["blocked", "succeeded", "failed"])
+def test_iterative_receipts_reach_accepted_artifact_index(
+        tmp_path: Path, scenario: str) -> None:
+    from appsec_review.jobs.job_artifact_indexing import (
+        build_job as build_artifact_index, load_accepted_artifact_index,
+    )
+
+    config, target = _fixture(tmp_path, declared_releases=scenario != "blocked")
+    calls = []
+    run_id, fingerprint = _accepted_project(config, target, calls)
+    calls.clear()
+    GraphRunner(config, [build_language(
+        executor_factory=lambda unit, profile: native_language_executor(
+            profile, calls, fail=scenario == "failed", partial_output=True))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    run = config.runtime.runs_dir / run_id
+    receipts = load_accepted_language_build(run)["receipts"]
+    assert len(receipts) == 1
+    receipt = receipts[0]
+    assert receipt["terminal_status"] == scenario.upper()
+    if scenario == "blocked":
+        assert not calls and not receipt["artifacts"] and not receipt["commands"]
+        assert any("missing release evidence" in gap for gap in receipt["gaps"])
+
+    result = GraphRunner(config, [build_artifact_index()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert result["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_artifact_index(run)
+    assert accepted["artifact_count"] == len(receipt["artifacts"])
+    assert all(f"{receipt['build_unit_id']}: {gap}" in accepted["gaps"]
+               for gap in receipt["gaps"])
+
+
+def test_unsupported_and_unresolved_iteration_receipts_survive_publication(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_artifact_indexing import (
+        build_job as build_artifact_index, load_accepted_artifact_index,
+    )
+
+    config, target = _fixture(tmp_path, declared_releases=False)
+    documents = {
+        "unsupported/legacy.vcproj": '<VisualStudioProject ProjectType="Visual C++"/>\n',
+        "unresolved/CMakeLists.txt": "add_library(C STATIC c.c)\n",
+        "unresolved/c.c": "int c(void) { return 0; }\n",
+    }
+    for relative, content in documents.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    calls = []
+    run_id, fingerprint = _accepted_project(config, target, calls)
+    calls.clear()
+    GraphRunner(config, [build_language(
+        executor_factory=lambda unit, profile: native_language_executor(profile, calls))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    run = config.runtime.runs_dir / run_id
+    receipts = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
+    assert set(receipts) == {"native", "unsupported", "unresolved"}
+    assert not calls
+    assert receipts["unsupported"]["gaps"] == ["unsupported"]
+    assert receipts["unresolved"]["gaps"] == ["unresolved"]
+    assert all(item["terminal_status"] == "BLOCKED" and not item["artifacts"]
+               and not item["commands"] for item in receipts.values())
+    GraphRunner(config, [build_artifact_index()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    accepted = load_accepted_artifact_index(run)
+    assert accepted["artifact_count"] == 0
+    assert all(f"{item['build_unit_id']}: {gap}" in accepted["gaps"]
+               for item in receipts.values() for gap in item["gaps"])
+
+
 def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_promoted_recipe(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import uuid

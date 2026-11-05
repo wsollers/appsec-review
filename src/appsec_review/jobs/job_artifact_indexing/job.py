@@ -31,6 +31,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.retrieval.model import canonical_json, normalize_relative_path
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, LockUnavailable, atomic_json, file_sha256
+from appsec_review.storage.shared import OBJECTS, verify_reference
 from appsec_review.jobs.job_artifact_indexing.datasets import CONSUMES, DATASETS
 
 
@@ -495,7 +496,14 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
                     raise ArtifactIndexIntegrityError("Node artifact origin is invalid")
             path = _safe_file(run_root, artifact, "produced artifact")
             expected = (run_root / workspace / Path(*PurePosixPath(workspace_path).parts)).resolve()
-            if path != expected or manifest_files.get(workspace_path) != digest:
+            if manifest_files.get(workspace_path) != digest:
+                raise ArtifactIndexIntegrityError("produced artifact is not bound to its workspace manifest")
+            if artifact.get("path") == f"{OBJECTS}/{digest}":
+                try:
+                    verify_reference(run_root, artifact)
+                except (KeyError, OSError, TypeError, ValueError) as exc:
+                    raise ArtifactIndexIntegrityError("retained produced artifact integrity is invalid") from exc
+            elif path != expected:
                 raise ArtifactIndexIntegrityError("produced artifact is not bound to its workspace manifest")
             if artifact.get("kind") == "package" and workspace_path in package_integrity:
                 artifact["package_integrity"] = dict(package_integrity[workspace_path])

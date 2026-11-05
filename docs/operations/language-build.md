@@ -27,6 +27,22 @@ The global iteration controller validates the accepted graph/dispatch before fam
 Handoff hashes, target snapshot, workflow envelopes, unique build-unit identities, recipes,
 descriptors and image dependencies remain resolving integrity checks. Ordinary unavailable units
 retain explicit receipts; malformed shared authority is not silently downgraded to an absent lane.
+Every nested language-build receipt, including controller-generated `BLOCKED`/`FAILED` receipts
+for missing releases, images, dependencies, or unsupported/unresolved topology, carries
+`appsec-review/language-build-receipt/1`. Controller gaps retain the accepted source fingerprint,
+unit identity, family, root and reason, with empty command and artifact lists. A worker failure or
+rejected product commit publishes no accepted artifacts; its immutable prepared receipt remains
+available for diagnosis. Not-applicable and policy dispositions remain explicit, not successful
+compilation.
+
+Successful iteration artifacts retain their bytes in canonical run-local
+`data/shared/objects/<sha256>` objects so later workspace rollback cannot destroy their evidence.
+Artifact indexing accepts the original workspace location or that exact verified immutable-object
+location, while requiring the same receipt-bound workspace manifest to map the logical
+`workspace_path` to the artifact digest. Missing schema, mismatched source or manifest identities,
+changed hashes/sizes, noncanonical retained locations and symlinked shared objects fail closed;
+an existing same-bytes file at an arbitrary run-relative path is not a valid retained artifact.
+
 Native, Rust, and .NET commands share one captured-build driver and the generic
 `reconcile_captured_build` successful-exec reconciliation through `CapturedBuildDescriptor`
 instances; the descriptors classify observed tools and map language-specific inputs, outputs,

@@ -26,6 +26,7 @@ from appsec_review.storage.shared import immutable_bytes, put_file, reference, v
 
 SCHEMA = "appsec-review/build-iterations/1"
 REQUEST_SCHEMA = "appsec-review/build-iteration-request/1"
+LANGUAGE_RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 
 
 def digest(value: Any) -> str:
@@ -504,7 +505,7 @@ class BuildIterations:
                 states[uid] = "FAILED"
                 failed_receipt = read_reference(self.run_root, prepared["receipt"])
                 receipts[uid] = {
-                    **failed_receipt, "terminal_status": "FAILED",
+                    **failed_receipt, "terminal_status": "FAILED", "artifacts": [],
                     "gaps": list(dict.fromkeys([*failed_receipt.get("gaps", ()),
                                                f"{type(error).__name__}: {error}"])),
                 }
@@ -520,7 +521,8 @@ class BuildIterations:
     def _gap(self, uid: str, reason: str, *, failed: bool = False) -> dict[str, Any]:
         dispatch = self.dispatches.get(uid, next(
             (node for node in self.graph["nodes"] if node["build_unit_id"] == uid), {}))
-        return {"build_unit_id": uid, "family": dispatch.get("family"), "root": dispatch.get("root"),
+        return {"schema": LANGUAGE_RECEIPT_SCHEMA, "source_fingerprint": self.graph["source_fingerprint"],
+                "build_unit_id": uid, "family": dispatch.get("family"), "root": dispatch.get("root"),
                 "terminal_status": "FAILED" if failed else "BLOCKED",
                 "artifacts": [], "commands": [], "gaps": [reason]}
 
