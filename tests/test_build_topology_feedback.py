@@ -377,12 +377,14 @@ def test_unity_and_shared_container_declarations_are_scoped_partial_and_canonica
     docker = document("Dockerfile", "FROM base AS i686\nCOPY --from=i686 /x /y\n")
     unity = document("game/ProjectSettings/ProjectSettings.asset", "scriptingBackend: 1\n")
     meta = document("game/Assets/plugin.dll.meta", "PluginImporter:\n  CPU: x86\n  OS: AnyOS\n")
+    cmake = document("native/CMakeLists.txt", "project(control)\n")
     units = [{"build_unit_id": "unity-control", "root": "game", "family": "dotnet",
               "build_system": "unity", "markers": [{key: unity[key] for key in ("path", "sha256")}],
               "descriptor_package": {"documents": [unity, meta, docker], "bounds": {}, "gaps": []}},
              {"build_unit_id": "native-control", "root": "native", "family": "native",
-              "build_system": "cmake", "markers": [],
-              "descriptor_package": {"documents": [docker], "bounds": {}, "gaps": []}}]
+              "build_system": "cmake", "markers": [{key: cmake[key] for key in ("path", "sha256")}],
+              "descriptor_package": {"documents": [cmake, docker], "bounds": {}, "gaps": []}}]
+    before = copy.deepcopy(units)
     graph = compile_build_topology(units, source_fingerprint="synthetic-unity-container")
     facts = graph["facts"]
     assert len([item for item in facts if item["predicate"] == "container:from"]) == 1
@@ -398,6 +400,11 @@ def test_unity_and_shared_container_declarations_are_scoped_partial_and_canonica
     for hints in ([], facts, facts[:1], list(reversed(facts))):
         assert compile_build_topology(units, source_fingerprint="synthetic-unity-container", hints=hints) == graph
         assert topology_evidence_bundle(units, source_fingerprint="synthetic-unity-container") == bundle
+    assert units == before
+    missing_marker = copy.deepcopy(units)
+    missing_marker[1]["markers"] = []
+    with pytest.raises(ValueError, match="requires resolving descriptor evidence"):
+        compile_build_topology(missing_marker, source_fingerprint="synthetic-unity-container")
 
 
 def test_additive_inventory_is_usable_exact_and_bounded_before_the_first_call():
@@ -464,12 +471,26 @@ def test_real_planner_requests_and_publishes_exact_additive_evidence(tmp_path):
 def test_unrelated_descendant_container_cannot_bind_to_another_unit():
     document = {"path": "owner/unrelated/Dockerfile", "content": "FROM windows-x86\n"}
     document["sha256"] = hashlib.sha256(document["content"].encode()).hexdigest()
+    cmake = {"path": "owner/CMakeLists.txt", "content": "project(control)\n"}
+    cmake["sha256"] = hashlib.sha256(cmake["content"].encode()).hexdigest()
     units = [{"build_unit_id": "owner-control", "root": "owner", "family": "native",
-              "build_system": "cmake", "markers": [],
-              "descriptor_package": {"documents": [document], "bounds": {}, "gaps": []}}]
+              "build_system": "cmake", "markers": [{key: cmake[key] for key in ("path", "sha256")}],
+              "descriptor_package": {"documents": [cmake, document], "bounds": {}, "gaps": []}}]
+    before = copy.deepcopy(units)
     graph = compile_build_topology(units, source_fingerprint="synthetic-container-collision")
-    assert graph["facts"] and not graph["bindings"]
+    container_ids = {fact["fact_id"] for fact in graph["facts"]
+                     if fact["predicate"].startswith("container:")}
+    assert container_ids
+    assert not any(binding["fact_id"] in container_ids for binding in graph["bindings"])
+    own_ids = {fact["fact_id"] for fact in graph["facts"] if fact["path"] == cmake["path"]}
+    assert own_ids and any(binding["fact_id"] in own_ids and binding["build_unit_id"] == "owner-control"
+                           for binding in graph["bindings"])
     assert not graph["edges"]
+    assert units == before
+    missing_marker = copy.deepcopy(units)
+    missing_marker[0]["markers"] = []
+    with pytest.raises(ValueError, match="requires resolving descriptor evidence"):
+        compile_build_topology(missing_marker, source_fingerprint="synthetic-container-collision")
 
 
 def test_container_context_neither_taints_closed_native_proof_nor_supplies_missing_target():
