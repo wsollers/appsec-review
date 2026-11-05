@@ -329,7 +329,7 @@ def test_unscheduled_optional_host_reference_survives_actual_graph_plan_and_run(
     without_prior = graph.plan(root.name, source, target_root=target)
     assert without_prior[-1].action == "RUN"
     assert "planning environment availability identity changed" in without_prior[-1].reasons
-    with pytest.raises(ValueError, match="no accepted handoff"):
+    with pytest.raises(ValueError, match="^environment reference is not the accepted producer$"):
         graph.plan(root.name, source, target_root=target, orchestration={"workflow": "wave1_review"})
 
 

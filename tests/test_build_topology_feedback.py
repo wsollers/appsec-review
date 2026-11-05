@@ -218,6 +218,7 @@ def test_actual_feedback_enforces_empty_request_component_and_scanner_allowlists
     assert any(expected in error for error in result["errors"])
     assert not list((tmp_path / "cache").glob("*.json"))
     cached = {"key": result["cache_key"], "status": "COMPLETE", "proposal": final, "documents": []}
+    (tmp_path / "cache").mkdir(exist_ok=True)
     (tmp_path / "cache" / (result["cache_key"] + ".json")).write_bytes(json.dumps(cached).encode())
     with pytest.raises(ValueError, match="complete validated final"):
         bounded_feedback(lambda *_a, **_kw: pytest.fail("out-of-request cache must not call a model"),
