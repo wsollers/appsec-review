@@ -26,8 +26,9 @@ def _read_refinement_index(pointer: Path) -> dict[str, Any]:
     size = pointer.stat().st_size
     if size > INDEX_BYTE_LIMIT:
         raise ValueError("accepted refinement index exceeds its byte bound")
-    data = pointer.read_bytes()
-    if len(data) != size or len(data) > INDEX_BYTE_LIMIT:
+    with pointer.open("rb") as stream:
+        data = stream.read(INDEX_BYTE_LIMIT + 1)
+    if len(data) != size or len(data) > INDEX_BYTE_LIMIT or pointer.stat().st_size != size:
         raise ValueError("accepted refinement index changed during its bounded read")
     index = json.loads(data)
     if (not isinstance(index, dict) or set(index) != {"schema", "entries"}

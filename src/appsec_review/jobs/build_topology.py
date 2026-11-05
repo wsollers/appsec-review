@@ -1167,7 +1167,7 @@ def _node_requested_operations(unit, commands, facts):
               for ref in unit.get("descriptor_package", {}).get("documents", []))
     native, reasons = False, set()
 
-    def script(name, active):
+    def script(name, active, arguments=()):
         nonlocal native
         if name not in scripts:
             return
@@ -1187,7 +1187,7 @@ def _node_requested_operations(unit, commands, facts):
                            or any(character in value for character in ("$", "`", "\n")) for value in argv):
             reasons.add("node_script_effective_operation_unresolved")
             return
-        command(argv, (*active, name))
+        command([*argv, *arguments], (*active, name))
 
     def command(argv, active=()):
         nonlocal native
@@ -1205,26 +1205,30 @@ def _node_requested_operations(unit, commands, facts):
             if argv[0] not in {"tsc", "esbuild", "webpack"}:
                 reasons.add("node_script_effective_operation_unresolved")
             return
-        if (len(argv) < 2 or argv[1].startswith("-") or
+        delimiter = argv.index("--") if "--" in argv else len(argv)
+        control, forwarded = argv[:delimiter], argv[delimiter + 1:]
+        if (len(control) < 2 or control[1].startswith("-") or
                 any(value in {"--prefix", "--workspace", "--workspaces", "-w", "--global", "-g"}
-                    or value.startswith(("--prefix=", "--workspace=")) for value in argv[2:])):
+                    or value.startswith(("--prefix=", "--workspace=")) for value in control[2:])):
             reasons.add("node_requested_lifecycle_unresolved")
             return
         if len(lifecycle) != 1:
             reasons.add("node_manifest_unresolved")
             return
-        verb = argv[1]
-        ignore = "--ignore-scripts" in argv or "--ignore-scripts=true" in argv
-        if "--ignore-scripts=false" in argv and ignore:
+        verb = control[1]
+        ignore = "--ignore-scripts" in control or "--ignore-scripts=true" in control
+        if "--ignore-scripts=false" in control and ignore:
             reasons.add("node_requested_lifecycle_unresolved")
             return
+        requested = None
         if verb in {"run", "run-script"}:
-            if len(argv) < 3 or argv[2].startswith("-") or argv[2] not in scripts:
+            if len(control) < 3 or control[2].startswith("-") or control[2] not in scripts:
                 reasons.add("node_requested_script_uncaptured")
                 return
-            names = (argv[2],) if ignore else ("pre" + argv[2], argv[2], "post" + argv[2])
+            requested = control[2]
+            names = (requested,) if ignore else ("pre" + requested, requested, "post" + requested)
         elif verb in {"pack", "publish", "install", "ci", "rebuild"}:
-            if any(not value.startswith("-") for value in argv[2:]):
+            if forwarded or any(not value.startswith("-") for value in control[2:]):
                 reasons.add("node_dependency_lifecycle_uncaptured")
             names = {
                 "pack": ("prepack", "prepare", "postpack"),
@@ -1245,7 +1249,7 @@ def _node_requested_operations(unit, commands, facts):
             reasons.add("node_requested_lifecycle_unresolved")
             return
         for name in names:
-            script(name, active)
+            script(name, active, forwarded if name == requested else ())
 
     for argv in commands:
         command(argv)

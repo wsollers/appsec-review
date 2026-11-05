@@ -262,29 +262,73 @@ def test_refinement_index_real_32mib_read_and_growth_bounds(tmp_path, monkeypatc
     pointer = root / "data/build/topology/accepted-refinements.json"
     original = pointer.read_bytes()
     assert INDEX_BYTE_LIMIT == 33554432
+    real_open = Path.open
+    reads = []
+    mutation = None
+
+    class ObservedIndexRead:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def __enter__(self):
+            self.stream.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.stream.__exit__(*args)
+
+        def read(self, size=-1):
+            assert size == 33554433
+            reads.append(size)
+            if mutation in {"grow-over-limit", "grow-within-limit"}:
+                count = 33554433 - len(original) if mutation == "grow-over-limit" else 1
+                with real_open(pointer, "ab") as writer:
+                    writer.write(b" " * count)
+            elif mutation == "shrink":
+                with real_open(pointer, "r+b") as writer:
+                    writer.truncate(len(original) - 1)
+            elif mutation == "replace-after-open":
+                replacement = pointer.with_name("replacement-index.json")
+                with real_open(replacement, "wb") as writer:
+                    writer.write(at_limit + b" ")
+                replacement.replace(pointer)
+            return self.stream.read(size)
+
+    def observed_open(path, mode="r", *args, **kwargs):
+        stream = real_open(path, mode, *args, **kwargs)
+        return ObservedIndexRead(stream) if path == pointer and mode == "rb" else stream
+
+    def current_bytes():
+        with real_open(pointer, "rb") as stream:
+            return stream.read(33554434)
+
+    monkeypatch.setattr(Path, "open", observed_open)
     at_limit = original + b" " * (33554432 - len(original))
     pointer.write_bytes(at_limit)
     assert load_refinement(root, action["topology_refinement"])["refinement_id"]
     assert publish_refinement(root, [action], **inputs) == action["topology_refinement"]
-    assert pointer.read_bytes() == at_limit
+    assert current_bytes() == at_limit
+    assert reads == [33554433, 33554433]
     pointer.write_bytes(at_limit + b" ")
     for consume in (lambda: load_refinement(root, action["topology_refinement"]),
                     lambda: publish_refinement(root, [action], **inputs)):
         with pytest.raises(ValueError, match="index exceeds its byte bound"):
             consume()
+    assert reads == [33554433, 33554433]
+    assert current_bytes() == at_limit + b" "
+    for mutation in ("grow-over-limit", "grow-within-limit", "shrink", "replace-after-open"):
+        expected = (original[:-1] if mutation == "shrink" else
+                    original + b" " if mutation == "grow-within-limit" else at_limit + b" ")
+        for consume in (lambda: load_refinement(root, action["topology_refinement"]),
+                        lambda: publish_refinement(root, [action], **inputs)):
+            pointer.write_bytes(original)
+            before_reads = len(reads)
+            with pytest.raises(ValueError, match="changed during its bounded read"):
+                consume()
+            assert len(reads) == before_reads + 1
+            assert current_bytes() == expected
     pointer.write_bytes(original)
-    real_read = Path.read_bytes
-
-    def growing(path):
-        data = real_read(path)
-        return data + b" " * (33554433 - len(data)) if path == pointer else data
-
-    monkeypatch.setattr(Path, "read_bytes", growing)
-    for consume in (lambda: load_refinement(root, action["topology_refinement"]),
-                    lambda: publish_refinement(root, [action], **inputs)):
-        with pytest.raises(ValueError, match="changed during its bounded read"):
-            consume()
-    assert real_read(pointer) == original
+    assert current_bytes() == original
 
 
 def test_oversized_canonical_index_replacement_preserves_prior_bytes(tmp_path):
