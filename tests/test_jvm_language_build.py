@@ -81,7 +81,8 @@ class JvmRecipeModel:
                 "expected_outputs": expected, "network_required": True,
                 "reason": "bounded JVM fixture recipe",
             })
-        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                            "component_proposals": [],
                             "build_recipes": recipes})
 
 

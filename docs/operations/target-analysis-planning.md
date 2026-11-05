@@ -1,7 +1,9 @@
 # Target analysis planning operations
 
-The planner runs automatically after `job_target_catalog` and before evidence collection in the
-`wave1_review` Dagster graph. Its accepted artifact is:
+The planner runs after `job_target_catalog` and the enabled `job_build_environment_analysis`
+producer in both `wave1_review` and `project_build_review`. Disabling the environment producer
+transparently preserves the catalog dependency; an expected current producer is never optional.
+Its accepted artifact is:
 
 `runs/<run-id>/data/jobs/job_target_analysis_plan/attempts/<attempt-id>/artifacts/analysis-plan/accepted-analysis-plan.json`
 
@@ -26,13 +28,19 @@ request assembled by the application. `provider = "anthropic-api"` selects the a
 Anthropic Messages transport, which requires `ANTHROPIC_API_KEY`. The runtime stores exact guidance
 and model identity beneath
 `runs/<run-id>/data/guidance/<sha256>/`, and logs only hashes, identity, counts, duration, retries,
-status, and token counts in the central log. Bounded raw provider responses—including rejected
-responses—are retained as run-owned diagnostic artifacts beside the inference task so malformed
-model output can be debugged; credentials are never written there. Repair calls receive only the
-rejected textual output and validation errors, not the provider envelope or hidden metadata.
+status, and token counts in the central log. Planning's recording boundary withholds sensitive
+proposals and raw provider envelopes before recording. Repairs receive sanitized bounded errors,
+not rejected raw output. The static environment and evidence boundaries redact credentials before
+new artifacts or model context; sensitive additive evidence is withheld, not silently rewritten.
 
-On provider failure or proposal rejection, the job completes with gaps and publishes its
-deterministic safe plan. A framework integrity failure—changed catalog bytes, escaped paths,
+Recognized model-output errors, call timeouts, budget exhaustion and explicit abstentions produce
+named gaps. Unexpected provider/application errors propagate rather than being converted to success.
+For proposal/3, the single inference dispatch strips rejected messages, raw/rejected output and
+exception chains before diagnostic retention. A recognized rejection is recorded and spends the
+same finite call budget; the admission permit's final cancellation check still runs before repair.
+Unexpected failures remain fatal, and global cancellation, orchestration deadlines and provider
+teardown failures cannot become repair signals. Other response protocols retain their behavior.
+A framework integrity failure—changed catalog bytes, escaped paths,
 corrupt manifests, invalid baseline suppression, or an unverified index—fails the job and stops
 downstream publication. Resume the same run after correcting the integrity problem; immutable
 catalog and plan identities allow unaffected jobs and shards to be reused.
@@ -53,7 +61,7 @@ as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
 ## Build-topology interpretation
 
 **Source-integrated:** the accepted plan now carries
-`build_topology.executable_graph` (`appsec-review/build-topology/1`). Its source/status boundary
+`build_topology.executable_graph` (`appsec-review/build-topology/2`). Its source/status boundary
 and historical discovery evidence, including the initial Windows/canonical WSL source publication,
 are recorded in the
 [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md).
@@ -72,9 +80,8 @@ every prerequisite. Contained children are represented without duplicating their
 
 Edges use exact producer/consumer IDs and typed `requires_product` or `order_only` semantics.
 Ambiguity, cycles, unsupported dynamic/conditional/included declarations, unresolved products and
-external requirements are gaps, not invented ordering. Model-proposed component `depends_on`
-edges remain component evidence, recorded as nonblocking `unresolved_component_dependency`
-instead of shortest-root build-unit projection. Every nonempty graph also records
+external requirements are gaps, not invented ordering. Proposal/3 cannot alter component ownership, scanner choices or scheduling edges; its component
+proposal list must be empty. Every nonempty graph also records
 `incomplete_dependency_discovery`; an absent edge is not proof of independence.
 
 Acceptance recompiles the graph from the exact catalog/accepted declarations and rejects a
@@ -93,6 +100,57 @@ Model/catalog-summary bounds control inference input, not compiler visibility in
 repository. They are not a reason to omit source files needed by a build.
 Production materializes the complete target into one run-owned shared target/install generation;
 it does not copy only the descriptors shown to inference.
+
+## Proposal/3 evidence and immutable cache
+
+The only response actions are `need_evidence` and `final`. Evidence requests name accepted
+inventory paths and exact raw hashes, not commands. Each group receives a byte-bounded additional
+inventory view with an explicit omitted count. UTF-8 evidence is additive, hash-verified and
+scoped to accepted unit roots; unsupported encodings, sensitive content and missing source
+custody cannot silently become proof. A final response accounts for every scoped unit with one
+validated recipe or an explicit abstention. Hints name existing compiler fact IDs and never
+change graph bytes. Summary trimming cannot replace the accepted whole evidence bundle.
+
+`[jobs.job_target_analysis_plan.settings.feedback]` pins at most 512 deterministic scopes,
+16 units/scope, four calls/scope including repairs, three evidence rounds, eight documents/request,
+64 KiB/document, 256 KiB additive evidence/scope, 128 KiB/request, 64 KiB/response and a 300-second
+internal scope deadline. The model worker pool is separately bounded. Calls, request/response/
+evidence bytes, rounds, cache hits and elapsed scope time are recorded in accepted feedback
+metadata; these are not compiler timings.
+The existing model `retries` setting can further tighten the whole conversation to `1 + retries`
+calls; it does not add transport or repair calls outside `feedback.max_calls`. Per-call timeout
+also respects the configured model timeout and the remaining internal scope deadline.
+
+Only complete, validated non-abstained finals are immutable cache entries beneath
+`data/planning-feedback/`. Keys include source, whole bundle, environment, profiles, rules,
+prompt/guidance/model identities and bounds. Invalid, exhausted or partial results cannot be
+complete-success cache hits. Availability follows the
+[environment lifecycle](build-environment-analysis.md), including stale optional prior evidence.
+
+Catalog handoffs, the full target catalog and repository partition have explicit 32 MiB readers;
+other catalog children remain bounded at 16 MiB. Whole plans/handoffs and topology inputs/
+refinements are capped at 32 MiB; the canonical graph itself remains capped at 16 MiB. This
+corrects the feature predecessor's 16 MiB intake conflict without removing integrity checks
+or relaxing the global 32 MiB ceiling.
+
+### R8 authoring, not a measured result
+
+`test_actual_catalog_offline_feedback_replay` in `tests/test_target_analysis_plan.py` is an
+explicitly selected **manual external-capture integration replay, authored NOT RUN**. It is
+excluded from the finite fast-unit proposal, not skipped or replaced with a small synthetic
+catalog. It pins the accepted full catalog/handoff/partition and all referenced intake documents,
+295 units, the exact source SHA and each checkout's pytest root/config/package/venv binding.
+It uses the real planner, publication, accepted reader and project selection/preflight with
+scripted model and fake executor/image boundaries. The upstream retrieval manifest is an
+explicit empty fixture boundary; only captured descriptor bytes are staged, not the full target.
+These limitations remain recorded and cannot establish live or whole-target acceptance.
+
+The genuine baseline is original `acf973f8a0d7ca78548ad619ba4b5691c5b93678`, never V1 or
+a feature-disabled proxy. Its reader has no 16 MiB limit; neither its future outcome nor the
+candidate's is measured here. Separate baseline environment/driver/import admission is required.
+The provisional 120-second whole-feedback budget and all produced document sizes must be
+measured in that future replay, not inferred from pytest or compiler timings. Missing or
+mismatched actual capture bindings fail; synthetic input is not an R8 substitute.
 
 ## Image preparation and bounded production iterations
 

@@ -9,6 +9,7 @@ The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 ```text
 model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
   -> ci_configuration_analysis -> source_history_analysis
+  -> build_environment_analysis
   -> target_analysis_plan
   -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
   -> artifact_indexing -> test_coverage -> profile_data -> debug_symbol_indexing -> artifact_security_analysis
@@ -30,6 +31,11 @@ enabled catalog image, build profile and CodeQL source image resolves on the loc
 its pin; any missing image or moved tag fails the run (see
 [`image-pin-verification.md`](image-pin-verification.md)). The pipeline never builds images. Setting
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
+
+The default-enabled [static environment producer](build-environment-analysis.md) also appears
+between catalog and planner in `project_build_review`. Disabling it preserves the catalog barrier.
+Expected current evidence cannot be treated as optional; trusted standalone planning explicitly
+records `NOT_RUN` when that producer was deliberately not scheduled.
 
 Both surfaces then run `target_acquisition`. For `start --system <id>` (Dagster:
 `APPSEC_REVIEW_SYSTEM=<id>`) it acquires or re-verifies every component of the configured system in

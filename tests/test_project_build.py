@@ -223,7 +223,8 @@ class RecipeModel:
                 "expected_outputs": [f"{root}/{'build' if system == 'cmake' else 'target'}"],
                 "network_required": system == "cargo", "reason": "fixture recipe",
             })
-        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                            "component_proposals": [],
                             "build_recipes": recipes})
 
 
@@ -246,7 +247,8 @@ class NodeRestoreRecipeModel:
                 "expected_outputs": [output], "network_required": True,
                 "reason": "locked fixture restore and build",
             })
-        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                            "component_proposals": [],
                             "build_recipes": recipes})
 
 
@@ -913,7 +915,8 @@ def test_native_windows_placeholder_is_blocked_without_hiding_alternate_cmake_au
             if request.allowed_build_systems != ("msbuild",):
                 return super().complete(request, timeout_seconds=timeout_seconds)
             unit = request.summary["build_units"][0]
-            return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [], "build_recipes": [{
+            return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                                "component_proposals": [], "build_recipes": [{
                 "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
                 "image_profile": "native", "source_dir": unit["root"], "build_dir": unit["root"] + "/build",
                 "system_packages": [], "environment": {},

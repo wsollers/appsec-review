@@ -26,7 +26,7 @@ def test_wave1_order_is_topological_and_closure_follows_propagation() -> None:
     assert jobs["job_review_intake"]["upstream_handoffs"] == []
     assert jobs["job_target_catalog"]["upstream_handoffs"] == ["job_review_intake"]
     assert jobs["job_change_context_analysis"]["upstream_handoffs"] == [
-        "job_ci_configuration_analysis", "job_language_build", "job_project_build",
+        "job_build_environment_analysis", "job_ci_configuration_analysis", "job_language_build", "job_project_build",
         "job_review_intake", "job_source_history_analysis",
         "job_target_analysis_plan", "job_target_catalog", "job_tree_sitter_ast"]
     assert "job_model_connectivity" not in jobs["job_codeql_analysis"]["upstream_handoffs"]
@@ -42,6 +42,20 @@ def test_disabled_jobs_are_transparent_and_closure_is_transitive() -> None:
     assert upstream_closure("job_target_analysis_plan", dependencies,
                             {"job_review_intake", "job_target_catalog"}) == (
         "job_review_intake", "job_target_catalog")
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_environment_producer_precedes_planning_without_weakening_required_dependencies(enabled):
+    registered = {"job_model_connectivity", "job_review_intake", "job_target_catalog",
+                  "job_target_analysis_plan"}
+    if enabled:
+        registered.add("job_build_environment_analysis")
+    dependencies = wave1_dependencies(registered)
+    assert dependencies["job_target_catalog"] == ("job_review_intake",)
+    assert dependencies["job_target_analysis_plan"] == (
+        ("job_build_environment_analysis",) if enabled else ("job_target_catalog",))
+    if enabled:
+        assert dependencies["job_build_environment_analysis"] == ("job_target_catalog",)
 
 
 @pytest.mark.parametrize("export_enabled,poc_enabled", [(False, False), (False, True),

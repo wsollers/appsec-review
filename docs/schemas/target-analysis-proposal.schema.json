@@ -1,27 +1,41 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "appsec-review/target-analysis-proposal/2",
+  "$id": "appsec-review/target-analysis-proposal/3",
   "title": "Untrusted target analysis and build-recipe proposal",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "component_proposals", "build_recipes"],
+  "required": ["schema", "action"],
+  "oneOf": [
+    {"properties": {"action": {"const": "need_evidence"}},
+     "required": ["requests"],
+     "not": {"anyOf": [{"required": ["component_proposals"]}, {"required": ["build_recipes"]},
+                      {"required": ["hints"]}, {"required": ["abstentions"]}]}},
+    {"properties": {"action": {"const": "final"}},
+     "required": ["component_proposals", "build_recipes", "hints", "abstentions"],
+     "not": {"required": ["requests"]}}
+  ],
   "properties": {
-    "schema": {"const": "appsec-review/target-analysis-proposal/2"},
-    "component_proposals": {
-      "type": "array", "maxItems": 256,
-      "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["component_id", "scanner_ids", "build_systems", "scope_paths", "dependencies", "reason"],
+    "schema": {"const": "appsec-review/target-analysis-proposal/3"},
+    "action": {"enum": ["need_evidence", "final"]},
+    "requests": {
+      "type": "array", "minItems": 1, "maxItems": 8,
+      "items": {"type": "object", "additionalProperties": false,
+        "required": ["path", "sha256", "reason"],
         "properties": {
-          "component_id": {"type": "string", "maxLength": 128},
-          "scanner_ids": {"type": "array", "uniqueItems": true, "maxItems": 20, "items": {"type": "string"}},
-          "build_systems": {"type": "array", "uniqueItems": true, "maxItems": 24, "items": {"type": "string"}},
-          "scope_paths": {"type": "array", "uniqueItems": true, "maxItems": 10000, "items": {"type": "string", "maxLength": 512}},
-          "dependencies": {"type": "array", "uniqueItems": true, "maxItems": 128, "items": {"type": "string", "maxLength": 128}},
+          "path": {"type": "string", "maxLength": 512},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
           "reason": {"type": "string", "minLength": 1, "maxLength": 2048}
-        }
-      }
+        }}
     },
+    "hints": {"type": "array", "maxItems": 256, "items": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+    "abstentions": {"type": "array", "maxItems": 256,
+      "items": {"type": "object", "additionalProperties": false,
+        "required": ["build_unit_id", "reason"],
+        "properties": {
+          "build_unit_id": {"type": "string", "maxLength": 128},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 2048}
+        }}},
+    "component_proposals": {"type": "array", "maxItems": 0},
     "build_recipes": {"type": "array", "maxItems": 256, "items": {"$ref": "build-recipe.schema.json"}}
   }
 }

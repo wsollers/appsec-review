@@ -39,7 +39,7 @@ from appsec_review.jobs.job_source_history_analysis import load_accepted_history
 from .planning import (
     BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS,
     ambiguity_reasons, deterministic_plan, merge_proposal, summarize_catalog,
-    validate_plan, validate_proposal,
+    validate_plan, validate_proposal, bounded_feedback, evidence_catalog, _publish_build_graph, model_safe,
 )
 from appsec_review.jobs.job_target_analysis_plan.datasets import CONSUMES, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
@@ -75,20 +75,28 @@ def publish_guidance_bundle(run_root: Path, *, persona: str, role: str, guidance
 
 
 def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
+    if len(canonical_json(value)) > 32 * 1024 * 1024:
+        raise ValueError("planning artifact exceeds its 32 MiB reader bound")
     path = unit.job.attempt_root / "artifacts" / "analysis-plan" / name
     identity = write_json(path, value)
     identity["path"] = path.relative_to(unit.job.run_root).as_posix()
     return identity
 
 
-def _read_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, Any]:
-    path = (run_root / str(identity.get("path", ""))).resolve()
+def _read_artifact(run_root: Path, identity: Mapping[str, Any], *,
+                   byte_limit: int = 16 * 1024 * 1024) -> Mapping[str, Any]:
+    from appsec_review.storage.shared import safe_path
+    if byte_limit not in {16 * 1024 * 1024, 32 * 1024 * 1024}:
+        raise ValueError("unsupported accepted-artifact byte limit")
+    path = safe_path(run_root, str(identity.get("path", "")))
     if run_root.resolve() not in path.parents or not path.is_file():
         raise ValueError("accepted upstream artifact is unavailable or outside the run")
-    if path.stat().st_size > 16 * 1024 * 1024:
+    size = path.stat().st_size
+    if size > byte_limit:
         raise ValueError("accepted upstream artifact exceeds its byte bound")
     data = path.read_bytes()
-    if len(data) > 16 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != identity.get("sha256"):
+    if (len(data) != size or len(data) > byte_limit or identity.get("size_bytes", size) != size
+            or hashlib.sha256(data).hexdigest() != identity.get("sha256")):
         raise ValueError("accepted upstream artifact identity changed")
     value = json.loads(data)
     if not isinstance(value, Mapping):
@@ -97,23 +105,39 @@ def _read_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
 
 
 def _accepted_catalog(run_root: Path) -> dict[str, Any]:
-    pointer_path = run_root / "data" / "jobs" / "job_target_catalog" / "latest.json"
+    from appsec_review.storage.shared import safe_path
+    pointer_path = safe_path(run_root, "data/jobs/job_target_catalog/latest.json")
     if not pointer_path.is_file():
         raise ValueError("accepted job_target_catalog handoff is required")
+    if pointer_path.stat().st_size > 65536:
+        raise ValueError("accepted catalog pointer exceeds its byte bound")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_artifact(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
+    handoff = _read_artifact(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]},
+                             byte_limit=32 * 1024 * 1024)
     handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_target_catalog")
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
-    catalog = _read_artifact(run_root, published.get("artifact", {}))
+    catalog = _read_artifact(run_root, published.get("artifact", {}), byte_limit=32 * 1024 * 1024)
     if catalog.get("schema") != "appsec-review/target-catalog/1":
         raise ValueError("target catalog schema is unsupported")
+    if catalog.get("source_fingerprint") != handoff["source_fingerprint"]:
+        raise ValueError("accepted catalog and handoff source identities differ")
     artifacts = catalog.get("artifacts", {})
-    partition = _read_artifact(run_root, artifacts["repository_discovery.partition_repository"])
+    partition = _read_artifact(run_root, artifacts["repository_discovery.partition_repository"],
+                               byte_limit=32 * 1024 * 1024)
     projects = _read_artifact(run_root, artifacts["repository_discovery.discover_projects"])
     components = _read_artifact(run_root, artifacts["component_discovery.catalog_components"])
     builds = _read_artifact(run_root, artifacts["build_discovery.discover_build_systems"])
     compile_databases = _read_artifact(run_root, artifacts["build_discovery.discover_compile_commands"])
     targets = _read_artifact(run_root, artifacts["build_discovery.catalog_build_targets"])
+    expected_schemas = (
+        (partition, "repository-partition/1"), (projects, "project-catalog/1"),
+        (components, "component-catalog/1"), (builds, "build-systems/2"),
+        (compile_databases, "compile-commands/1"), (targets, "build-targets/2"),
+    )
+    if any(value.get("schema") != "appsec-review/" + schema for value, schema in expected_schemas):
+        raise ValueError("accepted catalog child artifact schema is unsupported")
+    if partition.get("source_fingerprint") != catalog["source_fingerprint"]:
+        raise ValueError("accepted catalog partition source identity differs")
     recognized_names = {
         "CMakeLists.txt", "Makefile", "configure.ac", "configure.in", "Makefile.am", "meson.build",
         "BUILD", "WORKSPACE", "MODULE.bazel", "pom.xml", "build.gradle", "build.gradle.kts",
@@ -147,7 +171,8 @@ def _verify_source_topology(plan_bytes: bytes) -> None:
     plan = json.loads(plan_bytes)
     topology = plan["build_topology"]
     graph, actions, bundle = topology["executable_graph"], topology["build_actions"], topology["evidence_bundle"]
-    if (compile_build_topology(actions, source_fingerprint=plan["source_fingerprint"],
+    if (bundle["environment"] != plan.get("build_environment")
+            or compile_build_topology(actions, source_fingerprint=plan["source_fingerprint"],
                                environment=bundle["environment"], profiles=bundle["profiles"]) != graph
             or bundle != topology_evidence_bundle(actions, source_fingerprint=plan["source_fingerprint"],
                                                  environment=bundle["environment"], profiles=bundle["profiles"])
@@ -157,14 +182,18 @@ def _verify_source_topology(plan_bytes: bytes) -> None:
 
 
 def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
-    pointer_path = Path(run_root) / "data" / "jobs" / "job_target_analysis_plan" / "latest.json"
+    from appsec_review.storage.shared import safe_path
+    pointer_path = safe_path(Path(run_root), "data/jobs/job_target_analysis_plan/latest.json")
     if not pointer_path.is_file():
         raise ValueError("accepted job_target_analysis_plan handoff is required")
+    if pointer_path.stat().st_size > 65536:
+        raise ValueError("accepted planning pointer exceeds its byte bound")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_artifact(Path(run_root), {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
+    handoff = _read_artifact(Path(run_root), {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]},
+                             byte_limit=32 * 1024 * 1024)
     handoff = decode_handoff(handoff, run_id=Path(run_root).name, job_id="job_target_analysis_plan")
     identity = handoff.get("outputs", {}).get("plan_acceptance.publish_handoff", {}).get("artifact")
-    plan = _read_artifact(Path(run_root), identity or {})
+    plan = _read_artifact(Path(run_root), identity or {}, byte_limit=32 * 1024 * 1024)
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError("accepted analysis plan schema is unsupported")
     graph = plan.get("build_topology", {}).get("executable_graph")
@@ -172,6 +201,16 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
         raise ValueError("accepted analysis plan has no source-bound executable build graph")
     validate_build_topology(graph)
     if graph["schema"] == "appsec-review/build-topology/2":
+        environment = plan.get("build_environment")
+        if environment is not None:
+            from appsec_review.jobs.job_build_environment_analysis.job import load_environment
+            contract = {key: environment[key] for key in
+                        ("schema", "workflow", "expected_producer", "mode", "reference", "reason")}
+            current = load_environment(Path(run_root), plan["source_fingerprint"], contract)
+            # Availability reason is a persisted outcome, not the launch reason.
+            if any(environment[key] != current[key] for key in
+                   ("availability", "artifact", "evidence", "reference", "mode", "workflow", "expected_producer")):
+                raise ValueError("accepted planning environment identity changed")
         _verify_source_topology(canonical_json(plan))
     reject_swift_derived(
         plan, enabled=swift_enabled_from_run(Path(run_root)),
@@ -180,6 +219,8 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
 
 
 def _validate_config(context, result) -> None:
+    from appsec_review.config import PlanningFeedbackSettings, parse_bounded_settings
+    parse_bounded_settings(context.config.settings.get("feedback", {}), PlanningFeedbackSettings)
     if tuple(context.config.steps) != tuple(TOPOLOGY):
         raise ValueError("target analysis plan topology does not match configuration")
     for step, tasks in TOPOLOGY.items():
@@ -260,8 +301,11 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         if history is not None and history.get("target_snapshot") != catalog["source_fingerprint"]:
             history = {"stale_reason": "accepted source history describes a different target snapshot"}
         unit.job.events.write("ANALYSIS_PLAN_STARTED", catalog_handoff_sha256=catalog["catalog_handoff_sha256"])
+        from appsec_review.jobs.job_build_environment_analysis.job import load_environment
+        contract = json.loads(unit.job.orchestration["build_environment_contract"])
+        environment = load_environment(unit.job.run_root, catalog["source_fingerprint"], contract)
         return {"catalog": catalog, "catalog_handoff_sha256": catalog["catalog_handoff_sha256"],
-                "history": history}
+                "history": history, "environment": environment}
 
     def summarize(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -284,6 +328,14 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         summary = unit.output("catalog_summary.summarize_components")["summary"]
         value = deterministic_plan(catalog, summary,
                                    unit.output("catalog_summary.load_accepted_catalog").get("history"))
+        value["build_environment"] = unit.output("catalog_summary.load_accepted_catalog")["environment"]
+        environment = value["build_environment"]
+        environment_gaps = environment["evidence"]["gaps"] if environment["evidence"] is not None else []
+        if environment["availability"] == "UNAVAILABLE":
+            environment_gaps = [*environment_gaps, environment["reason"]]
+        value["coverage_gaps"] = [*value["coverage_gaps"],
+                                  *("build environment: " + gap for gap in environment_gaps)]
+        _publish_build_graph(value)
         unit.job.events.write("ANALYSIS_PLAN_DETERMINISTIC_DECISIONS",
                               selected_scanner_count=len(value["scanner_selections"]),
                               skipped_scanner_count=len(value["scanner_non_selections"]),
@@ -295,11 +347,12 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         maybe_fail(unit)
         base = unit.output("analysis_decisions.apply_deterministic_rules")
         plan = dict(base["plan"])
+        environment_gaps = [gap for gap in plan["coverage_gaps"] if gap.startswith("build environment: ")]
         ambiguities = list(base["ambiguities"])
         model = unit.job.config.settings["model"]
         if not ambiguities:
-            return {"plan": plan, "gaps": [], "model_calls": 0, "validation_rejections": 0,
-                    "terminal_status": "SUCCEEDED"}
+            return {"plan": plan, "gaps": environment_gaps, "model_calls": 0, "validation_rejections": 0,
+                    "terminal_status": "COMPLETED_WITH_GAPS" if environment_gaps else "SUCCEEDED"}
         if not bool(model["enabled"]):
             gap = "analysis planning ambiguity was not model-assisted because the configured model is disabled"
             plan["coverage_gaps"] = [*plan["coverage_gaps"], gap]
@@ -317,6 +370,10 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             enabled=unit.job.tools.enable_swift)
         summary = unit.output("catalog_summary.summarize_components")["summary"]
         catalog_units = {str(value["build_unit_id"]): value for value in catalog.get("build_units", ())}
+        from appsec_review.config import PlanningFeedbackSettings, parse_bounded_settings
+        limits = parse_bounded_settings(unit.job.config.settings.get("feedback", {}), PlanningFeedbackSettings)
+        from dataclasses import replace
+        limits = replace(limits, max_calls=min(limits.max_calls, 1 + model["retries"]))
         guidance = load_runtime_skill(unit.job.repository_root, "target-analysis-planning",
                                       job_id="job_target_analysis_plan").text
         prompt_root = unit.job.repository_root / "pipeline" / "prompt-fragments"
@@ -337,8 +394,16 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
 
         if not grouped:
             plan["model"] = {"status": "NOT_NEEDED", "proposal_sha256": None}
-            return {"plan": plan, "gaps": [], "model_calls": 0, "validation_rejections": 0,
-                    "terminal_status": "SUCCEEDED"}
+            return {"plan": plan, "gaps": environment_gaps, "model_calls": 0, "validation_rejections": 0,
+                    "terminal_status": "COMPLETED_WITH_GAPS" if environment_gaps else "SUCCEEDED"}
+
+        partitions = []
+        for key, values in sorted(grouped.items()):
+            ordered = sorted(values, key=lambda value: value["build_unit_id"])
+            partitions.extend((key, ordered[offset:offset + limits.units_per_scope])
+                              for offset in range(0, len(ordered), limits.units_per_scope))
+        omitted = max(0, len(partitions) - limits.max_scopes)
+        partitions = partitions[:limits.max_scopes]
 
         def infer_group(item: tuple[tuple[str, str, str], list[Mapping[str, Any]]]) -> dict[str, Any]:
             (family, build_system, image_profile), build_units = item
@@ -356,7 +421,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                                                           if str(value["path"]) in paths],
                                "compile_databases": [value for value in summary["compile_databases"]
                                                      if str(value["path"]) in paths],
-                               "accepted_artifacts": [], "build_units": build_units}
+                               "accepted_artifacts": [], "build_units": build_units,
+                               "build_environment": plan["build_environment"],
+                               "feedback_limits": asdict(limits)}
             request = ModelRequest(
                 schema=PROPOSAL_SCHEMA, persona=persona, role=role, guidance=guidance,
                 summary=compact_summary, allowed_scanners=(), allowed_build_systems=(build_system,),
@@ -375,152 +442,84 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 "model": request.model, "reasoning": request.reasoning,
                 "max_input_tokens": request.max_input_tokens, "max_output_tokens": request.max_output_tokens,
                 "guidance_sha256": guidance_sha,
+                "source_fingerprint": catalog["source_fingerprint"],
+                "whole_bundle": plan["build_topology"]["evidence_bundle"],
+                "environment": plan["build_environment"],
+                "profiles": plan["build_topology"]["evidence_bundle"]["profiles"],
+                "rules": plan["build_topology"]["executable_graph"]["rules"],
             }
-            request_sha = hashlib.sha256(canonical_json(request_identity)).hexdigest()
-            if len(canonical_json(request_identity)) + len(guidance_bytes) > request.max_input_tokens * 4:
-                return {"status": "BUDGET_EXCEEDED", "proposal": None, "calls": 0, "errors": [],
-                        "gap": f"{family}/{build_system}: recipe inference exceeded its input budget"}
-            # Summary trimming limits model context, not accepted source authority.
             accepted_units = [catalog_units[str(value["build_unit_id"])] for value in build_units]
             group_catalog = {**catalog, "build_units": accepted_units}
-            calls = 0
-            errors: list[str] = []
-            last_error: Exception | None = None
-            group_slug = hashlib.sha256(f"{family}:{build_system}:{image_profile}".encode()).hexdigest()[:12]
-            from appsec_review.runtime import execution_safety as safety
-            for retry in range(1 if safety.active() else int(model["retries"]) + 1):
-                safety.check_running()
-                calls += 1
-                invocation = hashlib.sha256(
-                    f"{unit.job.run_id}:{unit.job.attempt_id}:{group_slug}:{retry}:{request_sha}".encode()).hexdigest()
-                log = PipelineLog(unit.job.run_root)
-                emit_model_event(log, event_type="MODEL_CALL_STARTED", run_id=unit.job.run_id,
-                    invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
-                    reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                    request_sha256=request_sha, retry_count=retry, job_id="job_target_analysis_plan",
-                    attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
-                started = time.monotonic()
-                try:
-                    result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
-                    if result.raw_response is not None:
-                        atomic_bytes(unit.unit_root / f"model-response-{group_slug}-{retry}.txt",
-                                     result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
-                    proposal = dict(result.proposal)
-                    recipes = proposal.get("build_recipes")
-                    if isinstance(recipes, list):
-                        units_by_id = {str(value["build_unit_id"]): value for value in accepted_units}
-                        proposal["build_recipes"] = [
-                            normalize_build_recipe(
-                                recipe, units_by_id.get(str(recipe.get("build_unit_id", ""))))
-                            if isinstance(recipe, Mapping) else recipe
-                            for recipe in recipes]
-                    errors = validate_proposal(proposal, catalog=group_catalog,
-                                               allowed_components=(), allowed_paths=request.allowed_paths)
-                    emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
-                        invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
-                        reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                        request_sha256=request_sha, terminal_status="REJECTED" if errors else "ACCEPTED",
-                        duration_ms=int((time.monotonic() - started) * 1000), retry_count=retry,
-                        input_tokens=result.input_tokens, output_tokens=result.output_tokens,
-                        cache_tokens=result.cache_tokens, job_id="job_target_analysis_plan",
-                        attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
-                    if not errors:
-                        return {"status": "ACCEPTED", "proposal": proposal, "calls": calls,
-                                "errors": [], "gap": None}
-                    unit.job.events.write("ANALYSIS_PLAN_VALIDATION_REJECTED",
-                        rejection_count=len(errors), build_family=family, build_system=build_system,
-                        proposal_sha256=hashlib.sha256(canonical_json(proposal)).hexdigest())
-                    safety.fail("analysis-plan model output failed validation", action="target_plan.inference")
-                    if retry < int(model["retries"]):
-                        request = replace(request, repair_errors=tuple(errors[:20]),
-                            prior_response=canonical_json(result.proposal).decode()[:131072])
-                except Exception as exc:
-                    last_error = exc
-                    raw_response = getattr(exc, "raw_response", None)
-                    if isinstance(raw_response, str):
-                        atomic_bytes(unit.unit_root / f"model-response-{group_slug}-{retry}-invalid.txt",
-                                     raw_response.encode("utf-8")[:2 * 1024 * 1024])
-                        if retry < int(model["retries"]):
-                            rejected_output = getattr(exc, "rejected_output", None)
-                            request = replace(request, repair_errors=(str(exc)[:4096],),
-                                              prior_response=(rejected_output if isinstance(rejected_output, str)
-                                                              else raw_response)[:131072])
-                    emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
-                        invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
-                        reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                        request_sha256=request_sha, terminal_status="FAILED",
-                        duration_ms=int((time.monotonic() - started) * 1000), retry_count=retry,
-                        error_class=type(exc).__name__, job_id="job_target_analysis_plan",
-                        attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
-                    safety.fail(f"analysis-plan inference failed: {type(exc).__name__}",
-                                action="target_plan.inference")
-            if errors:
-                accepted = []
-                unit_gaps = []
-                recipes = proposal.get("build_recipes", ())
-                counts: dict[str, int] = {}
-                subset_allowed = (
-                    set(proposal) == {"schema", "component_proposals", "build_recipes"}
-                    and proposal.get("schema") == PROPOSAL_SCHEMA
-                    and proposal.get("component_proposals") == []
-                    and isinstance(recipes, list) and len(recipes) <= 256
-                )
-                if subset_allowed:
-                    for recipe in recipes:
-                        if isinstance(recipe, Mapping):
-                            key = str(recipe.get("build_unit_id", ""))
-                            counts[key] = counts.get(key, 0) + 1
-                for build_unit in accepted_units:
-                    key = str(build_unit["build_unit_id"])
-                    candidates = [recipe for recipe in recipes if isinstance(recipe, Mapping)
-                                  and recipe.get("build_unit_id") == key] if subset_allowed else []
-                    candidate = candidates[0] if subset_allowed and counts.get(key) == 1 else None
-                    unit_errors = (validate_proposal(
-                        {**proposal, "build_recipes": [candidate]},
-                        catalog={**group_catalog, "build_units": [build_unit]},
-                        allowed_components=(), allowed_paths=request.allowed_paths,
-                    ) if candidate is not None else ["missing or duplicated recipe"])
-                    if not unit_errors:
-                        accepted.append(candidate)
-                    else:
-                        markers = ", ".join(f"{marker['path']}@{marker['sha256']}"
-                                            for marker in build_unit["markers"])
-                        unit_gaps.append(f"{family}/{build_system}/{key}: recipe proposal rejected after bounded repair "
-                                         f"({markers}): "
-                                         + "; ".join(unit_errors))
-                if accepted:
-                    return {"status": "PARTIAL", "proposal": {
-                        "schema": PROPOSAL_SCHEMA, "component_proposals": [],
-                        "build_recipes": accepted,
-                    }, "calls": calls, "errors": errors[:20], "gap": "\n".join(unit_gaps or [
-                        f"{family}/{build_system}: rejected group validation retained as a coverage gap: "
-                        + "; ".join(errors[:20])
-                    ])}
-                return {"status": "REJECTED", "proposal": None, "calls": calls, "errors": errors[:20],
-                        "gap": "\n".join(unit_gaps) or
-                               f"{family}/{build_system}: recipe proposal rejected after bounded repair"}
-            return {"status": "FAILED", "proposal": None, "calls": calls, "errors": [],
-                    "gap": f"{family}/{build_system}: recipe inference failed ({type(last_error).__name__})"}
+            from .planning import feedback_request
+            request = feedback_request(request, group_catalog, limits)
+            from appsec_review.storage.shared import safe_path
 
-        workers = max(1, min(int(model.get("workers", 4)), len(grouped)))
+            def read_document(item, bound):
+                if unit.job.target_root is None:
+                    raise ValueError("planning evidence source custody is missing")
+                path = safe_path(unit.job.target_root, item["path"])
+                with path.open("rb") as stream:
+                    return stream.read(bound + 1)
+
+            call_starts = {}
+            def on_call(event, call, key, error, result=None):
+                if event == "STARTED":
+                    call_starts[call] = time.monotonic()
+                duration = (None if event == "STARTED" else
+                            max(0, int((time.monotonic() - call_starts.pop(call)) * 1000)))
+                invocation = hashlib.sha256(
+                    f"{unit.job.run_id}:{unit.job.attempt_id}:{key}:{call}".encode()).hexdigest()
+                emit_model_event(PipelineLog(unit.job.run_root),
+                    event_type="MODEL_CALL_STARTED" if event == "STARTED" else "MODEL_CALL_COMPLETED",
+                    run_id=unit.job.run_id, invocation_id=invocation,
+                    provider=str(model["provider"]), model=str(model["model"]),
+                    reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
+                    request_sha256=key, retry_count=call - 1, job_id="job_target_analysis_plan",
+                    attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system,
+                    duration_ms=duration,
+                    input_tokens=result.input_tokens if result is not None else None,
+                    output_tokens=result.output_tokens if result is not None else None,
+                    cache_tokens=result.cache_tokens if result is not None else None,
+                    terminal_status=event if event != "STARTED" else None, error_class=error)
+
+            return bounded_feedback(infer, request, catalog=group_catalog, limits=limits,
+                read_document=read_document,
+                cache_root=unit.job.run_root / "data" / "planning-feedback",
+                identity=request_identity, on_call=on_call,
+                call_timeout_seconds=int(model["timeout_seconds"]))
+
+        workers = max(1, min(int(model.get("workers", 4)), len(partitions)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(pool.map(infer_group, sorted(grouped.items())))
+            results = list(pool.map(infer_group, partitions))
         accepted_recipes = [recipe for value in results if value["proposal"] is not None
                             for recipe in value["proposal"]["build_recipes"]]
-        gaps = [str(value["gap"]) for value in results if value["gap"]]
+        gaps = [*environment_gaps, *(str(value["gap"]) for value in results if value["gap"])]
+        if omitted:
+            gaps.append(f"feedback_scope_bound: {omitted} deterministic partitions were not inferred")
+        captured = {document["path"]: document for value in results for document in value["documents"]}
+        plan["planning_evidence"] = [captured[path] for path in sorted(captured)]
+        catalog = evidence_catalog(catalog, plan["planning_evidence"])
+        for action in plan["build_topology"]["build_actions"]:
+            accepted = next(item for item in catalog["build_units"]
+                            if item["build_unit_id"] == action["build_unit_id"])
+            action["descriptor_package"] = accepted["descriptor_package"]
         errors = [error for value in results for error in value["errors"]]
         if accepted_recipes:
-            proposal = {"schema": PROPOSAL_SCHEMA, "component_proposals": [],
-                        "build_recipes": accepted_recipes}
+            proposal = {"schema": PROPOSAL_SCHEMA, "action": "final", "component_proposals": [],
+                        "build_recipes": accepted_recipes, "hints": [], "abstentions": []}
             plan = merge_proposal(plan, proposal, catalog)
             plan["model"] = {"status": "ACCEPTED" if not gaps else "PARTIAL",
                              "proposal_sha256": hashlib.sha256(canonical_json(proposal)).hexdigest(),
                              "groups": [{"status": value["status"]} for value in results]}
         else:
-            terminal_model = "REJECTED" if results and all(value["status"] == "REJECTED" for value in results) else "FAILED"
+            terminal_model = "PARTIAL" if any(value["status"] == "PARTIAL" for value in results) else "FAILED"
             plan["model"] = {"status": terminal_model, "proposal_sha256": None,
                              "groups": [{"status": value["status"]} for value in results]}
         plan["coverage_gaps"] = [*plan["coverage_gaps"], *gaps]
+        _publish_build_graph(plan)
+        plan["feedback"] = [{"cache_key": value["cache_key"], "cache_hit": value["cache_hit"],
+                             "calls": value["calls"], "status": value["status"], "metrics": value["metrics"]}
+                            for value in results]
         plan["contradictions"] = [*plan.get("contradictions", []), *errors[:20]]
         return {"plan": plan, "gaps": gaps, "model_calls": sum(value["calls"] for value in results),
                 "validation_rejections": len(errors),

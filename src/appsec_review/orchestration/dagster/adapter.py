@@ -207,6 +207,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                 claim = launch_begin(
                     runner_factory(config), selected, inputs, run_id=run_id, trigger=_trigger_for_run(tags),
                     orchestration={"system": "dagster", "run_id": context.run_id,
+                                    "workflow": context.dagster_run.job_name,
                                    "node": context.op.name,
                                    **({"iteration_request": iteration_request} if iteration_request else {})})
                 created_at = getattr(context.dagster_run, "create_timestamp", None)
@@ -474,6 +475,12 @@ def build_definitions(
                         registry.build("job_target_catalog"),
                         registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
                         registry.build("job_language_build")]
+        if "job_build_environment_analysis" in registered:
+            project_dependencies["job_build_environment_analysis"] = ("job_target_catalog",)
+            project_dependencies["job_target_analysis_plan"] = ("job_build_environment_analysis",)
+            position = next(index for index, job in enumerate(project_jobs)
+                            if job.job_id == "job_target_analysis_plan")
+            project_jobs.insert(position, registry.build("job_build_environment_analysis"))
         if "job_artifact_indexing" in registered:
             project_jobs.append(registry.build("job_artifact_indexing"))
             project_dependencies["job_artifact_indexing"] = ("job_language_build",)

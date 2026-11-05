@@ -372,6 +372,7 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("review_intake").name == "review_intake"
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
     assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
+    assert definitions.get_job_def("build_environment_analysis").name == "build_environment_analysis"
     assert definitions.get_job_def("project_build").name == "project_build"
     assert definitions.get_job_def("artifact_indexing").name == "artifact_indexing"
     assert definitions.get_job_def("cpp_compiled_analysis").name == "cpp_compiled_analysis"
@@ -635,6 +636,31 @@ def test_wave1_dagster_path_runs_application_graph(tmp_path: Path, monkeypatch) 
     assert result.success
     assert "evidence_collection__evidence_publication__assemble_manifest" in {
         node.name for node in build_definitions(config).get_job_def("wave1_review").graph.node_defs}
+
+
+@pytest.mark.parametrize("workflow", ["wave1_review", "project_build_review"])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_environment_dependency_is_required_or_transparently_disabled(tmp_path, workflow, enabled):
+    source = Path(__file__).resolve().parents[3] / "appsec-review.toml"
+    text = source.read_text(encoding="utf-8").replace(
+        "[jobs.job_build_environment_analysis.settings]\nenabled = true",
+        "[jobs.job_build_environment_analysis.settings]\nenabled = " + str(enabled).lower())
+    config = tmp_path / "appsec-review.toml"
+    config.write_text(text, encoding="utf-8")
+    graph = build_definitions(config).get_job_def(workflow).graph
+    prefix = "project_build_review__" if workflow == "project_build_review" else ""
+    upstream = graph.dependency_structure.input_to_upstream_outputs_for_node(prefix + "target_analysis_plan__begin")
+    names = {output.node_name.removeprefix(prefix) for outputs in upstream.values() for output in outputs}
+    if enabled:
+        assert "build_environment_analysis__finalize" in names
+        environment = graph.dependency_structure.input_to_upstream_outputs_for_node(
+            prefix + "build_environment_analysis__begin")
+        assert {output.node_name.removeprefix(prefix) for outputs in environment.values() for output in outputs} == {
+            "target_catalog__finalize"}
+    else:
+        assert "build_environment_analysis__finalize" not in names
+        assert names
+        assert prefix + "build_environment_analysis__begin" not in {node.name for node in graph.node_defs}
 
 
 def test_multiprocess_branches_overlap_and_final_manifest_waits(tmp_path: Path, monkeypatch) -> None:

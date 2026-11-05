@@ -20,8 +20,12 @@ execution authority. Windows/Linux x64 intent and project-declared mobile facts 
 for compiler, selected-member, product-role or effective-input proof. Cached builds and resumed
 work must re-admit those receipts before reuse or reconstruction. See
 [build topology and iterations](docs/architecture/build-topology-and-iterations.md).
-This source change does not establish live acceptance, acquired compiler metadata, new images,
-builder provisioning, or the later build-environment-analysis lifecycle.
+The default-enabled [static environment producer](docs/operations/build-environment-analysis.md)
+now precedes planning in both review composites. Proposal/3 supports bounded additional evidence,
+explicit abstention and complete-only caches; Unity/container declarations use the same source
+compiler without becoming target-selection or image/compiler proof. This V2 source candidate is
+untested: it establishes neither live acceptance, acquired compiler metadata, new images nor
+builder provisioning.
 
 ## Contents
 

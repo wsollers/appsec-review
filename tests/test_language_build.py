@@ -190,7 +190,8 @@ class NativeRecipeModel:
                 "expected_outputs": [f"{root}/build"], "network_required": False,
                 "reason": "bounded native test recipe",
             })
-        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                            "component_proposals": [],
                             "build_recipes": recipes})
 
 
@@ -214,7 +215,8 @@ class DotnetRecipeModel:
                 "expected_outputs": [f"{root}/bin", f"{root}/obj"], "network_required": True,
                 "reason": "locked Linux SDK build",
             })
-        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "hints": [], "abstentions": [],
+                            "component_proposals": [],
                             "build_recipes": recipes})
 
 

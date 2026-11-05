@@ -17,7 +17,7 @@ from appsec_review.tool_inputs import SOURCE_SUFFIXES as TOOL_SOURCE_SUFFIXES, s
 
 
 PLAN_SCHEMA = "appsec-review/target-analysis-plan/1"
-PROPOSAL_SCHEMA = "appsec-review/target-analysis-proposal/2"
+PROPOSAL_SCHEMA = "appsec-review/target-analysis-proposal/3"
 SUMMARY_SCHEMA = "appsec-review/target-analysis-summary/1"
 
 SCANNERS = (
@@ -299,14 +299,16 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
 
 def _publish_build_graph(plan: dict[str, Any]) -> None:
     topology = plan["build_topology"]
+    environment = plan.get("build_environment")
     graph = compile_build_topology(
         topology["build_actions"], source_fingerprint=plan["source_fingerprint"],
-        component_relationships=topology["relationships"])
+        component_relationships=topology["relationships"], environment=environment)
     topology["executable_graph"] = graph
     from appsec_review.jobs.build_topology import topology_evidence_bundle, refine_build_topology
     topology["evidence_bundle"] = topology_evidence_bundle(
-        topology["build_actions"], source_fingerprint=plan["source_fingerprint"])
-    topology["planning_refinement"] = refine_build_topology(graph, topology["build_actions"])
+        topology["build_actions"], source_fingerprint=plan["source_fingerprint"], environment=environment)
+    topology["planning_refinement"] = refine_build_topology(
+        graph, topology["build_actions"], environment=environment)
     plan["coverage_gaps"] = list(dict.fromkeys([
         *(gap for gap in plan["coverage_gaps"] if not gap.startswith("executable build graph: ")),
         *(f"executable build graph: {gap['code']}: {gap['reason']}" for gap in graph["coverage_gaps"]),
@@ -317,8 +319,32 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
                       allowed_components: Collection[str] | None = None,
                       allowed_paths: Collection[str] | None = None) -> list[str]:
     errors: list[str] = []
-    if set(proposal) != {"schema", "component_proposals", "build_recipes"} or proposal.get("schema") != PROPOSAL_SCHEMA:
-        return ["proposal must contain only the supported versioned schema, component_proposals, and build_recipes"]
+    if (set(proposal) != {"schema", "action", "component_proposals", "build_recipes", "hints", "abstentions"}
+            or proposal.get("schema") != PROPOSAL_SCHEMA or proposal.get("action") != "final"):
+        return ["proposal must be a closed proposal/3 final response"]
+    if proposal.get("component_proposals") != []:
+        return ["component ownership and scanner choices are deterministic, not model authority"]
+    graph = compile_build_topology(catalog.get("build_units", ()),
+                                   source_fingerprint=catalog["source_fingerprint"])
+    fact_ids = {fact["fact_id"] for fact in graph["facts"]}
+    hints = proposal.get("hints")
+    if (not isinstance(hints, list) or len(hints) > 256
+            or any(not isinstance(item, str) or item not in fact_ids for item in hints)):
+        errors.append("hints must resolve deterministic whole-bundle fact identities")
+    abstentions = proposal.get("abstentions")
+    unit_ids = {item["build_unit_id"] for item in catalog.get("build_units", ())}
+    abstained = set()
+    if not isinstance(abstentions, list) or len(abstentions) > 256:
+        errors.append("abstentions must be bounded")
+    else:
+        for item in abstentions:
+            if (not isinstance(item, Mapping) or set(item) != {"build_unit_id", "reason"}
+                    or item["build_unit_id"] not in unit_ids or item["build_unit_id"] in abstained
+                    or not isinstance(item["reason"], str) or not item["reason"].strip()
+                    or len(item["reason"].encode()) > 2048):
+                errors.append("abstention must name one accepted unit and a bounded reason")
+            else:
+                abstained.add(item["build_unit_id"])
     values = proposal.get("component_proposals")
     if not isinstance(values, list) or len(values) > 256:
         return ["component_proposals must be a bounded list"]
@@ -406,13 +432,17 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
                 errors.append(f"build_recipes[{index}] duplicates a build unit")
             seen_recipes.add(unit_id)
             errors.extend(f"build_recipes[{index}]: {error}" for error in validate_build_recipe(recipe, units[unit_id]))
-        missing = sorted(set(units) - seen_recipes)
+        if seen_recipes & abstained:
+            errors.append("unit cannot have both a recipe and an abstention")
+        missing = sorted(set(units) - seen_recipes - abstained)
         if missing:
             errors.append("build_recipes omitted accepted build units: " + ", ".join(missing[:8]))
     return errors
 
 
 def merge_proposal(plan: Mapping[str, Any], proposal: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any]:
+    if proposal.get("component_proposals") != []:
+        raise ValueError("component ownership and scanner choices are deterministic, not model authority")
     result = copy.deepcopy(dict(plan))
     path_hashes = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
     components = {item["component_id"]: item for item in result["components"]}
@@ -448,7 +478,251 @@ def merge_proposal(plan: Mapping[str, Any], proposal: Mapping[str, Any], catalog
     return result
 
 
+def evidence_catalog(catalog, documents):
+    """Augment only exact accepted inventory identities; ownership still comes from source rules."""
+    documents = tuple(documents)
+    if not documents:
+        return catalog
+    result = copy.deepcopy(dict(catalog))
+    inventory = {item["path"]: item["sha256"] for item in catalog["files"]}
+    captured = {}
+    for document in documents:
+        if (set(document) != {"path", "sha256", "content"}
+                or inventory.get(document["path"]) != document["sha256"]
+                or not isinstance(document["content"], str)
+                or hashlib.sha256(document["content"].encode()).hexdigest() != document["sha256"]):
+            raise ValueError("planning evidence does not resolve accepted source bytes")
+        if document["path"] in captured and captured[document["path"]] != document:
+            raise ValueError("conflicting planning evidence")
+        captured[document["path"]] = document
+    for unit in result.get("build_units", ()):
+        package = unit.setdefault("descriptor_package", {})
+        existing = {item["path"]: item for item in package.get("documents", ())}
+        for path, document in captured.items():
+            if _under(path, unit["root"]):
+                if path in existing and existing[path] != document:
+                    raise ValueError("planning evidence changed captured descriptor bytes")
+                existing[path] = copy.deepcopy(document)
+        package["documents"] = [existing[path] for path in sorted(existing)]
+    return result
+
+
+def model_safe(value):
+    from appsec_review.jobs.job_build_environment_analysis.job import redact, SECRET
+    if isinstance(value, Mapping):
+        return {key: "[REDACTED]" if SECRET.search(str(key)) else model_safe(item)
+                for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [model_safe(item) for item in value]
+    return redact(value) if isinstance(value, str) else value
+
+
+def feedback_request(request, catalog, limits):
+    """Offer exact additional inventory identities within the existing request-byte budget."""
+    from dataclasses import asdict, replace
+    roots = [unit["root"] for unit in catalog.get("build_units", ())]
+    captured = {document["path"] for unit in catalog.get("build_units", ())
+                for document in unit.get("descriptor_package", {}).get("documents", ())}
+    eligible = sorted((item for item in catalog["files"]
+                       if item["path"] not in captured and any(_under(item["path"], root) for root in roots)),
+                      key=lambda item: item["path"])
+    references = []
+    offered = replace(request, summary={**request.summary, "evidence_inventory": references,
+                                       "evidence_inventory_omitted": len(eligible)})
+    for item in eligible:
+        candidate = {key: item[key] for key in ("path", "sha256", "size_bytes")}
+        references.append(candidate)
+        offered = replace(offered, summary={**offered.summary,
+            "evidence_inventory_omitted": len(eligible) - len(references)},
+            allowed_paths=tuple(sorted({*request.allowed_paths, *(entry["path"] for entry in references)})))
+        # Leave room for the first evidence response and repair metadata, not just identities.
+        if len(canonical_json(model_safe(asdict(offered)))) > min(
+                limits.max_request_bytes, request.max_input_tokens * 4) * 3 // 4:
+            references.pop()
+            return replace(offered, summary={**offered.summary, "evidence_inventory": list(references),
+                "evidence_inventory_omitted": len(eligible) - len(references)},
+                allowed_paths=tuple(sorted({*request.allowed_paths, *(entry["path"] for entry in references)})))
+    return offered
+
+
+def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_root, identity,
+                     clock=None, on_call=None, call_timeout_seconds=None):
+    """One finite evidence/repair conversation. Only a validated complete final is reusable."""
+    from dataclasses import asdict, replace
+    import time
+    from appsec_review.inference import ModelOutputError
+    from appsec_review.storage.shared import safe_path, immutable_bytes
+    from appsec_review.jobs.build_discovery import normalize_build_recipe
+    clock = clock or time.monotonic
+    call_timeout_seconds = limits.deadline_seconds if call_timeout_seconds is None else call_timeout_seconds
+    if type(call_timeout_seconds) is not int or call_timeout_seconds < 1:
+        raise ValueError("feedback model call timeout must be a positive integer")
+    started = clock()
+    metrics = {"request_bytes": 0, "response_bytes": 0, "evidence_bytes": 0, "evidence_rounds": 0}
+    def finish(value):
+        return {**value, "metrics": {**metrics, "elapsed_seconds": clock() - started}}
+    inventory = {item["path"]: item for item in catalog["files"]}
+    key = hashlib.sha256(canonical_json({
+        "identity": identity, "request": asdict(request), "limits": asdict(limits),
+        "source": catalog["source_fingerprint"], "call_timeout_seconds": call_timeout_seconds,
+        "accepted_units": catalog.get("build_units", ()), "rules": "bounded-feedback/1",
+    })).hexdigest()
+    cache_path = safe_path(cache_root, key + ".json")
+    if cache_path.is_file():
+        if cache_path.stat().st_size > 2 * (limits.max_response_bytes + limits.max_evidence_bytes) + 4096:
+            raise ValueError("feedback cache exceeds its bound")
+        cached = json.loads(cache_path.read_bytes())
+        if set(cached) != {"key", "proposal", "documents", "status"} or cached["key"] != key:
+            raise ValueError("feedback cache identity mismatch")
+        augmented = evidence_catalog(catalog, cached["documents"])
+        documents = cached["documents"]
+        if (cached["status"] != "COMPLETE" or not isinstance(documents, list)
+                or len(documents) > limits.max_evidence_rounds * limits.max_documents
+                or len({item["path"] for item in documents}) != len(documents)
+                or sum(len(item["content"].encode()) for item in documents) > limits.max_evidence_bytes
+                or any(len(item["content"].encode()) > limits.max_document_bytes for item in documents)
+                or model_safe(documents) != documents or model_safe(cached["proposal"]) != cached["proposal"]
+                or cached["proposal"].get("abstentions") != []
+                or validate_proposal(cached["proposal"], catalog=augmented)):
+            raise ValueError("feedback cache is not a complete validated final")
+        metrics["evidence_bytes"] = sum(len(item["content"].encode()) for item in documents)
+        return finish({"status": "ACCEPTED", "proposal": cached["proposal"], "documents": documents,
+                       "calls": 0, "errors": [], "gap": None, "cache_key": key, "cache_hit": True})
+    documents, calls, rounds, errors = {}, 0, 0, []
+    current = request
+    while calls < limits.max_calls:
+        remaining = limits.deadline_seconds - (clock() - started)
+        if remaining <= 0:
+            errors.append("internal_feedback_deadline")
+            break
+        current = replace(current, summary=model_safe(current.summary),
+                          prior_response=model_safe(current.prior_response),
+                          repair_errors=tuple(model_safe(current.repair_errors)))
+        request_bytes = canonical_json(asdict(current))
+        if len(request_bytes) > min(limits.max_request_bytes, current.max_input_tokens * 4):
+            errors.append("feedback_request_byte_bound")
+            break
+        calls += 1
+        metrics["request_bytes"] += len(request_bytes)
+        if on_call:
+            on_call("STARTED", calls, key, None)
+        try:
+            result = infer(current, timeout_seconds=max(
+                1, min(int(remaining), call_timeout_seconds, limits.deadline_seconds)))
+        except (ModelOutputError, TimeoutError) as exc:
+            errors = ["model_output_invalid" if isinstance(exc, ModelOutputError) else "model_timeout"]
+            if on_call:
+                on_call("REJECTED", calls, key, type(exc).__name__)
+            current = replace(current, repair_errors=tuple(errors), prior_response=None)
+            continue
+        if on_call:
+            on_call("COMPLETED", calls, key, None, result)
+        raw_size = len(result.raw_response.encode()) if result.raw_response is not None else 0
+        response_size = max(raw_size, len(canonical_json(result.proposal)))
+        metrics["response_bytes"] += response_size
+        if clock() - started >= limits.deadline_seconds:
+            errors = ["internal_feedback_deadline"]
+            break
+        if response_size > limits.max_response_bytes:
+            errors = ["feedback_response_byte_bound"]
+            current = replace(current, repair_errors=tuple(errors), prior_response=None)
+            continue
+        if not isinstance(result.proposal, Mapping):
+            errors = ["model_response_must_be_an_object"]
+            current = replace(current, repair_errors=tuple(errors), prior_response=None)
+            continue
+        proposal = copy.deepcopy(dict(result.proposal))
+        if model_safe(proposal) != proposal:
+            errors = ["sensitive_model_output_rejected"]
+            current = replace(current, repair_errors=tuple(errors), prior_response=None)
+            continue
+        if proposal.get("schema") == PROPOSAL_SCHEMA and proposal.get("action") == "need_evidence":
+            requests = proposal.get("requests")
+            if (set(proposal) != {"schema", "action", "requests"} or not isinstance(requests, list)
+                    or not 1 <= len(requests) <= limits.max_documents):
+                errors = ["invalid_bounded_evidence_request"]
+            elif rounds >= limits.max_evidence_rounds:
+                errors = ["evidence_rounds_exhausted"]
+                break
+            else:
+                rounds += 1
+                metrics["evidence_rounds"] = rounds
+                additions, request_errors = {}, []
+                roots = [unit["root"] for unit in catalog.get("build_units", ())]
+                for item in requests:
+                    if (not isinstance(item, Mapping) or set(item) != {"path", "sha256", "reason"}
+                            or not isinstance(item["path"], str)
+                            or not isinstance(item["reason"], str) or not item["reason"].strip()
+                            or len(item["reason"].encode()) > 2048
+                            or item["path"] not in inventory
+                            or inventory[item["path"]]["sha256"] != item["sha256"]
+                            or not any(_under(item["path"], root) for root in roots)):
+                        request_errors.append("evidence_identity_or_scope_rejected")
+                        continue
+                    if item["path"] in documents or item["path"] in additions:
+                        request_errors.append("evidence_request_makes_no_progress")
+                        continue
+                    if clock() - started >= limits.deadline_seconds:
+                        request_errors.append("internal_feedback_deadline")
+                        break
+                    payload = read_document(inventory[item["path"]], limits.max_document_bytes)
+                    if len(payload) > limits.max_document_bytes:
+                        request_errors.append("evidence_document_byte_bound")
+                        continue
+                    if hashlib.sha256(payload).hexdigest() != item["sha256"]:
+                        raise ValueError("requested evidence source identity changed")
+                    try:
+                        text = payload.decode("utf-8")
+                    except UnicodeDecodeError:
+                        request_errors.append("unsupported_evidence_encoding")
+                        continue
+                    if model_safe(text) != text:
+                        request_errors.append("sensitive_evidence_withheld")
+                        continue
+                    additions[item["path"]] = {"path": item["path"], "sha256": item["sha256"],
+                                               "content": text}
+                if sum(len(item["content"].encode()) for item in (*documents.values(), *additions.values())
+                       ) > limits.max_evidence_bytes:
+                    request_errors.append("additive_evidence_byte_bound")
+                if request_errors:
+                    errors = sorted(set(request_errors))
+                else:
+                    documents.update(additions)
+                    metrics["evidence_bytes"] = sum(len(item["content"].encode()) for item in documents.values())
+                    current = replace(current, summary={**request.summary,
+                        "evidence": [documents[path] for path in sorted(documents)]},
+                        repair_errors=(), prior_response=None)
+                    continue
+        else:
+            augmented = evidence_catalog(catalog, documents.values())
+            units = {unit["build_unit_id"]: unit for unit in augmented.get("build_units", ())}
+            recipes = proposal.get("build_recipes")
+            if isinstance(recipes, list):
+                proposal["build_recipes"] = [
+                    normalize_build_recipe(recipe, units.get(str(recipe.get("build_unit_id"))))
+                    if isinstance(recipe, Mapping) else recipe for recipe in recipes]
+            errors = validate_proposal(proposal, catalog=augmented)
+            if not errors:
+                withheld = proposal["abstentions"]
+                status = "PARTIAL" if withheld else "ACCEPTED"
+                if not withheld:
+                    immutable_bytes(cache_root, key + ".json", canonical_json({
+                        "key": key, "status": "COMPLETE", "proposal": proposal,
+                        "documents": list(documents.values())}))
+                return finish({"status": status, "proposal": proposal, "documents": list(documents.values()),
+                        "calls": calls, "errors": [], "gap": (
+                            "model abstained: " + "; ".join(
+                                f"{item['build_unit_id']}: {model_safe(item['reason'])}" for item in withheld)
+                            if withheld else None), "cache_key": key, "cache_hit": False})
+        current = replace(current, repair_errors=tuple(model_safe(errors[:20])), prior_response=None)
+    return finish({"status": "BUDGET_EXCEEDED", "proposal": None, "documents": list(documents.values()),
+            "calls": calls, "errors": model_safe(errors[:20]), "gap": (
+                "bounded feedback exhausted: " + "; ".join(model_safe(errors[:20]))),
+            "cache_key": key, "cache_hit": False})
+
+
 def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
+    catalog = evidence_catalog(catalog, plan.get("planning_evidence", ()))
     if plan.get("schema") != PLAN_SCHEMA or plan.get("source_fingerprint") != catalog["source_fingerprint"]:
         raise ValueError("analysis plan identity does not match the accepted target catalog")
     paths = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
@@ -516,6 +790,6 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
     validate_build_topology(graph)
     expected = compile_build_topology(
         topology["build_actions"], source_fingerprint=catalog["source_fingerprint"],
-        component_relationships=topology["relationships"])
+        component_relationships=topology["relationships"], environment=plan.get("build_environment"))
     if graph != expected:
         raise ValueError("analysis plan build graph differs from accepted descriptor declarations")

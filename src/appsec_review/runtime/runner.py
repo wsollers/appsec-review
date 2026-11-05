@@ -218,6 +218,10 @@ class JobRunner:
         else:
             raise RuntimeError(f"attempt id space exhausted for {run_id}/{job.job_id}")
         correlation = dict(orchestration or {})
+        if job.job_id == "job_target_analysis_plan":
+            from appsec_review.jobs.job_build_environment_analysis.job import environment_contract
+            correlation["build_environment_contract"] = canonical_json(
+                environment_contract(self.config, correlation, upstream_handoffs or {})).decode()
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
             raise ValueError("orchestration correlation must contain string keys and values")
         claim = {
@@ -297,6 +301,12 @@ class JobRunner:
         self._check_target_inputs(job, kwargs.get("target_root"), source_fingerprint)
         if run_id is not None:
             run_root = self.runs.resolve(str(run_id))
+            if job.job_id == "job_target_analysis_plan":
+                from appsec_review.jobs.job_build_environment_analysis.job import (
+                    environment_contract, load_environment,
+                )
+                load_environment(run_root, source_fingerprint, environment_contract(
+                    self.config, kwargs.get("orchestration") or {}, upstream))
             reasons, handoff_hash = ResumePlanner(
                 self.config, run_root, (job,), source_fingerprint,
                 target_root=kwargs.get("target_root")).accepted(job, upstream)
@@ -671,6 +681,9 @@ class JobRunner:
         if accepted:
             handoff["resolving_paths"]["result"] = attempt + "/result.json"
         handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
+        if (context.config.job_id in {"job_target_analysis_plan", "job_build_environment_analysis"}
+                and len(canonical_json(handoff)) > 32 * 1024 * 1024):
+            raise ValueError("planning/environment handoff exceeds its bounded accepted reader")
         return handoff
 
     @staticmethod

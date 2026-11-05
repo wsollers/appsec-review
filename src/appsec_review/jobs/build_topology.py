@@ -532,7 +532,7 @@ BUILD_TOPOLOGY_SCHEMA = "appsec-review/build-topology/2"
 BUNDLE_SCHEMA = "appsec-review/build-topology-evidence/1"
 REFINEMENT_SCHEMA = "appsec-review/build-topology-refinement/1"
 ENFORCEMENT_SCHEMA = "appsec-review/native-target-enforcement/1"
-RULES = "source-scoped-topology/2"
+RULES = "source-scoped-topology/3"
 OPERATIONS = frozenset({"managed_compile", "bytecode_transform", "native_aot",
                        "native_compile", "native_link", "package", "prebuilt_import", "unknown"})
 PROOF_KINDS = frozenset({"msbuild_selected_mapping", "compiler_explicit_target",
@@ -639,6 +639,38 @@ def _xml_declarations(document):
 
 def _document_declarations(document):
     suffix = PurePosixPath(document["path"]).suffix.lower()
+    path = PurePosixPath(document["path"])
+    if path.name.startswith("Dockerfile"):
+        declarations = []
+        stage = None
+        for line_number, line in enumerate(document["content"].splitlines(), 1):
+            instruction = re.fullmatch(r"\s*(FROM|COPY|ARG|ENV|WORKDIR)\s+(.+?)\s*", line, re.I)
+            if not instruction:
+                continue
+            name, raw = instruction[1].upper(), instruction[2]
+            if name == "FROM":
+                match = re.fullmatch(r"(\S+)(?:\s+AS\s+([A-Za-z0-9_-]+))?", raw, re.I)
+                stage = match[2] if match else None
+            # Image strings and platform options are declarations, never native compiler evidence.
+            declarations.append({"predicate": "container:" + name.lower(),
+                "value": {"raw": raw, "stage": stage},
+                "condition": "unresolved", "line": line_number})
+        return declarations
+    if (path.parent.name == "ProjectSettings" and path.name in {
+            "ProjectSettings.asset", "EditorBuildSettings.asset", "ProjectVersion.txt"}
+            or suffix == ".meta" and "PluginImporter:" in document["content"]):
+        declarations = []
+        for line_number, line in enumerate(document["content"].splitlines(), 1):
+            match = re.fullmatch(r"\s*(m_EditorVersion|scriptingBackend|scriptingDefineSymbols|"
+                                 r"apiCompatibilityLevelPerPlatform|m_Enabled|enabled|path|"
+                                 r"CPU|OS|first|second|isPreloaded|platformData)\s*:\s*(.*?)\s*", line)
+            if match:
+                declarations.append({"predicate": "unity:raw_declaration",
+                    "value": {"key": match[1], "raw": match[2], "scope": path.as_posix()},
+                    "condition": "unresolved", "line": line_number})
+        declarations.append({"predicate": "coverage_gap", "value": "unity_platform_plugin_semantics_partial",
+                             "condition": "unresolved", "line": 1})
+        return declarations
     if suffix in {".vcxproj", ".vcproj", ".csproj", ".vbproj", ".fsproj", ".props", ".targets"}:
         return _xml_declarations(document)
     result = []
@@ -754,6 +786,17 @@ def _scoped_documents(unit, facts_by_document):
     available = {item["path"] for item in unit["descriptor_package"]["documents"]}
     scoped = {marker["path"]: {("driver", marker["path"])} for marker in unit.get("markers", [])
               if marker["path"] in available}
+    for path in sorted(available):
+        candidate = PurePosixPath(path)
+        root = PurePosixPath(unit["root"])
+        if (candidate.name.startswith("Dockerfile")
+                and (candidate.parent == root or candidate.parent in root.parents
+                     or candidate.parent == PurePosixPath("."))):
+            scoped.setdefault(path, set()).add(("container_context", path))
+        if (unit["build_system"] == "unity" and (
+                unit["root"] == "." or path.startswith(unit["root"] + "/"))
+                and any(fact["predicate"].startswith("unity:") for fact in facts_by_document.get(path, ()))):
+            scoped.setdefault(path, set()).add(("unity_declaration", path))
     if unit["build_system"] == "gradle":
         for marker in unit.get("markers", []):
             parent = PurePosixPath(marker["path"]).parent
@@ -850,6 +893,14 @@ def compile_build_topology(units, *, source_fingerprint, component_relationships
         node["recipe_revision"] = None
         scoped = _scoped_documents(unit, facts_by_document)
         own_facts = [fact for path in scoped for fact in facts_by_document[path]]
+        for prefix, code in (("unity:", "unity_declarations_partial"),
+                             ("container:", "container_declarations_advisory")):
+            if any(fact["predicate"].startswith(prefix) for fact in own_facts):
+                legacy["coverage_gaps"].append({
+                    "code": code, "build_unit_ids": [uid], "blocking": False,
+                    "reason": "scoped source declarations do not establish selected targets or native proof",
+                    "evidence": [],
+                })
         if node["build_system"] == "make":
             resolved = make_default_build_commands(unit)
             if resolved is not None:
@@ -952,6 +1003,8 @@ def topology_identity(graph):
 def validate_build_topology(graph):
     if graph.get("schema") == "appsec-review/build-topology/1":
         return _validate_graph1(graph)
+    if len(canonical_json(graph)) > 16 * 1024 * 1024:
+        raise ValueError("graph/2 exceeds its 16 MiB byte bound")
     keys = {"schema", "source_fingerprint", "bundle_identity", "rules", "topology_id", "nodes",
             "edges", "external_requirements", "coverage_gaps", "facts", "bindings",
             "declarations", "relations"}
@@ -1286,6 +1339,9 @@ def _compiler_axes(target):
 
 
 def _native_enforcement(unit, graph, recipe, selection, operation, facts, profiles):
+    facts = [fact for fact in facts if not fact["predicate"].startswith(("container:", "unity:"))
+             and not (fact["predicate"] == "coverage_gap"
+                      and fact["value"] == "unity_platform_plugin_semantics_partial")]
     unresolved, axes, kind = [], {}, "compiler_explicit_target"
     uid = unit["build_unit_id"]
     commands = [] if recipe is None else [*recipe["configure_commands"], *recipe["build_commands"]]

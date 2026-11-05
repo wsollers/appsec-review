@@ -103,6 +103,18 @@ class ResumePlanner:
         if job.input_identity is not None or job.run_input_identity is not None:
             checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root, self.run_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
+        if job.job_id == "job_target_analysis_plan":
+            from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
+            from appsec_review.jobs.job_build_environment_analysis.job import (
+                environment_contract, load_environment,
+            )
+            # A planner reused by a graph still consumes the current accepted environment.
+            current = load_environment(self.run_root, self.source_fingerprint,
+                                       environment_contract(self.config, {}, upstream))
+            stored = load_accepted_plan(self.run_root).get("build_environment")
+            if stored is None or any(stored[key] != current[key] for key in
+                                     ("availability", "artifact", "evidence", "reference", "mode")):
+                reasons.append("planning environment availability identity changed")
         if job.job_id in {"job_project_build", "job_language_build", "job_build_iteration"}:
             try:
                 from appsec_review.jobs.build_topology_artifacts import _read, guard_build_cache

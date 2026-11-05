@@ -17,6 +17,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   historical topology discovery, the initial Windows/canonical WSL source publication and
   shared-workspace producer graph, registered bounded iterations, detached recipe recovery,
   restoration, and retention; deployment and live acceptance remain unestablished.
+- [`../operations/build-environment-analysis.md`](../operations/build-environment-analysis.md) -
+  bounded static environment declarations, authoritative availability and proposal/3 feedback;
+  declarations are advisory, not native execution proof.
 - [`../operations/language-build.md`](../operations/language-build.md) — global registered build
   iterations, family adapters, protected provenance, recovery CLI, checkpoints and workspace retention.
 - [`native-build-output-discovery.md`](native-build-output-discovery.md) — native build-layout

@@ -223,9 +223,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 from appsec_review.jobs.engine_discovery import unity_configuration_fingerprint
                 project = item["engine_project"]
                 fingerprint = unity_configuration_fingerprint(project, unit.job.source_fingerprint)
-                package = {"schema": "appsec-review/build-descriptor-package/1",
-                           "build_unit": {"build_unit_id": item["build_unit_id"]},
-                           "documents": [], "inventory": list(item["markers"]), "gaps": []}
+                package = descriptor_package(_target(unit), item, files)
+                package["inventory"] = list(item["markers"])
                 facts = dict(item["descriptor_facts"])
                 facts["configuration_fingerprint"] = fingerprint
             else:

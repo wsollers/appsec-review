@@ -95,6 +95,7 @@ input, output, tool, and acceptance contracts.
 | `job_target_acquisition` | Acquires (or re-verifies) every component of the review system named by `start --system`, in parallel, into `targets/<system>/` before intake; a failed component is a named gap; a no-op without a requested system | [target-acquisition](../operations/target-acquisition.md) |
 | `job_review_intake` | Configuration and target intake; copies a target-acquisition manifest to `target-acquisition.json` and resolves configured binary decompilation publications to `binary-evidence.json` | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
+| `job_build_environment_analysis` | Default-enabled bounded static developer-environment declarations and authoritative availability; no execution | [build-environment-analysis](../operations/build-environment-analysis.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
 | `job_ci_configuration_analysis` | CI/CD configuration analysis | [ci-configuration-analysis](../operations/ci-configuration-analysis.md) |
 | `job_target_analysis_plan` | Scanner selection and build recipes | [target-analysis-planning](../operations/target-analysis-planning.md) |
@@ -489,25 +490,27 @@ Deterministic rules select mandatory baseline coverage, language-specific scanne
 managers, and generic build units first. Units come from accepted project descriptors or a bounded
 source-only fallback for directly compiled languages; their stable identities never include fixture
 names or fixed repository layouts. A centrally configured model resolves how each unit should be
-built from a bounded descriptor package. It returns one typed recipe per unit, including the
+built from a bounded descriptor package. Proposal/3 returns one typed recipe or explicit abstention
+per unit and can request exact bounded accepted-inventory evidence. Recipes include the
 throwaway-image profile, declared dependencies, environment, argv arrays, and expected outputs.
 
 Model proposals are untrusted, versioned data. Every identity and path must resolve against the
 accepted catalog. Validators reject unknown executables, shell syntax, secret environment keys,
 absolute or escaping paths, package/tool installers, tests, and target execution. The model cannot
 invent a build unit or authorize execution; a later build job may execute only an accepted recipe
-inside its matching image profile. Disabled, unavailable, failed, invalid, or contradictory model
-assistance publishes an explicit build-planning gap and leaves recipes absent.
+inside its matching image profile and matching accepted refinement. Recognized bounded failures
+leave named gaps; unexpected bugs and integrity failures block publication. Static environment
+availability is persisted and rechecked, never substituted for recipe-enforced target proof.
 
 `job_project_build` resolves native CMake recipes deterministically from an accepted
 `CMakeLists.txt` marker. That narrow policy takes precedence over model-proposed CMake commands,
 is validated by the same recipe allowlist, and is marked `deterministic-cmake-marker`; it does not
-generalize to ambiguous build systems. Project-build execution first probes the default pinned
-family image. A failed probe may trigger at least three centrally bounded inference-guided image
-repairs. The repair schema permits only typed, bounded data: a complete apt package set, a
+generalize to ambiguous build systems. Project-build prepares images and dispatches; generic probes
+are compatibility no-ops, not a second compilation. Authoritative language-build iterations use
+the existing bounded recovery path. The image-repair schema permits only typed, bounded data: a complete apt package set, a
 complete environment drawn from a per-family allowlist, a package manager the family image already
-pins, and restores of accepted dependency manifests by the family's own package manager. Commands,
-paths, dependency files, and outputs remain immutable; see
+pins, and restores of accepted dependency manifests by the family's own package manager. Supported
+recipe revisions receive a new immutable accepted refinement; original plans remain immutable. See
 [`../operations/project-build.md`](../operations/project-build.md). A successful repair promotes the exact Dockerfile, derived
 image digest, and repaired operational recipe into a cache keyed by the original recipe identity,
 so unchanged recipes reuse the accepted image while changed recipes return to the default probe.

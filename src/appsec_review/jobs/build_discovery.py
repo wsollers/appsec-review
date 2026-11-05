@@ -658,14 +658,19 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
             path.parent != unit_root and
             (path.parent == PurePosixPath(".") or path.parent in unit_root.parents)
         )
+        container_context = (path.name.startswith("Dockerfile")
+                             and (path.parent == unit_root or path.parent in unit_root.parents
+                                  or path.parent == PurePosixPath(".")))
         if workspace_root is not None and ancestor_context and path.name in NODE_LOCKFILES:
             # A workspace member's lockfile is the workspace root's, never a further ancestor's.
             ancestor_context = path.parent == workspace_root
-        if not under and not ancestor_context:
+        if not under and not ancestor_context and not container_context:
             continue
         if (str(item["path"]) in marker_paths or str(item["path"]) in component_paths or
                 _is_context_name(path.name) or
-                path.name.startswith("Dockerfile") or ancestor_context):
+                container_context or ancestor_context or
+                (unit.get("build_system") == "unity" and (
+                    path.suffix in {".meta", ".asset"} or path.name == "ProjectVersion.txt"))):
             candidates.append(item)
     documents = []
     total = 0
@@ -697,6 +702,12 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
         except UnicodeError:
             gaps.append(f"{item['path']}: descriptor is not UTF-8 text")
             continue
+        if PurePosixPath(str(item["path"])).name.startswith("Dockerfile"):
+            from appsec_review.jobs.job_build_environment_analysis.job import redact
+            if redact(text) != text:
+                gaps.append(f"{item['path']}: sensitive container declarations withheld")
+                inventory[str(item["path"])] = _identity(item)
+                continue
         documents.append({"path": item["path"], "sha256": item["sha256"], "content": text})
         total += size
     for relative in inventory:

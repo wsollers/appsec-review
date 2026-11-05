@@ -1,5 +1,12 @@
 # Build environments, execution capture, and secret scanning
 
+The separately named default-enabled
+[`job_build_environment_analysis`](../operations/build-environment-analysis.md) statically reads
+bounded accepted script inventory before planning; it neither prepares these images nor executes
+target scripts. Its availability and redacted developer declarations are advisory. Dockerfile
+strings, host/image labels and script values never establish native target enforcement. The V2
+source lifecycle is authored, not a new image build, deployment or live capture result.
+
 This page describes the architecture that prepares build environments, derives dependency-bearing
 project images, executes accepted build commands, captures their process behavior, and scans the
 resulting evidence with gitleaks. It documents the active implementation outside `old/`; it is not

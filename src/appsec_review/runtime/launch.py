@@ -25,6 +25,7 @@ LOGGER = logging.getLogger(__name__)
 # job and the report are deliberately absent: they read accepted run state only (the PoC job copies the
 # run's hash-verified native build workspace, not the target).
 TARGET_JOBS = frozenset({
+    "job_build_environment_analysis",
     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
     "job_project_build", "job_language_build", "job_artifact_indexing",
     "job_debug_symbol_indexing", "job_test_coverage",

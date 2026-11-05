@@ -4,6 +4,11 @@ Each enabled build environment is a language-only, non-root (`10001:10001`) imag
 `job_project_build` and `job_language_build`. None inherits the archived native-analysis omnibus or
 carries MCP/LSP payloads; analysis tooling lives in its own images.
 
+The default-enabled [static environment-analysis job](../../docs/operations/build-environment-analysis.md)
+does not build or change these images. Accepted developer-script and Dockerfile declarations are
+advisory source facts, never compiler-default, installed-SDK or native-target proof. This V2 source
+change adds no image/profile asset pins, acquisition, provisioning or host probes.
+
 | Catalog id | Directory | Toolchain | Build profiles |
 | --- | --- | --- | --- |
 | `buildenv-native-toolchain` | `native-toolchain/` | gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace | base of every family image |

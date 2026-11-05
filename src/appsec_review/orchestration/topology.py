@@ -63,8 +63,11 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         wave_dependencies["job_ci_configuration_analysis"] = ("job_target_catalog",)
     if "job_source_history_analysis" in registered:
         wave_dependencies["job_source_history_analysis"] = ("job_target_catalog",)
+    if "job_build_environment_analysis" in registered:
+        wave_dependencies["job_build_environment_analysis"] = ("job_target_catalog",)
     wave_dependencies["job_target_analysis_plan"] = tuple(job_id for job_id in (
-        "job_ci_configuration_analysis", "job_source_history_analysis") if job_id in registered) or (
+        "job_ci_configuration_analysis", "job_source_history_analysis",
+        "job_build_environment_analysis") if job_id in registered) or (
         "job_target_catalog",)
     if "job_project_build" in registered:
         wave_dependencies["job_project_build"] = ("job_target_analysis_plan",)

@@ -488,6 +488,48 @@ class WasmBuildSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class BuildEnvironmentSettings:
+    max_scripts: int = 64
+    max_script_bytes: int = 262144
+    max_assignments: int = 4096
+    max_depth: int = 4
+    deadline_seconds: int = 30
+
+
+@dataclass(frozen=True, slots=True)
+class PlanningFeedbackSettings:
+    max_scopes: int = 512
+    units_per_scope: int = 16
+    max_calls: int = 4
+    max_evidence_rounds: int = 3
+    max_documents: int = 8
+    max_document_bytes: int = 65536
+    max_evidence_bytes: int = 262144
+    max_request_bytes: int = 131072
+    max_response_bytes: int = 65536
+    deadline_seconds: int = 300
+
+
+def parse_bounded_settings(value, kind):
+    from dataclasses import fields
+    if kind is BuildEnvironmentSettings and isinstance(value, Mapping) and "enabled" in value:
+        if type(value["enabled"]) is not bool:
+            raise ValueError("environment enabled must be boolean")
+        value = {key: item for key, item in value.items() if key != "enabled"}
+    if not isinstance(value, Mapping) or set(value) - {item.name for item in fields(kind)}:
+        raise ValueError(f"{kind.__name__} must contain only supported bounded settings")
+    defaults = kind()
+    values = {}
+    for item in fields(kind):
+        bound = getattr(defaults, item.name)
+        actual = value.get(item.name, bound)
+        if type(actual) is not int or not 1 <= actual <= bound:
+            raise ValueError(f"{kind.__name__}.{item.name} must be between 1 and {bound}")
+        values[item.name] = actual
+    return kind(**values)
+
+
+@dataclass(frozen=True, slots=True)
 class JobConfig:
     job_id: str
     name: str
@@ -1024,6 +1066,10 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                 tasks=MappingProxyType(tasks),
             )
         typed_settings: object | None = None
+        if job_id == "job_build_environment_analysis":
+            typed_settings = parse_bounded_settings(settings, BuildEnvironmentSettings)
+        if job_id == "job_target_analysis_plan":
+            parse_bounded_settings(settings.get("feedback", {}), PlanningFeedbackSettings)
         if job_id == "job_project_build":
             if settings.get("force_buildability_probe") is not False and "force_buildability_probe" in settings:
                 raise ValueError("force_buildability_probe is retired; use a selected build iteration "

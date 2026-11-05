@@ -73,13 +73,48 @@ reuse old build receipts. Generic unrelated job caches retain their previous lif
 Content-keyed derivation memoization follows bounded raw-artifact integrity reads, never mutable
 pointer/mtime trust.
 
-**Verification limit:** this vertical source batch is authored, not yet unit-tested or live
-accepted. Real compiler-profile acquisition is absent; optional metadata intake and explicitly
+**Verification limit:** V1 original `8ac764c0c4d8fa5582922adb0587512614158ef8` was independently
+verified at 83 functions/173 passing cases. The V2 source additions below are authored, not yet
+unit-tested, replayed or live accepted. Real compiler-profile acquisition is absent; optional metadata intake and explicitly
 synthetic unit controls are not a probe or provisioning path. Unsupported compiler/wrapper
 closure remains a named unknown. The 295-unit/120-second offline budget and 16 MiB graph bound
-are requirements, not measured acceptance results. Later environment-analysis/proposal lifecycle
-work is not described here as delivered. The source-history receipts below describe the earlier
-implementation only.
+are requirements, not measured acceptance results. The source-history receipts below describe
+the earlier implementation only.
+
+### V2 static environment and bounded feedback source
+
+The default-enabled environment producer precedes planning in both review composites, with
+explicit disabled transparency and strict expected-current versus optional-prior availability.
+Its source declarations are advisory. Missing/changed expected publications block; recognized
+bounded analysis gaps do not become proof. See the [availability matrix](../operations/build-environment-analysis.md).
+
+Proposal/3 partitions deterministic bounded scopes, accepts exact additive evidence requests and
+requires one recipe or abstention per unit. It shares the same whole-bundle compiler and immutable
+recipe-bound refinements; there is no model topology compiler. Complete-only caches bind source,
+environment, profiles, rules, guidance/model identities and bounds. Unity settings/plugin metadata
+and ancestor-scoped Dockerfile declarations retain raw scoped partial observations, including
+unselectable 32-bit declarations, without inventing target selection or image-native proof.
+The source rule identity is `source-scoped-topology/3`; older graph/2 rule receipts require
+replanning rather than borrowing a prior compiler result. Graph/1's schema remains unchanged.
+
+```mermaid
+flowchart LR
+  C[Accepted catalog and inventory] --> E[Bounded static environment]
+  C --> P[Planner scopes and proposal/3]
+  E --> A[Authoritative availability]
+  A --> P
+  P --> Q[Exact bounded need_evidence]
+  Q --> P
+  P --> F[Validated final or named gaps]
+  F --> G[Same whole-bundle source compiler]
+  G --> R[Immutable graph and recipe refinement]
+```
+
+The manually selected actual-capture R8 driver is authored NOT RUN, with genuine original `acf973f8`
+baseline custody and a separately pinned candidate. Its full intake, actual plan/publication/read/
+selection/preflight, explicit external doubles and whole-produced-byte measurements are described
+in [planning operations](../operations/target-analysis-planning.md#r8-authoring-not-a-measured-result).
+Neither 173 V1 passes nor parser timing establishes that replay's outcome or budget.
 
 Native image derivation also requires prebound compiler/recipe metadata before image cache
 access; knowing only the base image does not authorize a newly derived image. Thin archives,

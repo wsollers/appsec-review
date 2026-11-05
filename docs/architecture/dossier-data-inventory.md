@@ -1,5 +1,12 @@
 # Dossier data, queries and provenance
 
+**V2 source delta, not produced dossier evidence:** `job_build_environment_analysis` adds a
+sensitive artifact-only static declaration/availability publication before planning. Proposal/3
+adds protected complete-only feedback cache and exact additive evidence; raw model envelopes are
+not the planning output. These declarations are not new public retrieval endpoints, authenticated
+package identities, shipped artifacts or native target proof. The counts/history below retain
+their named source baselines; this untested candidate does not claim a new run or dossier result.
+
 Status: source-verified inventory, initially at contract commit
 `5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
 and assurance fix `7641fa5`, then reader/metric checkpoint `18eae9f`, remediation `e769645f` and

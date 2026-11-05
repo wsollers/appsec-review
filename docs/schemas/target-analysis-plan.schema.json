@@ -33,6 +33,41 @@
     "confidence": {"enum": ["high", "medium", "low"]},
     "contradictions": {"type": "array", "items": {"type": "string"}},
     "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+    "build_environment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "workflow", "expected_producer", "mode", "reference", "reason",
+                   "availability", "artifact", "evidence"],
+      "properties": {
+        "schema": {"const": "appsec-review/build-environment-availability/1"},
+        "workflow": {"type": "string", "minLength": 1},
+        "expected_producer": {"enum": [null, "job_build_environment_analysis"]},
+        "mode": {"enum": ["EXPECTED_CURRENT", "OPTIONAL_PRIOR", "DISABLED", "NOT_RUN"]},
+        "reference": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "reason": {"type": "string", "minLength": 1},
+        "availability": {"enum": ["AVAILABLE", "UNAVAILABLE", "ABSENT", "DISABLED"]},
+        "artifact": {"type": ["object", "null"]},
+        "evidence": {"oneOf": [{"type": "null"}, {"$ref": "build-environment-analysis.schema.json"}]}
+      }
+    },
+    "planning_evidence": {"type": "array", "items": {"type": "object"}},
+    "feedback": {"type": "array", "maxItems": 512, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["cache_key", "cache_hit", "calls", "status", "metrics"],
+      "properties": {
+        "cache_key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "cache_hit": {"type": "boolean"},
+        "calls": {"type": "integer", "minimum": 0, "maximum": 4},
+        "status": {"enum": ["ACCEPTED", "PARTIAL", "BUDGET_EXCEEDED"]},
+        "metrics": {"type": "object", "additionalProperties": false,
+          "required": ["request_bytes", "response_bytes", "evidence_bytes", "evidence_rounds", "elapsed_seconds"],
+          "properties": {
+            "request_bytes": {"type": "integer", "minimum": 0},
+            "response_bytes": {"type": "integer", "minimum": 0},
+            "evidence_bytes": {"type": "integer", "minimum": 0, "maximum": 262144},
+            "evidence_rounds": {"type": "integer", "minimum": 0, "maximum": 3},
+            "elapsed_seconds": {"type": "number", "minimum": 0}
+          }}
+      }}},
     "history_priority": {
       "type": "object", "additionalProperties": false,
       "required": ["status", "reason", "handoff_sha256", "history_identity", "ranking", "components", "files"],
@@ -57,7 +92,7 @@
           "type": "array",
           "items": {
             "type": "object", "additionalProperties": false, "required": ["status"],
-            "properties": {"status": {"enum": ["ACCEPTED", "REJECTED", "FAILED", "BUDGET_EXCEEDED"]}}
+            "properties": {"status": {"enum": ["ACCEPTED", "PARTIAL", "REJECTED", "FAILED", "BUDGET_EXCEEDED"]}}
           }
         }
       }

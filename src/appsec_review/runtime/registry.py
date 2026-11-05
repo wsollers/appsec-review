@@ -51,6 +51,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_target_acquisition import build_job as build_target_acquisition
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
+    from appsec_review.jobs.job_build_environment_analysis.job import build_job as build_environment
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
     from appsec_review.jobs.job_source_history_analysis import build_job as build_source_history
     from appsec_review.jobs.job_change_context_analysis import build_job as build_change_context
@@ -102,8 +103,26 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_source_history_analysis", build_source_history)
     registry.register("job_change_context_analysis", build_change_context)
+    registry.register("job_build_environment_analysis", build_environment)
+    def planning_model(request, *, timeout_seconds):
+        from dataclasses import replace
+        from appsec_review.inference import ModelOutputError
+        from appsec_review.jobs.job_target_analysis_plan.planning import model_safe
+        try:
+            result = live_infer(request, timeout_seconds=timeout_seconds)
+        except ModelOutputError:
+            raise ModelOutputError("planning model output could not be decoded") from None
+        except TimeoutError:
+            raise TimeoutError("planning model call timed out") from None
+        if result.raw_response is not None and len(result.raw_response.encode()) > 65536:
+            raise ModelOutputError("planning model response exceeded 64 KiB")
+        if model_safe(result.proposal) != result.proposal:
+            raise ModelOutputError("sensitive planning model output was withheld")
+        # The recording boundary must not persist a provider's unredacted response.
+        return replace(result, raw_response=None)
+
     registry.register("job_target_analysis_plan",
-                      lambda: build_analysis_plan(infer=infer))
+                      lambda: build_analysis_plan(infer=recorded(planning_model)))
     registry.register("job_tree_sitter_ast", build_tree_sitter_ast)
     registry.register("job_project_build",
                       lambda: build_project_build(infer=infer))

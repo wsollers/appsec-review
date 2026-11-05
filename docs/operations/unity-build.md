@@ -35,6 +35,13 @@ Configuration fingerprints are versioned canonical input identities with explici
 partial status. They bind the source/root, declared engine, recorded settings/dependencies and
 known build inputs; they do not prove reproducibility, execution, or shipped content.
 
+The catalog now captures bounded settings and plugin `.meta` documents into the same descriptor
+bundle used by graph/2. Raw backend/platform/CPU declarations remain source-scoped partial facts,
+not generic .NET recipes, mobile selection or a reason to provision an Editor. Shared ancestor
+Dockerfile context uses the same deterministic compiler; unrelated descendant Dockerfiles cannot
+grant a Unity or native unit context. Sensitive container declarations are withheld with a gap.
+These V2 source additions are not yet executed or accepted.
+
 ## Execution boundary
 
 `jobs.job_project_build.settings.unity` defaults to:

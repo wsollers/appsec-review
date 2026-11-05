@@ -27,11 +27,14 @@ def _digest(value: Any) -> str:
 
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
     path = safe_path(root, ref["path"])
-    if path.stat().st_size > 16 * 1024 * 1024:
+    # Whole plans, recipe inputs and sidecars may repeat bounded source evidence.
+    # Graph documents retain their separate 16 MiB limit.
+    byte_limit = 16 * 1024 * 1024 if "/graphs/" in ref["path"] else 32 * 1024 * 1024
+    if path.stat().st_size > byte_limit:
         raise ValueError("accepted topology artifact exceeds its byte bound")
     path = verify_reference(root, ref)
     data = path.read_bytes()
-    if len(data) > 16 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != ref["sha256"]:
+    if len(data) > byte_limit or hashlib.sha256(data).hexdigest() != ref["sha256"]:
         raise ValueError("accepted topology artifact changed during its bounded read")
     value = json.loads(data)
     if not isinstance(value, dict):
@@ -40,8 +43,10 @@ def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _retain(root: Path, category: str, value: Mapping[str, Any]) -> dict[str, Any]:
-    return immutable_bytes(root, f"artifacts/build/topology/{category}/{_digest(value)}.json",
-                           canonical_json(value))
+    data = canonical_json(value)
+    if len(data) > (16 if category == "graphs" else 32) * 1024 * 1024:
+        raise ValueError("topology publication exceeds its category byte bound")
+    return immutable_bytes(root, f"artifacts/build/topology/{category}/{_digest(value)}.json", data)
 
 
 def publish_refinement(run_root: Path, actions: Sequence[Mapping[str, Any]], *,

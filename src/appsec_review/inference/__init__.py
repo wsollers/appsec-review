@@ -35,12 +35,35 @@ def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -
         send = PROVIDERS[request.provider]
     except KeyError as exc:
         raise ValueError(f"unsupported inference provider: {request.provider}") from exc
+    planning = request.schema == "appsec-review/target-analysis-proposal/3"
+    failure = None
+    repairable = False
     with safety.operation(f"inference.{request.provider}.{request.model}"):
         try:
-            return send(request, timeout_seconds=timeout_seconds)
+            result = send(request, timeout_seconds=timeout_seconds)
+        except (ModelOutputError, TimeoutError) as exc:
+            if not planning:
+                safety.retain_failure("inference", exc, provider=request.provider, model=request.model)
+                raise
+            repairable = True
+            failure = (ModelOutputError("planning model output could not be decoded")
+                       if isinstance(exc, ModelOutputError) else
+                       TimeoutError("planning model call timed out"))
         except Exception as exc:
-            safety.retain_failure("inference", exc, provider=request.provider, model=request.model)
-            raise
+            if not planning:
+                safety.retain_failure("inference", exc, provider=request.provider, model=request.model)
+                raise
+            failure = RuntimeError("planning inference transport failed unexpectedly")
+        if failure is not None:
+            safety.retain_failure("inference", failure, provider=request.provider, model=request.model,
+                                  outcome="REJECTED", repairable=repairable)
+            if not repairable:
+                raise failure from None
+    # A rejected bounded reply spends a call, not the global stop latch. Admission's final
+    # cancellation check still runs before the sanitized repair signal leaves this boundary.
+    if failure is not None:
+        raise failure from None
+    return result
 
 
 MODEL_CHECKS: dict[str, Callable[..., dict[str, Any]]] = {

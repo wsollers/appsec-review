@@ -9,7 +9,7 @@
     "schema": {"const": "appsec-review/build-topology/2"},
     "source_fingerprint": {"type": "string", "minLength": 1},
     "bundle_identity": {"$ref": "#/$defs/hash"},
-    "rules": {"const": "source-scoped-topology/2"},
+    "rules": {"const": "source-scoped-topology/3"},
     "nodes": {
       "type": "array", "items": {
         "allOf": [

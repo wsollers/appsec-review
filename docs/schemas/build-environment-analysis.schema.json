@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/build-environment-analysis/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_fingerprint", "catalog_handoff_sha256", "rules", "availability",
+               "coverage", "declarations", "gaps", "bounds"],
+  "properties": {
+    "schema": {"const": "appsec-review/build-environment-analysis/1"},
+    "source_fingerprint": {"type": "string", "minLength": 1},
+    "catalog_handoff_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "rules": {"const": "static-environment/1"},
+    "availability": {"enum": ["AVAILABLE", "UNAVAILABLE"]},
+    "coverage": {"enum": ["complete", "partial", "not_applicable"]},
+    "declarations": {"type": "array", "maxItems": 4096,
+      "items": {"type": "object", "additionalProperties": false,
+        "required": ["path", "sha256", "line", "name", "value", "status", "reason"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "line": {"type": "integer", "minimum": 1},
+          "name": {"type": "string"},
+          "value": {"type": ["string", "null"]},
+          "status": {"enum": ["declared", "unknown", "redacted"]},
+          "reason": {"type": "string"}
+        }}},
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "bounds": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_scripts", "max_script_bytes", "max_assignments", "max_depth",
+                   "deadline_seconds", "inspected_scripts", "inventory_scope"],
+      "properties": {
+        "max_scripts": {"type": "integer", "minimum": 1, "maximum": 64},
+        "max_script_bytes": {"type": "integer", "minimum": 1, "maximum": 262144},
+        "max_assignments": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_depth": {"type": "integer", "minimum": 1, "maximum": 4},
+        "deadline_seconds": {"type": "integer", "minimum": 1, "maximum": 30},
+        "inspected_scripts": {"type": "integer", "minimum": 0, "maximum": 64},
+        "inventory_scope": {"const": "accepted inventory only; no whole-target absence claim"}
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"availability": {"const": "UNAVAILABLE"}}},
+     "then": {"properties": {"declarations": {"maxItems": 0}, "coverage": {"const": "partial"}}}},
+    {"if": {"properties": {"coverage": {"const": "partial"}}},
+     "then": {"properties": {"gaps": {"minItems": 1}}}},
+    {"if": {"properties": {"coverage": {"const": "complete"}}},
+     "then": {"properties": {"gaps": {"maxItems": 0}}}},
+    {"if": {"properties": {"coverage": {"const": "not_applicable"}}},
+     "then": {"properties": {"availability": {"const": "AVAILABLE"}, "declarations": {"maxItems": 0},
+              "gaps": {"maxItems": 0}, "bounds": {"properties": {"inspected_scripts": {"const": 0}}}}}}
+  ]
+}

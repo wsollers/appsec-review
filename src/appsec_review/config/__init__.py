@@ -26,6 +26,7 @@ from .image_pin_verification import ImagePinVerificationSettings, parse_image_pi
 from .signing import SigningConfig, parse_signing
 
 from .loader import (
+    BuildEnvironmentSettings, PlanningFeedbackSettings, parse_bounded_settings,
     AppConfig, BuildCaptureConfig, CppCompiledAnalysisSettings, DagsterConfig, DotnetBuildSettings, GoBuildSettings, JobConfig, JvmBuildSettings, LanguageBuildSettings, NodeBuildSettings, PhpBuildSettings, ProcessingMode, PythonBuildSettings, RuntimeConfig, RustBuildSettings,
     OVERLAY_ENVIRONMENT, PENDING_JOBS, PROFILE_ENVIRONMENT, PROFILES,
     DocumentIssueSettings, ScheduleConfig, StepConfig, TargetDocumentSettings, TaskConfig, ToolCapabilityConfig, WasmBuildSettings, WasmProducerSettings, load_config,
@@ -33,6 +34,7 @@ from .loader import (
 )
 
 __all__ = [
+    "BuildEnvironmentSettings", "PlanningFeedbackSettings", "parse_bounded_settings",
     "BuildSelectionPolicy", "parse_build_selection",
     "BuildWorkspacePolicy", "parse_build_workspaces",
     "CompilerTarget", "COMPILER_TARGET_TAG",
