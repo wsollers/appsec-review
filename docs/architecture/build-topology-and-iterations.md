@@ -74,8 +74,11 @@ Content-keyed derivation memoization follows bounded raw-artifact integrity read
 pointer/mtime trust.
 
 **Verification limit:** V1 original `8ac764c0c4d8fa5582922adb0587512614158ef8` was independently
-verified at 83 functions/173 passing cases. The V2 source additions below are authored, not yet
-unit-tested, replayed or live accepted. Real compiler-profile acquisition is absent; optional metadata intake and explicitly
+verified at 83 functions/173 passing cases. Historical V2 original `e95602dd3db955665625cb39377742267be8eaa1`
+observed 150 functions/333 cases across three admitted cohorts: 327 passed and six failed, not
+333 passes. Subsequent source corrections and the V3 changes below do not inherit that result.
+Their exact-SHA handoff records separate admission and any later evidence. They are not replayed
+or live accepted here. Real compiler-profile acquisition is absent; optional metadata intake and explicitly
 synthetic unit controls are not a probe or provisioning path. Unsupported compiler/wrapper
 closure remains a named unknown. The 295-unit/120-second offline budget and 16 MiB graph bound
 are requirements, not measured acceptance results. The source-history receipts below describe
@@ -94,7 +97,8 @@ recipe-bound refinements; there is no model topology compiler. Complete-only cac
 environment, profiles, rules, guidance/model identities and bounds. Unity settings/plugin metadata
 and ancestor-scoped Dockerfile declarations retain raw scoped partial observations, including
 unselectable 32-bit declarations, without inventing target selection or image-native proof.
-The source rule identity is `source-scoped-topology/3`; older graph/2 rule receipts require
+The current source rule identity is `source-scoped-topology/4`; the V2 predecessor used `/3`.
+Older graph/2 rule receipts require
 replanning rather than borrowing a prior compiler result. Graph/1's schema remains unchanged.
 
 ```mermaid
@@ -115,6 +119,49 @@ baseline custody and a separately pinned candidate. Its full intake, actual plan
 selection/preflight, explicit external doubles and whole-produced-byte measurements are described
 in [planning operations](../operations/target-analysis-planning.md#r8-authoring-not-a-measured-result).
 Neither 173 V1 passes nor parser timing establishes that replay's outcome or budget.
+
+### V3 consumer and replay closure
+
+Historical graph/1 is published, indexed and read through real accepted job handoffs for audit.
+It cannot obtain a graph/2 refinement, readiness, build-cache admission, reconstruction or detached
+replay authority. Migration means accepted replanning from the captured source bundle, never
+rewriting a graph version or borrowing an old receipt.
+
+Both accepted-refinement index consumers share a stat-before-read, post-length and closed-object
+reader with an actual 32 MiB bound. Under the existing writer lock, publication measures the
+canonical complete index before replacing its pointer. Refused growth leaves prior pointer bytes
+unchanged; immutable graph/input/refinement/acceptance artifacts are still retained before indexing.
+
+Prepared-image replay reads the immutable approval's `compiler_metadata` reference, verifies its
+raw bytes and requires the actual resolved image digest and exact candidate recipe digest.
+It derives and admits a new immutable refinement from that metadata **before** replay
+reconstruction, executor creation, `resolve()` or command execution. Promotion and selected replay
+recheck the same binding. No compiler profile is acquired or inferred from an image label.
+Native CMake without a supported compiler closure remains unknown and cannot execute.
+
+Node packaging and native operations are likewise distinct. A `binding.gyp` file or the word
+`build` does not activate native compilation. Exact captured npm lifecycle scripts determine
+whether the requested command invokes `node-gyp build/rebuild`; package-only `npm pack` stays
+package-only unless its applicable prepack/prepare/postpack hooks request native work. Unrelated
+scripts do not activate it, and unresolved scripts remain blockers. Scoped manifest facts retain
+their raw hash and declaring lines. The rule-identity change invalidates prior graph/refinement
+and feedback identities without changing graph/2, proposal/3 or the four closed proof kinds.
+
+```mermaid
+flowchart LR
+  F[Accepted failure and immutable original request] --> C[Validated candidate]
+  C --> I[Resolve operator-approved prepared profile]
+  I --> E[Verify immutable compiler metadata: actual image and exact recipe]
+  E --> R[Publish and guard new accepted refinement]
+  R --> W[Reconstruct detached target and retained interfaces]
+  W --> X[Recheck admission before executor resolve and captured commands]
+  X --> P[Verify trial and select recipe only]
+```
+
+The authored focused controls cover the real 32 MiB boundary/growth/refused replacement, genuine
+legacy publication/index/read, replay/CLI accepted-plan custody and actual-image zero-execution
+negatives. They are source controls, not evidence that these tests, the neutral full-295 R8
+proposal, evaluator-owned integration/acceptance or live review have passed.
 
 Native image derivation also requires prebound compiler/recipe metadata before image cache
 access; knowing only the base image does not authorize a newly derived image. Thin archives,

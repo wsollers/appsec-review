@@ -6,6 +6,10 @@ bounded accepted script inventory before planning; it neither prepares these ima
 target scripts. Its availability and redacted developer declarations are advisory. Dockerfile
 strings, host/image labels and script values never establish native target enforcement. The V2
 source lifecycle is authored, not a new image build, deployment or live capture result.
+Detached prepared-image replay additionally requires an immutable compiler-metadata reference
+whose raw bytes bind the actual image and exact candidate recipe. Its accepted refinement is
+guarded before reconstruction and again before executor resolution. This consumes existing
+metadata only; it is not a compiler probe, builder provisioner or CMake closure capability.
 
 This page describes the architecture that prepares build environments, derives dependency-bearing
 project images, executes accepted build commands, captures their process behavior, and scans the

@@ -12,7 +12,7 @@ from appsec_review.container_runtime import BuildProfile, CaptureScope
 from appsec_review.container_runtime.build_executor import reconcile_build_leases
 from appsec_review.jobs.build_workspace import BuildWorkspace, NodeBinding, ProductSpec
 from tests.capture_fakes import simulated_executor
-from tests.test_build_recipe_replay import build
+from tests.test_build_recipe_replay import NATIVE_OBJECT, NATIVE_OUTPUT, TARGET, _compiler_metadata, build
 
 VARIANT = {"configuration": "release", "target_arch": "x86_64", "execution_role": "target",
            "linkage": "static", "toolchain": "fixture/1", "abi": "fixture-abi/1"}
@@ -161,17 +161,17 @@ def test_real_replay_callback_captures_shared_commands_interfaces_profile_and_ex
         "family": "native", "image_tag": "fixture:base",
         "image_id": build.context.binding.image_identity, "user": "1000:1000", "dependency_hashes": {},
     }
-    request_ref = retain(run, "requests", {"dispatch": {
-        "image": original_image, "recipe": build.context.accepted_recipe}})
     failure = read_reference(run, build.context.inputs["failure"])
+    original_request = read_reference(run, failure["request"])
+    request_ref = retain(run, "requests", {**original_request, "dispatch": {
+        **original_request["dispatch"], "image": original_image}})
     context = replace(build.context, inputs={**build.context.inputs, "failure": retain(
         run, "failures", {**failure, "request": request_ref})})
     candidate = replace(build.candidate, recipe={
         **build.candidate.recipe,
         "execution_cwd": {"configure": "a-consumer/build", "build": "a-consumer/build"},
-        "configure_commands": [["cmake", "-S", "..", "-B", "."]],
-        "build_commands": [["cmake", "--build", "a-consumer/build", "--target",
-                            "a-consumer/custom-target", "B", "--config", "a-consumer/Release"]],
+        "configure_commands": [["clang", TARGET, "-c", "../b.c", "-o", "preflight.o"]],
+        "build_commands": [["clang", TARGET, "../b.c", "-o", "B", "-g"]],
         **({"system_packages": ["libssl-dev"]} if prepared else {}),
     })
     profile = (BuildProfile("native", "fixture:prepared", "sha256:" + "2" * 64, "1000:1000",
@@ -192,19 +192,17 @@ def test_real_replay_callback_captures_shared_commands_interfaces_profile_and_ex
         assert environment["PKG_CONFIG_PATH"] == "/install/lib/pkgconfig"
         assert environment["CMAKE_PREFIX_PATH"] == "/install"
         assert (mounts["/install"] / "lib/libA.a").read_bytes() == build.a_bytes
-        recording.exec("/usr/bin/cmake", argv)
+        recording.exec("/usr/bin/clang", argv)
         launched.append(tuple(argv))
-        if "--build" in argv:
-            assert tuple(argv) == ("cmake", "--build", ".", "--target",
-                                   "a-consumer/custom-target", "B", "--config", "a-consumer/Release")
+        if "-c" not in argv:
+            assert tuple(argv) == ("clang", TARGET, "../b.c", "-o", "B", "-g")
             output = mounts["/install"] / "bin/B"
             output.parent.mkdir(exist_ok=True)
-            output.write_bytes(b"trial B executable")
-            (target / "a-consumer/build/B").write_bytes(b"trial B executable")
+            output.write_bytes(NATIVE_OUTPUT)
+            (target / "a-consumer/build/B").write_bytes(NATIVE_OUTPUT)
         else:
-            assert tuple(argv) == ("cmake", "-S", "..", "-B", ".")
-            (target / "a-consumer/build/CMakeCache.txt").write_text(
-                "CMAKE_HOME_DIRECTORY:INTERNAL=/workspace/a-consumer\n")
+            assert tuple(argv) == ("clang", TARGET, "-c", "../b.c", "-o", "preflight.o")
+            (target / "a-consumer/build/preflight.o").write_bytes(NATIVE_OBJECT)
         return 0, b"", b""
 
     def factory(actual_profile, **kwargs):
@@ -229,6 +227,7 @@ def test_real_replay_callback_captures_shared_commands_interfaces_profile_and_ex
         approval = retain(run, "image-approvals", {
             "image_id": profile.image_id, "profile": asdict(profile), "operator_approved": True,
             "recipe_identity": digest(candidate.recipe),
+            "compiler_metadata": retain(run, "compiler-metadata", _compiler_metadata(profile.image_id, candidate.recipe)),
             "network": "none", "prepared": True})
         image_builder = lambda *_: ImageResolution(profile, approval)
     before = (build.workspace.paths.install / "lib/libA.a").read_bytes()
@@ -260,3 +259,32 @@ def test_real_replay_callback_captures_shared_commands_interfaces_profile_and_ex
     assert overrides[context.binding.node_id] == [asdict(spec) for spec in context.products]
     if prepared:
         assert dispatches[0]["promoted_profile"] == asdict(profile)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "image", "recipe"])
+def test_captured_replay_admits_actual_refinement_before_executor_construction_or_resolution(build, monkeypatch, mutation):
+    from unittest.mock import Mock
+    import appsec_review.container_runtime as runtime
+    from appsec_review.jobs.build_iterations import captured_replay, read_reference
+    from appsec_review.jobs.build_recipe_replay import ReplayInvocation
+    run = build.workspace.run_dir
+    failure = read_reference(run, build.context.inputs["failure"])
+    dispatch = read_reference(run, failure["request"])["dispatch"]
+    profile = BuildProfile("native", "fixture:base", build.context.binding.image_identity, "1000:1000")
+    candidate = replace(build.candidate, recipe=build.context.accepted_recipe)
+    if mutation == "image":
+        profile = replace(profile, image_id="sha256:" + "2" * 64)
+    elif mutation == "recipe":
+        candidate = build.candidate
+    invocation = ReplayInvocation(
+        build.context, candidate, build.workspace.paths, run / "artifacts/never-captured",
+        "never-executed", "none", profile.image_id, profile,
+        topology_refinement=None if mutation == "missing" else dispatch["topology_refinement"])
+    executor = Mock(side_effect=AssertionError("unadmitted replay must not construct an executor"))
+    monkeypatch.setattr(runtime, "BuildContainerExecutor", executor)
+    config = SimpleNamespace(runtime=SimpleNamespace(runs_dir=run.parent),
+                             job=Mock(side_effect=AssertionError("must fail before executor settings")))
+    with pytest.raises(ValueError):
+        captured_replay(config, build.context, invocation)
+    executor.assert_not_called()
+    config.job.assert_not_called()

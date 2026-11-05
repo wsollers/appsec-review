@@ -106,6 +106,7 @@ class ReplayInvocation:
     image_identity: str
     profile: BuildProfile | None = None
     interfaces: tuple[Mapping[str, Any], ...] = ()
+    topology_refinement: Mapping[str, Any] | None = None
 
     @property
     def commands(self) -> tuple[tuple[str, ...], ...]:
@@ -333,19 +334,35 @@ def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
 
 
 def _refine_candidate(workspace: BuildWorkspace, context: ReplayContext,
-                      candidate: RecipeCandidate) -> Mapping[str, Any]:
+                      candidate: RecipeCandidate, *, image_identity: str,
+                      profiles=None) -> Mapping[str, Any]:
     from appsec_review.jobs.build_topology_artifacts import bind_actions, guard_action, load_refinement
     failure = _read(workspace.run_dir, context.inputs["failure"])
     dispatch = _read(workspace.run_dir, failure["request"])["dispatch"]
     base = load_refinement(workspace.run_dir, dispatch["topology_refinement"])
-    action = bind_actions(workspace.run_dir, [{**dispatch, "recipe": dict(candidate.recipe)}],
-                          policy=base["policy"], profiles=base["profiles"],
+    action = bind_actions(workspace.run_dir, [{
+        **dispatch, "recipe": dict(candidate.recipe),
+        "image": {**dispatch["image"], "image_id": image_identity}}],
+                          policy=base["policy"], profiles=base["profiles"] if profiles is None else profiles,
                           environment=base["environment"], releases=context.releases)[0]
     try:
-        guard_action(workspace.run_dir, action, releases=context.releases)
+        guard_action(workspace.run_dir, action, releases=context.releases, image_identity=image_identity)
     except ValueError as error:
         raise ReplayRefused("candidate_target_unenforced", str(error)) from error
     return action
+
+
+def _approved_compiler_metadata(run: Path, approval: Mapping[str, Any],
+                                image_identity: str, recipe: Mapping[str, Any]) -> Mapping[str, Any]:
+    reference = approval.get("compiler_metadata")
+    if not isinstance(reference, Mapping):
+        raise ReplayRefused("unverified_image_compiler", "prepared image requires immutable compiler metadata")
+    metadata = _read(run, reference)
+    if (metadata.get("schema") != "appsec-review/static-compiler-profile/1"
+            or metadata.get("image_digest") != image_identity
+            or metadata.get("image_recipe_digest") != canonical_json_sha256(recipe)):
+        raise ReplayRefused("unverified_image_compiler", "compiler metadata differs from the actual image or exact recipe")
+    return metadata
 
 
 def _validate_products(products: tuple[ProductSpec, ...], context: ReplayContext,
@@ -493,16 +510,10 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
         with workspace.writer() as writer:
             graph = _validate_context(workspace, context, writer)
             products = _validate_candidate(context, candidate, run, graph)
-            refined_candidate = _refine_candidate(workspace, context, candidate)
-            from appsec_review.jobs.build_topology import verify_product_contract
-            from appsec_review.jobs.build_topology_artifacts import guard_action
-            verify_product_contract(guard_action(
-                run, refined_candidate, releases=context.releases), products)
             context_ref = _publish(run, "contexts", context.view())
             candidate_ref = _publish(run, "candidates", candidate.view())
             base = {"schema": REPLAY_SCHEMA, "context": context_ref, "candidate": candidate_ref,
-                    "candidate_key": key, "network": "none" if network_offline else "bridge",
-                    "topology_refinement": refined_candidate["topology_refinement"]}
+                    "candidate_key": key, "network": "none" if network_offline else "bridge"}
             seen = safe_path(run, f"{_ROOT}/selected/{key}.json")
             no_op = (_recipe_key(candidate.recipe) == _recipe_key(context.accepted_recipe)
                      and _product_views(products) == _product_views(context.products))
@@ -516,6 +527,7 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
             image_identity = context.binding.image_identity
             image_evidence = None
             image_profile = None
+            compiler_metadata = None
             if any(candidate.recipe.get(field) != context.accepted_recipe.get(field) for field in _IMAGE_FIELDS):
                 if approved_image_builder is None:
                     return _publish(run, "trials", {**base, "status": "BLOCKED",
@@ -532,6 +544,14 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
                     raise ReplayRefused("unverified_image_preparation", "approved bounded image evidence is required")
                 image_identity, image_evidence = resolution.profile.image_id, dict(resolution.evidence)
                 image_profile = resolution.profile
+                compiler_metadata = _approved_compiler_metadata(run, receipt, image_identity, candidate.recipe)
+            refined_candidate = _refine_candidate(
+                workspace, context, candidate, image_identity=image_identity, profiles=compiler_metadata)
+            from appsec_review.jobs.build_topology import verify_product_contract
+            from appsec_review.jobs.build_topology_artifacts import guard_action
+            verify_product_contract(guard_action(
+                run, refined_candidate, releases=context.releases, image_identity=image_identity), products)
+            base["topology_refinement"] = refined_candidate["topology_refinement"]
             replay_id = f"recipe-{key}"
             replay = writer.create_replay(replay_id, context.generation_identity)
         attempt = f"replay-{key[:32]}"
@@ -540,7 +560,8 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
                           "image_profile": None if image_profile is None else asdict(image_profile)})
         capture_dir = safe_path(run, f"{_ROOT}/captures/{key}")
         invocation = ReplayInvocation(context, candidate, replay.paths, capture_dir, attempt,
-                                      base["network"], image_identity, image_profile)
+                                      base["network"], image_identity, image_profile,
+                                      topology_refinement=refined_candidate["topology_refinement"])
         with replay.writer() as trial:
             interfaces: list[dict[str, Any]] = []
             producer_by_node = {item.binding.node_id: item for item in context.upstreams}
@@ -624,15 +645,13 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
     candidate = RecipeCandidate(value["recipe"], tuple(value["evidence"]), value["reason"],
                                 None if value["products"] is None else
                                 tuple(ProductSpec(**spec) for spec in value["products"]))
-    refined_candidate = _refine_candidate(workspace, context, candidate)
-    if trial.get("topology_refinement") != refined_candidate["topology_refinement"]:
-        raise ReplayRefused("trial_refinement_changed", "trial lacks the matching accepted candidate refinement")
     products = _validate_candidate(context, candidate, run, graph)
     expected_binding = replace(context.binding, recipe_identity=canonical_json_sha256(candidate.recipe),
                                image_identity=intent["image_identity"])
     if trial.get("binding") != expected_binding.view():
         raise ReplayRefused("trial_binding_mismatch", "recipe, image or execution inputs changed")
     profile = None
+    compiler_metadata = None
     if intent.get("image_evidence") is not None:
         try:
             profile = BuildProfile(**intent["image_profile"])
@@ -645,10 +664,16 @@ def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
                 or image.get("recipe_identity") != expected_binding.recipe_identity
                 or trial["network"] == "none" and (image.get("network") != "none" or image.get("prepared") is not True)):
             raise ReplayRefused("image_mismatch", "image preparation evidence changed")
+        compiler_metadata = _approved_compiler_metadata(
+            run, image, expected_binding.image_identity, candidate.recipe)
     elif (expected_binding.image_identity != context.binding.image_identity
           or intent.get("image_profile") is not None
           or any(candidate.recipe.get(field) != context.accepted_recipe.get(field) for field in _IMAGE_FIELDS)):
         raise ReplayRefused("image_mismatch", "changed image inputs require bounded preparation evidence")
+    refined_candidate = _refine_candidate(
+        workspace, context, candidate, image_identity=expected_binding.image_identity, profiles=compiler_metadata)
+    if trial.get("topology_refinement") != refined_candidate["topology_refinement"]:
+        raise ReplayRefused("trial_refinement_changed", "trial lacks the matching accepted candidate refinement")
     expected = _command_plan(candidate.recipe)
     if len(trial.get("commands", ())) != len(expected):
         raise ReplayRefused("command_sequence_incomplete", "the trial did not complete every required command")
@@ -728,7 +753,7 @@ def verify_selected_trial(run: Path, context: ReplayContext, promotion: Mapping[
     original = _read(run, failure["request"])["dispatch"]
     action = {**original, "recipe": recipe, "image": {"image_id": expected.image_identity},
               "topology_refinement": trial["topology_refinement"]}
-    bound = guard_action(run, action, releases=context.releases)
+    bound = guard_action(run, action, releases=context.releases, image_identity=expected.image_identity)
     if intent.get("image_evidence") is not None:
         profile = BuildProfile(**intent["image_profile"])
         image = _read(run, intent["image_evidence"])
@@ -739,6 +764,10 @@ def verify_selected_trial(run: Path, context: ReplayContext, promotion: Mapping[
                 or trial["network"] == "none" and (
                     image.get("network") != "none" or image.get("prepared") is not True)):
             raise ReplayRefused("image_mismatch", "selected image preparation evidence changed")
+        from appsec_review.jobs.build_topology_artifacts import load_refinement
+        if load_refinement(run, trial["topology_refinement"])["profiles"] != _approved_compiler_metadata(
+                run, image, expected.image_identity, recipe):
+            raise ReplayRefused("image_mismatch", "selected refinement compiler metadata differs from its approval")
     elif (expected.image_identity != context.binding.image_identity
           or intent.get("image_profile") is not None or promotion.get("image_profile") is not None
           or any(recipe.get(field) != context.accepted_recipe.get(field) for field in _IMAGE_FIELDS)):

@@ -19,6 +19,21 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json
 from appsec_review.storage.shared import immutable_bytes, safe_path, verify_reference
 
 INDEX_SCHEMA = "appsec-review/accepted-topology-refinements/1"
+INDEX_BYTE_LIMIT = 32 * 1024 * 1024
+
+
+def _read_refinement_index(pointer: Path) -> dict[str, Any]:
+    size = pointer.stat().st_size
+    if size > INDEX_BYTE_LIMIT:
+        raise ValueError("accepted refinement index exceeds its byte bound")
+    data = pointer.read_bytes()
+    if len(data) != size or len(data) > INDEX_BYTE_LIMIT:
+        raise ValueError("accepted refinement index changed during its bounded read")
+    index = json.loads(data)
+    if (not isinstance(index, dict) or set(index) != {"schema", "entries"}
+            or index["schema"] != INDEX_SCHEMA or not isinstance(index["entries"], list)):
+        raise ValueError("accepted refinement index is malformed")
+    return index
 
 
 def _digest(value: Any) -> str:
@@ -106,12 +121,12 @@ def publish_refinement(run_root: Path, actions: Sequence[Mapping[str, Any]], *,
     receipt = _retain(root, "acceptances", acceptance)
     pointer = root / "data/build/topology/accepted-refinements.json"
     with FileLock(pointer.with_suffix(".lock")):
-        index = (json.loads(pointer.read_bytes()) if pointer.exists() else
+        index = (_read_refinement_index(pointer) if pointer.exists() else
                  {"schema": INDEX_SCHEMA, "entries": []})
-        if index.get("schema") != INDEX_SCHEMA or set(index) != {"schema", "entries"}:
-            raise ValueError("accepted refinement index is malformed")
         if receipt not in index["entries"]:
             index["entries"].append(receipt)
+            if len(canonical_json(index)) > INDEX_BYTE_LIMIT:
+                raise ValueError("accepted refinement index publication exceeds its byte bound")
             atomic_json(pointer, index)
     return receipt
 
@@ -134,8 +149,8 @@ def load_refinement(run_root: Path, receipt: Mapping[str, Any], *, graph=None, p
     pointer = root / "data/build/topology/accepted-refinements.json"
     if not pointer.is_file():
         raise ValueError("accepted refinement publication is missing")
-    index = json.loads(pointer.read_bytes())
-    if index.get("schema") != INDEX_SCHEMA or receipt not in index.get("entries", []):
+    index = _read_refinement_index(pointer)
+    if receipt not in index["entries"]:
         raise ValueError("refinement has no accepted index entry")
     acceptance = _read(root, receipt)
     if acceptance.get("schema") != "appsec-review/accepted-topology-refinement/1":
@@ -160,6 +175,8 @@ def guard_action(run_root: Path, action: Mapping[str, Any], *, graph=None,
     from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
     plan = load_accepted_plan(Path(run_root))
     accepted_graph = plan["build_topology"]["executable_graph"]
+    if accepted_graph["schema"] != BUILD_TOPOLOGY_SCHEMA:
+        raise ValueError("graph/1 remains audit-only and requires accepted replanning before execution or reuse")
     if not isinstance(action.get("recipe"), Mapping):
         raise ValueError("execution requires the exact selected non-null recipe")
     if graph is not None and graph != accepted_graph:

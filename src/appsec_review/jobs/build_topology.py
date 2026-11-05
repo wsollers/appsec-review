@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 import copy
 import hashlib
 import heapq
+import json
 from pathlib import PurePosixPath
 import posixpath
 import re
@@ -532,7 +533,7 @@ BUILD_TOPOLOGY_SCHEMA = "appsec-review/build-topology/2"
 BUNDLE_SCHEMA = "appsec-review/build-topology-evidence/1"
 REFINEMENT_SCHEMA = "appsec-review/build-topology-refinement/1"
 ENFORCEMENT_SCHEMA = "appsec-review/native-target-enforcement/1"
-RULES = "source-scoped-topology/3"
+RULES = "source-scoped-topology/4"
 OPERATIONS = frozenset({"managed_compile", "bytecode_transform", "native_aot",
                        "native_compile", "native_link", "package", "prebuilt_import", "unknown"})
 PROOF_KINDS = frozenset({"msbuild_selected_mapping", "compiler_explicit_target",
@@ -637,9 +638,63 @@ def _xml_declarations(document):
     return declarations
 
 
+def _node_declarations(document):
+    text = document["content"]
+
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate manifest key")
+            value[key] = item
+        return value
+
+    try:
+        manifest = json.loads(text, object_pairs_hook=unique)
+    except ValueError:
+        return [{"predicate": "coverage_gap", "value": "node_manifest_unresolved",
+                 "condition": "unresolved", "line": 1}]
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("scripts", {}), dict):
+        return [{"predicate": "coverage_gap", "value": "node_manifest_unresolved",
+                 "condition": "unresolved", "line": 1}]
+    decoder = json.JSONDecoder()
+
+    def members(start):
+        index = start + 1
+        while True:
+            while text[index].isspace():
+                index += 1
+            if text[index] == "}":
+                return
+            key_start = index
+            key, index = decoder.raw_decode(text, index)
+            while text[index].isspace() or text[index] == ":":
+                index += 1
+            value_start = index
+            value, index = decoder.raw_decode(text, index)
+            yield key, value, key_start, value_start
+            while text[index].isspace():
+                index += 1
+            if text[index] == "}":
+                return
+            index += 1
+
+    result = [{"predicate": "node:lifecycle", "value": {
+        "gypfile": manifest.get("gypfile", True)}, "condition": None, "line": 1}]
+    for key, _, _, start in members(len(text) - len(text.lstrip())):
+        if key == "scripts":
+            for name, command, offset, _ in members(start):
+                result.append({"predicate": "node:script", "value": {"name": name, "command": command},
+                               "condition": None if isinstance(command, str) else "unresolved",
+                               "line": text.count("\n", 0, offset) + 1})
+    return result
+
+
 def _document_declarations(document):
     suffix = PurePosixPath(document["path"]).suffix.lower()
     path = PurePosixPath(document["path"])
+    if path.name == "package.json":
+        return _node_declarations(document)
     if path.name.startswith("Dockerfile"):
         declarations = []
         stage = None
@@ -1103,6 +1158,100 @@ def _condition_applies(condition, configuration, platform):
         return None
 
 
+def _node_requested_operations(unit, commands, facts):
+    manifest_path = str(PurePosixPath(unit["root"]) / "package.json")
+    manifest_facts = [fact for fact in facts if fact["path"] == manifest_path]
+    lifecycle = [fact for fact in manifest_facts if fact["predicate"] == "node:lifecycle"]
+    scripts = {fact["value"]["name"]: fact for fact in manifest_facts if fact["predicate"] == "node:script"}
+    gyp = any(PurePosixPath(ref["path"]) == PurePosixPath(unit["root"]) / "binding.gyp"
+              for ref in unit.get("descriptor_package", {}).get("documents", []))
+    native, reasons = False, set()
+
+    def script(name, active):
+        nonlocal native
+        if name not in scripts:
+            return
+        fact = scripts[name]
+        if name in active or len(active) >= 16 or fact["condition"] is not None:
+            reasons.add("node_script_effective_operation_unresolved")
+            return
+        try:
+            lexer = shlex.shlex(fact["value"]["command"], posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            argv = list(lexer)
+        except ValueError:
+            reasons.add("node_script_effective_operation_unresolved")
+            return
+        if not argv or any(value in {"&&", "||", ";", "|", "&", "(", ")", "<", ">"}
+                           or any(character in value for character in ("$", "`", "\n")) for value in argv):
+            reasons.add("node_script_effective_operation_unresolved")
+            return
+        command(argv, (*active, name))
+
+    def command(argv, active=()):
+        nonlocal native
+        if not argv:
+            return
+        if argv[0] == "node-gyp":
+            if len(argv) > 1 and argv[1] in {"build", "rebuild"}:
+                native = True
+            elif len(argv) > 1 and argv[1] == "configure":
+                reasons.add("node_configuration_stage_unresolved")
+            else:
+                reasons.add("node_script_effective_operation_unresolved")
+            return
+        if argv[0] != "npm":
+            if argv[0] not in {"tsc", "esbuild", "webpack"}:
+                reasons.add("node_script_effective_operation_unresolved")
+            return
+        if (len(argv) < 2 or argv[1].startswith("-") or
+                any(value in {"--prefix", "--workspace", "--workspaces", "-w", "--global", "-g"}
+                    or value.startswith(("--prefix=", "--workspace=")) for value in argv[2:])):
+            reasons.add("node_requested_lifecycle_unresolved")
+            return
+        if len(lifecycle) != 1:
+            reasons.add("node_manifest_unresolved")
+            return
+        verb = argv[1]
+        ignore = "--ignore-scripts" in argv or "--ignore-scripts=true" in argv
+        if "--ignore-scripts=false" in argv and ignore:
+            reasons.add("node_requested_lifecycle_unresolved")
+            return
+        if verb in {"run", "run-script"}:
+            if len(argv) < 3 or argv[2].startswith("-") or argv[2] not in scripts:
+                reasons.add("node_requested_script_uncaptured")
+                return
+            names = (argv[2],) if ignore else ("pre" + argv[2], argv[2], "post" + argv[2])
+        elif verb in {"pack", "publish", "install", "ci", "rebuild"}:
+            if any(not value.startswith("-") for value in argv[2:]):
+                reasons.add("node_dependency_lifecycle_uncaptured")
+            names = {
+                "pack": ("prepack", "prepare", "postpack"),
+                "publish": ("prepublishOnly", "prepack", "prepare", "postpack", "publish", "postpublish"),
+                "install": ("preinstall", "install", "postinstall", "prepublish", "preprepare", "prepare", "postprepare"),
+                "ci": ("preinstall", "install", "postinstall", "prepublish", "preprepare", "prepare", "postprepare"),
+                "rebuild": ("preinstall", "install", "postinstall", "prepare"),
+            }[verb]
+            if ignore:
+                names = ()
+            elif verb in {"install", "ci", "rebuild"} and gyp and not ({"preinstall", "install"} & scripts.keys()):
+                gypfile = lifecycle[0]["value"]["gypfile"]
+                if gypfile is True:
+                    native = True
+                elif gypfile is not False:
+                    reasons.add("node_manifest_unresolved")
+        else:
+            reasons.add("node_requested_lifecycle_unresolved")
+            return
+        for name in names:
+            script(name, active)
+
+    for argv in commands:
+        command(argv)
+    return native, sorted(reasons)
+
+
 def _selected_operations(unit, graph, recipe, selected):
     uid = unit["build_unit_id"]
     fact_ids = {binding["fact_id"] for binding in graph["bindings"] if binding["build_unit_id"] == uid}
@@ -1260,11 +1409,17 @@ def _selected_operations(unit, graph, recipe, selected):
             reasons.append("managed_prefer32bit_incompatible" if applicable and
                            output_type in {"exe", "winexe"} and target == "anycpu"
                            and applicable_framework else "managed_prefer32bit_applicability_unknown")
-    native_markers = any(PurePosixPath(ref["path"]).name == "binding.gyp" for ref in
-                         unit.get("descriptor_package", {}).get("documents", []))
-    if native_markers and any(argv and argv[0] in {"npm", "node-gyp"} for argv in commands):
+    node_native = False
+    if unit["family"] == "node" and commands:
+        node_native, node_reasons = _node_requested_operations(unit, commands, facts)
+        reasons.extend(node_reasons)
+        if node_reasons:
+            kinds.add("unknown")
+    if node_native:
         kinds.add("native_compile")
-    if unit.get("native_components"):
+    direct_native = commands and all(argv[0] in {"clang", "clang++", "gcc", "g++"} for argv in commands)
+    if (unit.get("native_components") and not direct_native
+            and (unit["family"] != "node" or node_native)):
         kinds.add("unknown")
         reasons.append("native_component_requested_stage_unresolved")
     if any(fact["predicate"] == "android:plugin" and fact["condition"] is None for fact in facts):

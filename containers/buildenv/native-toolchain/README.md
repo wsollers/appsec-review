@@ -33,6 +33,12 @@ container; it does not need to be copied into the image or installed from a targ
 For prebuilt artifacts or legacy build environments without the readers, the provisioned
 [`tool-native-cpp`](../../tools/native-cpp/README.md) analysis image is the approved fallback.
 
+These package/image identities are not graph/2 native target proof. Execution and prepared-image
+replay require separately accepted static compiler metadata bound to the actual immutable image,
+supported effective command closure and exact recipe. No metadata acquisition, new image build
+or Windows/mobile builder provisioning is delivered by the topology source change. Native CMake
+without supported compiler closure remains blocked; target labels and this README cannot prove it.
+
 ## Why a base image
 
 All family build environments (C/C++, Go, Python, PHP, Rust/WebAssembly, and Node) are Ubuntu 24.04

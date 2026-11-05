@@ -14,7 +14,7 @@
     "status": {"enum": ["proven", "unknown", "incompatible"]},
     "proven_axes": {"$ref": "build-selection-policy.schema.json#/$defs/axes"},
     "unresolved_inputs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-    "scope_rule": {"const": "source-scoped-topology/3"},
+    "scope_rule": {"const": "source-scoped-topology/4"},
     "source_evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/hash"}, "uniqueItems": true},
     "closure_manifest": {"type": "object"},
     "source_fingerprint": {"type": "string", "minLength": 1},

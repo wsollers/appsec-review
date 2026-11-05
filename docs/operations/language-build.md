@@ -680,8 +680,10 @@ and runs before **each** captured command, delegating to the same Make/CMake sou
 as production. Source-subdirectory cwd needs accepted descriptor evidence; build cwd must stay
 inside the declared build directory. Configure-created symlink or wrong-source operands fail
 before the next launch, and arbitrary target names are not rebased.
-Changed cwd is currently supported only for recognized native Make/CMake commands; a different
-driver cannot silently opt into the same transformation.
+Changed cwd is supported for recognized native Make/CMake commands and direct
+Clang/GCC commands with accepted translation-unit bytes. Direct compiler arguments are not
+silently rebased: the accepted source hash, in-unit output and actual cwd/symlink containment
+are rechecked before each launch. Other drivers cannot opt into that transformation.
 
 Replay uses owned `workspace/build-replays/` target/install trees with the same logical mounts,
 not a compiler view restricted to descriptors. Durable contexts/candidates/intents/trials,
@@ -701,6 +703,13 @@ consumes the selection. These command examples are not authorization to resume a
 Unchanged-image replay uses the failed dispatch's exact profile. Image changes need bounded
 operator-approved preparation evidence with full `BuildProfile`
 (`name`, `tag`, `image_id`, `user`, `derived_from_image_id`) preserved through selection/retry.
+That immutable approval also references `compiler_metadata`: a hash/size/path reference to the
+existing static compiler-profile document, bound to the actual `image_digest` and exact
+`image_recipe_digest`. Missing, changed or mismatched compiler evidence fails before detached
+workspace reconstruction or executor resolution, not merely after a command has run. The actual
+image/recipe receives its own accepted immutable refinement; the original failure image's proof
+is not transferable. The captured callback independently guards that refinement before
+constructing its executor, and selection/promotion reverify the same metadata.
 `--prepared-image <reference-json>` consumes this evidence, never builds an image; missing
 approved preparation is `derived_image_preparation_unavailable`. Typed failure diagnosis and
 `NOT_IMAGE_REPAIRABLE` prevent a missing project header/library from becoming a speculative apt

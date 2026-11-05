@@ -59,8 +59,8 @@ Standalone OpenVEX is registered and enabled by default in both configuration an
 with truthful tool author, conservative action and an exact accepted-snapshot namespace requiring
 no operator setup. Explicit disable opts out; old frozen disabled runs remain disabled and refuse
 manual redispatch. Optional author/action/IRI overrides remain strict and pre-run only.
-This brings the combined
-inventory to 44 jobs. Its bounded review `/3` verifier and the report share accepted gate `/2`
+At that historical combined source, this brought the
+inventory to 44 jobs; it is not the current registry count. Its bounded review `/3` verifier and the report share accepted gate `/2`
 snapshot authority without optional producer-head discovery. It never becomes a report input
 or completion barrier; generation adds no model, external publication, signature or new topology;
 see the [export contract](openvex-export.md) and [verification record](../reviews/openvex-export-implementation.md).
@@ -84,7 +84,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 43 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 46 jobs, exactly matching the 46 `[jobs.<job_id>]` tables in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -103,6 +103,7 @@ input, output, tool, and acceptance contracts.
 | `job_change_context_analysis` | Change-context signals | [change-context-analysis](../operations/change-context-analysis.md) |
 | `job_project_build` | Project images, probes, and image repair | [project-build](../operations/project-build.md) |
 | `job_language_build` | Generic language and WebAssembly builds | [language-build](../operations/language-build.md), [wasm-build](../operations/wasm-build.md) |
+| `job_build_iteration` | One immutable, admitted build request/node transaction; not a second whole-target build | [language-build](../operations/language-build.md#detached-recipe-selection) |
 | `job_artifact_indexing` | Produced-artifact index | [artifact-indexing](../operations/artifact-indexing.md) |
 | `job_debug_symbol_indexing` | Run-selected Clang/DWARF or MSVC/PDB evidence, bounded normalized symbol queries and explicit coverage | [debug-symbol-indexing](debug-symbol-indexing.md) |
 | `job_test_coverage` | Hash-verified import of retained LCOV, Cobertura, JaCoCo and LLVM coverage | [test-coverage-ingestion](../operations/test-coverage-ingestion.md) |
@@ -133,6 +134,7 @@ input, output, tool, and acceptance contracts.
 | `job_remediation_validation` | Exact scratch applicability, independent semantic assessment, selected static/native syntax checks and cleanup; never runtime verification | [remediation](../operations/remediation.md) |
 | `job_dossier_publication` | Protected per-confirmed-finding and per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate; real PDF only when rendered | [dossier-publication](../operations/dossier-publication.md) |
 | `job_final_report_publication` | Deterministic, model-free terminal job: `final-report.json` and a byte-reproducible `final-report.md` from the accepted gate (PDF is a later step) | [final-report](../operations/final-report.md) |
+| `job_openvex_export` | Default-enabled conservative OpenVEX statement export from the same immutable accepted gate snapshot; no report fan-in or external publication | [openvex-export](openvex-export.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the

@@ -236,3 +236,68 @@ def test_direct_workers_reject_stale_recipe_before_constructing_an_executor(tmp_
         else:
             execute_wasm(unit, changed, {}, "rust", {}, factory)
     assert constructed == []
+
+
+@pytest.mark.parametrize("value", [[], None, {"schema": "wrong", "entries": []},
+                                  {"schema": "appsec-review/accepted-topology-refinements/1", "entries": {}},
+                                  {"schema": "appsec-review/accepted-topology-refinements/1", "entries": [], "extra": 1}])
+def test_both_refinement_index_consumers_reject_malformed_closed_shape(tmp_path, value):
+    from appsec_review.jobs.build_topology_artifacts import publish_refinement
+    _, root, _, action = accepted_native(tmp_path)
+    pointer = root / "data/build/topology/accepted-refinements.json"
+    atomic_json(pointer, value)
+    before = pointer.read_bytes()
+    with pytest.raises(ValueError, match="index is malformed"):
+        load_refinement(root, action["topology_refinement"])
+    with pytest.raises(ValueError, match="index is malformed"):
+        publish_refinement(root, [action])
+    assert pointer.read_bytes() == before
+
+
+def test_refinement_index_real_32mib_read_and_growth_bounds(tmp_path, monkeypatch):
+    from appsec_review.jobs.build_topology_artifacts import INDEX_BYTE_LIMIT, publish_refinement
+    _, root, _, action = accepted_native(tmp_path)
+    refinement = load_refinement(root, action["topology_refinement"])
+    inputs = {key: refinement[key] for key in ("policy", "profiles", "environment", "releases")}
+    pointer = root / "data/build/topology/accepted-refinements.json"
+    original = pointer.read_bytes()
+    assert INDEX_BYTE_LIMIT == 33554432
+    at_limit = original + b" " * (33554432 - len(original))
+    pointer.write_bytes(at_limit)
+    assert load_refinement(root, action["topology_refinement"])["refinement_id"]
+    assert publish_refinement(root, [action], **inputs) == action["topology_refinement"]
+    assert pointer.read_bytes() == at_limit
+    pointer.write_bytes(at_limit + b" ")
+    for consume in (lambda: load_refinement(root, action["topology_refinement"]),
+                    lambda: publish_refinement(root, [action], **inputs)):
+        with pytest.raises(ValueError, match="index exceeds its byte bound"):
+            consume()
+    pointer.write_bytes(original)
+    real_read = Path.read_bytes
+
+    def growing(path):
+        data = real_read(path)
+        return data + b" " * (33554433 - len(data)) if path == pointer else data
+
+    monkeypatch.setattr(Path, "read_bytes", growing)
+    for consume in (lambda: load_refinement(root, action["topology_refinement"]),
+                    lambda: publish_refinement(root, [action], **inputs)):
+        with pytest.raises(ValueError, match="changed during its bounded read"):
+            consume()
+    assert real_read(pointer) == original
+
+
+def test_oversized_canonical_index_replacement_preserves_prior_bytes(tmp_path):
+    from appsec_review.jobs.build_topology_artifacts import INDEX_SCHEMA, publish_refinement
+    from appsec_review.storage import canonical_json
+    _, root, _, action = accepted_native(tmp_path)
+    pointer = root / "data/build/topology/accepted-refinements.json"
+    index = {"schema": INDEX_SCHEMA, "entries": [""]}
+    padding = 33554432 - len(canonical_json(index))
+    index["entries"][0] = "x" * padding
+    before = canonical_json(index)
+    assert len(before) == 33554432
+    pointer.write_bytes(before)
+    with pytest.raises(ValueError, match="index publication exceeds its byte bound"):
+        publish_refinement(root, [action])
+    assert pointer.read_bytes() == before

@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 from pathlib import Path
+import struct
 from unittest.mock import Mock
 
 import jsonschema
@@ -24,10 +25,80 @@ from appsec_review.jobs.build_workspace import (
 from appsec_review.storage.atomic import canonical_json, canonical_json_sha256
 from appsec_review.storage.lock import FileLock, LockUnavailable
 from appsec_review.storage.shared import immutable_bytes, reference, verify_reference
+from tests.test_native_target_enforcement import _archive_member, _profile
 
 
 VARIANT = {"configuration": "release", "target_arch": "x86_64", "execution_role": "target",
-           "linkage": "static", "toolchain": "fixture-toolchain/1", "abi": "fixture-abi/1"}
+           "linkage": "static", "toolchain": "fixture-toolchain/1", "abi": "gnu"}
+TARGET = "--target=x86_64-unknown-linux-gnu"
+_ELF_IDENT = b"\x7fELF\x02\x01\x01" + bytes(9)
+_EXIT_CODE = b"\xb8\x3c\0\0\0\x31\xff\x0f\x05"
+NATIVE_OUTPUT = (
+    struct.pack("<16sHHIQQQIHHHHHH", _ELF_IDENT, 2, 62, 1, 0x400078, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+    + struct.pack("<IIQQQQQQ", 1, 5, 0, 0x400000, 0x400000, 120 + len(_EXIT_CODE), 120 + len(_EXIT_CODE), 4096)
+    + _EXIT_CODE)
+NATIVE_OBJECT = (
+    struct.pack("<16sHHIQQQIHHHHHH", _ELF_IDENT, 1, 62, 1, 0, 0, 64, 0, 64, 0, 0, 64, 1, 0)
+    + bytes(64))
+NATIVE_AXES = {"os": "linux", "isa": "x86_64", "abi": "gnu", "sdk": None,
+               "deployment": None, "device_kind": None, "hardware_generation": None}
+
+
+def _compiler_metadata(image_identity, recipe=None):
+    profile = {**_profile(), "image_digest": image_identity}
+    if recipe is not None:
+        profile["image_recipe_digest"] = canonical_json_sha256(recipe)
+    return profile
+
+
+def _publish_source_plan(run, units, releases, *, config=None, legacy=False):
+    from appsec_review.config import load_config
+    from appsec_review.config.assurance import ComponentReleases
+    from appsec_review.jobs.build_topology import refine_build_topology, topology_evidence_bundle
+    from appsec_review.jobs.job_target_analysis_plan.planning import PLAN_SCHEMA
+    from appsec_review.runtime import Job, JobRunner, Unit
+
+    config = config or load_config(Path(__file__).parents[1] / "appsec-review.toml")
+    config = replace(config, runtime=replace(config.runtime, runs_dir=run.parent),
+                     review_policy=replace(config.review_policy, releases=ComponentReleases(releases)))
+    profile = _compiler_metadata("sha256:" + "1" * 64)
+    source_identity = units[0]["source_fingerprint"]
+    graph = compile_build_topology(units, source_fingerprint=source_identity, profiles=profile)
+    plan = {
+        "schema": PLAN_SCHEMA, "source_fingerprint": source_identity,
+        "build_topology": {
+            "executable_graph": graph, "build_actions": units,
+            "evidence_bundle": topology_evidence_bundle(
+                units, source_fingerprint=source_identity, profiles=profile),
+            "planning_refinement": refine_build_topology(graph, units, profiles=profile),
+        },
+    }
+    if legacy:
+        from appsec_review.jobs.build_topology import _compile_graph1
+        plan["build_topology"] = {
+            "executable_graph": _compile_graph1(units, source_fingerprint=source_identity),
+            "build_actions": units,
+        }
+
+    def publish(context):
+        artifact = immutable_bytes(context.job.run_root,
+                                   f"artifacts/source-plans/{canonical_json_sha256(plan)}.json", canonical_json(plan))
+        return {"artifact": artifact, "terminal_status": "SUCCEEDED"}
+
+    job = Job("job_target_analysis_plan", config.job("job_target_analysis_plan").name, lambda _: {},
+              units=(Unit("plan_acceptance.publish_handoff", publish),))
+    result = JobRunner(config).run(job, run_id=run.name, source_fingerprint=source_identity)
+    assert result["status"]["status"] == "SUCCEEDED"
+    return config, plan
+
+
+def _accepted_dispatch(run, unit, releases):
+    from appsec_review.jobs.build_topology_artifacts import bind_actions
+    action = bind_actions(run, [unit], profiles=_compiler_metadata("sha256:" + "1" * 64),
+                          releases=releases)[0]
+    return {**action, "image": {
+        "family": "native", "image_tag": "fixture:base", "image_id": "sha256:" + "1" * 64,
+        "user": "1000:1000", "dependency_hashes": {}}}
 
 
 def _json(run, relative, document):
@@ -55,7 +126,7 @@ def build(tmp_path, request):
         "z-library/CMakeLists.txt": b"project(A)\nadd_library(A STATIC a.c)\n",
         "z-library/a.c": b"int a(void) { return 1; }\n",
         "a-consumer/CMakeLists.txt": b"project(B)\nadd_executable(B b.c)\ntarget_link_libraries(B PRIVATE A)\n",
-        "a-consumer/b.c": b'#include "../shared/a.h"\nint main(void) { return a(); }\n',
+        "a-consumer/b.c": b'#include "../shared/a.h"\nint main(void) { return 0; }\n',
         "shared/a.h": b"int a(void);\n",
     }
     files = []
@@ -69,33 +140,46 @@ def build(tmp_path, request):
     units = discover_build_units(files)
     for unit in units:
         unit["descriptor_package"] = descriptor_package(source, unit, files)
+        captured = {document["path"] for document in unit["descriptor_package"]["documents"]}
+        for item in files:
+            if item["path"] not in captured and Path(item["path"]).suffix in {".c", ".h"}:
+                unit["descriptor_package"]["documents"].append({
+                    **item, "content": original[item["path"]].decode()})
         unit["build_variant"] = dict(VARIANT)
+        unit["source_fingerprint"] = source_identity
         root = unit["root"]
+        translation = "a.c" if root == "z-library" else "b.c"
         unit["recipe"] = {
             "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
             "image_profile": "native", "source_dir": root, "build_dir": root + "/build",
             "system_packages": [], "environment": {},
             "dependency_files": [marker["path"] for marker in unit["markers"]],
-            "configure_commands": [], "build_commands": [["cmake", "--build", root + "/build"]],
+            "configure_commands": [], "build_commands": [
+                ["clang", TARGET, "-c", translation, "-o", "build/A.o"] if root == "z-library"
+                else ["clang", TARGET, translation, "-o", "build/B"]],
             "expected_outputs": [root + "/build"], "network_required": False,
-            "reason": "source-backed accepted unit; compiler boundary is fake",
+            "reason": "source-backed direct compiler fixture; execution boundary is simulated",
         }
-    graph = compile_build_topology(units, source_fingerprint=source_identity)
+    graph = compile_build_topology(units, source_fingerprint=source_identity,
+                                   profiles=_compiler_metadata("sha256:" + "1" * 64))
     producer = next(node for node in graph["nodes"] if node["root"] == "z-library")
     consumer = next(node for node in graph["nodes"] if node["root"] == "a-consumer")
     unit_b = next(unit for unit in units if unit["root"] == "a-consumer")
-    run = tmp_path / "runs" / "run-1"
+    run = tmp_path / "runs" / "2026-10-12-0001"
     run.mkdir(parents=True)
     workspace = BuildWorkspace(run)
     initial = workspace.materialize(source, source_identity)
     releases = getattr(request, "param", {"platform": "platform/1", "validation": "validation/1"})
+    _publish_source_plan(run, units, releases)
+    action_b = _accepted_dispatch(run, unit_b, releases)
     configuration = canonical_json_sha256({"releases": releases})
     binding_a = NodeBinding(
         producer["build_unit_id"], source_identity, graph["topology_id"], configuration,
-        producer["recipe_revision"], "sha256:" + "1" * 64, VARIANT["toolchain"], (),
+        canonical_json_sha256(next(unit["recipe"] for unit in units if unit["root"] == "z-library")),
+        "sha256:" + "1" * 64, VARIANT["toolchain"], (),
         "fixture-capture/1", "fixture-output-policy/1",
     )
-    a_bytes = b"committed producer A; must never be recompiled"
+    a_bytes = b"!<arch>\n" + _archive_member("a.o/", NATIVE_OBJECT)
     with workspace.writer() as writer:
         writer.begin_attempt(binding_a, "A-success", initial)
         library = writer.paths.install / "lib/libA.a"
@@ -108,13 +192,16 @@ def build(tmp_path, request):
         metadata.mkdir()
         (metadata / "a.pc").write_bytes(b"Name: A\nLibs: -L/install/lib -lA\n")
         record_a = writer.commit([
-            ProductSpec("install/lib/libA.a", **producer["products"][0]),
-            ProductSpec("install/include/a.h", "headers", "include:A", "include:A", VARIANT),
-            ProductSpec("install/lib/pkgconfig/a.pc", "package_metadata", "pkg:A", "pkg:A", VARIANT),
+            ProductSpec("install/lib/libA.a", **producer["products"][0],
+                        role="static_archive", axes=NATIVE_AXES),
+            ProductSpec("install/include/a.h", "headers", "include:A", "include:A", VARIANT,
+                        role="headers", axes=NATIVE_AXES),
+            ProductSpec("install/lib/pkgconfig/a.pc", "package_metadata", "pkg:A", "pkg:A", VARIANT,
+                        role="metadata", axes=NATIVE_AXES),
         ])
         generation = writer.state()["generation"]
         binding_b = replace(binding_a, node_id=consumer["build_unit_id"],
-                            recipe_identity=consumer["recipe_revision"],
+                            recipe_identity=canonical_json_sha256(unit_b["recipe"]),
                             upstream_products=(record_a.identity,))
         writer.begin_attempt(binding_b, "B-failed", generation)
         (writer.paths.target / "failed-only").write_bytes(b"failed B dirt must not be replayed")
@@ -126,6 +213,7 @@ def build(tmp_path, request):
     capture = _json(run, "artifacts/failure/capture.json", {"original": "capture"})
     failure = _json(run, "artifacts/failure/failure.json", {
         "attempt_id": "B-failed", "binding": binding_b.view(), "terminal_status": "FAILED",
+        "request": _json(run, "artifacts/failure/request.json", {"dispatch": action_b}),
         "evidence": [stdout, stderr, capture],
     })
     inputs = {
@@ -135,13 +223,14 @@ def build(tmp_path, request):
         "source": reference(run, run / "artifacts/build/workspace/input.json"),
     }
     context = ReplayContext(
-        "run-1", "B-failed", binding_b, generation, unit_b, unit_b["recipe"], dict(VARIANT),
-        (ProductSpec("install/bin/B", **consumer["products"][0]),), releases, inputs,
+        run.name, "B-failed", binding_b, generation, unit_b, unit_b["recipe"], dict(VARIANT),
+        (ProductSpec("install/bin/B", **consumer["products"][0], role="executable",
+                     axes=NATIVE_AXES),), releases, inputs,
         (ProducerProduct(binding_a, record_a.reference),),
     )
     recipe = deepcopy(unit_b["recipe"])
-    recipe["build_commands"][0] += ["--parallel", "2"]
-    candidate = RecipeCandidate(recipe, (inputs["graph"],), "retry B with evidenced bounded parallel build")
+    recipe["build_commands"][0] += ["-g"]
+    candidate = RecipeCandidate(recipe, (inputs["graph"],), "retry B with an evidenced compiler option")
     yield Fixture(workspace, context, candidate, a_bytes, original, source)
     assert {path.relative_to(source).as_posix(): path.read_bytes()
             for path in source.rglob("*") if path.is_file()} == original
@@ -213,10 +302,10 @@ def _executor(build, *, exit_code=0, capture_gaps=(), cleanup=True, produce=True
         if produce:
             output = invocation.paths.install / "bin/B"
             output.parent.mkdir(exist_ok=True)
-            output.write_bytes(b"verified B executable")
+            output.write_bytes(NATIVE_OUTPUT)
             directory = invocation.paths.target / "a-consumer/build"
             directory.mkdir(exist_ok=True)
-            (directory / "B").write_bytes(b"verified B executable")
+            (directory / "B").write_bytes(NATIVE_OUTPUT)
         results = []
         for index in range(len(invocation.commands)):
             argv, _cwd = invocation.prepare_command(index)
@@ -456,23 +545,24 @@ def test_distinct_failed_candidate_can_be_followed_by_one_genuinely_different_su
 def test_evidenced_export_path_and_build_directory_revision_uses_same_source_cwd(build):
     recipe = deepcopy(build.candidate.recipe)
     recipe.update(build_dir="a-consumer/rebuilt", expected_outputs=["a-consumer/rebuilt"],
-                  configure_commands=[["cmake", "-S", "a-consumer", "-B", "a-consumer/rebuilt"]])
-    recipe["build_commands"] = [["cmake", "--build", "a-consumer/rebuilt"]]
+                  configure_commands=[["clang", TARGET, "-c", "b.c", "-o", "rebuilt/preflight.o"]])
+    recipe["build_commands"] = [["clang", TARGET, "b.c", "-o", "rebuilt/B"]]
     product = replace(build.context.products[0], path="install/revised/B")
     candidate = replace(build.candidate, recipe=recipe, products=(product,))
     seen = []
 
     def execute(invocation):
         assert invocation.candidate.recipe["source_dir"] == "a-consumer"
-        assert invocation.commands == (("cmake", "-S", ".", "-B", "rebuilt"), ("cmake", "--build", "rebuilt"))
+        assert invocation.commands == (("clang", TARGET, "-c", "b.c", "-o", "rebuilt/preflight.o"),
+                                       ("clang", TARGET, "b.c", "-o", "rebuilt/B"))
         assert (invocation.paths.target / "shared/a.h").is_file()
         assert (invocation.paths.install / "lib/libA.a").read_bytes() == build.a_bytes
         out = invocation.paths.install / "revised/B"
         out.parent.mkdir()
-        out.write_bytes(b"revised export")
+        out.write_bytes(NATIVE_OUTPUT)
         generated = invocation.paths.target / recipe["build_dir"]
         generated.mkdir(exist_ok=True)
-        (generated / "B").write_bytes(b"revised export")
+        (generated / "B").write_bytes(NATIVE_OUTPUT)
         seen.append(invocation)
         return TrialExecution(tuple(_capture(invocation, index, invocation.prepare_command(index)[0])
                                     for index in range(len(invocation.commands))), True)
@@ -491,14 +581,16 @@ def test_phase_cwd_correction_replays_and_promotes_without_changing_source_root_
     recipe = deepcopy(build.candidate.recipe)
     recipe.update(
         execution_cwd={"configure": "a-consumer", "build": "a-consumer/build"},
-        configure_commands=[["cmake", "-S", "a-consumer", "-B", "a-consumer/build"]],
+        configure_commands=[["clang", TARGET, "-c", "b.c", "-o", "build/preflight.o"]],
+        build_commands=[["clang", TARGET, "../b.c", "-o", "B", "-g"]],
     )
     candidate = replace(build.candidate, recipe=recipe)
     observed = []
 
     def execute(invocation):
         assert invocation.commands == (
-            ("cmake", "-S", ".", "-B", "build"), ("cmake", "--build", ".", "--parallel", "2"))
+            ("clang", TARGET, "-c", "b.c", "-o", "build/preflight.o"),
+            ("clang", TARGET, "../b.c", "-o", "B", "-g"))
         assert invocation.working_directories == ("a-consumer", "a-consumer/build")
         results = []
         for ordinal in range(len(invocation.commands)):
@@ -506,10 +598,10 @@ def test_phase_cwd_correction_replays_and_promotes_without_changing_source_root_
             assert (invocation.paths.target / cwd).is_dir()
             observed.append(cwd)
             if ordinal == 1:
-                (invocation.paths.target / cwd / "B").write_bytes(b"built from corrected cwd")
+                (invocation.paths.target / cwd / "B").write_bytes(NATIVE_OUTPUT)
                 output = invocation.paths.install / "bin/B"
                 output.parent.mkdir()
-                output.write_bytes(b"built from corrected cwd")
+                output.write_bytes(NATIVE_OUTPUT)
             results.append(_capture(invocation, ordinal, argv))
         return TrialExecution(tuple(results), True)
 
@@ -563,11 +655,11 @@ def test_shared_command_guard_refuses_wrong_source_before_replay_configure_launc
     execute.assert_not_called()
 
 
-def test_shared_command_guard_allows_parent_source_from_declared_build_cwd(build):
+def test_targeted_compiler_allows_parent_source_from_declared_build_cwd(build):
     recipe = {**build.candidate.recipe,
               "execution_cwd": {"configure": "a-consumer/build", "build": "a-consumer/build"},
-              "configure_commands": [["cmake", "-S", "..", "-B", "."]],
-              "build_commands": [["cmake", "--build", "."]]}
+              "configure_commands": [["clang", TARGET, "-c", "../b.c", "-o", "preflight.o"]],
+              "build_commands": [["clang", TARGET, "../b.c", "-o", "B"]]}
     ref = replay_recipe(build.workspace, build.context, replace(build.candidate, recipe=recipe),
                         execute=_executor(build))
     trial = _read(build.workspace.run_dir, ref)
@@ -576,16 +668,15 @@ def test_shared_command_guard_allows_parent_source_from_declared_build_cwd(build
     revision = load_promoted_revision(build.workspace, build.context,
                                       promote_recipe(build.workspace, build.context, ref))
     assert revision.recipe["source_dir"] == "a-consumer"
-    assert revision.recipe["configure_commands"] == [["cmake", "-S", "..", "-B", "."]]
+    assert revision.recipe["configure_commands"] == [["clang", TARGET, "-c", "../b.c", "-o", "preflight.o"]]
 
 
-def test_rebased_target_cannot_bypass_exact_command_capture_matching(build):
+def test_targeted_compiler_cannot_bypass_exact_command_capture_matching(build):
     recipe = {**build.candidate.recipe,
-              "build_commands": [["cmake", "--build", "a-consumer/build",
-                                  "--target", "a-consumer/custom-target"]]}
+              "build_commands": [["clang", TARGET, "b.c", "-o", "build/B", "-g"]]}
 
     def wrong_target(invocation, results):
-        argv = (*results[0].argv[:-1], "custom-target")
+        argv = (*results[0].argv[:-1], "-O2")
         results[0] = replace(results[0], argv=argv)
         document = json.loads(results[0].capture_record.read_bytes())
         document["command"]["argv"] = list(argv)
@@ -607,7 +698,8 @@ def test_explicit_default_phase_cwds_are_a_normalized_no_op(build):
 
 def test_cwd_is_revalidated_between_configure_and_build_instead_of_trusting_initial_directory(build):
     recipe = {**build.candidate.recipe, "execution_cwd": {"build": "a-consumer/build"},
-              "configure_commands": [["cmake", "-S", "a-consumer", "-B", "a-consumer/build"]]}
+              "configure_commands": [["clang", TARGET, "-c", "b.c", "-o", "build/preflight.o"]],
+              "build_commands": [["clang", TARGET, "../b.c", "-o", "B"]]}
     candidate = replace(build.candidate, recipe=recipe)
     executed = []
 
@@ -645,7 +737,8 @@ def test_non_build_source_cwd_requires_accepted_descriptor_evidence(build):
 
 def test_missing_generated_child_cwd_is_not_created_or_treated_as_verified_context(build):
     candidate = replace(build.candidate, recipe={**build.candidate.recipe,
-        "execution_cwd": {"build": "a-consumer/build/not-generated"}})
+        "execution_cwd": {"build": "a-consumer/build/not-generated"},
+        "build_commands": [["clang", TARGET, "../../b.c", "-o", "B"]]})
     executor = _executor(build)
     with pytest.raises(ReplayRefused, match="unsafe_execution_cwd"):
         replay_recipe(build.workspace, build.context, candidate, execute=executor)
@@ -653,7 +746,8 @@ def test_missing_generated_child_cwd_is_not_created_or_treated_as_verified_conte
 
 
 def test_captured_wrong_phase_cwd_cannot_be_a_winner(build):
-    recipe = {**build.candidate.recipe, "execution_cwd": {"build": "a-consumer/build"}}
+    recipe = {**build.candidate.recipe, "execution_cwd": {"build": "a-consumer/build"},
+              "build_commands": [["clang", TARGET, "../b.c", "-o", "B"]]}
     candidate = replace(build.candidate, recipe=recipe)
 
     def wrong_cwd(invocation, results):
@@ -674,6 +768,8 @@ def test_network_offline_approved_prepared_image_requires_immutable_matching_bui
     receipt = _json(build.workspace.run_dir, "artifacts/prepared/image.json", {
         "image_id": image, "recipe_identity": canonical_json_sha256(candidate.recipe),
         "profile": asdict(profile), "operator_approved": True, "network": "none", "prepared": True,
+        "compiler_metadata": _json(build.workspace.run_dir, "artifacts/prepared/compiler.json",
+                                   _compiler_metadata(image, candidate.recipe)),
     })
     builder = Mock(return_value=ImageResolution(profile, receipt))
     execute = _executor(build)
@@ -697,6 +793,99 @@ def test_network_offline_approved_prepared_image_requires_immutable_matching_bui
                    f"artifacts/build/recipe-replay/trials/{canonical_json_sha256(trial)}.json", trial)
     with pytest.raises(ReplayRefused, match="image_mismatch"):
         promote_recipe(build.workspace, build.context, forged)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "stale-bytes", "image", "recipe", "compiler", "target"])
+def test_prepared_actual_image_compiler_admission_precedes_reconstruction_and_execution(build, monkeypatch, mutation):
+    from appsec_review.jobs.build_workspace import WorkspaceWriter
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe, "system_packages": ["libssl-dev"]})
+    image = "sha256:" + "2" * 64
+    profile = BuildProfile("native", "prepared:fixture", image, "1000:1000")
+    metadata = _compiler_metadata(image, candidate.recipe)
+    if mutation == "image":
+        metadata["image_digest"] = build.context.binding.image_identity
+    elif mutation == "recipe":
+        metadata["image_recipe_digest"] = canonical_json_sha256(build.context.accepted_recipe)
+    elif mutation == "compiler":
+        metadata["compiler_sha256"] = None
+    elif mutation == "target":
+        metadata["executable"] = "gcc"
+    compiler = _json(build.workspace.run_dir, "artifacts/prepared/compiler.json", metadata)
+    if mutation == "stale-bytes":
+        (build.workspace.run_dir / compiler["path"]).write_bytes(canonical_json({**metadata, "compiler_sha256": "f" * 64}))
+    approval = _json(build.workspace.run_dir, "artifacts/prepared/approval.json", {
+        "image_id": image, "recipe_identity": canonical_json_sha256(candidate.recipe),
+        "profile": asdict(profile), "operator_approved": True, "network": "none", "prepared": True,
+        **({} if mutation == "missing" else {"compiler_metadata": compiler}),
+    })
+    reconstruct = Mock(side_effect=AssertionError("unadmitted image must not reconstruct"))
+    execute = Mock(side_effect=AssertionError("unadmitted image must not execute"))
+    monkeypatch.setattr(WorkspaceWriter, "create_replay", reconstruct)
+    with pytest.raises((ReplayRefused, ValueError)):
+        replay_recipe(build.workspace, build.context, candidate, execute=execute,
+                      approved_image_builder=Mock(return_value=ImageResolution(profile, approval)))
+    reconstruct.assert_not_called()
+    execute.assert_not_called()
+
+
+def test_native_cmake_without_compiler_closure_never_reconstructs_or_executes(build, monkeypatch):
+    from appsec_review.jobs.build_workspace import WorkspaceWriter
+    candidate = replace(build.candidate, recipe={**build.candidate.recipe,
+        "build_commands": [["cmake", "--build", "a-consumer/build"]]})
+    reconstruct = Mock(side_effect=AssertionError("unknown compiler closure must not reconstruct"))
+    execute = Mock(side_effect=AssertionError("unknown compiler closure must not execute"))
+    monkeypatch.setattr(WorkspaceWriter, "create_replay", reconstruct)
+    with pytest.raises(ReplayRefused, match="candidate_target_unenforced"):
+        replay_recipe(build.workspace, build.context, candidate, execute=execute)
+    reconstruct.assert_not_called()
+    execute.assert_not_called()
+
+
+@pytest.mark.parametrize("mutation", ["changed-source", "source-symlink", "output-symlink", "output-escape", "cwd-escape"])
+def test_direct_compiler_changed_cwd_rechecks_real_source_and_containment_each_launch(build, mutation):
+    from appsec_review.jobs.build_recipe_commands import prepare_recipe_command
+    workspace = build.workspace.paths.target
+    recipe = {**build.candidate.recipe, "execution_cwd": {"build": "a-consumer/build"},
+              "build_commands": [["clang", TARGET, "../b.c", "-o", "B"]]}
+    argv = recipe["build_commands"][0]
+    assert prepare_recipe_command(workspace, build.context.validation_unit, recipe, "build", argv) == (
+        tuple(argv), "a-consumer/build")
+    source = workspace / "a-consumer/b.c"
+    if mutation == "changed-source":
+        source.write_bytes(b"int main(void) { return 7; }\n")
+    elif mutation == "source-symlink":
+        source.unlink()
+        source.symlink_to("../z-library/a.c")
+    elif mutation == "output-symlink":
+        (workspace / "a-consumer/build/B").symlink_to("../../z-library/a.c")
+    elif mutation == "output-escape":
+        argv[-1] = "../../../outside"
+    elif mutation == "cwd-escape":
+        recipe["execution_cwd"]["build"] = "../outside"
+    with pytest.raises(ValueError):
+        prepare_recipe_command(workspace, build.context.validation_unit, recipe, "build", argv)
+
+
+def test_genuine_accepted_graph1_remains_readable_but_refuses_replay_before_reconstruction(build, monkeypatch):
+    from appsec_review.jobs.build_workspace import WorkspaceWriter
+    from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
+    run = build.workspace.run_dir
+    units = load_accepted_plan(run)["build_topology"]["build_actions"]
+    _, plan = _publish_source_plan(run, units, build.context.releases, legacy=True)
+    graph = plan["build_topology"]["executable_graph"]
+    binding = replace(build.context.binding, graph_identity=graph["topology_id"])
+    failure = _read(run, build.context.inputs["failure"])
+    context = replace(build.context, binding=binding, inputs={
+        **build.context.inputs, "graph": _json(run, "artifacts/legacy/graph.json", graph),
+        "failure": _json(run, "artifacts/legacy/failure.json", {**failure, "binding": binding.view()})})
+    reconstruct = Mock(side_effect=AssertionError("legacy graph cannot reconstruct a graph/2 trial"))
+    execute = Mock(side_effect=AssertionError("legacy graph cannot replay"))
+    monkeypatch.setattr(WorkspaceWriter, "create_replay", reconstruct)
+    with pytest.raises(ReplayRefused, match="graph/1"):
+        replay_recipe(build.workspace, context, build.candidate, execute=execute)
+    assert load_accepted_plan(run) == plan
+    reconstruct.assert_not_called()
+    execute.assert_not_called()
 
 
 def test_network_offline_builder_cannot_hide_a_fetch_or_unapproved_recipe(build):

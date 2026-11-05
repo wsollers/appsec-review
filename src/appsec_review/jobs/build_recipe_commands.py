@@ -19,6 +19,7 @@ class _CommandPlan:
     make_directory: str | None = None
     cmake_build: str | None = None
     directories: tuple[str, ...] = ()
+    outputs: tuple[str, ...] = ()
 
 
 def _plan(recipe: Mapping[str, Any], phase: str, argv: Sequence[str], *,
@@ -33,8 +34,8 @@ def _plan(recipe: Mapping[str, Any], phase: str, argv: Sequence[str], *,
     command[0] = argv[0]
     source, build = str(recipe["source_dir"]), recipe.get("build_dir")
 
-    def operand(value: str, base: str) -> tuple[str, str]:
-        if not normalized and source != "." and (value == source or value.startswith(source + "/")):
+    def operand(value: str, base: str, *, rebase: bool = True) -> tuple[str, str]:
+        if rebase and not normalized and source != "." and (value == source or value.startswith(source + "/")):
             value = posixpath.relpath(value, base)
         logical = posixpath.normpath(posixpath.join(base, value))
         if (PurePosixPath(logical).is_absolute() or ".." in PurePosixPath(logical).parts
@@ -120,6 +121,29 @@ def _plan(recipe: Mapping[str, Any], phase: str, argv: Sequence[str], *,
             drivers.append(relative)
         return _CommandPlan(tuple(command), cwd, tuple(drivers),
                             None if makefiles else effective, directories=tuple(required))
+    if "execution_cwd" in recipe and cwd != source and tool in {"clang", "clang++", "gcc", "g++"}:
+        drivers, outputs = [], []
+        index = 1
+        while index < len(command):
+            value = command[index]
+            if value in {"-o", "-target", "--target"}:
+                if index + 1 == len(command):
+                    raise ValueError("compiler option operand is missing")
+                if value == "-o":
+                    _, output = operand(command[index + 1], cwd, rebase=False)
+                    if not (output == source or output.startswith(source.rstrip("/") + "/")
+                            or source == "."):
+                        raise ValueError("compiler output escaped its accepted unit")
+                    outputs.append(output)
+                index += 2
+                continue
+            if not value.startswith("-") and PurePosixPath(value).suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}:
+                _, path = operand(value, cwd, rebase=False)
+                drivers.append(path)
+            index += 1
+        if not drivers:
+            raise ValueError("changed compiler cwd requires accepted translation-unit source evidence")
+        return _CommandPlan(tuple(command), cwd, tuple(drivers), outputs=tuple(outputs))
     if "execution_cwd" in recipe and cwd != source:
         raise ValueError("changed execution cwd is unsupported for this driver; use a validated native driver")
     return _CommandPlan(tuple(command), cwd)
@@ -167,6 +191,8 @@ def prepare_recipe_command(workspace: Path, validation_unit: Mapping[str, Any],
     for relative in plan.directories:
         if not contained(relative).is_dir():
             raise ValueError("native driver does not resolve a verified directory")
+    for relative in plan.outputs:
+        contained(relative, exists=False)
     drivers = plan.drivers
     if plan.make_directory is not None:
         candidates = [(PurePosixPath(plan.make_directory) / name).as_posix()

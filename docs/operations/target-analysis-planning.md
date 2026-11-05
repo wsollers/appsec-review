@@ -97,12 +97,16 @@ different graph. Old graphless plans require replanning. The source fingerprint,
 markers, descriptor evidence, ownership and variant/product identities remain resolving inputs;
 a model cannot replace them with a plausible-looking graph.
 
-Variant fields are `configuration`, `target_arch`, `execution_role`, `linkage`, `toolchain`, and
+Immutable observed variant fields are `configuration`, `target_arch`, `execution_role`, `linkage`, `toolchain`, and
 `abi`. Explicit `[jobs.job_project_build.settings.variants.<unit-id-or-family>]` entries may
 supply facts not contradicted by accepted descriptors. Missing ABI/architecture facts stay
 unknown; no filename, directory name, or default host guess resolves them. Product-dependent
 readiness requires compatible resolved facts and verified producer bytes/interfaces, and unknown
-variant fields prevent successful-node checkpoint reuse.
+variant fields prevent successful-node checkpoint reuse. These observations are separate from
+selection intent and the exact recipe-bound refinement. Do not edit accepted graph bytes to
+choose Windows/Linux x64 or a declared Android/iOS target. Preserve 32-bit declarations for
+audit without selecting/building them; unknown SDK, deployment, device and hardware-generation
+axes remain unknown.
 
 Model/catalog-summary bounds control inference input, not compiler visibility into the reviewed
 repository. They are not a reason to omit source files needed by a build.
@@ -139,7 +143,9 @@ Catalog handoffs, the full target catalog and repository partition have explicit
 other catalog children remain bounded at 16 MiB. Whole plans/handoffs and topology inputs/
 refinements are capped at 32 MiB; the canonical graph itself remains capped at 16 MiB. This
 corrects the feature predecessor's 16 MiB intake conflict without removing integrity checks
-or relaxing the global 32 MiB ceiling.
+or relaxing the global 32 MiB ceiling. The accepted-refinements index has the same 32 MiB
+pre-read/post-length bound in both consumers, and canonical replacement is size-checked under
+its lock. A refused replacement preserves the previous accepted pointer.
 
 ### R8 authoring, not a measured result
 
@@ -159,6 +165,19 @@ candidate's is measured here. Separate baseline environment/driver/import admiss
 The provisional 120-second whole-feedback budget and all produced document sizes must be
 measured in that future replay, not inferred from pytest or compiler timings. Missing or
 mismatched actual capture bindings fail; synthetic input is not an R8 substitute.
+
+The separate neutral **unit-level full-295 R8 driver proposal** is a session artifact, not this
+manual integration-marked test or a recorded outcome. It must use each source's own root,
+configuration, installed package, conftest/autouse fixtures and actual accepted intake. Loading an
+external test with `-p` alone does not establish those fixtures: the telemetry fixture explicitly
+returns for external paths. The proposal does not authorize baseline setup, collection or execution.
+Its feedback script must be independent of compiler answers, report nonzero eligible calls and
+measure full publication/read/recipe-selection/image-family preflight. Missing actual compiler or
+image metadata must remain a named block, not be replaced with a fake successful build.
+
+Graph/1 accepted publications remain available for indexing and audit. Executable consumption,
+cache/recovery/replay and refinement publication require a fresh accepted graph/2 plan from source;
+neither an old success label nor changing a schema string is a migration.
 
 ## Image preparation and bounded production iterations
 

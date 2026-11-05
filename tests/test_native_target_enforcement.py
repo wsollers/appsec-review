@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import struct
 import pytest
 
@@ -79,6 +80,91 @@ def test_null_recipe_planning_is_unknown_without_execution_authority():
     assert proof["source_evidence_refs"]
     assert unit == original
     validate_refinement(graph, refinement)
+
+
+@pytest.mark.parametrize("argv,scripts,native,unknown", [
+    (["npm", "pack"], {"build": "node-gyp rebuild"}, False, False),
+    (["npm", "run", "build"], {"build": "node-gyp rebuild"}, True, False),
+    (["npm", "run", "build"], {"build": "tsc -p tsconfig.json"}, False, False),
+    (["npm", "pack"], {"prepack": "node-gyp rebuild"}, True, False),
+    (["npm", "pack"], {"prepare": "node-gyp build"}, True, False),
+    (["npm", "pack"], {"postbuild": "node-gyp rebuild"}, False, False),
+    (["npm", "pack", "--ignore-scripts"], {"prepack": "node-gyp rebuild"}, False, False),
+    (["npm", "run", "build"], {"prebuild": "node-gyp rebuild", "build": "tsc"}, True, False),
+    (["npm", "ci", "--ignore-scripts"], {}, False, False),
+    (["npm", "ci"], {}, True, False),
+    (["node-gyp", "configure"], {}, False, True),
+    (["node-gyp", "build"], {}, True, False),
+    (["npm", "run", "missing"], {"build": "node-gyp rebuild"}, False, True),
+    (["npm", "run", "build"], {"build": "node build.js"}, False, True),
+    (["npm", "run", "build"], {"build": "npm run build"}, False, True),
+])
+def test_node_requested_native_stage_comes_from_applicable_captured_lifecycle_not_marker_or_command_name(
+        argv, scripts, native, unknown):
+    text = json.dumps({"name": "synthetic-node-control", "scripts": scripts}, indent=2) + "\n"
+    documents = [{"path": path, "content": content,
+                  "sha256": hashlib.sha256(content.encode()).hexdigest(), "size_bytes": len(content.encode())}
+                 for path, content in {"package.json": text, "binding.gyp": '{"targets": []}\n'}.items()]
+    unit = _native()
+    unit.update(family="node", build_system="node", markers=[{
+        key: documents[0][key] for key in ("path", "sha256", "size_bytes")}],
+        descriptor_package={"documents": documents, "bounds": {}, "gaps": []})
+    unit["recipe"].update(image_profile="node", dependency_files=["package.json", "binding.gyp"],
+                          build_commands=[argv])
+    before = copy.deepcopy(unit)
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-node-lifecycle")
+    bound = refine_build_topology(graph, [unit])["units"][0]
+    kinds = {operation["kind"] for operation in bound["operations"]}
+    assert ("native_compile" in kinds) is native
+    assert ("unknown" in kinds) is unknown
+    assert "package" in kinds
+    assert bool(bound["enforcement"]) is native
+    if native:
+        assert all(proof["status"] == "unknown" for proof in bound["enforcement"])
+        assert "unenforced_native_target" in bound["blockers"]
+    if unknown:
+        assert "operation_unknown" in bound["blockers"]
+    script_facts = [fact for fact in graph["facts"] if fact["predicate"] == "node:script"]
+    assert len(script_facts) == len(scripts)
+    for fact in script_facts:
+        assert fact["path"] == "package.json" and fact["sha256"] == documents[0]["sha256"]
+        assert json.dumps(fact["value"]["name"]) in text.splitlines()[fact["span"][0] - 1]
+        assert fact["fact_id"] in {binding["fact_id"] for binding in graph["bindings"]}
+    assert unit == before
+
+
+def test_ambiguous_node_manifest_cannot_hide_a_native_lifecycle():
+    unit = _native(extra_documents={
+        "package.json": '{"scripts":{"prepare":"node-gyp rebuild"},"scripts":{}}\n',
+        "binding.gyp": '{"targets":[]}\n'})
+    document = next(item for item in unit["descriptor_package"]["documents"] if item["path"] == "package.json")
+    unit.update(family="node", build_system="node", markers=[{
+        key: document[key] for key in ("path", "sha256", "size_bytes")}])
+    unit["recipe"].update(image_profile="node", dependency_files=["package.json", "binding.gyp"],
+                          build_commands=[["npm", "pack"]])
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-ambiguous-node-manifest")
+    bound = refine_build_topology(graph, [unit])["units"][0]
+    assert "node_manifest_unresolved" in bound["blockers"]
+    assert "operation_unknown" in bound["blockers"]
+    assert any(fact["predicate"] == "coverage_gap" and fact["value"] == "node_manifest_unresolved"
+               for fact in graph["facts"])
+
+
+@pytest.mark.parametrize("captured", [True, False])
+def test_direct_compiler_closes_discovered_native_components_only_from_real_accepted_source(captured):
+    unit = _native()
+    document = next(item for item in unit["descriptor_package"]["documents"] if item["path"] == "main.c")
+    unit["native_components"] = [{key: document[key] for key in ("path", "sha256", "size_bytes")}]
+    if not captured:
+        unit["descriptor_package"]["documents"].remove(document)
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-component-direct-compiler")
+    bound = refine_build_topology(graph, [unit], profiles=_profile())["units"][0]
+    if captured:
+        assert bound["blockers"] == []
+        assert all(proof["status"] == "proven" for proof in bound["enforcement"])
+    else:
+        assert "unenforced_native_target" in bound["blockers"]
+        assert all("compiler_source_closure_unknown" in proof["unresolved_inputs"] for proof in bound["enforcement"])
 
 
 def test_complete_explicit_target_has_recipe_bound_sidecar_not_recipe_bound_graph():

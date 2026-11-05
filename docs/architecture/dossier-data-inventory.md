@@ -5,7 +5,9 @@ sensitive artifact-only static declaration/availability publication before plann
 adds protected complete-only feedback cache and exact additive evidence; raw model envelopes are
 not the planning output. These declarations are not new public retrieval endpoints, authenticated
 package identities, shipped artifacts or native target proof. The counts/history below retain
-their named source baselines; this untested candidate does not claim a new run or dossier result.
+their named source baselines; this candidate does not claim a new accepted run or dossier result.
+The current static registry and TOML inventory is exactly 46 jobs, including build-environment
+analysis and build iteration; the completion-era 44-job count below is historical.
 
 Status: source-verified inventory, initially at contract commit
 `5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
@@ -564,7 +566,7 @@ hashes, identity-resolved PoC briefs and summary persistence/report-count regres
 | Delivered surface | Source-verified state / remaining boundary |
 | --- | --- |
 | Shared review reader | `jobs/accepted_review.py` verifies handoff `/3`, ledger-bound chain publication/memberships, original actor/cell receipts, nested review-package refs, run identity, duplicate identities and the PoC-basis digest. |
-| Pre-gate topology | Registry and central config contain the same 44 jobs. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, debug symbols, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate. Report and default-on OpenVEX independently consume that gate. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
+| Pre-gate topology (historical completion source) | Registry and central config contained the same 44 jobs at this named baseline, not the current 46-job inventory. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, debug symbols, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate. Report and default-on OpenVEX independently consume that gate. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
 | Chains | Three pre-seal units, strict native continuity policy, protected dataset/manifest and exact actor-receipt accounting exist. `stages.base_review_projection` validates exact enhancement-cell coverage while excluding those cells/gaps from base completeness accounting; the full ledger/projection retains them and publication exposes enhancement gaps separately. Integrity failures still fail. |
 | PoC / gate / report | Immutable protected PoC attempt files and exact `/2` producer/provenance contracts; gate `/2` verifies all optional nested artifacts, candidate partitions and five-capability accounting; report `/2` consumes only the frozen certified snapshot. Disabled manual PoC requires explicit authenticated upstream admission, never silent pointer discovery. |
 | Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Job-scoped validated role bundles are hash-pinned; uncommissioned native profiles retain manual outcomes. Neither PoC context nor regression-function compilation is commissioned. |

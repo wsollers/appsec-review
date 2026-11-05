@@ -23,9 +23,12 @@ work must re-admit those receipts before reuse or reconstruction. See
 The default-enabled [static environment producer](docs/operations/build-environment-analysis.md)
 now precedes planning in both review composites. Proposal/3 supports bounded additional evidence,
 explicit abstention and complete-only caches; Unity/container declarations use the same source
-compiler without becoming target-selection or image/compiler proof. This V2 source candidate is
-untested: it establishes neither live acceptance, acquired compiler metadata, new images nor
-builder provisioning.
+compiler without becoming target-selection or image/compiler proof. Graph/1 publications remain
+readable and indexed for audit, not executable or reusable as graph/2. Detached replay binds the
+actual prepared image and exact recipe to immutable compiler evidence before reconstruction or
+executor resolution. This source candidate is not newly accepted: it establishes neither live
+acceptance, acquired compiler metadata, new images nor builder provisioning. Exact-SHA verification
+and remaining gaps belong to the source handoff, not historical test counts.
 
 ## Contents
 

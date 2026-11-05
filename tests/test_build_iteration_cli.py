@@ -8,14 +8,15 @@ import pytest
 
 from appsec_review import cli
 from appsec_review.config import load_config
-from appsec_review.interchange import HANDOFF_SCHEMA, handoff_input_projection, input_set_sha256
 from appsec_review.jobs.build_iterations import decode_replay_context, read_reference, retain
 from appsec_review.jobs.build_recipe_replay import ProducerProduct
 from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec
-from appsec_review.jobs.job_target_analysis_plan.planning import PLAN_SCHEMA
+from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.storage import atomic_json
 from appsec_review.storage.shared import immutable_bytes, reference, verify_reference
-from tests.test_build_recipe_replay import _executor, build as replay_build
+from tests.test_build_recipe_replay import (
+    NATIVE_AXES, _accepted_dispatch, _compiler_metadata, _executor, _publish_source_plan, build as replay_build,
+)
 
 
 @pytest.fixture
@@ -26,6 +27,9 @@ def build(replay_build, tmp_path):
     workspace = BuildWorkspace(run)
     initial = workspace.materialize(original.source, original.context.binding.source_identity)
     graph = read_reference(original.workspace.run_dir, original.context.inputs["graph"])
+    units = load_accepted_plan(original.workspace.run_dir)["build_topology"]["build_actions"]
+    _publish_source_plan(run, units, original.context.releases)
+    dispatch = _accepted_dispatch(run, original.context.validation_unit, original.context.releases)
     producer = next(node for node in graph["nodes"] if node["root"] == "z-library")
     binding_a = original.context.upstreams[0].binding
     with workspace.writer() as writer:
@@ -38,9 +42,11 @@ def build(replay_build, tmp_path):
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(content)
         record = writer.commit((
-            ProductSpec("install/lib/libA.a", **producer["products"][0]),
-            ProductSpec("install/include/a.h", "headers", "include:A", "include:A", original.context.variant),
-            ProductSpec("install/lib/pkgconfig/a.pc", "package_metadata", "pkg:A", "pkg:A", original.context.variant),
+            ProductSpec("install/lib/libA.a", **producer["products"][0], role="static_archive", axes=NATIVE_AXES),
+            ProductSpec("install/include/a.h", "headers", "include:A", "include:A", original.context.variant,
+                        role="headers", axes=NATIVE_AXES),
+            ProductSpec("install/lib/pkgconfig/a.pc", "package_metadata", "pkg:A", "pkg:A", original.context.variant,
+                        role="metadata", axes=NATIVE_AXES),
         ))
         generation = writer.state()["generation"]
         atomic_json(run / "data/test-checkpoints.json",
@@ -52,7 +58,8 @@ def build(replay_build, tmp_path):
     for evidence in failure["evidence"]:
         immutable_bytes(run, evidence["path"], verify_reference(original.workspace.run_dir, evidence).read_bytes())
     inputs = {
-        "failure": retain(run, "failures", {**failure, "binding": binding_b.view()}),
+        "failure": retain(run, "failures", {
+            **failure, "binding": binding_b.view(), "request": retain(run, "requests", {"dispatch": dispatch})}),
         "graph": retain(run, "graphs", graph),
         "configuration": retain(run, "configurations", read_reference(
             original.workspace.run_dir, original.context.inputs["configuration"])),
@@ -71,16 +78,14 @@ def recovery(build, monkeypatch):
     config = replace(config, runtime=replace(config.runtime, runs_dir=run.parent))
     monkeypatch.setattr(cli, "load_config", lambda *_, **__: config)
     directory = run / "data/configuration"
-    directory.mkdir(parents=True)
+    directory.mkdir(parents=True, exist_ok=True)
     (directory / "resolved.json").write_bytes(config.resolved_json)
     atomic_json(directory / "manifest.json", {"resolved_sha256": config.resolved_sha256, "selection": {}})
     request = retain(run, "requests", {
         "attempt_id": build.context.failed_attempt_id, "generation": build.context.generation_identity,
         "node_id": build.context.binding.node_id, "binding": build.context.binding.view(),
         "graph": build.context.inputs["graph"], "configuration": build.context.inputs["configuration"],
-        "dispatch": {**build.context.validation_unit, "image": {
-            "family": "native", "image_tag": "fixture:base", "image_id": build.context.binding.image_identity,
-            "user": "1000:1000", "dependency_hashes": {}}},
+        "dispatch": _accepted_dispatch(run, build.context.validation_unit, build.context.releases),
         "producers": {item.binding.node_id: item.binding.view() for item in build.context.upstreams},
     })
     failure = retain(run, "failures", {
@@ -151,6 +156,8 @@ def test_replay_cli_consumes_a_pinned_approved_full_profile_without_image_prepar
                            context.binding.image_identity)
     evidence = retain(build.workspace.run_dir, "image-approvals", {
         "image_id": profile.image_id, "profile": asdict(profile), "operator_approved": True,
+        "compiler_metadata": retain(build.workspace.run_dir, "compiler-metadata",
+                                    _compiler_metadata(profile.image_id, candidate.recipe)),
         "recipe_identity": build_iterations.digest(candidate.recipe), "network": "none", "prepared": True})
     executor = _executor(build)
 
@@ -168,28 +175,14 @@ def test_replay_cli_consumes_a_pinned_approved_full_profile_without_image_prepar
 def accepted_plan(build, recovery):
     config, context, _context_ref = recovery
     run = build.workspace.run_dir
-    graph = read_reference(run, context.inputs["graph"])
-    plan = retain(run, "accepted-plans", {
-        "schema": PLAN_SCHEMA, "source_fingerprint": graph["source_fingerprint"],
-        "build_topology": {"executable_graph": graph, "build_actions": [context.validation_unit]}})
-    outcomes = retain(run, "outcomes", {"schema": "appsec-review/job-outcomes/1"})
-    handoff = {
-        "schema": HANDOFF_SCHEMA, "run_id": run.name, "job_id": "job_target_analysis_plan",
-        "attempt_id": "plan-accepted", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
-        "execution_status": "SUCCEEDED", "outputs": {"plan_acceptance.publish_handoff": {"artifact": plan}},
-        "artifacts": [plan, outcomes], "outcomes": outcomes, "upstream_handoff_sha256": {},
-        "resolved_config_sha256": config.resolved_sha256, "job_config_sha256": "a" * 64,
-        "source_fingerprint": graph["source_fingerprint"], "target_snapshot": graph["source_fingerprint"],
-        "implementation_identity": "fixture/1", "schema_identity": "fixture/1",
-        "validation_identity": "fixture/1", "tool_identity": {}, "input_identity": {},
-        "input_manifest": None, "dataset_contract_sha256": "b" * 64,
-        "coverage": {"disposition": "complete", "gap_count": 0, "retry_required": False},
-        "resolving_paths": {}, "started_at": "fixture-start", "completed_at": "fixture-end",
-    }
-    handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
-    accepted = retain(run, "handoffs", handoff)
-    atomic_json(run / "data/jobs/job_target_analysis_plan/latest.json", {
-        "handoff_path": accepted["path"], "handoff_sha256": accepted["sha256"]})
+    plan = load_accepted_plan(run)
+    assert plan["build_topology"]["executable_graph"] == read_reference(run, context.inputs["graph"])
+    assert context.validation_unit in plan["build_topology"]["build_actions"]
+    pointer = json.loads((run / "data/jobs/job_target_analysis_plan/latest.json").read_bytes())
+    handoff = json.loads(verify_reference(run, {
+        "path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]}).read_bytes())
+    assert handoff["status"] == "ACCEPTED"
+    assert handoff["outcomes"]["path"].startswith("artifacts/")
     return config, context
 
 

@@ -9,7 +9,7 @@
     "schema": {"const": "appsec-review/build-topology/2"},
     "source_fingerprint": {"type": "string", "minLength": 1},
     "bundle_identity": {"$ref": "#/$defs/hash"},
-    "rules": {"const": "source-scoped-topology/3"},
+    "rules": {"const": "source-scoped-topology/4"},
     "nodes": {
       "type": "array", "items": {
         "allOf": [
@@ -32,7 +32,7 @@
           "line": {"type": "integer", "minimum": 1},
           "path": {"type": "string", "minLength": 1},
           "sha256": {"$ref": "#/$defs/hash"},
-          "rule": {"const": "source-scoped-topology/3"},
+          "rule": {"const": "source-scoped-topology/4"},
           "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 1}},
           "fact_id": {"$ref": "#/$defs/hash"}
         }
@@ -48,7 +48,7 @@
           "subject": {"type": "string"},
           "stage": {"type": "string"},
           "condition": {"type": ["string", "null"]},
-          "scope_rule": {"const": "source-scoped-topology/3"},
+          "scope_rule": {"const": "source-scoped-topology/4"},
           "binding_id": {"$ref": "#/$defs/hash"}
         }
       }

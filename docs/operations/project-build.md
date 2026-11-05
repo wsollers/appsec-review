@@ -86,8 +86,9 @@ profile. `source_dir` must equal the build-unit root; output paths remain valida
 paths. Optional `execution_cwd` selects configure/build directories without changing source
 ownership, and omitted phases default to `source_dir`. The common production/replay guard
 revalidates actual cwd, descriptor/driver and recognized Make/CMake source/output operands
-before every launch, including after configure changes the tree. Changed cwd is supported only
-for recognized native Make/CMake forms, not arbitrary drivers. Commands are argv arrays
+before every launch, including after configure changes the tree. Changed cwd supports recognized
+native Make/CMake forms and direct Clang/GCC with accepted source hashes and in-unit outputs,
+not arbitrary drivers or rewritten compiler flags. Commands are argv arrays
 (at most 16 per list, 128 arguments each) without shell operators, and `argv[0]` must be a bare
 name in that profile's `_PROFILE_COMMANDS` allowlist (for example `go` only for Go, `dotnet` and
 `msbuild` for .NET). Test, run, and install subcommands, non-build Maven goals or Gradle tasks, and

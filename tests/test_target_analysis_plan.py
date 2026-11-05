@@ -822,6 +822,57 @@ def test_graph_reuse_declares_releases_and_missing_release_still_refuses_reuse(t
     assert "missing_release_identity" in decisions[0].reasons
 
 
+def test_genuine_graph1_accepted_publication_index_and_audit_have_no_graph2_execution_authority(tmp_path):
+    from appsec_review.jobs.build_topology import _compile_graph1, ready_build_units, validate_build_topology
+    from appsec_review.jobs.build_topology_artifacts import guard_action, guard_build_cache, publish_refinement
+    from appsec_review.jobs.job_target_analysis_plan.job import _artifact
+    from appsec_review.runtime import UnitExecutor
+    config, target = _fixture(tmp_path, {"CMakeLists.txt": "project(app)\nadd_executable(A a.c)\n",
+                                       "a.c": "int main(void) { return 0; }\n"}, model_enabled=True)
+    planner = build_job(infer=_Model(_proposal).complete)
+
+    def historical_acceptance(unit):
+        resolution = unit.output("analysis_decisions.resolve_ambiguity")
+        plan = copy.deepcopy(resolution["plan"])
+        topology = plan["build_topology"]
+        topology["executable_graph"] = _compile_graph1(
+            topology["build_actions"], source_fingerprint=plan["source_fingerprint"])
+        topology.pop("evidence_bundle")
+        topology.pop("planning_refinement")
+        validate_build_topology(topology["executable_graph"])
+        return {"status": "VALID", "plan": plan, "artifact": _artifact(unit, "historical-plan.json", plan),
+                "gaps": plan["coverage_gaps"], "terminal_status": resolution["terminal_status"]}
+
+    units = tuple(replace(unit, handler=historical_acceptance)
+                  if unit.unit_id == "plan_acceptance.validate_plan" else unit for unit in planner.units)
+    planner = replace(planner, units=units, handler=UnitExecutor(units).execute)
+    outcome, accepted = _run(config, target, planner)
+    run = config.runtime.runs_dir / outcome["run_id"]
+    graph = accepted["build_topology"]["executable_graph"]
+    assert graph["schema"] == "appsec-review/build-topology/1"
+    publication = outcome["jobs"]["job_target_analysis_plan"]["result"]["outputs"]["plan_acceptance.publish_handoff"]
+    assert publication["build_topology_schema"] == graph["schema"]
+    assert publication["build_topology_id"] == graph["topology_id"]
+    assert publication["index_identity"]["sha256"]
+    page = RunIndexBackend(config.runtime.runs_dir).search(
+        SearchRequest(run.name, "symbol", "planned-build", limit=10))
+    assert any("planned-build:" in hit.excerpt for hit in page.hits)
+    before = (run / "data/jobs/job_target_analysis_plan/latest.json").read_bytes()
+    readiness = ready_build_units(graph, {})
+    assert readiness["ready"] == [] and readiness["blocked"]
+    assert all(item["reasons"] == ["legacy_graph_requires_accepted_replanning"] for item in readiness["blocked"])
+    action = accepted["build_topology"]["build_actions"][0]
+    with pytest.raises(ValueError, match="graph/1"):
+        guard_action(run, action, graph=graph)
+    with pytest.raises(ValueError, match="graph/1"):
+        guard_build_cache(run, "job_project_build", {"dispatches": [action]})
+    with pytest.raises(ValueError, match="graph/1"):
+        publish_refinement(run, [action])
+    assert load_accepted_plan(run) == accepted
+    assert (run / "data/jobs/job_target_analysis_plan/latest.json").read_bytes() == before
+    assert not (run / "data/build/topology/accepted-refinements.json").exists()
+
+
 @pytest.mark.parametrize("mutation", ("graph", "missing", "duplicate", "root", "image_profile"))
 def test_plan_validation_rejects_unaccepted_graph_projection_or_authority(tmp_path: Path, mutation) -> None:
     import hashlib

@@ -899,6 +899,12 @@ def captured_replay(config, context, invocation):
                        derived_from_image_id=derived_base_image_id(image)))
     if profile.image_id != invocation.image_identity:
         raise ValueError("replay image differs from its approved pinned profile")
+    from appsec_review.jobs.build_topology_artifacts import guard_action
+    guard_action(run_root, {
+        **request["dispatch"], "recipe": dict(invocation.candidate.recipe),
+        "image": {**image, "image_id": profile.image_id},
+        "topology_refinement": invocation.topology_refinement,
+    }, releases=context.releases, image_identity=profile.image_id)
     settings = config.job("job_language_build")
     executor = BuildContainerExecutor(
         profile, timeout_seconds=int(settings.settings["command_timeout_seconds"]),
