@@ -1171,16 +1171,17 @@ def _selected_operations(unit, graph, recipe, selected):
             properties = {item["predicate"]: item["value"] for item in property_facts
                           if (item["path"] == fact["path"] or fact["path"] == "@recipe") and _condition_applies(
                               item["condition"], member_configuration, member_platform) is True}
-            output_type = properties.get("OutputType")
-            target = properties.get("PlatformTarget", member_platform)
-            framework = str(properties.get("TargetFramework", properties.get("TargetFrameworkVersion", "")))
+            output_type = str(properties.get("OutputType", "")).lower()
+            raw_target = properties.get("PlatformTarget", member_platform)
+            target = str(raw_target).replace(" ", "").lower() if raw_target is not None else None
+            framework = str(properties.get("TargetFramework", properties.get("TargetFrameworkVersion", ""))).lower()
             applicable_framework = framework.startswith("v") or bool(re.fullmatch(r"net[1-4][0-9]{1,2}", framework))
-            if output_type == "Library" or target not in {None, "AnyCPU", "Any CPU"}:
+            if output_type == "library" or target not in {None, "anycpu"}:
                 continue
             if framework.startswith(("netcoreapp", "netstandard")) or re.match(r"net[5-9]\.", framework):
                 continue
             reasons.append("managed_prefer32bit_incompatible" if applicable and
-                           output_type in {"Exe", "WinExe"} and target in {"AnyCPU", "Any CPU"}
+                           output_type in {"exe", "winexe"} and target == "anycpu"
                            and applicable_framework else "managed_prefer32bit_applicability_unknown")
     native_markers = any(PurePosixPath(ref["path"]).name == "binding.gyp" for ref in
                          unit.get("descriptor_package", {}).get("documents", []))
@@ -1209,7 +1210,13 @@ def _selected_operations(unit, graph, recipe, selected):
         reasons = [reason for reason in reasons if not reason.startswith("managed_")]
     for fact in property_facts:
         if fact["predicate"] == "RuntimeIdentifier" and str(fact["value"]).endswith(("-x86", "-arm")):
-            reasons.append("32bit_runtime_selection_forbidden")
+            member = paths.get(fact["path"])
+            applicable = _condition_applies(
+                fact["condition"], member["configuration"] if member else configuration,
+                member["platform"] if member else platform)
+            if applicable is not False:
+                reasons.append("32bit_runtime_selection_forbidden" if applicable else
+                               "runtime_identifier_applicability_unknown")
     if unit["family"] == "go" and recipe and recipe["environment"].get("CGO_ENABLED") == "1":
         kinds.add("native_link")
     operations = []

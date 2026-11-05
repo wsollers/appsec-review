@@ -332,3 +332,12 @@ def test_native_commit_cannot_publish_32bit_bytes_under_an_x64_contract(tmp_path
             writer.commit([spec])
         assert writer.committed_generation()["accepted"] == {}
         writer.fail_attempt("explicitly synthetic wrong-machine output")
+
+
+def test_unselected_32bit_runtime_identifier_does_not_block_selected_managed_member():
+    unit = _solution(".csproj", "<OutputType>library</OutputType><PlatformTarget>AnyCPU</PlatformTarget>"
+                     """<RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">win-x86</RuntimeIdentifier>""")
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-unselected-runtime")
+    bound = refine_build_topology(graph, [unit])["units"][0]
+    assert {operation["kind"] for operation in bound["operations"]} == {"managed_compile"}
+    assert not any("runtime" in reason.lower() for reason in bound["blockers"])
