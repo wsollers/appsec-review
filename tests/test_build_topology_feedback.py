@@ -701,10 +701,22 @@ def test_quoted_batch_evidence_is_byte_exact_or_withheld_before_model_and_cache(
     document = {"path": "native/setup.cmd", "sha256": hashlib.sha256(data).hexdigest(),
                 "size_bytes": len(data)}
     catalog["files"].append(document)
+    original_paths = request.allowed_paths
+    assert document["path"] not in original_paths
+    request = replace(request, allowed_paths=(*original_paths, document["path"]))
+    assert request.allowed_paths == (*original_paths, document["path"])
+    assert document["path"] in request.allowed_paths
     before = copy.deepcopy(catalog)
     need = {"schema": PROPOSAL_SCHEMA, "action": "need_evidence", "requests": [{
         "path": document["path"], "sha256": document["sha256"], "reason": "exact synthetic batch evidence"}]}
     calls = []
+    reads = []
+    def read_document(item, bound):
+        assert item == document and bound == PlanningFeedbackSettings().max_document_bytes
+        assert item["path"] in request.allowed_paths and len(data) <= bound
+        assert hashlib.sha256(data).hexdigest() == item["sha256"]
+        reads.append((copy.deepcopy(item), bound, data))
+        return data
     def infer(current, *, timeout_seconds):
         calls.append(current)
         assert "SYNTHETIC_BOUNDARY_SENTINEL" not in repr(current)
@@ -718,8 +730,9 @@ def test_quoted_batch_evidence_is_byte_exact_or_withheld_before_model_and_cache(
                 "path": document["path"], "sha256": document["sha256"], "content": text}]
         return ModelResult(final)
     result = bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
-        read_document=lambda item, bound: data, cache_root=tmp_path / "cache", identity={})
+        read_document=read_document, cache_root=tmp_path / "cache", identity={})
     assert result["status"] == "ACCEPTED" and result["calls"] == len(calls) == 2
+    assert reads == [(document, PlanningFeedbackSettings().max_document_bytes, data)]
     assert result["documents"] == ([] if sensitive else [{
         "path": document["path"], "sha256": document["sha256"], "content": text}])
     assert catalog == before and document["sha256"] == hashlib.sha256(data).hexdigest()
