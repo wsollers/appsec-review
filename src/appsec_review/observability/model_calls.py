@@ -5,6 +5,7 @@ from dataclasses import asdict
 import hashlib
 import os
 from pathlib import Path
+from subprocess import TimeoutExpired
 import time
 from typing import Any
 import uuid
@@ -38,7 +39,7 @@ def call_model(infer: Infer, request: ReviewModelRequest, *, timeout_seconds: in
     try:
         result = infer(request, timeout_seconds=timeout_seconds)
     except BaseException as exc:
-        status = ("TIMED_OUT" if isinstance(exc, TimeoutError) else
+        status = ("TIMED_OUT" if isinstance(exc, (TimeoutError, TimeoutExpired)) else
                   "CANCELLED" if not isinstance(exc, Exception) else "FAILED")
         emit_model_event(log, event_type="MODEL_CALL_COMPLETED", **fields,
                          terminal_status=status, retry_count=retry_count,

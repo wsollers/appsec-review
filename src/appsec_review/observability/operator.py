@@ -1,0 +1,215 @@
+"""Bounded, derived operator views. This module never changes job or run state."""
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+from dataclasses import asdict
+from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path
+import time
+from typing import Any, Mapping, Sequence
+
+from appsec_review.observability.costs import account_calls
+from appsec_review.observability.diagnostics import execution_summary, diagnostic_reference
+from appsec_review.observability.events import EventCursor, PipelineLog
+from appsec_review.observability.telemetry import validate_event
+from appsec_review.reporting.telemetry.inputs import JOB_TERMINALS, RUN_TERMINALS, job_spans, _timestamp
+from appsec_review.storage import canonical_json
+
+SCHEMA = "appsec-review/operator-status/1"
+_ACTIVE = {"STARTED", "STARTING", "MANAGED", "CANCELING"}
+_QUEUED = {"QUEUED", "NOT_STARTED"}
+_TERMINAL = {"SUCCESS", "FAILURE", "CANCELED", "CANCELLED"}
+
+
+class OperatorFollower:
+    """Retain bounded lifecycle evidence and coalesce only replaceable progress samples."""
+
+    def __init__(self, run_root: Path, *, capacity: int = 10000):
+        if not 1 <= capacity <= 100000:
+            raise ValueError("operator capacity must be between 1 and 100000")
+        self.log, self.capacity = PipelineLog(run_root), capacity
+        self.cursor = EventCursor()
+        self.records: dict[str, Mapping[str, Any]] = {}
+        self.counts: Counter[str] = Counter()
+        self.read_status = "not_read"
+        self.reset_reason: str | None = None
+        self.alert_keys: set[str] = set()
+
+    @staticmethod
+    def _key(record: Mapping[str, Any]) -> str:
+        if record["event_type"] == "OPERATION_PROGRESS":
+            details = record["details"]
+            return "/".join(str(value) for value in (
+                record["run_id"], record["job_id"], record["attempt_id"],
+                details.get("span_id"), "progress"))
+        return str(record["sequence"])
+
+    def poll(self, *, max_records: int = 256, max_bytes: int = 1024 * 1024) -> str:
+        page = self.log.follow(self.cursor, max_records=max_records, max_bytes=max_bytes)
+        if page.reset_reason:
+            self.records.clear()
+            self.counts.clear()
+            self.alert_keys.clear()
+            self.cursor = EventCursor()
+        self.reset_reason = page.reset_reason
+        for record in page.records:
+            validate_event(record)
+            if (not isinstance(record["details"], Mapping) or _timestamp(record["timestamp"]) is None
+                    or record["run_id"] != self.log.path.parents[2].name):
+                raise ValueError("operator event provenance or timestamp is invalid")
+        keys = {self._key(record) for record in page.records}
+        if len(self.records.keys() | keys) > self.capacity:
+            self.read_status = "capacity_reached"
+            return self.read_status
+        for record in page.records:
+            self.records[self._key(record)] = record
+            self.counts[record["event_type"]] += 1
+        self.cursor, self.read_status = page.cursor, page.status
+        return self.read_status
+
+    def snapshot(self, *, now: datetime | None = None,
+                 dispatches: Sequence[Mapping[str, Any]] = (), stale_seconds: int = 3600,
+                 alert_after_seconds: int = 3600, max_alerts: int = 100,
+                 prices: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        if stale_seconds < 1 or alert_after_seconds < 1 or not 1 <= max_alerts <= 1000:
+            raise ValueError("operator alert bounds must be positive and bounded")
+        if len(dispatches) > 1000:
+            raise ValueError("dispatch snapshot exceeds 1000 records")
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise ValueError("operator clock must be timezone-aware")
+        run_id = self.log.path.parents[2].name
+        events = tuple(sorted(self.records.values(), key=lambda event: event["sequence"]))
+        last_start = max((event["sequence"] for event in events if event["event_type"] == "RUN_STARTED"),
+                         default=0)
+        terminals = [event for event in events
+                     if event["event_type"] in RUN_TERMINALS and event["sequence"] > last_start]
+        statuses = {str(event["details"].get("completion_status") or RUN_TERMINALS[event["event_type"]])
+                    for event in terminals}
+        statuses.discard("None")
+        operation = next(iter(statuses)) if len(statuses) == 1 else "CONFLICT" if statuses else "UNKNOWN"
+        gaps, failures, references, resources = [], [], {}, {}
+        progress = []
+        for event in events:
+            details, kind = event["details"], event["event_type"]
+            stamp = _timestamp(event["timestamp"])
+            if kind in {"OPERATION_PROGRESS", "JOB_STARTED", "TASK_STARTED", "TASK_COMPLETED",
+                        "TASK_COMPLETED_WITH_GAPS", "TOOL_INVOCATION_COMPLETED", "MODEL_CALL_COMPLETED"}:
+                progress.append(stamp)
+            disposition = details.get("completion_status") or details.get("coverage_disposition")
+            if ("GAP" in kind or disposition in {"COMPLETED_WITH_GAPS", "GAP", "PARTIAL", "BLOCKED"}
+                    or details.get("gap_count") or details.get("gaps")):
+                gaps.append({"event_id": event["event_id"], "job_id": event["job_id"],
+                             "attempt_id": event["attempt_id"], "source": "declared_gap",
+                             "reused": "REUSED" in kind})
+            outcome = execution_summary(details)
+            if outcome["category"] in {"failure", "exit_failure", "timeout", "oom", "cancelled"} or kind.endswith(
+                ("FAILED", "TIMED_OUT", "CANCELLED", "CANCELED")
+            ):
+                failures.append({"event_id": event["event_id"], "job_id": event["job_id"],
+                                 "attempt_id": event["attempt_id"], **outcome})
+            for name in ("receipt", "execution_receipt", "metrics_receipt", "handoff", "artifact"):
+                ref = diagnostic_reference(details.get(name))
+                if ref:
+                    references[ref["sha256"]] = ref
+            lease = details.get("resource_lease_id") or (
+                details.get("span_id") if kind.startswith("RESOURCE_") else None)
+            if lease:
+                resources[str(lease)] = {
+                    "lease_id": str(lease), "job_id": event["job_id"], "attempt_id": event["attempt_id"],
+                    "last_event": kind, "timestamp": event["timestamp"],
+                    "cleanup": "confirmed" if kind in {"RESOURCE_RELEASED", "RESOURCE_CLEANUP_CONFIRMED"}
+                    else "unconfirmed"}
+        known_stamps = [stamp for stamp in progress if stamp is not None and stamp <= now]
+        last_progress = max(known_stamps, default=None)
+        age = (now - last_progress).total_seconds() if last_progress else None
+        selected = []
+        for dispatch in dispatches:
+            tags = {item["key"]: item["value"] for item in dispatch.get("tags", [])}
+            if tags.get("appsec/application_run_id") == run_id:
+                selected.append({name: dispatch.get(name) for name in (
+                    "runId", "status", "startTime", "endTime")})
+        states = {item["status"] for item in selected}
+        caught_up = self.read_status == "caught_up"
+        if not caught_up:
+            operation = "UNKNOWN"
+        conflict = operation == "CONFLICT" or bool(terminals and states & (_ACTIVE | _QUEUED))
+        if conflict:
+            liveness, action = "conflicting_evidence", "reconcile_dispatch_and_application_receipts"
+        elif operation != "UNKNOWN":
+            liveness, action = "terminal", "inspect_declared_gaps_and_accepted_evidence"
+        elif states & _ACTIVE:
+            liveness, action = "active", "observe_progress_do_not_restart"
+        elif states & _QUEUED:
+            liveness, action = "queued", "inspect_orchestrator_queue"
+        elif states and states <= _TERMINAL:
+            liveness, action = "interrupted_or_unconfirmed", "reconcile_dispatch_and_application_receipts"
+        elif age is not None and age <= stale_seconds:
+            liveness, action = "recent_progress", "observe_progress_do_not_restart"
+        else:
+            liveness, action = "unknown", "verify_process_and_orchestrator_before_recovery"
+        jobs = [asdict(span) for span in job_spans(events)]
+        attempts = Counter(row["job_id"] for row in jobs)
+        for job in jobs:
+            job["retry_attempts_observed"] = max(0, attempts[job["job_id"]] - 1)
+        candidates = []
+        if caught_up and states & _ACTIVE and (age is None or age >= alert_after_seconds):
+            candidates.append(("progress_unconfirmed", run_id))
+        for lease, resource in resources.items():
+            stamp = _timestamp(resource["timestamp"])
+            if (resource["cleanup"] == "unconfirmed" and liveness == "terminal" and stamp
+                    and (now - stamp).total_seconds() >= alert_after_seconds):
+                candidates.append(("cleanup_unconfirmed", lease))
+        alerts = []
+        for category, identity in candidates:
+            key = hashlib.sha256(canonical_json([run_id, last_start, category, identity])).hexdigest()
+            if key not in self.alert_keys and len(self.alert_keys) < max_alerts:
+                self.alert_keys.add(key)
+                alerts.append({"id": key, "category": category, "action": action})
+        return {
+            "schema": SCHEMA, "run_id": run_id, "operational_status": operation,
+            "analysis_completeness": "declared_gaps" if gaps else
+            "no_declared_gaps_not_proof_of_coverage" if caught_up and operation == "SUCCEEDED" else "unknown",
+            "liveness": liveness, "safe_action": action, "dispatches": selected, "jobs": jobs,
+            "last_progress": last_progress.isoformat() if last_progress else None,
+            "progress_age_seconds": age, "event_counts": dict(self.counts),
+            "gaps": gaps, "failures": failures, "reusable_evidence": list(references.values()),
+            "resources": list(resources.values()), "alerts": alerts,
+            "alert_capacity_reached": len(self.alert_keys) >= max_alerts,
+            "costs": account_calls(events, prices=prices),
+            "coverage": {"status": self.read_status, "reset_reason": self.reset_reason,
+                         "cursor": asdict(self.cursor), "retained_records": len(self.records),
+                         "progress_samples_coalesced": True},
+        }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("run", type=Path)
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--interval", type=float, default=5)
+    parser.add_argument("--pages", type=int, default=1)
+    parser.add_argument("--capacity", type=int, default=10000)
+    parser.add_argument("--dispatches", type=Path, help="Recorded Dagster results; never queried implicitly")
+    parser.add_argument("--prices", type=Path, help="Opt in to a versioned API estimate table")
+    args = parser.parse_args(argv)
+    if not 0.1 <= args.interval <= 3600 or not 1 <= args.pages <= 100:
+        parser.error("interval must be 0.1..3600 seconds and pages 1..100")
+    follower = OperatorFollower(args.run, capacity=args.capacity)
+    prices = json.loads(args.prices.read_text()) if args.prices else None
+    while True:
+        for _ in range(args.pages):
+            if follower.poll() != "backlog":
+                break
+        dispatches = json.loads(args.dispatches.read_text()) if args.dispatches else []
+        print(json.dumps(follower.snapshot(dispatches=dispatches, prices=prices), sort_keys=True), flush=True)
+        if not args.watch or follower.read_status == "capacity_reached":
+            return 0 if follower.read_status == "caught_up" else 2
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

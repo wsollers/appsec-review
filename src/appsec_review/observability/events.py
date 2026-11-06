@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from functools import lru_cache
+import hashlib
 import json
 import os
 import platform
@@ -16,7 +18,10 @@ from appsec_review.storage import FileLock, LockUnavailable
 
 MAX_RECORD_BYTES = 64 * 1024
 _SECRET = re.compile(r"(?i)(api[_-]?key|authorization|password|secret|token)")
-_CONTENT = re.compile(r"(?i)^(prompt|response|raw_model_output|model_output|source_text|query_text)$")
+_CONTENT = re.compile(
+    r"(?i)^(prompt|response|raw_model_output|model_output|source_text|query_text|"
+    r"stdout_text|stderr_text|traceback|error_message|command_line)$"
+)
 
 
 def _bounded(value: Any, *, depth: int = 0) -> Any:
@@ -106,6 +111,29 @@ def _append_position(path: Path) -> tuple[int, int, int]:
     return previous + 1, valid_length, size - valid_length
 
 
+@dataclass(frozen=True)
+class EventCursor:
+    offset: int = 0
+    sequence: int = 0
+    device: int = 0
+    inode: int = 0
+    anchor: str = ""
+
+
+@dataclass(frozen=True)
+class EventPage:
+    records: tuple[dict[str, Any], ...]
+    cursor: EventCursor
+    status: str
+    reset_reason: str | None = None
+    bytes_read: int = 0
+
+
+def _anchor(stream: Any, offset: int) -> str:
+    stream.seek(max(0, offset - MAX_RECORD_BYTES))
+    return hashlib.sha256(stream.read(min(offset, MAX_RECORD_BYTES))).hexdigest()
+
+
 class PipelineLog:
     """One crash-recovering, process-safe JSONL stream for an application run."""
 
@@ -128,24 +156,28 @@ class PipelineLog:
         message: str = "",
         details: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        from appsec_review.observability.spans import operation_phase
+
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lock = FileLock(self.lock_path)
         deadline = time.monotonic() + 30.0
-        while True:
-            try:
-                lock.__enter__()
-                break
-            except LockUnavailable:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.005)
+        with operation_phase("telemetry.lock_wait"):
+            while True:
+                try:
+                    lock.__enter__()
+                    break
+                except LockUnavailable:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.005)
         try:
             sequence, valid_length, recovered_bytes = _append_position(self.path)
             if recovered_bytes:
                 with self.path.open("r+b") as stream:
                     stream.truncate(valid_length)
                     stream.flush()
-                    os.fsync(stream.fileno())
+                    with operation_phase("telemetry.fsync"):
+                        os.fsync(stream.fileno())
             record = {
                 "schema": "appsec-review/telemetry-event/1",
                 "sequence": sequence,
@@ -174,7 +206,8 @@ class PipelineLog:
             with self.path.open("ab") as stream:
                 stream.write(line)
                 stream.flush()
-                os.fsync(stream.fileno())
+                with operation_phase("telemetry.fsync"):
+                    os.fsync(stream.fileno())
             return record
         finally:
             lock.__exit__(None, None, None)
@@ -185,6 +218,66 @@ class PipelineLog:
         payload = self.path.read_bytes()
         records, valid_length = _valid_lines(payload)
         return records, valid_length != len(payload)
+
+    def follow(self, cursor: EventCursor | None = None, *, max_records: int = 256,
+               max_bytes: int = 1024 * 1024) -> EventPage:
+        """Read a bounded page; never advance past a torn or invalid complete record.
+
+        A changed generation explicitly resets the cursor. Consumers must discard their
+        derived state on reset, or replaying the new generation would double count.
+        """
+        if not 1 <= max_records <= 10000 or not MAX_RECORD_BYTES <= max_bytes <= 16 * 1024 * 1024:
+            raise ValueError("event page bounds are invalid")
+        cursor = cursor or EventCursor()
+        if (type(cursor.offset) is not int or type(cursor.sequence) is not int
+                or cursor.offset < 0 or cursor.sequence < 0
+                or bool(cursor.offset) != bool(cursor.sequence)):
+            raise ValueError("invalid event cursor")
+        try:
+            stream = self.path.open("rb")
+        except FileNotFoundError:
+            return EventPage((), EventCursor(), "missing",
+                             "log_removed" if cursor.offset else None)
+        with stream:
+            stat = os.fstat(stream.fileno())
+            reset = None
+            if cursor.offset and (
+                (cursor.device, cursor.inode) != (stat.st_dev, stat.st_ino)
+                or cursor.offset > stat.st_size or _anchor(stream, cursor.offset) != cursor.anchor
+            ):
+                reset, cursor = "log_replaced_or_truncated", EventCursor()
+            stream.seek(cursor.offset)
+            records = []
+            offset, sequence, consumed = cursor.offset, cursor.sequence, 0
+            status = "caught_up"
+            while len(records) < max_records and consumed < max_bytes:
+                allowance = min(MAX_RECORD_BYTES + 1, max_bytes - consumed)
+                line = stream.readline(allowance)
+                consumed += len(line)
+                if not line:
+                    break
+                if not line.endswith(b"\n"):
+                    if len(line) > MAX_RECORD_BYTES:
+                        raise ValueError("pipeline record exceeds the record bound")
+                    status = "backlog" if stream.tell() < stat.st_size else "torn_tail"
+                    break
+                if len(line) > MAX_RECORD_BYTES:
+                    raise ValueError("pipeline record exceeds the record bound")
+                try:
+                    record = json.loads(line)
+                except (ValueError, UnicodeError) as exc:
+                    raise ValueError(f"malformed complete pipeline log record at byte {offset}") from exc
+                if (not isinstance(record, dict) or type(record.get("sequence")) is not int
+                        or record["sequence"] != sequence + 1):
+                    raise ValueError(f"invalid pipeline log sequence at byte {offset}")
+                records.append(record)
+                sequence += 1
+                offset += len(line)
+            if status == "caught_up" and offset < stat.st_size:
+                status = "backlog"
+            return EventPage(tuple(records), EventCursor(
+                offset, sequence, stat.st_dev, stat.st_ino, _anchor(stream, offset)),
+                status, reset, consumed)
 
 
 _EVENT_LOG_LOCK = threading.Lock()
