@@ -162,7 +162,70 @@ Canonical owner: session `f9628e8e-873f-4f72-8aca-3069fb9fe4af`, operating
 build-topology hold was released. Do not establish a competing owner or lock.
 
 Canonical history was imported read-only through a local Git bundle from the assigned app
-worktree; no canonical checkout files were read or written by this session. Imported main was
-`0d2c6d7b8` (Package 02 plus its landing record). The implementation will be based on that current
-main, tested again, then handed to the authorized owner with exact SHA/tree and coverage gaps.
+worktree; no canonical checkout files were read or written by this session. The unpublished
+implementation was rebased without conflicts onto
+`0d2c6d7b8830436bda7eed3e2c66f89c6525a17d` (Package 02 plus its landing record).
 No remote push or PR is authorized.
+
+## Frozen post-rebase verification
+
+Exact implementation revision: **`91fecdd2f875aa5ad89ae05340c671f1a7af2f21`**.
+Private editable import:
+`/home/wsollers/copilot-worktrees/worker-contracts-d23ca33f/src/appsec_review/__init__.py`.
+
+**619 passed in 95.87 seconds.** Slowest individual test: 4.21 seconds (skill-separation source
+scan). The next four were 3.60, 2.79, 2.48 and 2.46 seconds. No unit exceeded ten seconds.
+This is the comprehensive affected selection, not a full repository or live-quality result:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_worker_prompt_contracts.py tests/test_capability_artifact_cards.py tests/review/test_prompt_competence.py tests/test_guidance_compose.py tests/test_guidance_procedures.py tests/test_guidance_examples.py tests/test_skill_separation.py tests/test_prompt_numeric_reasoning.py tests/test_native_inference_runtime.py tests/test_remediation_models.py tests/test_poc_writer.py tests/test_review_model_request.py tests/review/test_cells.py tests/test_native_component_curation.py tests/test_native_metadata_investigation.py tests/test_dependency_intelligence.py::test_native_inference_is_injectable_and_pins_registered_guidance tests/test_dependency_intelligence.py::test_guidance_and_job_public_api_are_registered tests/test_dependency_intelligence.py::test_model_resolution_is_validated_and_never_exact tests/test_post_build_security_assessment.py::test_inference_is_observation_until_evidence_validation_confirms_or_refutes tests/test_post_build_security_assessment.py::test_bounded_inference_records_tokens_and_validates_observations tests/test_project_build.py::test_image_repair_accepts_only_bounded_apt_package_sets tests/test_project_build.py::test_image_repair_environment_is_a_typed_family_allowlist tests/test_project_build.py::test_image_repair_dependency_restores_use_the_family_manager_on_accepted_manifests tests/test_project_build.py::test_image_repair_package_manager_selects_only_a_pinned_lockless_node_manager tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable tests/test_owasp_telemetry.py tests/test_owasp_evidence_binding.py --basetemp=test/tmp/pkg04-post-rebase --tb=short --durations=5
+```
+
+Committed portable files and the final Linux working files are LF. Initial UNC file creation
+produced CRLF in seven new portable files; `.gitattributes` correctly staged LF. Those working
+files were normalized to the committed LF bytes before rebasing and before the frozen-revision
+test run. Byte-pinned JSON fixtures were already LF and were not normalized. `git diff --check`
+and changed-file `git ls-files --eol` were inspected.
+
+Documentation command:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_documentation.py --basetemp=test/tmp/pkg04-documentation --tb=short
+```
+
+The repository-wide link check failed in **0.87 seconds** on two existing links from
+`docs/architecture/build-environments-and-execution-capture.md` into the intentionally absent
+`targets/appsec-multi-vuln` checkout (`support/project-matrix.json` and `README.md`). Package 04
+does not clone or alter a user target to satisfy documentation checks. Changed-document links
+are checked separately. These missing target links are not caused by the worker-contract change.
+The earlier named package-03 fixture/parser gaps remain explicit, not counted among the 619 passes.
+
+<details>
+<summary>Exact diagnostic commands for the development verification table</summary>
+
+```sh
+# G1
+.venv/bin/python -m pytest -q tests/test_guidance_compose.py tests/test_guidance_procedures.py tests/test_guidance_examples.py tests/test_review_guidance_execution.py tests/test_skill_separation.py --basetemp=test/tmp/pkg04-guidance-first --tb=short
+# G2
+.venv/bin/python -m pytest -q tests/test_guidance_compose.py tests/test_guidance_procedures.py tests/test_guidance_examples.py tests/test_skill_separation.py --basetemp=test/tmp/pkg04-guidance-migration --tb=short
+# S1
+.venv/bin/python -m pytest -q tests/test_native_inference_runtime.py tests/test_remediation_models.py tests/test_poc_writer.py tests/test_review_model_request.py tests/test_anthropic_inference.py tests/test_claude_cli_inference.py --basetemp=test/tmp/pkg04-specialized-first --tb=short
+# C1
+.venv/bin/python -m pytest -q tests/test_worker_prompt_contracts.py tests/test_capability_artifact_cards.py tests/test_native_inference_runtime.py tests/test_remediation_models.py tests/test_poc_writer.py tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable --basetemp=test/tmp/pkg04-contracts-first --tb=short
+# C2
+.venv/bin/python -m pytest -q tests/test_worker_prompt_contracts.py tests/test_capability_artifact_cards.py tests/test_native_inference_runtime.py tests/test_remediation_models.py tests/test_poc_writer.py tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable tests/review/test_cells.py --basetemp=test/tmp/pkg04-contracts-second --tb=short
+# R1
+.venv/bin/python -m pytest -q tests/test_capability_artifact_cards.py tests/test_worker_prompt_contracts.py tests/test_remediation_models.py tests/test_dependency_intelligence.py::test_guidance_and_job_public_api_are_registered tests/test_dependency_intelligence.py::test_model_resolution_is_validated_and_never_exact --basetemp=test/tmp/pkg04-render-final --tb=short
+# W1
+.venv/bin/python -m pytest -q tests/test_owasp_telemetry.py tests/test_owasp_evidence_binding.py --basetemp=test/tmp/pkg04-owasp-contracts --tb=short
+# W2
+.venv/bin/python -m pytest -q tests/test_owasp_evidence_binding.py --basetemp=test/tmp/pkg04-owasp-binding-fixed --tb=short --maxfail=3
+# Agent (same selector throughout its bounded implementation iterations)
+.venv/bin/python -m pytest tests/review/test_prompt_competence.py --basetemp=test/tmp/pkg04-competence -q --tb=short
+```
+
+</details>
+
+Only this verification record changes after the frozen implementation test. The integration
+owner receives its final ready SHA/tree, the full changed-path list, local bundle and the evidence
+above, and must append the observed canonical-main ancestry/landing record below.
