@@ -59,6 +59,19 @@ feed maintenance always dispatches fresh so a previous successful sync cannot su
 requested update. Required non-handoff inputs also need a verified reader receipt before accepted
 publication; execution without that receipt is rejected.
 
+An `external_input_identity` callback returns the closed JSON
+`appsec-review/external-input-selection/1` document, including each selector's exact identity or
+named absence. `Job.bind_input_identity` invokes it once and freezes that same selection in the
+claim; the reuse hash cannot describe a different probe. Actual external readers must match the
+claimed identities, including if a mutable current pointer changes and is later rolled back.
+Claims predating this selection cannot execute under a job that now requires it. Consumers of
+already published feed pins use the accepted indexing input-summary contract, not global
+current-feed selection. Copying/verifying an inherited provenance receipt is not a semantic read.
+A read-contract violation remains fatal at the runtime boundary even if a handler catches it as
+an optional gap. For external references, the `producer` names the declared source interface;
+the original publisher's identity (including an unknown legacy origin) remains in the verified
+feed-use proof and is not inferred from that name.
+
 For an untagged single-job attempt the runtime selects current accepted inputs only from enabled
 declared producers. Explicit supply rejects undeclared, stale and conflicting identities. An
 explicitly supplied downstream handoff can supply its hash-pinned ancestors **only when the

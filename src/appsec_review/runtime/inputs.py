@@ -8,10 +8,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from functools import wraps
 import json
 from pathlib import Path
 from threading import RLock
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping, ParamSpec, TypeVar
 
 from appsec_review.runtime.contracts import (
     CoveragePolicy, InputChannel, InputRequirement, JobContract, MissingPolicy,
@@ -22,6 +23,45 @@ from appsec_review.storage.shared import safe_path, verify_handoff
 
 INPUT_ADMISSION_SCHEMA = "appsec-review/input-admission/1"
 INPUT_READS_SCHEMA = "appsec-review/input-reads/1"
+EXTERNAL_SELECTION_SCHEMA = "appsec-review/external-input-selection/1"
+
+
+def external_selection(rows: list[dict[str, Any]]) -> str:
+    return json.dumps({"schema": EXTERNAL_SELECTION_SCHEMA, "inputs": rows},
+                      sort_keys=True, separators=(",", ":"))
+
+
+def read_external_selection(document: object, contract: JobContract | None) -> dict[str, Any]:
+    if (not isinstance(document, dict) or set(document) != {"schema", "inputs"}
+            or document["schema"] != EXTERNAL_SELECTION_SCHEMA or not isinstance(document["inputs"], list)
+            or contract is None):
+        raise ValueError("external input selection requires fresh typed admission")
+    declared = {(item.producer, item.output_kind, item.schema) for item in contract.inputs
+                if item.channel is InputChannel.EXTERNAL}
+    seen = set()
+    for row in document["inputs"]:
+        if not isinstance(row, dict) or set(row) != {
+                "producer", "output_kind", "schema", "selector", "status", "identity", "reason"}:
+            raise ValueError("invalid external input selection fields")
+        if not all(isinstance(row[key], str) for key in ("producer", "output_kind", "schema", "selector", "status")):
+            raise ValueError("invalid external input selection identity")
+        key = row["producer"], row["output_kind"], row["schema"]
+        if key not in declared or not row["selector"] or (*key, row["selector"]) in seen:
+            raise ValueError("undeclared or duplicate external input selection")
+        seen.add((*key, row["selector"]))
+        if row["status"] == "available":
+            if (not isinstance(row["identity"], dict) or not row["identity"] or row["reason"] is not None
+                    or not all(isinstance(key, str) and isinstance(value, str)
+                               for key, value in row["identity"].items())):
+                raise ValueError("invalid supplied external identity")
+        elif row["status"] in {"unavailable", "not_applicable"}:
+            if row["identity"] is not None or not isinstance(row["reason"], str) or not row["reason"]:
+                raise ValueError("external absence requires a named reason")
+        else:
+            raise ValueError("invalid external input selection status")
+    if {key[:3] for key in seen} != declared:
+        raise ValueError("external selection omits a declared source")
+    return document
 
 
 def selected_handoffs(job: Any, root: Path, supplied: Mapping[str, str] | None, *,
@@ -104,6 +144,17 @@ def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
         }
         if requirement.channel is not InputChannel.HANDOFF:
             row["status"] = "requires_channel_reader"
+            if requirement.channel is InputChannel.EXTERNAL and context.external_input_selection is not None:
+                selections = [item for item in context.external_input_selection["inputs"]
+                              if (item["producer"], item["output_kind"]) == (
+                                  requirement.producer, requirement.output_kind)]
+                supplied = any(item["status"] == "available" for item in selections)
+                missing = any(item["status"] == "unavailable" for item in selections)
+                row.update(available=supplied, supplied=supplied, selections=selections,
+                           status="partial" if supplied and missing else "supplied" if supplied else
+                           "gap" if missing else "not_applicable")
+                if not supplied and requirement.required(enabled) and requirement.missing is MissingPolicy.REJECT:
+                    raise ValueError(f"required external input unavailable: {requirement.producer}/{requirement.output_kind}")
             rows.append(row)
             continue
         handoff = handoffs.get(requirement.producer)
@@ -162,6 +213,11 @@ class InputReads:
     records: dict[str, Mapping[str, Any]] = field(default_factory=dict)
     lock: RLock = field(default_factory=RLock)
     producers: dict[str, tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]] = field(default_factory=dict)
+    violation: str | None = None
+
+    def check(self) -> None:
+        if self.violation is not None:
+            raise ValueError(f"input contract violation: {self.violation}")
 
     def producer(self, producer: str) -> tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]:
         from appsec_review.retrieval.core import _accepted_handoff
@@ -215,10 +271,37 @@ def input_read_scope(context: Any) -> Iterator[InputReads | None]:
     token = _READS.set(reads)
     try:
         yield reads
+        reads.check()
     finally:
         _READS.reset(token)
 
 
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def _read_boundary(function: Callable[P, T]) -> Callable[P, T]:
+    @wraps(function)
+    def checked(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return function(*args, **kwargs)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            reads = _READS.get()
+            if reads is not None:
+                with reads.lock:
+                    if reads.violation is None:
+                        reads.violation = str(error)
+            raise
+    return checked
+
+
+def check_input_reads() -> None:
+    reads = _READS.get()
+    if reads is not None:
+        reads.check()
+
+
+@_read_boundary
 def observe_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
     reads = _READS.get()
     if reads is None or handoff["job_id"] == reads.context.config.job_id:
@@ -236,6 +319,7 @@ def observe_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
                                "target_snapshot": handoff["target_snapshot"], "coverage": dict(handoff["coverage"])})
 
 
+@_read_boundary
 def observe_shard(root: Path, shard: Mapping[str, Any]) -> None:
     reads = _READS.get()
     if reads is None:
@@ -269,6 +353,7 @@ def observe_shard(root: Path, shard: Mapping[str, Any]) -> None:
                                "attempt_id": handoff["attempt_id"], "target_snapshot": handoff["target_snapshot"]})
 
 
+@_read_boundary
 def observe_external(root: Path, producer: str, output_kind: str, schema: str,
                      identity: Mapping[str, Any], *, channel: InputChannel = InputChannel.EXTERNAL) -> None:
     reads = _READS.get()
@@ -279,9 +364,21 @@ def observe_external(root: Path, producer: str, output_kind: str, schema: str,
     requirement = reads.requirement(producer, output_kind, channel)
     if schema != requirement.schema:
         raise ValueError("external input schema differs from contract")
+    if channel is InputChannel.EXTERNAL:
+        selected = reads.context.external_input_selection
+        if selected is None:
+            if not reads.context.contract.always_execute:
+                raise ValueError("external reads require a claimed immutable selection")
+        elif not any(
+                (row["producer"], row["output_kind"], row["schema"]) == (producer, output_kind, schema)
+                and row["status"] == "available"
+                and all(identity.get(key) == value for key, value in row["identity"].items())
+                for row in selected["inputs"]):
+            raise ValueError("external input differs from its claimed immutable selection")
     reads.record(requirement, identity)
 
 
+@_read_boundary
 def observe_output(root: Path, producer: str, output_kind: str, reference: Mapping[str, Any]) -> None:
     reads = _READS.get()
     if reads is None:
@@ -303,6 +400,7 @@ def observe_output(root: Path, producer: str, output_kind: str, reference: Mappi
                                "attempt_id": handoff["attempt_id"], "target_snapshot": handoff["target_snapshot"]})
 
 
+@_read_boundary
 def decode_consumed_handoff(value: Any, **expected: Any) -> dict[str, Any]:
     """Compatibility wiring for job-specific readers pending the shared artifact API."""
     from appsec_review.interchange import decode_handoff
@@ -362,22 +460,31 @@ def feed_input_identity(target: Path | None, run_root: Path, repository_root: Pa
     from appsec_review.jobs.job_review_data_indexing.job import _resolved_document
     from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
     from appsec_review.storage.feed_provenance import STEPS
-    from appsec_review.storage.atomic import canonical_json_sha256
     document = _resolved_document(run_root)
     steps = document["jobs"].get("job_third_party_data_sync", {}).get("steps", {})
-    pins = {}
+    rows: list[dict[str, Any]] = []
     for feed, step in sorted(STEPS.items()):
+        row: dict[str, Any] = {"producer": "job_third_party_data_sync", "output_kind": "feed_snapshot",
+               "schema": "appsec-review/public-feed-use/1", "selector": feed,
+               "status": "unavailable", "identity": None, "reason": "feed root is not configured"}
+        rows.append(row)
         configured = steps.get(step, {}).get("settings", {}).get("feed_root")
         if not configured:
-            pins[feed] = {"status": "unavailable", "reason": "feed root is not configured"}
             continue
         path = Path(configured)
         path = path if path.is_absolute() else repository_root / path
         try:
+            relative = path.relative_to(repository_root).as_posix()
+        except ValueError:
+            raise ValueError("external feed selection is outside repository data") from None
+        if not relative.startswith("data/"):
+            raise ValueError("external feed selection is outside repository data")
+        path = safe_path(repository_root, relative)
+        try:
             value = verify_current(path, feed)
         except (OSError, ValueError, KeyError, TypeError) as error:
-            pins[feed] = {"status": "unavailable", "reason": type(error).__name__}
+            row["reason"] = type(error).__name__
         else:
-            pins[feed] = {"status": "available", "manifest_sha256": value["manifest_sha256"],
-                          "snapshot_id": value["snapshot_id"]}
-    return canonical_json_sha256(pins)
+            row.update(status="available", identity={"feed_id": feed, "manifest_sha256": value["manifest_sha256"],
+                                                    "snapshot_id": value["snapshot_id"]}, reason=None)
+    return external_selection(rows)

@@ -147,11 +147,6 @@ def record_snapshot(root: Path, feed: str, snapshot_id: str, *, computed: bool,
     manifest = reference(root, safe_path(root, f"snapshots/{snapshot_id}/manifest.json"))
     document = _verify_snapshot(root, manifest, feed)
     owner = current()
-    if owner is not None and owner.actor["job_id"] != "job_third_party_data_sync" and not computed:
-        from appsec_review.runtime.inputs import observe_external
-        observe_external(owner.run_root, "job_third_party_data_sync", "feed_snapshot", PROOF_SCHEMA,
-                         {"feed_id": feed, "snapshot_id": snapshot_id,
-                          "manifest_sha256": manifest["sha256"], "manifest_schema": document["schema"]})
     if owner is None:
         if not computed:
             if producer is not None:
@@ -234,7 +229,15 @@ def verify_feed_receipt(run_root: Path, receipt: Mapping[str, Any], claim: Mappi
         raise ValueError("public-feed origin is unavailable")
 
 
-def consume_pin(run_root: Path, pin: Mapping[str, Any]) -> dict[str, Any] | None:
+def observe_snapshot(feed: str, snapshot_id: str, manifest_sha256: str) -> None:
+    owner = current()
+    if owner is not None and owner.actor["job_id"] != "job_third_party_data_sync":
+        from appsec_review.runtime.inputs import observe_external
+        observe_external(owner.run_root, "job_third_party_data_sync", "feed_snapshot", PROOF_SCHEMA,
+                         {"feed_id": feed, "snapshot_id": snapshot_id, "manifest_sha256": manifest_sha256})
+
+
+def consume_pin(run_root: Path, pin: Mapping[str, Any], *, observe: bool = True) -> dict[str, Any] | None:
     """Use a selected snapshot, never reselect from a mutable current pointer."""
     from .shared import verify_receipt
     owner = current()
@@ -265,5 +268,8 @@ def consume_pin(run_root: Path, pin: Mapping[str, Any]) -> dict[str, Any] | None
     manifest = reference(root, safe_path(root, f"snapshots/{pin['snapshot_id']}/manifest.json"))
     if manifest["sha256"] != pin["manifest_sha256"]:
         raise ValueError("feed pin manifest hash mismatch")
-    return record_snapshot(root, pin["feed_id"], pin["snapshot_id"], computed=False,
-                           producer=producer, select_producer=pin.get("provenance") is None)
+    result = record_snapshot(root, pin["feed_id"], pin["snapshot_id"], computed=False,
+                             producer=producer, select_producer=pin.get("provenance") is None)
+    if observe:
+        observe_snapshot(pin["feed_id"], pin["snapshot_id"], manifest["sha256"])
+    return result

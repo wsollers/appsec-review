@@ -136,6 +136,9 @@ class JobRunner:
         if job.contract is not None and persisted.get("dataset_contract", {}).get(
                 "job_contract") != job.contract.document():
             raise ValueError("attempt input/dispatch contract differs from current job")
+        if job.external_input_identity is not None:
+            from appsec_review.runtime.inputs import read_external_selection
+            read_external_selection(persisted.get("external_input_selection"), job.contract)
         if not claim.get("reused"):
             from appsec_review.storage.admission import claim_identity
             if canonical_json(claim_identity(claim)) != canonical_json(claim_identity(persisted)):
@@ -186,6 +189,7 @@ class JobRunner:
             evidence_target_snapshot=claim.get("evidence_target_snapshot"),
             upstream_handoffs=MappingProxyType(dict(claim.get("upstream_handoffs", {}))),
             contract=job.contract,
+            external_input_selection=claim.get("external_input_selection"),
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
             input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
@@ -255,7 +259,7 @@ class JobRunner:
             correlation["build_environment_contract"] = canonical_json(contract).decode()
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
             raise ValueError("orchestration correlation must contain string keys and values")
-        input_identity = job.probe_input_identity(
+        input_identity, external_input_selection = job.bind_input_identity(
             target_root, run_root, repository_root=self.config.runtime.repository_root)
         attempts = run_root / "data" / "jobs" / job.job_id / "attempts"
         attempts.mkdir(parents=True, exist_ok=True)
@@ -281,6 +285,7 @@ class JobRunner:
             "review_policy": self.config.review_policy.view(),
             "upstream_handoffs": required_upstream,
             "input_identity": input_identity,
+            "external_input_selection": external_input_selection,
             "job_config_sha256": job_config_sha256(self.config, job.job_id),
             "unit_ids": [unit.unit_id for unit in job.units],
             "component_identities": job.identities(
@@ -424,7 +429,8 @@ class JobRunner:
                          "resolved_config_sha256": self.config.resolved_sha256}
                 if job.job_id == "job_target_analysis_plan":
                     claim["orchestration"]["build_environment_contract"] = canonical_json(contract).decode()
-                for key in ("evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256"):
+                for key in ("evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256",
+                            "external_input_selection"):
                     if key in original_claim:
                         claim[key] = original_claim[key]
                 if "review_policy" in original_claim:
@@ -971,7 +977,8 @@ class JobRunner:
             artifacts = collect_artifacts(
                 root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
                 outcomes_ref, outcomes, result, attempt_refs)
-            from appsec_review.runtime.inputs import verify_external_inputs
+            from appsec_review.runtime.inputs import check_input_reads, verify_external_inputs
+            check_input_reads()
             verify_external_inputs(context, artifacts)
         handoff = self._handoff_document(
             context, claim, result, outcomes, outcomes_ref, accepted=True, completed=completed, artifacts=artifacts)
@@ -994,6 +1001,7 @@ class JobRunner:
                                    + "/latest.json")]
         if accepted_manifest is not None:
             pointer_paths.append(safe_path(root, "data/indices/accepted.json"))
+        check_input_reads()
         previous = {path: path.read_bytes() if path.exists() else None for path in pointer_paths}
         try:
             atomic_json(context.attempt_root / "status.json", status)

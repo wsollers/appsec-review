@@ -262,7 +262,7 @@ def test_real_shard_reader_binds_exact_output_owner(tmp_path, change):
         assert reads.document()["reads"][0]["output_kind"] == "observations"
         assert reads.document()["reads"][0]["sha256"] == shard["sha256"]
     else:
-        with input_read_scope(context), pytest.raises(ValueError, match="undeclared|bound|changed"):
+        with pytest.raises(ValueError, match="undeclared|bound|changed"), input_read_scope(context):
             open_shard(root, shard)
 
 
@@ -378,11 +378,8 @@ def test_input_manifest_preserves_a_dominating_accepted_manifest(tmp_path, omitt
     assert not (Path(second["attempt_root"]) / "inputs/retrieval-manifest.json").exists()
 
 
-def test_external_feed_selection_invalidates_reuse_without_scheduling_maintenance(tmp_path):
+def with_feed_configuration(tmp_path):
     import re
-    from appsec_review.runtime.inputs import feed_input_identity
-    from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot
-    runner, _producer, consumer, target = setup(tmp_path, read=False)
     path = tmp_path / "appsec-review.toml"
     selected = False
     with path.open("a") as stream:
@@ -393,11 +390,23 @@ def test_external_feed_selection_invalidates_reuse_without_scheduling_maintenanc
                     "jobs.job_third_party_data_sync.")
             if selected:
                 stream.write(line + "\n")
-    runner = JobRunner(load_config(path))
-    consumer = replace(consumer, consumes=(), contract=JobContract(inputs=(
+    return JobRunner(load_config(path))
+
+
+def feed_consumer(consumer, handler=None):
+    from appsec_review.runtime.inputs import feed_input_identity
+    result = replace(consumer, consumes=(), contract=JobContract(inputs=(
         InputRequirement("job_third_party_data_sync", "feed_snapshot", "appsec-review/public-feed-use/1",
                          authority=EvidenceAuthority.REFERENCE, channel=InputChannel.EXTERNAL),)),
-                       external_input_identity=feed_input_identity)
+                     external_input_identity=feed_input_identity)
+    return replace(result, units=(Unit("work.read", handler),)) if handler is not None else result
+
+
+def test_external_feed_selection_invalidates_reuse_without_scheduling_maintenance(tmp_path):
+    from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot
+    _runner, _producer, consumer, target = setup(tmp_path, read=False)
+    runner = with_feed_configuration(tmp_path)
+    consumer = feed_consumer(consumer)
     first = run(runner, consumer, target)
     root = runner.runs.resolve(first["status"]["run_id"])
     planner = ResumePlanner(runner.config, root, (consumer,), SNAPSHOT, target_root=target)
@@ -412,6 +421,74 @@ def test_external_feed_selection_invalidates_reuse_without_scheduling_maintenanc
     assert "input identity changed" in reasons
     assert not (root / "data/jobs/job_third_party_data_sync/latest.json").exists()
     assert builtin_registry().build("job_third_party_data_sync").always_execute
+
+
+@pytest.mark.parametrize("rollback", (False, True), ids=("changed-pointer", "rolled-back-pointer"))
+def test_external_reader_refuses_a_snapshot_not_supplied_at_claim(tmp_path, rollback):
+    from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot, verify_current
+    from appsec_review.storage import atomic_bytes
+    from appsec_review.storage.feed_provenance import consume_pin
+    _runner, _producer, consumer, target = setup(tmp_path, read=False)
+    runner = with_feed_configuration(tmp_path)
+    feed_root = tmp_path / runner.config.job("job_third_party_data_sync").step("osv_sync").settings["feed_root"]
+    records = tmp_path / "records.json"
+    records.write_text("[]")
+    publish_snapshot(feed_root, feed_id="osv", schema="appsec-review/osv-snapshot/1",
+                     files={"records.json": records}, manifest_fields={})
+    original = (feed_root / "current.json").read_bytes()
+    captured = None
+
+    def handle(unit):
+        if rollback:
+            assert captured is not None
+            consume_pin(unit.job.run_root, {"feed_id": "osv", **captured})
+        else:
+            verify_current(feed_root, "osv")
+        return {"value": 7}
+
+    consumer = feed_consumer(consumer, handle)
+    claim = runner.begin_attempt(consumer, target_root=target, source_fingerprint=SNAPSHOT)
+    assert claim["external_input_selection"]["schema"] == "appsec-review/external-input-selection/1"
+    admission = claim["input_admission"]["requirements"][0]
+    assert admission["available"] is True and admission["supplied"] is True and admission["read"] is False
+    records.write_text('[{"changed":true}]')
+    publish_snapshot(feed_root, feed_id="osv", schema="appsec-review/osv-snapshot/1",
+                     files={"records.json": records}, manifest_fields={})
+    captured = verify_current(feed_root, "osv")
+    if rollback:
+        atomic_bytes(feed_root / "current.json", original)
+    with pytest.raises(ValueError, match="claimed immutable selection"):
+        runner.execute_or_reuse_unit(consumer, claim, "work.read")
+    root = runner.runs.resolve(claim["run_id"])
+    assert not (root / "data/jobs/job_reader/latest.json").exists()
+
+
+def test_provenance_propagation_is_not_fabricated_as_external_consumption(tmp_path):
+    from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot, verify_current
+    _runner, second, first, target = setup(tmp_path, read=False)
+    runner = with_feed_configuration(tmp_path)
+    feed_root = tmp_path / runner.config.job("job_third_party_data_sync").step("osv_sync").settings["feed_root"]
+    records = tmp_path / "records.json"
+    records.write_text("[]")
+    publish_snapshot(feed_root, feed_id="osv", schema="appsec-review/osv-snapshot/1",
+                     files={"records.json": records}, manifest_fields={})
+
+    def read_feed(unit):
+        return {"artifact": verify_current(feed_root, "osv")["provenance"]}
+
+    first = feed_consumer(first, read_feed)
+    supplied = run(runner, first, target)
+
+    def read_handoff(unit):
+        assert accepted_handoff(unit.job.run_root, first.job_id) is not None
+        return {"value": 7}
+
+    second = replace(second, units=(Unit("work.only", read_handoff),), contract=JobContract(
+        inputs=accepted_inputs(first.job_id, first.datasets)))
+    output = run(runner, second, target, supplied["status"]["run_id"])
+    root = runner.runs.resolve(output["status"]["run_id"])
+    reads = read_input_observations(root, output["handoff"])["reads"]
+    assert [(row["producer"], row["channel"]) for row in reads] == [("job_reader", "handoff")]
 
 
 @pytest.mark.parametrize("supplied", (False, True))
@@ -441,3 +518,34 @@ def test_required_transaction_needs_verified_reader_receipt(tmp_path, supplied):
     else:
         with pytest.raises(ValueError, match="required external input was not validated"):
             run(runner, consumer, target)
+
+
+def test_intake_selection_explicitly_accounts_for_unconfigured_external_sources(tmp_path):
+    from appsec_review.jobs.job_review_intake.datasets import CONTRACT
+    from appsec_review.jobs.job_review_intake.job import external_input_identity
+    runner, _producer, consumer, target = setup(tmp_path, read=False)
+    consumer = replace(consumer, consumes=(), contract=replace(CONTRACT, schedule_after=()),
+                       external_input_identity=external_input_identity)
+    output = run(runner, consumer, target)
+    claim = json.loads((Path(output["attempt_root"]) / "claim.json").read_bytes())
+    assert len(claim["external_input_selection"]["inputs"]) == 3
+    assert {row["status"] for row in claim["external_input_selection"]["inputs"]} == {"not_applicable"}
+    assert all(not row["supplied"] and not row["read"] for row in claim["input_admission"]["requirements"])
+
+
+def test_undeclared_consumption_cannot_be_swallowed_as_an_optional_gap(tmp_path):
+    runner, producer, consumer, target = setup(tmp_path, read=False)
+    first = run(runner, producer, target)
+
+    def handle(unit):
+        try:
+            accepted_handoff(unit.job.run_root, producer.job_id)
+        except ValueError:
+            return {"terminal_status": "COMPLETED_WITH_GAPS", "gaps": ["optional input unavailable"]}
+        raise AssertionError("undeclared input must be rejected")
+
+    consumer = replace(consumer, consumes=(), contract=JobContract(), units=(Unit("work.read", handle),))
+    with pytest.raises(RuntimeError, match="input contract violation"):
+        run(runner, consumer, target, first["status"]["run_id"])
+    root = runner.runs.resolve(first["status"]["run_id"])
+    assert not (root / "data/jobs/job_reader/latest.json").exists()

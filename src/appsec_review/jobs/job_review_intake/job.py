@@ -152,16 +152,38 @@ def resolved_configuration(run_root: Path) -> Mapping[str, Any]:
 
 def external_input_identity(target: Path | None, run_root: Path, repository_root: Path) -> str:
     from appsec_review.target_acquisition.acquire import find_acquisition
-    from appsec_review.storage.atomic import canonical_json_sha256
+    from appsec_review.runtime.inputs import external_selection
     document = resolved_configuration(run_root)
     settings = document.get("target_acquisition") or {}
     acquisition = (find_acquisition(repository_root, str(settings.get("records_dir", "data/target-acquisitions")),
                                     target) if target is not None else None)
-    binaries = resolve_binary_evidence(document, repository_root)
-    return canonical_json_sha256({
-        "acquisition": file_sha256(acquisition) if acquisition is not None else None,
-        "binaries": [{key: value.get(key) for key in ("binary_id", "binary_sha256", "status", "manifest_sha256")}
-                     for value in binaries["binaries"]]})
+    rows = []
+    raw = acquisition.read_bytes() if acquisition is not None else None
+    schema = json.loads(raw)["schema"] if raw is not None else None
+    for kind, expected in (("target_acquisition", "appsec-review/target-acquisition/1"),
+                           ("system_acquisition", "appsec-review/target-system-acquisition/1")):
+        available = schema == expected
+        rows.append({"producer": "job_target_acquisition", "output_kind": kind,
+                     "schema": expected, "selector": "target",
+                     "status": "available" if available else "not_applicable",
+                     "identity": {"sha256": hashlib.sha256(raw).hexdigest()}
+                     if available and raw is not None else None,
+                     "reason": None if available else "no matching acquisition manifest"})
+    binaries = resolve_binary_evidence(document, repository_root)["binaries"]
+    for binary in binaries:
+        available = binary["status"] == "resolved"
+        rows.append({"producer": "binary_publication", "output_kind": "decompilation",
+                     "schema": "appsec-review/binary-decompilation/1", "selector": binary["binary_id"],
+                     "status": "available" if available else "unavailable",
+                     "identity": {key: binary[key] for key in ("binary_id", "binary_sha256", "manifest_sha256")}
+                     if available else None,
+                     "reason": None if available else binary["reason"]})
+    if not binaries:
+        rows.append({"producer": "binary_publication", "output_kind": "decompilation",
+                     "schema": "appsec-review/binary-decompilation/1", "selector": "none",
+                     "status": "not_applicable", "identity": None,
+                     "reason": "no configured binary publications"})
+    return external_selection(rows)
 
 
 def build_job(*, check_models: ModelCheck | None = None) -> Job:
@@ -295,7 +317,7 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
             if binary["status"] == "resolved":
                 observe_external(unit.job.run_root, "binary_publication", "decompilation",
                                  "appsec-review/binary-decompilation/1",
-                                 {"binary_sha256": binary["binary_sha256"],
+                                 {"binary_id": binary["binary_id"], "binary_sha256": binary["binary_sha256"],
                                   "manifest_sha256": binary["manifest_sha256"]})
         path = unit.unit_root / "binary-evidence.json"
         identity = write_json(path, document)

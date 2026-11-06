@@ -74,6 +74,8 @@ class InputRequirement:
                 raise ValueError(f"invalid input {name}")
         if self.availability is Availability.REQUIRED and self.missing is not MissingPolicy.REJECT:
             raise ValueError("required inputs must reject absence")
+        if self.channel is not InputChannel.HANDOFF and self.coverage is not CoveragePolicy.ALLOW_PARTIAL:
+            raise ValueError("coverage guarantees require an accepted producer coverage contract")
 
     @property
     def key(self) -> tuple[str, str, str]:

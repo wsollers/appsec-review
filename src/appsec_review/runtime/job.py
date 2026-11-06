@@ -37,6 +37,7 @@ class JobContext:
     evidence_target_snapshot: str | None = None
     upstream_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     contract: JobContract | None = None
+    external_input_selection: Mapping[str, Any] | None = None
 
 
 class JobHandler(Protocol):
@@ -69,6 +70,7 @@ class Job:
     input_identity: Callable[[Path | None], str] | None = None
     # Source discovery may also need the accepted, bounded catalog of this run.
     run_input_identity: Callable[[Path | None, Path], str] | None = None
+    # A closed external-input-selection/1 document, frozen with its hash before execution.
     external_input_identity: Callable[[Path | None, Path, Path], str] | None = None
     # Publication contract: every output kind this job may emit, and the accepted upstream jobs
     # whose handoffs it reads. The dataset audit compares both with what a run actually produced.
@@ -99,17 +101,27 @@ class Job:
 
     def probe_input_identity(self, target_root: Path | None, run_root: Path | None = None, *,
                              repository_root: Path | None = None) -> str | None:
+        return self.bind_input_identity(target_root, run_root, repository_root=repository_root)[0]
+
+    def bind_input_identity(self, target_root: Path | None, run_root: Path | None = None, *,
+                            repository_root: Path | None = None
+                            ) -> tuple[str | None, Mapping[str, Any] | None]:
+        """Probe once so the reuse identity and admitted external selections cannot diverge."""
         identity = (self.run_input_identity(target_root, run_root)
                     if self.run_input_identity is not None and run_root is not None else
                     self.input_identity(target_root) if self.input_identity is not None else None)
         if self.external_input_identity is not None:
             if run_root is None or repository_root is None:
                 raise ValueError("external input identity requires the bound run and repository")
+            import json
+            from appsec_review.runtime.inputs import read_external_selection
             from appsec_review.storage.atomic import canonical_json_sha256
+            selected = read_external_selection(json.loads(
+                self.external_input_identity(target_root, run_root, repository_root)), self.contract)
             return canonical_json_sha256({
                 "schema": "appsec-review/job-external-inputs/1", "source": identity,
-                "external": self.external_input_identity(target_root, run_root, repository_root)})
-        return identity
+                "external": selected}), selected
+        return identity, None
 
     def configured_workers(self, step_id: str, task_id: str) -> int:
         return self.worker_lookup(step_id, task_id) if self.worker_lookup is not None else 1

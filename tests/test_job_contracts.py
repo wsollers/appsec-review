@@ -126,3 +126,28 @@ def test_historical_dataset_contract_readability_without_retrospective_provenanc
     legacy = {key: value for key, value in historical.items() if key != "shared_namespaces"}
     legacy["schema"] = "appsec-review/attempt-datasets/1"
     assert read_dataset_contract(resign(legacy), "job_consumer") == (old_steps, old_outputs)
+
+
+@pytest.mark.parametrize("change", ("none", "extra", "missing", "duplicate", "foreign", "bad_identity"))
+def test_external_selections_are_closed_and_complete(change):
+    from appsec_review.runtime.inputs import external_selection, read_external_selection
+    contract = JobContract(inputs=(InputRequirement(
+        "job_source", "snapshot", "appsec-review/snapshot/1", channel=InputChannel.EXTERNAL),))
+    row = {"producer": "job_source", "output_kind": "snapshot", "schema": "appsec-review/snapshot/1",
+           "selector": "fixture", "status": "available", "identity": {"sha256": "a" * 64}, "reason": None}
+    document = json.loads(external_selection([row]))
+    if change == "none":
+        assert read_external_selection(document, contract) == document
+        return
+    if change == "extra":
+        document["grant"] = True
+    elif change == "missing":
+        document["inputs"] = []
+    elif change == "duplicate":
+        document["inputs"].append(dict(row))
+    elif change == "foreign":
+        document["inputs"][0]["producer"] = "job_foreign"
+    else:
+        document["inputs"][0]["identity"] = {"sha256": 7}
+    with pytest.raises(ValueError):
+        read_external_selection(document, contract)

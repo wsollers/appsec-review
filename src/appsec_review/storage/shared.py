@@ -482,7 +482,7 @@ class SharedArtifacts:
                     "snapshot_id": Path(proof["manifest"]["path"]).parent.name,
                     "manifest_sha256": proof["manifest"]["sha256"],
                     "directory": str(root / Path(proof["manifest"]["path"]).parent),
-                    "provenance": source})
+                    "provenance": source}, observe=False)
             if consumed is None:
                 raise ValueError("claimed feed consumer did not record its use")
             return consumed

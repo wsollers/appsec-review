@@ -176,6 +176,8 @@ def verify_current(root: Path, expected_feed: str) -> dict[str, Any]:
         raise ValueError(f"{expected_feed} snapshot identity mismatch")
     verified = verify_snapshot_directory(directory, manifest)
     provenance = record_snapshot(root, expected_feed, pointer["snapshot_id"], computed=False)
+    from appsec_review.storage.feed_provenance import observe_snapshot
+    observe_snapshot(expected_feed, pointer["snapshot_id"], pointer["manifest_sha256"])
     return {**verified, "manifest_sha256": pointer["manifest_sha256"], "directory": str(directory),
             **({"provenance": provenance} if provenance is not None else {})}
 
