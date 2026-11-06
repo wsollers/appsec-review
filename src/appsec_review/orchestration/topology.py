@@ -206,7 +206,7 @@ def describe_wave1(config: Any, registry: Any, include: Iterable[str] = ()) -> d
             "dependencies": list(dependencies[job_id]),
             "propagate_handoff": job_id in propagating,
             "upstream_handoffs": list(input_projection(
-                registry.build(job_id), {name: "" for name in propagating}, dependencies, propagating)),
+                registry.build(job_id), {name: "" for name in dependencies}, dependencies, propagating)),
             "contract": registry.build(job_id).contract.document(),
         } for job_id in dependencies],
     }

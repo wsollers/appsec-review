@@ -303,6 +303,8 @@ def test_dagster_definition_edges_match_direct_contract_without_execution():
         actual = {value.node for value in dependencies.get(name, {}).values()}
         expected = {value.removeprefix("job_") + "__finalize" for value in row["dependencies"]}
         assert actual == expected
+        assert set(row["upstream_handoffs"]) == set(registry.build(row["job_id"]).consumes) & {
+            entry["job_id"] for entry in description["jobs"]}
     assert not any(name.startswith(("build_iteration__", "third_party_data_sync__")) for name in dependencies)
 
 
