@@ -409,3 +409,19 @@ def test_checkpoint_writer_and_reader_share_the_exact_byte_bound(tmp_path, monke
     assert path.read_bytes() == original
     with pytest.raises(ValueError, match="exceeds bound"):
         OperatorFollower(tmp_path).restore_checkpoint(path)
+
+
+@pytest.mark.parametrize(("kind", "category"), [
+    ("JOB_CANCELED", "cancelled"), ("TASK_CANCELLED", "cancelled"),
+    ("JOB_TIMED_OUT", "timeout"), ("TASK_FAILED", "failure"),
+])
+def test_legacy_terminal_event_names_preserve_categories_without_details(tmp_path, kind, category):
+    event = emit(PipelineLog(tmp_path), kind)
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    assert follower.snapshot()["failures"][0]["category"] == category
+    batches = []
+    exporter = BoundedOTLP(batches.append, enabled=True)
+    exporter.offer(event)
+    assert exporter.flush()["status"] == "exported"
+    assert batches[0]["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["body"]["stringValue"] == category

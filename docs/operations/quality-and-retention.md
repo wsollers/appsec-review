@@ -61,6 +61,8 @@ Execution summaries distinguish timeout (including historical `TimeoutExpired` e
 OOM **only when reported**, nonzero exit, cancellation, reuse and unknown. Hash-bound diagnostics
 never include stderr, stdout, prompts, source, exception messages, mounts or command lines.
 The receipt adapter accepts `container-execution/1` and `tree-sitter-invocation/1`.
+When old events omit a duplicated terminal-status field, explicit terminal event names retain
+their timeout/cancellation/failure category in both the operator view and OTLP adapter.
 
 `run-metrics/7` retains its existing fields and adds `cost-provenance/1`. Legacy `model_tokens`
 is a compatibility field; use the extension's nullable usage and completeness status when

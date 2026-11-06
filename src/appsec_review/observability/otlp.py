@@ -5,7 +5,7 @@ from collections import deque
 import hashlib
 from typing import Any, Callable, Mapping
 
-from appsec_review.observability.diagnostics import execution_summary
+from appsec_review.observability.diagnostics import execution_event_summary
 from appsec_review.observability.telemetry import validate_event
 
 
@@ -29,7 +29,7 @@ class BoundedOTLP:
         attributes = [{"key": key, "value": {"stringValue": hashlib.sha256(
             str(event.get(key) or "").encode()).hexdigest()}}
             for key in ("run_id", "job_id", "attempt_id", "event_id")]
-        category = execution_summary(event["details"])["category"]
+        category = execution_event_summary(event)["category"]
         self.pending.append({"body": {"stringValue": category}, "attributes": attributes})
         return "queued"
 

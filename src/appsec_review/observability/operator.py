@@ -12,7 +12,7 @@ import time
 from typing import Any, Mapping, Sequence
 
 from appsec_review.observability.costs import account_calls
-from appsec_review.observability.diagnostics import execution_summary, diagnostic_reference, read_execution_receipt
+from appsec_review.observability.diagnostics import execution_event_summary, diagnostic_reference, read_execution_receipt
 from appsec_review.observability.events import EventCursor, PipelineLog
 from appsec_review.observability.telemetry import validate_event
 from appsec_review.reporting.telemetry.inputs import (
@@ -176,7 +176,7 @@ class OperatorFollower:
                 gaps.append({"event_id": event["event_id"], "job_id": event["job_id"],
                              "attempt_id": event["attempt_id"], "source": "declared_gap",
                              "reused": "REUSED" in kind})
-            outcome = execution_summary(details)
+            outcome = execution_event_summary(event)
             if outcome["category"] in {"failure", "exit_failure", "timeout", "oom", "cancelled"} or kind.endswith(
                 ("FAILED", "TIMED_OUT", "CANCELLED", "CANCELED")
             ):

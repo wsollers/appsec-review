@@ -54,6 +54,19 @@ def execution_summary(value: Mapping[str, Any]) -> dict[str, Any]:
             "exit_code": code if type(code) is int else None, "diagnostics": refs}
 
 
+def execution_event_summary(event: Mapping[str, Any]) -> dict[str, Any]:
+    details = event.get("details", {})
+    if not isinstance(details, Mapping):
+        raise ValueError("execution event details must be an object")
+    if not details.get("terminal_status") and not details.get("status"):
+        kind = str(event.get("event_type") or "")
+        for status in ("TIMED_OUT", "CANCELLED", "CANCELED", "FAILED", "SUCCEEDED", "OOM_KILLED"):
+            if kind.endswith("_" + status):
+                details = {**details, "terminal_status": status}
+                break
+    return execution_summary(details)
+
+
 def read_execution_receipt(run_root: Any, identity: Mapping[str, Any], *,
                            max_bytes: int = 1024 * 1024) -> dict[str, Any]:
     """Verify an existing run-owned receipt before interpreting its diagnostic fields."""
