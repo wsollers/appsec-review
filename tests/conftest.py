@@ -60,6 +60,102 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+class _TestTimings:
+    """Stream every test's start, finish, phase durations and outcome into SQLite as it happens.
+
+    The database sits beside ``--basetemp`` (pytest wipes the basetemp itself), and each row is
+    committed immediately, so a stalled or killed session still shows the test that never finished.
+    """
+
+    def __init__(self, path: Path) -> None:
+        import sqlite3
+        import time
+
+        self._clock = time.time
+        self.path = path
+        self._db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS test_timings (session_started REAL, pid INTEGER, nodeid TEXT, "
+            "file TEXT, started REAL, finished REAL, duration_s REAL, setup_s REAL, call_s REAL, "
+            "teardown_s REAL, outcome TEXT, PRIMARY KEY (session_started, nodeid))")
+        self._session = self._clock()
+
+    def start(self, nodeid: str, file: str) -> None:
+        self._db.execute(
+            "INSERT OR REPLACE INTO test_timings (session_started, pid, nodeid, file, started, outcome) "
+            "VALUES (?, ?, ?, ?, ?, 'running')", (self._session, os.getpid(), nodeid, file, self._clock()))
+
+    def report(self, report: pytest.TestReport) -> None:
+        column = {"setup": "setup_s", "call": "call_s", "teardown": "teardown_s"}[report.when]
+        outcome = "xfailed" if hasattr(report, "wasxfail") and report.skipped else report.outcome
+        if report.when != "call" and report.failed:
+            outcome = "error"
+        self._db.execute(
+            f"UPDATE test_timings SET {column} = ?, outcome = CASE "
+            "WHEN outcome IN ('failed', 'error') THEN outcome "
+            "WHEN ? = 'passed' AND outcome <> 'running' THEN outcome ELSE ? END "
+            "WHERE session_started = ? AND nodeid = ?",
+            (report.duration, outcome, outcome, self._session, report.nodeid))
+
+    def finish(self, nodeid: str) -> None:
+        self._db.execute(
+            "UPDATE test_timings SET finished = ?, duration_s = ? - started "
+            "WHERE session_started = ? AND nodeid = ?",
+            (self._clock(), self._clock(), self._session, nodeid))
+
+    def close(self) -> None:
+        self._db.close()
+
+
+_TIMINGS: _TestTimings | None = None
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    global _TIMINGS
+    config = session.config
+    if getattr(config.option, "collectonly", False):
+        return
+    basetemp = _resolved_from_invocation(config.getoption("basetemp"), Path(config.invocation_params.dir))
+    _TIMINGS = _TestTimings(basetemp.parent / f"{basetemp.name}.timings.sqlite")
+
+
+def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
+    if _TIMINGS is not None:
+        _TIMINGS.start(nodeid, location[0])
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    if _TIMINGS is not None:
+        _TIMINGS.report(report)
+
+
+def pytest_runtest_logfinish(nodeid: str, location: tuple[str, int | None, str]) -> None:
+    if _TIMINGS is not None:
+        _TIMINGS.finish(nodeid)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    global _TIMINGS
+    if _TIMINGS is not None:
+        _TIMINGS.close()
+        _TIMINGS = None
+
+
+_FIRST_TEST_MODULE = _REPOSITORY_ROOT / "tests" / "test_000_unit_environment_guard.py"
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Run the production-sizing guard before every other collected test.
+
+    Path order alone does not do this: tests/orchestration/ sorts before tests/test_*.py.
+    """
+    first = [item for item in items if Path(str(item.path)).resolve() == _FIRST_TEST_MODULE]
+    if first:
+        items[:] = first + [item for item in items if Path(str(item.path)).resolve() != _FIRST_TEST_MODULE]
+
+
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     """Keep implicit discovery on the fast paths; explicit selections remain on demand."""
     if config.args_source is pytest.Config.ArgsSource.ARGS:
