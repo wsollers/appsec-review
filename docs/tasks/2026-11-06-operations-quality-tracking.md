@@ -124,13 +124,14 @@ control files, not only artifact aliases; its focused regression is included in 
 
 ### Final tested implementation and local integration result
 
-Implementation/tested-code SHA: `de3178df75eaea298db22fdd78bcd2266e71031a`.
+Initial ready-code SHA: `de3178df75eaea298db22fdd78bcd2266e71031a`.
 The expanded seven-file command above, with
 `--basetemp=test/tmp/operations-b603f2c2-ready`, passed **107 tests in 31.23s** after
 incorporating current WSL main (already up to date). The existing fork warning remains the
 only warning. Subsequent handoff changes are documentation-only.
 
-Canonical WSL `main` remains `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`.
+At the first guarded integration attempt, canonical WSL `main` was
+`528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`.
 Integration was **attempted and refused**, not performed. The OS-backed advisory
 `/home/wsollers/projects/appsec-review/.git/appsec-independent-main-integration.lock`
 was held during the final inspection and released on refusal. WSL main contains these nine
@@ -165,3 +166,53 @@ conflict resolution, push, PR, deployment or production cleanup was used.
 
 **Integration and acceptance suites: WRITTEN, NOT RUN. Live evaluation and real OTLP export:
 NOT RUN. Production retention application: NOT RUN.**
+
+### Incorporating independently advanced main
+
+During final synchronization, another package advanced WSL main to
+`37ae743ca28c26239383d68054accb1826e60ad7`. A fresh locked inspection confirmed the **same
+nine untracked provenance files**, so the dirty-main blocker was not resolved. This package
+did not infer permission from another session's merge and did not bypass the guard.
+
+That newer main was incorporated into this package's isolated branch as merge
+`d4d8b8cfea57e9a0c1d52c437f8d5395579bf566`, then transferred back to the app-facing branch
+by local bundle. The merge had no content conflicts. Its committer identity was supplied
+per command from this session's existing Git author identity; no shared/global Git config
+was changed.
+
+Latest main added the quality dependency extra/lock and public cross-package boundary checks.
+The existing reporting timestamp/status helpers were exposed as public reporting interfaces
+rather than importing private symbols or duplicating their behavior. At
+`25703d3367f7c4199ccafa2d9437825f465cfe8d`, the same seven-file unit command with
+`--basetemp=test/tmp/operations-b603f2c2-current-main` passed **107 tests in 40.60s**, using
+the latest-main pinned pytest 8.4.2. The static gate ran concurrently:
+
+```sh
+uv pip install --python .venv/bin/python -e '.[test,quality]'
+uv pip install --python .venv/bin/python --require-hashes -r requirements/quality.lock
+.venv/bin/python -m tools.quality check \
+  --base 37ae743ca28c26239383d68054accb1826e60ad7 --static-only
+```
+
+Static result: **PASS**, 655 modules scanned, no new diagnostics, 47 existing baseline
+findings retained under the unchanged shrink-only policy. Timings: Ruff 0.175s, mypy 11.717s,
+Bandit 19.409s, architecture 5.736s. This gate's own unit selection was **NOT RUN**;
+the affected 107-test suite was executed separately. Static checks are not live vulnerability
+assessment, and their declared type-checking boundary remains the one documented by Package 02.
+
+Final implementation SHA: `4e5e344b8bc03b46ea3cc5205d028c62be45ab29`. Its only code delta
+from the statically checked candidate rejects malformed sealed-store owner identities.
+The focused final command was:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_operations_retention.py \
+  --basetemp=test/tmp/operations-b603f2c2-final-retention
+.venv/bin/python -m ruff check --ignore-noqa src/appsec_review/observability/retention.py
+```
+
+Result: **16 passed in 1.56s**, and the focused Ruff check passed. These 16 tests overlap the
+combined suite; they are not presented as 16 additional independent cases. Later changes are
+documentation-only, with source/test/deploy byte identity checked against this implementation.
+The ready branch includes WSL main `37ae743ca28c26239383d68054accb1826e60ad7`; landing remains
+blocked by the unrelated dirty provenance state. No production data or Windows-primary
+checkout changes were made.
