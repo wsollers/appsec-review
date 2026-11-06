@@ -16,7 +16,7 @@ from appsec_review.observability.diagnostics import execution_summary, diagnosti
 from appsec_review.observability.events import EventCursor, PipelineLog
 from appsec_review.observability.telemetry import validate_event
 from appsec_review.reporting.telemetry.inputs import (
-    JOB_TERMINALS, RUN_TERMINALS, job_spans, _timestamp, _STATUS_ALIASES,
+    JOB_TERMINALS, RUN_TERMINALS, job_spans, event_timestamp, STATUS_ALIASES,
 )
 from appsec_review.storage import canonical_json, atomic_json
 
@@ -88,7 +88,7 @@ class OperatorFollower:
         self.reset_reason = page.reset_reason
         for record in page.records:
             validate_event(record)
-            if (not isinstance(record["details"], Mapping) or _timestamp(record["timestamp"]) is None
+            if (not isinstance(record["details"], Mapping) or event_timestamp(record["timestamp"]) is None
                     or record["run_id"] != self.log.path.parents[2].name):
                 raise ValueError("operator event provenance or timestamp is invalid")
         keys = {self._key(record) for record in page.records}
@@ -121,7 +121,7 @@ class OperatorFollower:
         raw_statuses = {str(event["details"].get("completion_status") or RUN_TERMINALS[event["event_type"]])
                         for event in terminals}
         raw_statuses.discard("None")
-        statuses = {_STATUS_ALIASES.get(status, status) for status in raw_statuses}
+        statuses = {STATUS_ALIASES.get(status, status) for status in raw_statuses}
         supported = {"SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED", "CANCELLED", "TIMED_OUT", "BLOCKED", "PARTIAL"}
         lifecycle_gaps = []
         if not statuses <= supported:
@@ -147,7 +147,7 @@ class OperatorFollower:
                     "SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED", "REUSED", "TIMED_OUT", "CANCELLED"
                 )):
                     unit["reported_status"] = details.get("completion_status") or kind.removeprefix("TASK_")
-            stamp = _timestamp(event["timestamp"])
+            stamp = event_timestamp(event["timestamp"])
             if kind in {"OPERATION_PROGRESS", "JOB_STARTED", "TASK_STARTED", "TASK_COMPLETED",
                         "TASK_COMPLETED_WITH_GAPS", "TOOL_INVOCATION_COMPLETED", "MODEL_CALL_COMPLETED"}:
                 progress.append(stamp)
@@ -241,7 +241,7 @@ class OperatorFollower:
         if caught_up and states & _ACTIVE and (age is None or age >= alert_after_seconds):
             candidates.append(("progress_unconfirmed", run_id))
         for lease, resource in resources.items():
-            stamp = _timestamp(resource["timestamp"])
+            stamp = event_timestamp(resource["timestamp"])
             if (resource["cleanup"] == "unconfirmed" and liveness == "terminal" and stamp
                     and (now - stamp).total_seconds() >= alert_after_seconds):
                 candidates.append(("cleanup_unconfirmed", lease))
