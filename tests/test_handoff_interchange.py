@@ -32,6 +32,8 @@ from tests.test_job_runtime import write_config
 
 
 def setup(tmp_path, handler=lambda unit: {"value": 7}, *, units=None, datasets=(), extra_jobs=()):
+    from tests.release_support import write_release
+    write_release(tmp_path, ("job_fixture", *extra_jobs))
     path = write_config(tmp_path)
     with path.open("a", encoding="utf-8") as stream:
         stream.write('\n[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n')

@@ -6,12 +6,14 @@ import pytest
 
 from appsec_review.inference import ModelOutputError, infer
 from appsec_review.inference import ModelRequest
+from appsec_review.inference.anthropic_api import send
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 
 
 class Response:
     def __init__(self, value):
         self.value = value
+        self.read_complete = False
 
     def __enter__(self):
         return self
@@ -20,6 +22,9 @@ class Response:
         return False
 
     def read(self, _limit):
+        if self.read_complete:
+            return b""
+        self.read_complete = True
         return json.dumps(self.value).encode()
 
 
@@ -69,7 +74,7 @@ def test_anthropic_parse_failure_retains_bounded_raw_response(monkeypatch) -> No
         max_output_tokens=8000,
     )
     with pytest.raises(ModelOutputError) as raised:
-        infer(request, timeout_seconds=30)
+        send(request, timeout_seconds=30)
     assert raised.value.raw_response and "not json" in raised.value.raw_response
     assert raised.value.rejected_output == "not json"
 
@@ -82,11 +87,11 @@ def test_anthropic_normalizes_only_unambiguous_missing_plan_schema(monkeypatch) 
         "stop_reason": "end_turn",
     }))
     request = ModelRequest(
-        schema=PROPOSAL_SCHEMA, persona="devops", role="build engineer", guidance="bounded",
+        schema="appsec-review/target-analysis-proposal/2", persona="devops", role="build engineer", guidance="bounded",
         summary={"build_units": []}, allowed_scanners=(), allowed_build_systems=(),
         allowed_components=(), allowed_paths=(), allowed_build_units=(), provider="anthropic-api",
         model="claude-haiku-4-5-20251001", reasoning="medium", max_input_tokens=32000,
         max_output_tokens=8000,
     )
     result = infer(request, timeout_seconds=30)
-    assert result.proposal == {"schema": PROPOSAL_SCHEMA, **value}
+    assert result.proposal == {"schema": request.schema, **value}

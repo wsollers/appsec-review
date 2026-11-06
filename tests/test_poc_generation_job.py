@@ -474,6 +474,7 @@ def test_the_writer_requests_are_recorded_and_replayed_with_identical_keys(chain
     assert document["request"]["role"] == "poc_writer" and "<run>" not in json.dumps(document["result"])
     replay_dir = tmp_path_factory.mktemp("replay")
     shutil.copytree(recordings, replay_dir / POC)
+    shutil.copyfile(recordings.parent / "recording-root.json", replay_dir / "recording-root.json")
 
     def never(request, *, timeout_seconds):
         raise AssertionError("the replay must answer from the recording")

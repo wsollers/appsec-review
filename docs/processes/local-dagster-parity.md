@@ -153,8 +153,9 @@ recorded. A parity difference in a model-backed job then always means the driver
 that the model answered differently. Model variance is out of scope for parity.
 
 - **Where.** Every job reaches a model only through `appsec_review.inference.infer`, which the job
-  registry hands to jobs. Record and replay wrap that one callable in the registry. Providers and
-  jobs are untouched.
+  registry hands to jobs. Record and replay wrap that callable in the registry; the OWASP
+  workbench also applies the same wrapper at its model boundary. Job adapters use the
+  [shared bounded execution mechanics](../architecture/bounded-worker-execution.md).
 - **Switch.** The mode comes from the process environment
   (`APPSEC_REVIEW_MODEL_RECORDING=record|replay`), never from `appsec-review.toml`. A
   configuration change would change `resolved_config_sha256`, so the two sides would no longer be
@@ -163,12 +164,19 @@ that the model answered differently. Model variance is out of scope for parity.
   normalizer applies (repository, target and run roots). The `/opt/app` and host spellings of one
   request therefore produce one key.
 - **Recording.** The Dagster side writes each request, key and `ModelResult` to
-  `runs/<run>/data/inference-recordings/<job>/<key>.json`. Before the second restore, `parity`
+  `runs/<run>/data/inference-recordings/<job>/<key>.<sequence>.json`. V2 reserves repeated-request
+  sequence numbers before dispatch, not when concurrent calls finish. Copy the root's
+  `recording-root.json` with its job directories when moving a recording set. Before the second restore, `parity`
   copies the recordings to `runs/metadata/stepwise/parity/<run>/<job>/recordings/`, and the local
   side replays from that copy.
 - **Fail closed.** A replay miss means the local driver built a different request. It raises,
   the job fails, and the parity report names the unmatched key and the masked request, so the
   difference is visible rather than answered by a live model.
+- **Errors and usage.** V2 uses closed typed error envelopes, including real timeout and
+  cancellation semantics; no exception class is dynamically imported or invented. Legacy v1
+  successful responses remain supported, but v1 errors are rejected explicitly. Replay retains
+  historical token reports with replay provenance and records no new billable tokens. Missing or
+  invalid provider usage remains unknown, never zero actual usage.
 - **Coverage.** This applies to `job_target_analysis_plan`, `job_project_build`,
   `job_dependency_intelligence`, `job_post_build_security_assessment`,
   `job_review_prioritization`, `job_review_data_indexing` and `job_inference_security_review`, the

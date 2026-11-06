@@ -14,7 +14,6 @@ import zipfile
 from appsec_review.jobs.cpp_index_scopes import load_accepted_cpp
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.inference import Infer, ModelRequest
-from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, index_fingerprint, write_manifest,
@@ -29,7 +28,6 @@ from .assessment import (
     normalize_action, shard_fingerprint, validate_inference,
 )
 from appsec_review.jobs.job_post_build_security_assessment.datasets import CONSUMES, DATASETS
-from appsec_review.guidance.skills import load_runtime_skill
 
 PROJECT_TASKS = ("native_units",)
 TOPOLOGY = {
@@ -571,18 +569,12 @@ def build_job(*, infer: Infer | None = None) -> Job:
             inspection_value = _stage_case(unit, "inspection", case_id)
             deterministic_value = _stage_case(unit, "deterministic", case_id)
             settings = unit.job.config.settings["model"]
-            guidance = load_runtime_skill(unit.job.repository_root, "post-build-security-assessment",
-                                          job_id="job_post_build_security_assessment").text
+            from appsec_review.guidance.workers import publish_worker_guidance
             model_identity = {"provider": str(settings["provider"]), "model": str(settings["model"]),
                               "reasoning": str(settings["reasoning"])}
-            guidance_sha = hashlib.sha256(guidance.encode() + b"\0" + canonical_json(model_identity)).hexdigest()
+            guidance, guidance_sha = publish_worker_guidance(
+                unit.job.repository_root, unit.job.run_root, "post_build", model=settings)
             model_identity["guidance_sha256"] = guidance_sha
-            bundle = unit.job.run_root / "data" / "guidance" / guidance_sha
-            from appsec_review.storage.shared import publish_named
-            publish_named(unit.job.run_root, bundle / "SKILL.md", guidance.encode(),
-                          namespace="guidance", computation=model_identity)
-            publish_named(unit.job.run_root, bundle / "model-identity.json", canonical_json(model_identity),
-                          namespace="guidance", computation=model_identity)
             if provenance_value.get("terminal_status") == "NOT_APPLICABLE":
                 document = {"schema": "appsec-review/build-security-inference/1",
                             "case_id": _display(case_id), "model_identity": model_identity,
@@ -603,8 +595,15 @@ def build_job(*, infer: Infer | None = None) -> Job:
             request = {"schema": "appsec-review/build-security-inference-request/1", "guidance": GUIDANCE_IDENTITY,
                        "case_id": _display(case_id), "topology": {"actions": len(actions), "artifacts": len(records)},
                        "actions": actions, "artifacts": records, "deterministic_results": deterministic_value["checks"],
-                       "rules": ["missing data is a gap, never a clean result", "cite only supplied evidence ids",
-                                 "model output remains an observation until deterministic validation"]}
+                       "guidance_bundle_sha256": guidance_sha,
+                       "artifact_admission": {"datasets": [
+                           {"name": name, "producer": "job_post_build_security_assessment",
+                            "accepted_sha256": value["artifact"]["sha256"]}
+                           for name, value in (("actions", provenance_value), ("artifacts", inspection_value),
+                                               ("deterministic_results", deterministic_value))]},
+                       "coverage_gaps": list(dict.fromkeys([
+                           *provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
+                           *deterministic_value.get("gaps", ())]))}
             encoded = canonical_json(request)
             gaps: list[str] = []
             if len(encoded) > int(settings["max_input_tokens"]) * 4:
@@ -623,9 +622,14 @@ def build_job(*, infer: Infer | None = None) -> Job:
                           "refuted_count": 0, "unvalidated_count": 0}
                 calls = 0
             else:
-                request_sha = hashlib.sha256(encoded).hexdigest()
+                from appsec_review.inference.errors import (
+                    ExecutionLimit, ModelOutputError, ProviderError, failure_category,
+                )
+                from appsec_review.inference.execution import CallContext, Execution, RetryPolicy
+                import subprocess
                 model_request = ModelRequest(
-                    schema=INFERENCE_PROPOSAL_SCHEMA, persona="", role="", guidance=guidance, summary=request,
+                    schema=INFERENCE_PROPOSAL_SCHEMA, persona="build_supply_chain",
+                    role="build_security_assessor", guidance=guidance, summary=request,
                     allowed_scanners=(), allowed_build_systems=(), allowed_components=(), allowed_paths=(),
                     allowed_build_units=(), provider=str(settings["provider"]), model=str(settings["model"]),
                     reasoning=str(settings["reasoning"]), max_input_tokens=int(settings["max_input_tokens"]),
@@ -635,41 +639,38 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     str(item.get("artifact_id")) for item in records} | {str(item.get("sha256")) for item in records}
                 calls, proposal = 0, None
                 last_error: Exception | None = None
-                for retry in range(int(settings["retries"]) + 1):
-                    calls += 1
-                    invocation = hashlib.sha256(f"{unit.job.run_id}:{case_id}:{retry}:{request_sha}".encode()).hexdigest()
-                    emit_model_event(PipelineLog(unit.job.run_root), event_type="MODEL_CALL_STARTED",
-                        run_id=unit.job.run_id, invocation_id=invocation, provider=str(settings["provider"]),
-                        model=str(settings["model"]), reasoning_level=str(settings["reasoning"]),
-                        guidance_bundle_sha256=guidance_sha, request_sha256=request_sha, retry_count=retry,
-                        job_id="job_post_build_security_assessment", attempt_id=unit.job.attempt_id,
-                        case_id=_display(case_id))
-                    started = time.monotonic()
+                policy = RetryPolicy(int(settings["retries"]) + 1, True, True, True)
+                engine = Execution(timeout_seconds=int(settings["timeout_seconds"]), max_calls=policy.attempts,
+                    max_response_bytes=int(settings["max_output_tokens"]) * 4,
+                    guidance_sha256=guidance_sha,
+                    context=CallContext(unit.job.run_root, unit.job.run_id,
+                                        "job_post_build_security_assessment", unit.job.attempt_id,
+                                        "inference", _display(case_id), case_id=_display(case_id)))
+                retry_reason = None
+                accepted = False
+                for attempt in range(1, policy.attempts + 1):
                     try:
-                        proposal = infer(model_request, timeout_seconds=int(settings["timeout_seconds"]))
-                        if ((proposal.output_tokens or 0) > int(settings["max_output_tokens"]) or
-                                len(canonical_json(proposal.proposal)) > int(settings["max_output_tokens"]) * 4):
-                            raise ValueError("build-security inference output exceeded configured budget")
-                        result = validate_inference(proposal.proposal, checks=deterministic_value["checks"], evidence_ids=known)
-                        emit_model_event(PipelineLog(unit.job.run_root), event_type="MODEL_CALL_COMPLETED",
-                            run_id=unit.job.run_id, invocation_id=invocation, provider=str(settings["provider"]),
-                            model=str(settings["model"]), reasoning_level=str(settings["reasoning"]),
-                            guidance_bundle_sha256=guidance_sha, request_sha256=request_sha,
-                            terminal_status="ACCEPTED", duration_ms=int((time.monotonic() - started) * 1000),
-                            retry_count=retry, input_tokens=proposal.input_tokens, output_tokens=proposal.output_tokens,
-                            cache_tokens=proposal.cache_tokens, job_id="job_post_build_security_assessment",
-                            attempt_id=unit.job.attempt_id, case_id=_display(case_id))
+                        proposal = engine.call(infer, model_request, timeout_seconds=int(settings["timeout_seconds"]),
+                                               retry_count=attempt - 1, retry_reason=retry_reason)
+                        try:
+                            result = validate_inference(proposal.proposal, checks=deterministic_value["checks"],
+                                                        evidence_ids=known)
+                        except ValueError as exc:
+                            raise ModelOutputError(str(exc)) from exc
+                        accepted = True
                         break
-                    except Exception as exc:
+                    except (ModelOutputError, ProviderError, TimeoutError, subprocess.TimeoutExpired, ExecutionLimit) as exc:
                         last_error = exc
-                        emit_model_event(PipelineLog(unit.job.run_root), event_type="MODEL_CALL_COMPLETED",
-                            run_id=unit.job.run_id, invocation_id=invocation, provider=str(settings["provider"]),
-                            model=str(settings["model"]), reasoning_level=str(settings["reasoning"]),
-                            guidance_bundle_sha256=guidance_sha, request_sha256=request_sha,
-                            terminal_status="FAILED", duration_ms=int((time.monotonic() - started) * 1000),
-                            retry_count=retry, error_class=type(exc).__name__, job_id="job_post_build_security_assessment",
-                            attempt_id=unit.job.attempt_id, case_id=_display(case_id))
-                else:
+                        try:
+                            retry = engine.retry(attempt, exc, policy)
+                        except ExecutionLimit:
+                            retry = False
+                        if not retry:
+                            break
+                        retry_reason = failure_category(exc).value
+                    finally:
+                        calls = engine.calls
+                if not accepted:
                     gaps.append(f"build-security inference failed after bounded retries ({type(last_error).__name__})")
                     result = {"observations": [], "rejections": [], "confirmed_count": 0,
                               "refuted_count": 0, "unvalidated_count": 0}

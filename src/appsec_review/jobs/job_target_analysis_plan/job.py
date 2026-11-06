@@ -19,7 +19,6 @@ from appsec_review.jobs.build_discovery import (
 )
 from appsec_review.jobs.build_topology import validate_build_topology
 from appsec_review.jobs.cataloging import write_json
-from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, index_fingerprint, write_manifest,
@@ -53,25 +52,13 @@ TOPOLOGY = {
 
 
 def publish_guidance_bundle(run_root: Path, *, persona: str, role: str, guidance: str,
-                            model: Mapping[str, Any], family: str, build_system: str) -> str:
+                            model: Mapping[str, Any], family: str, build_system: str,
+                            repository_root: Path | None = None) -> str:
     """Write one immutable bundle per model and recipe group before inference uses it."""
-    identity = {"provider": str(model["provider"]), "model": str(model["model"]),
-                "reasoning": str(model["reasoning"]), "persona": "devops_engineer",
-                "role": f"build_engineer_{family}", "build_system": build_system}
-    content = (persona.encode("utf-8") + b"\0" + role.encode("utf-8") + b"\0" +
-               guidance.encode("utf-8") + b"\0" + canonical_json(identity))
-    guidance_sha = hashlib.sha256(content).hexdigest()
-    bundle_root = run_root / "data" / "guidance" / guidance_sha
-    files = {"persona.md": persona.encode("utf-8"), "role.md": role.encode("utf-8"),
-             "task.md": guidance.encode("utf-8"),
-             "model-identity.json": canonical_json({**identity, "guidance_sha256": guidance_sha})}
-    from appsec_review.storage.shared import publish_named
-    for name, payload in files.items():
-        path = bundle_root / name
-        if path.is_file() and path.read_bytes() != payload:
-            raise ValueError(f"accepted guidance bundle changed: {guidance_sha}/{name}")
-        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
-    return guidance_sha
+    from appsec_review.guidance.workers import publish_worker_guidance
+    root = repository_root or application_root("pipeline/guidance/registry.json")
+    return publish_worker_guidance(root, run_root, "build_planning", family=family, model=model, build_system=build_system,
+        texts={"persona": persona, "role": role, "procedure": guidance})[1]
 
 
 def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
@@ -409,10 +396,12 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             (family, build_system, image_profile), build_units = item
             role_path = prompt_root / "roles" / f"build-engineer-{family}.md"
             role = role_path.read_text(encoding="utf-8")
-            guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
-            guidance_sha = publish_guidance_bundle(
-                unit.job.run_root, persona=persona, role=role, guidance=guidance,
-                model=model, family=family, build_system=build_system)
+            from appsec_review.guidance.workers import publish_worker_guidance
+            governed, guidance_sha = publish_worker_guidance(
+                unit.job.repository_root, unit.job.run_root, "build_planning", family=family, model=model,
+                build_system=build_system,
+                texts={"persona": persona, "role": role, "procedure": guidance})
+            guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + governed.encode()
             paths = sorted({str(value["path"]) for build_unit in build_units
                             for value in (*build_unit.get("markers", ()),
                                           *build_unit.get("descriptor_package", {}).get("documents", ()))})
@@ -423,9 +412,10 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                                                      if str(value["path"]) in paths],
                                "accepted_artifacts": [], "build_units": build_units,
                                "build_environment": plan["build_environment"],
-                               "feedback_limits": asdict(limits)}
+                               "feedback_limits": asdict(limits),
+                               "guidance_bundle_sha256": guidance_sha}
             request = ModelRequest(
-                schema=PROPOSAL_SCHEMA, persona=persona, role=role, guidance=guidance,
+                schema=PROPOSAL_SCHEMA, persona=persona, role=role, guidance=governed,
                 summary=compact_summary, allowed_scanners=(), allowed_build_systems=(build_system,),
                 allowed_components=(), allowed_paths=tuple(paths),
                 allowed_build_units=tuple(str(value["build_unit_id"]) for value in build_units),
@@ -461,31 +451,14 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 with path.open("rb") as stream:
                     return stream.read(bound + 1)
 
-            call_starts = {}
-            def on_call(event, call, key, error, result=None):
-                if event == "STARTED":
-                    call_starts[call] = time.monotonic()
-                duration = (None if event == "STARTED" else
-                            max(0, int((time.monotonic() - call_starts.pop(call)) * 1000)))
-                invocation = hashlib.sha256(
-                    f"{unit.job.run_id}:{unit.job.attempt_id}:{key}:{call}".encode()).hexdigest()
-                emit_model_event(PipelineLog(unit.job.run_root),
-                    event_type="MODEL_CALL_STARTED" if event == "STARTED" else "MODEL_CALL_COMPLETED",
-                    run_id=unit.job.run_id, invocation_id=invocation,
-                    provider=str(model["provider"]), model=str(model["model"]),
-                    reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                    request_sha256=key, retry_count=call - 1, job_id="job_target_analysis_plan",
-                    attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system,
-                    duration_ms=duration,
-                    input_tokens=result.input_tokens if result is not None else None,
-                    output_tokens=result.output_tokens if result is not None else None,
-                    cache_tokens=result.cache_tokens if result is not None else None,
-                    terminal_status=event if event != "STARTED" else None, error_class=error)
-
+            from appsec_review.inference.execution import CallContext
             return bounded_feedback(infer, request, catalog=group_catalog, limits=limits,
                 read_document=read_document,
                 cache_root=unit.job.run_root / "data" / "planning-feedback",
-                identity=request_identity, on_call=on_call,
+                identity=request_identity,
+                guidance_sha256=guidance_sha,
+                context=CallContext(unit.job.run_root, unit.job.run_id, "job_target_analysis_plan",
+                                    unit.job.attempt_id, "inference", unit.unit_id),
                 call_timeout_seconds=int(model["timeout_seconds"]))
 
         workers = max(1, min(int(model.get("workers", 4)), len(partitions)))

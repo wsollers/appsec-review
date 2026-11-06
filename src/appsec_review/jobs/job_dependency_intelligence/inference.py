@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
-import hashlib
 from pathlib import Path
+import subprocess
 from typing import Any
 
-from appsec_review.guidance.compose import load_registry
-from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import Infer, ModelRequest
-from appsec_review.storage import atomic_bytes, canonical_json
-from appsec_review.storage.shared import publish_named
+from appsec_review.inference.errors import ExecutionLimit, ModelOutputError, ProviderError, failure_category
+from appsec_review.inference.execution import Execution, RetryPolicy
+from appsec_review.storage import canonical_json
 
 from .resolution import apply_model_resolution
 
@@ -25,40 +24,8 @@ RUNTIME_SKILL_ID = "native-dependency-resolution"
 
 
 def _guidance(repository_root: Path, run_root: Path, model: Mapping[str, Any]) -> tuple[str, str]:
-    registry = load_registry(repository_root)
-    persona_record = registry["personas"].get(PERSONA_ID)
-    role_record = registry["roles"].get(ROLE_ID)
-    task_record = registry["tasks"].get("dependency-intelligence", {}).get(TASK_ID)
-    if (not isinstance(persona_record, Mapping) or not isinstance(role_record, Mapping) or
-            not isinstance(task_record, Mapping)):
-        raise ValueError("dependency resolution guidance is not registered")
-    paths = {
-        "persona.md": repository_root / "pipeline/prompt-fragments/personas/dependency_repository_investigator.md",
-        "role.md": repository_root / "pipeline/prompt-fragments/roles/native_dependency_resolver.md",
-        "task.md": repository_root / str(task_record["path"]),
-    }
-    skill = load_runtime_skill(repository_root, RUNTIME_SKILL_ID, job_id="job_dependency_intelligence")
-    files = {name: path.read_text(encoding="utf-8") for name, path in paths.items()}
-    files["skill.md"] = skill.text
-    identity = {"provider": model["provider"], "model": model["model"], "reasoning": model["reasoning"],
-                "persona": PERSONA_ID, "role": ROLE_ID, "task": TASK_ID,
-                "runtime_skill_sha256": skill.sha256}
-    content = b"\0".join([*(files[name].encode() for name in sorted(files)), canonical_json(identity)])
-    digest = hashlib.sha256(content).hexdigest()
-    destination = run_root / "data" / "guidance" / digest
-    for name, text in sorted(files.items()):
-        path = destination / name
-        payload = text.encode()
-        if path.is_file() and path.read_bytes() != payload:
-            raise ValueError("dependency inference guidance changed after pinning")
-        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
-    metadata = canonical_json({**identity, "guidance_sha256": digest})
-    metadata_path = destination / "model-identity.json"
-    if metadata_path.is_file() and metadata_path.read_bytes() != metadata:
-        raise ValueError("dependency inference model identity changed after pinning")
-    publish_named(run_root, metadata_path, metadata, namespace="guidance", computation=identity)
-    joined = "\n\n".join((files["persona.md"], files["role.md"], files["task.md"], files["skill.md"]))
-    return joined, digest
+    from appsec_review.guidance.workers import publish_worker_guidance
+    return publish_worker_guidance(repository_root, run_root, "dependency_repository", model=model)
 
 
 def resolve_with_inference(dependency: Mapping[str, Any], *, repository_root: Path, run_root: Path,
@@ -97,24 +64,37 @@ def resolve_with_inference(dependency: Mapping[str, Any], *, repository_root: Pa
         return dict(dependency), {"dependency_id": dependency_id, "kind": "bounds",
                                   "detail": "native inference request exceeds its token-derived byte bound"}
     from appsec_review.runtime import execution_safety as safety
+    policy = RetryPolicy(int(model["retries"]) + 1, True, True, True)
+    engine = Execution(timeout_seconds=int(model["timeout_seconds"]), max_calls=policy.attempts,
+                       guidance_sha256=guidance_sha)
     errors: list[str] = []
-    for attempt in range(1 if safety.active() else int(model["retries"]) + 1):
-        safety.check_running()
+    retry_reason = None
+    for attempt in range(1, policy.attempts + 1):
         try:
-            result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
+            result = engine.call(infer, request, timeout_seconds=int(model["timeout_seconds"]),
+                                 retry_count=attempt - 1, retry_reason=retry_reason)
             proposal = result.proposal
             if (proposal.get("schema") == PROPOSAL_SCHEMA and
                     proposal.get("candidate_id") == candidate.get("candidate_id") and
                     proposal.get("repository") is None and proposal.get("confidence") == 0):
                 return dict(dependency), None
-            resolved = apply_model_resolution(dependency, proposal, supported_hosts=supported_hosts)
+            try:
+                resolved = apply_model_resolution(dependency, proposal, supported_hosts=supported_hosts)
+            except ValueError as exc:
+                raise ModelOutputError(str(exc)) from exc
             return resolved, None
-        except Exception as exc:
+        except (ModelOutputError, ProviderError, TimeoutError, subprocess.TimeoutExpired, ExecutionLimit) as exc:
             errors = [f"{type(exc).__name__}: {exc}"[:2048]]
             safety.retain_failure("dependency.inference", exc, dependency_id=dependency_id)
             safety.fail(errors[0], action="dependency.inference")
-            if attempt < int(model["retries"]):
-                request = replace(request, repair_errors=tuple(errors), prior_response=None)
+            try:
+                retry = engine.retry(attempt, exc, policy)
+            except ExecutionLimit:
+                retry = False
+            if not retry:
+                break
+            retry_reason = failure_category(exc).value
+            request = replace(request, repair_errors=tuple(errors), prior_response=None)
     return dict(dependency), {"dependency_id": dependency_id, "kind": "model_failure",
                               "detail": errors[0] if errors else "native repository inference failed"}
 

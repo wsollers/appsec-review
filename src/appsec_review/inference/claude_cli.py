@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
+import time
 from typing import Any, Mapping, Sequence
 
 from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
-
-
-class ModelOutputError(ValueError):
-    def __init__(self, message: str, *, raw_response: str | None = None,
-                 rejected_output: str | None = None) -> None:
-        super().__init__(message)
-        self.raw_response = raw_response
-        self.rejected_output = rejected_output
+from .errors import (
+    ExecutionContractError, FailureCategory, ModelOutputError, ModelTimeout, ProviderError, failure_category,
+)
+from .usage import Usage
 
 
 def _text_from_envelope(value: Any) -> str:
@@ -91,7 +91,7 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int, bi
     """Operator-authenticated Claude CLI transport; the model is granted no tools."""
     executable = shutil.which(binary)
     if executable is None:
-        raise FileNotFoundError(f"configured Claude CLI is unavailable: {binary}")
+        raise ProviderError("configured Claude CLI is unavailable", code="cli_unavailable")
     prompt = (review_prompt(request, include_guidance=True)
               if isinstance(request, ReviewModelRequest) else _plan_prompt(request))
     return _run(executable, prompt, request.schema, model=request.model, reasoning=request.reasoning,
@@ -99,29 +99,8 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int, bi
 
 
 def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
-    prompt: dict[str, Any] = {
-        "persona": request.persona,
-        "role": request.role,
-        "task": request.guidance,
-        "response_schema": request.schema,
-        "catalog_summary": request.summary,
-        "allowlists": {
-            "scanners": request.allowed_scanners,
-            "build_systems": request.allowed_build_systems,
-            "components": request.allowed_components,
-            "paths": request.allowed_paths,
-            "build_units": request.allowed_build_units,
-            "image_profiles": request.allowed_image_profiles,
-        },
-        "limits": {"max_input_tokens": request.max_input_tokens,
-                   "max_output_tokens": request.max_output_tokens},
-    }
-    if request.repair_errors:
-        prompt["repair"] = {"validation_errors": request.repair_errors,
-                            "rejected_response": request.prior_response,
-                            "instruction": ("Return only one corrected JSON object. Its top-level "
-                                            f"schema must be exactly {request.schema}. Do not reinvestigate.")}
-    return prompt
+    from .request import plan_prompt
+    return plan_prompt(request)
 
 
 _GITHUB_TOKEN_NAMES = ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN")
@@ -142,24 +121,20 @@ def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str,
     argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
             "--safe-mode", "--tools", "", "--allowedTools", "",
             "--model", model, "--effort", reasoning]
-    completed = subprocess.run(
-        argv, input=json.dumps(prompt, sort_keys=True), text=True, encoding="utf-8",
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_seconds,
-        check=False, env=environment,
-    )
+    completed = _invoke(argv, input=json.dumps(prompt, sort_keys=True), environment=environment,
+                        timeout_seconds=timeout_seconds)
     if completed.returncode != 0:
-        error = completed.stderr.strip()[:4096]
-        raise RuntimeError(f"Claude CLI exited {completed.returncode}: {error}")
+        raise ProviderError("Claude CLI exited with a nonzero status", code="cli_exit")
     try:
         proposal = parse_model_payload(completed.stdout, schema)
     except ModelOutputError as exc:
-        raw = completed.stdout[:2 * 1024 * 1024]
+        raw = completed.stdout.encode("utf-8")[:2 * 1024 * 1024].decode("utf-8", "ignore")
         try:
             rejected = _text_from_envelope(json.loads(raw))
         except (json.JSONDecodeError, ModelOutputError):
             rejected = raw
         raise ModelOutputError(str(exc), raw_response=raw,
-                               rejected_output=rejected[:131072]) from exc
+                               rejected_output=rejected.encode("utf-8")[:131072].decode("utf-8", "ignore")) from exc
     usage = {}
     served_model = None
     try:
@@ -172,12 +147,87 @@ def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str,
                 served_model = next(iter(model_usage))
     except json.JSONDecodeError:
         pass
-    return ModelResult(
+    invalid_usage = not isinstance(usage, Mapping)
+    if invalid_usage:
+        usage = {}
+    if served_model is not None and not isinstance(served_model, str):
+        raise ModelOutputError("Claude CLI returned an invalid model identity")
+    result = ModelResult(
         proposal=proposal,
         input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
         cache_tokens=usage.get("cache_read_input_tokens"), raw_response=completed.stdout,
         served_model=served_model, served_provider="claude-cli",
+        usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None,
     )
+    return Usage.from_result(result).normalize(result)
+
+
+def _invoke(argv: list[str], *, input: str, environment: Mapping[str, str],
+            timeout_seconds: int) -> subprocess.CompletedProcess:
+    """Keep cancellation in the calling thread and reap the owned subprocess before returning."""
+    from appsec_review.runtime import execution_safety as safety
+    if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
+            or timeout_seconds <= 0):
+        raise ExecutionContractError("Claude CLI timeout_seconds must be finite and positive")
+    safety.check_running()
+    options = dict(text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                   env=environment)
+    try:
+        if not safety.active():
+            result = subprocess.run(argv, input=input, timeout=timeout_seconds, check=False, **options)
+        else:
+            deadline = time.monotonic() + timeout_seconds
+            process = subprocess.Popen(argv, stdin=subprocess.PIPE, start_new_session=True, **options)
+            finished = False
+            try:
+                first = True
+                while True:
+                    safety.check_running()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ModelTimeout()
+                    try:
+                        stdout, stderr = process.communicate(input=input if first else None,
+                                                              timeout=min(0.1, remaining))
+                        break
+                    except subprocess.TimeoutExpired:
+                        first = False
+                result = subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+                finished = True
+            finally:
+                original = sys.exception()
+                if not finished or process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.communicate(timeout=5)
+                    except subprocess.TimeoutExpired as error:
+                        failure = ExecutionContractError("Claude CLI cleanup could not be confirmed")
+                        from appsec_review.runtime.resources import quarantine_resources
+                        try:
+                            quarantine_resources("claude_teardown_unconfirmed")
+                            safety.retain_failure("inference.cleanup", failure, provider="claude-cli")
+                        except Exception as publication_error:
+                            failure.add_note(
+                                f"Claude CLI cleanup evidence/quarantine failed ({type(publication_error).__name__})")
+                        if original is not None and failure_category(original) is FailureCategory.CANCELLED:
+                            original.add_note(str(failure))
+                            raise original from failure
+                        raise failure from error
+    except ModelTimeout:
+        raise
+    except subprocess.TimeoutExpired:
+        raise ModelTimeout("Claude CLI call timed out") from None
+    except TimeoutError:
+        raise ModelTimeout("Claude CLI call timed out") from None
+    except UnicodeError:
+        raise ModelOutputError("Claude CLI returned invalid text") from None
+    except OSError:
+        raise ProviderError("Claude CLI could not be started or read", code="cli_io") from None
+    safety.check_running()
+    return result
 
 
 def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude",
@@ -185,7 +235,7 @@ def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude"
     """Confirm each named model by one minimal call; the CLI offers no model listing."""
     executable = shutil.which(binary)
     if executable is None:
-        raise FileNotFoundError(f"configured Claude CLI is unavailable: {binary}")
+        raise ProviderError("configured Claude CLI is unavailable", code="cli_unavailable")
     environment = _worker_environment(auth_mode)
     result: dict[str, Any] = {}
     for name in names:
@@ -193,10 +243,8 @@ def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude"
                 "--safe-mode", "--tools", "", "--allowedTools", "", "--model", name,
                 "--system-prompt", "Reply with the single word ok."]
         try:
-            completed = subprocess.run(
-                argv, input="ok", text=True, encoding="utf-8", stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, timeout=timeout_seconds, check=False, env=environment)
-        except subprocess.TimeoutExpired:
+            completed = _invoke(argv, input="ok", environment=environment, timeout_seconds=timeout_seconds)
+        except ModelTimeout:
             result[name] = {"available": False, "detail": "the availability probe timed out"}
             continue
         try:

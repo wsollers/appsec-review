@@ -13,7 +13,7 @@ worker identity, effective deployment configuration and refund atomicity. Labels
 numbered, hashed excerpts. Expected outcomes, case family and decisive citation labels are
 answer keys held out of model input; the fixtures are not registered runtime guidance.
 
-Each case is a single final-answer experiment with **no retrieval tools**. Missing declarations,
+The original `review.evaluation` experiment is a single final answer with **no retrieval tools**. Missing declarations,
 helper implementations and deployment receipts must produce explicit uncertainty. This measures
 bounded source reasoning and output discipline, not retrieval quality, whole-repository recall,
 multi-round convergence, independence adjudication or production false-positive rates. Verifier
@@ -24,17 +24,17 @@ inputs retain a neutral structured condition, not another worker's argument.
 No inference runs without `--live`. Offline re-scoring reads recorded raw proposals and recalculates
 metrics against the same case-set hash:
 
-```powershell
-.\.venv\Scripts\python.exe -m appsec_review.review.evaluation `
-  --responses runs\guidance-eval\data\evaluation\report.json
+```sh
+.venv/bin/python -m appsec_review.review.evaluation \
+  --responses runs/guidance-eval/data/evaluation/report.json
 ```
 
 To deliberately spend the configured model budget on a paired procedure ablation:
 
-```powershell
-.\.venv\Scripts\python.exe -m appsec_review.review.evaluation `
-  --live --profile dev --role independent_verifier --variant paired `
-  --output runs\guidance-eval
+```sh
+.venv/bin/python -m appsec_review.review.evaluation \
+  --live --profile dev --role independent_verifier --variant paired \
+  --output runs/guidance-eval
 ```
 
 Use a **new** output directory beneath `runs/`; existing outputs are never overwritten. `--profile prod`
@@ -73,3 +73,43 @@ inspect raw reasoning and source lines before accepting a gain. Keep a separate,
 holdout for statistically meaningful evaluations: these small public fixtures can be learned and
 are suitable for regression experiments, not a general performance claim. No live performance
 gain is established by the offline tests or by adding this harness.
+
+## Multi-turn prompt competence
+
+`review.competence.run_competence_case` exercises real composed bundles, accepted source/index
+manifests, `run_cell`, retrieval authorization, paging and compact citation expansion. The nine
+cases in `competence_cases.json` and scripts in `competence_scripts.json` cover native bounds,
+tenant authorization and deployment configuration: retrieval selection, truncation, denial
+recovery, remaining budgets/final turn, missing artifacts, wrong citations, hostile untrusted
+text, false-positive controls and justified abstention. Expected outcomes and scripted answers
+are held out of worker prompts.
+
+Focused offline unit command:
+
+```sh
+.venv/bin/python -m pytest tests/review/test_prompt_competence.py \
+  --basetemp=test/tmp/pkg04-competence -q
+```
+
+Scripted fixtures establish protocol/acceptance behavior, not live efficacy. The current live
+competence path evaluates the independent verifier only; it is not graph-retrieval coverage or
+exploit confirmation. Source citation metrics remain proxies and reuse the existing evaluator.
+
+Future **manual acceptance only**, not run during implementation:
+
+```sh
+.venv/bin/python -m tests.acceptance.test_prompt_competence --live \
+  --config appsec-review.toml --profile dev \
+  --provider claude-cli --model claude-haiku-5-5 \
+  --cases tests/fixtures/review_guidance/competence_cases.json \
+  --output runs/competence-live-YYYYMMDD-unique
+```
+
+Provider/model flags assert the selected configured identities; they are not overrides. Use the
+actual configured pair if it changes. Output must be a new run directory. The entrypoint records
+configuration, corpus and model identities along with quality metrics and gaps.
+`tests/acceptance/test_prompt_competence.py::test_live_prompt_competence` is an alternative
+opt-in pytest entrypoint requiring `APPSEC_REVIEW_LIVE_COMPETENCE=1` and
+`APPSEC_REVIEW_COMPETENCE_ARGS` containing those arguments as a JSON array. Integration,
+acceptance and live paths are excluded from implicit unit collection; selecting them is a
+separate manual action, not authorization granted by a passing unit run.

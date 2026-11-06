@@ -22,7 +22,6 @@ from appsec_review.storage import atomic_json, file_sha256
 from tests.fixtures.inference_review.builder import (
     FEEDS, FILES, FIXTURE_SECRET, SECRET_FILE, build_accepted_index_set,
 )
-from tests.handoff_fixture import write_fixture_handoff
 
 
 PATH = "svc/api/handler.py"
@@ -52,20 +51,24 @@ def publication(seed_publication, tmp_path_factory):
 
 
 def repin(publication, manifest_path):
+    from tests.handoff_fixture import write_fixture_handoff
     pointer_path = publication.run_root / "data" / "indices" / "accepted.json"
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     pointer["manifest_path"] = manifest_path.relative_to(publication.run_root).as_posix()
     handoff_path = publication.run_root / pointer["handoff_path"]
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    manifest = {"path": pointer["manifest_path"], "sha256": file_sha256(manifest_path)}
-    outputs = {unit: ({**output, "index_manifest": manifest} if "index_manifest" in output else output)
-               for unit, output in handoff["outputs"].items()}
-    # Republish the producer attempt so its result, outcomes and artifacts bind the new manifest.
-    (handoff_path.parent / "result.json").unlink()
+    manifest_ref = {"path": pointer["manifest_path"], "sha256": file_sha256(manifest_path),
+                    "size_bytes": manifest_path.stat().st_size}
+    outputs = deepcopy(handoff["outputs"])
+    outputs["publish.inventory_index"]["index_manifest"] = manifest_ref
+    # Rebuild the synthetic producer's result, outcomes and artifact inventory together. Updating
+    # only the pointer leaves a stale accepted result and correctly fails real admission.
+    atomic_json(handoff_path.parent / "result.json", {
+        "status": handoff["completion_status"], "outputs": outputs})
     write_fixture_handoff(publication.run_root, handoff_path, {
         "job_id": handoff["job_id"], "attempt_id": handoff["attempt_id"],
-        "completion_status": handoff["completion_status"], "artifacts": [manifest], "outputs": outputs,
-        "source_fingerprint": handoff["source_fingerprint"]})
+        "completion_status": handoff["completion_status"], "source_fingerprint": publication.snapshot,
+        "artifacts": [manifest_ref], "outputs": outputs})
     pointer.update(manifest_sha256=file_sha256(manifest_path), handoff_sha256=file_sha256(handoff_path))
     atomic_json(pointer_path, pointer)
 

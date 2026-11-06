@@ -245,7 +245,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
         attempt_id=Path(attempt_root).name,
         result_cache=cache_from_settings(settings.result_cache, run_id),
         receipts_root=Path(run_root) / "data" / "jobs" / JOB_ID / "cells",
-        budget=JobBudget(Path(attempt_root) / "budget", settings.budgets),
+        budget=JobBudget.for_run(Path(run_root), settings.budgets, new_timing_mode="active_v2"),
         semaphore=ReviewTeamSemaphore.for_run(Path(run_root), settings.teams.review_teams),
         vocabulary=vocabulary, crosswalk=crosswalk, covers=load_persona_covers(root, registry),
         role_tools={name: tuple(value.get("tools", ())) for name, value in registry["roles"].items()},

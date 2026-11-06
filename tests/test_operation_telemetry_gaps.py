@@ -674,9 +674,13 @@ def test_runtime_intervals_are_typed_and_applied_by_the_runner(tmp_path: Path) -
 # --- sections 4/5 wiring and section 7 switch: artifact indexing --------------------------------------
 
 def _indexing_run(tmp_path: Path, monkeypatch, *, disable_spans: bool = False):
+    import json
+
     from appsec_review.jobs.job_artifact_indexing import build_job
     from appsec_review.runtime import GraphRunner
     from appsec_review.runtime import runner as runner_module
+    from appsec_review.runtime.repair import WORKER_PROTOCOL, stopped_reasons, worker_scope
+    from appsec_review.storage import atomic_json
     from tests.test_artifact_indexing import RUN_ID, _publish_changed_language_receipts, _seed
 
     config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest = _seed(tmp_path)
@@ -688,7 +692,13 @@ def _indexing_run(tmp_path: Path, monkeypatch, *, disable_spans: bool = False):
         "mapping_confidence": 1.0, "inputs": [],
         "outputs": [{"workspace_path": obj["workspace_path"], "sha256": obj["sha256"]}],
     }]
-    _publish_changed_language_receipts(run_root, receipts, accepted_path, handoff_path, latest)
+    # Publish the synthetic producer within the same worker lifecycle required for restart.
+    with worker_scope(config, run_root, preparing_job="job_language_build"):
+        claim_path = handoff_path.with_name("claim.json")
+        claim = json.loads(claim_path.read_text(encoding="utf-8"))
+        atomic_json(claim_path, {**claim, "worker_protocol": WORKER_PROTOCOL})
+        _publish_changed_language_receipts(run_root, receipts, accepted_path, handoff_path, latest)
+    assert stopped_reasons(config, run_root) == ()
     monkeypatch.setattr(runner_module, "configure_operation_sampling", lambda **_: None)
     spans.configure_operation_sampling(progress_interval_seconds=0.01, sample_interval_seconds=0.005)
     original = spans.operation_span

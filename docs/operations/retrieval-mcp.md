@@ -1,6 +1,8 @@
-# Operating the local retrieval MCP gateway
+# Operating the read-only operator MCP gateway
 
-The gateway serves one already accepted review run. It does not build indexes and cannot change a
+The gateway selects exactly one **application run**, even when that run has not reached index
+acceptance. Accepted-evidence queries still require verified acceptance; operator inspection never
+turns missing state into accepted evidence. It does not build indexes, execute recovery, or change a
 run. It is for external clients; the review cells (red, blue, verifier, hunter) do not use it and have
 no tools, because the application runs their retrieval requests in-process (see
 [`../architecture/retrieval-surfaces.md`](../architecture/retrieval-surfaces.md)).
@@ -8,7 +10,7 @@ no tools, because the application runs their retrieval requests in-process (see
 Start it over stdio:
 
 ```text
-appsec-review-mcp --runs-dir runs --run-id 2026-10-08-0001
+appsec-review-mcp --runs-dir runs --run-id <application-run-id>
 ```
 
 For a stricter deployment pin, copy the `manifest_sha256` from
@@ -18,14 +20,144 @@ For a stricter deployment pin, copy the `manifest_sha256` from
 --manifest-sha256 <64-lowercase-hex-digest>
 ```
 
-Startup fails when the run id is invalid, the accepted pointer or handoff is missing, the handoff
-is not accepted, the pin differs, an artifact path escapes the run, or a manifest/index hash or
-embedded identity differs. Those failures require repairing or rerunning the producer; operators
-must not edit generated run material.
+An application ID has the form `YYYY-MM-DD-NNNN`; a Dagster dispatch is a separate UUID.
+There is no `latest` selection. Startup rejects invalid selection or endpoint configuration.
+`inspect_run` distinguishes missing runs, unaccepted index state, unsupported pointer versions and
+verified acceptance. Evidence calls fail when the accepted pointer/handoff is absent, the handoff
+is not accepted, the pin differs, a path escapes the run, or a manifest/index hash or embedded
+identity differs. The first verified manifest binds the session when no explicit pin was supplied;
+later calls cannot silently switch to another accepted manifest. Those failures require repairing
+or rerunning the producer; operators must not edit generated run material.
 
 The server implements JSON-RPC MCP initialization, tool listing, calls, and ping. Tool definitions
-are in `docs/schemas/retrieval-mcp-tools.json`. Application code should instantiate
-`RetrievalCore` instead of calling the MCP process.
+for accepted retrieval remain in `docs/schemas/retrieval-mcp-tools.json`; the operator additions
+are in `src/appsec_review/mcp/operator_schema.py`. The served catalog is their union, not a second
+service. Application review code should instantiate `RetrievalCore` instead of calling the MCP
+process. The operator supplies a diagnostic-only audit sink: reading an observed run does not
+append pipeline events or change receipts. Existing in-process retrieval retains its run-local
+audit behavior.
+
+## Explicit client registration
+
+No unconditional `.mcp.json` is installed. Generate a configuration only after selecting the run:
+
+```sh
+python -m appsec_review.mcp.configuration --run-id <application-run-id> \
+  --runs-dir runs --manifest-sha256 <64-lowercase-hex-digest>
+```
+
+This prints JSON and writes no configuration. The optional manifest argument can be omitted.
+The `mcpServers` client configuration shape is:
+
+```json
+{
+  "mcpServers": {
+    "appsec-review": {
+      "command": "appsec-review-mcp",
+      "args": ["--runs-dir", "runs", "--run-id", "<application-run-id>"]
+    }
+  }
+}
+```
+
+Replace the placeholder using the generator before registering; it is deliberately not a live
+run ID. Register the generated entry in the external development agent's project-scoped MCP
+configuration or UI, according to that client's documented format. Ensure that client resolves
+the executable in the checkout's environment and its `runs` path from the intended working
+directory; supply an explicit locally chosen runs directory when the client's working directory
+is different. Do not commit workstation paths or credentials. The generator never reads global
+agent settings, selects a run, installs a service, or installs tools into review-worker transports.
+
+An optional `--dagster-endpoint <trusted-graphql-endpoint>` enables `inspect_dagster`. Configure
+only an endpoint administered by the operator; it is disabled by default. The tool takes an exact
+`dispatch_id`, never a URL or GraphQL text. Its fixed read query verifies that the returned
+dispatch's application tag matches the selected application run. HTTPS is required except for
+explicit loopback HTTP. Credentials in URLs, redirects, ambient proxies, query strings and URL
+fragments are refused. Authentication-header and arbitrary query/mutation support are intentionally
+absent. Network access occurs only when that tool is called, not at registration or initialization.
+
+## Triage and recovery
+
+| Tool | Scope and result |
+| --- | --- |
+| `inspect_run` | Exact selected application run and accepted-index availability; no lifecycle inference. |
+| `list_jobs` | Bounded pages of job identities in this run. Existence is not acceptance. |
+| `list_attempts` | One exact job's attempts; never automatically chooses its latest attempt. |
+| `inspect_attempt` | Exact job/attempt status, failure class, status-byte identity and protected failure references. |
+| `read_logs` | Bounded structural events with exact job/attempt/level/event-type filters and byte/hash references. |
+| `inspect_recovery_plan` | An exact recorded `RESUME_PLANNED` event selected by the log reference's `offset` and `sha256`. |
+| `inspect_dagster` | Exact UUID at the startup-configured endpoint, with independently verified application binding. |
+
+Accepted artifact discovery and coverage use the existing `query_artifacts`, `coverage` and
+`query_dataset_inventory` tools. No tool reads arbitrary files, executes SQL/shell/GraphQL supplied
+by a caller, returns archive bytes, or exposes protected stdout/stderr, command data, failure
+message text, or tracebacks. Log pages intentionally expose only sequence, event type, level,
+job/attempt identities and resolving byte references. Status/plan references are observations of
+operational records, **not** accepted artifacts or proof of current restart safety.
+
+For a failed run, inspect the exact attempt, page `read_logs` with
+`"event_type": "RESUME_PLANNED"`, then pass the chosen reference's `offset` and `sha256` to
+`inspect_recovery_plan`. The latter projects the existing resume planner's recorded decisions;
+it does not instantiate another planner, rescan the target, compute fresh admission or dispatch a
+job. Original decision reasons are protected. Missing or truncated decisions remain named gaps.
+A historical plan may be stale. No plan is manufactured when no planner event exists.
+
+The plan provides actual CLI entry points and `tests/test_wave1_resume.py` as a baseline regression
+reference. The exact repair-specific unit selectors, build failure context, candidate, prepared
+image and replay references still require operator selection; the service cannot invent them.
+`plan-resume` itself emits telemetry and requires an explicit target/system, so it is deliberately
+not executed by this read-only service. Recipe replay, promotion, job execution and restarts remain
+separately authorized manual operations.
+
+Development procedures are canonical in
+[`run-triage-and-repair`](../../.claude/skills/run-triage-and-repair/SKILL.md),
+[`add-a-job-contract`](../../.claude/skills/add-a-job-contract/SKILL.md),
+[`add-runtime-guidance`](../../.claude/skills/add-runtime-guidance/SKILL.md), and
+[`codeql-release-recompile`](../../.claude/skills/codeql-release-recompile/SKILL.md).
+They reuse existing coordination/docs procedures. They are never runtime-worker guidance.
+
+## Protocol and bounds
+
+The server negotiates MCP `2025-06-18`, implements a complete single-page catalog and preserves
+JSON-RPC IDs. Notifications receive no response and never dispatch tools. Unsupported methods,
+invalid request shapes and invalid parameters are JSON-RPC errors. Known tool execution failures
+are MCP `isError: true` results with stable codes; unexpected server failures are internal errors.
+Neither protocol errors nor stderr diagnostics echo exception messages, user paths or raw data.
+Stdio stdout contains JSON-RPC only.
+
+Each input frame is at most 128 KiB and 32 JSON nesting levels; duplicate keys, non-finite numbers,
+invalid UTF-8 and batches are rejected. Oversized frames produce a bounded error and terminate
+the stream instead of draining an unbounded input. Responses are at most 1 MiB. Logs scan at most
+1 MiB per page and enforce the producer's 64 KiB event bound. Directory inventories examine at
+most 4,096 entries; larger inventories fail explicitly rather than claim complete coverage.
+Individual operational JSON documents are limited to 1 MiB.
+
+Page sizes are 1-100. Operator cursors are authenticated with a session-private key, expire after
+five minutes, and bind the application run, manifest, tool and exact supplied filters/page size.
+They cannot move between clients. A log or directory changed since a page was read invalidates its
+cursor: restart pagination explicitly. No follow loop runs. A torn final log record is withheld
+with a gap; malformed complete records, sequence gaps, schema mismatches and foreign-run records
+fail. A bounded scan with no matching rows is not proof that matching events do not exist.
+
+## Manual interoperability validation
+
+Offline units dispatch directly; they do **not** establish stdio/service interoperability.
+The following suites are written for explicit future user authorization and were **NOT RUN** for
+this package:
+
+```sh
+.venv/bin/python -m pytest tests/integration/test_operator_stdio.py \
+  tests/integration/test_operator_dagster.py \
+  --basetemp=test/tmp/operator-mcp-manual-integration
+.venv/bin/python -m pytest tests/acceptance/test_operator_triage.py \
+  --basetemp=test/tmp/operator-mcp-manual-acceptance
+```
+
+Prerequisites: an isolated Linux checkout/environment with test dependencies, permission to start
+fixture stdio processes and the isolated fake Dagster HTTP service, and no active review using that
+checkout. These fixtures need no live run, model, credentials, container or provisioned service.
+Existing mixed legacy stdio smoke cases in `test_retrieval_core.py` and `test_retrieval_artifacts.py`
+also remain manual. Default integration/acceptance/live collection exclusions are unchanged.
 
 The stdio gateway and plain `RetrievalMcpAdapter` are operator interfaces. Review workers must
 receive only `ScopedRetrievalMcpAdapter` with a package and role capability issued from a verified
@@ -45,12 +177,11 @@ only returned nodes of those files; no CodeQL graph scope is required. The node 
 then be passed to `find` or `read_excerpt`. Names, imports and call targets stay unresolved, and
 every answer names syntax-only limitations rather than claiming semantic flow evidence.
 
-The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes the core tool
-set, while `tests/test_retrieval_artifacts.py` exercises artifact queries through both the core and
-stdio transport.
-Top-level tool-call spans and nested retrieval spans appear in `data/logs/pipeline.jsonl` under the
-run. One transport call produces one `MCP_TOOL_COMPLETED` metric event even when it invokes several
-internal retrieval operations.
+The legacy live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes the
+core tool set, while `tests/test_retrieval_artifacts.py` includes a stdio case. Do not run those cases
+as offline units. Plain in-process `RetrievalMcpAdapter` calls retain top-level and nested
+`data/logs/pipeline.jsonl` spans; the read-only operator transport instead sends audit diagnostics
+outside the observed run.
 
 `query_build_security` reads only accepted immutable `build_security` shards. It supports exact
 project, build-root/action, configuration, compile-unit, linked-artifact, producer, and shard

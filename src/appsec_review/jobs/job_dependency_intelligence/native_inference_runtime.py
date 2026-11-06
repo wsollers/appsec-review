@@ -12,16 +12,17 @@ from pathlib import Path
 import subprocess
 from typing import Any, Literal
 
-from appsec_review.guidance.compose import GOVERNING_PATH, load_registry
-from appsec_review.guidance.fragments import (
-    GuidanceError, load_tool_names, policy_keys, validate_fragment_text, validate_procedure_text,
-)
-from appsec_review.guidance.skills import load_runtime_skill
+from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.inference import Infer, ModelRequest, ModelResult
+from appsec_review.inference.errors import (
+    ExecutionLimit, FailureCategory, ModelOutputError, ProviderError, failure_category,
+)
+from appsec_review.inference.execution import Execution, RetryPolicy
+from appsec_review.inference.usage import Usage, total_reported
 from appsec_review.observability.events import EventLog
 from appsec_review.runtime import execution_safety as safety
 from appsec_review.storage import canonical_json
-from appsec_review.storage.shared import immutable_bytes, publish_named, safe_path
+from appsec_review.storage.shared import immutable_bytes, safe_path
 
 from .native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
@@ -89,20 +90,20 @@ class NativeProposer:
         self.events = events
         self.unit_id = unit_id
         self.metrics = dict.fromkeys(TRANSPORT_COUNTERS, 0)
+        self._usage: list[Usage] = []
         self.artifacts: list[dict[str, Any]] = []
         self.guidance_hashes: list[str] = []
-        self._bundles: dict[str, tuple[str, str, dict[str, bytes]]] = {}
+        self._bundles: dict[str, dict[str, Any]] = {}
         self._scope = "unit-" + _digest(canonical_json({"unit_id": unit_id}))
 
     def _failure(self, error: NativeInferenceError, *, stage: str,
                  request_id: str | None = None) -> None:
         _LOG.warning("Native inference %s failed (%s): %s", stage, error.kind,
-                     _clip(str(error), self.bounds.field_bytes))
+                     type(error.__cause__ or error).__name__)
         if self.events is not None:
             self.events.write(
                 "NATIVE_INFERENCE_FAILED", unit_id=self.unit_id, stage=stage, request_id=request_id,
                 kind=error.kind, error_type=type(error.__cause__ or error).__name__,
-                detail=_clip(str(error), self.bounds.field_bytes),
             )
         safety.retain_failure("dependency.native_inference", error.__cause__ or error,
                               unit_id=self.unit_id, stage=stage, request_id=request_id)
@@ -123,67 +124,21 @@ class NativeProposer:
             if type(value) is not int or value < (0 if key == "retries" else 1):
                 raise NativeInferenceError("unavailable", f"central model setting {key} is invalid")
 
-    def _guidance(self, task: str) -> tuple[str, str]:
+    def _guidance(self, task: str, *, stage: str | None = None) -> tuple[str, str]:
+        from appsec_review.guidance.compose import pin_bundle, render_prompt
+        from appsec_review.guidance.workers import worker_bundle
+        worker = {"curate": "native_curation", "plan": "native_plan", "metadata": "native_metadata"}.get(
+            stage or ("curate" if task == "native_component_curation" else "plan"))
+        if worker is None or task not in {record[1] for record in STAGES.values()}:
+            raise GuidanceError("native SBOM task is not registered")
         if not self._bundles:
-            registry = load_registry(self.repository_root)
-            role = registry["roles"].get(ROLE_ID)
-            persona = registry["personas"].get(PERSONA_ID)
-            if (not isinstance(role, Mapping) or set(role) != {"responsibility"}
-                    or not isinstance(persona, Mapping)):
-                raise GuidanceError("native SBOM role and persona must be registered")
-            skill = load_runtime_skill(self.repository_root, RUNTIME_SKILL_ID,
-                                       job_id="job_dependency_intelligence", fallback_to_package=False)
-            common_paths = {
-                "governing-rules.md": GOVERNING_PATH.as_posix(),
-                "role.md": f"pipeline/prompt-fragments/roles/{ROLE_ID}.md",
-                "persona.md": persona.get("path", f"pipeline/prompt-fragments/personas/{PERSONA_ID}.md"),
-                "skill.md": skill.path,
-            }
-            common = {name: (self.repository_root / path).read_bytes()
-                      for name, path in common_paths.items()}
-            if _digest(common["skill.md"]) != skill.sha256:
-                raise GuidanceError("native SBOM skill bytes differ from the loaded runtime skill")
-            tools = load_tool_names(self.repository_root)
-            validate_fragment_text("native SBOM persona", common["persona.md"].decode("utf-8"), tools)
-            validate_procedure_text("native SBOM role", common["role.md"].decode("utf-8"), tools)
-            validate_procedure_text("native SBOM procedure", skill.body, tools)
-            bundles = {}
-            for task_id in dict.fromkeys(record[1] for record in STAGES.values()):
-                record = registry["tasks"].get("dependency-intelligence", {}).get(task_id)
-                if not isinstance(record, Mapping):
-                    raise GuidanceError(f"native SBOM task is not registered: {task_id}")
-                paths = {**common_paths, "task.md": record["path"]}
-                files = {**common, "task.md": (self.repository_root / record["path"]).read_bytes()}
-                validate_procedure_text("native SBOM task", files["task.md"].decode("utf-8"), tools)
-                keys: set[str] = set()
-                for name, payload in files.items():
-                    section_keys = policy_keys(payload.decode("utf-8"))
-                    if keys & section_keys:
-                        raise GuidanceError("native SBOM guidance repeats shared policy keys")
-                    keys.update(section_keys)
-                identity = {
-                    "schema": "appsec-review/native-inference-guidance/1",
-                    "job_id": "job_dependency_intelligence", "role": ROLE_ID, "role_record": dict(role),
-                    "persona": PERSONA_ID, "persona_record": dict(persona), "task": task_id,
-                    "registry_version": registry["version"],
-                    "files": {name: {"path": paths[name], "sha256": _digest(payload),
-                                     "size_bytes": len(payload)} for name, payload in files.items()},
-                }
-                manifest = canonical_json(identity)
-                digest = _digest(manifest)
-                text = "\n\n".join(files[name].decode("utf-8") for name in
-                                    ("governing-rules.md", "role.md", "persona.md", "task.md", "skill.md"))
-                bundles[task_id] = (text, digest, {**files, "bundle.json": manifest})
-            self._bundles = bundles
-        text, digest, files = self._bundles[task]
-        # Revalidate pinned bytes even when another caller changed a run-owned file.
-        for name, payload in files.items():
-            publish_named(self.run_root, self.run_root / "data" / "guidance" / digest / name,
-                          payload, namespace="guidance",
-                          computation={"job_id": "job_dependency_intelligence", "sha256": digest})
+            self._bundles = {name: worker_bundle(self.repository_root, name)
+                             for name in ("native_curation", "native_plan", "native_metadata")}
+        bundle = self._bundles[worker]
+        digest = pin_bundle(self.run_root, bundle)["bundle_sha256"]
         if digest not in self.guidance_hashes:
             self.guidance_hashes.append(digest)
-        return text, digest
+        return render_prompt(bundle), digest
 
     def _request(self, stage: str, payload: Mapping[str, Any]) -> tuple[ModelRequest, str, str]:
         self._check_model()
@@ -200,7 +155,7 @@ class NativeProposer:
         if type(value.get("input_records")) is int and value["input_records"] > self.bounds.batch_candidates:
             raise NativeInferenceError("bounds", "native candidate batch exceeds its bound")
         schema, task = STAGES[stage]
-        guidance, guidance_hash = self._guidance(task)
+        guidance, guidance_hash = self._guidance(task, stage=stage)
         summary = {"stage": stage, "payload": value, "guidance_bundle_sha256": guidance_hash}
         if len(canonical_json(summary)) > self.bounds.max_payload_bytes:
             raise NativeInferenceError("bounds", "native request summary exceeds its byte bound")
@@ -233,15 +188,20 @@ class NativeProposer:
                     raise ValueError("native inference attempt path is not a directory") from None
         raise AssertionError("unreachable attempt ordinal")
 
-    def _account_usage(self, result: ModelResult | None) -> dict[str, int | None]:
-        usage: dict[str, int | None] = {}
-        for key in ("input_tokens", "output_tokens", "cache_tokens"):
-            value = getattr(result, key, None)
-            usage[key] = value if type(value) is int and value >= 0 else None
-            if usage[key] is not None:
-                self.metrics[key] += usage[key]
-        self.metrics["unknown_usage_calls"] += int(any(value is None for value in usage.values()))
-        return usage
+    def _account_usage(self, usage: Usage) -> dict[str, int | None]:
+        self._usage.append(usage)
+        actual = usage.actual
+        # The existing integer-only publication counters are known subtotals, not complete usage.
+        for key, value in actual.items():
+            if value is not None:
+                self.metrics[key] += value
+        self.metrics["unknown_usage_calls"] += int(any(value is None for value in actual.values()))
+        return actual
+
+    @property
+    def usage_totals(self) -> dict[str, int | None]:
+        return {key: total_reported([usage.actual[key] for usage in self._usage])
+                for key in ("input_tokens", "output_tokens", "cache_tokens")}
 
     def _response(self, result: ModelResult) -> tuple[dict[str, Any], Mapping[str, Any]]:
         limit = min(self.bounds.max_payload_bytes, self.model["max_output_tokens"] * 4)
@@ -297,14 +257,18 @@ class NativeProposer:
         request_id = None
         try:
             request, request_id, guidance_hash = self._request(stage, payload)
-        except (GuidanceError, OSError, UnicodeError, ValueError) as exc:
+        except (GuidanceError, OSError, UnicodeError) as exc:
             error = NativeInferenceError("unavailable", f"native SBOM guidance unavailable: {exc}")
             self._failure(error, stage=stage)
             raise error from exc
         except NativeInferenceError as exc:
             self._failure(exc, stage=stage)
             raise
-        for attempt in range(1 if safety.active() else self.model["retries"] + 1):
+        policy = RetryPolicy(self.model["retries"] + 1, True, True, True)
+        engine = Execution(timeout_seconds=self.model["timeout_seconds"], max_calls=policy.attempts,
+                           guidance_sha256=guidance_hash)
+        retry_reason = None
+        for attempt in range(1, policy.attempts + 1):
             try:
                 safety.check_running()
                 if self.metrics["model_calls"] >= self.bounds.max_calls:
@@ -320,21 +284,32 @@ class NativeProposer:
                 "stage": stage, "guidance_bundle_sha256": guidance_hash,
                 "timeout_seconds": self.model["timeout_seconds"], "request": asdict(request),
             })
-            self.metrics["model_calls"] += 1
             result = None
             error = None
-            try:
+            retry_error: BaseException | FailureCategory = FailureCategory.SCHEMA
+            receipt_count = len(engine.receipts)
+            def dispatch(request, *, timeout_seconds):
+                nonlocal result
                 assert self.infer is not None
-                result = self.infer(request, timeout_seconds=self.model["timeout_seconds"])
-            except (ValueError, subprocess.TimeoutExpired, RuntimeError, OSError) as exc:
-                error = NativeInferenceError("model_failure", f"{type(exc).__name__}: {exc}")
+                result = self.infer(request, timeout_seconds=timeout_seconds)
+                return result
+            try:
+                result = engine.call(dispatch, request, timeout_seconds=self.model["timeout_seconds"],
+                                     retry_count=attempt - 1, retry_reason=retry_reason)
+            except (ModelOutputError, TimeoutError, subprocess.TimeoutExpired, ProviderError, ExecutionLimit) as exc:
+                kind = ("bounds" if isinstance(exc, ExecutionLimit) or
+                        isinstance(exc, ModelOutputError) and "byte bound" in str(exc) else
+                        "invalid_output" if isinstance(exc, ModelOutputError) else "model_failure")
+                error = NativeInferenceError(kind, f"{type(exc).__name__}: {exc}")
                 error.__cause__ = exc
-            usage = self._account_usage(result)
+                retry_error = exc
+            finally:
+                if len(engine.receipts) > receipt_count:
+                    self.metrics["model_calls"] += int(engine.receipts[-1].dispatched)
+                    usage = self._account_usage(engine.receipts[-1].usage)
             response_ref = None
             if error is None:
                 try:
-                    if not isinstance(result, ModelResult):
-                        raise NativeInferenceError("invalid_output", "Infer did not return a ModelResult")
                     response, proposal = self._response(result)
                     response_ref = self._persist(directory, "response", {
                         "schema": "appsec-review/native-inference-response/1", **response, "usage": usage,
@@ -350,8 +325,12 @@ class NativeProposer:
                 response_ref = self._persist(directory, "response", self._rejected_response(result, error, usage))
             receipt = {
                 "schema": "appsec-review/native-inference-attempt/1", "request_id": request_id,
-                "stage": stage, "retry": attempt, "request": request_ref, "response": response_ref,
+                "stage": stage, "retry": attempt - 1, "request": request_ref, "response": response_ref,
                 "guidance_bundle_sha256": guidance_hash, "usage": usage,
+                "usage_source": engine.receipts[-1].usage.source,
+                "usage_unavailable_reason": engine.receipts[-1].usage.unavailable_reason,
+                "usage_totals": self.usage_totals,
+                "known_usage_subtotals": {key: self.metrics[key] for key in self.usage_totals},
                 "status": "FAILED" if error is not None else "SUCCEEDED",
             }
             if error is not None:
@@ -369,13 +348,20 @@ class NativeProposer:
                 if self.events is not None:
                     self.events.write("NATIVE_INFERENCE_COMPLETED", unit_id=self.unit_id, stage=stage,
                                       request_id=request_id, guidance_bundle_sha256=guidance_hash,
-                                      served_model=result.served_model, served_provider=result.served_provider,
+                                      served_model=engine.receipts[-1].served_model,
+                                      served_provider=engine.receipts[-1].served_provider,
                                       **usage)
                 return proposal
             self.metrics["model_failures"] += 1
             self._failure(error, stage=stage, request_id=request_id)
-            if attempt == self.model["retries"]:
+            try:
+                retry = engine.retry(attempt, retry_error, policy)
+            except ExecutionLimit:
+                retry = False
+            if not retry:
                 raise error
+            retry_reason = (retry_error.value if isinstance(retry_error, FailureCategory)
+                            else failure_category(retry_error).value)
             request = replace(request, repair_errors=(_clip(str(error), self.bounds.field_bytes),),
                               prior_response=None)
         raise AssertionError("unreachable native inference retry state")

@@ -303,13 +303,15 @@ def test_guidance_and_job_public_api_are_registered() -> None:
     skill = load_runtime_skill(root, "native-dependency-resolution", job_id="job_dependency_intelligence")
     assert skill.name == "native-dependency-resolution"
     job = build_job()
-    assert [unit.unit_id for unit in job.units][2:5] == [
+    assert [unit.unit_id for unit in job.units][2:7] == [
+        "resolution.curate_components", "resolution.investigate_components",
         "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch"]
     assert job.consumes == ("job_target_catalog", "job_language_build", "job_artifact_indexing",
                             "job_evidence_collection")
     assert {item.output_kind for item in job.datasets} == {
         "dependency_context", "scorecard_responses", "dependency_intelligence_handoff",
-        "native_discovery", "native_spdx", "native_sbom_provenance", "native_sbom_metrics"}
+        "native_discovery", "native_spdx", "native_sbom_provenance", "native_sbom_metrics",
+        "native_component_curation", "native_metadata_investigation", "native_inference_metrics"}
 
 
 def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) -> None:

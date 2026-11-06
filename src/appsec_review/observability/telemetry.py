@@ -1567,9 +1567,19 @@ def _operation_hotspots(spans: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.observability.spans import operation_phase
+
+    with operation_phase("telemetry.aggregate"):
+        return _aggregate_run_metrics(run_root)
+
+
+def _aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     from appsec_review.jobs.job_openvex_export.metrics import aggregate_openvex_metrics
+    from appsec_review.observability.costs import account_calls
+    from appsec_review.observability.diagnostics import execution_category
 
     records, torn = PipelineLog(run_root).read()
+    accounting_records = records
     for record in records:
         validate_event(record)
     openvex = aggregate_openvex_metrics(Path(run_root), records)
@@ -1677,7 +1687,8 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             model_usage.append({
                 "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
                 "step_id": record.get("step_id"), "task_id": record.get("task_id"),
-                "invocation_id": details.get("model_invocation_id"),
+                "invocation_id": details.get("model_invocation_id") or details.get("invocation_id"),
+                "execution_category": execution_category(details),
                 **{name: details.get(name) for name in (
                     "role", "persona", "cell_id", "batch_id", "package_id", "lane",
                     "terminal_status", "error_class", "served_provider", "served_model", "execution_mode")},
@@ -1813,6 +1824,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "resource_totals": None,
             "resource_totals_unavailable_reason": "inclusive_process_spans_must_not_be_summed",
             "model_invocations": model_usage,
+            "cost_provenance": account_calls(accounting_records),
             "avoided_platform_work": None,
             "avoided_platform_work_unavailable_reason": "excluded_trees_are_not_enumerated",
             "dispositions": dict(sorted(dispositions.items())),

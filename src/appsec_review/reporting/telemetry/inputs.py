@@ -29,7 +29,7 @@ RUN_TERMINALS = {
     "GRAPH_SUCCEEDED": "SUCCEEDED", "GRAPH_COMPLETED_WITH_GAPS": "COMPLETED_WITH_GAPS",
     "GRAPH_FAILED": "FAILED", "GRAPH_CANCELED": "CANCELLED", "RUN_COMPLETED": None,
 }
-_STATUS_ALIASES = {"FAILURE": "FAILED", "CANCELED": "CANCELLED", "SUCCESS": "SUCCEEDED"}
+STATUS_ALIASES = {"FAILURE": "FAILED", "CANCELED": "CANCELLED", "SUCCESS": "SUCCEEDED"}
 # Run and job statuses reuse the verdict colours of tokens.py.
 STATUS_TONE = {"SUCCEEDED": "confirmed", "COMPLETED_WITH_GAPS": "insufficient_evidence",
                "FAILED": "contradicted", "CANCELLED": "unresolved", "TIMED_OUT": "contradicted",
@@ -67,7 +67,8 @@ class TelemetryInputs:
     named_gaps: tuple[str, ...]
 
 
-def _timestamp(value: Any) -> datetime | None:
+def event_timestamp(value: Any) -> datetime | None:
+    """Normalize an event timestamp for public reporting consumers."""
     try:
         parsed = datetime.fromisoformat(str(value))
     except ValueError:
@@ -81,14 +82,14 @@ def _offset(origin: datetime, value: datetime) -> int:
 
 def job_spans(events: tuple[Mapping[str, Any], ...]) -> tuple[JobSpan, ...]:
     """Job attempts from JOB_STARTED (else the attempt's first event) to its JOB_* terminal."""
-    stamps = [stamp for stamp in (_timestamp(event.get("timestamp")) for event in events) if stamp]
+    stamps = [stamp for stamp in (event_timestamp(event.get("timestamp")) for event in events) if stamp]
     if not stamps:
         return ()
     origin = min(stamps)
     attempts: dict[tuple[str, str], dict[str, Any]] = {}
     for event in events:
         job = str(event.get("job_id") or "-")
-        stamp = _timestamp(event.get("timestamp"))
+        stamp = event_timestamp(event.get("timestamp"))
         if job == "-" or stamp is None:
             continue
         key = (job, str(event.get("attempt_id") or "-"))
@@ -122,7 +123,7 @@ def _completion(events: tuple[Mapping[str, Any], ...]) -> tuple[str, str | None]
         details = event.get("details") if isinstance(event.get("details"), Mapping) else {}
         raw = details.get("completion_status") or RUN_TERMINALS[kind]
         if raw:
-            raw = _STATUS_ALIASES.get(str(raw), str(raw))
+            raw = STATUS_ALIASES.get(str(raw), str(raw))
             status = raw if raw in STATUS_TONE else "UNKNOWN"
             ended = str(event.get("timestamp"))
     return status, ended
@@ -169,9 +170,9 @@ def load_inputs(run_dir: Path) -> TelemetryInputs:
         except Exception:  # noqa: BLE001 - any derivation failure is a named gap, not a crash
             gaps.append("metrics_summary_recompute_failed")
 
-    stamps = sorted(stamp for stamp in (_timestamp(event.get("timestamp")) for event in events) if stamp)
+    stamps = sorted(stamp for stamp in (event_timestamp(event.get("timestamp")) for event in events) if stamp)
     status, ended = _completion(events)
-    ended_stamp = (_timestamp(ended) if ended else None) or (stamps[-1] if stamps else None)
+    ended_stamp = (event_timestamp(ended) if ended else None) or (stamps[-1] if stamps else None)
     return TelemetryInputs(
         run_id=run_dir.name, summary=summary, summary_source=summary_source,
         summary_sha256=summary_sha256, events=events, events_sha256=events_sha256, torn_tail=torn,

@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
+from appsec_review.inference.errors import ProviderError
 from appsec_review.review.capability import CellCapability
 from appsec_review.retrieval.core import RetrievalIntegrityError
 from appsec_review.review.cells import (
@@ -308,7 +309,7 @@ def test_invalid_output_is_not_retried_unless_enabled(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(("error", "status"), [
-    (RuntimeError("Claude CLI exited 1"), CellStatus.FAILED),
+    (ProviderError("Claude CLI exited 1", retryable=True), CellStatus.FAILED),
     (TimeoutError("slow"), CellStatus.TIMED_OUT),
 ])
 def test_provider_failures_are_worker_gaps_never_exceptions(tmp_path: Path, error, status) -> None:
@@ -504,7 +505,7 @@ def test_an_untrusted_memo_pointer_is_a_miss_and_the_cell_runs(tmp_path: Path, p
     from appsec_review.storage import file_sha256
     cache = InMemoryResultCache()
     if pointer == "failed_source":
-        source = memo_run(tmp_path, ScriptedInfer(RuntimeError("provider down")), None)
+        source = memo_run(tmp_path, ScriptedInfer(ProviderError("provider down", retryable=True)), None)
         assert source.record.status is CellStatus.FAILED
     else:
         source = memo_run(tmp_path, ScriptedInfer(final(LEAD)), None)

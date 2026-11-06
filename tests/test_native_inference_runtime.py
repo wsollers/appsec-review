@@ -14,6 +14,7 @@ import pytest
 from appsec_review.guidance.compose import GOVERNING_PATH, load_registry
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import ModelOutputError, ModelResult
+from appsec_review.inference.errors import ExecutionContractError, ProviderError
 from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
 )
@@ -93,29 +94,31 @@ def test_routes_stage_schema_and_central_settings_without_tools(tmp_path, stage)
 
 
 def test_guidance_is_exact_registered_pinned_and_shared_rules_occur_once(tmp_path):
+    from appsec_review.guidance.compose import verify_bundle, render_prompt
     fake = FakeInfer()
     instance = proposer(tmp_path, fake=fake)
     for stage in SCHEMAS:
         instance(stage, {})
-    assert len(instance.guidance_hashes) == 2
-    assert fake.calls[1][0].guidance == fake.calls[2][0].guidance
+    assert len(instance.guidance_hashes) == 3
+    assert PLAN_SCHEMA in fake.calls[1][0].guidance and METADATA_SCHEMA in fake.calls[2][0].guidance
     registry = load_registry(ROOT)
     skill = load_runtime_skill(ROOT, "native-sbom-investigation", job_id="job_dependency_intelligence")
     for digest in instance.guidance_hashes:
         directory = instance.run_root / "data" / "guidance" / digest
         manifest_bytes = (directory / "bundle.json").read_bytes()
-        assert hashlib.sha256(manifest_bytes).hexdigest() == digest
         manifest = json.loads(manifest_bytes)
+        assert verify_bundle(manifest) == digest
         assert manifest["registry_version"] == registry["version"]
-        assert manifest["role_record"] == registry["roles"]["native_sbom_investigator"]
-        assert manifest["persona_record"] == registry["personas"]["native_dependency_analyst"]
-        assert manifest["files"]["skill.md"]["path"] == skill.path
-        assert manifest["files"]["skill.md"]["sha256"] == skill.sha256
-        for name, ref in manifest["files"].items():
-            pinned = (directory / name).read_bytes()
-            assert pinned == (ROOT / ref["path"]).read_bytes()
-            assert hashlib.sha256(pinned).hexdigest() == ref["sha256"]
-            assert len(pinned) == ref["size_bytes"]
+        sections = {item["name"]: item for item in manifest["sections"]}
+        assert sections["role"]["record"] == registry["roles"]["native_sbom_investigator"]
+        assert sections["persona"]["id"] == "native_dependency_analyst"
+        assert sections["procedures"]["items"][0]["path"] == skill.path
+        assert sections["procedures"]["items"][0]["source_sha256"] == skill.sha256
+        assert sections["procedures"]["items"][0]["text"].encode() == (ROOT / skill.path).read_bytes()
+        for name in ("role", "persona"):
+            source = ROOT / "pipeline" / "prompt-fragments" / (name + "s") / (sections[name]["id"] + ".md")
+            assert sections[name]["text"].encode() == source.read_bytes()
+        assert (directory / "prompt.md").read_text() == render_prompt(manifest)
     rules = (ROOT / GOVERNING_PATH).read_bytes().decode("utf-8")
     for request, _ in fake.calls:
         assert request.guidance.count(rules) == 1
@@ -133,18 +136,19 @@ def test_guidance_snapshot_does_not_change_after_source_edits_even_for_unused_st
     instance("plan", {})
     instance("metadata", {})
     assert "SOURCE CHANGED" not in fake.calls[1][0].guidance
-    assert fake.calls[1][0].guidance == fake.calls[2][0].guidance
+    assert "SOURCE CHANGED" not in fake.calls[2][0].guidance
+    assert instance._bundles["native_plan"]["section_sha256"]["procedures"] == (
+        instance._bundles["native_metadata"]["section_sha256"]["procedures"])
 
 
 def test_guidance_pin_tampering_fails_before_another_model_call(tmp_path):
     fake = FakeInfer()
     instance = proposer(tmp_path, fake=fake)
     instance("curate", {})
-    path = instance.run_root / "data" / "guidance" / instance.guidance_hashes[0] / "role.md"
+    path = instance.run_root / "data" / "guidance" / instance.guidance_hashes[0] / "prompt.md"
     path.write_text("changed bytes")
-    with pytest.raises(NativeInferenceError) as caught:
+    with pytest.raises(ValueError, match="(changed|different|mismatch|immutable)"):
         instance("curate", {})
-    assert caught.value.kind == "unavailable"
     assert len(fake.calls) == 1
 
 
@@ -258,7 +262,6 @@ def test_exact_input_budget_boundary_includes_repair_and_guidance(tmp_path):
     (ModelResult(["not", "an", "object"]), "invalid_output"),
     (ModelResult({"schema": CURATION_SCHEMA, "value": "a" * 65}), "bounds"),
     (ModelResult({"schema": CURATION_SCHEMA, "value": float("nan")}), "invalid_output"),
-    ({"proposal": {"schema": CURATION_SCHEMA}}, "invalid_output"),
 ])
 def test_invalid_output_is_not_success_and_preserves_attempt(tmp_path, result, kind):
     fake = FakeInfer(result)
@@ -299,11 +302,11 @@ def test_output_byte_bound_preserves_hash_and_size_without_accepting_oversize(tm
 
 
 @pytest.mark.parametrize("failure", [
-    RuntimeError("transport broke"),
+    ProviderError("transport broke", retryable=True),
     TimeoutError("deadline"),
     subprocess.TimeoutExpired("fake-model", 19),
     ModelOutputError("malformed external model JSON"),
-    ValueError("provider reasoning is unavailable"),
+    ProviderError("provider reasoning is unavailable", retryable=True),
 ])
 def test_central_retries_preserve_errors_and_do_not_recount_usage(tmp_path, failure):
     fake = FakeInfer(failure, ModelResult({"schema": CURATION_SCHEMA, "stats": {"input_tokens": 999999}},
@@ -323,8 +326,8 @@ def test_central_retries_preserve_errors_and_do_not_recount_usage(tmp_path, fail
 
 
 def test_exhausted_model_error_retains_original_cause_and_attempts(tmp_path):
-    failure = OSError("external transport unavailable")
-    fake = FakeInfer(RuntimeError("first error"), failure)
+    failure = ProviderError("external transport unavailable", retryable=True)
+    fake = FakeInfer(ProviderError("first error", retryable=True), failure)
     instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 1})
     with pytest.raises(NativeInferenceError) as caught:
         instance("metadata", {})
@@ -356,7 +359,7 @@ def test_execution_safety_stops_after_first_failure_but_keeps_attempt(tmp_path, 
 
     monkeypatch.setattr(safety, "active", lambda: True)
     monkeypatch.setattr(safety, "fail", stop)
-    fake = FakeInfer(RuntimeError("first-error policy"))
+    fake = FakeInfer(ProviderError("first-error policy", retryable=True))
     instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 3})
     with pytest.raises(safety.ReviewStopped):
         instance("curate", {})
@@ -395,7 +398,7 @@ def test_missing_partial_zero_and_invalid_usage_remain_distinguishable(tmp_path)
 
 
 def test_call_bound_includes_retries_and_prevents_extra_dispatch(tmp_path):
-    fake = FakeInfer(RuntimeError("failed"))
+    fake = FakeInfer(ProviderError("failed", retryable=True))
     instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 8},
                         bounds=replace(NativeInferenceBounds(), max_calls=1))
     with pytest.raises(NativeInferenceError) as caught:

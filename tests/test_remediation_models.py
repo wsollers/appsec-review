@@ -6,6 +6,7 @@ import pytest
 
 from appsec_review.config.remediation import RemediationModel
 from appsec_review.inference import ModelOutputError, ModelResult
+from appsec_review.inference.errors import ProviderError
 from appsec_review.jobs.job_remediation_planning.model import emit_model_event, guidance, run_model
 from appsec_review.review.models import IntegrityError
 from tests import remediation_support as support
@@ -19,8 +20,8 @@ def model(infer, *, profile=None, retrieve=None):
                      else (_ for _ in ()).throw(ValueError("closed answer expected")), retrieve=retrieve)
 
 
-@pytest.mark.parametrize("error", [TimeoutError("timeout"), RuntimeError("provider unavailable"),
-                                     ModelOutputError("unparseable"), OSError("transport failed")])
+@pytest.mark.parametrize("error", [TimeoutError("timeout"), ProviderError("provider unavailable"),
+                                     ModelOutputError("unparseable")])
 def test_writer_failures_are_explicit_unavailable_outcomes(error):
     def infer(*_args, **_kwargs):
         raise error
@@ -117,6 +118,21 @@ def test_usage_telemetry_distinguishes_unavailable_from_genuine_zero(turns, expe
     assert records[0]["usage_unavailable_reason"] == reason
 
 
+@pytest.mark.parametrize("usage,reason", [
+    ({"input_tokens": -1, "output_tokens": True}, "invalid_provider_usage"),
+    ({"input_tokens": 3, "output_tokens": 4, "usage_source": "replay"}, "recorded_replay"),
+])
+def test_specialized_telemetry_preserves_normalized_usage_reason(usage, reason):
+    from types import SimpleNamespace
+    records = []
+    answer, receipt = model(lambda *_args, **_kwargs: ModelResult(
+        {"action": "final", "result": {"safe": True}}, **usage))
+    emit_model_event(SimpleNamespace(write=lambda _event, **fields: records.append(fields)), receipt)
+    assert answer == {"safe": True}
+    assert records[0]["input_tokens"] is records[0]["output_tokens"] is None
+    assert records[0]["usage_unavailable_reason"] == reason
+
+
 @pytest.mark.parametrize("role,job", [
     ("remediation_writer", support.PLAN), ("remediation_reviewer", support.VALIDATE),
 ])
@@ -124,14 +140,15 @@ def test_guidance_validates_and_pins_exact_registered_role_and_job(tmp_path, rol
     import hashlib
     import json
     from appsec_review.storage import canonical_json
+    from appsec_review.guidance.compose import render_prompt, verify_bundle
     text, digest = guidance(support.ROOT, tmp_path, role, job_id=job)
     pinned = tmp_path / "data" / "guidance" / digest
     bundle = json.loads((pinned / "bundle.json").read_text())
-    assert bundle["role"] == role and bundle["job_id"] == job
-    assert hashlib.sha256(canonical_json(bundle)).hexdigest() == digest
-    assert all(hashlib.sha256((pinned / name).read_bytes()).hexdigest() == sha
-               for name, sha in bundle["files"].items())
-    assert text == "\n\n".join((pinned / name).read_text() for name in ("governing-rules.md", f"{role}.md"))
+    assert bundle["role_id"] == role and bundle["job"] == job
+    assert verify_bundle(bundle) == digest
+    section = next(item for item in bundle["sections"] if item["name"] == "role")
+    assert hashlib.sha256(section["text"].encode()).hexdigest() == section["source_sha256"]
+    assert text == render_prompt(bundle) == (pinned / "prompt.md").read_text()
     assert guidance(support.ROOT, tmp_path, role, job_id=job) == (text, digest)
 
 

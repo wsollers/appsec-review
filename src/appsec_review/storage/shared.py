@@ -391,10 +391,15 @@ class SharedArtifacts:
         return receipt
 
     def lookup(self, namespace: str, fingerprint: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        from appsec_review.runtime.repair import ComputationAdmission, IncompatibleComputation
+        claim = json.loads(verify_reference(self.run_root, self.actor["claim"]).read_bytes())
+        admission = ComputationAdmission.for_repair(self.run_root, claim)
         slot = safe_path(self.run_root, self._slot(namespace, fingerprint))
         if slot.exists():
             ref = reference(self.run_root, slot)
             value = verify_receipt(self.run_root, ref)
+            if admission is not None:
+                admission.verify(self.run_root, value)
             if value["mode"] == "computed":
                 self.computed(namespace, fingerprint, value["object"], computation=value["computation"],
                               dependencies=tuple(value["dependencies"]), layout=value.get("layout"))
@@ -406,6 +411,16 @@ class SharedArtifacts:
         for path in sorted(directory.iterdir()):
             candidate = verify_request(self.run_root, reference(self.run_root, path))
             value = verify_receipt(self.run_root, candidate)
+            if admission is not None:
+                try:
+                    admission.verify(self.run_root, value)
+                except IncompatibleComputation as exc:
+                    from appsec_review.observability import PipelineLog
+                    PipelineLog(self.run_root).write(
+                        "CHECKPOINT_MISSED", run_id=self.actor["run_id"], job_id=self.actor["job_id"],
+                        attempt_id=self.actor["attempt_id"], message=str(exc),
+                        details={"producer_receipt": candidate})
+                    continue
             candidates.append((candidate, value))
         if not candidates:
             return None
@@ -438,6 +453,11 @@ class SharedArtifacts:
         hit = self.lookup(namespace, fingerprint)
         if hit is not None:
             return hit[1]
+        claim = json.loads(verify_reference(self.run_root, self.actor["claim"]).read_bytes())
+        if (claim.get("repair_admission_sha256")
+                and safe_path(self.run_root, f"{REQUESTS}/{namespace}/{fingerprint}").exists()):
+            raise ValueError("repair cannot relabel an unresolved or incompatible named computation as legacy; "
+                             "regenerate it with a new computation identity or use a successor run")
         if binding.exists():
             raise ValueError("named immutable publication has no complete producer receipt")
         return self.legacy(namespace, fingerprint, obj, computation=computation or {})[1]
