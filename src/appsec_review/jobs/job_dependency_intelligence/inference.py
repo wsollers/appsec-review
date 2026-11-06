@@ -6,11 +6,14 @@ from collections.abc import Mapping
 from dataclasses import replace
 import hashlib
 from pathlib import Path
+import subprocess
 from typing import Any
 
 from appsec_review.guidance.compose import load_registry
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import Infer, ModelRequest
+from appsec_review.inference.errors import ExecutionLimit, ModelOutputError, ProviderError, failure_category
+from appsec_review.inference.execution import Execution, RetryPolicy
 from appsec_review.storage import atomic_bytes, canonical_json
 from appsec_review.storage.shared import publish_named
 
@@ -97,24 +100,37 @@ def resolve_with_inference(dependency: Mapping[str, Any], *, repository_root: Pa
         return dict(dependency), {"dependency_id": dependency_id, "kind": "bounds",
                                   "detail": "native inference request exceeds its token-derived byte bound"}
     from appsec_review.runtime import execution_safety as safety
+    policy = RetryPolicy(int(model["retries"]) + 1, True, True, True)
+    engine = Execution(timeout_seconds=int(model["timeout_seconds"]), max_calls=policy.attempts,
+                       guidance_sha256=guidance_sha)
     errors: list[str] = []
-    for attempt in range(1 if safety.active() else int(model["retries"]) + 1):
-        safety.check_running()
+    retry_reason = None
+    for attempt in range(1, policy.attempts + 1):
         try:
-            result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
+            result = engine.call(infer, request, timeout_seconds=int(model["timeout_seconds"]),
+                                 retry_count=attempt - 1, retry_reason=retry_reason)
             proposal = result.proposal
             if (proposal.get("schema") == PROPOSAL_SCHEMA and
                     proposal.get("candidate_id") == candidate.get("candidate_id") and
                     proposal.get("repository") is None and proposal.get("confidence") == 0):
                 return dict(dependency), None
-            resolved = apply_model_resolution(dependency, proposal, supported_hosts=supported_hosts)
+            try:
+                resolved = apply_model_resolution(dependency, proposal, supported_hosts=supported_hosts)
+            except ValueError as exc:
+                raise ModelOutputError(str(exc)) from exc
             return resolved, None
-        except Exception as exc:
+        except (ModelOutputError, ProviderError, TimeoutError, subprocess.TimeoutExpired, ExecutionLimit) as exc:
             errors = [f"{type(exc).__name__}: {exc}"[:2048]]
             safety.retain_failure("dependency.inference", exc, dependency_id=dependency_id)
             safety.fail(errors[0], action="dependency.inference")
-            if attempt < int(model["retries"]):
-                request = replace(request, repair_errors=tuple(errors), prior_response=None)
+            try:
+                retry = engine.retry(attempt, exc, policy)
+            except ExecutionLimit:
+                retry = False
+            if not retry:
+                break
+            retry_reason = failure_category(exc).value
+            request = replace(request, repair_errors=tuple(errors), prior_response=None)
     return dict(dependency), {"dependency_id": dependency_id, "kind": "model_failure",
                               "detail": errors[0] if errors else "native repository inference failed"}
 

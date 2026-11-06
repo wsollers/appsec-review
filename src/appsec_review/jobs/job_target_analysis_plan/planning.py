@@ -572,18 +572,26 @@ def feedback_request(request, catalog, limits):
 
 
 def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_root, identity,
-                     clock=None, on_call=None, call_timeout_seconds=None):
+                     clock=None, on_call=None, call_timeout_seconds=None, context=None, guidance_sha256=None):
     """One finite evidence/repair conversation. Only a validated complete final is reusable."""
     from dataclasses import asdict, replace
     import time
+    import subprocess
     from appsec_review.inference import ModelOutputError
+    from appsec_review.inference.errors import ExecutionLimit, FailureCategory, ProviderError, failure_category
+    from appsec_review.inference.execution import Execution, RetryPolicy
     from appsec_review.storage.shared import safe_path, immutable_bytes
     from appsec_review.jobs.build_discovery import normalize_build_recipe
     clock = clock or time.monotonic
     call_timeout_seconds = limits.deadline_seconds if call_timeout_seconds is None else call_timeout_seconds
     if type(call_timeout_seconds) is not int or call_timeout_seconds < 1:
         raise ValueError("feedback model call timeout must be a positive integer")
-    started = clock()
+    policy = RetryPolicy(limits.max_calls, on_timeout=True, on_invalid_output=True)
+    engine = Execution(timeout_seconds=limits.deadline_seconds, max_calls=limits.max_calls,
+                       max_request_bytes=min(limits.max_request_bytes, request.max_input_tokens * 4),
+                       max_response_bytes=limits.max_response_bytes, clock=clock, context=context,
+                       guidance_sha256=guidance_sha256)
+    started = engine.deadline.started
     metrics = {"request_bytes": 0, "response_bytes": 0, "evidence_bytes": 0, "evidence_rounds": 0}
     def finish(value):
         return {**value, "metrics": {**metrics, "elapsed_seconds": clock() - started}}
@@ -591,7 +599,8 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
     key = hashlib.sha256(canonical_json({
         "identity": identity, "request": asdict(request), "limits": asdict(limits),
         "source": catalog["source_fingerprint"], "call_timeout_seconds": call_timeout_seconds,
-        "accepted_units": catalog.get("build_units", ()), "rules": "bounded-feedback/1",
+        "guidance_sha256": guidance_sha256,
+        "accepted_units": catalog.get("build_units", ()), "rules": "bounded-feedback/2",
     })).hexdigest()
     cache_path = safe_path(cache_root, key + ".json")
     if cache_path.is_file():
@@ -620,9 +629,22 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                        "calls": 0, "errors": [], "gap": None, "cache_key": key, "cache_hit": True})
     documents, calls, rounds, errors = {}, 0, 0, []
     current = request
+    retry_count, retry_reason = 0, None
+    def repair_allowed(error=FailureCategory.SCHEMA):
+        nonlocal retry_count, retry_reason
+        try:
+            allowed = engine.retry(calls, error, policy)
+        except ExecutionLimit:
+            errors.append("internal_feedback_deadline")
+            return False
+        if allowed:
+            retry_count += 1
+            retry_reason = error.value if isinstance(error, FailureCategory) else failure_category(error).value
+        return allowed
     while calls < limits.max_calls:
-        remaining = limits.deadline_seconds - (clock() - started)
-        if remaining <= 0:
+        try:
+            engine.deadline.remaining()
+        except ExecutionLimit:
             errors.append("internal_feedback_deadline")
             break
         current = replace(current, summary=model_safe(current.summary),
@@ -637,33 +659,48 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
         if on_call:
             on_call("STARTED", calls, key, None)
         try:
-            result = infer(current, timeout_seconds=max(
-                1, min(int(remaining), call_timeout_seconds, limits.deadline_seconds)))
-        except (ModelOutputError, TimeoutError) as exc:
-            errors = ["model_output_invalid" if isinstance(exc, ModelOutputError) else "model_timeout"]
+            result = engine.call(infer, current, timeout_seconds=call_timeout_seconds,
+                                 retry_count=retry_count, retry_reason=retry_reason)
+        except (ModelOutputError, TimeoutError, subprocess.TimeoutExpired, ProviderError, ExecutionLimit) as exc:
+            errors = [("feedback_response_byte_bound" if "byte bound" in str(exc) else "model_output_invalid")
+                      if isinstance(exc, ModelOutputError) else
+                      "model_provider_failure" if isinstance(exc, ProviderError) else
+                      "internal_feedback_deadline" if isinstance(exc, ExecutionLimit) and
+                      exc.code == "execution_deadline" else
+                      exc.code if isinstance(exc, ExecutionLimit) else "model_timeout"]
             if on_call:
                 on_call("REJECTED", calls, key, type(exc).__name__)
+            if not repair_allowed(exc):
+                break
             current = replace(current, repair_errors=tuple(errors), prior_response=None)
             continue
+        finally:
+            calls = engine.calls
+            metrics["response_bytes"] = engine.response_bytes
         if on_call:
             on_call("COMPLETED", calls, key, None, result)
         raw_size = len(result.raw_response.encode()) if result.raw_response is not None else 0
         response_size = max(raw_size, len(canonical_json(result.proposal)))
-        metrics["response_bytes"] += response_size
         if clock() - started >= limits.deadline_seconds:
             errors = ["internal_feedback_deadline"]
             break
         if response_size > limits.max_response_bytes:
             errors = ["feedback_response_byte_bound"]
+            if not repair_allowed():
+                break
             current = replace(current, repair_errors=tuple(errors), prior_response=None)
             continue
         if not isinstance(result.proposal, Mapping):
             errors = ["model_response_must_be_an_object"]
+            if not repair_allowed():
+                break
             current = replace(current, repair_errors=tuple(errors), prior_response=None)
             continue
         proposal = copy.deepcopy(dict(result.proposal))
         if model_safe(proposal) != proposal:
             errors = ["sensitive_model_output_rejected"]
+            if not repair_allowed():
+                break
             current = replace(current, repair_errors=tuple(errors), prior_response=None)
             continue
         if proposal.get("schema") == PROPOSAL_SCHEMA and proposal.get("action") == "need_evidence":
@@ -693,7 +730,9 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                     if item["path"] in documents or item["path"] in additions:
                         request_errors.append("evidence_request_makes_no_progress")
                         continue
-                    if clock() - started >= limits.deadline_seconds:
+                    try:
+                        engine.deadline.remaining()
+                    except ExecutionLimit:
                         request_errors.append("internal_feedback_deadline")
                         break
                     payload = read_document(inventory[item["path"]], limits.max_document_bytes)
@@ -748,6 +787,8 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                             "model abstained: " + "; ".join(
                                 f"{item['build_unit_id']}: {model_safe(item['reason'])}" for item in withheld)
                             if withheld else None), "cache_key": key, "cache_hit": False})
+        if not repair_allowed():
+            break
         current = replace(current, repair_errors=tuple(model_safe(errors[:20])), prior_response=None)
     return finish({"status": "BUDGET_EXCEEDED", "proposal": None, "documents": list(documents.values()),
             "calls": calls, "errors": model_safe(errors[:20]), "gap": (
