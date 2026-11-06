@@ -492,3 +492,43 @@ already an ancestor of WSL main, but this does not authorize clearing someone el
 Neither this session nor its integration worker ran `git am` or changed those state files.
 Its owner must resolve that operation; an untracked-file exception alone would not permit
 landing. The nine provenance files remain protected.
+
+The provenance-closure fixes are committed at
+**`61162de502ea75c8d8a9be3a151f9a2325a82756`**, tree
+**`950504c9a8761c8bf38a3b592889be21eb1e7226`**. The final frozen-tree command below passed
+**333 tests in 248.126 s**, with the same two independently proven baseline failures explicitly
+deselected. The worktree was clean before and after; no integration, acceptance or live test ran.
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py tests/test_repair_dagster_contract.py tests/test_job_test_selection.py \
+  tests/test_job_runtime.py tests/test_handoff_interchange.py tests/test_review_run_cli.py \
+  tests/test_wave1_resume.py tests/test_runtime_launch.py \
+  tests/test_source_history_analysis.py::test_job_binds_mainline_history_ranks_by_sii_and_feeds_the_plan \
+  tests/test_shared_artifacts.py::test_same_request_can_preserve_different_results_and_pins_selection \
+  tests/test_shared_artifacts.py::test_concurrent_writers_deduplicate_without_rebinding_receipts \
+  tests/test_shared_artifacts.py::test_interrupted_publication_retains_complete_bytes_and_retries_idempotently \
+  tests/test_shared_artifacts.py::test_missing_or_tampered_shared_state_never_silently_recomputes \
+  tests/test_shared_artifacts.py::test_publication_rejects_noncanonical_or_escaping_paths \
+  tests/test_shared_artifacts.py::test_publication_and_consumption_reject_symlinks_even_with_matching_bytes \
+  tests/test_shared_artifacts.py::test_wrong_existing_object_bytes_are_never_overwritten \
+  tests/test_shared_artifacts.py::test_partial_write_never_publishes_and_retries_without_deleting_evidence \
+  tests/orchestration/dagster/test_definitions.py::test_definitions_reject_registry_config_drift \
+  tests/orchestration/dagster/test_definitions.py::test_job_level_disabled_setting_is_transparent_to_dagster \
+  tests/orchestration/dagster/test_definitions.py::test_environment_dependency_is_required_or_transparently_disabled \
+  tests/orchestration/dagster/test_definitions.py::test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs \
+  --deselect=tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps \
+  --deselect=tests/test_runtime_launch.py::test_every_registered_job_outside_the_target_set_is_named \
+  --basetemp=test/tmp/recovery-final-61162 --tb=short --maxfail=4
+```
+
+Configured Ruff checks passed on all changed Python paths (**0.105 s**), and the affected public
+Job mypy check passed (**3.015 s**). Two real source-release generations produced identical
+canonical bytes over **1,612 files/46 jobs** in **44.898 s**, with identity
+`b52f5b59d8c3fa0bcbd9d5084feba93089c110dc435db1d4691dc51d7bbc4fd5`.
+
+The narrowly necessary additional implementation surfaces are `runtime/handoff.py` and
+`storage/shared.py`. The latter's previously committed CRLF bytes were normalized to the required
+portable LF while adding the guard; ignoring end-of-line differences shows only 20 added logical
+lines in that file. No byte-pinned rule pack, fixture or customer artifact was normalized.
+This follow-up does not relax either WSL-master blocker.
