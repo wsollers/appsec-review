@@ -7,7 +7,7 @@ them. They are different, and this page is the one place that says which is whic
 |---|---|---|
 | **Retrieval tool** | A typed, bounded read of accepted index shards, for example `search`, `find`, `read_excerpt`, `trace`, `resolve_evidence`, `query_observations`, `query_build_security`, `query_code_graph`. The names and parameter schemas are in `docs/schemas/retrieval-mcp-tools.json` and `src/appsec_review/mcp/schema.py`. | Every consumer below. |
 | **Retrieval core** | `appsec_review.retrieval`: the code that opens the accepted shards read-only and answers a tool call. | Jobs, review cells, and the MCP adapter. |
-| **MCP adapter** | `appsec_review.mcp` and the `appsec-review-mcp` command: a read-only JSON-RPC (MCP) stdio server over the retrieval core, pinned to one accepted run. | External clients and the OWASP workbench. **Not** review cells. |
+| **MCP adapter** | `appsec_review.mcp` and the `appsec-review-mcp` command: one read-only JSON-RPC stdio operator service selecting an explicit application run. Accepted retrieval is manifest-pinned; operational inspection can report missing/unaccepted state. | External development clients and the OWASP workbench. **Not** review cells. |
 | **Runtime skill** | A bounded guidance file under `pipeline/skills/<name>/SKILL.md`, registered for one job and hash-pinned with its guidance. | Configured model workers, including the review roles' selected evidence-checking procedures and the `binary-evidence` skill (attached to review cells only when the run has a binary shard). It grants no tools. |
 
 ## How each consumer reaches the data
@@ -30,11 +30,17 @@ accepted index shards (read-only, hash-verified)
 - **The tool catalog is part of the prompt.** Each cell is told which tools it is granted, their exact
   parameter schemas, and a worked request (`turn_protocol.tool_catalog`). It is not discovered through
   an MCP `tools/list` call.
-- **Authority is shared, transport is not.** The review cell loop and the MCP adapter apply the same
+- **Scoped review authority is shared, transport is not.** The review cell loop and the scoped MCP adapter apply the same
   rules: only granted tools, no `path`, glob, regular expression, query-language or URL parameters,
   entity-scope checks, and page, depth and byte caps. A review cell's capability is a frozen record
   bound by hash to the run, manifest, package, role and round. The scoped MCP session uses the role
   tool lists in `mcp/capability.py::_ROLE_TOOLS`.
+- **Operator queries are not review capabilities.** The external stdio service additionally reads
+  bounded run/job/attempt metadata, structural log pages and exact recorded recovery plans. Its
+  optional fixed Dagster query requires a trusted startup endpoint and checks the dispatch UUID's
+  application tag. It never mutates a run, executes a plan, or exposes raw streams. These schemas
+  live in `mcp/operator_schema.py`, not worker tool catalogs. See
+  [`retrieval-mcp.md`](../operations/retrieval-mcp.md) for explicit client registration and limits.
 - **`query_owasp_workbench` is MCP-only.** It reads a separate store, so it is not grantable to a
   review cell. This does not exclude OWASP context from review: accepted publications project to
   PRECOMPUTED `control_evidence`, then provisional lead/hunt packages and labelled red/blue/verifier
