@@ -27,17 +27,22 @@ from collections import defaultdict
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 import json
+import os
 from itertools import zip_longest
 from pathlib import Path
 import threading
 import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
+from uuid import uuid4
 
 from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings, TeamPackageBudget
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
 from appsec_review.guidance.routing import unit_sources
 from appsec_review.guidance.routing import rank_personas
-from appsec_review.inference import ModelResult, ReviewModelRequest
+from appsec_review.inference import ModelRequest, ModelResult, ReviewModelRequest
+from appsec_review.inference.execution import CallContext
+from appsec_review.inference.recording import MODE_ENVIRONMENT
+from appsec_review.inference.usage import Usage
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.retrieval.model import EntityKind
 
@@ -47,7 +52,7 @@ BINARY_ENTITY_PREFIXES = tuple(f"asr:{kind.value}:" for kind in (
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.adjudication import adjudicate
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
-from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
+from appsec_review.review.cells import CellBudgetExceeded, CellNotLaunched, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
 from appsec_review.review.result_cache import Memo
 from appsec_review.review.claims import normalize_claim
 from appsec_review.review.compact import Expander, expand_blue, expand_judge, expand_red, expand_verifier
@@ -153,6 +158,7 @@ class ReviewContext:
     max_page_size: int = 20
     max_depth: int = 4
     attempt_id: str = "-"
+    allow_new_calls: bool = True
     # The run's blue-cell result memo (``review.result_cache``); ``None`` when disabled.
     result_cache: Any = None
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -457,45 +463,51 @@ def _validator(ctx: ReviewContext, role: Role, *, claim_id: str | None = None, t
 
 
 class _Guard:
-    """Per-cell infer wrapper: wall-clock deadline, token caps, job budget charges, request capture."""
+    """Reserve one physical dispatch atomically; the shared cell engine owns execution bounds."""
 
-    def __init__(self, ctx: ReviewContext, cell: _Cell, profile: ModelProfileSettings, *, capture: bool,
-                 clock: Callable[[], float] = time.monotonic) -> None:
-        self.ctx, self.cell, self.profile, self.capture, self.clock = ctx, cell, profile, capture, clock
-        self.deadline: float | None = None
+    def __init__(self, ctx: ReviewContext, cell: _Cell, profile: ModelProfileSettings, *, capture: bool) -> None:
+        self.ctx, self.cell, self.profile, self.capture = ctx, cell, profile, capture
         self.dispatches = 0
+        self.owner_id = f"{ctx.attempt_id}:{cell.cell_id}:{uuid4().hex}"
+        self.active_started = False
 
-    def __call__(self, request: ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
-        if not self.ctx.budget.cell_launch_allowed():
+    def reserve(self, request: ModelRequest | ReviewModelRequest) -> str:
+        from appsec_review.runtime import execution_safety as safety
+        safety.check_running()
+        if not getattr(self.ctx, "allow_new_calls", True):
+            raise CellBudgetExceeded("team_package_not_admitted")
+        if not self.active_started and self.ctx.budget.snapshot().timing_mode == "active_v2":
+            self.ctx.budget.resume_execution(self.owner_id)
+            self.active_started = True
+        reservation = self.ctx.budget.reserve_call(
+            owner_id=self.owner_id, input_tokens=request.max_input_tokens,
+            output_tokens=request.max_output_tokens,
+            replay=os.environ.get(MODE_ENVIRONMENT) == "replay")
+        if reservation is None:
             raise CellBudgetExceeded(f"job budget exhausted ({self.ctx.budget.usage_exhausted()})")
-        now = self.clock()
-        if self.deadline is None:
-            self.deadline = now + self.profile.timeout_seconds
-        remaining = self.deadline - now
-        if remaining <= 0:
-            raise CellBudgetExceeded("cell_deadline")
+        return reservation
+
+    def settle(self, reservation: str, *, usage: Usage, dispatched: bool) -> None:
+        self.ctx.budget.settle_call(reservation, usage=usage if dispatched else None, dispatched=dispatched)
+
+    def dispatch(self, request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
         if self.capture:
             self.cell.requests.append(json.dumps(asdict(request), sort_keys=True, default=str).encode("utf-8"))
+        self.dispatches += 1
+        return self.ctx.infer(request, timeout_seconds=timeout_seconds)
+
+    def __call__(self, request: ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
+        from appsec_review.runtime import execution_safety as safety
+        reservation = self.reserve(request)
+        usage, dispatched = Usage.from_result(None), False
         try:
-            from appsec_review.observability.model_calls import call_model
-            spec = self.cell.spec
-            self.dispatches += 1
-            result = call_model(self.ctx.infer, request,
-                timeout_seconds=max(1, min(int(timeout_seconds), int(remaining) or 1)),
-                run_root=self.ctx.run_root, run_id=self.ctx.run_id,
-                job_id="job_inference_security_review", attempt_id=self.ctx.attempt_id,
-                step_id=f"{spec.lane.value}_review", task_id="teams",
-                package_id=spec.package_id, lane=spec.lane.value)
-        except BaseException:
-            self.ctx.budget.charge(model_turns=1)
-            raise
-        input_tokens, output_tokens = int(result.input_tokens or 0), int(result.output_tokens or 0)
-        self.ctx.budget.charge(model_turns=1, input_tokens=input_tokens, output_tokens=output_tokens)
-        if input_tokens > self.profile.max_input_tokens or output_tokens > self.profile.max_output_tokens:
-            raise CellBudgetExceeded("cell_token_cap")
-        if self.clock() > self.deadline:
-            raise CellBudgetExceeded("cell_deadline")
-        return result
+            safety.check_running()
+            dispatched = True
+            result = self.dispatch(request, timeout_seconds=timeout_seconds)
+            usage = Usage.from_result(result)
+            return usage.normalize(result)
+        finally:
+            self.settle(reservation, usage=usage, dispatched=dispatched)
 
 
 def _not_launched(cell: _Cell, reason: str, gap_class: GapClass = GapClass.BUDGET_GAP) -> tuple[CellRecord, Gap]:
@@ -526,21 +538,39 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
                 "gap_count": len(outcome.gaps),
                 "duration_ms": max(0, int((time.monotonic() - started) * 1000))})
 
-    if not ctx.budget.cell_launch_allowed():
-        cell.record, gap = _not_launched(cell, f"job budget exhausted ({ctx.budget.usage_exhausted()})")
-        outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
-        cell.outcome = outcome
-        completed(outcome, 0)
-        return
     retry = ctx.settings.retry
     guard = _Guard(ctx, cell, ctx.profile(cell.spec.role), capture=capture)
-    outcome = reuse_or_run(cell.spec, infer=guard, core=ctx.core, capability=cell.capability,
-                           receipts_root=ctx.receipts_root, validate_final=validate, memo=_memo(ctx, cell),
-                           max_attempts=retry.max_attempts, retry_on_timeout=retry.retry_on_timeout,
-                           retry_on_provider_error=retry.retry_on_provider_error,
-                           retry_on_invalid_output=retry.retry_on_invalid_output)
+    try:
+        outcome = reuse_or_run(cell.spec, infer=guard.dispatch, core=ctx.core, capability=cell.capability,
+                               receipts_root=ctx.receipts_root, validate_final=validate, memo=_memo(ctx, cell),
+                               max_attempts=retry.max_attempts, retry_on_timeout=retry.retry_on_timeout,
+                               retry_on_provider_error=retry.retry_on_provider_error,
+                               retry_on_invalid_output=retry.retry_on_invalid_output,
+                               backoff_seconds=retry.backoff_seconds,
+                               accounting=guard,
+                               launch_allowed=lambda: getattr(ctx, "allow_new_calls", True)
+                                   and ctx.budget.cell_launch_allowed(),
+                               execution_context=CallContext(ctx.run_root, ctx.run_id,
+                                   "job_inference_security_review", ctx.attempt_id,
+                                   f"{cell.spec.lane.value}_review", "teams",
+                                   package_id=cell.spec.package_id, lane=cell.spec.lane.value))
+    except CellNotLaunched:
+        reason = ("team package is not admitted" if not getattr(ctx, "allow_new_calls", True) else
+                  f"job budget exhausted ({ctx.budget.usage_exhausted()})")
+        cell.record, gap = _not_launched(cell, reason)
+        cell.outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+        completed(cell.outcome, 0)
+        return
+    except IntegrityError:
+        raise
+    except Exception as exc:
+        raise IntegrityError(f"review execution contract failed: {type(exc).__name__}") from exc
     if not outcome.reused and outcome.counts.get("queries"):
         ctx.budget.charge(retrieval_queries=int(outcome.counts["queries"]))
+    if guard.active_started:
+        terminal_receipt = outcome.receipt_paths[-1]
+        ctx.budget.pause_execution(guard.owner_id, cessation_evidence=(
+            f"{terminal_receipt.relative_to(ctx.run_root).as_posix()}#sha256={file_sha256(terminal_receipt)}"))
     cell.outcome, cell.record = outcome, outcome.record
     completed(outcome, guard.dispatches)
 
@@ -835,14 +865,17 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
     result.routing = {key: value for key, value in routing.items() if key != "gaps"}
     result.gaps.extend(routing["gaps"])
     reds = _red_cells(ctx, work, routing)
-    if launch and not ctx.budget.reserve(work.lane):
-        launch, not_launched_reason = False, f"job budget exhausted ({ctx.budget.snapshot().exhausted})"
     if not launch:
         _skip(result, work, reds, not_launched_reason or "not launched", GapClass.BUDGET_GAP)
         return result
+    admitted = ctx.budget.reserve(work.lane)
+    if not admitted:
+        ctx = replace(ctx, allow_new_calls=False)
+        result.gaps.append(make_gap(GapClass.BUDGET_GAP, work.package_id,
+                                    f"new team work not admitted: job budget exhausted ({ctx.budget.snapshot().exhausted})"))
     try:
         with ctx.semaphore.acquire(work.lane):
-            result.launched = True
+            result.launched = admitted
             _run_rounds(ctx, work, routing, reds, result)
     except TeamUnavailable:
         _skip(result, work, reds, "no review team became free within the wait bound", GapClass.WORKER_GAP)

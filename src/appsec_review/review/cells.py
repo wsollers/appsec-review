@@ -29,7 +29,7 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
 from appsec_review.inference.errors import ExecutionLimit, FailureCategory, ProviderError, failure_category
-from appsec_review.inference.execution import CallContext, Execution, RetryPolicy
+from appsec_review.inference.execution import CallAccounting, CallContext, Execution, RetryPolicy
 from appsec_review.inference.usage import Usage
 from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
 from appsec_review.review.capability import (
@@ -62,7 +62,7 @@ Infer = Callable[..., ModelResult]
 ValidateFinal = Callable[[Mapping[str, Any]], Sequence[str]]
 
 
-class CellBudgetExceeded(Exception):
+class CellBudgetExceeded(ExecutionLimit):
     """Raised by an infer wrapper when a cell reaches its wall-clock deadline or token cap.
 
     The cell ends ``timed_out`` with a ``budget_gap``; it is never retried.
@@ -71,6 +71,10 @@ class CellBudgetExceeded(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = str(reason)[:200]
+
+
+class CellNotLaunched(CellBudgetExceeded):
+    """No reusable result exists and the caller forbids a fresh cell execution."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,11 +197,15 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
              retry_on_timeout: bool = True, retry_on_provider_error: bool = True,
              retry_on_invalid_output: bool = False, backoff_seconds: tuple[int, ...] = (),
              execution_context: CallContext | None = None,
+             accounting: CallAccounting | None = None,
+             launch_allowed: Callable[[], bool] | None = None,
              clock: Callable[[], float] | None = None, sleep: Callable[[float], None] | None = None) -> CellOutcome:
     """Run one cell to exactly one terminal status, retrying per policy without widening it."""
     from appsec_review.runtime import execution_safety as safety
     safety.check_running()
     cell_id = _bind(spec, capability, core)
+    if launch_allowed is not None and not launch_allowed():
+        raise CellNotLaunched("new_cell_not_admitted")
     cell_root = Path(receipts_root) / cell_id
     attempts: list[_Attempt] = []
     paths: list[Path] = []
@@ -206,7 +214,7 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
                          retry_on_invalid_output, backoff_seconds)
     execution = Execution(timeout_seconds=spec.timeout_seconds,
                           max_calls=capability.max_turns * policy.attempts,
-                          context=execution_context, clock=clock or time.monotonic,
+                          context=execution_context, accounting=accounting, clock=clock or time.monotonic,
                           sleep=sleep or time.sleep)
     for retry_index in range(policy.attempts):
         safety.check_running()
@@ -818,7 +826,7 @@ def _plain(value: Any) -> Any:
 
 def _total(values: Iterator[int | None]) -> int | None:
     values = list(values)
-    return sum(values) if all(value is not None for value in values) else None
+    return sum(value for value in values if value is not None) if all(value is not None for value in values) else None
 
 
 def _usage(attempt: _Attempt, entry: dict[str, Any], usage: Usage, *, dispatched: bool) -> None:
@@ -956,5 +964,5 @@ def _valid_reused_from(value: Any, cell_id: str) -> bool:
         re.fullmatch(r"[0-9a-f]{64}", value["memo_key"]) is not None
 
 
-__all__ = ["CellBudgetExceeded", "CellOutcome", "CellSpec", "EXECUTOR_VERSION", "RECEIPT_SCHEMA", "TURN_SCHEMA",
+__all__ = ["CellBudgetExceeded", "CellNotLaunched", "CellOutcome", "CellSpec", "EXECUTOR_VERSION", "RECEIPT_SCHEMA", "TURN_SCHEMA",
            "cell_fingerprint", "reuse_or_run", "run_cell"]

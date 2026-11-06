@@ -36,7 +36,7 @@ class Usage:
         reason = ("recorded_replay" if result.usage_source == "replay" else
                   "invalid_provider_usage" if invalid else result.usage_unavailable_reason or
                   ("provider_usage_missing" if any(value is None for value in values[:2]) else None))
-        return cls(*values, source=result.usage_source, unavailable_reason=reason)
+        return cls(values[0], values[1], values[2], source=result.usage_source, unavailable_reason=reason)
 
     @property
     def actual(self) -> dict[str, int | None]:
@@ -52,4 +52,5 @@ class Usage:
 
 def total_reported(values: list[int | None]) -> int | None:
     """A cumulative total is unknown if any contributing call is unknown."""
-    return sum(values) if values and all(value is not None for value in values) else None
+    return sum(value for value in values if value is not None) \
+        if values and all(value is not None for value in values) else None

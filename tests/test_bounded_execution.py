@@ -240,3 +240,87 @@ def test_invalid_retry_contract_is_explicit():
         RetryPolicy(on_timeout="true")
     with pytest.raises(ValueError, match="attempt"):
         RetryPolicy(2).allows(0, FailureCategory.TIMEOUT)
+
+
+def test_accounting_refusal_never_reports_a_physical_model_call(tmp_path):
+    class Accounting:
+        def reserve(self, request):
+            raise ExecutionLimit("job_budget_exhausted")
+
+        def settle(self, *args, **kwargs):
+            pytest.fail("no reservation was made")
+
+    engine = Execution(timeout_seconds=20, max_calls=1, accounting=Accounting(),
+                       context=CallContext(tmp_path, "run", "job", "attempt"))
+    with pytest.raises(ExecutionLimit):
+        engine.call(lambda *a, **kw: pytest.fail("not admitted"), request(), timeout_seconds=20)
+    assert not engine.receipts[0].dispatched and engine.calls == 0
+    assert PipelineLog(tmp_path).read() == ([], False)
+
+
+def test_cancellation_after_reserving_settles_without_new_spend():
+    reserved = False
+    settled = []
+
+    class Accounting:
+        def reserve(self, request):
+            nonlocal reserved
+            reserved = True
+            return "reservation-1"
+
+        def settle(self, reservation, *, usage, dispatched):
+            settled.append((reservation, dispatched, usage))
+
+    def check():
+        if reserved:
+            raise ModelCancelled("cancelled before transport")
+
+    engine = Execution(timeout_seconds=20, max_calls=1, accounting=Accounting(), check_cancelled=check)
+    with pytest.raises(ModelCancelled):
+        engine.call(lambda *a, **kw: pytest.fail("not admitted"), request(), timeout_seconds=20)
+    assert settled[0][:2] == ("reservation-1", False)
+    assert not engine.receipts[0].dispatched
+
+
+def test_accounting_failure_is_explicit_and_does_not_hide_cancellation():
+    class Accounting:
+        def reserve(self, request):
+            return "reservation-1"
+
+        def settle(self, *args, **kwargs):
+            raise OSError("storage unavailable")
+
+    engine = Execution(timeout_seconds=20, max_calls=1, accounting=Accounting())
+    with pytest.raises(ExecutionContractError, match="settlement failed"):
+        engine.call(lambda *a, **kw: answer(), request(), timeout_seconds=20)
+    assert engine.receipts[0].accounting_error_class == "OSError"
+    assert engine.receipts[0].category == "contract"
+    engine = Execution(timeout_seconds=20, max_calls=1, accounting=Accounting())
+
+    def cancelled(*args, **kwargs):
+        raise ModelCancelled("stop")
+
+    with pytest.raises(ModelCancelled) as raised:
+        engine.call(cancelled, request(), timeout_seconds=20)
+    assert "settlement failed" in raised.value.__notes__[0]
+    assert engine.receipts[0].category == "cancelled"
+    assert engine.receipts[0].accounting_error_class == "OSError"
+
+
+def test_new_receipts_and_run_budget_have_declared_inventory_owners(tmp_path):
+    from appsec_review.indexing.inventory import Claim, FileClaims, runtime_claims, scan_run_tree
+    from appsec_review.jobs.job_inference_security_review.datasets import DATASETS
+    from appsec_review.review.budget import JobBudget
+    from tests.review.test_budget import _limits
+
+    engine = Execution(timeout_seconds=20, max_calls=1,
+                       context=CallContext(tmp_path, "run", "job", "attempt"))
+    engine.call(lambda *a, **kw: answer(), request(), timeout_seconds=20)
+    budget = JobBudget.for_run(tmp_path, _limits())
+    dataset = next(item for item in DATASETS if item.output_kind == "review_cells")
+    claims = FileClaims([*runtime_claims({}),
+                         Claim("job_inference_security_review", dataset.step, dataset.output_kind, dataset)])
+    assert claims.file(budget.state_path.relative_to(tmp_path).as_posix()).declaration.disposition == "protected"
+    tree = scan_run_tree(tmp_path, claims, max_files=100)
+    assert tree.unaccounted == [] and not tree.scan_errors
+    assert any(key[2] == "model_executions" for key in tree.groups)

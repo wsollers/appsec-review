@@ -1,5 +1,6 @@
 from dataclasses import replace
 import json
+import shutil
 
 import pytest
 
@@ -125,3 +126,38 @@ def test_first_error_mode_preserves_one_failed_receipt_and_no_retry(tmp_path, mo
         run(tmp_path, infer, max_attempts=3)
     assert len(infer.requests) == 1
     assert len(list((tmp_path / "cells").glob("*/attempt-*.json"))) == 1
+
+
+def test_recorded_timeout_replays_through_real_cell_retries_without_billing(tmp_path, monkeypatch):
+    from appsec_review.inference.recording import (
+        MODE_ENVIRONMENT, RECORDINGS, REPLAY_ENVIRONMENT, recorded, unit_scope,
+    )
+    from appsec_review.inference.execution import CallContext
+    from appsec_review.observability.events import PipelineLog
+
+    first_root, replay_root = tmp_path / "record", tmp_path / "replay-run"
+    provider = ScriptedInfer(TimeoutError("bounded timeout"), final(LEAD))
+    monkeypatch.setenv(MODE_ENVIRONMENT, "record")
+    with unit_scope(run_root=first_root, job_id="job_inference_security_review",
+                    repository_root=None, target_root=None):
+        first = run(first_root, recorded(provider), max_attempts=2)
+    assert first.record.status is CellStatus.SUCCEEDED and len(provider.requests) == 2
+    recordings = first_root / RECORDINGS
+    replay_copy = tmp_path / "recording-copy"
+    shutil.copytree(recordings, replay_copy)
+    monkeypatch.setenv(MODE_ENVIRONMENT, "replay")
+    monkeypatch.setenv(REPLAY_ENVIRONMENT, str(replay_copy))
+
+    def never(*args, **kwargs):
+        pytest.fail("replay must not call a provider")
+
+    with unit_scope(run_root=replay_root, job_id="job_inference_security_review",
+                    repository_root=None, target_root=None):
+        replay = run(replay_root, recorded(never), max_attempts=2,
+                     execution_context=CallContext(replay_root, "run", "job_inference_security_review", "attempt"))
+    assert replay.result == first.result and len(replay.receipt_paths) == 2
+    assert replay.counts["input_tokens"] == replay.counts["output_tokens"] == 0
+    events, _ = PipelineLog(replay_root).read()
+    completed = [row["details"] for row in events if row["event_type"] == "MODEL_CALL_COMPLETED"]
+    assert completed[0]["terminal_status"] == "TIMED_OUT"
+    assert all(row["execution_mode"] == "replay" and row["input_tokens"] is None for row in completed)

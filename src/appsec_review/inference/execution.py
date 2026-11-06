@@ -11,10 +11,11 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import time
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 from appsec_review.runtime import execution_safety as safety
@@ -72,6 +73,12 @@ class CallContext:
             return None
         return cls(owner.run_root, str(owner.actor["run_id"]), str(owner.actor["job_id"]),
                    str(owner.actor["attempt_id"]))
+
+
+class CallAccounting(Protocol):
+    def reserve(self, request: ModelRequest | ReviewModelRequest) -> str: ...
+
+    def settle(self, reservation: str, *, usage: Usage, dispatched: bool) -> None: ...
 
 
 class Deadline:
@@ -168,6 +175,7 @@ class CallReceipt:
     served_provider: str | None
     served_model: str | None
     failure_code: str | None = None
+    accounting_error_class: str | None = None
 
 
 class Execution:
@@ -177,6 +185,7 @@ class Execution:
                  context: CallContext | None = None, max_request_bytes: int | None = None,
                  max_response_bytes: int | None = None, max_total_response_bytes: int | None = None,
                  guidance_sha256: str | None = None,
+                 accounting: CallAccounting | None = None,
                  clock: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep,
                  check_cancelled: Callable[[], None] = safety.check_running) -> None:
@@ -193,6 +202,7 @@ class Execution:
         self.max_total_response_bytes, self.response_bytes = max_total_response_bytes, 0
         self.context = context if context is not None else CallContext.current()
         self.guidance_sha256 = guidance_sha256
+        self.accounting = accounting
         self.execution_id = uuid4().hex
         self.receipts: list[CallReceipt] = []
 
@@ -250,8 +260,14 @@ class Execution:
         invocation, started = uuid4().hex, self.deadline.clock()
         fields = self._fields(request, invocation, request_hash, guidance_hash, retry_count, retry_reason) \
             if self.context is not None else {}
-        result, response_hash, error, dispatched = None, None, None, False
-        usage = Usage.from_result(None)
+        result: ModelResult | None = None
+        response_hash: str | None = None
+        error: BaseException | None = None
+        dispatched = False
+        reservation: str | None = None
+        from .recording import MODE_ENVIRONMENT
+        usage = (Usage(source="replay", unavailable_reason="recorded_replay")
+                 if os.environ.get(MODE_ENVIRONMENT) == "replay" else Usage.from_result(None))
         try:
             timeout = self.deadline.timeout(timeout_seconds)
             if self.calls >= self.max_calls:
@@ -260,6 +276,9 @@ class Execution:
                 min(4 * 1024 * 1024, request.max_input_tokens * 4)
             if len(encoded) > request_bound:
                 raise ExecutionLimit("input_byte_bound")
+            if self.accounting is not None:
+                reservation = self.accounting.reserve(request)
+            self.deadline.remaining()
             self._emit("MODEL_CALL_STARTED", fields)
             dispatched = True
             self.calls += 1
@@ -294,6 +313,18 @@ class Execution:
                                   execution_id=self.execution_id)
             raise
         finally:
+            accounting_error: BaseException | None = None
+            if reservation is not None:
+                try:
+                    assert self.accounting is not None
+                    self.accounting.settle(reservation, usage=usage, dispatched=dispatched)
+                except BaseException as exc:
+                    accounting_error = exc
+                    safety.retain_failure("inference.accounting", exc, execution_id=self.execution_id)
+                    if error is not None and failure_category(error) is FailureCategory.CANCELLED:
+                        error.add_note(f"model accounting settlement failed: {type(exc).__name__}")
+                    else:
+                        error = ExecutionContractError("model accounting settlement failed")
             category = failure_category(error) if error is not None else None
             failure_code = (getattr(error, "code", None) if error is not None else None)
             failure_code = _identity(failure_code) if isinstance(failure_code, str) else None
@@ -310,7 +341,8 @@ class Execution:
                 category.value if category is not None else None,
                 type(error).__name__ if error is not None else None, status, retry_count, retry_reason,
                 max(0, int((self.deadline.clock() - started) * 1000)), usage,
-                _identity(request.provider), _identity(request.model), served_provider, served_model, failure_code)
+                _identity(request.provider), _identity(request.model), served_provider, served_model, failure_code,
+                type(accounting_error).__name__ if accounting_error is not None else None)
             self.receipts.append(receipt)
             if self.context is not None:
                 context = self.context
@@ -325,5 +357,9 @@ class Execution:
                     duration_ms=receipt.elapsed_ms, error_class=receipt.error_class,
                     failure_category=receipt.category, served_provider=served_provider, served_model=served_model,
                     failure_code=receipt.failure_code,
+                    accounting_error_class=receipt.accounting_error_class,
                     execution_mode="replay" if usage.source == "replay" else "inference",
                     usage_source=usage.source, usage_unavailable_reason=usage.unavailable_reason, **usage.actual)
+            if accounting_error is not None and category is not FailureCategory.CANCELLED:
+                assert error is not None
+                raise error from accounting_error

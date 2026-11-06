@@ -13,6 +13,7 @@ from referencing import Registry, Resource
 
 from appsec_review.config import load_config
 from appsec_review.inference import ModelResult
+from appsec_review.inference.errors import ProviderError
 from appsec_review.jobs.job_inference_security_review import build_job
 from appsec_review.jobs.job_inference_security_review import teams as team_handler
 from appsec_review.jobs.job_inference_security_review.job import (
@@ -29,6 +30,7 @@ from appsec_review.runtime.runner import JobRunner
 from tests.fixtures.inference_review.acceptance import JOB, ROOT, write_config
 from tests.fixtures.inference_review.builder import build_accepted_index_set
 from tests.fixtures.inference_review.fake_infer import NARRATIVES, ScriptedInfer
+from tests.final_report_support import job_tables
 
 SCHEMAS = ROOT / "docs" / "schemas" / "inference-security-review"
 
@@ -50,11 +52,16 @@ class Recording:
 @pytest.fixture()
 def prepared(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("APPSEC_REVIEW_CONFIG_OVERLAY", raising=False)
+    base = tmp_path / "review"
+    base.mkdir()
+    config = write_config(base, base / "runs", overrides={"backoff_seconds": [0]},
+                          extra=job_tables("job_third_party_data_sync") + job_tables("job_review_data_indexing"))
     fixture = build_accepted_index_set(tmp_path / "review")
-    config = write_config(tmp_path / "review", fixture.runs_dir)
     job = build_job(infer=ScriptedInfer({"ids": fixture.ids}), repository_root=ROOT)
     runner = JobRunner(load_config(config))
-    claim = runner.begin_attempt(job, run_id=fixture.run_id)
+    accepted = json.loads((fixture.run_root / "data" / "indices" / "accepted.json").read_text())
+    claim = runner.begin_attempt(job, run_id=fixture.run_id,
+                                 upstream_handoffs={"job_review_data_indexing": accepted["handoff_sha256"]})
     outputs = {}
     for unit in ("scope.accept_manifest", "scope.assemble_scope", "triage.lead_severity", "packages.assemble_lead_packages",
                  "packages.assemble_hunt_packages"):
@@ -320,7 +327,7 @@ def test_a_team_failure_preserves_completed_red_records_and_names_the_gap(prepar
 
 def test_an_entire_lane_failing_never_raises(prepared) -> None:
     def outage(request, *, timeout_seconds):
-        raise ConnectionError("provider down")
+        raise ProviderError("provider down", retryable=True)
 
     ctx = prepared.context(outage, lane="hunt")
     document = run_lane(ctx, Lane.HUNT, package_works(prepared.fixture.run_root, prepared.documents("hunt")),
@@ -343,16 +350,18 @@ def test_budgets_end_cells_not_launched_or_timed_out_and_are_never_retried(prepa
     assert any(gap.gap_class is GapClass.BUDGET_GAP and gap.subject_id == result.package_id for gap in result.gaps)
 
     tiny = replace(prepared.settings.budgets, max_model_turns=1)
-    result = run_team(prepared.context(prepared.infer, attempt="turns", budgets=tiny), prepared.work("lead", "sast_high"),
-                      launch=True)
-    # Red cells run concurrently, so which of them pass the launch check before the first turn is charged
-    # is timing; only the bound and the terminal statuses are deterministic.
+    # A different limit is a separate unit scenario, not a reset of a run's persisted budget.
+    limited = prepared.context(prepared.infer, attempt="turns")
+    limited.settings = replace(limited.settings, budgets=tiny)
+    limited.budget = JobBudget(prepared.tmp / "turn-limit-scenario", tiny)
+    result = run_team(limited, prepared.work("lead", "sast_high"), launch=True)
+    # Cells can reach admission concurrently, but at most one physical model call is reserved.
     launched = [item for item in result.cells if item.status is not CellStatus.NOT_LAUNCHED]
     assert len(launched) <= 3 and all(item.attempts <= 1 for item in result.cells)
     assert {item.status for item in launched} <= {CellStatus.SUCCEEDED, CellStatus.TIMED_OUT}
+    assert limited.budget.snapshot().model_turns == 1
     # Exhaustion is sticky for the attempt: every later cell is not launched.
-    again = run_team(prepared.context(prepared.infer, attempt="turns", budgets=tiny),
-                     prepared.work("lead", "ci_high"), launch=True)
+    again = run_team(limited, prepared.work("lead", "ci_high"), launch=True)
     assert {item.status for item in again.cells} == {CellStatus.NOT_LAUNCHED}
     assert any(gap.gap_class is GapClass.BUDGET_GAP for gap in again.gaps)
 
@@ -385,6 +394,23 @@ def test_rerunning_a_team_reuses_every_succeeded_cell(prepared) -> None:
     assert again.counts["cells_reused"] == len(first.cells) == 7          # 3 red, 2 blue, verifier, judge
     assert again.cells == first.cells and again.relations == first.relations
     assert again.independence == first.independence
+
+
+def test_resuming_exhausted_team_reconstructs_prior_claims_without_new_calls(prepared):
+    ctx = prepared.context(prepared.infer)
+    limits = replace(prepared.settings.budgets, budget_team_packages=1, max_model_turns=1)
+    ctx.budget = JobBudget(prepared.tmp / "resume-budget", limits)
+    ctx.settings = replace(ctx.settings, budgets=limits, teams=replace(ctx.settings.teams, red_per_team=1))
+    work = prepared.work("lead", "sast_high")
+    first = run_team(ctx, work, launch=True)
+    assert first.claims and ctx.budget.snapshot().model_turns == 1
+    recording = Recording(prepared.infer)
+    ctx.infer = recording
+    ctx.attempt_id = "resumed-attempt"
+    second = run_team(ctx, work, launch=True)
+    assert not recording.requests and second.claims == first.claims
+    assert ctx.budget.snapshot().model_turns == 1
+    assert any(item.status is CellStatus.SUCCEEDED for item in second.cells)
 
 
 # ------------------------------------------------------------------------------------------------ isolation rules

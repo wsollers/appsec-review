@@ -41,6 +41,7 @@ import time
 from typing import Any, Mapping
 
 from appsec_review.inference import ModelResult, ReviewModelRequest
+from appsec_review.inference.errors import ProviderError
 from tests.fixtures.inference_review.red import Proposal, red_result
 
 TURN = "appsec-review/worker-turn/1"
@@ -126,7 +127,12 @@ class ScriptedInfer:
         payload = request.task_input.get("input", {})
         self._log(request, "call")
         if request.role in self.scenario.get("fail_roles", ()):
-            raise RuntimeError("scripted provider outage")
+            raise ProviderError("scripted provider outage", retryable=True)
+        if request.role == "lead_triager":
+            return ModelResult({"schema": request.schema, "items": [
+                {"lead_id": item["lead_id"], "severity": None, "basis": "insufficient_context",
+                 "reason": "The scripted fixture does not establish additional severity evidence."}
+                for item in request.task_input["findings"]]}, input_tokens=100, output_tokens=20)
         if task == "chain_composer":
             return self._final({"candidates": [], "gaps": ["fixture_has_no_native_chain_continuity_evidence"]})
         if task in ("chain_refuter", "chain_weakest_link_verifier"):
@@ -252,7 +258,7 @@ class ScriptedInfer:
         claim = payload["claim"]
         predicate = claim["security_predicate"]
         if predicate == "resource_exhaustion":
-            raise RuntimeError("scripted verifier provider failure")
+            raise ProviderError("scripted verifier provider failure", retryable=True)
         plan = {"memory_corruption": [(item, "unit:native-main") for item in PREDICATES],
                 "sql_injection": [("affected_construct", "sast_high")],
                 "command_injection": [("affected_construct", "unit:native-main")],

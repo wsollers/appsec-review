@@ -134,3 +134,188 @@ package/lane/batch/build-unit/case IDs. Callers with legacy `ModelRequest` can p
 pinned guidance digest as `Execution(guidance_sha256=...)`; otherwise its existing summary pin
 or the exact guidance-content digest is recorded. Failure codes distinguish execution deadline
 exhaustion from byte/token limits. No arbitrary correlation dictionary is forwarded.
+
+### Integrated implementation chunks
+
+The bounded subagents used GPT-6 Astra, high reasoning and long context, each in its own
+Linux-filesystem worktree/environment. No nested agents, remote operations or live validations
+were commissioned.
+
+- Shared engine: `2c77d7c809d95a734bda86954ea78a315d77ac1f`.
+- Review/triage core: `7631fe91639ffd109f7a02ceb6d20c52c20e3e72`.
+- Atomic budget/timing: `d2d3b93b376550f683110172749b8c1977bf0150`, branch `package03-budget`,
+  only `review/budget.py` and its two focused unit files. Imported into this package by exact SHA.
+- Transport/recording: `521262be87d6fb62e7cbd8bd460783e5c59bd0e7`, branch `package03-transport`,
+  only the five owned inference modules and four provider/recording unit files.
+- Specialized adapters: `c2075ab3b89d036cc283fcc4be0775ac686b111d`, branch `package03-adapters`,
+  nine owned execution adapters and five focused unit files. Guidance-loader bodies and request
+  rendering were not changed by that chunk.
+
+The parent wired atomic accounting before physical-call telemetry, including undispatched
+cancellation settlement. New review runs select active timing; imported wall-clock runs retain
+their semantics. A normal cell execution closes only its own invocation owner against its
+verified receipt. Interrupted/uncertain owners require positive cessation evidence and explicit
+reconciliation. A budget-exhausted resume may revalidate existing receipts and reconstruct prior
+claims, but cannot dispatch new model work. It does not erase prior findings merely because the
+new-call budget is exhausted.
+
+The new receipt directory and canonical run-wide budget are declared in inventory/datasets;
+this is a necessary output-contract update, not an expansion of retrieval authority. PoC private
+readers declare a local capability contract, without public MCP exposure. `recording-root.json`
+must accompany copied v2 recordings; the PoC replay fixture was updated accordingly. A focused
+cell test exercises a recorded timeout and identical retry through actual replay and the shared
+engine, including zero new billing for the replayed failure.
+
+#### Budget chunk verification
+
+Root: `/home/wsollers/appsec-package03-budget-8b2ffebc`. Commands used the checkout's own
+`.venv/bin/python -m pytest`, with `--basetemp=test/tmp/package03-budget -q` and
+`/usr/bin/time -f 'wall_seconds=%e'` when timed.
+
+- **B1**: `tests/review/test_budget.py`
+- **B2**: `tests/review/test_budget.py tests/review/test_budget_reservations.py`
+- **B3**: `tests/review/test_budget_reservations.py`
+
+| Command | Result | Wall seconds |
+| --- | --- | --- |
+| B1 | Missing `.venv/bin/python`, exit 127, no collection | Not measured |
+| B1 after isolated dependency restoration | 17 passed | 19.44 |
+| B2 | 81 passed | 31.54 |
+| B3 | `NameError: replay` in a misplaced guard; aggregate output truncated | Not captured |
+| B3 `-x --tb=short` | 1 failed, same misplaced guard | 1.43 |
+| B2 `--tb=short` after correction and added cases | 100 passed | 28.69 |
+| B3 `-k 'identity_collision or corrupted_receipts or directory_without or import_sources'` | 11 passed, 78 deselected | 1.79 |
+| B3 `-k 'timing_option or legacy_import_never or active_execution'` | 3 passed, 87 deselected | 1.98 |
+| B2 at ready `d2d3b93b376550f683110172749b8c1977bf0150` | 107 passed; pytest 16.53 s | 17.02 |
+
+The first two rows used pristine contract revision `0a01ca073807d6559d3a9d81163c27c237cf49bc`;
+intermediate rows used that HEAD plus evolving owned changes. Uncaptured timing/counts are
+explicit record gaps, not estimates.
+
+#### Transport chunk verification
+
+Root: `/home/wsollers/appsec-package03-transport-8b2ffebc`. Final command:
+
+```text
+/usr/bin/time -p .venv/bin/python -m pytest tests/test_model_recording.py tests/test_inference.py tests/test_claude_cli_inference.py tests/test_copilot_inference.py tests/test_anthropic_inference.py tests/test_inference_transport_failures.py --basetemp=test/tmp/package03-transport -q
+```
+
+| Invocation | Result | Wall seconds |
+| --- | --- | --- |
+| Initial selection, before the new failure-test file existed | Missing environment, exit 127 | 0.00 |
+| Same baseline selection after restoration | 22 passed, 12 skipped, 3 failed | 11.03 |
+| Final selection during implementation | 6 circular-import collection errors | 2.16 |
+| Same selection after fixing cold imports | 178 passed | 13.55 |
+| Same selection with additional coverage | 181 passed | 13.78 |
+| Same selection with additional coverage | 205 passed | 13.57 |
+| Same selection with additional coverage | 214 passed | 14.72 |
+| Exact ready `521262be87d6fb62e7cbd8bd460783e5c59bd0e7` | 216 passed, no skips; pytest 10.21 s | 10.85 |
+
+Baseline failures were stale Anthropic planning-v3 sanitization/v2 omission expectations and an
+incomplete nested-model profile walker. The assertions now target the correct boundary and all
+configured models. Optional SDK tests use deterministic fake SDK modules rather than skipping
+coverage or contacting the SDK service.
+
+#### Specialized adapter verification
+
+Root: `/home/wsollers/appsec-package03-adapters-8b2ffebc`. All commands used
+`/usr/bin/time -f elapsed=%e .venv/bin/python -m pytest`, plus
+`--basetemp=test/tmp/package03-adapters -q`. Selector aliases:
+
+- **P**: `tests/test_poc_writer.py`
+- **R**: `tests/test_remediation_models.py`
+- **N**: `tests/test_native_inference_runtime.py`
+- **F**: `tests/test_build_topology_feedback.py`
+- **X**: `tests/test_bounded_worker_adapters.py`
+- **D**: `tests/test_dependency_intelligence.py`
+- **O**: `tests/test_owasp_evidence_binding.py`
+- **S**: `tests/test_post_build_security_assessment.py`
+- **J**: `tests/test_project_build.py`
+
+| Selectors / additional flags | Result | Wall seconds |
+| --- | --- | --- |
+| P | Missing environment, exit 127; restored private environment | 0.00 |
+| P R N F | 152 passed, 8 failed; corrected clock initialization and first-error expectations | 34.79 |
+| X F | 145 passed, 2 failed; corrected new first-error tests to expect cancellation control flow | 28.81 |
+| S D O | Pre-existing topology/OWASP fixture failures; aggregate console output truncated | Not captured |
+| `D::test_guidance_and_job_public_api_are_registered` O `--tb=short -x` | 1 failed: stale topology expectation omits `resolution.curate_components` | 1.59 |
+| O `--tb=short -x` | 1 failed before dispatch: `repin` drops `size_bytes`; package 04 owns it | 2.86 |
+| X P R N F `--tb=short` | 254 passed, 1 failed; new fixture landed exactly on, not above, the output bound | 29.62 |
+| X P R N F `--tb=short` after correcting that fixture | 256 passed | 38.35 |
+| D `-k 'model_resolution or native_inference' --tb=short` | 2 passed, 24 deselected | 1.82 |
+| S `--tb=short` | 20 passed | 17.02 |
+| J `-k 'repair or repeated_preparation' --tb=short` | 5 passed, 6 failed, 33 deselected; unrelated existing `profile=None`/unenforced-target fixture expectations | 90.21 |
+| X R N `--tb=short` | 173 passed | 21.25 |
+| X P R N F `--tb=short` at ready `c2075ab3b89d036cc283fcc4be0775ac686b111d` | 267 passed; pytest 35.29 s | 35.93 |
+
+The unchanged project preparation/reuse functions were compared against the base; model planning
+completed without model gaps. No target-policy weakening or speculative fixture rewrite was
+performed. The missing aggregate timing/output is retained as a verification-record gap.
+
+#### Parent integration regressions
+
+Commands below are `.venv/bin/python -m pytest <selectors> --basetemp=<listed path> -q`
+under `/home/wsollers/appsec-package03-8b2ffebc`, timed with `/usr/bin/time`.
+
+| Selectors | Basetemp under `test/tmp/` | Result | Wall seconds |
+| --- | --- | --- | --- |
+| Core/cells/cache/triage selection above | `package03-review-commit` | 120 passed | 4.12 |
+| Same selection after accounting hooks | `package03-accounting-boundary` | 123 passed | 3.52 |
+| `tests/review/test_execution_budget_wiring.py` | `package03-budget-wiring` | 5 passed, 1 failed; undispatched settlement must pass `usage=None` | 2.65 |
+| Wiring file plus `tests/review/test_team_handler.py --durations=5` | `package03-teams` | 46 passed, 13 fixture setup errors: frozen configuration mismatch | 96.73 |
+| Wiring file after correction | `package03-budget-wiring-fixed` | 6 passed | 2.52 |
+| Wiring file plus team blind-verifier and budget cases | `package03-team-prerequisites` | 1 passed, 5 failed (wall-clock timing must not switch); 2 upstream-origin fixture errors | 8.84 |
+| Same selection after timing compatibility correction | `package03-active-budget` | 6 passed, 2 fixture errors: scripted provider did not implement triage | 10.93 |
+| Team blind-verifier and budget cases `--tb=short` | `package03-team-fixture-fixed` | 1 passed, 1 failed: test tried changing a persisted run's budget limits | 16.04 |
+| Five team cases listed below `--tb=short --durations=5` | `package03-team-focused` | 5 passed | 46.37 |
+| `tests/test_bounded_execution.py tests/review/test_bounded_cells.py tests/review/test_execution_budget_wiring.py` plus exhausted-team resume case, `--tb=short` | `package03-resume-regressions` | 50 passed | 15.60 |
+
+The five focused team selectors are:
+
+```text
+tests/review/test_team_handler.py::test_blue_cells_never_see_each_other_and_the_verifier_is_blind
+tests/review/test_team_handler.py::test_a_distinct_verifier_profile_is_recorded_without_changing_independence
+tests/review/test_team_handler.py::test_provider_and_schema_failures_are_typed_gaps_with_terminal_records
+tests/review/test_team_handler.py::test_budgets_end_cells_not_launched_or_timed_out_and_are_never_retried
+tests/review/test_team_handler.py::test_rerunning_a_team_reuses_every_succeeded_cell
+```
+
+The resume selector is
+`tests/review/test_team_handler.py::test_resuming_exhausted_team_reconstructs_prior_claims_without_new_calls`.
+The last regression selection ran after integrating the three exact ready commits above, plus
+the parent's working-tree changes. The exact final source revision is recorded by the subsequent
+code-freeze/final validation entry rather than assigning a pre-commit SHA to uncommitted changes.
+
+Fixture repairs were scoped to affected checks: write config before frozen handoffs, include
+the real upstream jobs, supply the accepted upstream identity, and give the scripted Infer a
+valid unresolved triage answer instead of relying on swallowed assertions. Separate limit
+variants use independent unit budget scenarios; the product still rejects mutated run limits.
+The team fixture uses zero retry delay because fake-clock cell tests cover the real configured
+delay and deadline behavior. No assertions were weakened and production backoff is not bypassed.
+
+Slow checks are explicit: the earlier profile-allocation cases took 10.41-10.97 s of call time
+each, and one final blind-verifier case had 5.63 s setup plus 5.07 s call time. They were not
+reclassified or assigned larger timeouts; later selections exclude unrelated profile sweeps.
+
+### Manual suites: written, NOT RUN
+
+Only syntax parsing with `ast.parse` was performed on the new files; no import, collection,
+fixture, test or provider was executed from these suites.
+
+```text
+.venv/bin/python -m pytest tests/integration/test_bounded_worker_execution.py --basetemp=test/tmp/manual-bounded-integration -q
+.venv/bin/python -m pytest tests/acceptance/test_bounded_worker_execution.py --basetemp=test/tmp/manual-bounded-acceptance -q
+```
+
+Prerequisites: an isolated Linux checkout and its own editable `.[test]` environment. These
+component-level manual suites script the actual external Infer/retrieval/Garnet boundaries;
+they do not need provider credentials, Docker or external services. They exercise real
+adapter validation and accounting, not an alternative execution loop. They are not a substitute
+for full-graph/live acceptance, which remains separately user-owned and unrun.
+
+The integration suite composes review, triage and remediation adapters with common receipts and
+telemetry while retaining different authority and output validators. Acceptance scenarios cover
+interruption, positively verified cessation, repair pause/resume, immutable prior receipts,
+transient/schema failures, cache outage, verifier memo exclusion and unknown-usage exhaustion.
+`tests/conftest.py` already excludes `tests/integration` and `tests/acceptance` from implicit
+unit collection; this package does not alter that global configuration.
