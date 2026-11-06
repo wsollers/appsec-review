@@ -13,9 +13,15 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
+# Initialize the runtime before transports load errors: its runner imports recording, while
+# the cancellation contract derives from runtime.execution_safety.ReviewStopped.
+from appsec_review.runtime import execution_safety as safety
+
 from . import anthropic_api, claude_cli, copilot_sdk, openai_api
 from .claude_cli import ModelOutputError, parse_model_payload
+from .errors import ExecutionContractError, ModelCancelled, ModelTimeout, ProviderError
 from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
+from .usage import Usage
 
 
 PROVIDERS: dict[str, Infer] = {
@@ -30,7 +36,6 @@ def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -
 
     A `ReviewModelRequest` is one review-cell turn; its validated proposal is the worker turn.
     """
-    from appsec_review.runtime import execution_safety as safety
     try:
         send = PROVIDERS[request.provider]
     except KeyError as exc:
@@ -41,6 +46,7 @@ def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -
     with safety.operation(f"inference.{request.provider}.{request.model}"):
         try:
             result = send(request, timeout_seconds=timeout_seconds)
+            result = Usage.from_result(result).normalize(result)
         except (ModelOutputError, TimeoutError) as exc:
             if not planning:
                 safety.retain_failure("inference", exc, provider=request.provider, model=request.model)
@@ -48,16 +54,34 @@ def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -
             repairable = True
             failure = (ModelOutputError("planning model output could not be decoded")
                        if isinstance(exc, ModelOutputError) else
-                       TimeoutError("planning model call timed out"))
-        except Exception as exc:
+                       ModelTimeout("planning model call timed out",
+                                    code=getattr(exc, "code", "provider_timeout")))
+        except ProviderError as exc:
             if not planning:
                 safety.retain_failure("inference", exc, provider=request.provider, model=request.model)
                 raise
-            failure = RuntimeError("planning inference transport failed unexpectedly")
+            failure = ProviderError("planning inference provider failed", code=exc.code,
+                                    retryable=exc.retryable)
+        except Exception as exc:
+            evidence = ExecutionContractError("inference application contract failed")
+            safety.retain_failure("inference", evidence, provider=request.provider, model=request.model,
+                                  exception_type=type(exc).__name__, category="contract")
+            if not planning:
+                raise
+            failure = ExecutionContractError(
+                f"planning inference application contract failed ({type(exc).__name__})")
+        except BaseException as exc:
+            try:
+                safety.retain_failure("inference", ModelCancelled("model call cancelled"),
+                                      provider=request.provider, model=request.model, category="cancelled")
+            except Exception as publication_error:
+                exc.add_note("model cancellation evidence could not be published")
+                raise exc from publication_error
+            raise
         if failure is not None:
             safety.retain_failure("inference", failure, provider=request.provider, model=request.model,
                                   outcome="REJECTED", repairable=repairable)
-            if not repairable:
+            if not repairable or safety.active():
                 raise failure from None
     # A rejected bounded reply spends a call, not the global stop latch. Admission's final
     # cancellation check still runs before the sanitized repair signal leaves this boundary.
@@ -80,7 +104,6 @@ def check_models(provider: str, names: Sequence[str], *, timeout_seconds: int) -
     A provider that cannot be reached, is not authenticated, or has no inference transport makes
     every one of its models unavailable, with the provider's error retained.
     """
-    from appsec_review.runtime import execution_safety as safety
     wanted = sorted(set(names))
     report: dict[str, Any] = {"provider": provider, "transport": provider in PROVIDERS,
                               "method": None, "listed": None, "error": None, "models": {}}
