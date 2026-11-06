@@ -220,7 +220,7 @@ The final current-record compatibility check also covered the existing `JOB_REUS
 which records a handoff hash without completion metadata. Revision
 `df49731c418ff7e4394efa91ad82d1292154e435` preserves that hash as an unverified reference and
 reports unknown reused completeness explicitly instead of treating an outer success as
-coverage evidence. On that exact **final implementation SHA**:
+coverage evidence. On that exact compatibility revision:
 
 ```sh
 .venv/bin/python -m pytest -q \
@@ -235,3 +235,122 @@ only; source/test/deploy byte identity is checked against this implementation. D
 test state and tool caches created by this package were removed from its isolated worktree.
 Its Linux environment, ready branch and local transfer bundle are retained for integration
 after the independent dirty-main blocker is resolved.
+
+### Final current-main compatibility and verification
+
+Canonical main subsequently published worker prompt contracts at
+`dc263b305e500df398b19398260e619253e855a7`. They were incorporated into this package as
+`531fe82f8af063b8ec85469c891423670b4cc9fc`. The new `prompt-competence/1` report is now
+adapted by the quality-trend module, using the existing scorer rather than rerunning or
+replacing its per-case evaluation. Recorded model/configuration identities, query/denial
+counters and unknown usage are preserved; scripted/live and mixed-configuration observations
+are not compared as equivalent. Distinct retrieval-failure counts remain explicitly
+unavailable where the upstream record does not measure them.
+
+At adapter revision `92b47e445234519ba1352dcd520ebd7864b47fde`, adding
+`tests/test_review_model_request.py` to the earlier seven-file command and using
+`--basetemp=test/tmp/operations-b603f2c2-competence-main` produced **114 passed in 31.34s**.
+The accompanying static gate initially **failed** on one inherited main violation:
+`guidance/cards.py:275` imported private `writer._tool_catalog`. The file was verified
+unchanged from incorporated main; this was not hidden with a new baseline exemption.
+
+Package 04 confirmed that Package 03 owned the narrow public-catalog correction. Exact
+owner-supplied commit `4539322da0b1ec347694c9dda567c4aa1c80ac7b` was inspected and cherry-picked
+as `08526c6567899fa82c92b4006db2bcfb9769e895`. It changes only four identifier occurrences
+in `guidance/cards.py` and `jobs/job_poc_generation/writer.py`: public `tool_catalog`
+replaces `_tool_catalog`, with the catalog body, grants and schemas unchanged and no MCP
+exposure. **The broader, unfinished Package 03 branch was not merged.**
+
+The intervening retention revision `e793718cebc4e0d67f8292088aef8539677bae08` additionally
+fsyncs the write-ahead journal's directory before deletion, the deletion's parent directory
+and the completed journal update. A failed pre-delete directory sync removes nothing.
+
+The complete combined check at `08526c6567899fa82c92b4006db2bcfb9769e895` was:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operations_reporting.py tests/test_operations_quality.py tests/test_operations_retention.py \
+  tests/test_pipeline_log.py tests/test_operation_telemetry_gaps.py \
+  tests/test_pytest_default_collection.py tests/reporting/test_telemetry_inputs.py \
+  tests/test_review_model_request.py tests/test_poc_writer.py tests/test_worker_prompt_contracts.py \
+  --basetemp=test/tmp/operations-b603f2c2-handoff
+```
+
+Result: **188 passed in 37.02s**, with the same previously recorded fork warning.
+The static gate against `dc263b305e500df398b19398260e619253e855a7` then **passed** with
+no new diagnostics and the unchanged 47 legacy findings. Timings: Ruff 0.162s,
+mypy 11.251s, Bandit 19.216s, architecture 5.402s.
+
+Checkpoint-bound revision: `4bc8c62bc1c8d0b44585cf254fd4641bf220e347`.
+Its only subsequent code change makes checkpoint writers and readers enforce the same
+32 MiB byte bound, refusing an oversized replacement instead of writing a checkpoint
+that cannot be restored. The exact threshold and previous-file preservation are exercised:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_operations_reporting.py \
+  --basetemp=test/tmp/operations-b603f2c2-final-checkpoint
+.venv/bin/python -m ruff check --ignore-noqa src/appsec_review/observability/operator.py
+.venv/bin/python -m tools.quality check \
+  --base dc263b305e500df398b19398260e619253e855a7 --static-only
+```
+
+Results: **30 passed in 2.44s**, focused Ruff passed, and the complete static gate on that
+exact final implementation **passed** (658 modules, no new diagnostics, 47 legacy findings).
+Final static timings: Ruff 0.136s, mypy 10.731s, Bandit 18.873s, architecture 5.407s.
+The 30-case rerun overlaps the combined suite; counts are not summed.
+
+A fresh locked main inspection at `dc263b305e500df398b19398260e619253e855a7` still found
+exactly the same nine untracked NVD provenance files. **This package's main integration
+remains refused**, even though other packages independently advanced main. No assumption
+of authorization was inferred from their merges. The implementation and documentation are
+preserved in both ready branches and a local bundle. Final documentation-only tip identity
+is supplied in the session handoff; its code/test/deploy contents match the final tested
+implementation exactly.
+
+**Integration/acceptance/live suites remain NOT RUN. No infrastructure, collector, model
+review, production retention, main cleanup, remote push or pull request was performed.**
+
+### Final closure checks and ready-code identity
+
+The final compatibility checks also normalize explicit legacy terminal event names when
+their details omit a duplicated status, consistently in operator and OTLP output. At
+`693e8b705704c191f6e7bc90c7802450253b9dd0`, the combined ten-file command above with
+`--basetemp=test/tmp/operations-b603f2c2-final` passed **193 tests in 33.69s**. The complete
+static gate passed at that exact revision: Ruff 0.149s, mypy 10.532s, Bandit 19.263s,
+architecture 5.700s, no new diagnostics and 47 retained legacy findings.
+
+**Final tested implementation: `3cf34831a76da1168ec9c2d31d277785f5065760`.**
+The final resource cases ensure that late sampled progress cannot revoke a release record,
+and an admission timeout is reported as `not_acquired`, not overdue cleanup.
+The manual integration fixture now uses an actual writer subprocess interrupted while
+holding the log lock, then a new writer process. Its module and both embedded programs
+were syntax-parsed only; no integration subprocess, service or collector was started.
+
+Final combined unit command:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operations_reporting.py tests/test_operations_quality.py tests/test_operations_retention.py \
+  tests/test_pipeline_log.py tests/test_operation_telemetry_gaps.py \
+  tests/test_pytest_default_collection.py tests/reporting/test_telemetry_inputs.py \
+  tests/test_review_model_request.py tests/test_poc_writer.py tests/test_worker_prompt_contracts.py \
+  --basetemp=test/tmp/operations-b603f2c2-complete
+```
+
+Result: **195 passed in 31.19s**, with the unchanged pre-existing fork warning. The full
+static command against `dc263b305e500df398b19398260e619253e855a7` passed at the exact
+final implementation: 658 modules, no new diagnostics, 47 retained baseline findings;
+Ruff 0.145s, mypy 10.559s, Bandit 18.630s, architecture 5.451s.
+
+The last read-only custody response requested by Packages 01 and 03 independently confirmed
+Ubuntu-22.04 master `/home/wsollers/projects/appsec-review` at
+`dc263b305e500df398b19398260e619253e855a7`, with the same nine untracked NVD provenance
+paths recorded above. The WSL kernel lock was available at inspection and immediately
+released. This package owns no active source freeze; the global source-freeze owner and
+those files' producing/data-custody owner were not verified. Requested custody facts were
+relayed without authorizing or performing cleanup, relocation, hiding or a master update.
+
+Only handoff documentation follows the final tested implementation. The final ready-tip
+SHA is reported in the session handoff, and both ready checkouts are synchronized through
+local bundles. Main landing remains explicitly blocked, not claimed complete. The owner
+must resolve the dirty state and recheck any newer main/source freeze before integration.
