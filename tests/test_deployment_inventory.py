@@ -480,8 +480,8 @@ spec:
 
 @pytest.mark.parametrize(("account", "valid"), [
     ("a" * 253, True), ("a" * 254, False), ("valid.account-name", True),
-    ("Invalid", False), ("namespace/account", False), ("-invalid", False), ("", False),
-], ids=["max-name", "over-max-name", "dns-subdomain", "uppercase", "slash", "leading-hyphen", "empty"])
+    ("Invalid", False), ("namespace/account", False), ("-invalid", False),
+], ids=["max-name", "over-max-name", "dns-subdomain", "uppercase", "slash", "leading-hyphen"])
 def test_service_account_identifiers_are_bounded_before_identity_assembly(account, valid):
     source = document(
         "apiVersion: v1\nkind: Pod\nmetadata: {name: cache}\nspec:\n"
@@ -497,6 +497,29 @@ def test_service_account_identifiers_are_bounded_before_identity_assembly(accoun
     else:
         assert graph.outcome == "malformed" and not graph.services
         assert "invalid_service_account" in {item.code for item in graph.gaps}
+
+
+@pytest.mark.parametrize("account_field", ["", "  serviceAccountName: ''\n"], ids=["omitted", "empty"])
+def test_unspecified_service_account_preserves_pod_listener_and_unknown_identity(account_field):
+    source = document(
+        "apiVersion: v1\nkind: Pod\nmetadata: {name: cache}\nspec:\n"
+        + account_field
+        + "  containers:\n    - name: cache\n      image: redis\n"
+          "      ports: [{containerPort: 6379}]\n",
+        "kubernetes",
+    )
+    graph = extract(source)
+    assert graph.outcome == "complete"
+    assert len(graph.services) == 1
+    service = graph.services[0]
+    assert service.kind == "kubernetes_workload" and service.product == "redis"
+    assert service.identity is None and "identity" in service.unknowns
+    assert [(item.service_id, item.role, item.port) for item in graph.listeners] == [
+        (service.id, "container", 6379),
+    ]
+    assert service.evidence and graph.evidence
+    for reference in graph.evidence:
+        assert resolve_evidence(reference, source) == source.data[reference.start_byte:reference.end_byte]
 
 
 def test_constructed_fact_overflow_is_a_valid_partial_outcome_not_truncation():

@@ -254,7 +254,8 @@ def kubernetes(builder: Builder, roots: list[Node]) -> None:
             account = _text(spec, "serviceAccountName")
             user = _security_user(builder, fields.get("securityContext")) or pod_user
             identity_parts = []
-            if account is not None:
+            # Empty and omitted names are defaultable, not runtime identity evidence.
+            if account:
                 if dynamic(account):
                     builder.gap("dynamic_identity", "service account interpolation is unresolved",
                                 service=service, evidence=ev)

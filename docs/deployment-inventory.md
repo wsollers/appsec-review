@@ -133,9 +133,11 @@ and 10,000 extracted records. Hard safety ceilings are 256 documents, 2 MiB/docu
 Scalar declarations are additionally bounded to 4,096 characters (Nginx tokens to 1,024)
 so extracted records cannot exceed the closed wire schema's literal bounds.
 Constructed identities, claims and fact descriptions are checked against the same wire
-bound. Kubernetes service-account names must be DNS subdomains of at most 253 characters;
+bound. Nonempty Kubernetes service-account names must be DNS subdomains of at most 253 characters;
 invalid identifiers yield a valid `malformed` outcome, and oversized constructed values
 yield a valid `partial` outcome without truncation.
+An empty service-account name is treated like an omitted name: the Pod and its evidence
+are preserved, and the effective/default runtime account remains unknown.
 
 ## Imported observations and drift
 
