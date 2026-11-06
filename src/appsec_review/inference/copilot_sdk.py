@@ -5,13 +5,48 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import json
+import math
 import os
 from pathlib import Path
 import tempfile
+import time
 from typing import Any, Sequence
 
 from .claude_cli import ModelOutputError, _plan_prompt, parse_model_payload
 from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
+from .errors import ExecutionContractError, ModelTimeout, ProviderError, FailureCategory, failure_category
+from .usage import Usage, token_count, total_reported
+
+
+_CLEANUP_SECONDS = 5
+
+
+@asynccontextmanager
+async def _managed(manager, label: str):
+    """Treat an interrupted/failed SDK exit as unconfirmed cleanup, never as success."""
+    entered = False
+    body_error = None
+    try:
+        async with manager as value:
+            entered = True
+            try:
+                yield value
+            except BaseException as error:
+                body_error = error
+                raise
+    except BaseException as error:
+        if not entered or error is body_error:
+            raise
+        failure = _cleanup_failure(f"Copilot {label} teardown failed")
+        cancellation = next((item for item in (body_error, error) if item is not None and
+                             failure_category(item) is FailureCategory.CANCELLED), None)
+        if cancellation is not None:
+            cancellation.add_note(str(failure))
+            raise cancellation from failure
+        raise failure from error
+    if body_error is not None:
+        # An SDK context manager may not suppress cancellation or an application failure.
+        raise body_error
 
 
 def auth_home() -> Path:
@@ -24,12 +59,11 @@ async def _client():
     try:
         from copilot import CopilotClient
     except ImportError as exc:
-        raise RuntimeError("install appsec-review[copilot] and run "
-                           "`python -m copilot download-runtime`") from exc
+        raise ProviderError("Copilot SDK is unavailable; install appsec-review[copilot]",
+                            code="sdk_unavailable") from exc
     home = auth_home()
     if not home.is_dir():
-        raise RuntimeError("Copilot worker login is missing; run `COPILOT_HOME="
-                           "\"$HOME/.config/appsec-review/copilot\" copilot login`")
+        raise ProviderError("Copilot worker login is missing", code="authentication_missing")
     # Git's identity must never become the inference identity, even when inherited from CI.
     environment = {key: value for key, value in os.environ.items()
                    if key not in {"GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN",
@@ -38,13 +72,14 @@ async def _client():
     environment["COPILOT_SKIP_CLI_DOWNLOAD"] = "1"
     environment["COPILOT_GITHUB_TELEMETRY_DISABLED"] = "true"
     with tempfile.TemporaryDirectory(prefix="appsec-copilot-") as working:
-        async with CopilotClient(
+        async with _managed(CopilotClient(
             mode="empty", base_directory=str(home), working_directory=working,
             env=environment, use_logged_in_user=True,
-        ) as client:
+        ), "client") as client:
             status = await client.get_auth_status()
             if not status.isAuthenticated:
-                raise RuntimeError("Copilot worker subscription login is required in APPSEC_COPILOT_HOME")
+                raise ProviderError("Copilot worker subscription login is required in APPSEC_COPILOT_HOME",
+                                    code="authentication_missing")
             yield client, working
 
 
@@ -76,7 +111,7 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
         catalog = {model.id: model for model in await client.list_models()}
         model = catalog.get(request.model)
         if model is None or not _available(model):
-            raise RuntimeError(f"Copilot model is unavailable: {request.model}")
+            raise ProviderError("Copilot model is unavailable", code="model_unavailable")
         if request.reasoning not in (model.supported_reasoning_efforts or []):
             raise ValueError(f"Copilot model {request.model} does not support reasoning "
                              f"effort {request.reasoning}")
@@ -103,13 +138,20 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                 max_prompt_tokens=request.max_input_tokens, max_output_tokens=request.max_output_tokens)),
             on_event=observe,
         )
-        async with session:
+        async with _managed(session, "session"):
             # The outer deadline covers authentication, catalog lookup, creation, and inference.
             try:
                 response = await session.send_and_wait(json.dumps(prompt, sort_keys=True),
                                                        timeout=timeout_seconds)
-            except (asyncio.CancelledError, TimeoutError):
-                await asyncio.wait_for(session.abort(), timeout=5)
+            except (asyncio.CancelledError, TimeoutError) as original:
+                try:
+                    # _run owns the single cleanup deadline; wait_for could itself wait forever
+                    # for a cancellation-resistant abort coroutine.
+                    await session.abort()
+                except BaseException:
+                    failure = _cleanup_failure("Copilot session abort failed")
+                    original.add_note("Copilot session abort failed")
+                    raise original from failure
                 raise
             if response is None or not isinstance(response.data, AssistantMessageData):
                 raise ModelOutputError("Copilot returned no final assistant message")
@@ -125,64 +167,104 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
             try:
                 proposal = parse_model_payload(raw, request.schema)
             except ModelOutputError as exc:
-                raise ModelOutputError(str(exc), raw_response=raw[:2 * 1024 * 1024],
-                                       rejected_output=raw[:131072]) from exc
+                bounded = raw.encode("utf-8") if isinstance(raw, str) else b""
+                raise ModelOutputError(str(exc), raw_response=bounded[:2 * 1024 * 1024].decode("utf-8", "ignore"),
+                                       rejected_output=bounded[:131072].decode("utf-8", "ignore")) from exc
 
             def tokens(field: str) -> int | None:
-                values = [getattr(item, field) for item in usage]
-                return sum(values) if values and all(value is not None for value in values) else None
+                return total_reported([token_count(getattr(item, field, None)) for item in usage])
 
-            return ModelResult(proposal=proposal, input_tokens=tokens("input_tokens"),
+            invalid_usage = any(getattr(item, name, None) is not None and
+                                token_count(getattr(item, name)) is None
+                                for item in usage
+                                for name in ("input_tokens", "output_tokens", "cache_read_tokens"))
+            result = ModelResult(proposal=proposal, input_tokens=tokens("input_tokens"),
                                output_tokens=tokens("output_tokens"), cache_tokens=tokens("cache_read_tokens"),
-                               raw_response=raw, served_model=request.model, served_provider="copilot-sdk")
+                               raw_response=raw, served_model=request.model, served_provider="copilot-sdk",
+                               usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None)
+            return Usage.from_result(result).normalize(result)
+
+
+def _cleanup_failure(message: str, *, pending_tasks: int = 0) -> ExecutionContractError:
+    from appsec_review.runtime import execution_safety as safety
+    from appsec_review.runtime.resources import quarantine_resources
+    error = ExecutionContractError(message)
+    try:
+        quarantine_resources("copilot_teardown_unconfirmed")
+    except Exception as failure:
+        error.add_note(f"Copilot resource quarantine failed ({type(failure).__name__})")
+    try:
+        safety.retain_failure("copilot.cleanup", error, pending_tasks=pending_tasks, category="contract")
+    except Exception as failure:
+        error.add_note(f"Copilot cleanup evidence publication failed ({type(failure).__name__})")
+    return error
 
 
 def _run(operation, timeout_seconds: int):
     from appsec_review.runtime import execution_safety as safety
-    if timeout_seconds <= 0:
+    if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
+            or timeout_seconds <= 0):
         operation.close()
-        raise ValueError("Copilot timeout_seconds must be positive")
+        raise ExecutionContractError("Copilot timeout_seconds must be finite and positive")
+    try:
+        safety.check_running()
+    except BaseException:
+        operation.close()
+        raise
+
+    loop = asyncio.new_event_loop()
+    task = loop.create_task(operation)
+    deadline = time.monotonic() + timeout_seconds
+    original: BaseException | None = None
 
     async def bounded():
-        async with asyncio.timeout(timeout_seconds):
-            if not safety.active():
-                return await operation
-            task = asyncio.create_task(operation)
-            try:
-                while not task.done():
-                    safety.check_running()
-                    await asyncio.wait({task}, timeout=0.1)
-                return await task
-            except BaseException:
-                task.cancel()
-                done, pending = await asyncio.wait({task}, timeout=5)
-                if not pending:
-                    await asyncio.gather(*done, return_exceptions=True)
-                raise
+        while not task.done():
+            safety.check_running()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ModelTimeout("Copilot call timed out")
+            await asyncio.wait({task}, timeout=min(0.1, remaining))
+        safety.check_running()
+        return task.result()
 
-    if not safety.active():
-        return asyncio.run(bounded())
-    loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(bounded())
+        result = loop.run_until_complete(bounded())
+    except TimeoutError:
+        original = ModelTimeout("Copilot call timed out")
+    except ConnectionError:
+        original = ProviderError("Copilot connection failed", code="network", retryable=True)
+    except BaseException as error:
+        original = error
     finally:
-        pending = asyncio.all_tasks(loop)
         try:
+            pending = asyncio.all_tasks(loop)
+            cleanup_error = None
             if pending:
-                for task in pending:
-                    task.cancel()
-                done, pending = loop.run_until_complete(asyncio.wait(pending, timeout=5))
-                for task in done:
-                    if not task.cancelled():
-                        task.exception()
+                for pending_task in pending:
+                    pending_task.cancel()
+                done, pending = loop.run_until_complete(asyncio.wait(pending, timeout=_CLEANUP_SECONDS))
+                for completed in done:
+                    if completed.cancelled():
+                        try:
+                            completed.result()
+                        except asyncio.CancelledError as cancellation:
+                            if isinstance(cancellation.__cause__, ExecutionContractError):
+                                cleanup_error = cancellation.__cause__
+                    elif completed.exception() is not None:
+                        cleanup_error = _cleanup_failure("Copilot cancellation cleanup failed")
             if pending:
-                from appsec_review.runtime.resources import quarantine_resources
-                quarantine_resources("copilot_teardown_unconfirmed")
-                error = RuntimeError("Copilot teardown exceeded its cancellation bound")
-                safety.retain_failure("copilot.cleanup", error, pending_tasks=len(pending))
-                safety.fail(str(error), action="copilot.cleanup")
+                cleanup_error = _cleanup_failure("Copilot teardown exceeded its cancellation bound",
+                                                 pending_tasks=len(pending))
+            if cleanup_error is not None:
+                if original is not None and failure_category(original) is FailureCategory.CANCELLED:
+                    original.add_note(str(cleanup_error))
+                    raise original from cleanup_error
+                raise cleanup_error from original
         finally:
             loop.close()
+    if original is not None:
+        raise original
+    return result
 
 
 def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
