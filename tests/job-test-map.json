@@ -26,7 +26,11 @@
       "live": []
     },
     "job_build_iteration": {
-      "unit": ["tests/test_build_iterations.py"],
+      "unit": [
+        "tests/test_build_iterations.py",
+        "tests/test_build_topology_refinement.py::test_workspace_resume_after_failed_iteration_rollback_needs_no_ledger",
+        "tests/test_build_topology_refinement.py::test_workspace_resume_without_ledger_refuses_non_pristine_state"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
