@@ -322,9 +322,11 @@ def test_real_resume_keeps_schedule_only_branch_identity(tmp_path):
     assert (Path(output["attempt_root"]) / "handoff.json").read_bytes() == accepted_bytes
 
 
-def test_input_manifest_preserves_a_dominating_accepted_manifest(tmp_path):
+@pytest.mark.parametrize("omitted", (False, True), ids=("complete-root", "omitted-inherited-shard"))
+def test_input_manifest_preserves_a_dominating_accepted_manifest(tmp_path, omitted):
     from appsec_review.retrieval.core import materialize_attempt_input_manifest, resolve_context_manifest
-    from appsec_review.retrieval.index import write_manifest
+    from appsec_review.retrieval.index import IndexBuilder, IndexIdentity, write_manifest, load_verified_manifest
+    from appsec_review.runtime.datasets import indexed
     from appsec_review.storage.shared import reference
 
     runner, producer, consumer, target = setup(tmp_path, read=False)
@@ -332,25 +334,47 @@ def test_input_manifest_preserves_a_dominating_accepted_manifest(tmp_path):
     def publish(unit):
         path = unit.unit_root / "manifest.json"
         parents = ()
+        indexes = ()
+        result = {}
         if unit.job.upstream_handoffs:
             upstream, digest = resolve_context_manifest(unit.job)
             parents = (reference(unit.job.run_root, upstream, expected_sha256=digest),)
+        elif omitted:
+            from dataclasses import asdict
+            database = unit.job.run_root / "data/indices/analysis/inherited.sqlite"
+            builder = IndexBuilder(database, name="analysis", fingerprint="a" * 64,
+                                   target_snapshot=SNAPSHOT, shard_id="inherited")
+            builder.add_coverage("inherited", "complete")
+            identity = IndexIdentity("analysis", "appsec-review/retrieval-index/2",
+                                     builder.build(), "a" * 64,
+                                     database.relative_to(unit.job.run_root).as_posix(),
+                                     {"job": producer.job_id, "unit": unit.unit_id}, (), "inherited")
+            indexes = (identity,)
+            result = {"index_identity": asdict(identity), "artifacts": [reference(unit.job.run_root, database)]}
         write_manifest(path, run_id=unit.job.run_id, target_snapshot=SNAPSHOT,
-                       target_root=target, indexes=(), upstream_manifests=parents)
-        return {"index_manifest": reference(unit.job.run_root, path)}
+                       target_root=target, indexes=indexes, upstream_manifests=parents)
+        return {**result, "index_manifest": reference(unit.job.run_root, path)}
 
-    producer = replace(producer, datasets=(), units=(Unit("work.publish", publish),))
+    datasets = (indexed("analysis", "work", "catalog", "appsec-review/retrieval-index/2",
+                        "Inherited fixture analysis.", indexes=("analysis",), route="find"),) if omitted else ()
+    producer = replace(producer, datasets=datasets, units=(Unit("work.publish", publish),))
     consumer = replace(consumer, units=(Unit("work.read", publish),),
-                       contract=JobContract(inputs=accepted_inputs(producer.job_id, ())))
+                       contract=JobContract(inputs=accepted_inputs(producer.job_id, datasets)))
     first = run(runner, producer, target)
     second = run(runner, consumer, target, first["status"]["run_id"])
     root = runner.runs.resolve(first["status"]["run_id"])
+    projection = root / "data/inputs/manifest-projection"
     path, digest = materialize_attempt_input_manifest(
-        run_root=root, attempt_root=Path(second["attempt_root"]), run_id=root.name,
+        run_root=root, attempt_root=projection, run_id=root.name,
         target_snapshot=SNAPSHOT, target_root=target, upstream_handoffs={
             producer.job_id: first["handoff_sha256"], consumer.job_id: second["handoff_sha256"]})
     expected = second["result"]["outputs"]["work.read"]["index_manifest"]
-    assert path == root / expected["path"] and digest == expected["sha256"]
+    if omitted:
+        assert path != root / expected["path"]
+        manifest, _ = load_verified_manifest(root, path, digest)
+        assert [item["shard_id"] for item in manifest["indexes"]] == ["inherited"]
+    else:
+        assert path == root / expected["path"] and digest == expected["sha256"]
     assert not (Path(second["attempt_root"]) / "inputs/retrieval-manifest.json").exists()
 
 

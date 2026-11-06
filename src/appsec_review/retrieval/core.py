@@ -259,7 +259,11 @@ def materialize_attempt_input_manifest(
         item[0] in other[2] for other in expanded if other[0] != item[0])]
     if len(maximal) == 1:
         identity = maximal[0][0]
-        return roots[identity], identity[1]
+        document, _ = load_verified_manifest(run_root, roots[identity], identity[1], verified=verified)
+        direct = {(str(item["name"]), str(item.get("shard_id", "default"))): item
+                  for item in document["indexes"]}
+        if direct == maximal[0][1]:
+            return roots[identity], identity[1]
     merged: dict[tuple[str, str], tuple[Mapping[str, Any], tuple[str, str]]] = {}
     for root_identity, values, lineage in sorted(expanded, key=lambda item: (len(item[2]), item[0])):
         for key, value in values.items():
