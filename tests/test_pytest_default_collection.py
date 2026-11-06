@@ -25,8 +25,9 @@ def test_collection_scope(tmp_path: Path, arguments, imported, passed):
     root = tmp_path / "p"
     tests = root / "tests"
     tests.mkdir(parents=True)
-    (tests / "conftest.py").write_text(
-        Path(__file__).with_name("conftest.py").read_text(encoding="utf-8"), encoding="utf-8")
+    for harness in ("conftest.py", "time_budgets.py"):
+        (tests / harness).write_text(
+            Path(__file__).with_name(harness).read_text(encoding="utf-8"), encoding="utf-8")
     (root / "pyproject.toml").write_text(
         '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n'
         'addopts = "--basetemp=test/tmp"\ncache_dir = "test/tmp/.pytest_cache"\n',
