@@ -26,7 +26,7 @@ from appsec_review.jobs.job_poc_generation.source import WriterAnswer, assemble
 from appsec_review.storage import canonical_json
 from tests import poc_support
 from tests.final_report_support import (
-    GATE, REPORT, environment, job_tables, report_job, review_job, run_job,
+    GATE, REPORT, environment, job_tables, repin, report_job, review_job, run_job,
 )
 from tests.fixtures.inference_review.acceptance import JOB, ROOT, write_config, write_overlay, write_scenario
 from tests.fixtures.inference_review.builder import FixtureRun, build_accepted_index_set
@@ -239,50 +239,6 @@ def load_chain(base: Path, meta: Path) -> PocChain:
                      record["findings"], record["packages"])
     chain.restore()
     return chain
-
-
-def repin(attempt: Path, changed: Mapping[Path, bytes]) -> None:
-    """Re-seal an accepted attempt after rewriting artifacts, so only the injected content differs.
-
-    Admission verifies every digest the handoff, result, outcome and unit records pin, so each JSON
-    record in the attempt that carries a replaced digest is rewritten with the new one (and its size),
-    until nothing changes.
-    """
-    digests: dict[str, tuple[str, int]] = {}
-
-    def write(path: Path, payload: bytes) -> None:
-        before, after = hashlib.sha256(path.read_bytes()).hexdigest(), hashlib.sha256(payload).hexdigest()
-        if before != after:
-            digests[before] = (after, len(payload))
-            path.write_bytes(payload)
-
-    def update(node: Any) -> bool:
-        touched = False
-        if isinstance(node, dict):
-            for key, value in list(node.items()):
-                if isinstance(value, str) and value in digests:
-                    node[key] = digests[value][0]
-                    if key == "sha256" and "size_bytes" in node:
-                        node["size_bytes"] = digests[value][1]
-                    touched = True
-                else:
-                    touched = update(value) or touched
-        elif isinstance(node, list):
-            for value in node:
-                touched = update(value) or touched
-        return touched
-
-    for path, payload in changed.items():
-        write(path, payload)
-    while True:
-        rewritten = False
-        for path in sorted(attempt.rglob("*.json")):
-            document = json.loads(path.read_bytes())
-            if update(document):
-                write(path, canonical_json(document))
-                rewritten = True
-        if not rewritten:
-            return
 
 
 def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:

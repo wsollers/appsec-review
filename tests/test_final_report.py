@@ -31,7 +31,7 @@ from appsec_review.retrieval.core import RetrievalIntegrityError
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.storage import file_sha256
-from tests.final_report_support import GATE, REPORT, Chain, job_tables, run_review_chain
+from tests.final_report_support import GATE, REPORT, Chain, job_tables, repin, run_review_chain
 from tests.fixtures.inference_review.acceptance import JOB, ROOT
 from tests.fixtures.inference_review.fake_infer import NARRATIVES
 
@@ -446,12 +446,9 @@ def test_gate_rejects_a_handoff_whose_partition_disagrees_with_its_packages(pris
     moved = document["remediation_intake"].pop()
     document["verification_backlog"].append({**moved, "label": "unconfirmed", "missing_predicates": [],
                                              "gap_ids": [], "ship_block_status": "not_ship_blocking"})
-    path.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
-    # Re-pin the rewritten document the way a forger would: through the unit result and the handoff.
+    # Re-pin the rewritten document the way a forger would: through every record of the attempt.
     handoff_path = copy_.run_root / reference["path"].split("/steps/")[0] / "handoff.json"
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    handoff["outputs"]["publication.publish_handoff"]["artifact"]["sha256"] = file_sha256(path)
-    handoff_path.write_text(json.dumps(handoff, sort_keys=True), encoding="utf-8")
+    repin(handoff_path.parent, {path: (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()})
     pointer_path = copy_.run_root / "data" / "jobs" / JOB / "latest.json"
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     pointer["handoff_sha256"] = file_sha256(handoff_path)
@@ -473,11 +470,8 @@ def test_gate_recounts_ship_block_totals_including_decision_pending(pristine: Ch
     for counts in (summary["by_status"], summary["by_lane"][lane]):
         counts[status] -= 1
         counts[replacement] += 1
-    path.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     handoff_path = copy_.run_root / reference["path"].split("/steps/")[0] / "handoff.json"
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    handoff["outputs"]["publication.publish_handoff"]["artifact"]["sha256"] = file_sha256(path)
-    handoff_path.write_text(json.dumps(handoff, sort_keys=True), encoding="utf-8")
+    repin(handoff_path.parent, {path: (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode()})
     pointer_path = copy_.run_root / "data" / "jobs" / JOB / "latest.json"
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     pointer["handoff_sha256"] = file_sha256(handoff_path)
