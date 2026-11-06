@@ -26,6 +26,13 @@ test = [
     "hypothesis==6.170.0",
     "PyYAML==6.0.3",
 ]
+quality = [
+    "ruff==0.14.2",
+    "mypy==1.18.2",
+    "bandit==1.8.6",
+    "pytest==8.4.2",
+    "setuptools==80.9.0",
+]
 dagster = [
     "dagster==1.13.21",
     "dagster-postgres==0.29.21",
@@ -51,3 +58,67 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "--basetemp=test/tmp"
 cache_dir = "test/tmp/.pytest_cache"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+cache-dir = "test/tmp/.ruff_cache"
+
+[tool.ruff.lint]
+# Initial correctness rules, not a repository-wide style migration.
+select = ["E9", "F811", "F821", "F822", "F823"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+follow_imports = "silent"
+warn_unused_configs = true
+cache_dir = "test/tmp/.mypy_cache"
+files = [
+    "tools/quality",
+    "src/appsec_review/runtime/job.py",
+    "src/appsec_review/runtime/plan.py",
+    "src/appsec_review/storage/atomic.py",
+    "src/appsec_review/storage/validation.py",
+    "src/appsec_review/inference/request.py",
+]
+
+[tool.appsec-quality]
+version = 1
+source_roots = ["src/appsec_review", "tools/quality"]
+baseline = "quality/baseline.json"
+timeout_seconds = 120
+sast_rules = ["B102", "B301", "B307", "B506", "B602"]
+# These are offline contract sentinels, NOT a second job-to-test registry.
+unit_tests = [
+    "tests/quality/test_config_selection.py",
+    "tests/quality/test_boundaries_baseline.py",
+    "tests/quality/test_runner.py",
+    "tests/quality/test_workflows.py",
+]
+contract_tests = [
+    "tests/test_config.py",
+    "tests/test_pytest_default_collection.py",
+    "tests/test_review_model_request.py",
+]
+quality_prefixes = ["tools/quality/", "tests/quality/", "quality/"]
+documentation_prefixes = ["docs/"]
+shared_paths = [
+    "pyproject.toml", "requirements/quality.lock", "appsec-review.toml",
+    "tests/conftest.py", ".github/workflows/quality.yml",
+]
+bootstrap_modules = [
+    "appsec_review.signing.bootstrap",
+    "appsec_review.signing.core",
+    "appsec_review.signing.modules",
+    "appsec_review.signing.import_hook",
+    "appsec_review.signing.release_lib",
+    "appsec_review.signing.sitecustomize_shim",
+]
+public_contracts = [
+    "appsec_review.runtime.job",
+    "appsec_review.runtime.plan",
+    "appsec_review.inference.request",
+    "appsec_review.storage.atomic",
+    "appsec_review.storage.validation",
+]

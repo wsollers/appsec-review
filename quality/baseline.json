@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "reason": "Initial reviewed legacy diagnostics at 528b3fa681d9e33113932c9fc4abf9ddbc53b6e5; see docs/development/quality-gates.md for rule scope and dispositions.",
+  "findings": [
+    {
+      "path": "src/appsec_review/acceptance/answer_key.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.acceptance.answer_key imports appsec_review.review.evidence._content_record",
+      "fingerprint": "914627d5930e1f8371b95e8aa664dbc0fd89f8a52faf6a30bbf874f3e9a4c785",
+      "line": 188
+    },
+    {
+      "path": "src/appsec_review/acceptance/custody.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.acceptance.custody imports appsec_review.storage.shared._binding_path",
+      "fingerprint": "efe5e2d851f78818a2a653ef2462e8ad8a80d70847f1d44240daeab4f974899b",
+      "line": 371
+    },
+    {
+      "path": "src/appsec_review/binary_decompilation/efficacy.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.binary_decompilation.efficacy imports appsec_review.container_runtime.executor._default_runner",
+      "fingerprint": "2632b3623e4e03ec2c5d020b51052212cb0efb63697e343ade67e59c50449df8",
+      "line": 27
+    },
+    {
+      "path": "src/appsec_review/cli.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.cli imports appsec_review.container_runtime.build_executor._run",
+      "fingerprint": "a3ace244228e6784b08d8efb5eb3c6240fdf59117057643242b35a100f09feb3",
+      "line": 226
+    },
+    {
+      "path": "src/appsec_review/codeql/runtime.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.codeql.runtime imports appsec_review.container_runtime.build_executor._run",
+      "fingerprint": "1d01e8606571ae3bfc9ced74af8c8c19b75931345fc1cb96d4d86ce7a397de7a",
+      "line": 19
+    },
+    {
+      "path": "src/appsec_review/container_runtime/image_builder.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.container_runtime.image_builder imports appsec_review.runtime.resources._ACTIVE",
+      "fingerprint": "3544f4c248802dbeb984b0f7942e6beedef42682a50fe79b8eb43c5dd0b374d1",
+      "line": 84
+    },
+    {
+      "path": "src/appsec_review/container_runtime/image_builder.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.container_runtime.image_builder imports appsec_review.runtime.resources._OWNER",
+      "fingerprint": "5810c0c56897eacf3efd4bfb9b6bf23ca9283b05ebbc308ce449760d4fba0057",
+      "line": 84
+    },
+    {
+      "path": "src/appsec_review/container_runtime/native_client.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.container_runtime.native_client imports appsec_review.runtime.resources._ACTIVE",
+      "fingerprint": "7713b9eab76b225299426d878e89e3cc5c9e66d1f0d2814e4d38d5bbd321d171",
+      "line": 407
+    },
+    {
+      "path": "src/appsec_review/container_runtime/native_client.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.container_runtime.native_client imports appsec_review.runtime.resources._ACTIVE",
+      "fingerprint": "e51c9740c38d751195e2b7a78e22c175358d7c9d4b0f69044cc7549ca8322b48",
+      "line": 158
+    },
+    {
+      "path": "src/appsec_review/debug_symbols/_reader_pdb.py",
+      "rule": "bandit:B506",
+      "message": "Use of unsafe yaml load. Allows instantiation of arbitrary objects. Consider yaml.safe_load().",
+      "fingerprint": "ea284496143cc173d7b0a00fef0d22acb43f184884f1d45996d760edd844315d",
+      "line": 58
+    },
+    {
+      "path": "src/appsec_review/jobs/build_iterations.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_iterations imports appsec_review.jobs.build_topology_artifacts._read",
+      "fingerprint": "8e68d29219dd32db3573453eed984597a9e623599fbc294c4b8ed944a9e9c996",
+      "line": 616
+    },
+    {
+      "path": "src/appsec_review/jobs/build_iterations.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_iterations imports appsec_review.jobs.job_language_build.job._interface_environment",
+      "fingerprint": "8669b596e6e48d51e8e78f41443a64af27f6e0e0b5be66c7429a8e3001dfd22c",
+      "line": 889
+    },
+    {
+      "path": "src/appsec_review/jobs/build_recipe_commands.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_recipe_commands imports appsec_review.jobs.job_project_build.job._normalized_argv",
+      "fingerprint": "0d64a756fa40c696c0ed00c604db9a5850ddf7ec06f6d923b710b534e9605a03",
+      "line": 27
+    },
+    {
+      "path": "src/appsec_review/jobs/build_topology_artifacts.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_topology_artifacts imports appsec_review.jobs.build_iterations.BuildIterations._decode_binding",
+      "fingerprint": "67912fecca0ddc1a27e1ce2b82d9bd7dbec6e7e993d735b827049cf704d47200",
+      "line": 398
+    },
+    {
+      "path": "src/appsec_review/jobs/build_topology_artifacts.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_topology_artifacts imports appsec_review.jobs.build_iterations.BuildIterations._decode_binding",
+      "fingerprint": "b0aec7f49667cf5d0217e28070cfe98eddcc11db38a1324ed66d9ed004a054a6",
+      "line": 313
+    },
+    {
+      "path": "src/appsec_review/jobs/build_topology_artifacts.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_topology_artifacts imports appsec_review.jobs.build_topology._SOURCE_KEYS",
+      "fingerprint": "b279964ee19ba3b72bda20d143cff320309d68d5e1cfe3de2dd322a9232da554",
+      "line": 14
+    },
+    {
+      "path": "src/appsec_review/jobs/build_topology_artifacts.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.build_topology_artifacts imports appsec_review.jobs.build_workspace.WorkspaceWriter._link_target",
+      "fingerprint": "4d71639749470ddb11aef16e5f312d6bce63bbc7e8563d8969d4abbe57f881b2",
+      "line": 333
+    },
+    {
+      "path": "src/appsec_review/jobs/job_build_environment_analysis/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_build_environment_analysis.job imports appsec_review.jobs.job_target_analysis_plan.job._accepted_catalog",
+      "fingerprint": "097b141d1b8f3c0f89857031af307fd69560ae93fec20891668ea4f1c775a63d",
+      "line": 324
+    },
+    {
+      "path": "src/appsec_review/jobs/job_build_iteration/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_build_iteration.job imports appsec_review.jobs.job_language_build.job._production_iteration",
+      "fingerprint": "7e409fce2feba5aad299139d237bd17b02cc8ad3090198db7a97cbe554eaec47",
+      "line": 95
+    },
+    {
+      "path": "src/appsec_review/jobs/job_language_build/dotnet.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_language_build.dotnet imports appsec_review.jobs.build_topology._condition_applies",
+      "fingerprint": "6ad58c053eecef493d02be4e124ca308c08b6ecd12ca14f022f29e5d08711987",
+      "line": 101
+    },
+    {
+      "path": "src/appsec_review/jobs/job_language_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_language_build.job imports appsec_review.jobs.job_project_build.job._node_recipe_restores_dependencies",
+      "fingerprint": "712c12c695e5b79efe14b0f73560e30951b84cbd3c964338d77b0bc9644f3ab9",
+      "line": 42
+    },
+    {
+      "path": "src/appsec_review/jobs/job_language_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_language_build.job imports appsec_review.jobs.job_project_build.job._normalized_argv",
+      "fingerprint": "9677fc4852eddf600747324682bc86093d10145a1b9c4d2f9f14ed9669036800",
+      "line": 42
+    },
+    {
+      "path": "src/appsec_review/jobs/job_language_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_language_build.job imports appsec_review.jobs.job_project_build.job._probe_environment",
+      "fingerprint": "a05f21b91f22d2bf338adffea31488788e5808dd4477bb77fca16b307f907851",
+      "line": 42
+    },
+    {
+      "path": "src/appsec_review/jobs/job_language_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_language_build.job imports appsec_review.jobs.job_project_build.job._safe_root",
+      "fingerprint": "4d7fc37a0b0b6b0e8873840fc28fdd3e02c3f8bb947a4043594b833c564e4f16",
+      "line": 42
+    },
+    {
+      "path": "src/appsec_review/jobs/job_language_build/wasm.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_language_build.wasm imports appsec_review.jobs.job_project_build.job._normalized_argv",
+      "fingerprint": "5104d92a13464be1d39d5005713a75f6820c037bf3ae40dc9a99ed3e337aec08",
+      "line": 24
+    },
+    {
+      "path": "src/appsec_review/jobs/job_sanitizer_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_sanitizer_build.job imports appsec_review.jobs.job_language_build.job._build_output_policy",
+      "fingerprint": "6cf3df66c3285e5e55776baa7c949e437a1312d736cb5bc47b480b86758b5d47",
+      "line": 35
+    },
+    {
+      "path": "src/appsec_review/jobs/job_sanitizer_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_sanitizer_build.job imports appsec_review.jobs.job_language_build.job._copy_source",
+      "fingerprint": "09f942d352e88d2aabc1a0ef3c90c5368540c2c32cde740acc50cb12fb49f066",
+      "line": 35
+    },
+    {
+      "path": "src/appsec_review/jobs/job_sanitizer_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_sanitizer_build.job imports appsec_review.jobs.job_language_build.job._kind",
+      "fingerprint": "7ad72a1e1c3517c856a2ff8bb37b7590002216fcdfc0b941d02de4e8aef81930",
+      "line": 35
+    },
+    {
+      "path": "src/appsec_review/jobs/job_sanitizer_build/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_sanitizer_build.job imports appsec_review.jobs.job_language_build.job._snapshot",
+      "fingerprint": "de5c35cd182ef599476308b79222191c2032cd6467897c56ac38c561069c2c33",
+      "line": 35
+    },
+    {
+      "path": "src/appsec_review/jobs/job_source_history_analysis/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_source_history_analysis.job imports appsec_review.jobs.job_tree_sitter_ast.job._grammar_locks",
+      "fingerprint": "11ccfe09c3c9d1e12dee339eac26bec0011e29e23d3d58cc6c94c38883ea9634",
+      "line": 782
+    },
+    {
+      "path": "src/appsec_review/jobs/job_source_history_analysis/job.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_source_history_analysis.job imports appsec_review.jobs.job_tree_sitter_ast.scope_execution._validate_container_output",
+      "fingerprint": "e893e8be0818472de07573c924a008cce55970db882dfdd53811a7a197a524bf",
+      "line": 783
+    },
+    {
+      "path": "src/appsec_review/jobs/job_target_analysis_plan/job.py",
+      "rule": "ruff:F811",
+      "message": "Redefinition of unused `replace` from line 7",
+      "fingerprint": "570a6be6b6f9319034a07f0f7f5e00f18007f0bfe02af65ed94c88ea1af6c5d3",
+      "line": 375
+    },
+    {
+      "path": "src/appsec_review/jobs/job_third_party_data_sync/steps/nvd_sync/feed.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed imports appsec_review.storage.shared._link",
+      "fingerprint": "48af2d13b5a5f40c5e72c3500be0ad8ad8f8fe619ed0573174683ee05d92e5a6",
+      "line": 377
+    },
+    {
+      "path": "src/appsec_review/jobs/job_tree_sitter_ast/generated_sources.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.job_tree_sitter_ast.generated_sources imports appsec_review.jobs.job_artifact_indexing.job._validate_receipts",
+      "fingerprint": "da2383cad8a4f776c6bcec4b4009eb6d64ea50e2e4e3e54a4ca897840d1d45e3",
+      "line": 12
+    },
+    {
+      "path": "src/appsec_review/jobs/unity_build.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.jobs.unity_build imports appsec_review.jobs.job_project_build.job._copy_source",
+      "fingerprint": "f3e61605b21a83bbb49129ed4aef8d8afb2aa24bd2800f06fd35f6b28ef075aa",
+      "line": 446
+    },
+    {
+      "path": "src/appsec_review/reporting/html.py",
+      "rule": "ruff:invalid-syntax",
+      "message": "Cannot reuse outer quote character in f-strings on Python 3.11 (syntax was added in Python 3.12)",
+      "fingerprint": "05e6ad1132c0c63925dcb1e310f775c479a5a62f8b3aaf44148ce896b41ced87",
+      "line": 279
+    },
+    {
+      "path": "src/appsec_review/review/slicing/sources.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.review.slicing.sources imports appsec_review.indexing.store._LOCATION",
+      "fingerprint": "291a8fb2ffee59f1b6e3b833815434d01b35ff74aa11b2787e4b1f1fc18585fc",
+      "line": 31
+    },
+    {
+      "path": "src/appsec_review/rulepacks/sei_cert/pack.py",
+      "rule": "bandit:B506",
+      "message": "Use of unsafe yaml load. Allows instantiation of arbitrary objects. Consider yaml.safe_load().",
+      "fingerprint": "fcf0e97c8423c93f7b818f27848d5a1e88f0899b75a4768e651508b38a483101",
+      "line": 105
+    },
+    {
+      "path": "src/appsec_review/runtime/handoff.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.runtime.handoff imports appsec_review.config.loader._build_capture",
+      "fingerprint": "e5d62fbe359333fde925bfdc49ed21a9c1bd1c232351ae266a3e6eaf3cb540a4",
+      "line": 176
+    },
+    {
+      "path": "src/appsec_review/runtime/registry.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.runtime.registry imports appsec_review.container_runtime.build_executor._run",
+      "fingerprint": "3aa4cd7d7c929ee8f6ba02c58a39e04247da34a1bfe69ed4461e1cefde857183",
+      "line": 49
+    },
+    {
+      "path": "src/appsec_review/runtime/resume.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.runtime.resume imports appsec_review.jobs.build_topology_artifacts._read",
+      "fingerprint": "59b51ca15de9c009d8669b7546d7ef927a369d2083cb6a4c8c5fbbf9fd0ca6dd",
+      "line": 122
+    },
+    {
+      "path": "src/appsec_review/signing/bootstrap.py",
+      "rule": "bandit:B102",
+      "message": "Use of exec detected.",
+      "fingerprint": "829a8fe4a72cbb488482c989d2a845cc9d81a4b6d9f72b57fdb5bf0d2c25da0b",
+      "line": 81
+    },
+    {
+      "path": "src/appsec_review/signing/import_hook.py",
+      "rule": "bandit:B102",
+      "message": "Use of exec detected.",
+      "fingerprint": "16d11ac6973057409739fbad0b13945cb1464ada5ba65f8d1fc39e5ff1245201",
+      "line": 208
+    },
+    {
+      "path": "src/appsec_review/signing/sitecustomize_shim.py",
+      "rule": "bandit:B102",
+      "message": "Use of exec detected.",
+      "fingerprint": "82d2cc20040f1623f4869e3869483a6f7d7b4239a3c283569c54af55042a3206",
+      "line": 35
+    },
+    {
+      "path": "src/appsec_review/storage/admission.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.storage.admission imports appsec_review.retrieval.core._accepted_handoff",
+      "fingerprint": "9e5caf2bb81189087d0c4aa35398250c47ddc9a3b13a53da2e82f0eebaf1c18b",
+      "line": 176
+    },
+    {
+      "path": "src/appsec_review/storage/admission.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.storage.admission imports appsec_review.retrieval.core._accepted_handoff",
+      "fingerprint": "9e5caf2bb81189087d0c4aa35398250c47ddc9a3b13a53da2e82f0eebaf1c18b",
+      "line": 228
+    },
+    {
+      "path": "src/appsec_review/storage/feed_provenance.py",
+      "rule": "ARCH:private-import",
+      "message": "appsec_review.storage.feed_provenance imports appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed.NvdPublisher._snapshot_id",
+      "fingerprint": "2d7616d354ee2fb025448dc9dd49dbafb23fc0417ec3c777997f71ecce1b05b3",
+      "line": 110
+    }
+  ]
+}
