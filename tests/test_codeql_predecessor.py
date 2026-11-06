@@ -90,6 +90,8 @@ def fixture(tmp_path, monkeypatch, request):
         path.write_text(
             '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n' + build_capture_toml()
             + '\n[jobs.job_codeql_analysis]\nname = "fixture"\nworkers = 1\n'
+            # The fixture runs a subset of units; DATASETS also declares the acceptance step.
+            + '\n[jobs.job_codeql_analysis.steps.acceptance]\n'
             + _table("jobs.job_codeql_analysis.settings", settings)
             + _table("review_policy", policy))
         return load_config(path)
@@ -164,6 +166,11 @@ def test_selected_database_is_detached_and_only_new_queries_execute(fixture):
     assert record["source_handoff_sha256"] == fixture.policy["predecessor_databases"]["handoff_sha256"]
 
 
+def _not_applicable_export(context, value, **kwargs):
+    return {**codeql._export_base(codeql._scope_from(value["scope"]), value),
+            "export_status": "NOT_APPLICABLE", "gaps": []}
+
+
 def test_ready_coordinator_imports_before_scheduling_selected_scope(fixture, monkeypatch):
     prepared, _ = fixture.destination()
     unit = UnitContext(
@@ -172,7 +179,7 @@ def test_ready_coordinator_imports_before_scheduling_selected_scope(fixture, mon
     monkeypatch.setattr(codeql, "_plan_from", lambda value: SimpleNamespace(scopes=[fixture.scope]))
     monkeypatch.setattr(codeql, "_receipt_map", lambda value: {})
     monkeypatch.setattr(codeql, "_normalize_one", lambda context, value: {**value, "observation_count": 0})
-    monkeypatch.setattr(codeql, "_export_isolated", lambda context, value, **kwargs: {**value, "gaps": []})
+    monkeypatch.setattr(codeql, "_export_isolated", _not_applicable_export)
     execution = next(item for item in codeql.build_job().units if item.unit_id == "execution.scopes")
     result = execution.handler(unit)
     assert result["predecessor_import"]
@@ -190,7 +197,7 @@ def test_supported_destination_lifecycle_accepts_import_and_reuses_new_queries(f
 
     monkeypatch.setattr(codeql, "_receipt_map", lambda value: {})
     monkeypatch.setattr(codeql, "_normalize_one", lambda context, value: {**value, "observation_count": 0})
-    monkeypatch.setattr(codeql, "_export_isolated", lambda context, value, **kwargs: {**value, "gaps": []})
+    monkeypatch.setattr(codeql, "_export_isolated", _not_applicable_export)
     execution = next(item for item in codeql.build_job().units if item.unit_id == "execution.scopes")
     definition = Job(predecessor.JOB, "fixture", lambda context: {},
                      units=(Unit("plan.inventory", plan), execution), datasets=DATASETS)
@@ -223,7 +230,7 @@ def test_re_pinned_handoff_cannot_name_another_source_run(fixture):
     atomic_json(path, handoff)
     fixture.policy["predecessor_databases"]["handoff_sha256"] = file_sha256(path)
     unit, _ = fixture.destination()
-    with pytest.raises(ValueError, match="accepted CodeQL attempt"):
+    with pytest.raises(ValueError, match="handoff run_id mismatch"):
         _import(fixture, unit)
     assert len(fixture.calls) == 2
 
@@ -235,7 +242,7 @@ def test_re_pinned_original_claim_cannot_name_another_source_run(fixture):
     claim["run_id"] = "2026-10-24-9999"
     atomic_json(claim_path, claim)
     handoff = json.loads(handoff_path.read_text())
-    assert "run_id" not in handoff
+    assert handoff["run_id"] == fixture.source.name
     reference = next(item for item in handoff["artifacts"] if item["path"].endswith("/claim.json"))
     reference.update(sha256=file_sha256(claim_path), size_bytes=claim_path.stat().st_size)
     atomic_json(handoff_path, handoff)

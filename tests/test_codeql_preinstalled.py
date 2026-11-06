@@ -505,6 +505,8 @@ def test_jobrunner_inventory_database_and_query_use_real_executor_with_fake_engi
         '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n' + build_capture_toml()
         + _table("review_policy", policy)
         + '\n[jobs.job_codeql_analysis]\nname = "fixture"\nworkers = 1\n'
+        # The fixture runs a subset of units; DATASETS also declares the acceptance step.
+        + '\n[jobs.job_codeql_analysis.steps.acceptance]\n'
         + _table("jobs.job_codeql_analysis.settings", settings)
         + "".join(_table("[jobs.job_codeql_analysis.settings.preinstalled_runtimes]", entry)
                   for entry in entries))
