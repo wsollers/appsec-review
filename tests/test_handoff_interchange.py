@@ -896,3 +896,9 @@ def test_finalization_retry_preserves_accepted_immutable_handoff(tmp_path):
     assert (attempt / "handoff.json").read_bytes() == original
     events = [json.loads(line) for line in (attempt / "logs/events.jsonl").read_text().splitlines()]
     assert sum(event["event"] == "HANDOFF_ACCEPTED" for event in events) == 1
+
+
+def test_handoff_outputs_retain_producer_gaps_for_consumers(tmp_path):
+    """Consumers such as the publication gate compare a producer's named gaps with its summary."""
+    _, _, _, outcome, _ = publish(tmp_path, lambda unit: {"gaps": ["bounded coverage gap"]})
+    assert outcome["handoff"]["outputs"]["work.only"]["gaps"] == ["bounded coverage gap"]

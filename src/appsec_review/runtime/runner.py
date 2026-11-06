@@ -663,7 +663,7 @@ class JobRunner:
             if isinstance(output, Mapping):
                 handoff_outputs[unit_id] = {key: output[key] for key in (
                     "schema", "artifact", "graph_export_artifact", "identity", "pointer", "metadata_path", "item_count",
-                    "index_manifest", "index_identity", "terminal_status",
+                    "gaps", "index_manifest", "index_identity", "terminal_status",
                 ) if key in output}
         attempt = context.attempt_root.relative_to(context.run_root).as_posix()
         handoff = {
