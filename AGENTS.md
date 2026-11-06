@@ -128,7 +128,8 @@ agents that inspect or change the repository. It is not a prompt for review work
   test-isolation defect to fix.
 - Integration, acceptance, and live tests follow the same isolation, deterministic-id, and
   named-skip rules, and each case carries an explicit declared time budget that is never raised
-  to make a slow case pass.
+  to make a slow case pass. Integration (300 s) and live (1800 s) defaults are configured in
+  `pyproject.toml`; a longer need is declared with `pytest.mark.time_budget(seconds, reason=...)`.
 - [`docs/architecture/testing.md`](docs/architecture/testing.md) describes the tiers, the harness,
   and the working loop.
 - Use the smallest relevant set of unit-test files or cases; do not run the full test suite by

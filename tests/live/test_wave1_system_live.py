@@ -26,6 +26,8 @@ TAG = os.environ.get("APPSEC_REVIEW_SYSTEM_ACCEPTANCE", "")
 
 pytestmark = [
     pytest.mark.skipif(not TAG, reason="set APPSEC_REVIEW_SYSTEM_ACCEPTANCE=<corpus tag> to run the live system test"),
+    pytest.mark.time_budget(14400, reason="drives one complete wave1_review through Dagster; not yet calibrated "
+                                          "from the timing table"),
 ]
 
 

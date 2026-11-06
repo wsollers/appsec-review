@@ -60,6 +60,8 @@ from tests.test_codeql_preinstalled import settings_value
 
 DECLARATION_ERROR = "requires one exact environment/user declaration"
 
+# Customized project-image builds are bounded at 3600 s and run in the module fixture's first user.
+pytestmark = pytest.mark.time_budget(3600, reason="builds derived CodeQL images; each build is bounded at 3600 s")
 
 @pytest.fixture(scope="module")
 def env(tmp_path_factory: pytest.TempPathFactory):

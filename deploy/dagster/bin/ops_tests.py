@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import random
 import re
 import shlex
 import signal
@@ -95,6 +96,13 @@ def find_python(root: Path) -> tuple[str, dict[str, str]]:
     return sys.executable, {"PYTHONPATH": str(root / "src")}
 
 
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return value
+
+
 def has_xdist(python: str, environment: dict[str, str]) -> bool:
     probe = subprocess.run([python, "-c", "import xdist"], capture_output=True, check=False,
                            env={**os.environ, **environment})
@@ -105,9 +113,23 @@ def build_command(root: Path, args: argparse.Namespace, python: str, stamp: str,
     name = "custom" if args.extra else args.suite
     command = [python, "-m", "pytest", "-q", "-rfE", f"--basetemp=test/tmp/tests-{name}-{stamp}"]
     if parallel:
-        command += ["-n", "auto"]
+        command += ["-n", str(args.test_workers)]
+    seed = shuffle_seed(args)
+    if seed is not None:
+        command.append(f"--shuffle-seed={seed}")
     command += list(args.extra) if args.extra else suite_arguments(root, args.suite)
     return command
+
+
+def shuffle_seed(args: argparse.Namespace) -> int | None:
+    """Named suites other than live run in a shuffled order so order-coupled tests surface."""
+    if args.no_shuffle or any(item == "--shuffle-seed" or item.startswith("--shuffle-seed=") for item in args.extra):
+        return None
+    if args.shuffle_seed is not None:
+        return args.shuffle_seed
+    if args.extra or args.suite == "live":
+        return None
+    return random.SystemRandom().randrange(1, 2**31)
 
 
 def parse_output(text: str, known: dict[str, str]) -> Result:
@@ -199,7 +221,13 @@ def register(commands, add, root: Path) -> None:
               dry_run=True, url=False)
     sub.add_argument("suite", nargs="?", metavar="SUITE", help=f"one of {', '.join(SUITES)} (default fast)")
     sub.add_argument("--background", action="store_true", help="start detached; print the log path and how to follow it")
-    sub.add_argument("--parallel", action="store_true", help="use pytest-xdist (-n auto) when it is installed")
+    sub.add_argument("--parallel", action="store_true",
+                     help="use pytest-xdist with --test-workers workers when it is installed")
+    sub.add_argument("--test-workers", type=_positive_int, default=8, metavar="N",
+                     help="xdist workers for --parallel (default 8; bounded for shared hosts, never auto)")
+    sub.add_argument("--shuffle-seed", type=int, metavar="N",
+                     help="reproduce a shuffled order (named suites except live are shuffled by default)")
+    sub.add_argument("--no-shuffle", action="store_true", help="keep pytest's deterministic collection order")
     sub.add_argument("--strict", action="store_true", help="fail even when only known failures remain")
     sub.add_argument("--acceptance", metavar="PROFILE",
                      help="run an explicit acceptance inventory profile (quick); always strict and isolated")

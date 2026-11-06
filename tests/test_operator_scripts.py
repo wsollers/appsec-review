@@ -998,6 +998,45 @@ def test_run_tests_parallel_falls_back_without_xdist(box: Sandbox) -> None:
     assert "0 failures, 0 known" in result.stdout and "3 passed" in result.stdout
 
 
+def _run_tests_args(*argv: str):
+    options, extra = (argv[:argv.index("--")], argv[argv.index("--") + 1:]) if "--" in argv else (argv, ())
+    args = ops.build_parser().parse_args(["run-tests", *options])
+    args.extra = list(extra)
+    if not args.extra:
+        args.suite = args.suite or "fast"
+    return args
+
+
+def test_run_tests_parallel_uses_a_bounded_worker_count_never_auto(tmp_path: Path) -> None:
+    default = ops_tests.build_command(tmp_path, _run_tests_args("--no-shuffle", "--", "tests"), "py", "s", True)
+    assert default[default.index("-n") + 1] == "8" and "auto" not in default
+    chosen = ops_tests.build_command(tmp_path, _run_tests_args("--test-workers", "3", "--", "tests"), "py", "s", True)
+    assert chosen[chosen.index("-n") + 1] == "3"
+    assert "-n" not in ops_tests.build_command(tmp_path, _run_tests_args("--", "tests"), "py", "s", False)
+    with pytest.raises(SystemExit):
+        _run_tests_args("--test-workers", "0")
+
+
+def test_run_tests_shuffles_named_suites_except_live(tmp_path: Path) -> None:
+    def seeds(*argv: str) -> list[str]:
+        command = ops_tests.build_command(tmp_path, _run_tests_args(*argv), "py", "s", False)
+        return [item for item in command if item.startswith("--shuffle-seed")]
+
+    shuffled = seeds("fast")
+    assert len(shuffled) == 1 and int(shuffled[0].split("=", 1)[1]) > 0
+    assert seeds("fast", "--shuffle-seed", "42") == ["--shuffle-seed=42"]
+    assert seeds("fast", "--no-shuffle") == [] and seeds("live") == []
+    assert seeds("--", "tests") == []
+    assert seeds("--shuffle-seed", "7", "--", "tests") == ["--shuffle-seed=7"]
+    assert seeds("--shuffle-seed", "7", "--", "tests", "--shuffle-seed=9") == ["--shuffle-seed=9"]
+
+
+def test_run_tests_prints_the_shuffle_seed_for_reproduction(box: Sandbox) -> None:
+    result = box.run("run-tests", "fast", "--dry-run")
+    command = next(line for line in result.stdout.splitlines() if line.startswith("+ "))
+    assert result.returncode == 0 and " --shuffle-seed=" in command
+
+
 def test_run_tests_background_returns_the_log_path_at_once(box: Sandbox) -> None:
     box.pytest_output.write_text("3 passed in 1s\n", encoding="utf-8")
     environment = {"APPSEC_PYTHON": box.install_fake_python()}

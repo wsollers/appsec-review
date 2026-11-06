@@ -7,8 +7,12 @@ import os
 
 import pytest
 
+from tests import time_budgets
+
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+_TIER_BUDGETS = pytest.StashKey[dict]()
+_PHASE_CLOCK = pytest.StashKey[time_budgets.PhaseClock]()
 _PYTEST_SCRATCH_ROOT = (_REPOSITORY_ROOT / "test" / "tmp").resolve()
 
 
@@ -37,6 +41,8 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "requires_target(name): needs the local checkout targets/<name>; skipped when it is absent",
     )
+    config.addinivalue_line("markers", time_budgets.MARKER_HELP)
+    config.stash[_TIER_BUDGETS] = time_budgets.tier_budgets(config.getini)
 
     invocation_dir = Path(config.invocation_params.dir)
     basetemp = config.getoption("basetemp")
@@ -199,6 +205,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--shuffle-seed", type=int, default=None, metavar="SEED",
         help="run collected tests in an order shuffled by SEED to expose order-dependent tests; "
              "rerun with the same SEED to reproduce. Every pytest-xdist worker uses the same order.")
+    for tier, name in time_budgets.TIER_INI_OPTIONS.items():
+        parser.addini(name, f"per-test time budget in seconds for the {tier} tier (setup, call and teardown)",
+                      default=f"{time_budgets.DEFAULT_TIER_BUDGETS[tier]:g}")
 
 
 def pytest_report_header(config: pytest.Config) -> str | None:
@@ -220,6 +229,23 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     first = [item for item in items if Path(str(item.path)).resolve() == _FIRST_TEST_MODULE]
     if first:
         items[:] = first + [item for item in items if Path(str(item.path)).resolve() != _FIRST_TEST_MODULE]
+    budgets = config.stash[_TIER_BUDGETS]
+    for item in items:
+        budget = time_budgets.budget_for(
+            item.nodeid, time_budgets.tier_of(Path(str(item.path)), _REPOSITORY_ROOT / "tests"),
+            item.get_closest_marker(time_budgets.MARKER), budgets)
+        if budget is not None:
+            item.stash[_PHASE_CLOCK] = time_budgets.PhaseClock(budget)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
+    """Fail an integration or live test that overruns its declared time budget."""
+    report = yield
+    clock = item.stash.get(_PHASE_CLOCK, None)
+    if clock is not None:
+        clock.observe(report)
+    return report
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:

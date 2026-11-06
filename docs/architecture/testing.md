@@ -81,9 +81,24 @@ These tiers are slower and depend on the host, but the same principles apply:
   acceptance supervisor's private workspace) and never reads or writes production `runs/`, Dagster
   storage or the deployment's data volumes. Cases do not depend on each other's outputs unless the
   dependency is declared, as acceptance stages are.
-- **Declared time budgets.** Each case carries an explicit cap, as bounded acceptance does (60 s
-  per ordinary case, declared exceptions, 600 s per profile). A cap is never raised to make a slow
-  case pass; a raise is a reviewed change with its reason recorded.
+- **Declared time budgets.** Each case carries an explicit cap. Bounded acceptance enforces its own
+  (60 s per ordinary case, declared exceptions, 600 s per profile). For `tests/integration` and
+  `tests/live` the harness (`tests/time_budgets.py`, wired in `tests/conftest.py`) fails any test
+  whose setup, call and teardown together exceed its budget:
+
+  | Tier | Default | ini option | Rationale |
+  |---|---|---|---|
+  | integration | 300 s | `integration_time_budget_seconds` | a Docker probe plus one bounded build or tool command, whose own timeouts are 60–180 s |
+  | live | 1800 s | `live_time_budget_seconds` | one CodeQL database (bounded at 900 s) plus its query run |
+
+  The defaults live in `[tool.pytest.ini_options]` in `pyproject.toml`; lower or raise them for one
+  run with `-o integration_time_budget_seconds=<seconds>`. A test or module that legitimately needs
+  longer declares `pytest.mark.time_budget(<seconds>, reason="...")`; the reason is mandatory and the
+  declaration is a reviewed change. Module-scoped fixtures charge their setup to the module's first
+  test, which is why the whole-review live modules declare 14400 s (not yet calibrated from the
+  timing table). The check runs after each phase ends: it reports overruns, while a hung test is
+  stopped by its own internal timeouts. A cap is never raised to make a slow case pass. Unit tests
+  have no hard budget; their 10 s limit is enforced by the end-of-run slow-test list.
 - **Deterministic selection and ids,** as for unit tests.
 - **Opt-in, named prerequisites.** A test that needs Docker, images, targets, models or a run id
   gates on an `APPSEC_*` variable or a probe and skips naming what is missing. A skip is reported as
@@ -122,5 +137,7 @@ substitute for fixing or reporting a failure.
 
 `scripts/run-tests.sh` and `scripts/run-tests.ps1` wrap these commands for named suites and
 bounded acceptance profiles; see
-[`../operations/operator-scripts.md#run-tests`](../operations/operator-scripts.md#run-tests). Its
-`--parallel` option currently passes `-n auto`.
+[`../operations/operator-scripts.md#run-tests`](../operations/operator-scripts.md#run-tests).
+`--parallel` runs `--test-workers` xdist workers (default 8, never `auto`), and named suites other
+than `live` run shuffled with a printed `--shuffle-seed` (reproduce with `--shuffle-seed <n>`, opt
+out with `--no-shuffle`).

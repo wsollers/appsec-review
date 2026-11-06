@@ -411,12 +411,15 @@ sets `PYTHONPATH=src` so the worktree's code is the code under test. Each run ge
 | `live` | opt-in: `tests/live`, `tests/test_live_*.py`, `tests/integration`; needs Docker, the tool images, target checkouts and model access, and prints a warning |
 
 Options: `--dry-run` prints the command and log path, `--background` starts detached and prints the
-log path and how to follow it (`tail -f`), `--parallel` adds `-n auto` only when `pytest-xdist` is
-installed (otherwise it warns and runs serially), `--strict` also fails on known failures. For an
-arbitrary selection pass pytest arguments after `--` instead of a suite name. `-n auto` starts one
-worker per core, which overloads a host that also runs the review stack; there, pass a bounded
-count instead (`scripts/run-tests.sh -- -n 8 --shuffle-seed=<seed> <paths>`). Test standards and
-the working loop are in [`../architecture/testing.md`](../architecture/testing.md).
+log path and how to follow it (`tail -f`), `--parallel` runs `--test-workers N` xdist workers
+(default 8; never `-n auto`, which starts one worker per core and overloads a host that also runs
+the review stack) only when `pytest-xdist` is installed (otherwise it warns and runs serially), and
+`--strict` also fails on known failures. Named suites other than `live` run in a shuffled order so
+order-coupled tests surface; the printed command shows `--shuffle-seed=<n>`, `--shuffle-seed <n>`
+reproduces an order and `--no-shuffle` keeps collection order. For an arbitrary selection pass
+pytest arguments after `--` instead of a suite name; that selection is shuffled only when
+`--shuffle-seed` is given. Test standards and the working loop are in
+[`../architecture/testing.md`](../architecture/testing.md).
 
 `scripts/known-failures.txt` lists node ids that fail without any change of yours, one
 `<node id> | <reason>` per line. The final summary reads `N failures, M known`, marks each known

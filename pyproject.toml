@@ -52,3 +52,6 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "--basetemp=test/tmp"
 cache_dir = "test/tmp/.pytest_cache"
+# Per-test budgets (seconds) for tests/integration and tests/live; see docs/architecture/testing.md.
+integration_time_budget_seconds = "300"
+live_time_budget_seconds = "1800"

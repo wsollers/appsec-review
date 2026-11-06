@@ -51,6 +51,8 @@ IMAGE_GO_PROXY = "file:///opt/project-deps/go/cache/download"
 pytestmark = [
     pytest.mark.skipif(not os.environ.get("APPSEC_REVIEW_CODEQL_ACCEPTANCE"),
                        reason="set APPSEC_REVIEW_CODEQL_ACCEPTANCE=1 to run the live CodeQL analysis acceptance"),
+    pytest.mark.time_budget(14400, reason="the module fixture drives one complete wave1_review through Dagster; "
+                                          "not yet calibrated from the timing table"),
 ]
 
 
