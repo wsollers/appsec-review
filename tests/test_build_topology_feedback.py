@@ -584,6 +584,7 @@ def _transport(monkeypatch, tmp_path, send):
 def test_proposal3_transport_first_error_refuses_repair_before_raw_retention(
         tmp_path, monkeypatch, kind):
     from appsec_review.inference import ModelOutputError
+    from appsec_review.runtime import execution_safety as safety
     secret = "synthetic-sensitive-provider-data"
     calls = []
     def send(request, *, timeout_seconds):
@@ -593,10 +594,11 @@ def test_proposal3_transport_first_error_refuses_repair_before_raw_retention(
         raise TimeoutError(secret) from ValueError(secret)
     infer, controller = _transport(monkeypatch, tmp_path, send)
     catalog, request, _, _ = _inputs()
-    result = bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
-        read_document=lambda *_: pytest.fail("invalid output must not read evidence"),
-        cache_root=tmp_path / "cache", identity={})
-    assert result["status"] == "BUDGET_EXCEEDED" and result["calls"] == len(calls) == 1
+    with pytest.raises(safety.ReviewStopped):
+        bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
+            read_document=lambda *_: pytest.fail("invalid output must not read evidence"),
+            cache_root=tmp_path / "cache", identity={})
+    assert len(calls) == 1
     assert not list((tmp_path / "cache").glob("*.json"))
     records = [json.loads(path.read_bytes()) for path in (tmp_path / "data/execution-failures").glob("*.json")]
     assert len(records) == 2
@@ -606,20 +608,24 @@ def test_proposal3_transport_first_error_refuses_repair_before_raw_retention(
                and record["outcome"] == "REJECTED" for record in records)
     assert secret not in json.dumps(records)
     assert len([item for item in controller.events if item[0] == "admit"]) == 1
-    assert len([item for item in controller.events if item[0] == "check"]) == 3
-    assert all(item[1]["succeeded"] is True for item in controller.events if item[0] == "finish")
-    assert not any(item[0] == "failure" for item in controller.events)
+    assert any(item[0] == "check" for item in controller.events)
+    assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == [False]
+    assert len([item for item in controller.events if item[0] == "failure"]) == 1
 
 
 @pytest.mark.parametrize("kind", ["output", "timeout"])
 def test_proposal3_transport_repair_signal_has_no_original_exception_chain(tmp_path, monkeypatch, kind):
+    from contextvars import ContextVar
     from appsec_review.inference import ModelOutputError
+    from appsec_review.runtime import execution_safety as safety
     secret = "synthetic-sensitive-provider-data"
     def send(request, *, timeout_seconds):
         if kind == "output":
             raise ModelOutputError(secret, raw_response=secret, rejected_output=secret) from ValueError(secret)
         raise TimeoutError(secret) from ValueError(secret)
     infer, _ = _transport(monkeypatch, tmp_path, send)
+    # Ordinary repair mode receives a typed signal; first-error mode stops instead.
+    monkeypatch.setattr(safety, "_ACTIVE", ContextVar("ordinary-repair-mode", default=None))
     _, request, _, _ = _inputs()
     with pytest.raises(ModelOutputError if kind == "output" else TimeoutError) as caught:
         infer(request, timeout_seconds=30)
@@ -647,10 +653,14 @@ def test_proposal3_transport_unexpected_failure_still_latches_before_any_repair(
     assert secret not in "".join(traceback.format_exception(
         type(caught.value), caught.value, caught.value.__traceback__))
     records = [json.loads(path.read_bytes()) for path in (tmp_path / "data/execution-failures").glob("*.json")]
-    assert len(records) == 2
+    assert len(records) == 3
     records = [record for record in records if record["action"] != "inference.execution"]
-    assert len(records) == 1 and records[0]["repairable"] is False
-    assert records[0]["raw_response"] is None and secret not in json.dumps(records)
+    assert len(records) == 2
+    contract = next(record for record in records if record.get("category") == "contract")
+    rejected = next(record for record in records if record.get("outcome") == "REJECTED")
+    assert contract["exception_type"] == "RuntimeError"
+    assert rejected["repairable"] is False
+    assert all(record["raw_response"] is None for record in records) and secret not in json.dumps(records)
     assert len([item for item in controller.events if item[0] == "failure"]) == 1
     assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == [False]
 
@@ -680,9 +690,13 @@ def test_proposal3_transport_cannot_repair_global_stop_kill_deadline_or_teardown
     assert len(calls) == (0 if kind == "deadline" else 1)
     assert not list((tmp_path / "cache").glob("*.json"))
     records = [json.loads(path.read_bytes()) for path in (tmp_path / "data/execution-failures").glob("*.json")]
-    assert len(records) == (0 if kind == "deadline" else 1)
-    assert all(record["action"] == "inference.execution" and record["error_type"] == "ReviewStopped"
-               for record in records)
+    assert len(records) == (0 if kind == "deadline" else 2)
+    if kind != "deadline":
+        assert {record["action"] for record in records} == {"inference", "inference.execution"}
+        transport = next(record for record in records if record["action"] == "inference")
+        execution = next(record for record in records if record["action"] == "inference.execution")
+        assert transport["category"] == "cancelled" and execution["error_type"] == "ReviewStopped"
+        assert all(record["raw_response"] is None for record in records)
     assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == (
         [] if kind == "deadline" else [False])
     if kind == "stop":
@@ -706,7 +720,8 @@ def test_nonproposal3_transport_keeps_its_existing_fail_closed_diagnostic_bounda
 
 
 @pytest.mark.parametrize("version", [2, 3])
-def test_transport_success_keeps_one_dispatch_and_the_original_result(tmp_path, monkeypatch, version):
+def test_transport_success_keeps_one_dispatch_and_normalizes_usage_without_mutating_result(
+        tmp_path, monkeypatch, version):
     _, request, final, _ = _inputs()
     result = ModelResult(final)
     calls = []
@@ -715,7 +730,11 @@ def test_transport_success_keeps_one_dispatch_and_the_original_result(tmp_path, 
         return result
     infer, controller = _transport(monkeypatch, tmp_path, send)
     request = replace(request, schema="appsec-review/target-analysis-proposal/" + str(version))
-    assert infer(request, timeout_seconds=30) is result
+    normalized = infer(request, timeout_seconds=30)
+    assert normalized.proposal is result.proposal
+    assert normalized.input_tokens is normalized.output_tokens is None
+    assert normalized.usage_unavailable_reason == "provider_usage_missing"
+    assert result.usage_unavailable_reason is None
     assert calls == [(request, 30)] and not list((tmp_path / "data/execution-failures").glob("*.json"))
     assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == [True]
 

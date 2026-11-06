@@ -319,3 +319,71 @@ interruption, positively verified cessation, repair pause/resume, immutable prio
 transient/schema failures, cache outage, verifier memo exclusion and unknown-usage exhaustion.
 `tests/conftest.py` already excludes `tests/integration` and `tests/acceptance` from implicit
 unit collection; this package does not alter that global configuration.
+
+### Current-main reconciliation and combined validation
+
+Code freeze before the sibling merge: `372be3655b4b099a23c2df953b7937069ae13f7a`.
+The canonical Windows **main ref** advanced to
+`dc263b305e500df398b19398260e619253e855a7`. Its committed objects were transferred by local
+bundle and merged into the isolated package branch as
+`48260787691915aa600430f02d07c5cf952b1719`. This imports main into the package; it does **not**
+claim that the package has landed on canonical main.
+
+The two textual conflicts were import-only: retain `dataclasses.field` and `typing.Literal`
+together in `inference/request.py`, and retain shared execution imports plus the new public
+guidance loader in dependency inference. Guidance bodies, schemas and allowed operations were
+preserved. The merged signing-policy documentation and quality configuration were adopted
+without changing signing enforcement.
+
+Because main introduced the pinned quality toolchain, the isolated environment was restored with:
+
+```text
+uv pip install --python .venv/bin/python --require-hashes -r requirements/quality.lock
+```
+
+The editable import remained inside this Linux checkout; pytest changed from 9.2.0 to the
+repository's pinned 8.4.2. No shared environment was modified.
+
+The combined unit command at `48260787691915aa600430f02d07c5cf952b1719` was:
+
+```text
+.venv/bin/python -m pytest tests/test_bounded_execution.py tests/review/test_cells.py tests/review/test_bounded_cells.py tests/review/test_result_cache.py tests/review/test_lead_triage.py tests/review/test_budget.py tests/review/test_budget_reservations.py tests/review/test_execution_budget_wiring.py tests/test_model_recording.py tests/test_inference.py tests/test_claude_cli_inference.py tests/test_copilot_inference.py tests/test_anthropic_inference.py tests/test_inference_transport_failures.py tests/test_bounded_worker_adapters.py tests/test_poc_writer.py tests/test_remediation_models.py tests/test_native_inference_runtime.py tests/test_build_topology_feedback.py tests/test_post_build_security_assessment.py tests/test_owasp_evidence_binding.py tests/test_dependency_intelligence.py::test_model_resolution_is_validated_and_never_exact tests/test_dependency_intelligence.py::test_native_inference_is_injectable_and_pins_registered_guidance tests/test_worker_prompt_contracts.py tests/test_capability_artifact_cards.py tests/test_review_model_request.py tests/test_review_data_indexing.py::test_model_recordings_written_by_a_parity_walk_are_claimed_not_unaccounted --basetemp=test/tmp/package03-combined-units -q --tb=short --durations=10
+```
+
+Result: **852 passed, 24 failed**, pytest 163.48 s, wall 165.36 s. The failures were:
+
+- New post-build adapter fixtures lacked the artifact references now required by main's
+  capability cards. They now create real bounded fixture files with matching hashes/sizes.
+- The PoC transcript-bound fixture's first request no longer fit after capability cards were
+  added. Its input limit now admits the initial request but still rejects the expanded transcript;
+  both conditions remain asserted.
+- Older planning transport assertions assumed neutral first-error rejection, one diagnostic
+  layer, or `ModelResult` object identity. The corrected assertions require one dispatch followed
+  by the stop latch, verify sanitized diagnostics at both layers, preserve the ordinary-mode
+  no-original-exception-chain check, and verify immutable usage normalization without modifying
+  the original result.
+
+The two slowest calls were the real-planner unit fixture (13.22 s) and the 599-package persisted
+budget unit (13.17 s). These durations are reported, not hidden by timeout or assertion changes.
+
+Focused correction command:
+
+```text
+.venv/bin/python -m pytest tests/test_bounded_worker_adapters.py tests/test_build_topology_feedback.py -k 'post_build or transcript_cap or transport' --basetemp=test/tmp/package03-merge-regressions -q --tb=short
+```
+
+Result: **26 passed, 142 deselected**, pytest 3.69 s, wall 4.45 s.
+
+Additional static verification:
+
+- `.venv/bin/python -m mypy src/appsec_review/inference/errors.py src/appsec_review/inference/usage.py src/appsec_review/inference/execution.py src/appsec_review/inference/request.py --cache-dir test/tmp/package03-mypy`
+  passed all four shared contracts, wall 9.11 s.
+- `.venv/bin/python -m tools.quality check --static-only --base canonical/main`
+  initially failed only on main's cross-owner `guidance/cards.py` import of the private PoC
+  `_tool_catalog` (wall 36.94 s). Package 04 explicitly assigned the narrow seam repair to 03:
+  rename it to public Python `tool_catalog`, update the two callers, and preserve its body,
+  schemas, ordering and grants. This is not public MCP exposure.
+- The same static command then **passed**, no new diagnostics, 47 individually baselined
+  legacy findings, 655 modules scanned. Tool times: Ruff 0.253 s, mypy 11.144 s, Bandit 19.010 s,
+  architecture 5.877 s. Its unit portion was explicitly **NOT RUN**; affected units are run
+  separately rather than claiming the static gate covers them.

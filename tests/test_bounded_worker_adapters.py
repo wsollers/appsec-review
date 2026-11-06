@@ -1,7 +1,8 @@
 """Offline adapter regressions: real execution, validation and receipts, scripted Infer only."""
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ from appsec_review.observability import PipelineLog
 from appsec_review.observability.events import EventLog
 from appsec_review.owasp_workbench import assessment
 from appsec_review.runtime import UnitContext
+from appsec_review.storage import canonical_json
 from tests.test_build_topology_feedback import _inputs
 from tests.test_native_inference_runtime import MODEL, proposer
 from tests.test_poc_writer import BRIEF, CLAIM, SCHEMAS, with_models
@@ -118,6 +120,14 @@ def _adapter(name, root, monkeypatch):
             "inspection.native_units": {"projects": {"unit-a": {"records": []}}},
             "deterministic.native_units": {"projects": {"unit-a": {"checks": []}}},
         }
+        for stage in ("provenance.native_units", "inspection.native_units", "deterministic.native_units"):
+            value = outputs[stage]["projects"]["unit-a"]
+            payload = canonical_json(value)
+            path = root / f"accepted-{stage}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            value["artifact"] = {"path": path.relative_to(root).as_posix(),
+                                 "sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
         unit = UnitContext(_job(root), "inference.native_units", "inference", "native_units",
                            root / "post-build", outputs)
         def invoke(infer):
@@ -348,8 +358,9 @@ def test_poc_transcript_cap_prevents_the_next_physical_call(tmp_path):
     script = Script(ModelResult({"action": "retrieve", "requests": [
         {"tool": "find_declaration", "parameters": {"name": "Header"}}]}))
     result = writer.run_writer(BRIEF, guidance=writer.Guidance("", "a" * 64),
-        settings=with_models(max_input_tokens=800), infer=script, reader=reader, schemas=SCHEMAS, claim_id=CLAIM)
+        settings=with_models(max_input_tokens=2000), infer=script, reader=reader, schemas=SCHEMAS, claim_id=CLAIM)
     assert result.status == "failed" and len(script.calls) == 1
+    assert len(canonical_json(asdict(script.calls[0][0]))) <= 2000 * 4
     assert result.attempts[-1].reason == "input_byte_bound"
 
 
