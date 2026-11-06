@@ -447,7 +447,7 @@ not substitutes for an authoritative main checkout. Package 03 has not pushed, o
 launched a model/review, deployed, or modified either canonical main.
 
 The primary integration target in the original package is
-`F:\XBOX-Repositories\appsec-review`. Its final observed main ref is
+`F:\XBOX-Repositories\appsec-review`. The last main revision incorporated by this package is
 `5c62c1d45df10d1b93c0db7336e8dd3b5d1f2402`: the recovery package's documentation-only
 integration record on top of `305a39d993bbd68b4678d309eef0e81463fd01fd`. That documentation
 update was included in the private branch at `6cf699aa30fd72f51e1ef22292a28498f33236e0`;
