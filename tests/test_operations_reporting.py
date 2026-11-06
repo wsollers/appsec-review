@@ -186,6 +186,8 @@ def test_missing_usage_legacy_identity_and_conflicts_are_not_zero(tmp_path):
     metrics = aggregate_run_metrics(tmp_path)
     assert any(row["invocation_id"] == "legacy" for row in metrics["model_invocations"])
     assert metrics["cost_provenance"]["run"]["status"] == "partial"
+    assert metrics["cost_provenance"]["conflicting_calls"]
+    assert metrics["cost_provenance"]["run"]["known_amounts"] == {}
 
 
 def test_timeout_expired_telemetry_is_reported_and_rethrown(tmp_path):
@@ -194,7 +196,8 @@ def test_timeout_expired_telemetry_is_reported_and_rethrown(tmp_path):
 
     request = ReviewModelRequest(schema="fixture", role="role", persona="persona", stack_profile="stack",
                                  guidance_bundle_sha256="a" * 64, guidance_text="",
-                                 task_input={}, transcript=(), provider="p", model="m", reasoning="high")
+                                 task_input={}, transcript=(), provider="p", model="m", reasoning="high",
+                                 max_input_tokens=100, max_output_tokens=100)
     def timeout(*args, **kwargs):
         raise TimeoutExpired("private command", 1, stderr=b"private diagnostic")
     with pytest.raises(TimeoutExpired):
@@ -238,3 +241,98 @@ def test_legacy_run_report_preserves_keys_and_does_not_mark_age_as_dead(tmp_path
     assert len(report["dagster"]["genuinelyRunning"]) == 1
     assert report["dagster"]["stale"] == []
     assert report["operator"]["runs"][0]["liveness"] == "active"
+
+
+def test_checkpoint_restart_preserves_cursor_counts_and_alert_deduplication(tmp_path, monkeypatch):
+    log = PipelineLog(tmp_path)
+    event = emit(log, "JOB_STARTED")
+    now = datetime.fromisoformat(event["timestamp"]) + timedelta(days=1)
+    first = OperatorFollower(tmp_path)
+    first.poll()
+    assert first.snapshot(now=now, dispatches=[dispatch(tmp_path)])["alerts"]
+    checkpoint = tmp_path / "checkpoint.json"
+    first.save_checkpoint(checkpoint)
+    restored = OperatorFollower(tmp_path)
+    restored.restore_checkpoint(checkpoint)
+    monkeypatch.setattr(Path, "read_bytes", lambda *_: pytest.fail("must follow, not replay full log"))
+    restored.poll()
+    assert restored.counts == first.counts and restored.cursor == first.cursor
+    assert restored.snapshot(now=now, dispatches=[dispatch(tmp_path)])["alerts"] == []
+
+
+def test_cleanup_alerts_need_terminal_evidence_and_are_deduplicated(tmp_path):
+    log = PipelineLog(tmp_path)
+    event = emit(log, "RESOURCE_ADMITTED", resource_lease_id="lease")
+    now = datetime.fromisoformat(event["timestamp"]) + timedelta(days=1)
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    assert follower.snapshot(now=now)["alerts"] == []
+    emit(log, "RUN_COMPLETED", completion_status="SUCCEEDED")
+    follower.poll()
+    assert follower.snapshot(now=now)["alerts"][0]["category"] == "cleanup_unconfirmed"
+    emit(log, "RESOURCE_RELEASED", resource_lease_id="lease")
+    follower.poll()
+    assert follower.snapshot(now=now)["resources"][0]["cleanup"] == "confirmed"
+
+
+def test_hash_bound_receipts_are_read_via_existing_verifier_and_redacted(tmp_path):
+    from appsec_review.observability.diagnostics import read_execution_receipt
+    from appsec_review.storage import atomic_json
+    from appsec_review.storage.verify import run_artifact
+    receipt = tmp_path / "data/execution.json"
+    atomic_json(receipt, {"schema": "appsec-review/container-execution/1", "exit_code": -9,
+                         "oom_killed": True, "stderr": "private", "stderr_sha256": "e" * 64})
+    identity = run_artifact(tmp_path, receipt)
+    emit(PipelineLog(tmp_path), "TOOL_INVOCATION_COMPLETED", execution_receipt=identity)
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    report = follower.snapshot()
+    assert report["execution_receipts"][0]["category"] == "oom"
+    assert "private" not in json.dumps(report)
+    receipt.write_text("{}")
+    with pytest.raises(ValueError):
+        read_execution_receipt(tmp_path, identity)
+
+
+def test_writer_and_aggregator_overhead_is_visible_in_existing_spans(tmp_path):
+    from appsec_review.observability.events import EventLog
+    from appsec_review.observability.spans import operation_span
+    log = PipelineLog(tmp_path)
+    local = EventLog(tmp_path / "local.jsonl", pipeline=log, base={"run_id": tmp_path.name})
+    with operation_span(local, "fixture") as span:
+        emit(log, "DURABLE_LIFECYCLE")
+        aggregate_run_metrics(tmp_path)
+    phases = span.phase_view()
+    assert {"telemetry.lock_wait", "telemetry.fsync", "telemetry.aggregate"} <= phases.keys()
+
+
+def test_oversized_critical_events_fail_and_only_progress_can_be_sampled(tmp_path):
+    log = PipelineLog(tmp_path)
+    oversized = {f"field-{index}": "x" * 8192 for index in range(20)}
+    with pytest.raises(ValueError, match="critical"):
+        emit(log, "JOB_COMPLETED", **oversized)
+    record = emit(log, "OPERATION_PROGRESS", span_id="span", progress_sequence=1, **oversized)
+    assert record["details"]["truncated"] is True
+    assert record["details"]["span_id"] == "span"
+    assert record["sequence"] == 1
+
+
+def test_bounded_byte_pages_and_empty_unknown_liveness(tmp_path):
+    log = PipelineLog(tmp_path)
+    for number in range(20):
+        emit(log, "PAD", padding="x" * 8192, number=number)
+    page = log.follow(max_bytes=65536)
+    assert page.bytes_read <= 65536 and page.status == "backlog"
+    assert 0 < len(page.records) < 20
+    follower = OperatorFollower(tmp_path / "absent")
+    assert follower.poll() == "missing"
+    report = follower.snapshot()
+    assert report["liveness"] == report["analysis_completeness"] == "unknown"
+
+
+def test_raw_stderr_source_and_credentials_do_not_enter_central_details(tmp_path):
+    log = PipelineLog(tmp_path)
+    emit(log, "ERROR", stderr="private stderr", stdout="private stdout", error="private stack",
+         source_text="private source", api_key="private key",
+         receipt={"path": "data/a", "sha256": "a" * 64})
+    assert "private" not in log.path.read_text()

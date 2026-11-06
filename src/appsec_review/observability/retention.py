@@ -49,15 +49,15 @@ def _parent(root: Path, relative: str) -> Iterator[tuple[int, str]]:
         os.close(fd)
 
 
-def _inspect(root: Path, path: str) -> dict[str, Any]:
+def _inspect(root: Path, path: str, *, max_bytes: int = 16 * 1024 * 1024) -> dict[str, Any]:
     with _parent(root, path) as (parent, name):
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
         try:
             info = os.fstat(fd)
             if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
                     or info.st_uid != os.getuid() or info.st_mode & 0o022):
                 raise ValueError("uncertain retention object ownership")
-            if info.st_size > 16 * 1024 * 1024:
+            if info.st_size > max_bytes:
                 raise ValueError("retention object exceeds verification bound")
             digest = hashlib.sha256()
             while data := os.read(fd, 65536):
@@ -101,6 +101,12 @@ def plan_retention(root: Path, *, _resume: Mapping[str, Any] | None = None) -> d
             raise ValueError("interrupted_or_completed_deletion_requires_original_plan")
         nodes, snapshots = {}, {}
         roots = set()
+        verified_bytes = 0
+        for run_id, run in catalog["runs"].items():
+            if (not isinstance(run_id, str) or "/" in run_id or "\\" in run_id or run_id in {".", ".."}
+                    or not isinstance(run, dict) or run.get("state") not in {"terminal", "active", "held"}
+                    or not isinstance(run.get("leases"), list) or type(run.get("repair_hold")) is not bool):
+                raise ValueError("unknown run root state or ownership")
         for item in catalog["objects"]:
             path = _relative(item["path"])
             if path in nodes or item.get("role") not in _ROLES:
@@ -117,7 +123,8 @@ def plan_retention(root: Path, *, _resume: Mapping[str, Any] | None = None) -> d
             nodes[path] = item
             deleted = _resume is not None and path in _resume.get("authorized_absence", [])
             try:
-                snapshot = _inspect(root, path)
+                snapshot = _inspect(root, path, max_bytes=min(16 * 1024 * 1024,
+                                                            64 * 1024 * 1024 - verified_bytes))
             except FileNotFoundError:
                 if not deleted:
                     raise
@@ -125,7 +132,10 @@ def plan_retention(root: Path, *, _resume: Mapping[str, Any] | None = None) -> d
             if snapshot["sha256"] != item.get("sha256"):
                 raise ValueError("retention object content identity changed")
             snapshots[path] = snapshot
-            if (item["retain"] or item["role"] != "artifact" or run["state"] != "terminal"
+            verified_bytes += snapshot["size"]
+            protected_path = path.split("/")[1:3] in [
+                ["data", name] for name in ("jobs", "logs", "configuration", "guidance", "orchestration", "build")]
+            if (item["retain"] or item["role"] != "artifact" or protected_path or run["state"] != "terminal"
                     or run["leases"] or run["repair_hold"]):
                 roots.add(path)
         # A sealed catalog must enumerate every object; unknown files and symlinks hold the store.
@@ -140,7 +150,9 @@ def plan_retention(root: Path, *, _resume: Mapping[str, Any] | None = None) -> d
                         raise ValueError("unbounded inventory or symlinked object")
                     path = Path(entry.path)
                     if entry.is_dir(follow_symlinks=False):
-                        if entry.stat(follow_symlinks=False).st_mode & 0o022:
+                        info = entry.stat(follow_symlinks=False)
+                        if (info.st_mode & 0o022 or info.st_uid != os.getuid()
+                                or directory == root and entry.name not in catalog["runs"]):
                             raise ValueError("uncertain directory ownership")
                         stack.append(path)
                     elif path.relative_to(root).as_posix() not in nodes and not (
@@ -179,8 +191,8 @@ def apply_retention(root: Path, plan: Mapping[str, Any], *, apply: bool = False)
     with FileLock(lock_path):
         journal_path = root / JOURNAL
         if journal_path.exists():
-            if journal_path.is_symlink():
-                raise ValueError("symlinked retention journal")
+            if journal_path.is_symlink() or journal_path.stat().st_size > 4 * 1024 * 1024:
+                raise ValueError("symlinked or unbounded retention journal")
             journal = json.loads(journal_path.read_bytes())
             if (journal.get("plan_id") != plan["plan_id"] or not isinstance(journal.get("deleted"), list)
                     or not set(journal["deleted"]) <= set(plan["delete"])
@@ -197,6 +209,8 @@ def apply_retention(root: Path, plan: Mapping[str, Any], *, apply: bool = False)
                 continue
             journal["pending"] = relative
             atomic_json(journal_path, journal)
+            if _catalog(root)[1] != plan["custody"]:
+                raise ValueError("retention claims changed during apply")
             with _parent(root, relative) as (parent, name):
                 try:
                     actual = os.stat(name, dir_fd=parent, follow_symlinks=False)

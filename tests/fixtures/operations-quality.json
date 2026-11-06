@@ -1,0 +1,15 @@
+{
+  "schema": "appsec-review/operations-recorded-fixture/1",
+  "provenance": "synthetic offline assessed rows; not a live model evaluation",
+  "cases": [
+    {"id": "v", "expected": "vulnerable"},
+    {"id": "s", "expected": "safe"},
+    {"id": "a", "expected": "abstain"}
+  ],
+  "rows": [
+    {"case_id": "v", "status": "completed", "decision": "vulnerable", "correct": true, "unsupported": 0, "conclusions": 1, "duplicates": 0, "input_tokens": 10, "output_tokens": 5},
+    {"case_id": "s", "status": "completed", "decision": "safe", "correct": true, "unsupported": 0, "conclusions": 1, "duplicates": 0, "input_tokens": 10, "output_tokens": 5},
+    {"case_id": "a", "status": "completed", "decision": "abstain", "correct": true, "unsupported": 0, "conclusions": 0, "duplicates": 0, "input_tokens": 10, "output_tokens": 5}
+  ],
+  "thresholds": {"precision": 0, "recall": 0, "abstention_precision": 0, "unsupported_conclusion_rate": 0}
+}

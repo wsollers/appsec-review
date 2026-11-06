@@ -121,3 +121,28 @@ def test_interrupted_deletion_requires_exact_original_plan_and_resumes(tmp_path,
     assert plan_retention(root)["holds"]
     monkeypatch.setattr(os, "unlink", unlink)
     assert apply_retention(root, plan, apply=True)["status"] == "applied"
+
+
+def test_accepted_job_paths_are_protected_even_if_mislabelled(tmp_path):
+    root = tmp_path / "store"
+    catalog = store(root)
+    path = root / "run2/data/jobs/job/receipt.json"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"accepted evidence")
+    catalog["objects"].append({"path": path.relative_to(root).as_posix(), "run_id": "run2",
+                               "role": "artifact", "retain": False, "references": [],
+                               "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+    atomic_json(root / CATALOG, catalog)
+    assert path.relative_to(root).as_posix() in plan_retention(root)["retained"]
+
+
+def test_unknown_empty_roots_and_nonregular_files_fail_closed(tmp_path):
+    root = tmp_path / "store"
+    store(root)
+    (root / "unregistered-root").mkdir()
+    assert plan_retention(root)["holds"]
+    (root / "unregistered-root").rmdir()
+    path = root / "run2/data/unused.bin"
+    path.unlink()
+    os.mkfifo(path)
+    assert plan_retention(root)["holds"]

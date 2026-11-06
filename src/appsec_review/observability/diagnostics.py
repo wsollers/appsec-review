@@ -33,7 +33,7 @@ def execution_category(value: Mapping[str, Any]) -> str:
 def diagnostic_reference(value: Any) -> dict[str, str] | None:
     if not isinstance(value, Mapping):
         return None
-    digest, path = value.get("sha256"), value.get("path")
+    digest = value.get("sha256")
     if not isinstance(digest, str) or not _HASH.fullmatch(digest):
         return None
     # Paths are display hints, not authority, and can themselves contain secrets.
@@ -52,3 +52,33 @@ def execution_summary(value: Mapping[str, Any]) -> dict[str, Any]:
     code = value.get("exit_code", value.get("returncode"))
     return {"category": execution_category(value),
             "exit_code": code if type(code) is int else None, "diagnostics": refs}
+
+
+def read_execution_receipt(run_root: Any, identity: Mapping[str, Any], *,
+                           max_bytes: int = 1024 * 1024) -> dict[str, Any]:
+    """Verify an existing run-owned receipt before interpreting its diagnostic fields."""
+    import json
+    from pathlib import Path, PurePosixPath
+    from appsec_review.storage.verify import verify_run_artifact
+
+    relative = identity.get("path")
+    if not isinstance(relative, str) or "\\" in relative:
+        raise ValueError("invalid execution receipt path")
+    path = Path(run_root)
+    pure = PurePosixPath(relative)
+    if pure.is_absolute() or pure.as_posix() != relative or ".." in pure.parts:
+        raise ValueError("invalid execution receipt path")
+    for part in pure.parts:
+        path /= part
+        if path.is_symlink():
+            raise ValueError("symlinked execution receipt")
+    if not 1 <= max_bytes <= 16 * 1024 * 1024 or path.stat().st_size > max_bytes:
+        raise ValueError("execution receipt exceeds verification bound")
+    path = verify_run_artifact(run_root, identity)
+    value = json.loads(path.read_bytes())
+    supported = {"appsec-review/container-execution/1",
+                 "appsec-review/tree-sitter-invocation/1"}
+    if not isinstance(value, dict) or value.get("schema") not in supported:
+        raise ValueError("unsupported execution receipt schema")
+    return {"schema": "appsec-review/execution-summary/1", **execution_summary(value),
+            "receipt": diagnostic_reference(identity), "integrity": "hash_verified"}

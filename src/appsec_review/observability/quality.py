@@ -40,6 +40,8 @@ def evaluation_trend(report: Mapping[str, Any], cases: Sequence[Mapping[str, Any
         raise ValueError("evaluation report schema or corpus identity mismatch")
     if len(cases) > 128 or variant not in report.get("variants", {}):
         raise ValueError("unknown variant or unbounded case corpus")
+    if not cases or len({case["id"] for case in cases}) != len(cases):
+        raise ValueError("empty or duplicate evaluation corpus")
     rows = report["variants"][variant]["rows"]
     metrics = score(cases, rows, report["role"])
     guidance = [row.get("guidance_sha256") for row in rows]

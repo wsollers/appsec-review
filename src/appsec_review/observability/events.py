@@ -20,7 +20,7 @@ MAX_RECORD_BYTES = 64 * 1024
 _SECRET = re.compile(r"(?i)(api[_-]?key|authorization|password|secret|token)")
 _CONTENT = re.compile(
     r"(?i)^(prompt|response|raw_model_output|model_output|source_text|query_text|"
-    r"stdout_text|stderr_text|traceback|error_message|command_line)$"
+    r"stdout_text|stderr_text|traceback|error_message|command_line|error|errors)$"
 )
 
 
@@ -31,6 +31,7 @@ def _bounded(value: Any, *, depth: int = 0) -> Any:
         return {
             str(key)[:128]: "<redacted>" if (
                 _CONTENT.fullmatch(str(key)) or
+                (str(key).lower() in {"stdout", "stderr"} and not isinstance(child, Mapping)) or
                 (_SECRET.search(str(key)) and not str(key).lower().endswith(("_tokens", "_token_count", "_sha256", "_id")))
             )
             else _bounded(child, depth=depth + 1)
@@ -201,7 +202,11 @@ class PipelineLog:
                 f"{run_id}:{sequence}:{event_type}".encode()).hexdigest()
             line = (json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
             if len(line) > MAX_RECORD_BYTES:
-                record["details"] = {"truncated": True, "original_size": len(line)}
+                if event_type != "OPERATION_PROGRESS":
+                    raise ValueError("critical pipeline event exceeds the record bound")
+                record["details"] = {
+                    **{key: record["details"].get(key) for key in ("span_id", "progress_sequence")},
+                    "truncated": True, "original_size": len(line)}
                 line = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
             with self.path.open("ab") as stream:
                 stream.write(line)

@@ -18,6 +18,11 @@ required inputs, per-run options, stack settings and TOML-only feature gates.
 
 ## Conventions
 
+For bounded offline event following, joined application/Dagster status, provenance-aware
+costs, revision-bound quality trends and conservative sealed-store retention, see
+[Operational quality and retention](quality-and-retention.md). These standalone reporting
+entrypoints do not change the existing review status/watch or recovery commands.
+
 - Run any script from any directory; the repository is found from the script's own path, and paths
   with spaces work.
 - `--help` (`-Help`) lists the options. `--dry-run` (`-DryRun`) is offered wherever a script changes

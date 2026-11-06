@@ -12,11 +12,11 @@ import time
 from typing import Any, Mapping, Sequence
 
 from appsec_review.observability.costs import account_calls
-from appsec_review.observability.diagnostics import execution_summary, diagnostic_reference
+from appsec_review.observability.diagnostics import execution_summary, diagnostic_reference, read_execution_receipt
 from appsec_review.observability.events import EventCursor, PipelineLog
 from appsec_review.observability.telemetry import validate_event
 from appsec_review.reporting.telemetry.inputs import JOB_TERMINALS, RUN_TERMINALS, job_spans, _timestamp
-from appsec_review.storage import canonical_json
+from appsec_review.storage import canonical_json, atomic_json
 
 SCHEMA = "appsec-review/operator-status/1"
 _ACTIVE = {"STARTED", "STARTING", "MANAGED", "CANCELING"}
@@ -38,9 +38,38 @@ class OperatorFollower:
         self.reset_reason: str | None = None
         self.alert_keys: set[str] = set()
 
+    def save_checkpoint(self, path: Path) -> None:
+        state = {"schema": "appsec-review/operator-checkpoint/1", "run_log": str(self.log.path.absolute()),
+                 "cursor": asdict(self.cursor), "records": list(self.records.values()),
+                 "counts": dict(self.counts), "alert_keys": sorted(self.alert_keys)}
+        atomic_json(path, {**state, "sha256": hashlib.sha256(canonical_json(state)).hexdigest()})
+
+    def restore_checkpoint(self, path: Path) -> None:
+        if path.stat().st_size > 32 * 1024 * 1024:
+            raise ValueError("operator checkpoint exceeds bound")
+        state = json.loads(path.read_bytes())
+        digest = state.pop("sha256", None)
+        if (state.get("schema") != "appsec-review/operator-checkpoint/1"
+                or state.get("run_log") != str(self.log.path.absolute())
+                or digest != hashlib.sha256(canonical_json(state)).hexdigest()
+                or len(state["records"]) > self.capacity or len(state["alert_keys"]) > 1000):
+            raise ValueError("operator checkpoint integrity or scope mismatch")
+        cursor = EventCursor(**state["cursor"])
+        records = {}
+        for record in state["records"]:
+            validate_event(record)
+            if record["sequence"] > cursor.sequence:
+                raise ValueError("operator checkpoint record exceeds cursor")
+            records[self._key(record)] = record
+        if (any(type(count) is not int or count < 0 for count in state["counts"].values())
+                or sum(state["counts"].values()) != cursor.sequence):
+            raise ValueError("operator checkpoint counters do not match cursor")
+        self.records, self.cursor = records, cursor
+        self.counts, self.alert_keys = Counter(state["counts"]), set(state["alert_keys"])
+
     @staticmethod
     def _key(record: Mapping[str, Any]) -> str:
-        if record["event_type"] == "OPERATION_PROGRESS":
+        if record["event_type"] == "OPERATION_PROGRESS" and record["details"].get("span_id"):
             details = record["details"]
             return "/".join(str(value) for value in (
                 record["run_id"], record["job_id"], record["attempt_id"],
@@ -91,7 +120,8 @@ class OperatorFollower:
                     for event in terminals}
         statuses.discard("None")
         operation = next(iter(statuses)) if len(statuses) == 1 else "CONFLICT" if statuses else "UNKNOWN"
-        gaps, failures, references, resources = [], [], {}, {}
+        gaps, failures, references, resources, blocked = [], [], {}, {}, []
+        execution_receipts, receipt_gaps = {}, []
         progress = []
         for event in events:
             details, kind = event["details"], event["event_type"]
@@ -100,6 +130,11 @@ class OperatorFollower:
                         "TASK_COMPLETED_WITH_GAPS", "TOOL_INVOCATION_COMPLETED", "MODEL_CALL_COMPLETED"}:
                 progress.append(stamp)
             disposition = details.get("completion_status") or details.get("coverage_disposition")
+            if "BLOCKED" in kind or kind in {"RESOURCE_TIMED_OUT", "RESOURCE_QUARANTINED"}:
+                blocked.append({"event_id": event["event_id"], "job_id": event["job_id"],
+                                "attempt_id": event["attempt_id"], "step_id": event.get("step_id"),
+                                "task_id": event.get("task_id"), "reason_event": kind,
+                                "safe_action": "inspect_owner_and_admission_receipt_before_retry"})
             if ("GAP" in kind or disposition in {"COMPLETED_WITH_GAPS", "GAP", "PARTIAL", "BLOCKED"}
                     or details.get("gap_count") or details.get("gaps")):
                 gaps.append({"event_id": event["event_id"], "job_id": event["job_id"],
@@ -110,11 +145,21 @@ class OperatorFollower:
                 ("FAILED", "TIMED_OUT", "CANCELLED", "CANCELED")
             ):
                 failures.append({"event_id": event["event_id"], "job_id": event["job_id"],
-                                 "attempt_id": event["attempt_id"], **outcome})
+                                 "attempt_id": event["attempt_id"], "event_type": kind, **outcome})
             for name in ("receipt", "execution_receipt", "metrics_receipt", "handoff", "artifact"):
                 ref = diagnostic_reference(details.get(name))
                 if ref:
-                    references[ref["sha256"]] = ref
+                    references[ref["sha256"]] = {**ref, "reuse_eligibility": "not_verified_by_status_view"}
+                    if name in {"execution_receipt", "metrics_receipt"} and ref["sha256"] not in execution_receipts:
+                        if len(execution_receipts) + len(receipt_gaps) >= 16:
+                            if "receipt_read_limit_reached" not in receipt_gaps:
+                                receipt_gaps.append("receipt_read_limit_reached")
+                        else:
+                            try:
+                                execution_receipts[ref["sha256"]] = read_execution_receipt(
+                                    self.log.path.parents[2], details[name])
+                            except (OSError, ValueError) as exc:
+                                receipt_gaps.append(f"receipt_unavailable:{ref['sha256']}:{type(exc).__name__}")
             lease = details.get("resource_lease_id") or (
                 details.get("span_id") if kind.startswith("RESOURCE_") else None)
             if lease:
@@ -168,7 +213,9 @@ class OperatorFollower:
             key = hashlib.sha256(canonical_json([run_id, last_start, category, identity])).hexdigest()
             if key not in self.alert_keys and len(self.alert_keys) < max_alerts:
                 self.alert_keys.add(key)
-                alerts.append({"id": key, "category": category, "action": action})
+                alerts.append({"id": key, "category": category, "action":
+                               "verify_cleanup_and_resource_owner_before_release"
+                               if category == "cleanup_unconfirmed" else action})
         return {
             "schema": SCHEMA, "run_id": run_id, "operational_status": operation,
             "analysis_completeness": "declared_gaps" if gaps else
@@ -177,6 +224,8 @@ class OperatorFollower:
             "last_progress": last_progress.isoformat() if last_progress else None,
             "progress_age_seconds": age, "event_counts": dict(self.counts),
             "gaps": gaps, "failures": failures, "reusable_evidence": list(references.values()),
+            "blocked": blocked,
+            "execution_receipts": list(execution_receipts.values()), "receipt_gaps": receipt_gaps,
             "resources": list(resources.values()), "alerts": alerts,
             "alert_capacity_reached": len(self.alert_keys) >= max_alerts,
             "costs": account_calls(events, prices=prices),
@@ -195,10 +244,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--capacity", type=int, default=10000)
     parser.add_argument("--dispatches", type=Path, help="Recorded Dagster results; never queried implicitly")
     parser.add_argument("--prices", type=Path, help="Opt in to a versioned API estimate table")
+    parser.add_argument("--checkpoint", type=Path, help="Persist bounded derived state and cursor together")
     args = parser.parse_args(argv)
     if not 0.1 <= args.interval <= 3600 or not 1 <= args.pages <= 100:
         parser.error("interval must be 0.1..3600 seconds and pages 1..100")
     follower = OperatorFollower(args.run, capacity=args.capacity)
+    if args.checkpoint and args.checkpoint.exists():
+        follower.restore_checkpoint(args.checkpoint)
     prices = json.loads(args.prices.read_text()) if args.prices else None
     while True:
         for _ in range(args.pages):
@@ -206,6 +258,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 break
         dispatches = json.loads(args.dispatches.read_text()) if args.dispatches else []
         print(json.dumps(follower.snapshot(dispatches=dispatches, prices=prices), sort_keys=True), flush=True)
+        if args.checkpoint:
+            follower.save_checkpoint(args.checkpoint)
         if not args.watch or follower.read_status == "capacity_reached":
             return 0 if follower.read_status == "caught_up" else 2
         time.sleep(args.interval)

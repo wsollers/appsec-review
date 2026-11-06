@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 from itertools import islice
 from urllib.request import Request, urlopen
 
@@ -105,6 +106,7 @@ def main() -> int:
     parser.add_argument("--url", help="Dagster GraphQL endpoint (default http://127.0.0.1:"
                         "<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
     parser.add_argument("--stale-seconds", type=int, default=3600)
+    parser.add_argument("--max-runs", type=int, default=100)
     args = parser.parse_args()
     from host import url_or_default
 
@@ -117,8 +119,9 @@ def main() -> int:
     if value.get("__typename") != "Runs":
         raise SystemExit(value.get("message") or payload.get("errors") or "Dagster run query failed")
     repository = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(repository / "src"))
     print(json.dumps(build_report(repository, value["results"], now=datetime.now(timezone.utc),
-                                  stale_seconds=args.stale_seconds), sort_keys=True, indent=2))
+                                  stale_seconds=args.stale_seconds, max_runs=args.max_runs), sort_keys=True, indent=2))
     return 0
 
 
