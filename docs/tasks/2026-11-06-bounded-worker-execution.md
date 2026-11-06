@@ -96,3 +96,14 @@ At baseline `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`:
   resolves inside this Linux worktree.
 - The same focused budget command passed: **17 passed**, pytest 10.10 s, wall 11.07 s.
   This baseline selection is not evidence of integration, acceptance, or live behavior.
+
+Shared-contract revision `0a01ca073807d6559d3a9d81163c27c237cf49bc` preserves the provider calling
+interfaces. Before committing it,
+`tests/test_inference.py tests/test_claude_cli_inference.py --basetemp=test/tmp/package03-contract -q`
+via `.venv/bin/python -m pytest` passed **16 tests** (pytest 7.93 s, wall 8.45 s).
+
+On that revision plus the shared execution implementation,
+`.venv/bin/python -m pytest tests/test_bounded_execution.py --basetemp=test/tmp/package03-engine -q`
+passed **20 tests** (pytest 1.33 s, wall 1.80 s). These cover cancellation checkpoints, fake-clock
+backoff, first-error refusal, deadlines, bounds, immutable correlated receipts, reported/replay
+usage and propagation of unexpected contract failures.
