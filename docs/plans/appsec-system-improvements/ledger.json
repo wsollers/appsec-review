@@ -1,18 +1,18 @@
 {
   "schema": "appsec-review/implementation-fleet-ledger/1",
-  "plan_version": "1.2",
-  "snapshot_event_seq": 71,
+  "plan_version": "1.3",
+  "snapshot_event_seq": 96,
   "coordinator_session_id": "02825845-7ac6-4a31-b648-999b3823ecf5",
   "authority": "Coordinator session SQLite fleet_* tables; this file is a published snapshot.",
   "initial_base_sha": "f9bb376e02aaef166bc71e736eaba7ee677ce97c",
   "main_parity": {
     "windows_path": "F:\\XBOX-Repositories\\appsec-review",
     "wsl_path": "/home/wsollers/projects/appsec-review",
-    "reported_sha": "11b1046f7d670cdec188719223c882d3aa68c6e1",
-    "tree_sha": "e27f2c74319f9716c2f6b63001824ca21bc6f5cb",
-    "status": "verified_first_implementation_wave_landed_recheck_before_next_landing",
-    "checked_at": "2026-11-06T13:40:01.8227866-05:00",
-    "receipt": "C:\\Users\\william.sollers\\.copilot\\session-state\\969abd85-9a4e-42a5-a323-34843205448e\\files\\f05-landing-receipt.json",
+    "reported_sha": "17e5bd3f73ca6d27a126b74d8111b7c6d77daa64",
+    "tree_sha": "d133dabff064aff6a8ecb3e35429b1df2bee9255",
+    "status": "verified_X02_landed_recheck_before_next_landing",
+    "checked_at": "2026-11-06T14:46:57.7471526-05:00",
+    "receipt": "C:\\Users\\william.sollers\\.copilot\\session-state\\969abd85-9a4e-42a5-a323-34843205448e\\files\\x02-landing-receipt.json",
     "preserve_untracked": "WSL data/feeds/",
     "integration_owner_session_id": "969abd85-9a4e-42a5-a323-34843205448e",
     "bootstrap_session_id": "053e6dce-78d3-428d-ac36-f1811056dd67",
@@ -21,7 +21,7 @@
   "packages": [
     {"id":"F00","title":"Integration ledger and Windows/WSL parity","status":"landed_unit_verified","depends_on":[],"session_id":"969abd85-9a4e-42a5-a323-34843205448e","app_url":"ghapp://sessions/969abd85-9a4e-42a5-a323-34843205448e","bootstrap_session_id":"053e6dce-78d3-428d-ac36-f1811056dd67","execution_worktree":"/home/wsollers/copilot-worktrees/fleet-main-landing-5b01f5f7","ready_sha":"23b5a5bcde9a8e35d4f39799ccecc5c60a14aef6","landed_windows_sha":"23b5a5bcde9a8e35d4f39799ccecc5c60a14aef6","landed_wsl_sha":"23b5a5bcde9a8e35d4f39799ccecc5c60a14aef6","verification_status":"Bootstrap docs verified and landed; F00 integration service continues"},
     {"id":"F01","title":"Publication and inventory blockers","status":"landed_unit_verified","depends_on":[],"session_id":"816be210-1d6f-4a8f-9368-3880b01cbfb1","app_url":"ghapp://sessions/816be210-1d6f-4a8f-9368-3880b01cbfb1","execution_worktree":"/home/wsollers/projects/fleet-f01-816be210/worktree","ready_sha":"808f6944665eddab46f4f5354e29ea3f385a2607","candidate_sha":"d4d68d2d99c681437f896bec35043c9b6fb22340","landed_windows_sha":"d4d68d2d99c681437f896bec35043c9b6fb22340","landed_wsl_sha":"d4d68d2d99c681437f896bec35043c9b6fb22340","verification_status":"Exact79-passed combined tree landed; paired-main parity/ancestry/EOL verified; manual tiers pending separately"},
-    {"id":"F02","title":"Authoritative job input and dispatch contracts","status":"in_flight","depends_on":["F01"],"session_id":"a80dbf2b-fd04-47fc-90df-e969c6cfd957","app_url":"ghapp://sessions/a80dbf2b-fd04-47fc-90df-e969c6cfd957","base_sha":"d4d68d2d99c681437f896bec35043c9b6fb22340","execution_worktree":"/home/wsollers/projects/fleet-f02-input-contracts","api_milestone_sha":"8ec116c5a574c59030e4324a757d6deae3abc431","verification_status":"Additive API47 units passed; builtin migration/enforcement in progress; milestone not landed"},
+    {"id":"F02","title":"Authoritative job input and dispatch contracts","status":"in_flight","depends_on":["F01"],"session_id":"a80dbf2b-fd04-47fc-90df-e969c6cfd957","app_url":"ghapp://sessions/a80dbf2b-fd04-47fc-90df-e969c6cfd957","base_sha":"d4d68d2d99c681437f896bec35043c9b6fb22340","execution_worktree":"/home/wsollers/projects/fleet-f02-input-contracts","api_milestone_sha":"8ec116c5a574c59030e4324a757d6deae3abc431","verification_status":"All46 contracts migrated; exact user45s/60s exceptions declared. Managed-fixture candidate33pass/3fail39.38s matches baseline41.72s with same3node/reason sets and no slowcases; newauthority tests green; final verification pending, gaps retained"},
     {"id":"F03","title":"Shared artifact and accepted-build APIs","status":"planned","depends_on":["F02"],"session_id":null},
     {"id":"F04","title":"Complete recoverability","status":"planned","depends_on":["F02","F03"],"session_id":null},
     {"id":"F05","title":"Static service inventory core","status":"landed_unit_verified","depends_on":[],"session_id":"7d50b1ec-b93e-4573-aff2-066da4f2ab6f","app_url":"ghapp://sessions/7d50b1ec-b93e-4573-aff2-066da4f2ab6f","execution_worktree":"/home/wsollers/projects/appsec-review-fleet-f05","ready_sha":"7a9a03ef398b48cd1f221e6405ab80c0c1612752","candidate_sha":"11b1046f7d670cdec188719223c882d3aa68c6e1","landed_windows_sha":"11b1046f7d670cdec188719223c882d3aa68c6e1","landed_wsl_sha":"11b1046f7d670cdec188719223c882d3aa68c6e1","verification_status":"All review blockers fixed/cleared;148 combined units/type/lint passed; exact20-file tree landed; F06 wiring/manual connected validation pending"},
@@ -36,12 +36,17 @@
     {"id":"F14","title":"Patch regression and new publication","status":"planned","depends_on":["F07","F12","F13"],"session_id":null},
     {"id":"F15","title":"Capability skills and MCP usability","status":"planned","depends_on":["F04","F06","F07","F10","F12","F13"],"session_id":null},
     {"id":"F16","title":"Measured optimization and native decision","status":"planned","depends_on":["F03","F10","F12"],"session_id":null},
-    {"id":"F17","title":"Acceptance and closeout","status":"planned","depends_on":["F01","F02","F03","F04","F05","F06","F07","F08","F09","F10","F11","F12","F13","F14","F15","F16","X01"],"session_id":null},
+    {"id":"F17","title":"Acceptance and closeout","status":"planned","depends_on":["F01","F02","F03","F04","F05","F06","F07","F08","F09","F10","F11","F12","F13","F14","F15","F16","X01","X02"],"session_id":null},
     {"id":"X01","title":"Inherited default-collection fixture regression","status":"landed_unit_verified","depends_on":[],"session_id":"d963e6fd-4153-401f-842f-1f6c18def977","app_url":"ghapp://sessions/d963e6fd-4153-401f-842f-1f6c18def977","base_sha":"f9bb376e02aaef166bc71e736eaba7ee677ce97c","ready_sha":"be6386e40586855d56c2ab52f2f08dfad3d2471e","candidate_sha":"b202e887a997ab4294264e3aa22e33e5479853fc","landed_windows_sha":"b202e887a997ab4294264e3aa22e33e5479853fc","landed_wsl_sha":"b202e887a997ab4294264e3aa22e33e5479853fc","verification_status":"One-file inherited test-fixture fix;9 combined units passed; exact both-main parity/bytes verified"},
-    {"id":"EXT-APS","title":"Existing APS DDNet harness","status":"blocked","depends_on":[],"session_id":"4c594168-d314-4336-b0b4-51aca8ae5462","implementation_session_id":"029a7295-c5c8-49b3-91c4-a6a1bdd300d2","design_main_sha":"fbfc6b5a6d39f8c267d4a9a37ebc6e057373be8f","blocker":"User-directed new APS implementation owner; previous sessions failed before edits. Awaiting tested runner/schema contract."}
+    {"id":"X02","title":"All-failed build workspace recovery","status":"landed_unit_verified","depends_on":[],"session_id":"d963e6fd-4153-401f-842f-1f6c18def977","app_url":"ghapp://sessions/d963e6fd-4153-401f-842f-1f6c18def977","base_sha":"4833894300452c13e825f73bc01a720cb98be8b6","ready_sha":"9e02798191c632f5e48ce78c86057166ca7bbdde","candidate_sha":"17e5bd3f73ca6d27a126b74d8111b7c6d77daa64","landed_windows_sha":"17e5bd3f73ca6d27a126b74d8111b7c6d77daa64","landed_wsl_sha":"17e5bd3f73ca6d27a126b74d8111b7c6d77daa64","execution_worktree":"/home/wsollers/copilot-worktrees/fix-i","verification_status":"Reviewed product/tests plus2exact mapselectors;41bounded cases pass; exact3file tree landed with parity/bytes.11baseline failures and missing full-pristine-log limitation retained; broad suite not certified"},
+    {"id":"EXT-APS","title":"Existing APS DDNet harness","status":"blocked","depends_on":[],"session_id":"4c594168-d314-4336-b0b4-51aca8ae5462","implementation_session_id":"029a7295-c5c8-49b3-91c4-a6a1bdd300d2","design_main_sha":"fbfc6b5a6d39f8c267d4a9a37ebc6e057373be8f","authorized_milestone":"Pinned DDNet build integration and deterministic JSON replay only; preserve Lean models; reset/input validation/controlled time/zero OS sends/ordinary correctness tests","blocker":"No tested runner/schema yet. APS user excludes campaigns, ACK-loss investigation, security-finding workflows and reducers from current milestone; downstream finding/fuzz adapters stay gated."}
   ],
   "verification_policy": {
     "unit": "Run focused real-behavior regressions, shuffled and bounded parallel, under 10 seconds per case.",
+    "user_approved_exceptions": [
+      {"nodeid":"tests/test_review_data_indexing.py::test_inventory_audit_matrices_links_and_fts_validation","max_total_seconds":45},
+      {"nodeid":"tests/test_review_data_indexing.py::test_package_job_publishes_accepted_manifest_and_receipts","max_total_seconds":60}
+    ],
     "manual": "Write integration/acceptance/live tests; execution and commissioning remain separately gated.",
     "completion": "Exact ready SHA reviewed, coordinator-authorized landing, affected unit evidence, and matching Windows/WSL main HEAD/tree; required manual validation separately visible."
   },
@@ -116,6 +121,31 @@
     {"seq":68,"package_id":"F05","event":"candidate_preparation_authorized","detail":"Cleared7a9a03ef plusmain9932eed5; exact20leaf files,148case/type/lint gates; no central wiring or metadata."},
     {"seq":69,"package_id":"F05","event":"candidate_verified","detail":"11b1046f/treee27f2c74 exact20files;148units7.80s pytest/10.5407s wall; type/lint/docs pass;5fixtures exact."},
     {"seq":70,"package_id":"F05","event":"merge_authorized","detail":"Exact11b1046f authorized onto both-main9932eed5."},
-    {"seq":71,"package_id":"F05","event":"landed_unit_verified","detail":"Both mains11b1046f/treee27f2c74 exact20files;148-pass tree; first4implementation packages landed. F02 continues, F06/manual wiring pending."}
+    {"seq":71,"package_id":"F05","event":"landed_unit_verified","detail":"Both mains11b1046f/treee27f2c74 exact20files;148-pass tree; first4implementation packages landed. F02 continues, F06/manual wiring pending."},
+    {"seq":72,"package_id":"F00","event":"first_wave_checkpoint_preparation","detail":"Frozenplan1.2/ledger71 and X01/F08/F05 receipts prepared in3docs onmain11b1046f; no landing yet."},
+    {"seq":73,"package_id":"F00","event":"first_wave_checkpoint_ready","detail":"48338943/tree97fe7fca docs-only,20records/71events and exact projections verified."},
+    {"seq":74,"package_id":"F00","event":"first_wave_checkpoint_merge_authorized","detail":"Exact48338943 authorized onto both-main11b1046f;3docs only."},
+    {"seq":75,"package_id":"F00","event":"first_wave_checkpoint_landed","detail":"Both mains48338943/tree97fe7fca,3exactdocs, plan1.2/ledger71; parity/clean/feeds preserved."},
+    {"seq":76,"package_id":"F02","event":"migration_validation_progress","detail":"All46 contracts migrated and actual reads enforced;75core/144lifecycle tests pass. Larger19-33s real-producer fixture and package identity drift unresolved; not ready."},
+    {"seq":77,"package_id":"X02","event":"mixed_handoff_held","detail":"Mixedceb8ea57 eight-file recovery/language-fixture handoff held; requested separate bounded recovery candidate and F02 overlap check."},
+    {"seq":78,"package_id":"X02","event":"ownership_cleared","detail":"F02 confirms no overlap in build_iterations.py/topology-refinement tests; original owner authorized narrow isolated candidate from48338943 with failure/rollback/resume controls."},
+    {"seq":79,"package_id":"EXT-APS","event":"milestone_narrowed_by_user","detail":"APS milestone now deterministic JSON replay/build only; no campaigns, ACK-loss investigation, security-finding workflow or reducer. No tested runner yet; adapter gates remain."},
+    {"seq":80,"package_id":"F00","event":"plan_scope_revision_pending","detail":"Sessionplan1.3 records narrowed APS milestone and supplementalX02; repo remains frozenplan1.2/ledger71 until next authorized checkpoint."},
+    {"seq":81,"package_id":"X02","event":"narrow_handoff_reviewed","detail":"ba57eb28 on48338943 has2files and realfailure/rollback test, but no claimed successful rerun; reported broader validation used borrowed stagea-verify venv."},
+    {"seq":82,"package_id":"X02","event":"revision_requested","detail":"Require ownedfix-i and baseline environments/import proofs, final successful controller rerun with accepted ledger/product and preserved failure, -n2 bounded green focusedset; keep11baselinefailures explicit."},
+    {"seq":83,"package_id":"F02","event":"fixture_validation_caveats","detail":"Manifest identity/per-producer binding fixed; affected all-stage units17.27s/29.10s remain slow.36managed-target cases fail missing old fixture dossier settings before F02 behavior."},
+    {"seq":84,"package_id":"F02","event":"fixture_ownership_extension","detail":"X01 covers only default collection. F02 may repair managed-target fixture after pristine-base proof without weakening loader/assertions/global guards. Slow cases need bounded real fixtures or explicit user exception; no silent waiver/relabeling."},
+    {"seq":85,"package_id":"X02","event":"revision_ready","detail":"9e027981 adds fresh realcontroller successful rerun and retained failureevidence; ownfix-i/base venv proofs.40green cases at2seeds, broad11failure sets identical baseline/candidate and not counted green."},
+    {"seq":86,"package_id":"X02","event":"candidate_preparation_authorized","detail":"Validate exact9e027981/tree83fe6db6 onmain48338943 in ownedWSL;40cases -n2 shuffle1002 with2named baseline deselections, other9baseline failures explicit.2files only; no main movement."},
+    {"seq":87,"package_id":"F02","event":"time_exception_requested","detail":"Two minimal real durable cross-producer cases17.27s/29.10s; profiled fsync/custody/handoff workload; proposed45s/60s rather than faking admission or changing shared caching."},
+    {"seq":88,"package_id":"F02","event":"time_exceptions_user_approved","detail":"User explicitly approved exact inventorycase45s/packagecase60s total setup/call/teardown; all other units10s. Per-case provenance/time accounting required; no global/manual/live/fullsuite authorization."},
+    {"seq":89,"package_id":"X02","event":"exact_ready_validation_passed","detail":"9e027981 exact2files,40cases16.29s pytest/18.9190s wall max2.6622s, no skips/slow; baseline11failureIDs and missing fullpristinelog caveat retained."},
+    {"seq":90,"package_id":"X02","event":"mapping_followup_authorized","detail":"Add only2new exact BuildIterations regression functionselectors to job_build_iteration map; preserve existingcoverage;41case rerun and newcandidate requested."},
+    {"seq":91,"package_id":"X02","event":"mapped_candidate_verified","detail":"17e5bd3f/treed133dabf exact3files;41passes16.52s pytest/18.9984s wall max2.6437s; mapping preserves existingcoverage."},
+    {"seq":92,"package_id":"X02","event":"merge_authorized","detail":"Exact17e5bd3f authorized onto both-main48338943; baseline11failure/fullpristinelog limitations explicit, no broadgreen claim."},
+    {"seq":93,"package_id":"F02","event":"managed_fixture_baseline_isolated","detail":"Ownedassignedbase8launchcases reproduce missingsettings; only fixture settings/release repair gives33pass/3old expectationfailures41.72s, no slowcases; product untouched and assertions preserved."},
+    {"seq":94,"package_id":"F02","event":"time_exception_declarations_added","detail":"Exact approved45s/60s node markers record userdecision and enforce full phases; other unit thresholds unchanged."},
+    {"seq":95,"package_id":"X02","event":"landed_unit_verified","detail":"Both mains17e5bd3f/treed133dabf exact3files and41-passed tree; pairedlocks/parity/ancestry/clean-state/feeds verified. Baseline11failureIDs and missing fullpristinelog limitation retained."},
+    {"seq":96,"package_id":"F02","event":"managed_fixture_candidate_matches_baseline","detail":"Candidate33pass/3fail39.38s equals baselinefailure set41.72s, allcases<10s; fixture-only settings/release changes. Assertions unchanged; retain full logs/identities and explicit gaps, not green suite claim."}
   ]
 }

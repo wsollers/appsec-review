@@ -1,6 +1,6 @@
 # Appsec implementation fleet
 
-**Plan version 1.2 - 6 November 2026**
+**Plan version 1.3 - 6 November 2026**
 
 Coordinator: `02825845-7ac6-4a31-b648-999b3823ecf5` (Appsec system review).
 Repository: `wsollers/appsec-review`.
@@ -12,6 +12,9 @@ Version 1.2 adds the narrowly scoped inherited test-harness repair X01 to the
 closeout ledger. The original 18 implementation packages are unchanged. Current
 owners, ready commits, landings and blockers are in the versioned ledger rather
 than inferred from this plan's initial-wave descriptions.
+Version 1.3 records the APS user's narrowed deterministic-replay milestone and the
+separately scoped X02 all-failed-build recovery repair. Neither change authorizes
+additional runtime experiments.
 
 ## User authorization
 
@@ -362,6 +365,11 @@ builds/engines/claims return explicit outcomes.
 - Reduction preserves predicate, mode and original/minimized parentage.
 - Add later language-engine adapters incrementally with explicit support inventory.
 
+The current APS milestone supplies only deterministic replay, if successfully
+implemented and handed off. It does not supply or authorize coverage-guided campaigns,
+ACK-loss investigation, security-finding workflows or reduction. Do not treat delivery
+of a replay executable as satisfying those additional capability and authorization gates.
+
 **Exit:** source implementation and unit coverage; real harness/fuzz execution is a separately
 authorized acceptance milestone, not implied by fake engine results.
 
@@ -425,7 +433,7 @@ that native work is not warranted. Real heavy benchmarks remain manually gated.
 
 ### F17 - Acceptance and closeout
 
-**Dependencies:** all F01-F16 and supplemental X01; F00 owns landing mechanics.
+**Dependencies:** all F01-F16 and supplemental X01/X02; F00 owns landing mechanics.
 
 - Reconcile directly related docs, job/input/output inventories, release closure,
   test mappings, supported-mode claims and outstanding conditional work.
@@ -452,6 +460,28 @@ assertions. No production code, harness policy, timeout or test-tier change.
 and the exact one-file fix lands through the same two-main parity gate. This repair
 supports the fleet's test infrastructure; it does not authorize a full-suite run.
 
+### X02 - All-failed build workspace recovery
+
+**Dependencies:** none; coordinate with F02/F04 ownership before edits.
+Original owner: unit-suite session `d963e6fd-4153-401f-842f-1f6c18def977`.
+**Own:** `jobs/build_iterations.py` and directly necessary topology-refinement
+regressions. F02 confirmed no overlap with those files or reliance on the old refusal.
+
+Repair the bounded case where all build iterations failed and rollback left a pristine
+materialized workspace with neither accepted iteration ledger nor pending request.
+Exercise actual failure, rollback and resume through real workspace/controller behavior,
+faking only external execution. Preserve refusal for unfinished attempts, accepted
+products without admission, corrupt state and failed custody.
+
+The original mixed eight-file handoff `ceb8ea5703d68f189ca8a41e55746f1db5ccc267`
+is not approved. Prepare a separate isolated candidate; exclude its six unrelated
+language-fixture migrations. Existing failed or over-ten-second cases are not passing
+evidence, and cannot be hidden by skips, relaxed assertions or tier relabeling.
+
+**Exit:** narrow positive/negative recovery regressions pass the focused unit gate,
+then exact reviewed candidate and Windows/WSL parity are recorded. No production
+review restart or broader language-build execution is authorized by this repair.
+
 ### EXT-APS - Existing DDNet harness work
 
 External owner: Lean Formalization coordinator
@@ -465,9 +495,20 @@ The model/design are available; the executable dependency stays gated until an e
 tested runner/schema handoff is received. This fleet does not restart that project's
 work or answer its pending user decisions on the user's behalf.
 
+**User-directed scope update, 6 November 2026:** APS's current milestone is pinned
+DDNet build integration and deterministic JSON replay only, preserving the Lean models,
+with reset/input validation, controlled time, zero OS network sends and ordinary
+correctness tests. Coverage-guided campaigns, candidate ACK-loss investigation,
+security-finding workflows and a finding reducer are excluded from that milestone.
+The next possible handoff is a tested deterministic runner/schema, not a full fuzzing
+API. F12/F13 remain gated on their actual required capabilities; this fleet must not
+ask the APS worker to restore the excluded scope or infer authorization from a runner.
+
 Required handoff: exact source/model/harness/schema/build commits, tested runner APIs,
 observability/oracle scope, allocator/caller modes, artifact semantics and remaining
 acceptance gaps. F12/F13 wait for that contract instead of implementing a competing harness.
+Only implemented observations and modes belong in that handoff; planned or excluded
+oracles and operations remain unavailable.
 
 ## Shared ownership and change rules
 
@@ -503,6 +544,22 @@ helper to avoid coordination.
 - Each ready handoff names package, branch/worktree, full ready/base SHAs, changed paths,
   public contract decisions, tests/results/timings, validation not run and blockers.
 - Ready means commit and notify; it does not mean merge or push.
+
+### User-approved F02 time exceptions
+
+The user explicitly approved these two existing offline unit-case exceptions after
+the worker measured minimal fixtures exercising real durable cross-producer admission:
+
+| Exact node ID | Maximum total case duration |
+|---|---|
+| `tests/test_review_data_indexing.py::test_inventory_audit_matrices_links_and_fts_validation` | 45 seconds |
+| `tests/test_review_data_indexing.py::test_package_job_publishes_accepted_manifest_and_receipts` | 60 seconds |
+
+These bounds include setup, call and teardown, not only assertions. Record per-case
+declarations, the exception provenance and actual times; an overrun remains a failure
+requiring resolution. The ten-second limit remains for all other unit cases. This
+does not authorize a global timeout increase, weakened admission/durability checks,
+full-suite runs, integration/acceptance/live execution, targets or model calls.
 
 ## Merge and parity transaction
 

@@ -421,3 +421,101 @@ Results on the exact checkpoint base plus these three docs: verifier PASS in
 line-ending inspection PASS in 0.081 s, with all four plan-directory files
 `i/lf`, `w/lf`, `eol=lf`. No source, tests, global checker, or approved-review edits
 were made; no code, broad-suite, integration, acceptance, or live checks were run.
+
+## 2026-11-06 - X02 receipt and checkpoint 96
+
+The X02 landing observations below are attributed to landing owner
+`969abd85-9a4e-42a5-a323-34843205448e`, not direct canonical-main inspection by this
+documentation session. The source receipt is that owner's
+`files/x02-landing-receipt.json`, SHA-256
+`8dc5d179d773fa2687c096eded591660a16aec7d6b2cc82a7679afbb75d7036a`.
+Its exact bytes were verified and captured beside this checkpoint's source snapshot.
+
+### X02 landing and retained limitations
+
+- Both mains advanced from checkpoint `4833894300452c13e825f73bc01a720cb98be8b6`,
+  tree `97fe7fcacdb58a3fa70a3f798d4a4794d3755347`, to candidate
+  `17e5bd3f73ca6d27a126b74d8111b7c6d77daa64`, tree
+  `d133dabff064aff6a8ecb3e35429b1df2bee9255`; worker ready SHA
+  `9e02798191c632f5e48ce78c86057166ca7bbdde` is an ancestor.
+- Completed at `2026-11-06T14:46:57.7471526-05:00` in 5.3384 s. The three changed
+  paths were `src/appsec_review/jobs/build_iterations.py`,
+  `tests/test_build_topology_refinement.py`, and `tests/job-test-map.json`.
+  The receipt reports both-main HEAD/tree parity, clean tracked content, exact
+  committed-byte agreement, LF bytes, preserved WSL `data/feeds/` directory
+  identity, an unchanged worker branch, and released locks.
+- The exact candidate had **41 previously passed focused cases**, not a broad-green-suite
+  result. **11 known baseline failures** remain: two explicit topology-refinement
+  deselections and nine build-iteration cases. Their retained failure-ID sets matched
+  in worker-owned candidate/base runs; the broad counts are attributed worker reports.
+- The **full pristine baseline log was overwritten**. Retained matching failure-ID
+  artifacts, not a complete pristine-run log, are the available baseline evidence.
+  The receipt pins `x02-known-baseline-failures.json` at SHA-256
+  `84dcf026e154621315c3724757eeabf9ff90e5a403b0fbd43f37a4c3bb4691ad`.
+  Those failures and the missing-log limitation were not resolved by landing.
+- No new tests or commits, remote pushes, extra metadata, other packages, or services
+  ran in the landing transaction. There is no broad-suite, live, production-review,
+  compiler, Docker, model, or target validation claim.
+
+### Frozen plan, ledger, and exact exceptions
+
+The coordinator authorized a separate docs-only checkpoint from
+`17e5bd3f73ca6d27a126b74d8111b7c6d77daa64`, tree
+`d133dabff064aff6a8ecb3e35429b1df2bee9255`. Only this session's clean owned branch was
+fast-forwarded to that base, under the existing documentation-only Windows exception.
+No canonical checkout was accessed and no main landing was performed.
+
+Plan **1.3** and ledger **96** are frozen in this session's
+`files/checkpoint96-sources` directory; later events are excluded. There are exactly
+21 records: the original F00-F17, supplemental X01/X02, and external dependency
+EXT-APS. F17 explicitly depends on both supplemental repairs.
+
+Plan 1.3 records the APS user's current deterministic-JSON-replay/build-only
+milestone: preserve Lean models, validate/reset inputs, control time, and make zero
+OS network sends. Campaigns, ACK-loss investigation, security-finding workflows,
+and a finding reducer are excluded from that milestone. No tested runner is claimed,
+and downstream F12/F13 capability and execution gates remain.
+
+The two user-approved offline unit exceptions are copied without expansion:
+
+| Exact node ID | Maximum total duration |
+|---|---|
+| `tests/test_review_data_indexing.py::test_inventory_audit_matrices_links_and_fts_validation` | 45 seconds |
+| `tests/test_review_data_indexing.py::test_package_job_publishes_accepted_manifest_and_receipts` | 60 seconds |
+
+Both limits cover setup, call, and teardown together. All other unit cases retain
+the ten-second limit. This checkpoint makes no global timeout, tier, durability,
+admission, assertion, or execution-policy change and runs neither exception.
+
+| Source | Published copy | Source SHA-256 | Published SHA-256 |
+|---|---|---|---|
+| `fleet-plan.md` | `README.md` | `25ba757a4530a634e4e3a6839aa81158583621ca3f9bc123ffe46eab02b2890b` | `9017a266d156d0b5484a6c0361a0c6a538d681de36e26a81b2c03784c6a9eb91` |
+| `fleet-ledger.json` | `ledger.json` | `ebc5fcf971000539bb1fbb37e8f3bf35b2aa4e1282fc7df770e92020384604a5` | `a87c7a9ec065bee7b722a0965dd42023e53080f3478b6c1e109ada36bd684fd2` |
+
+Only approved presentation transforms were applied: CRLF to LF and six plan
+Markdown `ghapp` links rendered with unchanged labels and inline-code original URIs.
+JSON URI values and semantic fields remain unchanged. The only modified repository
+paths are `README.md`, `ledger.json`, and this append-only log in the plan directory;
+`approved-review.md` retains its exact base bytes.
+
+Focused documentation verification uses the session artifact
+`files/verify-checkpoint96.py`:
+
+```powershell
+python (Join-Path $env:USERPROFILE '.copilot\session-state\053e6dce-78d3-428d-ac36-f1811056dd67\files\verify-checkpoint96.py')
+git diff --cached --check
+git ls-files --eol -- docs/plans/appsec-system-improvements
+```
+
+It checks exact frozen projections, duplicate-free JSON, 21 required records,
+X02/F17 dependencies, 96 contiguous events, states/DAG, exact exception node IDs
+and full-phase bounds, APS scope, pinned receipt/ledger/Git-object chain agreement,
+41-focused-pass versus 11-baseline-failure accounting, unchanged approved review,
+append-only log, exact three-path scope, and changed-document links/LF using the
+unchanged repository link parser.
+
+Results on the exact checkpoint base plus these three docs: verifier PASS in
+1.046 s wall (0.7906 s internally); staged whitespace check PASS in 0.130 s;
+line-ending inspection PASS in 0.081 s, with all four plan-directory files
+`i/lf`, `w/lf`, `eol=lf`. No source, tests, global checker, or approved-review edits
+were made; no code, broad-suite, integration, acceptance, or live checks were run.
