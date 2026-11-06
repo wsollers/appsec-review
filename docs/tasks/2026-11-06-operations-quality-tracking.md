@@ -375,3 +375,80 @@ at their previously synchronized code state. This follow-up updates only the app
 handoff documentation and its local transfer bundle; transferring that documentation to WSL
 is deferred until operation custody is resolved. The previously tested implementation and
 its unit/static results are unchanged.
+
+### Requested local-main parity, 2026-11-06 follow-up
+
+The user explicitly requested: "merge to local main and ensure windows and WSL are on the same commit".
+Fresh inspections found Windows main at `b561817f578133bc0ecb578faa7951337eb7e65a`,
+clean with no pending Git-operation markers, as reported by its designated integration
+session. WSL master remained at `dc263b305e500df398b19398260e619253e855a7`, with the same
+nine untracked provenance files and 19-file `git am` state. No main update was performed.
+
+Read-only investigation established that the pending patch has stable patch ID
+`5b5d6dcb776d1ae8adec0e414f61e8d53ad55f99`, exactly matching both ancestor commits
+`c13bfe94ddec7530e8fa0bbfe67fa3bf4785869f` and
+`abb49695449d8f6c66859755d7c31dcaa7105d79`, titled
+"Let capacity overlays set the host resource budget; add prod overlay with four I/O slots".
+Both are already ancestors of WSL HEAD. The WSL index has no unmerged entries, and the
+pending operation's abort-safety commit is the older
+`78f43d9d1d5802e6b2ed4a9354d432e3749baee9`.
+These facts make the operation look obsolete, but do not authorize clearing another
+owner's operation. Approval to preserve its state and use `git am --quit` was requested;
+the user was unavailable. No quit, abort, continue, skip, rollback, data relocation or
+ignore-rule change was performed.
+
+Latest Windows main was merged without conflicts into this package's feature branch as
+`b24d492e1bd4e1546052d4d932641e6ec7af755d`. Only that independent branch was transferred
+to the existing Linux worktree. Its Git-operation directory is
+`.git/worktrees/operations-quality-b603f2c2/rebase-apply`, not the master's operation
+directory, and was absent. Under the existing WSL advisory lock, before/after checks
+confirmed that master HEAD, index, status, unrelated refs, all 19 apply-state file hashes
+and all nine provenance-file hashes remained identical. These were isolated candidate
+updates, **not main synchronization**.
+
+At the exact merged candidate, the command below yielded **324 passed, 3 failed in
+183.30s**, with the previously recorded fork warning. This broader affected-runtime
+selection took about three minutes; it was not an integration or live suite:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operations_reporting.py tests/test_operations_quality.py tests/test_operations_retention.py \
+  tests/test_pipeline_log.py tests/test_operation_telemetry_gaps.py \
+  tests/test_pytest_default_collection.py tests/reporting/test_telemetry_inputs.py \
+  tests/test_review_model_request.py tests/test_poc_writer.py tests/test_worker_prompt_contracts.py \
+  tests/test_job_runtime.py tests/test_wave1_resume.py tests/test_handoff_interchange.py \
+  --basetemp=test/tmp/operations-b603f2c2-parity
+```
+
+Two failures were telemetry fixtures using a synthetic upstream claim without the worker
+protocol now required by main's restart guard. Commit
+`f81ce37900bb8951f3fea13ee74db33eb2c8b456` publishes that fixture's hash-bound handoff
+inside the actual `worker_scope`, declares its protocol, and asserts that the real stop
+inspection has no remaining reasons after scope exit. The production guard and all
+telemetry assertions remain unchanged. Exact focused rerun:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operation_telemetry_gaps.py::test_artifact_indexing_records_phases_counters_and_expected_totals \
+  tests/test_operation_telemetry_gaps.py::test_disabling_operation_spans_disables_sampler_phases_and_counters \
+  --basetemp=test/tmp/operations-b603f2c2-worker-fixture --tb=short
+```
+
+Result: **2 passed in 15.33s**. The third failure,
+`tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps`,
+expects `["node_modules: excluded_directory"]` but receives `[]`. Package 01 confirmed
+its exact reproduction at unmodified baseline `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`;
+that evidence is already committed in its package record. This unrelated existing gap
+was not fixed, suppressed or represented as passing.
+
+The full static gate passed on `b24d492e1bd4e1546052d4d932641e6ec7af755d` against
+Windows main `b561817f578133bc0ecb578faa7951337eb7e65a`: 665 modules, no new diagnostics,
+47 unchanged baseline findings; Ruff 0.272s, mypy 10.247s, Bandit 17.086s,
+architecture 4.933s. The following change is limited to the two passing fixture regressions;
+application code remains the statically checked candidate's code.
+
+**Windows/WSL main parity is still blocked**, not complete. The feature branches preserve
+the combined candidate; neither main has been changed by this follow-up. Completing parity
+requires explicit resolution of WSL's existing apply operation and unrelated untracked
+data, followed by fresh serialized integration and identical-main verification.
+Integration, acceptance, live models/reviews and production cleanup remain NOT RUN.
