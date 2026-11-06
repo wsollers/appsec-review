@@ -48,7 +48,7 @@ def proof(actor, ref):
     return json.loads(shared.verify_reference(actor.run_root, receipt["object"]).read_bytes())
 
 
-@pytest.mark.parametrize("feed", list(feeds.STEPS.keys() - {"nvd"}))
+@pytest.mark.parametrize("feed", sorted(feeds.STEPS.keys() - {"nvd"}))
 def test_independent_publication_survives_entire_producer_run_removal(tmp_path, feed):
     producer = owner(tmp_path, "original")
     with provenance_scope(producer):
