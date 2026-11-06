@@ -376,3 +376,17 @@ def test_step_and_task_attempts_remain_correlated(tmp_path):
     units = follower.snapshot()["units"]
     assert len(units) == 4
     assert [unit["reported_status"] for unit in units] == ["COMPLETED", "RUNNING", "RUNNING", "RUNNING"]
+
+
+def test_legacy_job_reuse_preserves_unknown_completeness_and_handoff_identity(tmp_path):
+    log = PipelineLog(tmp_path)
+    emit(log, "JOB_REUSED", handoff_sha256="a" * 64)
+    emit(log, "JOB_SUCCEEDED")
+    emit(log, "RUN_COMPLETED", completion_status="SUCCEEDED")
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    report = follower.snapshot()
+    assert report["operational_status"] == "SUCCEEDED"
+    assert report["analysis_completeness"] == "unknown"
+    assert report["reuse_gaps"][0]["reason"] == "reuse_completion_unavailable"
+    assert report["reusable_evidence"][0]["sha256"] == "a" * 64

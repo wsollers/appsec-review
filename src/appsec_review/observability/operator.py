@@ -130,6 +130,7 @@ class OperatorFollower:
         operation = next(iter(statuses)) if len(statuses) == 1 else "CONFLICT" if statuses else "UNKNOWN"
         gaps, failures, references, resources, blocked = [], [], {}, {}, []
         execution_receipts, receipt_gaps = {}, []
+        reuse_gaps = []
         units: dict[tuple[str, ...], dict[str, Any]] = {}
         progress = []
         for event in events:
@@ -152,6 +153,14 @@ class OperatorFollower:
                         "TASK_COMPLETED_WITH_GAPS", "TOOL_INVOCATION_COMPLETED", "MODEL_CALL_COMPLETED"}:
                 progress.append(stamp)
             disposition = details.get("completion_status") or details.get("coverage_disposition")
+            if kind in {"JOB_REUSED", "TASK_REUSED"} and disposition not in supported:
+                reuse_gaps.append({"event_id": event["event_id"], "job_id": event["job_id"],
+                                   "attempt_id": event["attempt_id"], "reason": "reuse_completion_unavailable"})
+            for name in ("handoff_sha256", "receipt_sha256", "artifact_sha256"):
+                reference = diagnostic_reference({"sha256": details.get(name)})
+                if reference:
+                    references[reference["sha256"]] = {
+                        **reference, "reuse_eligibility": "not_verified_by_status_view"}
             if "BLOCKED" in kind or kind in {"RESOURCE_TIMED_OUT", "RESOURCE_QUARANTINED"}:
                 blocked.append({"event_id": event["event_id"], "job_id": event["job_id"],
                                 "attempt_id": event["attempt_id"], "step_id": event.get("step_id"),
@@ -255,7 +264,7 @@ class OperatorFollower:
                                if category == "cleanup_unconfirmed" else action})
         return {
             "schema": SCHEMA, "run_id": run_id, "operational_status": operation,
-            "analysis_completeness": "declared_gaps" if gaps else
+            "analysis_completeness": "declared_gaps" if gaps else "unknown" if reuse_gaps or receipt_gaps else
             "no_declared_gaps_not_proof_of_coverage" if caught_up and operation == "SUCCEEDED" else "unknown",
             "liveness": liveness, "safe_action": action, "dispatches": selected, "jobs": jobs,
             "units": list(units.values()),
@@ -264,6 +273,7 @@ class OperatorFollower:
             "gaps": gaps, "failures": failures, "reusable_evidence": list(references.values()),
             "blocked": blocked,
             "execution_receipts": list(execution_receipts.values()), "receipt_gaps": receipt_gaps,
+            "reuse_gaps": reuse_gaps,
             "lifecycle_gaps": lifecycle_gaps,
             "resources": list(resources.values()), "alerts": alerts,
             "alert_capacity_reached": len(self.alert_keys) >= max_alerts,
