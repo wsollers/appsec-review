@@ -106,6 +106,18 @@ def test_outside_symlink_is_not_a_required_input(tmp_path: Path) -> None:
         checked_file(root, "tests/link.py")
 
 
+def test_baseline_initialization_cannot_follow_an_external_parent(tmp_path: Path) -> None:
+    root = repository(tmp_path / "repo")
+    (root / "quality/baseline.json").unlink()
+    (root / "quality").rmdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "quality").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(GateError, match="baseline must remain inside"):
+        load_config(root)
+    assert not (outside / "baseline.json").exists()
+
+
 def test_missing_base_fails_instead_of_selecting_nothing(tmp_path: Path) -> None:
     root = repository(tmp_path / "repo")
     with pytest.raises(GateError, match="tool-failure"):

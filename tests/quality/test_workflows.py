@@ -40,10 +40,14 @@ def test_repository_config_keeps_enforced_scope_and_explicit_safe_selectors() ->
     document = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert document["tool"]["ruff"]["lint"]["select"] == ["E9", "F811", "F821", "F822", "F823"]
     assert not document["tool"]["ruff"]["lint"].get("ignore")
+    assert not document["tool"]["ruff"]["lint"].get("per-file-ignores")
     assert document["tool"]["mypy"]["strict"] is True
     assert document["tool"]["mypy"]["follow_imports"] == "silent"
     assert not document["tool"]["mypy"].get("ignore_missing_imports")
     assert not document["tool"]["mypy"].get("overrides")
+    assert not document["tool"]["mypy"].get("exclude")
+    assert not document["tool"]["mypy"].get("ignore_errors")
+    assert not document["tool"]["mypy"].get("disable_error_code")
     assert set(config.sast_rules) == {"B102", "B301", "B307", "B506", "B602"}
     assert set(config.type_files) >= {
         "src/appsec_review/runtime/job.py", "src/appsec_review/storage/atomic.py",

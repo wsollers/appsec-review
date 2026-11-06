@@ -86,6 +86,9 @@ def load_config(root: Path) -> Config:
     if not isinstance(baseline, str):
         raise GateError("configuration", "baseline must be a path")
     relative_path(baseline)
+    baseline_path = root / baseline
+    if baseline_path.is_symlink() or not baseline_path.resolve().is_relative_to(root.resolve()):
+        raise GateError("configuration", "baseline must remain inside this repository without a symlink leaf")
     lists = {name: strings(raw[name], name) for name in expected - {"baseline", "timeout_seconds"}}
     for name in ("source_roots", "shared_paths", "unit_tests", "contract_tests"):
         for value in lists[name]:

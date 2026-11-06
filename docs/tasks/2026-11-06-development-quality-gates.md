@@ -135,3 +135,18 @@ canonical main at `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5` with a clean tracke
 It also reported an existing HOLD from the two-stage build-topology delivery owner, pending a
 release or Stage B handoff. This package does not waive that hold. Final ready SHA, exact-commit
 verification and integration evidence are recorded below when available.
+
+### Exact implementation-commit verification
+
+- Implementation commit: `46e4ea2246c646576b051d4c0301ee66cd363616`;
+  tree: `cf02f7402e20a7be85443b3875ed88f0ec012bcc`.
+- At that exact clean revision, reran
+  `.venv/bin/python -m tools.quality check --base 528b3fa681d9e33113932c9fc4abf9ddbc53b6e5 --full`:
+  PASS in 56.31s wall; 148 tests passed in 17.08s. Components: Ruff 0.171s,
+  mypy 11.432s, Bandit 19.642s, architecture 6.762s; unit subprocess 17.688s.
+- All 25 changed paths had LF index and worktree bytes; `git diff --check` passed.
+  The initial Ruff cache was removed from the repository root and its configured location is
+  now `test/tmp/.ruff_cache`. No hash-pinned application fixtures were normalized or edited.
+- Final review tightened baseline output-path containment and added a regression against an
+  external parent symlink before any baseline initialization write. Structured policy tests
+  also reject blanket Ruff/mypy ignore/exclude settings.
