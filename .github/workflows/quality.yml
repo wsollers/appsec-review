@@ -1,0 +1,41 @@
+name: Offline development quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install the reproducible quality environment
+        run: |
+          python -m pip install --require-hashes -r requirements/quality.lock
+          python -m pip install --no-deps --no-build-isolation -e .
+      - name: Offline lint, types, boundaries, self-scan and selected units
+        env:
+          QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          set -euo pipefail
+          if [[ -z "$QUALITY_BASE" || "$QUALITY_BASE" =~ ^0+$ ]]; then
+            python -m tools.quality check --base HEAD --full
+          else
+            python -m tools.quality check --base "$QUALITY_BASE"
+          fi
