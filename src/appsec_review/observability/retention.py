@@ -87,7 +87,8 @@ def _catalog(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         raise ValueError("invalid or unbounded retention catalog")
     value = json.loads(path.read_bytes())
     if (not isinstance(value, dict) or value.get("schema") != "appsec-review/retention-catalog/1"
-            or value.get("custody") != "sealed_offline" or not value.get("owner")
+            or value.get("custody") != "sealed_offline"
+            or not isinstance(value.get("owner"), str) or not value["owner"]
             or not isinstance(value.get("runs"), dict) or not isinstance(value.get("objects"), list)
             or len(value["objects"]) > 10000 or len(value["runs"]) > 1000):
         raise ValueError("unsupported or unbounded retention catalog")
@@ -106,7 +107,7 @@ def plan_retention(root: Path, *, _resume: Mapping[str, Any] | None = None) -> d
         roots = set()
         verified_bytes = 0
         for run_id, run in catalog["runs"].items():
-            if (not isinstance(run_id, str) or "/" in run_id or "\\" in run_id or run_id in {".", ".."}
+            if (not isinstance(run_id, str) or not run_id or "/" in run_id or "\\" in run_id or run_id in {".", ".."}
                     or not isinstance(run, dict) or run.get("state") not in {"terminal", "active", "held"}
                     or not isinstance(run.get("leases"), list) or type(run.get("repair_hold")) is not bool):
                 raise ValueError("unknown run root state or ownership")

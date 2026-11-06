@@ -80,7 +80,7 @@ def test_changed_claims_unknown_files_and_concurrent_claims_refuse_apply(tmp_pat
     assert plan_retention(root)["holds"]
 
 
-@pytest.mark.parametrize("mode", ["symlink", "traversal", "missing_reference", "legacy", "hardlink"])
+@pytest.mark.parametrize("mode", ["symlink", "traversal", "missing_reference", "legacy", "hardlink", "malformed_owner"])
 def test_unknown_ownership_paths_and_legacy_roots_are_holds(tmp_path, mode):
     root = tmp_path / "store"
     catalog = store(root)
@@ -94,6 +94,9 @@ def test_unknown_ownership_paths_and_legacy_roots_are_holds(tmp_path, mode):
         atomic_json(root / CATALOG, catalog)
     elif mode == "legacy":
         (root / CATALOG).unlink()
+    elif mode == "malformed_owner":
+        catalog["owner"] = True
+        atomic_json(root / CATALOG, catalog)
     else:
         os.link(root / "run1/data/shared.bin", tmp_path / "alias")
     plan = plan_retention(root)
