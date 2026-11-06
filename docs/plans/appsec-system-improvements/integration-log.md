@@ -519,3 +519,116 @@ Results on the exact checkpoint base plus these three docs: verifier PASS in
 line-ending inspection PASS in 0.081 s, with all four plan-directory files
 `i/lf`, `w/lf`, `eol=lf`. No source, tests, global checker, or approved-review edits
 were made; no code, broad-suite, integration, acceptance, or live checks were run.
+
+## 2026-11-06 - X03 step 1, external APS evidence, and checkpoint 113
+
+### Attributed X03 step-1 landing
+
+Landing owner `969abd85-9a4e-42a5-a323-34843205448e` supplied
+`files/x03-landing-receipt.json`, SHA-256
+`89506b0093840b79401ac3c5f18d00f91e08907202e63ec85703a0616861c398`.
+Its exact bytes were verified and captured with the checkpoint sources. This is
+receipt inspection, not this documentation session's inspection of either main.
+
+- Both mains advanced from `4062fa4da5820f82a50961eeb742ba1ff4254bee`, tree
+  `1781a435f4618454b63bcd976f1de4cc1fa111db`, to ready/candidate
+  `7acc8040c8a42ae9f342424a609b06596f251fe6`, tree
+  `37c3a6179eb57c5ac2b75e585d20a49cd4ccc181`.
+- Completed at `2026-11-06T15:35:17.4086687-05:00` in 7.7357 s. The exact three
+  new files were `container_runtime/compiler_profiles.py` under `src/appsec_review`,
+  `tests/test_compiler_profiles.py`, and `docs/plans/native-compiler-profiles.md`.
+  The receipt reports matching HEAD/tree and committed bytes, clean tracked content,
+  LF bytes, preserved WSL `data/feeds/` identity, unchanged worker branch/worktree,
+  and released locks.
+- The candidate had 130 previously passed unit cases plus strict mypy, Ruff, and
+  documentation verification. Landing ran no new tests and created no new commit,
+  metadata update, remote push, or service activity.
+- Only step 1 is implemented; steps 2-8 remain proposed and unconsumed. Synthetic
+  transcripts/ELF fixtures are not live-image commissioning. Derived collection is
+  refused before Docker/verifier calls. Real transport/image copying, downstream
+  admission wiring/enforcement, TOML/image pins, and signing-policy changes were not
+  performed. Hashing image-exported bytes is not independent image-layer authenticity.
+
+### External deterministic APS subset
+
+Frozen ledger 113 records foundation commit
+`4cb6ee15f572873df9dec31fa182a20de3d4e6f7`, tree
+`83d6b49574b4bcea39ca07fc7aa87b84b30c931f`, and optional tests/docs-only successor
+`630fdd82fc34c2d7a625caa5df679b5fa6c3310c`. The successor is a separate build/evidence
+record, not a replacement for foundation pins. Its producer-reported 4/4 CTest result
+in 2.61 s is retained by the coordinator; this session did not inspect that build.
+
+This session read and verified only the following foundation evidence identities
+in producing session `029a7295-c5c8-49b3-91c4-a6a1bdd300d2`, under
+`files/ddnet-replay-evidence`:
+
+| Evidence | SHA-256 |
+|---|---|
+| `build.json` | `23d8e09f37aeaa20a98612738f2d0e9fd657d02cde6792ae616b8305e44d1b5c` |
+| `tests.txt` | `6bac178a66bafeb12d96b2e181802fb7e28dbf75d6e68ebf868db0d3f794f9df` |
+| `validation-summary.json` | `925f85dffce6d6382bdc971739f06a5c5ba8babcdac087aa20180e9c2ccd0cf1` |
+
+Foundation build identity remains
+`a88ae8110d8993849af5e249e5737d649732c8304b638b243d29f3ceff549a1e`,
+binary SHA-256 `76b25d4ad840a628c75f56d115954ebba5321572100f589053d3bd67b10488f1`.
+The retained producer report says 3/3 CTest targets passed in 2.27 s. One identity
+distinction remains explicit: `build.json` names `tests_sha256`
+`b3d266cbaaf42bedf8461eb92d8fe86d4ad5c3e608d0fc6336c074e1c37c24ab`, which is not the
+supplied `tests.txt` hash above. The latter is independently pinned producer evidence;
+this checkpoint does not claim the build's internal field binds that supplied file.
+No evidence bytes or pins were rewritten to make those identities agree.
+
+The coordinator's prior source-byte-map checks and producing project's results are
+attributed evidence, not this session's source verification, fleet rebuild/replay,
+or authenticity attestation. No APS source, executable, or run was copied or executed.
+CLI 1.0.0 is a synchronous deterministic subset (`build`, `inspect`, `validate`,
+`replay`) for the documented Linux x86_64 Clang 14 profile, native allocator and
+stop-on-queue-failure mode. The supplied summary has empty finding oracles, zero
+campaigns, and no candidate schedule execution. No campaign, finding reducer,
+logical ACK-age ledger, async MCP, or Lean differential API is supplied. Synthetic
+component replay does not establish caller/live-network reachability; F12/F13
+capability and execution gates and the user's excluded scope remain unchanged.
+
+### Frozen checkpoint and verification
+
+The coordinator authorized only a documentation checkpoint from
+`7acc8040c8a42ae9f342424a609b06596f251fe6`, tree
+`37c3a6179eb57c5ac2b75e585d20a49cd4ccc181`. This session fast-forwarded only its clean
+owned branch under the existing docs-only Windows exception. No canonical-main
+access or landing occurred.
+
+Plan **1.4** and ledger **113** are frozen in this session's
+`files/checkpoint113-sources`; later events are excluded. There are 22 records:
+F00-F17, X01/X02/X03, and EXT-APS. Incoming X03 is a separately user-directed step,
+not a new whole-native-rollout dependency for F17. F17 retains F01-F16 and X01/X02.
+The exact two user-approved 45/60-second node exceptions still include setup, call,
+and teardown; all other unit cases retain the ten-second limit.
+
+| Source | Published copy | Source SHA-256 | Published SHA-256 |
+|---|---|---|---|
+| `fleet-plan.md` | `README.md` | `49420a6d54af14865a164e0db3c43d14ec865fbf4d989efaf9bc063759057e36` | `9366d7d85d52ffb0074978b51d75ab4841d4676445105cab8c35e6e326f4972a` |
+| `fleet-ledger.json` | `ledger.json` | `481118d3218660f46d12677731a927abbd95575c0b125ee947b1433161c8a2cf` | `47f9a1791373026bf57f65ed10be3379270a41db248e82b53ede5a9b70a8eb8a` |
+
+Only CRLF-to-LF normalization and the six approved plan Markdown `ghapp` presentation
+conversions were applied. JSON URI values and semantic fields remain unchanged.
+Only plan-directory `README.md`, `ledger.json`, and this append-only log changed;
+`approved-review.md` retains its exact base bytes.
+
+Focused documentation verification uses session artifact `files/verify-checkpoint113.py`:
+
+```powershell
+python (Join-Path $env:USERPROFILE '.copilot\session-state\053e6dce-78d3-428d-ac36-f1811056dd67\files\verify-checkpoint113.py')
+git diff --cached --check
+git ls-files --eol -- docs/plans/appsec-system-improvements
+```
+
+It checks exact projections, 22 records/113 contiguous events/states/DAG, unchanged
+F17 dependency scope, exact timing exceptions, the X03 receipt/Git-object chain,
+the three read-only APS evidence hashes and foundation identities, separately pinned
+test-report status, unchanged review, append-only log, three-path scope, links, and LF.
+
+Results on the exact checkpoint base plus these three docs: verifier PASS in
+0.834 s wall (0.6031 s internally); staged whitespace check PASS in 0.123 s;
+line-ending inspection PASS in 0.081 s, with all four plan-directory files
+`i/lf`, `w/lf`, `eol=lf`. No source, tests, global checker, or approved-review edits
+were made; no code/manual tests, APS replay, live images, or runtime work were run.

@@ -1,6 +1,6 @@
 # Appsec implementation fleet
 
-**Plan version 1.3 - 6 November 2026**
+**Plan version 1.4 - 6 November 2026**
 
 Coordinator: `02825845-7ac6-4a31-b648-999b3823ecf5` (Appsec system review).
 Repository: `wsollers/appsec-review`.
@@ -15,6 +15,9 @@ than inferred from this plan's initial-wave descriptions.
 Version 1.3 records the APS user's narrowed deterministic-replay milestone and the
 separately scoped X02 all-failed-build recovery repair. Neither change authorizes
 additional runtime experiments.
+Version 1.4 records incoming, separately user-directed native compiler-profile step X03
+and receipt of the APS deterministic subset. Neither supplies or authorizes the later
+native-admission rollout, fuzz campaigns or formal-comparison APIs.
 
 ## User authorization
 
@@ -504,11 +507,40 @@ The next possible handoff is a tested deterministic runner/schema, not a full fu
 API. F12/F13 remain gated on their actual required capabilities; this fleet must not
 ask the APS worker to restore the excluded scope or infer authorization from a runner.
 
+The deterministic subset was subsequently received at local commit
+`4cb6ee15f572873df9dec31fa182a20de3d4e6f7` (not assumed remotely published).
+The coordinator read its implemented contract and schemas, verified retained evidence
+hashes and source-byte maps, and retained the producing project's test results.
+This was read-only inspection, not a fleet rebuild/replay or authenticity attestation.
+CLI 1.0.0 supports synchronous `build`, `inspect`, `validate`, `replay` with the
+verified Linux x86_64 Clang 14 profile, native allocator and stop-on-queue-failure only.
+Finding oracles are empty. No campaign, reducer, logical ACK-age ledger, async MCP or
+Lean differential API is available. The live ledger records exact evidence references.
+
 Required handoff: exact source/model/harness/schema/build commits, tested runner APIs,
 observability/oracle scope, allocator/caller modes, artifact semantics and remaining
 acceptance gaps. F12/F13 wait for that contract instead of implementing a competing harness.
 Only implemented observations and modes belong in that handoff; planned or excluded
 oracles and operations remain unavailable.
+
+### X03 - Incoming native compiler-profile step 1
+
+This is a separately user-directed work item reported by the existing unit-suite owner
+`d963e6fd-4153-401f-842f-1f6c18def977`, not permission to implement its entire rollout.
+It is tracked for serialized integration; the original fleet dependencies are unchanged.
+
+**Own:** three new files only: `container_runtime/compiler_profiles.py`,
+`tests/test_compiler_profiles.py`, `docs/plans/native-compiler-profiles.md`.
+Implement the compiler-profile `/2` parser and Docker-boundary collector with bounded
+unit tests. No existing topology, build job, config, image-pin or enforcement changes;
+the profile is not yet a production admission input. F02 does not own these new files.
+F03 should assess the reviewed interface before adding a competing accepted-build model.
+
+**Exit:** closed, semantically checked records and bounded parsing/copy/cleanup behavior;
+honest identity versus configured signature-verification claims; focused isolated tests;
+exact reviewed candidate and two-main parity. Synthetic fixtures are not real image
+commissioning. Live image probes, downstream enforcement and later rollout steps require
+their own authorized scope. Initial review blockers and revisions remain in the ledger.
 
 ## Shared ownership and change rules
 

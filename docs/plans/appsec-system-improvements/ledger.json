@@ -1,18 +1,18 @@
 {
   "schema": "appsec-review/implementation-fleet-ledger/1",
-  "plan_version": "1.3",
-  "snapshot_event_seq": 96,
+  "plan_version": "1.4",
+  "snapshot_event_seq": 113,
   "coordinator_session_id": "02825845-7ac6-4a31-b648-999b3823ecf5",
   "authority": "Coordinator session SQLite fleet_* tables; this file is a published snapshot.",
   "initial_base_sha": "f9bb376e02aaef166bc71e736eaba7ee677ce97c",
   "main_parity": {
     "windows_path": "F:\\XBOX-Repositories\\appsec-review",
     "wsl_path": "/home/wsollers/projects/appsec-review",
-    "reported_sha": "17e5bd3f73ca6d27a126b74d8111b7c6d77daa64",
-    "tree_sha": "d133dabff064aff6a8ecb3e35429b1df2bee9255",
-    "status": "verified_X02_landed_recheck_before_next_landing",
-    "checked_at": "2026-11-06T14:46:57.7471526-05:00",
-    "receipt": "C:\\Users\\william.sollers\\.copilot\\session-state\\969abd85-9a4e-42a5-a323-34843205448e\\files\\x02-landing-receipt.json",
+    "reported_sha": "7acc8040c8a42ae9f342424a609b06596f251fe6",
+    "tree_sha": "37c3a6179eb57c5ac2b75e585d20a49cd4ccc181",
+    "status": "verified_X03_step1_landed_recheck_before_next_landing",
+    "checked_at": "2026-11-06T15:35:17.4086687-05:00",
+    "receipt": "C:\\Users\\william.sollers\\.copilot\\session-state\\969abd85-9a4e-42a5-a323-34843205448e\\files\\x03-landing-receipt.json",
     "preserve_untracked": "WSL data/feeds/",
     "integration_owner_session_id": "969abd85-9a4e-42a5-a323-34843205448e",
     "bootstrap_session_id": "053e6dce-78d3-428d-ac36-f1811056dd67",
@@ -39,7 +39,8 @@
     {"id":"F17","title":"Acceptance and closeout","status":"planned","depends_on":["F01","F02","F03","F04","F05","F06","F07","F08","F09","F10","F11","F12","F13","F14","F15","F16","X01","X02"],"session_id":null},
     {"id":"X01","title":"Inherited default-collection fixture regression","status":"landed_unit_verified","depends_on":[],"session_id":"d963e6fd-4153-401f-842f-1f6c18def977","app_url":"ghapp://sessions/d963e6fd-4153-401f-842f-1f6c18def977","base_sha":"f9bb376e02aaef166bc71e736eaba7ee677ce97c","ready_sha":"be6386e40586855d56c2ab52f2f08dfad3d2471e","candidate_sha":"b202e887a997ab4294264e3aa22e33e5479853fc","landed_windows_sha":"b202e887a997ab4294264e3aa22e33e5479853fc","landed_wsl_sha":"b202e887a997ab4294264e3aa22e33e5479853fc","verification_status":"One-file inherited test-fixture fix;9 combined units passed; exact both-main parity/bytes verified"},
     {"id":"X02","title":"All-failed build workspace recovery","status":"landed_unit_verified","depends_on":[],"session_id":"d963e6fd-4153-401f-842f-1f6c18def977","app_url":"ghapp://sessions/d963e6fd-4153-401f-842f-1f6c18def977","base_sha":"4833894300452c13e825f73bc01a720cb98be8b6","ready_sha":"9e02798191c632f5e48ce78c86057166ca7bbdde","candidate_sha":"17e5bd3f73ca6d27a126b74d8111b7c6d77daa64","landed_windows_sha":"17e5bd3f73ca6d27a126b74d8111b7c6d77daa64","landed_wsl_sha":"17e5bd3f73ca6d27a126b74d8111b7c6d77daa64","execution_worktree":"/home/wsollers/copilot-worktrees/fix-i","verification_status":"Reviewed product/tests plus2exact mapselectors;41bounded cases pass; exact3file tree landed with parity/bytes.11baseline failures and missing full-pristine-log limitation retained; broad suite not certified"},
-    {"id":"EXT-APS","title":"Existing APS DDNet harness","status":"blocked","depends_on":[],"session_id":"4c594168-d314-4336-b0b4-51aca8ae5462","implementation_session_id":"029a7295-c5c8-49b3-91c4-a6a1bdd300d2","design_main_sha":"fbfc6b5a6d39f8c267d4a9a37ebc6e057373be8f","authorized_milestone":"Pinned DDNet build integration and deterministic JSON replay only; preserve Lean models; reset/input validation/controlled time/zero OS sends/ordinary correctness tests","blocker":"No tested runner/schema yet. APS user excludes campaigns, ACK-loss investigation, security-finding workflows and reducers from current milestone; downstream finding/fuzz adapters stay gated."}
+    {"id":"X03","title":"Native compiler profiles step 1","status":"landed_unit_verified","depends_on":[],"session_id":"d963e6fd-4153-401f-842f-1f6c18def977","app_url":"ghapp://sessions/d963e6fd-4153-401f-842f-1f6c18def977","base_sha":"4062fa4da5820f82a50961eeb742ba1ff4254bee","ready_sha":"7acc8040c8a42ae9f342424a609b06596f251fe6","candidate_sha":"7acc8040c8a42ae9f342424a609b06596f251fe6","landed_windows_sha":"7acc8040c8a42ae9f342424a609b06596f251fe6","landed_wsl_sha":"7acc8040c8a42ae9f342424a609b06596f251fe6","execution_worktree":"/home/wsollers/copilot-worktrees/native-admission","verification_status":"Review blockers reproduced/fixed;130boundedunits/strictmypy/ruff/docs passed; exact3newfile tree landed with parity/bytes. Derivedcollection refused; liveimages/laterrollout uncommissioned.","scope":"Three new files only; separate user-directed step1, no existing-file rollout wiring"},
+    {"id":"EXT-APS","title":"Existing APS DDNet harness","status":"validation_pending","depends_on":[],"session_id":"4c594168-d314-4336-b0b4-51aca8ae5462","implementation_session_id":"029a7295-c5c8-49b3-91c4-a6a1bdd300d2","design_main_sha":"fbfc6b5a6d39f8c267d4a9a37ebc6e057373be8f","ready_sha":"4cb6ee15f572873df9dec31fa182a20de3d4e6f7","tree_sha":"83d6b49574b4bcea39ca07fc7aa87b84b30c931f","optional_regression_successor":"630fdd82fc34c2d7a625caa5df679b5fa6c3310c","authorized_milestone":"Pinned DDNet build integration and deterministic JSON replay only; preserve Lean models; reset/input validation/controlled time/zero OS sends/ordinary correctness tests","verification_status":"Foundation8evidencehashes and14harness+11LeanGit blobhashes verified; CTest3/3 producerreport retained. Optional successor has separate build/evidence and retained4/4CTest2.61s report; original pins unchanged. No fleet execution/import/authenticity attestation.","blocker":"Deterministic subset ready only; no finding/campaign/reducer/asyncMCP/Lean differential APIs or expanded authorization; F12/F13 remain gated."}
   ],
   "verification_policy": {
     "unit": "Run focused real-behavior regressions, shuffled and bounded parallel, under 10 seconds per case.",
@@ -146,6 +147,23 @@
     {"seq":93,"package_id":"F02","event":"managed_fixture_baseline_isolated","detail":"Ownedassignedbase8launchcases reproduce missingsettings; only fixture settings/release repair gives33pass/3old expectationfailures41.72s, no slowcases; product untouched and assertions preserved."},
     {"seq":94,"package_id":"F02","event":"time_exception_declarations_added","detail":"Exact approved45s/60s node markers record userdecision and enforce full phases; other unit thresholds unchanged."},
     {"seq":95,"package_id":"X02","event":"landed_unit_verified","detail":"Both mains17e5bd3f/treed133dabf exact3files and41-passed tree; pairedlocks/parity/ancestry/clean-state/feeds verified. Baseline11failureIDs and missing fullpristinelog limitation retained."},
-    {"seq":96,"package_id":"F02","event":"managed_fixture_candidate_matches_baseline","detail":"Candidate33pass/3fail39.38s equals baselinefailure set41.72s, allcases<10s; fixture-only settings/release changes. Assertions unchanged; retain full logs/identities and explicit gaps, not green suite claim."}
+    {"seq":96,"package_id":"F02","event":"managed_fixture_candidate_matches_baseline","detail":"Candidate33pass/3fail39.38s equals baselinefailure set41.72s, allcases<10s; fixture-only settings/release changes. Assertions unchanged; retain full logs/identities and explicit gaps, not green suite claim."},
+    {"seq":97,"package_id":"F00","event":"checkpoint96_preparation","detail":"Frozenplan1.3/ledger96 onmain17e5bd3f;21records and X02receipt, narrowedAPS and exacttestexceptions;3docs only."},
+    {"seq":98,"package_id":"EXT-APS","event":"deterministic_contract_received","detail":"Local4cb6ee15/tree83d6b495 clean commit verified; implementedreplay docs/2schemas read; deterministic-only capability recorded, no expanded API or execution."},
+    {"seq":99,"package_id":"F00","event":"checkpoint96_ready","detail":"4062fa4d/tree1781a435,3docs exactprojections;21records/96events and45/60secondexceptions verified."},
+    {"seq":100,"package_id":"F00","event":"checkpoint96_merge_authorized","detail":"Exact4062fa4d authorized onto both-main17e5bd3f; frozen96 excludes laterAPS events."},
+    {"seq":101,"package_id":"EXT-APS","event":"deterministic_evidence_verified","detail":"8artifact hashes,14harness/11modelGit blobs and bundlehash/head match;3/3CTest2.27s report and ordinaryrepeat are retained producer evidence, not fleet reruns. Emptyoracles/zerocampaigns retained."},
+    {"seq":102,"package_id":"F00","event":"checkpoint96_landed","detail":"Both mains4062fa4d/tree1781a435,3exactdocs, plan1.3/ledger96; no code/manualtests, trackedclean/feeds preserved."},
+    {"seq":103,"package_id":"X03","event":"external_ownership_registered","detail":"Existingowner reports user-directed compilerprofile schema2/parser/collector step1;3newfiles only, no currentF02 overlap or later rollout/live permission inferred."},
+    {"seq":104,"package_id":"X03","event":"ready_for_review","detail":"66729fa4 on4062fa4d,3newfiles/ownenv,37units at2seeds pass. Collector unconsumed; nativebroker run/outcopy deviation documented; no liveimagefixtures."},
+    {"seq":105,"package_id":"X03","event":"revision_requested","detail":"Directreview: nestedsemantic validator holes, head256 silenttruncation, ELFmagic-only acceptance, exception/uncertaincleanup and unconditionalsignature claims. Reproduce/fix within leafscope; preserve existing signingpolicy and explicitlive gaps."},
+    {"seq":106,"package_id":"EXT-APS","event":"optional_regression_successor_registered","detail":"630fdd82 parent4cb6ee15,4tests/docs/CMake paths; separatebuild/summary/testhashes retained, producer4/4CTest2.61s ordinaryregressions. Foundationpins unchanged; no expanded schema/runner/Lean/campaign authority."},
+    {"seq":107,"package_id":"X03","event":"revision_rereview","detail":"e52d0beb fixes prior mainissues with120reportedpasses; remaining derived-signature subject overclaim and nestedformat/set consistency gaps requested for narrowfollow-up."},
+    {"seq":108,"package_id":"X03","event":"second_revision_ready","detail":"7acc8040 refusesderived beforeDocker/verifier, guardsformattypes and persistedset class/machine while preservingcross-target;7priorfailures reproduced then130unit/type/lint pass."},
+    {"seq":109,"package_id":"X03","event":"rereview_accepted","detail":"Coordinator narrowdelta review clears derivedsignature/type/set blockers; no rollout/live claims."},
+    {"seq":110,"package_id":"X03","event":"candidate_preparation_authorized","detail":"Exact7acc8040/tree37c3a617 onmain4062fa4d;3newfiles,130unit cases shuffle1304+type/lint/docs; no invented map/wiring or main movement."},
+    {"seq":111,"package_id":"X03","event":"candidate_verified","detail":"Exact3file/3commit candidate130passes6.78s pytest/9.5391s wall, strictmypy/ruff/docs/bytes/releasecoverage pass; no consumer/liveimage/derived/laterrollout."},
+    {"seq":112,"package_id":"X03","event":"merge_authorized","detail":"Exact7acc8040 authorized onto both-main4062fa4d; pairedlocks and step1only, no extras/policy/wiring."},
+    {"seq":113,"package_id":"X03","event":"landed_unit_verified","detail":"Both mains7acc8040/tree37c3a617 exact3newfiles and130pass/type/lint tree; pairedlocks/parity/ancestry/clean-state/feeds verified. Unsupported/uncommissioned latercapabilities retained."}
   ]
 }
