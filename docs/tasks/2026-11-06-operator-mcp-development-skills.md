@@ -143,3 +143,34 @@ The latest canonical local `main` reference observed before preparing the ready 
 `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`. Only Git metadata was inspected through this session's
 checkout; the primary checkout was not read or written, and no integration lock or merge was
 attempted there. A private clone's `main` is not reported as canonical-main integration.
+
+### Committed verification and integration outcome
+
+- **Tested implementation SHA:** `adbd2fcdffbebbffc76005112b29db6360ed529e`.
+- **Canonical local-main ref:** `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`.
+  A fresh local bundle of that actual ref was fetched into `refs/remotes/canonical/main` in the
+  isolated Linux repository. `git merge --ff-only refs/remotes/canonical/main` reported
+  `Already up to date`; ancestry was verified before the committed test pass.
+- **Committed test command:** the complete 13-file command above, changing only basetemp to
+  `--basetemp=test/tmp/operator06-committed`. The worktree was clean before execution and the
+  import origin was checked again. Result: **410 passed, 2 deliberately deselected manual stdio
+  cases**, 62.10 s pytest time / **62.93 s wall time**.
+- **Local-main integration: BLOCKED.** The session's checkout-access restriction forbids reading
+  or writing the canonical primary checkout. No main merge, lock acquisition, dirty-checkout
+  bypass, reset, forced checkout, conflict auto-resolution or source-freeze override was attempted.
+  Main remains at the actual ref above; this is not a claim that the canonical worktree was
+  inspected or that the ready commit landed.
+- **Local preservation:** the ready implementation commit is on
+  `william-sollers-xbox-operator-mcp-development-skills` in the isolated Linux worktree, in the
+  session's `operator-ready.bundle`, and imported into the original repository's Git object
+  database under `refs/remotes/operator-package06/ready`. This import changes only Git metadata:
+  neither the Windows session's source files nor the primary checkout are modified. The final
+  documentation-only record commit follows the tested implementation and preserves its exact
+  source/test tree.
+- **Manual validation:** integration, acceptance, live review and model execution remain
+  **NOT RUN**. The three new manual files received syntax parsing only. No remote push, PR,
+  workstation registration, global Git setting, third-party service or provisioning change occurred.
+
+All 24 changed files passed LF index/worktree checks and `git diff --check`; the repository root
+was inspected. Disposable test outputs are confined to this package's unique `test/tmp` directories.
+The isolated environment and ready Git bundle are retained for later authorized local integration.
