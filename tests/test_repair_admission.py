@@ -157,11 +157,14 @@ def test_checkpoint_corruption_fails_closed(tmp_path, damage):
     assert plan["unit_decisions"]["job_fixture"]["work.only"]["action"] == "RUN"
 
 
-@pytest.mark.parametrize("stage", ["status", "latest", "published"])
+@pytest.mark.parametrize("stage", ["outcomes", "handoff", "validated_event", "status", "latest",
+                                  "accepted_event", "published"])
 def test_failed_publication_stage_never_reuses_partial_handoff(tmp_path, monkeypatch, stage):
     import appsec_review.runtime.runner as module
     config, (job,), _ = fixture(tmp_path)
     original = module.atomic_json
+    original_immutable = module.immutable_bytes
+    original_event = module.JobRunner._handoff_event
     fired = False
     def write(path, value):
         nonlocal fired
@@ -172,7 +175,23 @@ def test_failed_publication_stage_never_reuses_partial_handoff(tmp_path, monkeyp
             fired = True
             raise OSError("publication interruption")
         return original(path, value)
+    def immutable(root, path, data):
+        nonlocal fired
+        if not fired and ((stage == "outcomes" and path.endswith("/outcomes.json"))
+                          or (stage == "handoff" and path.endswith("/handoff.json"))):
+            fired = True
+            raise OSError("publication interruption")
+        return original_immutable(root, path, data)
+    def event(context, name, *args):
+        nonlocal fired
+        if not fired and ((stage == "validated_event" and name == "HANDOFF_VALIDATED")
+                          or (stage == "accepted_event" and name == "HANDOFF_ACCEPTED")):
+            fired = True
+            raise OSError("publication interruption")
+        return original_event(context, name, *args)
     monkeypatch.setattr(module, "atomic_json", write)
+    monkeypatch.setattr(module, "immutable_bytes", immutable)
+    monkeypatch.setattr(module.JobRunner, "_handoff_event", staticmethod(event))
     with pytest.raises(OSError, match="publication interruption"):
         JobRunner(config).run(job)
     root = next(path for path in config.runtime.runs_dir.iterdir() if path.name != "metadata")

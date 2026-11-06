@@ -182,3 +182,40 @@ to refuse checkpoint portability without changing the original execution/publica
 The two previously confirmed baseline failures remained. Seven failures came from an older
 handwritten managed-handoff fixture; their baseline comparison and the remaining selected
 checks are recorded below once complete. No assertions or coverage were weakened.
+
+Candidate `7cce9a1d3d7471eb2dfefed4bb8bb7daf82ea79d`
+(tree `6bffb5bd52fbfa62e1479fb76e8bc20dbc3b4bf6`) was then checked with:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py tests/test_repair_dagster_contract.py tests/test_job_test_selection.py \
+  tests/test_handoff_interchange.py::test_invalid_producer_declarations_publish_rejected_verified_execution_not_success \
+  tests/test_managed_admission.py tests/test_shared_artifacts.py tests/test_source_history_analysis.py \
+  tests/orchestration/dagster/test_definitions.py::test_definitions_reject_registry_config_drift \
+  tests/orchestration/dagster/test_definitions.py::test_job_level_disabled_setting_is_transparent_to_dagster \
+  tests/orchestration/dagster/test_definitions.py::test_wave1_exposes_real_producer_shard_topology \
+  tests/orchestration/dagster/test_definitions.py::test_environment_dependency_is_required_or_transparently_disabled \
+  tests/orchestration/dagster/test_definitions.py::test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs \
+  --basetemp=test/tmp/recovery-final-7cce --tb=short
+```
+
+Elapsed **453.876 s**: **239 passed, 31 failed, 11 setup errors**; clean worktree afterward.
+All new recovery/selector tests and the corrected malformed-producer regression passed.
+The history warm-reuse fixture also needed a generated release manifest; its actual warm-reuse
+and invalidation assertions are retained.
+
+The baseline comparison ran this exact command in the unchanged `528b3fa6` checkout:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_managed_admission.py tests/test_shared_artifacts.py \
+  tests/test_source_history_analysis.py --basetemp=test/tmp/recovery-baseline-provenance --tb=short
+```
+
+Elapsed **387.680 s**: **83 passed, 29 failed, 11 setup errors**. These same 40 failing/error
+selectors also fail on the implementation tree. Most use an obsolete handcrafted managed
+handoff; existing source-history retention/invalidation expectations also fail at baseline.
+These are genuine coverage gaps, not passing admission tests. The separately selected Dagster
+topology assertion expects intake immediately after image verification and omits the already
+present target-acquisition gate; its explicit baseline check initially could not collect because
+the baseline environment lacked Dagster (`1 skipped`, exit 4). The missing optional dependency
+was restored rather than treating that skipped collection as success.

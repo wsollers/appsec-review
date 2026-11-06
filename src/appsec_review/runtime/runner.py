@@ -893,7 +893,9 @@ class JobRunner:
                 raise ValueError("failed attempt cannot publish an accepted handoff")
             with publication_scope(context), operation_span(context.events, "publication.handoff"):
                 return self._publish_attempt_scoped(job, context, claim, result)
-        return self._with_lock(context.attempt_root / "failure.lock", publish)
+        return self._with_lock(
+            context.run_root / "data/publication.lock",
+            lambda: self._with_lock(context.attempt_root / "failure.lock", publish))
 
     def _publish_attempt_scoped(self, job: Job, context: JobContext, claim: Mapping[str, Any],
                                result: Mapping[str, Any]) -> Mapping[str, Any]:

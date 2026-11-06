@@ -244,6 +244,7 @@ class GraphRunner:
                 atomic_json(receipt_path, {
                     "schema": "appsec-review/orchestration-receipt/1",
                     "status": "SUCCEEDED",
+                    "completion_status": graph_status,
                     "application_run_id": run_id,
                     "orchestrator": correlation,
                     "decisions": [decision.as_dict() for decision in decisions],
