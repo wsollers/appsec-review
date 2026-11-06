@@ -249,3 +249,25 @@ into local `main` in `F:\XBOX-Repositories\appsec-review`.
   custodian. When this record was written it remained at
   `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`. Updating it awaits that custodian's authorized step.
 - No push or pull request was made.
+
+### Post-landing verification
+
+- **Tested revision:** `1a627f23d904c0c86233c92b1ad6e2ef7d0e07a6`, the landed `main` that includes
+  the landing record above, checked out in this package's isolated Linux environment. The complete
+  13-file focused pytest command recorded above was rerun unchanged except for
+  `--basetemp=test/tmp/operator06-post-landing`. Result: **410 passed**, with the 2 manual stdio
+  cases deliberately deselected. Pytest reported 56.92 s and the wall time was 57.78 s.
+- **Static gate coverage:** `git diff` from the previously tested `e617f90c` to `1a627f23` is empty
+  for `src`, `tests`, `.claude`, `tools`, `pyproject.toml` and `requirements`. The earlier passing
+  static-quality result therefore covers identical source and configuration.
+- **Platforms:**
+  - This package's Windows session checkout and isolated WSL worktree are both at `1a627f23`.
+  - Canonical WSL `main`, owned by its custodian, was fast-forwarded with the user's approval to
+    the exact merge `37ae743ca28c26239383d68054accb1826e60ad7`. The custodian reported that
+    `b8f77b96` is an ancestor and that tracked status was clean. It also reported that
+    `data/feeds`, ignored targets, `.git/rebase-apply` and non-main refs were preserved.
+  - The user then directed that Windows and canonical WSL `main` be brought to the same commit.
+    The canonical-main integration owner reports the exact resulting SHA outside this record.
+- This supersedes the historical integration blocker. No canonical source freeze remains.
+  **Integration, acceptance, live review and runtime model execution: NOT RUN.** No push or pull
+  request was made.
