@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/release-dependencies/1",
+  "common": ["src/appsec_review/**/*.py", "pyproject.toml", "deploy/dagster/requirements*.txt", "deploy/dagster/Dockerfile"],
+  "exclude_common": ["src/appsec_review/jobs/job_*/**", "src/appsec_review/development/**"],
+  "job_pattern": "src/appsec_review/jobs/{job_id}/**/*",
+  "validators": ["docs/schemas/**/*.json", "pipeline/**/*", "rules/**/*"],
+  "scripts": ["scripts/**/*.sh", "scripts/**/*.py", "scripts/**/*.ps1"],
+  "environment_requirements": ["APPSEC_REVIEW_CONFIG", "APPSEC_REVIEW_PROFILE", "APPSEC_REVIEW_TARGET"]
+}

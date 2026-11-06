@@ -14,6 +14,8 @@ from appsec_review.runtime.job import Job
 from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
 from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.runtime.dependencies import graph_dependencies, input_projection
+from appsec_review.orchestration.topology import upstream_closure
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,13 +56,18 @@ def job_config_sha256(config: AppConfig, job_id: str) -> str:
 
 class ResumePlanner:
     def __init__(self, config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str,
-                 target_root: Path | None = None, *, orchestration: Mapping[str, str] | None = None):
+                 target_root: Path | None = None, *, orchestration: Mapping[str, str] | None = None,
+                 dependencies: Mapping[str, Sequence[str]] | None = None,
+                 propagating: set[str] | None = None):
         self.config = config
         self.target_root = target_root
         self.run_root = Path(run_root)
         self.jobs = tuple(jobs)
         self.source_fingerprint = source_fingerprint
         self.orchestration = dict(orchestration or {})
+        self.dependencies = dict(dependencies) if dependencies is not None else graph_dependencies(self.jobs)
+        self.propagating = propagating if propagating is not None else {
+            job.job_id for job in jobs if job.propagate_handoff}
 
     def _accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[list[str], str | None]:
         contract = None
@@ -86,6 +93,14 @@ class ResumePlanner:
             if handoff.get("schema") != HANDOFF_SCHEMA:
                 return ["handoff_schema_changed"], handoff_hash
             handoff = decode_handoff(handoff, run_id=self.run_root.name, job_id=job.job_id)
+            from appsec_review.runtime.repair import verify_publication
+            verify_publication(self.run_root, handoff, handoff_hash)
+            from appsec_review.runtime.repair import forced_by_repair
+            if forced_by_repair(self.run_root, job.job_id, handoff):
+                return ["admitted repair requires a fresh immutable attempt"], handoff_hash
+            attempts = latest.parent / "attempts"
+            if any(path.name > handoff["attempt_id"] for path in attempts.iterdir() if path.is_dir()):
+                return ["a newer unaccepted attempt supersedes the accepted job"], handoff_hash
         except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
             return [f"accepted handoff is corrupt: {type(exc).__name__}"], None
         expected = job.identities(self.config.runtime.repository_root, self.config.review_policy.releases)
@@ -96,7 +111,7 @@ class ResumePlanner:
             "status": (handoff.get("status"), "ACCEPTED"),
             "resolved configuration": (handoff.get("resolved_config_sha256"), self.config.resolved_sha256),
             "job configuration": (handoff.get("job_config_sha256"), job_config_sha256(self.config, job.job_id)),
-            "target fingerprint": (handoff.get("source_fingerprint"), self.source_fingerprint),
+            "target fingerprint": (handoff.get("source_fingerprint"), self.job_fingerprint(job)),
             "implementation": (handoff.get("implementation_identity"), expected["implementation"]),
             "schema": (handoff.get("schema_identity"), expected["schema"]),
             "validator": (handoff.get("validation_identity"), expected["validation"]),
@@ -107,7 +122,9 @@ class ResumePlanner:
                                    | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets)["sha256"]),
         }
         if job.input_identity is not None or job.run_input_identity is not None:
-            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root, self.run_root))
+            from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
+            target = None if job.job_id in TARGET_INDEPENDENT_JOBS else self.target_root
+            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(target, self.run_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
         if job.job_id == "job_target_analysis_plan":
             from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
@@ -135,15 +152,40 @@ class ResumePlanner:
         try:
             from appsec_review.storage.shared import verify_handoff
             verify_handoff(self.run_root, handoff)
+            from appsec_review.runtime.release import read_document
+            from appsec_review.runtime.repair import deployment_identity
+            claim = read_document(safe_path(self.run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
+            if claim.get("deployment_identity") != deployment_identity(self.config.runtime.repository_root):
+                reasons.append("deployment image/scripts identity changed")
             if handoff["coverage"]["retry_required"]:
                 reasons.append("accepted job contains a retriable failed producer")
         except (OSError, ValueError, KeyError, TypeError) as exc:
             reasons.append(f"shared provenance integrity failed: {exc}")
+            from appsec_review.storage.shared import safe_path
+            for artifact in handoff.get("artifacts", []):
+                try:
+                    path = safe_path(self.run_root, artifact["path"])
+                    if not path.is_file():
+                        reasons.append(f"artifact missing: {artifact['path']}")
+                        break
+                    if file_sha256(path) != artifact["sha256"]:
+                        reasons.append(f"artifact changed: {artifact['path']}")
+                        break
+                except (OSError, ValueError, KeyError, TypeError):
+                    reasons.append("artifact reference is invalid")
+                    break
         return reasons, handoff_hash
 
     def accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[tuple[str, ...], str | None]:
-        reasons, handoff_hash = self._accepted(job, upstream)
+        try:
+            reasons, handoff_hash = self._accepted(job, upstream)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return (f"resume admission unavailable: {type(exc).__name__}: {exc}",), None
         return tuple(reasons), handoff_hash
+
+    def job_fingerprint(self, job: Job) -> str:
+        from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
+        return "none" if job.job_id in TARGET_INDEPENDENT_JOBS else self.source_fingerprint
 
     def plan(self, *, force_from: str | None = None, emit_event: bool = True,
              initial_upstream: Mapping[str, str] | None = None,
@@ -155,17 +197,21 @@ class ResumePlanner:
             raise ValueError(f"force-from job is not in graph: {force_from}")
         upstream: dict[str, str] = dict(initial_upstream or {})
         decisions: list[ResumeDecision] = []
+        dirty: set[str] = set()
         for job in self.jobs:
+            ancestors = set(upstream_closure(job.job_id, self.dependencies, set(self.dependencies)))
+            selected = input_projection(job.job_id, upstream, self.dependencies, self.propagating)
             if force_from == job.job_id:
-                invalidated = True
+                dirty.add(job.job_id)
                 decision = ResumeDecision(job.job_id, "RUN", ("forced rerun from named job",))
-            elif invalidated:
+            elif invalidated or ancestors & dirty:
+                dirty.add(job.job_id)
                 decision = ResumeDecision(job.job_id, "INVALIDATE", ("transitive downstream invalidation",))
             else:
-                reasons, handoff_hash = self._accepted(job, upstream)
+                reasons, handoff_hash = self.accepted(job, selected)
                 if reasons:
                     if job.propagate_handoff:
-                        invalidated = True
+                        dirty.add(job.job_id)
                     decision = ResumeDecision(job.job_id, "RUN", tuple(reasons))
                 else:
                     decision = ResumeDecision(job.job_id, "REUSE", ("all declared identities and artifacts match",), handoff_hash)

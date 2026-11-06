@@ -227,6 +227,23 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     return wave_dependencies
 
 
+def enabled_wave1_dependencies(registered: Set[str], all_registered: Set[str]) -> dict[str, tuple[str, ...]] | None:
+    """Project disabled vertices out of the canonical graph, retaining every enabled graph job."""
+    if not WAVE1_REQUIRED <= registered:
+        return None
+    if "job_remediation_validation" in registered and "job_remediation_planning" not in registered:
+        raise ValueError("job_remediation_validation requires enabled job_remediation_planning")
+    complete = wave1_dependencies(all_registered)
+    if complete is None:
+        return None
+    def predecessors(job_id: str) -> tuple[str, ...]:
+        values = []
+        for parent in complete[job_id]:
+            values.extend((parent,) if parent in registered else predecessors(parent))
+        return tuple(dict.fromkeys(values))
+    return {job_id: predecessors(job_id) for job_id in complete if job_id in registered}
+
+
 def upstream_closure(job_id: str, dependencies: Mapping[str, Iterable[str]],
                      propagating: Set[str]) -> tuple[str, ...]:
     """Jobs whose handoffs the composite graph hands to ``job_id``.
@@ -332,7 +349,7 @@ def describe_wave1(config: Any, registry: Any, include: Iterable[str] = ()) -> d
 
     registered = {job_id for job_id in registry.job_ids() if job_is_enabled(config, job_id)}
     registered |= {job_id for job_id in include if job_id in set(registry.job_ids())}
-    dependencies = wave1_dependencies(registered)
+    dependencies = enabled_wave1_dependencies(registered, set(registry.job_ids()))
     if dependencies is None:
         raise ValueError("wave1_review is not defined by this configuration")
     propagating = {job_id for job_id in dependencies if registry.build(job_id).propagate_handoff}

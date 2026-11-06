@@ -15,6 +15,7 @@ from appsec_review.runtime.job import Job
 from appsec_review.runtime.resume import ResumeDecision, ResumePlanner
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import FileLock, atomic_json
+from appsec_review.runtime.dependencies import graph_dependencies, input_projection
 
 
 # The last job that runs before a deferred target fingerprint exists: it creates the target.
@@ -30,11 +31,18 @@ class GraphRunner:
     fingerprinted and the remaining jobs are planned and run against it.
     """
 
-    def __init__(self, config: AppConfig, jobs: Sequence[Job]):
+    def __init__(self, config: AppConfig, jobs: Sequence[Job], *,
+                 dependencies: Mapping[str, Sequence[str]] | None = None):
         self.config = config
         self.jobs = tuple(jobs)
         if len({job.job_id for job in jobs}) != len(jobs):
             raise ValueError("graph job ids must be unique")
+        self.dependencies = graph_dependencies(self.jobs, dependencies)
+        self.propagating = {job.job_id for job in self.jobs if job.propagate_handoff}
+
+    def _planner(self, run_root: Path, jobs: Sequence[Job], fingerprint: str, **kwargs):
+        return ResumePlanner(self.config, run_root, jobs, fingerprint,
+                             dependencies=self.dependencies, propagating=self.propagating, **kwargs)
 
     def _split(self) -> int:
         ids = [job.job_id for job in self.jobs]
@@ -50,11 +58,14 @@ class GraphRunner:
         """Explain resume decisions; ``None`` plans the target-reading suffix against the current
         target, and the leading live gates always run."""
         run_root = JobRunner(self.config).runs.resolve(run_id)
+        if force_from is not None and force_from not in self.dependencies:
+            raise ValueError(f"force-from job is not in graph: {force_from}")
         if source_fingerprint is not None:
-            return ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
-                                 target_root=target_root, orchestration=orchestration).plan(force_from=force_from)
+            return self._planner(run_root, self.jobs, source_fingerprint,
+                                 target_root=target_root, orchestration=orchestration).plan(
+                                     force_from=force_from, emit_event=False)
         position = self._split()
-        head = ResumePlanner(self.config, run_root, self.jobs[:position], "none",
+        head = self._planner(run_root, self.jobs[:position], "none",
                              orchestration=orchestration).plan(
             force_from=force_from if force_from in {job.job_id for job in self.jobs[:position]} else None,
             emit_event=False)
@@ -64,9 +75,10 @@ class GraphRunner:
                          for job in self.jobs[position:])
             return head + tail
         suffix_force = force_from if force_from in {job.job_id for job in self.jobs[position:]} else None
-        return head + ResumePlanner(self.config, run_root, self.jobs[position:], fingerprint_of(target_root),
+        return head + self._planner(run_root, self.jobs[position:], fingerprint_of(target_root),
                                     target_root=target_root, orchestration=orchestration).plan(
-            force_from=suffix_force, invalidated=force_from is not None and suffix_force is None)
+            force_from=suffix_force, invalidated=force_from is not None and suffix_force is None,
+            emit_event=False)
 
     def run(
         self,
@@ -122,6 +134,8 @@ class GraphRunner:
         terminal: dict[str, Path],
     ) -> Mapping[str, Any]:
         runner = JobRunner(self.config)
+        if force_from is not None and force_from not in self.dependencies:
+            raise ValueError(f"force-from job is not in graph: {force_from}")
         correlation = dict(orchestration or {})
         if correlation.get("system") and correlation.get("run_id") and any(
             not re.fullmatch(r"[A-Za-z0-9_.-]+", correlation[key]) for key in ("system", "run_id")
@@ -134,6 +148,11 @@ class GraphRunner:
         deferred = source_fingerprint is None
         position = self._split() if deferred else 0
         with FileLock(run_root / "data" / "resume.lock"):
+            if any((run_root / "data/jobs").glob("*/attempts/*/status.json")):
+                from appsec_review.runtime.repair import stopped_reasons
+                reasons = stopped_reasons(self.config, run_root)
+                if reasons:
+                    raise ValueError("graph restart refused: " + "; ".join(reasons))
             runner._bind_configuration(run_root)
             from appsec_review.jobs.build_iterations import resume_build_workspace
             resume_build_workspace(run_root)
@@ -145,10 +164,10 @@ class GraphRunner:
                 orchestrator=dict(orchestration or {}).get("system", "application"),
                 details={"source_fingerprint": source_fingerprint or "deferred"})
             head_ids = {job.job_id for job in self.jobs[:position]}
-            decisions: list[ResumeDecision] = list(ResumePlanner(
-                self.config, run_root, self.jobs[:position], "none", orchestration=orchestration).plan(
+            decisions: list[ResumeDecision] = list(self._planner(
+                run_root, self.jobs[:position], "none", orchestration=orchestration).plan(
                 force_from=force_from if force_from in head_ids else None)) if deferred else list(
-                ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
+                self._planner(run_root, self.jobs, source_fingerprint,
                               target_root=target_root, orchestration=orchestration).plan(force_from=force_from))
             upstream: dict[str, str] = {}
             completed_handoffs: dict[str, str] = {}
@@ -164,8 +183,8 @@ class GraphRunner:
                             orchestrator=dict(orchestration or {}).get("system", "application"),
                             details={"source_fingerprint": source_fingerprint})
                         suffix_force = force_from if force_from not in head_ids else None
-                        decisions.extend(ResumePlanner(
-                            self.config, run_root, self.jobs[position:], source_fingerprint,
+                        decisions.extend(self._planner(
+                            run_root, self.jobs[position:], source_fingerprint,
                             target_root=target_root, orchestration=orchestration).plan(
                             force_from=suffix_force, initial_upstream=upstream,
                             invalidated=force_from is not None and suffix_force is None))
@@ -173,6 +192,11 @@ class GraphRunner:
                     index += 1
                     job_target = None if deferred and index <= position else target_root
                     job_fingerprint = "none" if deferred and index <= position else source_fingerprint
+                    from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
+                    if job.job_id in TARGET_INDEPENDENT_JOBS:
+                        job_target, job_fingerprint = None, "none"
+                    selected_upstream = input_projection(
+                        job.job_id, upstream, self.dependencies, self.propagating)
                     if decision.action == "REUSE":
                         completed_handoffs[job.job_id] = str(decision.handoff_sha256)
                         if job.propagate_handoff:
@@ -180,13 +204,15 @@ class GraphRunner:
                         pointer = json.loads((run_root / "data/jobs" / job.job_id / "latest.json").read_text())
                         handoff = json.loads((run_root / pointer["handoff_path"]).read_text())
                         outcomes[job.job_id] = {"decision": decision.as_dict(),
+                                                "status": {"status": handoff["completion_status"],
+                                                           "attempt_id": handoff["attempt_id"]},
                                                 "attempt_id": handoff["attempt_id"],
                                                 "handoff_sha256": decision.handoff_sha256,
                                                 "attempt_root": str((run_root / pointer["handoff_path"]).parent)}
                         continue
                     outcome = runner.run(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
                         target_root=job_target, source_fingerprint=job_fingerprint,
-                        upstream_handoffs=upstream)
+                        upstream_handoffs=selected_upstream)
                     completed_handoffs[job.job_id] = str(outcome["handoff_sha256"])
                     if job.propagate_handoff:
                         upstream[job.job_id] = str(outcome["handoff_sha256"])

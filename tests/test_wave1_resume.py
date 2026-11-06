@@ -23,6 +23,8 @@ ROOT = Path(__file__).parents[1]
 
 
 def _fixture(tmp_path: Path):
+    from tests.release_support import write_release
+    write_release(tmp_path, ("job_review_intake", "job_target_catalog"))
     config = tmp_path / "appsec-review.toml"
     source = (ROOT / "appsec-review.toml").read_text()
     config.write_text(source.replace(
@@ -34,6 +36,21 @@ def _fixture(tmp_path: Path):
     (target / "src" / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
     (target / "package.json").write_text('{"dependencies":{"fixture":"1.0.0"}}', encoding="utf-8")
     return load_config(config), target
+
+
+def test_warm_graph_preserves_gap_completion_status(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    intake = build_intake()
+    original = intake.result_transform
+    def with_gap(context, result):
+        value = dict(original(context, result) if original else result)
+        value["status"] = "COMPLETED_WITH_GAPS"
+        return value
+    graph = GraphRunner(config, [replace(intake, result_transform=with_gap), build_catalog()])
+    first = graph.run(target_root=target, source_fingerprint=source_fingerprint(target))
+    second = graph.run(target_root=target, source_fingerprint=source_fingerprint(target), run_id=first["run_id"])
+    assert [item["action"] for item in second["decisions"]] == ["REUSE", "REUSE"]
+    assert first["status"] == second["status"] == "COMPLETED_WITH_GAPS"
 
 
 def _counted(job, calls: dict[str, int]):
@@ -175,7 +192,7 @@ def test_corrupt_or_missing_artifact_and_force_from_invalidate_downstream(tmp_pa
         artifact.unlink()
     plan = graph.plan(first["run_id"], source_fingerprint(target))
     assert plan[0].action == "RUN"
-    assert any(f"artifact {damage if damage == 'missing' else 'changed'}" in reason for reason in plan[0].reasons)
+    assert any(f"artifact {damage if damage == 'missing' else 'changed'}" in reason for reason in plan[0].reasons), plan[0].reasons
     assert plan[1].action == "INVALIDATE"
 
     forced = graph.plan(first["run_id"], source_fingerprint(target), force_from="job_target_catalog")
@@ -213,10 +230,10 @@ def test_interrupted_running_attempt_is_not_accepted_and_is_retried(tmp_path: Pa
     runner._bind_configuration(run_root)
     interrupted = run_root / "data/jobs/job_review_intake/attempts/attempt_0001/status.json"
     atomic_json(interrupted, {"status": "RUNNING", "attempt_id": "attempt_0001"})
-    outcome = GraphRunner(config, [build_intake(), build_catalog()]).run(
-        target_root=target, source_fingerprint=source_fingerprint(target), run_id=run_id)
-    assert outcome["decisions"][0]["action"] == "RUN"
-    assert outcome["jobs"]["job_review_intake"]["status"]["attempt_id"] == "attempt_0002"
+    with pytest.raises(ValueError, match="historical worker stop state is unknown"):
+        GraphRunner(config, [build_intake(), build_catalog()]).run(
+            target_root=target, source_fingerprint=source_fingerprint(target), run_id=run_id)
+    assert not interrupted.parent.with_name("attempt_0002").exists()
     assert json.loads(interrupted.read_text(encoding="utf-8"))["status"] == "RUNNING"
 
 
