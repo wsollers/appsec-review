@@ -22,8 +22,11 @@ def portable(value: Any) -> bool:
     """Do not transplant path-coupled files, process/budget state, or side-effect receipts."""
     if isinstance(value, Mapping):
         from appsec_review.interchange import classify_producer_status
+        status = value.get("terminal_status")
+        if status is not None and (not isinstance(status, str) or not status.strip()):
+            return False
         if (value.get("retry_required") is True
-                or classify_producer_status(value.get("terminal_status")).retry_required):
+                or classify_producer_status(status).retry_required):
             return False
         if set(value) & {"artifact", "path", "pointer", "budget", "budget_path", "workspace",
                          "index_manifest", "index_identity", "command", "pid", "process", "dispositions"}:

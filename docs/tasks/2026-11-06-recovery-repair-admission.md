@@ -148,3 +148,37 @@ had not started. The owner now serializes updates with
 mutate the canonical main checkout directly. Exact ready SHA/tree and focused evidence will be
 handed to that owner after validation on the latest available main base. No origin-chat
 supervision, remote push, pull request, live cancellation or review launch is involved.
+
+### Frozen implementation verification
+
+The initial implementation was committed, then rebased before publication onto canonical main
+`0d2c6d7b8830436bda7eed3e2c66f89c6525a17d` (including package 02). No conflicts occurred.
+Frozen candidate `0fcc429d611d4e7c762135e52bf2f217d70380cc`,
+tree `4aaba81ab74a72755a0ae5083d53cd8cc7b7076c`, was checked with the incoming pinned quality
+environment (`.[test,dagster,quality]`; Python 3.12, pytest 8.4.2).
+
+Configured `ruff check` on all 24 changed Python paths passed in **0.076 s**.
+`.venv/bin/python -m mypy src/appsec_review/runtime/job.py` passed in **10.593 s**.
+The following frozen-tree focused command took **278.312 s**: **284 passed, 10 failed**,
+then stopped at the requested diagnostic failure bound. The worktree remained clean.
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py tests/test_repair_dagster_contract.py tests/test_job_test_selection.py \
+  tests/test_job_runtime.py tests/test_handoff_interchange.py tests/test_review_run_cli.py \
+  tests/test_wave1_resume.py tests/test_runtime_launch.py tests/test_managed_admission.py \
+  tests/test_shared_artifacts.py tests/test_source_history_analysis.py \
+  tests/orchestration/dagster/test_definitions.py::test_definitions_reject_registry_config_drift \
+  tests/orchestration/dagster/test_definitions.py::test_job_level_disabled_setting_is_transparent_to_dagster \
+  tests/orchestration/dagster/test_definitions.py::test_wave1_exposes_real_producer_shard_topology \
+  tests/orchestration/dagster/test_definitions.py::test_environment_dependency_is_required_or_transparently_disabled \
+  tests/orchestration/dagster/test_definitions.py::test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs \
+  --basetemp=test/tmp/recovery-final-0fcc --tb=short --maxfail=10
+```
+
+One new regression was found: checkpoint portability classified malformed producer declarations
+too early, replacing a publication rejection with a unit exception. The predicate was corrected
+to refuse checkpoint portability without changing the original execution/publication contract.
+The two previously confirmed baseline failures remained. Seven failures came from an older
+handwritten managed-handoff fixture; their baseline comparison and the remaining selected
+checks are recorded below once complete. No assertions or coverage were weakened.

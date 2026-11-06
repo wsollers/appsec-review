@@ -342,6 +342,7 @@ def test_plan_is_read_only_and_contains_exact_input_snapshots(tmp_path):
 @pytest.mark.parametrize("output", [
     {"terminal_status": "FAILED"}, {"retry_required": True}, {"path": "somewhere"},
     {"budget": {"spent": 1}}, {"value": "/attempt-owned/file"},
+    {"terminal_status": 7}, {"terminal_status": ""},
 ])
 def test_path_state_and_retriable_results_are_not_portable(output):
     from appsec_review.runtime.checkpoints import portable
