@@ -425,3 +425,20 @@ def test_legacy_terminal_event_names_preserve_categories_without_details(tmp_pat
     exporter.offer(event)
     assert exporter.flush()["status"] == "exported"
     assert batches[0]["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["body"]["stringValue"] == category
+
+
+@pytest.mark.parametrize(("kind", "cleanup"), [
+    ("RESOURCE_RELEASED", "confirmed"), ("RESOURCE_TIMED_OUT", "not_acquired"),
+])
+def test_late_progress_does_not_override_authoritative_resource_outcomes(tmp_path, kind, cleanup):
+    log = PipelineLog(tmp_path)
+    started = emit(log, "JOB_STARTED")
+    emit(log, kind, resource_lease_id="lease")
+    emit(log, "OPERATION_PROGRESS", span_id="span", resource_lease_id="lease", progress_sequence=1)
+    emit(log, "JOB_SUCCEEDED")
+    emit(log, "RUN_COMPLETED", completion_status="SUCCEEDED")
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    report = follower.snapshot(now=datetime.fromisoformat(started["timestamp"]) + timedelta(days=1))
+    assert report["resources"][0]["cleanup"] == cleanup
+    assert report["alerts"] == []

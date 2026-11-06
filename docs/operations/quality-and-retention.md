@@ -50,6 +50,8 @@ or use the existing completed-run report; this is not unlimited event compaction
 Progress/cleanup alerts are local output records, deduplicated by run generation and ownership.
 They do not send external notifications. `snapshot()` exposes `stale_seconds`,
 `alert_after_seconds` and `max_alerts`; the watch interval does not change lifecycle durability.
+Late span progress cannot revoke a resource-release record; an admission timeout means the
+resource was not acquired, not that cleanup is overdue.
 Every critical central event retains synchronous fsync. Oversized critical records fail
 explicitly; oversized progress retains its span/sequence plus an explicit truncation marker.
 Existing operation spans measure `telemetry.lock_wait`, `telemetry.fsync` and
@@ -230,7 +232,8 @@ APPSEC_OPERATIONS_OTLP_URL=http://127.0.0.1:<isolated-port>/v1/logs \
   --basetemp=test/tmp/operations-acceptance
 ```
 
-The separate suites combine real writers/readers, interrupted logs/restarts, pinned recorded
+The separate suites combine real writers/readers, an interrupted writer subprocess holding
+the log lock followed by a new writer process, pinned recorded
 quality observations and disposable multi-run retention with shared evidence and holds.
 Default collection excludes `tests/integration` and `tests/acceptance`; these explicit commands
 are manual opt-ins. Unit results do not establish either suite has passed.

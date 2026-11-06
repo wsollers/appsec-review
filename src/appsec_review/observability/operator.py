@@ -198,11 +198,12 @@ class OperatorFollower:
                                 receipt_gaps.append(f"receipt_unavailable:{ref['sha256']}:{type(exc).__name__}")
             lease = details.get("resource_lease_id") or (
                 details.get("span_id") if kind.startswith("RESOURCE_") else None)
-            if lease:
+            if lease and (kind.startswith("RESOURCE_") or str(lease) not in resources):
                 resources[str(lease)] = {
                     "lease_id": str(lease), "job_id": event["job_id"], "attempt_id": event["attempt_id"],
                     "last_event": kind, "timestamp": event["timestamp"],
                     "cleanup": "confirmed" if kind in {"RESOURCE_RELEASED", "RESOURCE_CLEANUP_CONFIRMED"}
+                    else "not_acquired" if kind == "RESOURCE_TIMED_OUT"
                     else "unconfirmed"}
         known_stamps = [stamp for stamp in progress if stamp is not None and stamp <= now]
         last_progress = max(known_stamps, default=None)
