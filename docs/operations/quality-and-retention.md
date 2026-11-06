@@ -125,6 +125,14 @@ Evaluation precision is **case-resolution precision**, not production finding pr
 Single-turn evaluation has no retrieval-failure measurement; it stays unavailable rather than
 zero. Acceptance results do not supply abstention, token or retrieval metrics.
 
+`quality.competence_trend` also consumes the now-published `prompt-competence/1` report without
+running a model or changing its per-case evaluator. The CLI selects this adapter from the
+report schema. It binds the recorded model/configuration, distinguishes scripted from live
+observations and preserves query/denial counters. Denials are not silently classified as
+retrieval failures; a distinct failure count remains unavailable in the current upstream
+record. Budget token estimates are never substituted for missing reported usage. Mixed
+per-case configuration identities make observations incomparable.
+
 `tests/fixtures/operations-quality.json` is a pinned **synthetic assessed-row** fixture, not a
 live model result. Its zero-regression thresholds cover precision, recall, justified abstention
 and unsupported conclusions. The existing opt-in live path remains separate:

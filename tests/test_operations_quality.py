@@ -91,3 +91,31 @@ def test_acceptance_adapter_uses_existing_detector_scorer():
     assert observation["metrics"]["precision"]["value"] == report["producers"][0]["precision"]
     assert observation["metrics"]["recall"]["value"] == report["producers"][0]["recall"]
     assert observation["metrics"]["abstention_precision"] is None
+
+
+def test_published_competence_results_preserve_retrieval_and_usage_provenance():
+    from appsec_review.observability.quality import competence_trend
+    from appsec_review.review.competence import REPORT_SCHEMA as COMPETENCE_SCHEMA
+    report, cases = fixture()
+    rows = report["variants"]["full"]["rows"]
+    for row in rows:
+        row.update(counts={"queries": 2, "denials": 1, "input_tokens": 999},
+                   input_tokens=None, settings_sha256="b" * 64)
+    recorded = {"schema": COMPETENCE_SCHEMA, "execution": "scripted", "role": report["role"],
+                "cases_sha256": report["cases_sha256"], "settings_sha256": "b" * 64,
+                "configuration_sha256": "d" * 64, "model": {"provider": "fixture", "model": "recorded"},
+                "rows": rows}
+    result = competence_trend(recorded, cases, implementation_sha="1" * 40)
+    assert result["metrics"]["retrieval_queries"]["value"] == 6
+    assert result["metrics"]["retrieval_denials"]["value"] == 3
+    assert result["metrics"]["retrieval_failure"]["value"] is None
+    assert result["metrics"]["tokens_per_correct_resolution"] is None
+    assert result["identity"]["model"] == sha256_hex(recorded["model"])
+    live = competence_trend({**recorded, "execution": "live"}, cases, implementation_sha="2" * 40)
+    assert compare_trends(result, live, thresholds={"recall": 0})["status"] == "incomparable"
+    rows[0]["settings_sha256"] = "e" * 64
+    mixed = competence_trend(recorded, cases, implementation_sha="2" * 40)
+    assert mixed["identity"]["configuration"] is None
+    assert compare_trends(result, mixed, thresholds={"recall": 0})["status"] == "incomparable"
+    with pytest.raises(ValueError, match="unsupported"):
+        competence_trend({**recorded, "role": "unsupported-role"}, cases, implementation_sha="2" * 40)

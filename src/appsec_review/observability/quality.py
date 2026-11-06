@@ -86,6 +86,40 @@ def acceptance_trend(report: Mapping[str, Any], *, producer: str, implementation
     }
 
 
+def competence_trend(report: Mapping[str, Any], cases: Sequence[Mapping[str, Any]], *,
+                     implementation_sha: str) -> dict[str, Any]:
+    """Adapt published multi-turn results without rerunning or replacing their evaluator."""
+    from appsec_review.review.competence import REPORT_SCHEMA as COMPETENCE_SCHEMA, ROLE
+
+    if (report.get("schema") != COMPETENCE_SCHEMA or report.get("execution") not in {"scripted", "live"}
+            or report.get("role") != ROLE.value):
+        raise ValueError("unsupported competence report schema or execution mode")
+    rows = report.get("rows")
+    if not isinstance(rows, list) or len(rows) > 128:
+        raise ValueError("competence rows must be a bounded list")
+    model = report.get("model")
+    mode = "competence-" + report["execution"]
+    adapted = {"schema": REPORT_SCHEMA, "role": report["role"], "cases_sha256": report["cases_sha256"],
+               "settings_sha256": report.get("configuration_sha256") or report.get("settings_sha256"),
+               "variants": {mode: {"rows": rows}}}
+    result = evaluation_trend(adapted, cases, variant=mode, implementation_sha=implementation_sha,
+                              model_sha256=sha256_hex(model) if isinstance(model, Mapping) and model else None)
+    result.update(source_schema=COMPETENCE_SCHEMA,
+                  source_sha256=hashlib.sha256(canonical_json(report)).hexdigest(),
+                  execution=report["execution"])
+    for field in ("queries", "denials"):
+        values = [row.get("counts", {}).get(field) for row in rows]
+        known = bool(rows) and len(rows) == len(cases) and all(type(value) is int and value >= 0 for value in values)
+        result["metrics"]["retrieval_" + field] = {
+            "value": sum(values) if known else None, "status": "measured" if known else "unavailable"}
+    result["metrics"]["retrieval_failure"] = {
+        "value": None, "status": "not_separately_measured; denials_are_not_failures"}
+    if any(row.get("settings_sha256") not in {None, report.get("settings_sha256")} for row in rows):
+        result["identity"]["configuration"] = None
+        result["status"] = "mixed_configuration_identities"
+    return result
+
+
 def publish_trend(directory: Path, trend: Mapping[str, Any]) -> dict[str, str]:
     if trend.get("schema") != SCHEMA:
         raise ValueError("unsupported quality trend schema")
@@ -143,8 +177,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     report = json.loads(args.report.read_text())
     cases = json.loads(args.cases.read_text())["cases"]
-    result = evaluation_trend(report, cases, variant=args.variant,
-                              implementation_sha=args.implementation_sha, model_sha256=args.model_sha256)
+    if report.get("schema") == REPORT_SCHEMA:
+        result = evaluation_trend(report, cases, variant=args.variant,
+                                  implementation_sha=args.implementation_sha, model_sha256=args.model_sha256)
+    else:
+        result = competence_trend(report, cases, implementation_sha=args.implementation_sha)
+        if args.model_sha256 and args.model_sha256 != result["identity"]["model"]:
+            parser.error("model identity assertion does not match the recorded competence model")
     print(json.dumps(publish_trend(args.output, result), sort_keys=True))
     return 0
 
