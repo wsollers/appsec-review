@@ -92,10 +92,12 @@ workspace staging, while its live selectors cover a real analysis run. The docum
 connected pipeline tests mapped as integration but no claimed focused unit coverage. This is a
 real **mapping gap**, not a statement that no tests exist.
 
-The shared `recovery-admission` contract selects six exact tests from `test_repair_admission.py`
+The shared `recovery-admission` contract selects fourteen exact tests from `test_repair_admission.py`
 for superseded attempts, portable checkpoint admission, publication interruption, configuration
-refusal, worker/cleanup refusal, and repair claims. These synthetic-job checks apply to the common
-runtime, not individual handler behavior or a promise that an always-execute job is reusable.
+refusal, worker/cleanup refusal, repair claims, shared producer/consumer compatibility, original
+release evidence, explicit dependency declarations, and declared image staging inputs. These
+common-contract checks do not claim individual handler coverage or promise that an always-execute
+job is reusable. The module is not selected wholesale; unrelated cases do not enter the plan.
 The common integration mapping is `tests/integration/test_repair_workflow.py`; its process crash
 and real Dagster lifecycle checks remain manual.
 

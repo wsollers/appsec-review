@@ -442,9 +442,25 @@ def test_shipped_metadata_covers_registered_jobs_and_resolves_every_category():
 def test_shipped_recovery_maps_preserve_narrow_fixture_scopes_and_manual_categories():
     document = json.loads((ROOT / "tests/job-test-map.json").read_text(encoding="utf-8"))
     common = document["common_contracts"]
-    assert len(common["recovery-admission"]["unit"]) == 6
-    assert all(selector.startswith("tests/test_repair_admission.py::test_")
-               for selector in common["recovery-admission"]["unit"])
+    recovery_cases = [
+        "test_active_workers_and_cleanup_uncertainty_refuse",
+        "test_application_image_stages_declared_release_inputs",
+        "test_compatible_shared_computation_survives_explicit_repair",
+        "test_concurrent_or_stale_repair_claims_are_rejected",
+        "test_config_schema_and_unknown_release_refuse_repair",
+        "test_explicit_release_dependency_cannot_be_silently_missing",
+        "test_failed_job_does_not_fall_back_to_older_accepted_attempt",
+        "test_failed_publication_stage_never_reuses_partial_handoff",
+        "test_missing_original_release_evidence_rejects_predecessor_reuse",
+        "test_named_cache_cannot_hide_an_incompatible_producer_as_legacy",
+        "test_publication_refuses_incompatible_receipt_even_when_lookup_is_bypassed",
+        "test_repair_does_not_relabel_an_old_shared_computation_as_new_code",
+        "test_shared_producer_change_invalidates_its_real_consumer_not_an_independent_job",
+        "test_successful_portable_unit_is_admitted_into_fresh_attempt",
+    ]
+    assert common["recovery-admission"]["unit"] == [
+        f"tests/test_repair_admission.py::{case}" for case in recovery_cases
+    ]
     assert common["recovery-admission"]["integration"] == ["tests/integration/test_repair_workflow.py"]
     assert common["recovery-admission"]["acceptance"] == common["recovery-admission"]["live"] == []
     assert common["wave1-reuse"]["jobs"] == ["job_review_intake", "job_target_catalog"]

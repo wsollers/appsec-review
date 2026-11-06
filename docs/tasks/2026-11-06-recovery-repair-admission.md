@@ -532,3 +532,36 @@ The narrowly necessary additional implementation surfaces are `runtime/handoff.p
 portable LF while adding the guard; ignoring end-of-line differences shows only 20 added logical
 lines in that file. No byte-pinned rule pack, fixture or customer artifact was normalized.
 This follow-up does not relax either WSL-master blocker.
+
+The verified closure follow-up landed on Windows main at
+**`cebb231b80582da9f9dc49be0e87aa774d160243`**, tree
+`9c9926d107243f9a6270e2e5868d57c49ddc06b6`, by exact fast-forward from `455ea837`.
+The existing exclusive gate was held
+`2026-11-06T13:14:59.5438092Z`–`2026-11-06T13:15:05.4939744Z`; branch, clean status,
+ancestry, exact file bytes, LF and diffcheck were verified and the lock was released in `finally`.
+Package03's integration worker confirmed no competing Windows reservation or freeze.
+
+The same commit was preserved in WSL **only** at `refs/remotes/package-01/ready`, with an
+expected-old fast-forward from `455ea837`. The verified bundle SHA-256 was
+`b4c74e8c2cd13ac68f6773440f1e5e32945edd0903297cce3de75ceb4ca6ffd8`.
+WSL main/HEAD remain `dc263b30`; index, exact nine-file status and all provenance hashes,
+unrelated refs and FETCH_HEAD remained unchanged. All 19 existing `rebase-apply` files and
+directory metadata were also protected and unchanged. Their aggregate content identity
+(SHA-256 of sorted compact JSON mapping relative paths to content SHA-256s) is
+`07066a87f115d9a89241982d322853d45c2890750ffb4947f51383f487606412`.
+No am/rebase control command or WSL-main update occurred. Ready ancestry to WSL main still
+returns 1. The master landing remains blocked, not completed.
+
+The development selector's shared `recovery-admission` contract now includes the eight new
+provenance-closure cases as exact selectors (14 shared cases total), without relabeling generic
+coverage as handler-specific coverage. The document-issue handler gap and manual mappings remain
+unchanged. Its isolated verification command passed **104 tests in 5.762 s**:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_job_test_selection.py \
+  --basetemp=test/tmp/job-test-selection-66e4291a-shared-coverage-01
+```
+
+That selector verification did not execute the mapped recovery cases or any integration,
+acceptance or live suite. Only selector metadata/tests/documentation changed after the frozen
+runtime verification above.
