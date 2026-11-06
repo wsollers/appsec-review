@@ -120,7 +120,8 @@ def _guidance(root: Path, run_root: Path, batch: Mapping[str, Any], role: str) -
             "runtime state inferred from static evidence", "absence inferred from missing evidence",
         ]})
     pinned = pin_bundle(run_root, bundle)
-    return pinned, canonical_json(bundle).decode()
+    from appsec_review.guidance.compose import render_prompt
+    return pinned, render_prompt(bundle)
 
 
 def _rebind(proposal: Mapping[str, Any], resolver: EvidenceResolver,
@@ -205,7 +206,13 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         for retry in range(policy.attempts):
             request = ReviewModelRequest(
                 TURN_SCHEMA, role, str(batch["assignment"]["persona"] or "general"), "owasp",
-                guidance["bundle_sha256"], text, task, tuple(transcript),
+                guidance["bundle_sha256"], text, {**task,
+                    "capability_limits": {"max_queries": settings.max_queries, "max_turns": settings.max_turns,
+                                          "max_source_lines": settings.max_source_lines},
+                    "remaining_budget": {"remaining_queries": max(0, settings.max_queries - queries),
+                                         "remaining_turns": settings.max_turns - turn,
+                                         "final_required": turn + 1 == settings.max_turns
+                                         or queries >= settings.max_queries}}, tuple(transcript),
                 str(profile["provider"]), str(profile["model"]), str(profile["reasoning"]),
                 int(profile["max_input_tokens"]), int(profile["max_output_tokens"]),
                 cell_id=f"owasp:{batch['batch_id']}:{role}:{turn}:{retry}")

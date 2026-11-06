@@ -94,29 +94,31 @@ def test_routes_stage_schema_and_central_settings_without_tools(tmp_path, stage)
 
 
 def test_guidance_is_exact_registered_pinned_and_shared_rules_occur_once(tmp_path):
+    from appsec_review.guidance.compose import verify_bundle, render_prompt
     fake = FakeInfer()
     instance = proposer(tmp_path, fake=fake)
     for stage in SCHEMAS:
         instance(stage, {})
-    assert len(instance.guidance_hashes) == 2
-    assert fake.calls[1][0].guidance == fake.calls[2][0].guidance
+    assert len(instance.guidance_hashes) == 3
+    assert PLAN_SCHEMA in fake.calls[1][0].guidance and METADATA_SCHEMA in fake.calls[2][0].guidance
     registry = load_registry(ROOT)
     skill = load_runtime_skill(ROOT, "native-sbom-investigation", job_id="job_dependency_intelligence")
     for digest in instance.guidance_hashes:
         directory = instance.run_root / "data" / "guidance" / digest
         manifest_bytes = (directory / "bundle.json").read_bytes()
-        assert hashlib.sha256(manifest_bytes).hexdigest() == digest
         manifest = json.loads(manifest_bytes)
+        assert verify_bundle(manifest) == digest
         assert manifest["registry_version"] == registry["version"]
-        assert manifest["role_record"] == registry["roles"]["native_sbom_investigator"]
-        assert manifest["persona_record"] == registry["personas"]["native_dependency_analyst"]
-        assert manifest["files"]["skill.md"]["path"] == skill.path
-        assert manifest["files"]["skill.md"]["sha256"] == skill.sha256
-        for name, ref in manifest["files"].items():
-            pinned = (directory / name).read_bytes()
-            assert pinned == (ROOT / ref["path"]).read_bytes()
-            assert hashlib.sha256(pinned).hexdigest() == ref["sha256"]
-            assert len(pinned) == ref["size_bytes"]
+        sections = {item["name"]: item for item in manifest["sections"]}
+        assert sections["role"]["record"] == registry["roles"]["native_sbom_investigator"]
+        assert sections["persona"]["id"] == "native_dependency_analyst"
+        assert sections["procedures"]["items"][0]["path"] == skill.path
+        assert sections["procedures"]["items"][0]["source_sha256"] == skill.sha256
+        assert sections["procedures"]["items"][0]["text"].encode() == (ROOT / skill.path).read_bytes()
+        for name in ("role", "persona"):
+            source = ROOT / "pipeline" / "prompt-fragments" / (name + "s") / (sections[name]["id"] + ".md")
+            assert sections[name]["text"].encode() == source.read_bytes()
+        assert (directory / "prompt.md").read_text() == render_prompt(manifest)
     rules = (ROOT / GOVERNING_PATH).read_bytes().decode("utf-8")
     for request, _ in fake.calls:
         assert request.guidance.count(rules) == 1
@@ -134,14 +136,16 @@ def test_guidance_snapshot_does_not_change_after_source_edits_even_for_unused_st
     instance("plan", {})
     instance("metadata", {})
     assert "SOURCE CHANGED" not in fake.calls[1][0].guidance
-    assert fake.calls[1][0].guidance == fake.calls[2][0].guidance
+    assert "SOURCE CHANGED" not in fake.calls[2][0].guidance
+    assert instance._bundles["native_plan"]["section_sha256"]["procedures"] == (
+        instance._bundles["native_metadata"]["section_sha256"]["procedures"])
 
 
 def test_guidance_pin_tampering_fails_before_another_model_call(tmp_path):
     fake = FakeInfer()
     instance = proposer(tmp_path, fake=fake)
     instance("curate", {})
-    path = instance.run_root / "data" / "guidance" / instance.guidance_hashes[0] / "role.md"
+    path = instance.run_root / "data" / "guidance" / instance.guidance_hashes[0] / "prompt.md"
     path.write_text("changed bytes")
     with pytest.raises(ValueError, match="(changed|different|mismatch|immutable)"):
         instance("curate", {})

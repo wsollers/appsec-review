@@ -111,8 +111,10 @@ Existing baseline assertions are never overwritten by differing native metadata.
 model settings. It assembles the governing rules once, registers the `native_dependency_analyst`
 persona and `native_sbom_investigator` role, and loads `native-sbom-investigation` only through
 the runtime-skill loader. The curation and investigation tasks are snapshotted at first use
-and exact guidance bytes are pinned under the run's guidance store. Development guidance
-never reaches workers.
+and exact guidance bytes are pinned under the run's guidance store through the common `/4`
+assembler/verifier/publisher. Planning and metadata share source procedures but pin distinct output
+contracts. Historical bundles remain byte-identical and audit-readable. Development guidance never
+reaches workers. Each request also records its bounded Capability & Artifact Card.
 
 Each physical model attempt retains exact request/response/attempt references, including
 failed schema attempts and served provider/model. Stage receipts bind results, effective

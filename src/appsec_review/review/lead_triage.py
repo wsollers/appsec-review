@@ -110,7 +110,7 @@ class TriageGuidance:
 def load_triage_guidance(repository_root: Path) -> TriageGuidance:
     """Assemble and verify the lean triage bundle: governing rules, the role, the ``lead_severity`` task."""
     from appsec_review.guidance.compose import (
-        REVIEW_JOB, bundle_sha256, governing_rules, load_registry, load_task, section_sha256,
+        REVIEW_JOB, bundle_sha256, governing_rules, load_registry, load_task, section_sha256, render_prompt,
     )
     from appsec_review.guidance.fragments import GuidanceError, load_tool_names, parse_role_text
     root = Path(repository_root)
@@ -138,8 +138,7 @@ def load_triage_guidance(repository_root: Path) -> TriageGuidance:
                               "job": REVIEW_JOB, "sections": sections,
                               "section_sha256": {item["name"]: item["sha256"] for item in sections}}
     bundle["sha256"] = bundle_sha256(bundle)
-    text = "\n\n".join(f"<<<{item['name']} id={item['id']} sha256={item['sha256']}>>>\n{item['text'].strip()}\n"
-                       f"<<<end {item['name']}>>>" for item in sections) + "\n"
+    text = render_prompt(bundle)
     return TriageGuidance(bundle, text)
 
 

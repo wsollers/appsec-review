@@ -50,6 +50,10 @@ and remaining gaps belong to the source handoff, not historical test counts.
 
 ## What you need
 
+For incremental offline lint, type, architecture and self-scan checks, see
+[development quality gates](docs/development/quality-gates.md). The checked-in CI runs an
+explicit bounded unit/contract allowlist, never integration, acceptance or live suites.
+
 | Requirement | Why |
 | --- | --- |
 | Git | Clone this repository and the review target. |

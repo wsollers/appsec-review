@@ -187,9 +187,14 @@ def test_standalone_managed_retrieval_keeps_admission_through_manifest_loading(t
         "target_root": str(target), "custody": "application_private_v1",
     })
     configuration = root / "data/configuration"
-    atomic_json(configuration / "resolved.json", {"review_policy": policy.view()})
-    atomic_json(configuration / "manifest.json",
-                {"resolved_sha256": file_sha256(configuration / "resolved.json")})
+    resolved = json.loads((configuration / "resolved.json").read_bytes())
+    atomic_json(configuration / "resolved.json", {**resolved, "review_policy": policy.view()})
+    configuration_manifest = json.loads((configuration / "manifest.json").read_bytes())
+    configuration_sha = file_sha256(configuration / "resolved.json")
+    atomic_json(configuration / "manifest.json", {
+        **configuration_manifest, "resolved_sha256": configuration_sha,
+        "resolved": {"path": "resolved.json", "sha256": configuration_sha},
+    })
     handoff_path = root / pointer["handoff_path"]
     handoff = json.loads(handoff_path.read_bytes())
     handoff["source_fingerprint"] = manifest["target_snapshot"]
@@ -198,6 +203,11 @@ def test_standalone_managed_retrieval_keeps_admission_through_manifest_loading(t
         "path": shard["relative_path"], "sha256": shard["sha256"],
         "size_bytes": (root / shard["relative_path"]).stat().st_size,
     } for shard in manifest["indexes"])
+    write_fixture_handoff(root, handoff_path, {
+        **handoff,
+        "artifacts": [ref for ref in handoff["artifacts"] if ref["path"].startswith("data/indices/")],
+    })
+    handoff = json.loads(handoff_path.read_bytes())
     context = SimpleNamespace(run_root=root, target_root=target, review_policy=policy,
                               source_fingerprint=manifest["target_snapshot"])
     handoff["validation_record"] = create_admission(context, handoff)
@@ -639,7 +649,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
         "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
         "query_change_context", "query_hotspots", "query_precomputed", "query_observations",
-        "query_dataset_inventory", "query_code_graph", "query_debug_symbols", "list_codeql_databases", "query_codeql_neighborhood",
+        "query_dataset_inventory", "query_code_graph", "query_debug_symbols", "query_syntax",
+        "list_codeql_databases", "query_codeql_neighborhood",
         "query_owasp_workbench"}
     codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
                                             "build_unit": "native-main", "path": "src/auth.c"})
@@ -657,6 +668,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         ("query_precomputed", {"query_set": "symbol_links", "subject": ids["symbol"]}),
         ("query_owasp_workbench", {}),
     ]
+    log_path = runs / RUN_ID / "data" / "logs" / "pipeline.jsonl"
+    before_transport = log_path.read_bytes()
     process = subprocess.Popen(
         [sys.executable, "-m", "appsec_review.mcp.stdio", "--runs-dir", str(runs), "--run-id", RUN_ID],
         cwd=Path(__file__).parents[1], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -670,11 +683,12 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     responses = [json.loads(line) for line in stdout.splitlines()]
     assert len(responses) == 12
     assert all(item["result"]["structuredContent"]["run_id"] == RUN_ID for item in responses)
+    assert log_path.read_bytes() == before_transport
     records = [json.loads(line) for line in (
         runs / RUN_ID / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()]
     completed = [item for item in records if item["event_type"] == "MCP_TOOL_COMPLETED"]
-    assert len(completed) == 14  # two direct adapter calls above plus twelve transport calls
-    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 14
+    assert len(completed) == 2  # Direct application calls audit; the operator transport only reads.
+    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 2
     children = [item for item in records if item["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
     assert children and all(item["details"]["parent_invocation_id"] for item in children)
 

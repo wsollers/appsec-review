@@ -9,14 +9,11 @@ import time
 from typing import Any, Callable, Mapping
 
 from appsec_review.config.remediation import RemediationModel
-from appsec_review.guidance import governing_rules, load_registry
-from appsec_review.guidance.fragments import load_tool_names, validate_procedure_text
 from appsec_review.inference import Infer, ModelOutputError, ReviewModelRequest
 from appsec_review.inference.errors import ExecutionLimit, ProviderError
 from appsec_review.inference.execution import Execution
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage import canonical_json
-from appsec_review.storage.shared import publish_named
 
 TURN_SCHEMA = "appsec-review/worker-turn/1"
 ROLE_JOBS = {"remediation_writer": "job_remediation_planning",
@@ -26,24 +23,8 @@ ROLE_JOBS = {"remediation_writer": "job_remediation_planning",
 def guidance(repository_root: Path, run_root: Path, role: str, *, job_id: str) -> tuple[str, str]:
     if ROLE_JOBS.get(role) != job_id:
         raise IntegrityError("remediation role is not allowed for this job")
-    registry = load_registry(repository_root)
-    record = registry["roles"].get(role)
-    if not isinstance(record, Mapping) or set(record) != {"responsibility"}:
-        raise IntegrityError("remediation role requires a registered bounded responsibility")
-    role_path = Path("pipeline") / "prompt-fragments" / "roles" / f"{role}.md"
-    role_text = (repository_root / role_path).read_text(encoding="utf-8")
-    validate_procedure_text(f"role {role}", role_text, load_tool_names(repository_root))
-    files = {"governing-rules.md": governing_rules(repository_root).encode("utf-8"),
-             f"{role}.md": role_text.encode("utf-8")}
-    identity = {"job_id": job_id, "role": role, "registry_version": registry["version"],
-                "responsibility": record["responsibility"],
-                "files": {name: hashlib.sha256(payload).hexdigest() for name, payload in files.items()}}
-    digest = hashlib.sha256(canonical_json(identity)).hexdigest()
-    files["bundle.json"] = canonical_json(identity)
-    for name, payload in files.items():
-        publish_named(run_root, run_root / "data" / "guidance" / digest / name, payload,
-                      namespace="guidance", computation={"job_id": job_id, "role": role, "sha256": digest})
-    return "\n\n".join(files[name].decode("utf-8") for name in ("governing-rules.md", f"{role}.md")), digest
+    from appsec_review.guidance.workers import publish_worker_guidance
+    return publish_worker_guidance(repository_root, run_root, role)
 
 
 def run_model(*, infer: Infer, profile: RemediationModel, role: str, cell_id: str,
@@ -69,7 +50,11 @@ def run_model(*, infer: Infer, profile: RemediationModel, role: str, cell_id: st
               "retrieve_shape": {"action": "retrieve", "request": {"path": "<admitted path>",
                                  "start_line": 1, "end_line": 40}},
               "final_shape": {"action": "final", "result": "<task output object>"},
-              "queries_remaining": max(0, profile.max_queries - queries)}},
+              "queries_remaining": max(0, profile.max_queries - queries)},
+             "capability_limits": {"max_queries": profile.max_queries, "max_turns": profile.max_turns},
+             "remaining_budget": {"remaining_queries": max(0, profile.max_queries - queries),
+                                  "remaining_turns": profile.max_turns - number + 1,
+                                  "final_required": number == profile.max_turns or queries >= profile.max_queries}},
             tuple(transcript), profile.provider, profile.model, profile.reasoning,
             profile.max_input_tokens, profile.max_output_tokens, cell_id=cell_id)
         receipt_count = len(engine.receipts)

@@ -703,18 +703,10 @@ def _repair_guidance(unit: UnitContext, family: str, model: Mapping[str, Any]) -
     persona = (prompt_root / "personas" / "devops-engineer.md").read_text(encoding="utf-8")
     role = (prompt_root / "roles" / f"build-engineer-{family}.md").read_text(encoding="utf-8")
     guidance = load_runtime_skill(repository, "build-image-repair", job_id="job_project_build").text
-    from appsec_review.storage.shared import publish_named
-    model_identity = {"provider": str(model["provider"]), "model": str(model["model"]),
-                      "reasoning": str(model["reasoning"]), "persona": "devops_engineer",
-                      "role": f"build_engineer_{family}", "task": "build_image_repair"}
-    identity = hashlib.sha256(persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
-                              + b"\0" + canonical_json(model_identity)).hexdigest()
-    bundle = unit.job.run_root / "data" / "guidance" / identity
-    for name, payload in {"persona.md": persona.encode(), "role.md": role.encode(),
-                          "task.md": guidance.encode(), "model-identity.json": canonical_json({
-                              **model_identity, "guidance_sha256": identity})}.items():
-        publish_named(unit.job.run_root, bundle / name, payload, namespace="guidance",
-                      computation=model_identity)
+    from appsec_review.guidance.workers import publish_worker_guidance
+    guidance, identity = publish_worker_guidance(
+        repository, unit.job.run_root, "build_repair", family=family, model=model,
+        texts={"persona": persona, "role": role, "procedure": guidance})
     return persona, role, guidance, identity
 
 
@@ -738,6 +730,7 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
         "dockerfile": dockerfile.decode("utf-8", "replace"),
         "failure": diagnostics,
         "prior_attempts": attempts[-10:],
+        "guidance_bundle_sha256": guidance_sha,
     }
     request = ModelRequest(
         schema=REPAIR_SCHEMA, persona=persona, role=role, guidance=guidance, summary=summary,

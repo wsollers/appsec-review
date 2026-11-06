@@ -377,28 +377,8 @@ def _memo_reuse(spec: CellSpec, cell_id: str, capability: CellCapability, receip
 
 def _tool_catalog(capability: CellCapability) -> list[dict[str, Any]]:
     """The granted tools with their exact parameter schemas, so a worker never has to guess a parameter name."""
-
-    from appsec_review.mcp.schema import TOOLS
-
-    by_name = {tool["name"]: tool for tool in TOOLS}
-    locator = {"type": "object", "required": ["path", "line"],
-               "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}}}
-    catalog = []
-    for name in sorted(capability.tools):
-        if name == EXPAND_TOOL:
-            catalog.append({"name": name, "parameters": EXPAND_SCHEMA, "description": (
-                "More about one item you can already see: the labelled rows that bear on a label (a sink, guard, "
-                "function, flow, call site), within your grant. Give exactly one of label, ref or files; files "
-                "names a file listed under the package files and offset pages it.")})
-        elif name in by_name:
-            schema = by_name[name]["inputSchema"]
-            description = by_name[name].get("description", "")
-            if name in LOCATOR_TOOLS:
-                schema = {**schema, "properties": {**schema["properties"], "locator": locator}}
-                description += (" Instead of a path, give locator {path, line} naming a file and line shown in the "
-                                "package; the application resolves it to identities in the package scope.")
-            catalog.append({"name": name, "description": description, "parameters": schema})
-    return catalog
+    from appsec_review.guidance.cards import review_tool_catalog
+    return review_tool_catalog(capability.tools)
 
 
 def _request_example(capability: CellCapability) -> dict[str, Any]:
@@ -447,6 +427,11 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
                                           "listed for that tool in tool_catalog",
                           "tool_catalog": _tool_catalog(capability)},
     }
+    from appsec_review.guidance.cards import review_admission
+    task_input["artifact_admission"] = review_admission(core, capability)
+    if view is not None:
+        task_input["artifact_admission"]["material_gap_count"] = len(view.document.get("material_gaps", ()))
+        task_input["artifact_admission"]["view_omitted"] = dict(view.document.get("omitted", {}))
     for turn_number in range(1, capability.max_turns + 1):
         final_required = turn_number == capability.max_turns or attempt.queries >= capability.max_queries
         request = ReviewModelRequest(

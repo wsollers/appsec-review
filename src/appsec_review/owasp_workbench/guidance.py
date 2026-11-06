@@ -66,7 +66,6 @@ def compose(repository_root: Path, *, role: str, persona: str | None,
     allowed_task = {"task_id", "question", "proof_obligations", "prohibited_claims"}
     if set(task) != allowed_task or not str(task["question"]).strip():
         raise ValueError("task prompt must contain only the bounded question contract")
-    governing = shared.governing_rules(repository_root)
     role_text = str(registry["roles"][role]["responsibility"])
     specialist = None
     if persona is not None:
@@ -84,19 +83,20 @@ def compose(repository_root: Path, *, role: str, persona: str | None,
         validate_procedure_text(f"procedure {procedure.name}", procedure.body, load_tool_names(repository_root))
         procedures.append({"id": procedure.name, "path": procedure.path, "text": procedure.text,
                            "source_sha256": procedure.sha256})
-    bundle = {
-        "schema": "appsec-review/guidance-bundle/1",
-        "registry_version": registry["version"],
-        "governing_rules": governing,
-        "role": {"id": role, "text": role_text},
-        "persona": specialist,
-        "procedures": procedures,
-        "task": dict(task),
-    }
-    bundle["sha256"] = shared.bundle_sha256(bundle)
-    return bundle
+    sections = [{"name": "role", "id": role, "text": role_text}]
+    if specialist is not None:
+        sections.append({"name": "persona", **specialist,
+                         "source_sha256": shared.text_sha256(specialist["text"]),
+                         "fragment_sha256": specialist["source_sha256"]})
+    sections.extend([
+        {"name": "task", "id": task["task_id"], "text": task["question"], "input": dict(task),
+         "response_schema": "appsec-review/owasp-assessment-turn/1",
+         "citation_contract": "owasp_typed_reference"},
+        {"name": "procedures", "items": procedures},
+    ])
+    return shared.compose_selected_bundle(repository_root, job="job_owasp_control_assessment",
+                                          role=role, sections=sections)
 
 
 def pin_bundle(run_root: Path, bundle: Mapping[str, Any]) -> dict[str, str]:
-    return shared.pin_bundle(run_root, bundle,
-                             files={"governing-rules.md": str(bundle.get("governing_rules", ""))})
+    return shared.pin_bundle(run_root, bundle)

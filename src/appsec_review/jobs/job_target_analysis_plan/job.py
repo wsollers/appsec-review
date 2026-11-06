@@ -52,25 +52,13 @@ TOPOLOGY = {
 
 
 def publish_guidance_bundle(run_root: Path, *, persona: str, role: str, guidance: str,
-                            model: Mapping[str, Any], family: str, build_system: str) -> str:
+                            model: Mapping[str, Any], family: str, build_system: str,
+                            repository_root: Path | None = None) -> str:
     """Write one immutable bundle per model and recipe group before inference uses it."""
-    identity = {"provider": str(model["provider"]), "model": str(model["model"]),
-                "reasoning": str(model["reasoning"]), "persona": "devops_engineer",
-                "role": f"build_engineer_{family}", "build_system": build_system}
-    content = (persona.encode("utf-8") + b"\0" + role.encode("utf-8") + b"\0" +
-               guidance.encode("utf-8") + b"\0" + canonical_json(identity))
-    guidance_sha = hashlib.sha256(content).hexdigest()
-    bundle_root = run_root / "data" / "guidance" / guidance_sha
-    files = {"persona.md": persona.encode("utf-8"), "role.md": role.encode("utf-8"),
-             "task.md": guidance.encode("utf-8"),
-             "model-identity.json": canonical_json({**identity, "guidance_sha256": guidance_sha})}
-    from appsec_review.storage.shared import publish_named
-    for name, payload in files.items():
-        path = bundle_root / name
-        if path.is_file() and path.read_bytes() != payload:
-            raise ValueError(f"accepted guidance bundle changed: {guidance_sha}/{name}")
-        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
-    return guidance_sha
+    from appsec_review.guidance.workers import publish_worker_guidance
+    root = repository_root or application_root("pipeline/guidance/registry.json")
+    return publish_worker_guidance(root, run_root, "build_planning", family=family, model=model, build_system=build_system,
+        texts={"persona": persona, "role": role, "procedure": guidance})[1]
 
 
 def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
@@ -408,10 +396,12 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             (family, build_system, image_profile), build_units = item
             role_path = prompt_root / "roles" / f"build-engineer-{family}.md"
             role = role_path.read_text(encoding="utf-8")
-            guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
-            guidance_sha = publish_guidance_bundle(
-                unit.job.run_root, persona=persona, role=role, guidance=guidance,
-                model=model, family=family, build_system=build_system)
+            from appsec_review.guidance.workers import publish_worker_guidance
+            governed, guidance_sha = publish_worker_guidance(
+                unit.job.repository_root, unit.job.run_root, "build_planning", family=family, model=model,
+                build_system=build_system,
+                texts={"persona": persona, "role": role, "procedure": guidance})
+            guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + governed.encode()
             paths = sorted({str(value["path"]) for build_unit in build_units
                             for value in (*build_unit.get("markers", ()),
                                           *build_unit.get("descriptor_package", {}).get("documents", ()))})
@@ -422,9 +412,10 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                                                      if str(value["path"]) in paths],
                                "accepted_artifacts": [], "build_units": build_units,
                                "build_environment": plan["build_environment"],
-                               "feedback_limits": asdict(limits)}
+                               "feedback_limits": asdict(limits),
+                               "guidance_bundle_sha256": guidance_sha}
             request = ModelRequest(
-                schema=PROPOSAL_SCHEMA, persona=persona, role=role, guidance=guidance,
+                schema=PROPOSAL_SCHEMA, persona=persona, role=role, guidance=governed,
                 summary=compact_summary, allowed_scanners=(), allowed_build_systems=(build_system,),
                 allowed_components=(), allowed_paths=tuple(paths),
                 allowed_build_units=tuple(str(value["build_unit_id"]) for value in build_units),

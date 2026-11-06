@@ -12,11 +12,7 @@ from pathlib import Path
 import subprocess
 from typing import Any, Literal
 
-from appsec_review.guidance.compose import GOVERNING_PATH, load_registry
-from appsec_review.guidance.fragments import (
-    GuidanceError, load_tool_names, policy_keys, validate_fragment_text, validate_procedure_text,
-)
-from appsec_review.guidance.skills import load_runtime_skill
+from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.inference import Infer, ModelRequest, ModelResult
 from appsec_review.inference.errors import (
     ExecutionLimit, FailureCategory, ModelOutputError, ProviderError, failure_category,
@@ -26,7 +22,7 @@ from appsec_review.inference.usage import Usage, total_reported
 from appsec_review.observability.events import EventLog
 from appsec_review.runtime import execution_safety as safety
 from appsec_review.storage import canonical_json
-from appsec_review.storage.shared import immutable_bytes, publish_named, safe_path
+from appsec_review.storage.shared import immutable_bytes, safe_path
 
 from .native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
@@ -97,7 +93,7 @@ class NativeProposer:
         self._usage: list[Usage] = []
         self.artifacts: list[dict[str, Any]] = []
         self.guidance_hashes: list[str] = []
-        self._bundles: dict[str, tuple[str, str, dict[str, bytes]]] = {}
+        self._bundles: dict[str, dict[str, Any]] = {}
         self._scope = "unit-" + _digest(canonical_json({"unit_id": unit_id}))
 
     def _failure(self, error: NativeInferenceError, *, stage: str,
@@ -128,67 +124,21 @@ class NativeProposer:
             if type(value) is not int or value < (0 if key == "retries" else 1):
                 raise NativeInferenceError("unavailable", f"central model setting {key} is invalid")
 
-    def _guidance(self, task: str) -> tuple[str, str]:
+    def _guidance(self, task: str, *, stage: str | None = None) -> tuple[str, str]:
+        from appsec_review.guidance.compose import pin_bundle, render_prompt
+        from appsec_review.guidance.workers import worker_bundle
+        worker = {"curate": "native_curation", "plan": "native_plan", "metadata": "native_metadata"}.get(
+            stage or ("curate" if task == "native_component_curation" else "plan"))
+        if worker is None or task not in {record[1] for record in STAGES.values()}:
+            raise GuidanceError("native SBOM task is not registered")
         if not self._bundles:
-            registry = load_registry(self.repository_root)
-            role = registry["roles"].get(ROLE_ID)
-            persona = registry["personas"].get(PERSONA_ID)
-            if (not isinstance(role, Mapping) or set(role) != {"responsibility"}
-                    or not isinstance(persona, Mapping)):
-                raise GuidanceError("native SBOM role and persona must be registered")
-            skill = load_runtime_skill(self.repository_root, RUNTIME_SKILL_ID,
-                                       job_id="job_dependency_intelligence", fallback_to_package=False)
-            common_paths = {
-                "governing-rules.md": GOVERNING_PATH.as_posix(),
-                "role.md": f"pipeline/prompt-fragments/roles/{ROLE_ID}.md",
-                "persona.md": persona.get("path", f"pipeline/prompt-fragments/personas/{PERSONA_ID}.md"),
-                "skill.md": skill.path,
-            }
-            common = {name: (self.repository_root / path).read_bytes()
-                      for name, path in common_paths.items()}
-            if _digest(common["skill.md"]) != skill.sha256:
-                raise GuidanceError("native SBOM skill bytes differ from the loaded runtime skill")
-            tools = load_tool_names(self.repository_root)
-            validate_fragment_text("native SBOM persona", common["persona.md"].decode("utf-8"), tools)
-            validate_procedure_text("native SBOM role", common["role.md"].decode("utf-8"), tools)
-            validate_procedure_text("native SBOM procedure", skill.body, tools)
-            bundles = {}
-            for task_id in dict.fromkeys(record[1] for record in STAGES.values()):
-                record = registry["tasks"].get("dependency-intelligence", {}).get(task_id)
-                if not isinstance(record, Mapping):
-                    raise GuidanceError(f"native SBOM task is not registered: {task_id}")
-                paths = {**common_paths, "task.md": record["path"]}
-                files = {**common, "task.md": (self.repository_root / record["path"]).read_bytes()}
-                validate_procedure_text("native SBOM task", files["task.md"].decode("utf-8"), tools)
-                keys: set[str] = set()
-                for name, payload in files.items():
-                    section_keys = policy_keys(payload.decode("utf-8"))
-                    if keys & section_keys:
-                        raise GuidanceError("native SBOM guidance repeats shared policy keys")
-                    keys.update(section_keys)
-                identity = {
-                    "schema": "appsec-review/native-inference-guidance/1",
-                    "job_id": "job_dependency_intelligence", "role": ROLE_ID, "role_record": dict(role),
-                    "persona": PERSONA_ID, "persona_record": dict(persona), "task": task_id,
-                    "registry_version": registry["version"],
-                    "files": {name: {"path": paths[name], "sha256": _digest(payload),
-                                     "size_bytes": len(payload)} for name, payload in files.items()},
-                }
-                manifest = canonical_json(identity)
-                digest = _digest(manifest)
-                text = "\n\n".join(files[name].decode("utf-8") for name in
-                                    ("governing-rules.md", "role.md", "persona.md", "task.md", "skill.md"))
-                bundles[task_id] = (text, digest, {**files, "bundle.json": manifest})
-            self._bundles = bundles
-        text, digest, files = self._bundles[task]
-        # Revalidate pinned bytes even when another caller changed a run-owned file.
-        for name, payload in files.items():
-            publish_named(self.run_root, self.run_root / "data" / "guidance" / digest / name,
-                          payload, namespace="guidance",
-                          computation={"job_id": "job_dependency_intelligence", "sha256": digest})
+            self._bundles = {name: worker_bundle(self.repository_root, name)
+                             for name in ("native_curation", "native_plan", "native_metadata")}
+        bundle = self._bundles[worker]
+        digest = pin_bundle(self.run_root, bundle)["bundle_sha256"]
         if digest not in self.guidance_hashes:
             self.guidance_hashes.append(digest)
-        return text, digest
+        return render_prompt(bundle), digest
 
     def _request(self, stage: str, payload: Mapping[str, Any]) -> tuple[ModelRequest, str, str]:
         self._check_model()
@@ -205,7 +155,7 @@ class NativeProposer:
         if type(value.get("input_records")) is int and value["input_records"] > self.bounds.batch_candidates:
             raise NativeInferenceError("bounds", "native candidate batch exceeds its bound")
         schema, task = STAGES[stage]
-        guidance, guidance_hash = self._guidance(task)
+        guidance, guidance_hash = self._guidance(task, stage=stage)
         summary = {"stage": stage, "payload": value, "guidance_bundle_sha256": guidance_hash}
         if len(canonical_json(summary)) > self.bounds.max_payload_bytes:
             raise NativeInferenceError("bounds", "native request summary exceeds its byte bound")

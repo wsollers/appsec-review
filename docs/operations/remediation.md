@@ -92,7 +92,8 @@ central; runtime profiles may override only the allowlisted writer/reviewer mode
 only to planning, `remediation_reviewer` only to validation. Each role requires a registered
 bounded responsibility and validated procedure text; governing rules use the shared validated
 loader. The immutable role bundle identity includes job/role, registry version, responsibility
-and exact file hashes, retained with `bundle.json` under `data/guidance/<sha256>/`.
+and exact file hashes, retained in the common selected-section `/4` format with `bundle.json`
+and `prompt.md` under `data/guidance/<sha256>/`. Historical layouts remain immutable and readable.
 Receipts pin that digest; host/repository-agent instructions and target guidance are not loaded
 as worker guidance. These are provenance records, not dossier raw-prompt payloads.
 
