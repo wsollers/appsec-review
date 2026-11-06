@@ -66,8 +66,8 @@ This uses the configured Dagster instance and launcher's worker-health API, with
 It refuses a missing/wrong/nonterminal run, a live/unknown worker, and a launcher without health
 support. Retained resource leases and uncertain controller permits still block admission.
 Registered local workers are checked by process generation and PID namespace; foreign or
-unverifiable workers fail closed. Historical `RUNNING` receipts without worker identity are
-uncertainty, not permission to start replacements.
+unverifiable workers fail closed. Historical receipts without worker identity are uncertainty,
+even when they say `FAILED` or `SUCCEEDED`: they do not prove that independent workers stopped.
 
 After the stopped deployment has been replaced with the repaired release:
 
@@ -117,6 +117,10 @@ appsec-review admit-repair --run-id OLD --target TARGET --plan successor-plan.js
 The returned successor has the same resolved review configuration and a versioned reference
 to the original plan/run. **All jobs rerun; imported successes are explicitly empty.** Original
 evidence remains in the source run. Stopped-worker/cleanup checks are not bypassed. A successor
+from an older runtime that recorded no worker identity remains refused rather than treating
+terminal status as shutdown proof. The automatic historical route supports unmeasured releases
+whose worker shutdown can actually be verified.
+A successor
 requiring first-error safety must be submitted with a fresh, authorized execution-safety envelope
 through the existing Dagster submission path; this command does not silently install one.
 

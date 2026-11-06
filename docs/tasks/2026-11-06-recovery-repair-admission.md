@@ -270,6 +270,22 @@ Release content identity:
 The generated verification artifact stays in `test/tmp/recovery-release-verification.json`;
 it is not committed and is not represented as a built/deployed image.
 
-The only change after this tested code SHA is this verification record. The integration handoff
-includes its descendant commit, the exact tested source identity, the complete owned-path list,
-LF/whitespace checks and the explicit manual-validation gaps.
+At the initial handoff, the only change after this tested code SHA was the verification record.
+The handoff included its descendant commit, the exact tested source identity, the complete
+owned-path list, LF/whitespace checks and the explicit manual-validation gaps.
+
+### Integration-owner transition and final stop-proof check
+
+The ready tip `2831c9986018388c82b2af03704f3d52e781f7b0` was imported into canonical Git
+storage and the assigned app branch, without native Windows development, builds or tests.
+Delivery to the previously confirmed integration owner failed because that session had been
+archived. Its surviving predecessor was no longer messageable. The only surviving session
+listed on the main checkout (`309f832c-bef7-46f0-8e9a-6c8a1f68b4eb`) explicitly declined ownership:
+its older task prohibited commits, and it confirmed no active work/freeze of its own. No
+unpermitted main update was attempted.
+
+During that transition, the legacy-worker boundary was tightened: **any** historical claim
+without worker identity is unverified, including a `FAILED` or `SUCCEEDED` receipt. A terminal
+job receipt is not proof that older independent workers have stopped. Four focused regressions
+cover those legacy states; the operations guide now names the resulting historical admission
+limitation. The earlier ready tip was withdrawn before landing.

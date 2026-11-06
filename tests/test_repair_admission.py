@@ -254,6 +254,21 @@ def test_active_workers_and_cleanup_uncertainty_refuse(tmp_path):
     assert any("leases" in value for value in stopped_reasons(config, root))
 
 
+@pytest.mark.parametrize("status", ["FAILED", "SUCCEEDED", "COMPLETED_WITH_GAPS", "RUNNING"])
+def test_legacy_terminal_status_is_not_proof_that_workers_stopped(tmp_path, status):
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    legacy = root / "data/jobs/job_fixture/attempts/attempt_0002"
+    atomic_json(legacy / "claim.json", {
+        "run_id": root.name, "job_id": job.job_id, "attempt_id": "attempt_0002",
+        "orchestration": {"system": "local"}})
+    atomic_json(legacy / "status.json", {"status": status})
+    assert "historical worker stop state is unknown" in stopped_reasons(config, root)
+    with pytest.raises(ValueError, match="historical worker stop state is unknown"):
+        JobRunner(config).begin_attempt(job, run_id=root.name)
+
+
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
     config, (job,), _ = fixture(tmp_path)
     monkeypatch.setenv("MODEL_TOKEN", "do-not-disclose")

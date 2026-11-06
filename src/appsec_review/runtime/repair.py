@@ -152,10 +152,7 @@ def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
     for path in sorted((run_root / "data/jobs").glob("*/attempts/*/claim.json")):
         claim = read_document(path)
         if claim.get("worker_protocol") != WORKER_PROTOCOL:
-            status_path = path.parent / "status.json"
-            if not status_path.exists() or read_document(status_path).get("status") not in {
-                    "FAILED", "SUCCEEDED", "COMPLETED_WITH_GAPS"}:
-                reasons.append("historical worker stop state is unknown")
+            reasons.append("historical worker stop state is unknown")
         if claim.get("orchestration", {}).get("system") == "dagster" and not safety_path.exists():
             # A failed step is not proof that the Dagster run worker cannot launch another step.
             dispatch_id = claim["orchestration"].get("run_id", "")
