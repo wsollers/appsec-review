@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 from appsec_review.observability.experiments import (
     csv_exports, input_schema, output_schema, publish_snapshot, rebuild, root_cause_id,
 )
-from appsec_review.observability.experiments.contracts import digest
+from appsec_review.observability.experiments.contracts import MAX_OBSERVATIONS, check_observation_budget, digest
 from tests.fixtures.glasswing import add_label, experiment, group, report, triage_experiment, usage
 
 
@@ -227,6 +227,99 @@ def test_root_matching_uses_exact_source_cause_symbols_and_locations_not_severit
         changed = {**original, field: value}
         assert root_cause_id(identity, original) != root_cause_id(identity, changed)
     assert root_cause_id(group(source_revision="new"), original) != root_cause_id(identity, original)
+
+
+def test_integer_valued_json_lines_keep_root_identity_adjudication_and_adjacent_jaccard():
+    document = experiment([["A"], ["A"]], outcomes={"A": "tp"})
+    expected = rebuild(document)
+    second_report = document["completions"][1]["reports"][0]
+    second_report["locations"][0].update(start_line=json.loads("1e0"), end_line=2.0)
+    assert root_cause_id(group(), second_report) == root_cause_id(group(), report("A"))
+    actual = rebuild(document)
+    assert actual == expected
+    assert actual["runs"][1]["transition"]["jaccard"]["value"] == 1
+    assert actual["runs"][1]["quality"]["tp"] == 1
+    assert actual["runs"][1]["quality"]["unresolved"] == 0
+    assert actual["groups"][0]["distinct"]["tp"] == 1
+    assert type(second_report["locations"][0]["start_line"]) is float
+
+
+def test_every_schema_integer_is_normalized_before_snapshot_hashing_and_index_operations(tmp_path):
+    integer_document = experiment([["A"], ["A"]], outcomes={"A": "tp"})
+    integer_document["inference_policy"] = {
+        "policy_id": "integer-normalization", "predeclared_at": "2026-11-05T00:00:00Z", "design": "fixed_sample",
+        "sampling_unit": "root-cause", "dependence_method": "whole-run", "planned_runs": 2,
+        "evidence_ids": ["predeclared-policy"],
+    }
+    for completion in integer_document["completions"]:
+        completion["coverage"] = [{"unit": "functions", "analyzed": 1, "eligible": 2,
+                                  "evidence_ids": ["coverage"], "missing_reason": None}]
+    floating_document = deepcopy(integer_document)
+    for launch in floating_document["launches"]:
+        launch["run_index"] = float(launch["run_index"])
+    for completion in floating_document["completions"]:
+        completion["usage"]["input_tokens"] = 10.0
+        completion["usage"]["output_tokens"] = 5.0
+        completion["coverage"][0].update(analyzed=1.0, eligible=2.0)
+        completion["reports"][0]["locations"][0].update(start_line=1.0, end_line=2.0)
+    floating_document["inference_policy"]["planned_runs"] = 2.0
+    expected = rebuild(integer_document)
+    actual = rebuild(floating_document)
+    assert actual == expected
+    assert actual["runs"][1]["ror_5"] == {"value": 1, "valid_count": 1, "total_count": 1}
+    assert actual["source_sha256"] == expected["source_sha256"]
+    assert type(actual["source"]["launches"][1]["run_index"]) is int
+    assert type(actual["source"]["completions"][0]["usage"]["input_tokens"]) is int
+    assert type(actual["source"]["completions"][0]["coverage"][0]["eligible"]) is int
+    assert type(actual["source"]["inference_policy"]["planned_runs"]) is int
+    assert publish_snapshot(tmp_path, expected)["status"] == "published"
+    assert publish_snapshot(tmp_path, actual)["status"] == "duplicate"
+
+
+@pytest.mark.parametrize("value", [1.5, True, "1", float("nan"), float("inf")])
+def test_public_root_matching_does_not_truncate_or_accept_invalid_integer_forms(value):
+    invalid = report("A")
+    invalid["locations"][0]["start_line"] = value
+    with pytest.raises(ValueError, match="integer-valued JSON number"):
+        root_cause_id(group(), invalid)
+
+
+def test_aggregate_observation_admission_at_actual_100000_and_100001_distinct_reports():
+    document = experiment([[] for _ in range(11)])
+    template = report("template")
+    for run_index, completion in enumerate(document["completions"][:10]):
+        completion["reports"] = [
+            {**template, "raw_report_id": str(run_index * 10000 + offset),
+             "cause_key": str(run_index * 10000 + offset)}
+            for offset in range(10000)
+        ]
+    assert MAX_OBSERVATIONS == 100000
+    assert len({row["cause_key"] for completion in document["completions"] for row in completion["reports"]}) == 100000
+    check_observation_budget(document)
+    recurrence_schema = output_schema()["properties"]["groups"]["items"]["properties"]["recurrence"]
+    membership_schema = output_schema()["properties"]["membership"]
+    assert recurrence_schema["maxItems"] == membership_schema["maxItems"] == MAX_OBSERVATIONS
+    document["completions"][-1]["reports"] = [report("100000")]
+    assert sum(len(completion["reports"]) for completion in document["completions"]) == 100001
+    # This must fail at admission, before full schema traversal, copying and pairwise work.
+    with pytest.raises(ValueError, match="aggregate observation limit 100000"):
+        rebuild(document)
+
+
+def test_observation_budget_counts_triage_diagnostics_and_duplicate_deliveries_before_deduplication():
+    document = experiment([[], "failed"])
+    repeated = report("same-root")
+    document["completions"][0]["reports"] = [repeated] * 50000
+    document["completions"][1]["decisions"] = [{"warning_id": "warning", "decision": "abstain"}] * 50000
+    # The fast cardinality boundary is independent of subsequent per-run schema admission.
+    check_observation_budget(document)
+    document["completions"][1]["reports"] = [repeated]
+    with pytest.raises(ValueError, match="aggregate observation limit"):
+        check_observation_budget(document)
+    document["completions"][1]["reports"] = []
+    document["completions"].append(document["completions"][0])
+    with pytest.raises(ValueError, match="aggregate observation limit"):
+        check_observation_budget(document)
 
 
 def test_fixed_warning_triage_preserves_abstentions_true_bug_retention_and_false_warning_removal():

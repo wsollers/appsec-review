@@ -29,6 +29,14 @@ adjudication documents have their own `/1` schemas, revision names and content h
 The Python input types are declared in `experiments/contracts.py`; schemas are
 defined alongside them, not in a second mutable registry.
 
+JSON Schema integers include integer-valued JSON numbers such as `1.0` and `1e0`.
+Admission normalizes every integer field (launch indices, source lines, token and
+coverage counts, planned run counts) before hashing or integer-only operations.
+The public `root_cause_id` helper applies the same source-line normalization;
+fractional values, booleans and nonfinite numbers are never truncated into integers.
+Equivalent integer spellings therefore retain root identity, labels and snapshot
+identity. Referenced raw artifact bytes and their supplied hashes remain untouched.
+
 `rebuild` validates and copies its input. It does not read a target, model endpoint,
 database or run directory. A future admission adapter must verify referenced source,
 usage and adjudication artifacts against their exact bytes and authorize their
@@ -166,7 +174,22 @@ Appending a late completion and calling `rebuild` recomputes the entire snapshot
 including both affected adjacent transitions, first-seen history, rolling windows,
 MPS and recurrence. The input and old snapshots are not mutated. The implementation
 is a bounded offline full rebuild (up to 512 launches), not a streaming database or
-an incremental cache. Pairwise work grows quadratically with completed run count.
+an incremental cache. Before deep copying, schema traversal or hashing, admission
+enforces a combined **100,000 raw reports plus triage decisions per input document**.
+This conservative budget includes incomplete diagnostic outputs, exact duplicate
+reports and duplicate completion deliveries, before deduplication. It applies across
+all groups; neither splitting groups nor repeating one root evades the budget.
+Existing per-run limits (10,000 reports and 10,000 decisions) still apply.
+
+The combined budget caps membership and each group's distinct recurrence at the
+same 100,000-row limit rather than admitting up to 5.12 million reports and failing
+only after aggregation. No output is truncated and no limit is increased. Full
+JSON Schema validation alone cannot express the cross-array sum: callers must use
+`rebuild` (or `contracts.load_experiment`) for admission, not only `input_schema()`.
+`contracts.check_observation_budget` is the fast cardinality boundary used before
+structural validation; it is not a substitute for full admission. Pairwise work
+still grows with both completed run count and admitted set sizes. The bound is a
+resource cap, not a throughput or latency guarantee.
 
 `publish_snapshot(directory, snapshot)` verifies the result by rebuilding its
 source. It pins immutable launch, launch-index and completion records in separate
@@ -203,6 +226,10 @@ empty/nonempty and all-empty sets, missing launches, out-of-order completion, mi
 groups/stages, label/matching revisions, duplicate reports/root causes, fixed-warning
 abstention and precision, unavailable costs, zero denominators, immutable publication,
 closed schemas and reproducible exports.
+Fast cardinality regressions exercise the actual 100,000/100,001 observation
+boundary without running a maximal-size aggregate campaign. Numeric regressions
+exercise equivalent integer/floating JSON forms through root matching, adjudication,
+adjacent Jaccard, launch-index windows and immutable publication.
 
 `tests/integration/test_glasswing_experiments.py` is a **manual, unrun** publication
 and re-adjudication scenario, not an automatic gate. F10 still needs accepted-artifact

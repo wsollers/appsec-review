@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+import math
 from typing import Any, Literal, TypedDict, cast
 
 from jsonschema import Draft202012Validator
@@ -13,6 +14,7 @@ from appsec_review.storage import canonical_json
 INPUT_SCHEMA = "appsec-review/quality-experiment/1"
 OUTPUT_SCHEMA = "appsec-review/quality-experiment-snapshot/1"
 NORMALIZER = "source-root-cause-exact/1"
+MAX_OBSERVATIONS = 100000
 
 
 class Group(TypedDict):
@@ -263,14 +265,15 @@ GROUP_METRICS = object_schema(
                          pending=COUNT, completed_empty=COUNT),
     completion_rate=RATIO, empty_run_rate=RATIO, mps=SUMMARY, empty_pair_count=COUNT,
     ror=SUMMARY, distinct=nullable(QUALITY), occurrences=nullable(QUALITY), macro_run_precision=SUMMARY,
-    unique_tp_yield=nullable(COUNT), unique_tp_per_completed_run=RATIO, recurrence=array_schema(RECURRENCE, 100000),
+    unique_tp_yield=nullable(COUNT), unique_tp_per_completed_run=RATIO,
+    recurrence=array_schema(RECURRENCE, MAX_OBSERVATIONS),
     input_tokens=USAGE_TOTAL, output_tokens=USAGE_TOTAL, wall_seconds=USAGE_TOTAL,
     cost=COST_TOTAL, triage=nullable(TRIAGE), open_world_recall=RATIO)
 OUTPUT = object_schema(
     schema={"const": OUTPUT_SCHEMA}, experiment_id=TEXT, source_sha256=HASH, source=INPUT,
     matching_snapshot_id=HASH, normalizer_version=TEXT, matching_revision=TEXT,
     label_snapshot_id=HASH, label_revision=TEXT, runs=array_schema(RUN_METRICS, 512),
-    groups=array_schema(GROUP_METRICS, 512), membership=array_schema(MEMBERSHIP, 5120000),
+    groups=array_schema(GROUP_METRICS, 512), membership=array_schema(MEMBERSHIP, MAX_OBSERVATIONS),
     inference=object_schema(status={"const": "not_certified"}, lower_confidence_bound={"type": "null"},
                             reason=enum("not_predeclared", "inference_not_implemented"),
                             pending_bounds={"const": "not_confidence_intervals"},
@@ -302,9 +305,53 @@ def validate(value: Any, schema: dict[str, Any]) -> None:
         raise ValueError(f"invalid quality document at {path}: {error.message}")
 
 
+def check_observation_budget(value: Any) -> None:
+    """Bound raw report/decision cardinality before copying, validating or hashing their contents."""
+    if not isinstance(value, dict) or not isinstance(value.get("completions"), list):
+        raise ValueError("quality experiment requires a completions array")
+    total = 0
+    for completion in value["completions"]:
+        if not isinstance(completion, dict) or any(
+            not isinstance(completion.get(field), list) for field in ("reports", "decisions")
+        ):
+            raise ValueError("quality completion requires reports and decisions arrays")
+        total += len(completion["reports"]) + len(completion["decisions"])
+        if total > MAX_OBSERVATIONS:
+            raise ValueError(f"quality experiment exceeds aggregate observation limit {MAX_OBSERVATIONS}")
+
+
+def _integer(value: Any) -> int:
+    if type(value) is int:
+        return value
+    if type(value) is float and math.isfinite(value) and value.is_integer():
+        return int(value)
+    raise ValueError("quality integer field requires an integer-valued JSON number")
+
+
 def load_experiment(value: Any) -> Experiment:
+    check_observation_budget(value)
     validate(value, INPUT)
-    return cast(Experiment, deepcopy(value))
+    document = cast(Experiment, deepcopy(value))
+    for launch in document["launches"]:
+        launch["run_index"] = _integer(launch["run_index"])
+    for completion in document["completions"]:
+        for report in completion["reports"]:
+            for location in report["locations"]:
+                location["start_line"] = _integer(location["start_line"])
+                location["end_line"] = _integer(location["end_line"])
+        usage = completion["usage"]
+        if usage["input_tokens"] is not None:
+            usage["input_tokens"] = _integer(usage["input_tokens"])
+        if usage["output_tokens"] is not None:
+            usage["output_tokens"] = _integer(usage["output_tokens"])
+        for coverage in completion["coverage"]:
+            for field in ("analyzed", "eligible"):
+                if coverage[field] is not None:
+                    coverage[field] = _integer(coverage[field])
+    policy = document["inference_policy"]
+    if policy is not None:
+        policy["planned_runs"] = _integer(policy["planned_runs"])
+    return document
 
 
 def population_id(group: Group) -> str:
@@ -316,7 +363,10 @@ def population_id(group: Group) -> str:
 
 def root_cause_id(group: Group, report: Report) -> str:
     """Conservative exact matching; wording, severity and confidence never change identity."""
-    locations = sorted({(row["path"], row["start_line"], row["end_line"]) for row in report["locations"]})
+    locations = sorted({(row["path"], _integer(row["start_line"]), _integer(row["end_line"]))
+                        for row in report["locations"]})
+    if any(start < 1 or end < start for _, start, end in locations):
+        raise ValueError("invalid root-cause source line range")
     return digest({"normalizer": NORMALIZER, "source": group["source_revision"], "cwe": report["cwe"],
                    "cause_key": report["cause_key"], "source_symbol": report["source_symbol"],
                    "sink_symbol": report["sink_symbol"], "locations": locations})
