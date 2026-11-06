@@ -1,0 +1,24 @@
+services:
+  edge:
+    image: nginx:1.27.2-alpine
+    ports: ["127.0.0.1:18088:8088"]
+    user: "101"
+    depends_on: [api]
+  api:
+    image: nginx:1.27
+    expose: [8080]
+    depends_on:
+      cache:
+        condition: service_started
+      database:
+        condition: service_started
+  cache:
+    image: redis:7.4.1
+    ports:
+      - target: 6379
+        published: "16379"
+        host_ip: "127.0.0.1"
+        protocol: tcp
+  database:
+    image: postgres:17.2
+    expose: [6543]
