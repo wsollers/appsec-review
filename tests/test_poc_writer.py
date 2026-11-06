@@ -16,6 +16,7 @@ import pytest
 from appsec_review.guidance import GuidanceError
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
+from appsec_review.inference.errors import ProviderError
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.jobs.job_poc_generation import writer
 from appsec_review.jobs.job_poc_generation.brief import Brief
@@ -234,7 +235,7 @@ def test_a_decline_is_a_terminal_outcome_with_its_status(reader, guidance) -> No
     (ModelOutputError("no json"), True, "model_output_unparseable"),
     (TimeoutError("slow"), True, "provider_timeout"),
     (subprocess.TimeoutExpired("claude", 5), True, "provider_timeout"),
-    (RuntimeError("boom"), True, "provider_error:RuntimeError"),
+    (ProviderError("boom", retryable=True), True, "provider_error:ProviderError"),
 ])
 def test_provider_failures_are_named_and_retried_per_policy(reader, guidance, failure, retried, reason) -> None:
     script = Script(failure, failure)
@@ -257,7 +258,9 @@ def test_malformed_turns_are_invalid_and_repairable(reader, guidance) -> None:
                  {"schema": "other/1", "action": "final", "result": {}}, ["not", "a", "turn"]):
         script = Script(turn, relay.answer())
         outcome = run(script, reader, guidance)
-        assert outcome.status == "answered" and outcome.attempts[0].reason == "malformed_turn", turn
+        assert outcome.status == "answered"
+        assert outcome.attempts[0].reason == (
+            "model_output_unparseable" if isinstance(turn, list) else "malformed_turn"), turn
         assert script.requests[1][0].repair_errors
 
 

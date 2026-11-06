@@ -8,6 +8,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import subprocess
 import time
 import xml.etree.ElementTree as ET
 import zipfile
@@ -44,7 +45,6 @@ from appsec_review.jobs.build_iterations import selected_graph
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
-from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.runtime.resources import ImagePreparationUnavailable
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
@@ -714,6 +714,8 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
                   dockerfile: bytes, diagnostics: Mapping[str, Any], attempts: list[Mapping[str, Any]],
                   repair_number: int, infer: Infer) -> Mapping[str, Any]:
     model = unit.job.config.settings["model"]
+    from appsec_review.inference.errors import ModelOutputError
+    from appsec_review.inference.execution import CallContext, Execution
     persona, role, guidance, guidance_sha = _repair_guidance(unit, str(action["family"]), model)
     summary = {
         "schema": "appsec-review/build-image-repair-request/1",
@@ -738,58 +740,21 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
         model=str(model["model"]), reasoning=str(model["reasoning"]),
         max_input_tokens=int(model["max_input_tokens"]), max_output_tokens=int(model["max_output_tokens"]),
     )
-    request_payload = {"schema": request.schema, "summary": summary, "provider": request.provider,
-                       "model": request.model, "reasoning": request.reasoning,
-                       "guidance_sha256": guidance_sha}
-    encoded = canonical_json(request_payload)
-    if len(encoded) + len(persona.encode()) + len(role.encode()) + len(guidance.encode()) > request.max_input_tokens * 4:
-        raise ValueError("build image repair request exceeded its configured input budget")
-    request_sha = hashlib.sha256(encoded).hexdigest()
-    invocation = hashlib.sha256(
-        f"{unit.job.run_id}:{unit.job.attempt_id}:{action['build_unit_id']}:{repair_number}:{request_sha}".encode()
-    ).hexdigest()
-    log = PipelineLog(unit.job.run_root)
-    emit_model_event(log, event_type="MODEL_CALL_STARTED", run_id=unit.job.run_id,
-        invocation_id=invocation, provider=request.provider, model=request.model,
-        reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
-        request_sha256=request_sha, retry_count=repair_number - 1, job_id="job_project_build",
-        attempt_id=unit.job.attempt_id, build_unit_id=str(action["build_unit_id"]),
-        family=str(action["family"]), root=str(action["root"]),
-        build_system=str(action["build_system"]), repair_number=repair_number,
-        inference_task="build_image_repair")
-    started = time.monotonic()
-    try:
-        result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
-        if result.raw_response is not None:
-            atomic_bytes(unit.unit_root / str(action["build_unit_id"]) /
-                         f"repair-{repair_number:03d}" / "model-response.txt",
-                         result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
-        errors = validate_repair_proposal(result.proposal, recipe=recipe,
-                                          build_system=str(action["build_system"]))
-        if errors:
-            raise ValueError("; ".join(errors))
-        emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
-            invocation_id=invocation, provider=request.provider, model=request.model,
-            reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
-            request_sha256=request_sha, terminal_status="ACCEPTED",
-            duration_ms=int((time.monotonic() - started) * 1000), retry_count=repair_number - 1,
-            input_tokens=result.input_tokens, output_tokens=result.output_tokens,
-            cache_tokens=result.cache_tokens, job_id="job_project_build", attempt_id=unit.job.attempt_id,
-            build_unit_id=str(action["build_unit_id"]), family=str(action["family"]),
-            root=str(action["root"]), build_system=str(action["build_system"]),
-            repair_number=repair_number, inference_task="build_image_repair")
-        return result.proposal
-    except Exception as exc:
-        emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
-            invocation_id=invocation, provider=request.provider, model=request.model,
-            reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
-            request_sha256=request_sha, terminal_status="FAILED",
-            duration_ms=int((time.monotonic() - started) * 1000), retry_count=repair_number - 1,
-            error_class=type(exc).__name__, job_id="job_project_build", attempt_id=unit.job.attempt_id,
-            build_unit_id=str(action["build_unit_id"]), family=str(action["family"]),
-            root=str(action["root"]), build_system=str(action["build_system"]),
-            repair_number=repair_number, inference_task="build_image_repair")
-        raise
+    engine = Execution(timeout_seconds=int(model["timeout_seconds"]), max_calls=1,
+                       guidance_sha256=guidance_sha,
+                       context=CallContext(unit.job.run_root, unit.job.run_id, "job_project_build",
+                                           unit.job.attempt_id, "repair", str(action["build_unit_id"]),
+                                           build_unit_id=str(action["build_unit_id"])))
+    result = engine.call(infer, request, timeout_seconds=int(model["timeout_seconds"]))
+    if result.raw_response is not None:
+        atomic_bytes(unit.unit_root / str(action["build_unit_id"]) /
+                     f"repair-{repair_number:03d}" / "model-response.txt",
+                     result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
+    errors = validate_repair_proposal(result.proposal, recipe=recipe,
+                                      build_system=str(action["build_system"]))
+    if errors:
+        raise ModelOutputError("; ".join(errors))
+    return result.proposal
 
 
 def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile: BuildProfile,
@@ -828,13 +793,16 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
     for repair_number in range(1, repair_limit + 1):
         repair_root = unit.unit_root / str(action["build_unit_id"]) / f"repair-{repair_number:03d}"
         attempt_started = time.monotonic()
+        inference_pending = False
         try:
             _identity, dockerfile = resolver.definition(
                 {**current_recipe, "build_system": action["build_system"]}, profile)
             atomic_bytes(repair_root / "Dockerfile", dockerfile)
+            inference_pending = True
             proposal = _infer_repair(unit, action=action, recipe=current_recipe, dockerfile=dockerfile,
                                      diagnostics=diagnostics, attempts=attempts,
                                      repair_number=repair_number, infer=infer)
+            inference_pending = False
             candidate = apply_repair(current_recipe, proposal, build_system=str(action["build_system"]))
             errors = validate_build_recipe(candidate, _repair_validation_unit(action, candidate))
             if errors:
@@ -899,6 +867,10 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                         "repair_attempt_count": repair_number}
             diagnostics = _probe_diagnostics(unit, last_probe)
         except Exception as exc:
+            from appsec_review.inference.errors import ExecutionLimit, ModelOutputError, ProviderError
+            if inference_pending and not isinstance(
+                    exc, (ExecutionLimit, ModelOutputError, ProviderError, TimeoutError, subprocess.TimeoutExpired)):
+                raise
             stdout = exc.stdout if isinstance(exc, ProjectImageBuildError) else b""
             stderr = exc.stderr if isinstance(exc, ProjectImageBuildError) else str(exc).encode("utf-8")
             stream_limit = int(unit.job.config.settings["output_bytes"])

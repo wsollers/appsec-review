@@ -5,14 +5,16 @@ from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import time
 from typing import Any, Mapping, Sequence
 
 from appsec_review.config.owasp import OwaspSettings
 from appsec_review.inference import Infer, ModelResult, ReviewModelRequest
+from appsec_review.inference.errors import ExecutionLimit, ModelOutputError, ProviderError, failure_category
+from appsec_review.inference.execution import CallContext, Execution, RetryPolicy
 from appsec_review.inference.recording import recorded
 from appsec_review.observability import PipelineLog
-from appsec_review.observability.model_calls import call_model
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import consume_named, publish_named, safe_path
 from .evidence import EvidenceResolver, redact
@@ -23,7 +25,7 @@ from .standards import digest
 
 TURN_SCHEMA = "appsec-review/owasp-assessment-turn/1"
 OUTCOMES = {"satisfied", "not_satisfied", "cannot_verify"}
-RESULT_RULE = "owasp-assessment-acceptance/1"
+RESULT_RULE = "owasp-assessment-acceptance/2"
 
 
 def _clean(value: Any) -> Any:
@@ -194,13 +196,14 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                for package in packages for item in package["evidence_references"]}
     queries = 0
     terminal = "turn_limit"
-    started = time.monotonic()
+    policy = RetryPolicy(int(profile["retries"]) + 1, True, True, True)
+    engine = Execution(timeout_seconds=int(profile["timeout_seconds"]),
+                       max_calls=settings.max_turns * policy.attempts,
+                       max_response_bytes=int(profile["max_output_tokens"]) * 4,
+                       context=CallContext(run_root, **correlation, batch_id=str(batch["batch_id"])))
     for turn in range(settings.max_turns):
-        for retry in range(int(profile["retries"]) + 1):
-            remaining = int(profile["timeout_seconds"]) - (time.monotonic() - started)
-            if remaining <= 0:
-                terminal = "timeout"
-                break
+        retry_reason = None
+        for retry in range(policy.attempts):
             request = ReviewModelRequest(
                 TURN_SCHEMA, role, str(batch["assignment"]["persona"] or "general"), "owasp",
                 guidance["bundle_sha256"], text, {**task,
@@ -225,42 +228,45 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                        "input_tokens_estimated": estimate, "output_tokens_estimated": None,
                        "turn": turn, "retry": retry, "request_sha256": digest(asdict(request))}
             call_started = time.monotonic()
+            receipt_count = len(engine.receipts)
+            retry_error = None
             try:
-                result: ModelResult = call_model(recorded(infer), request,
-                    timeout_seconds=max(1, int(remaining)), run_root=run_root, **correlation,
-                    batch_id=batch["batch_id"], turn=turn, retry_count=retry)
-                if any(value is not None and (type(value) is not int or value < 0)
-                       for value in (result.input_tokens, result.output_tokens, result.cache_tokens)):
-                    raise ValueError("OWASP provider returned invalid token usage")
+                result: ModelResult = engine.call(recorded(infer), request,
+                    timeout_seconds=int(profile["timeout_seconds"]), retry_count=retry,
+                    retry_reason=retry_reason)
                 attempt.update({
-                    "served_provider": result.served_provider, "served_model": result.served_model,
-                    "input_tokens_reported": result.input_tokens, "output_tokens_reported": result.output_tokens,
-                    "cache_tokens_reported": result.cache_tokens,
                     "output_tokens_estimated": (len(canonical_json(result.proposal)) + 3) // 4,
                     "response_sha256": digest(result.proposal),
                     "raw_response_sha256": hashlib.sha256(result.raw_response.encode()).hexdigest()
                     if result.raw_response is not None else None,
                 })
-                if ((result.input_tokens is not None and result.input_tokens > profile["max_input_tokens"])
-                        or (result.output_tokens is not None and result.output_tokens > profile["max_output_tokens"])
-                        or attempt["output_tokens_estimated"] > profile["max_output_tokens"]
-                        or time.monotonic() - started > profile["timeout_seconds"]):
-                    raise ValueError("OWASP model exceeded token/time budget")
                 proposal = result.proposal
-                if not isinstance(proposal, Mapping) or proposal.get("schema") != TURN_SCHEMA:
-                    raise ValueError("OWASP model returned a malformed turn")
-                if proposal.get("action") == "final":
-                    validate_final(proposal, packages)
-                elif proposal.get("action") != "retrieve":
-                    raise ValueError("OWASP model returned an unsupported action")
+                try:
+                    if not isinstance(proposal, Mapping) or proposal.get("schema") != TURN_SCHEMA:
+                        raise ValueError("OWASP model returned a malformed turn")
+                    if proposal.get("action") == "final":
+                        validate_final(proposal, packages)
+                    elif proposal.get("action") != "retrieve":
+                        raise ValueError("OWASP model returned an unsupported action")
+                except ValueError as exc:
+                    raise ModelOutputError(str(exc)) from exc
                 terminal = "succeeded"
                 attempt["outcome"] = terminal
-            except Exception as exc:
-                # Provider/output failures are terminal evidence gaps, with their class retained.
-                terminal = "timeout" if isinstance(exc, TimeoutError) else "invalid_or_provider_error"
+            except (ModelOutputError, ProviderError, TimeoutError, subprocess.TimeoutExpired, ExecutionLimit) as exc:
+                terminal = ("timeout" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else
+                            exc.code if isinstance(exc, ExecutionLimit) else "invalid_or_provider_error")
                 attempt.update({"outcome": terminal, "error_class": type(exc).__name__,
                                 "error": redact(str(exc))[0][:1000]})
                 proposal = None
+                retry_error = exc
+            finally:
+                if len(engine.receipts) > receipt_count:
+                    call = engine.receipts[-1]
+                    attempt.update({"served_provider": call.served_provider, "served_model": call.served_model,
+                                    "usage_source": call.usage.source,
+                                    "usage_unavailable_reason": call.usage.unavailable_reason,
+                                    "dispatched": call.dispatched,
+                                    **{key + "_reported": value for key, value in call.usage.actual.items()}})
             attempt["duration_ms"] = max(0, int((time.monotonic() - call_started) * 1000))
             attempts.append(attempt)
             log.write("OWASP_MODEL_ATTEMPT", **correlation, details={
@@ -268,6 +274,13 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                 "batch_id": batch["batch_id"], "cell_id": request.cell_id})
             if proposal is not None:
                 break
+            try:
+                if not engine.retry(retry + 1, retry_error, policy):
+                    break
+            except ExecutionLimit:
+                terminal = "execution_deadline"
+                break
+            retry_reason = failure_category(retry_error).value
         if terminal != "succeeded":
             break
         if proposal["action"] == "final":
@@ -286,6 +299,11 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
             break
         responses = []
         for query in requests:
+            try:
+                engine.deadline.remaining()
+            except ExecutionLimit:
+                terminal = "execution_deadline"
+                break
             queries += 1
             query_started = time.monotonic()
             retrieval = {"batch_id": batch["batch_id"], "role": role, "cell_id": request.cell_id,
@@ -314,7 +332,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                 **retrieval, "duration_ms": max(0, int((time.monotonic() - query_started) * 1000)),
                 "truncated": bool(responses[-1].get("truncated"))})
         transcript.extend(({"request": _clean(proposal)}, {"evidence": _clean(responses)}))
-        if terminal == "retrieval_budget":
+        if terminal in {"retrieval_budget", "execution_deadline"}:
             break
         terminal = "turn_limit"
     return {"status": terminal, "proposal": None, "attempts": attempts, "guidance": guidance,
@@ -465,7 +483,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
         "fingerprint": batch["fingerprint"], "terminal_state": "succeeded"
         if worker["status"] in {"succeeded", "reused"} else "failed",
         "results": results, "worker": worker, "independent_review": reviewer,
-        "metrics": {"model_calls": len(attempts), "attempts": attempts,
+        "metrics": {"model_calls": sum(item.get("dispatched", True) for item in attempts), "attempts": attempts,
                     "model_requested_retrievals": sum(
                         result.get("retrieval_requests", 0) for result in (worker, reviewer)),
                     "retrieval": retrieval, "cost_usd": None,

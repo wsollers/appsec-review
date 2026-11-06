@@ -49,7 +49,7 @@ DATASETS = (
               "Per-cell attempt receipts, verifier request checks and lane team documents (hashes and validated "
               "model results only; raw prompts are never stored).",
               artifacts=(_J + "/cells/**", _A + "/steps/lead_review/**", _A + "/steps/hunt_review/**",
-                         _A + "/budget/**", _A + "/lanes/**", _J + "/review-teams/**"),
+                         _A + "/budget/**", _J + "/budget/**", _A + "/lanes/**", _J + "/review-teams/**"),
               reason="model results and retrieval transcripts are untrusted worker output kept for audit and "
                      "cell reuse only"),
     artifact_only("claim_ledger", "publication", "inference_review", "appsec-review/ledger-event/1",

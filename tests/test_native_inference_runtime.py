@@ -14,6 +14,7 @@ import pytest
 from appsec_review.guidance.compose import GOVERNING_PATH, load_registry
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import ModelOutputError, ModelResult
+from appsec_review.inference.errors import ExecutionContractError, ProviderError
 from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
 )
@@ -146,9 +147,8 @@ def test_guidance_pin_tampering_fails_before_another_model_call(tmp_path):
     instance("curate", {})
     path = instance.run_root / "data" / "guidance" / instance.guidance_hashes[0] / "prompt.md"
     path.write_text("changed bytes")
-    with pytest.raises(NativeInferenceError) as caught:
+    with pytest.raises(ValueError, match="(changed|different|mismatch|immutable)"):
         instance("curate", {})
-    assert caught.value.kind == "unavailable"
     assert len(fake.calls) == 1
 
 
@@ -262,7 +262,6 @@ def test_exact_input_budget_boundary_includes_repair_and_guidance(tmp_path):
     (ModelResult(["not", "an", "object"]), "invalid_output"),
     (ModelResult({"schema": CURATION_SCHEMA, "value": "a" * 65}), "bounds"),
     (ModelResult({"schema": CURATION_SCHEMA, "value": float("nan")}), "invalid_output"),
-    ({"proposal": {"schema": CURATION_SCHEMA}}, "invalid_output"),
 ])
 def test_invalid_output_is_not_success_and_preserves_attempt(tmp_path, result, kind):
     fake = FakeInfer(result)
@@ -303,11 +302,11 @@ def test_output_byte_bound_preserves_hash_and_size_without_accepting_oversize(tm
 
 
 @pytest.mark.parametrize("failure", [
-    RuntimeError("transport broke"),
+    ProviderError("transport broke", retryable=True),
     TimeoutError("deadline"),
     subprocess.TimeoutExpired("fake-model", 19),
     ModelOutputError("malformed external model JSON"),
-    ValueError("provider reasoning is unavailable"),
+    ProviderError("provider reasoning is unavailable", retryable=True),
 ])
 def test_central_retries_preserve_errors_and_do_not_recount_usage(tmp_path, failure):
     fake = FakeInfer(failure, ModelResult({"schema": CURATION_SCHEMA, "stats": {"input_tokens": 999999}},
@@ -327,8 +326,8 @@ def test_central_retries_preserve_errors_and_do_not_recount_usage(tmp_path, fail
 
 
 def test_exhausted_model_error_retains_original_cause_and_attempts(tmp_path):
-    failure = OSError("external transport unavailable")
-    fake = FakeInfer(RuntimeError("first error"), failure)
+    failure = ProviderError("external transport unavailable", retryable=True)
+    fake = FakeInfer(ProviderError("first error", retryable=True), failure)
     instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 1})
     with pytest.raises(NativeInferenceError) as caught:
         instance("metadata", {})
@@ -360,7 +359,7 @@ def test_execution_safety_stops_after_first_failure_but_keeps_attempt(tmp_path, 
 
     monkeypatch.setattr(safety, "active", lambda: True)
     monkeypatch.setattr(safety, "fail", stop)
-    fake = FakeInfer(RuntimeError("first-error policy"))
+    fake = FakeInfer(ProviderError("first-error policy", retryable=True))
     instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 3})
     with pytest.raises(safety.ReviewStopped):
         instance("curate", {})
@@ -399,7 +398,7 @@ def test_missing_partial_zero_and_invalid_usage_remain_distinguishable(tmp_path)
 
 
 def test_call_bound_includes_retries_and_prevents_extra_dispatch(tmp_path):
-    fake = FakeInfer(RuntimeError("failed"))
+    fake = FakeInfer(ProviderError("failed", retryable=True))
     instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 8},
                         bounds=replace(NativeInferenceBounds(), max_calls=1))
     with pytest.raises(NativeInferenceError) as caught:

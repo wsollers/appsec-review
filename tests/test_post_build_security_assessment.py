@@ -12,7 +12,7 @@ from appsec_review.jobs.job_post_build_security_assessment.assessment import (
 )
 from appsec_review.jobs.job_post_build_security_assessment import build_job
 from appsec_review.mcp import RetrievalMcpAdapter
-from appsec_review.config import load_config
+from appsec_review.config import AppConfig, load_config
 from appsec_review.inference import ModelRequest, ModelResult
 from appsec_review.observability import aggregate_run_metrics
 from appsec_review.retrieval import (
@@ -243,7 +243,8 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
     return path
 
 
-def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = False) -> tuple[Path, Path]:
+def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = False,
+                          worker_config: AppConfig | None = None) -> tuple[Path, Path]:
     runs, run_root = tmp_path / "runs", tmp_path / "runs" / RUN_ID
     target = tmp_path / "target"
     target.mkdir()
@@ -302,11 +303,19 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
     result_artifact = {"path": result_path.relative_to(run_root).as_posix(), "sha256": file_sha256(result_path)}
     handoff_path = attempt / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
-    write_fixture_handoff(run_root, handoff_path, {"job_id": "job_cpp_compiled_analysis",
-        "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
-        "source_fingerprint": "snapshot", "artifacts": [result_artifact, manifest_artifact],
-        "resolving_paths": {"result": result_artifact["path"]},
-        "outputs": outputs})
+    from contextlib import nullcontext
+    from appsec_review.runtime.repair import WORKER_PROTOCOL, bind_release, worker_scope
+    if worker_config is not None:
+        bind_release(worker_config, run_root)
+    with (worker_scope(worker_config, run_root, preparing_job="job_cpp_compiled_analysis")
+          if worker_config is not None else nullcontext()):
+        if worker_config is not None:
+            atomic_json(attempt / "claim.json", {"worker_protocol": WORKER_PROTOCOL})
+        write_fixture_handoff(run_root, handoff_path, {"job_id": "job_cpp_compiled_analysis",
+            "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
+            "source_fingerprint": "snapshot", "artifacts": [result_artifact, manifest_artifact],
+            "resolving_paths": {"result": result_artifact["path"]},
+            "outputs": outputs})
     handoff_sha = file_sha256(handoff_path)
     latest = run_root / "data" / "jobs" / "job_cpp_compiled_analysis" / "latest.json"
     atomic_json(latest, {"schema": "appsec-review/latest-handoff/1", "attempt_id": "attempt_0001",
@@ -327,7 +336,10 @@ def _cpp_handoffs(runs: Path) -> dict[str, str]:
 
 def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp_path: Path) -> None:
     config = load_config(_post_build_config(tmp_path))
-    runs, target = _accepted_cpp_fixture(tmp_path)
+    runs, target = _accepted_cpp_fixture(tmp_path, worker_config=config)
+    workers = [json.loads(path.read_bytes()) for path in
+               (runs / RUN_ID / "data" / "recovery" / "workers").glob("*.json")]
+    assert len(workers) == 1 and workers[0]["status"] == "EXITED"
     runner, job = JobRunner(config), build_job()
     first = runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
                        upstream_handoffs=_cpp_handoffs(runs))

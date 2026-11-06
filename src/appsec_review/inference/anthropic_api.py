@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
+from http.client import HTTPException, IncompleteRead
 import os
+import socket
+import ssl
+import time
 from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 from urllib.error import HTTPError, URLError
@@ -9,6 +14,8 @@ from urllib.request import Request, urlopen
 
 from .claude_cli import ModelOutputError, parse_model_payload
 from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
+from .errors import ExecutionContractError, ModelTimeout, ProviderError
+from .usage import Usage
 
 
 _THINKING_BUDGETS = {"low": 1024, "medium": 2048, "high": 4096, "xhigh": 6144}
@@ -22,7 +29,7 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int,
     """Anthropic Messages API transport; no SDK or agent tools are involved."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY is unavailable to the configured inference provider")
+        raise ProviderError("Anthropic API authentication is unavailable", code="authentication_missing")
     if isinstance(request, ReviewModelRequest):
         # Hash-pinned guidance is the trusted system channel; task input and the
         # application-mediated transcript are the untrusted user message.
@@ -54,37 +61,101 @@ def _post(body: Mapping[str, Any], schema: str, *, key: str, endpoint: str,
         "content-type": "application/json", "x-api-key": key,
         "anthropic-version": "2023-06-01", "user-agent": "appsec-review/0.0.0",
     })
-    try:
-        with urlopen(http_request, timeout=timeout_seconds) as response:
-            raw = response.read(2 * 1024 * 1024 + 1)
-    except HTTPError as exc:
-        detail = exc.read(4096).decode("utf-8", "replace")
-        raise RuntimeError(f"Anthropic API returned HTTP {exc.code}: {detail}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Anthropic API request failed: {exc.reason}") from exc
+    raw = _read_response(http_request, timeout_seconds, 2 * 1024 * 1024)
     if len(raw) > 2 * 1024 * 1024:
         raise ModelOutputError("Anthropic API response exceeded the response bound")
-    envelope = json.loads(raw)
+    raw_text = raw.decode("utf-8", "replace").encode("utf-8")[:2 * 1024 * 1024].decode("utf-8", "ignore")
+    try:
+        envelope = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise ModelOutputError("Anthropic API returned invalid JSON",
+                               raw_response=raw_text) from None
     if not isinstance(envelope, Mapping):
         raise ModelOutputError("Anthropic API response is not an object")
-    text = "\n".join(str(item["text"]) for item in envelope.get("content", ())
-                     if isinstance(item, Mapping) and item.get("type") == "text")
+    content = envelope.get("content")
+    if (not isinstance(content, list) or
+            any(not isinstance(item, Mapping) or
+                item.get("type") == "text" and not isinstance(item.get("text"), str)
+                for item in content)):
+        raise ModelOutputError("Anthropic API returned invalid content blocks")
+    text = "\n".join(item["text"] for item in content if item.get("type") == "text")
     try:
         proposal = parse_model_payload(text, schema)
     except ModelOutputError as exc:
-        stop_reason = str(envelope.get("stop_reason", "unknown"))
         raise ModelOutputError(
-            f"Anthropic response was not a complete {schema} object "
-            f"(stop_reason={stop_reason}; parse_error={exc})",
-            raw_response=raw.decode("utf-8", "replace"),
-            rejected_output=text[:131072],
+            "Anthropic response was not a complete schema object",
+            raw_response=raw_text,
+            rejected_output=text.encode("utf-8")[:131072].decode("utf-8", "ignore"),
         ) from exc
     usage = envelope.get("usage", {}) if isinstance(envelope.get("usage"), Mapping) else {}
-    return ModelResult(proposal=proposal, input_tokens=usage.get("input_tokens"),
+    if envelope.get("model") is not None and not isinstance(envelope["model"], str):
+        raise ModelOutputError("Anthropic API returned an invalid model identity")
+    result = ModelResult(proposal=proposal, input_tokens=usage.get("input_tokens"),
                        output_tokens=usage.get("output_tokens"),
                        cache_tokens=usage.get("cache_read_input_tokens"),
-                       raw_response=raw.decode("utf-8", "replace"),
-                       served_model=envelope.get("model"), served_provider="anthropic-api")
+                       raw_response=raw_text,
+                       served_model=envelope.get("model"), served_provider="anthropic-api",
+                       usage_unavailable_reason=("invalid_provider_usage"
+                           if "usage" in envelope and not isinstance(envelope["usage"], Mapping) else None))
+    return Usage.from_result(result).normalize(result)
+
+
+def _read_response(request: Request, timeout_seconds: int, limit: int) -> bytes:
+    from appsec_review.runtime import execution_safety as safety
+    if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
+            or timeout_seconds <= 0):
+        raise ExecutionContractError("Anthropic timeout_seconds must be finite and positive")
+    safety.check_running()
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            read = getattr(response, "read1", response.read)
+            streaming = hasattr(response, "read1")
+            chunks = bytearray()
+            while len(chunks) <= limit:
+                safety.check_running()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ModelTimeout("Anthropic API call timed out")
+                # urllib's HTTPResponse retains the socket under its buffered reader.
+                # Refresh the read budget after headers and every chunk; never restart a POST.
+                transport_socket = getattr(getattr(getattr(response, "fp", None), "raw", None),
+                                           "_sock", None)
+                if transport_socket is not None:
+                    transport_socket.settimeout(remaining)
+                chunk = read(min(65536, limit + 1 - len(chunks)) if streaming else limit + 1)
+                if not chunk:
+                    break
+                chunks.extend(chunk)
+                if not streaming:
+                    break
+            raw = bytes(chunks)
+    except HTTPError as exc:
+        exc.close()
+        raise ProviderError(f"Anthropic API returned HTTP {exc.code}", code=f"http_{exc.code}",
+                            retryable=exc.code in {408, 425, 429, 500, 502, 503, 504, 529}) from None
+    except URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            raise ModelTimeout("Anthropic API call timed out") from None
+        transient = (isinstance(exc.reason, ConnectionError) or
+                     isinstance(exc.reason, socket.gaierror) and exc.reason.errno == socket.EAI_AGAIN)
+        if isinstance(exc.reason, ssl.SSLError):
+            transient = False
+        raise ProviderError("Anthropic API connection failed", code="network",
+                            retryable=transient) from None
+    except TimeoutError:
+        raise ModelTimeout("Anthropic API call timed out") from None
+    except ConnectionError:
+        raise ProviderError("Anthropic API connection failed", code="network", retryable=True) from None
+    except ssl.SSLError:
+        raise ProviderError("Anthropic API TLS connection failed", code="tls") from None
+    except HTTPException as exc:
+        raise ProviderError("Anthropic API HTTP transport failed", code="http_protocol",
+                            retryable=isinstance(exc, IncompleteRead)) from None
+    safety.check_running()
+    if time.monotonic() >= deadline:
+        raise ModelTimeout("Anthropic API call timed out")
+    return raw
 
 
 MODELS_ENDPOINT = "https://api.anthropic.com/v1/models"
@@ -94,17 +165,19 @@ def _get(url: str, key: str, timeout_seconds: int) -> tuple[int, Mapping[str, An
     http_request = Request(url, method="GET", headers={
         "x-api-key": key, "anthropic-version": "2023-06-01", "user-agent": "appsec-review/0.0.0"})
     try:
-        with urlopen(http_request, timeout=timeout_seconds) as response:
-            value = json.loads(response.read(4 * 1024 * 1024))
-    except HTTPError as exc:
-        if exc.code == 404:
+        raw = _read_response(http_request, timeout_seconds, 4 * 1024 * 1024)
+    except ProviderError as exc:
+        if exc.code == "http_404":
             return 404, {}
-        raise RuntimeError(f"Anthropic API returned HTTP {exc.code}: "
-                           f"{exc.read(1024).decode('utf-8', 'replace')}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Anthropic API request failed: {exc.reason}") from exc
+        raise
+    if len(raw) > 4 * 1024 * 1024:
+        raise ModelOutputError("Anthropic model catalog exceeds the response bound")
+    try:
+        value = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise ModelOutputError("Anthropic model catalog returned invalid JSON") from None
     if not isinstance(value, Mapping):
-        raise RuntimeError("Anthropic API model response is not an object")
+        raise ModelOutputError("Anthropic API model response is not an object")
     return 200, value
 
 
@@ -113,7 +186,7 @@ def models(names: Sequence[str], *, timeout_seconds: int,
     """List the account's models and confirm each named model, resolving aliases by lookup."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY is unavailable to the configured inference provider")
+        raise ProviderError("Anthropic API authentication is unavailable", code="authentication_missing")
     _status, listing = _get(endpoint + "?limit=1000", key, timeout_seconds)
     listed = sorted(str(item["id"]) for item in listing.get("data", ())
                     if isinstance(item, Mapping) and isinstance(item.get("id"), str))

@@ -52,19 +52,22 @@ def test_all_packages_budget_reserves_asymmetric_queues_and_persists(tmp_path: P
     ({"output_tokens": 100}, "max_output_tokens"),
     ({"retrieval_queries": 6}, "max_retrieval_queries"),
 ])
-def test_any_hard_ceiling_stops_new_launches(tmp_path: Path, charge: dict[str, int], ceiling: str,
-                                           package_limit: TeamPackageBudget) -> None:
+def test_any_launch_ceiling_stops_new_launches(tmp_path: Path, charge: dict[str, int], ceiling: str,
+                                             package_limit: TeamPackageBudget) -> None:
     budget = JobBudget(tmp_path, _limits(budget_team_packages=package_limit,
                                          max_model_turns=10, max_input_tokens=1000, max_output_tokens=100,
                                          max_retrieval_queries=5))
     assert budget.reserve(Lane.LEAD) and budget.charge() is None
     half = {name: value // 2 for name, value in charge.items()}
+    # These synthetic turns have known zero tokens, not missing provider reports.
+    if "model_turns" in charge:
+        half.update(input_tokens=0, output_tokens=0)
     assert budget.charge(**half) is None and budget.can_launch()
     assert budget.charge(**half) == ceiling
     assert budget.can_launch() is False and budget.reserve(Lane.HUNT) is False
     assert budget.cell_launch_allowed() is False
     # In-flight work is still charged truthfully, and exhaustion is sticky.
-    assert budget.charge(**charge) == ceiling
+    assert budget.charge(**({"input_tokens": 0, "output_tokens": 0, **charge})) == ceiling
     snapshot = budget.snapshot()
     assert getattr(snapshot, next(iter(charge))) == 2 * charge[next(iter(charge))]
     assert snapshot.exhausted == ceiling
@@ -118,7 +121,7 @@ def _reserve_many(root: str, attempts: int, lane: str, granted) -> None:
     for _ in range(attempts):
         if budget.reserve(lane):
             count += 1
-        budget.charge(model_turns=1)
+        budget.charge(model_turns=1, input_tokens=0, output_tokens=0)
     with granted.get_lock():
         granted.value += count
 

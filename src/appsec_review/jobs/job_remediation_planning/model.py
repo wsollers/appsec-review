@@ -10,6 +10,8 @@ from typing import Any, Callable, Mapping
 
 from appsec_review.config.remediation import RemediationModel
 from appsec_review.inference import Infer, ModelOutputError, ReviewModelRequest
+from appsec_review.inference.errors import ExecutionLimit, ProviderError
+from appsec_review.inference.execution import Execution
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage import canonical_json
 
@@ -35,8 +37,12 @@ def run_model(*, infer: Infer, profile: RemediationModel, role: str, cell_id: st
     receipt: dict[str, Any] = {"role": role, "cell_id": cell_id, "model": asdict(profile),
                                "guidance_bundle_sha256": guidance_sha256, "turns": turns,
                                "status": "failed", "reason": "turn_bound_reached"}
-    queries, response_bytes = 0, 0
+    queries = 0
     started = time.monotonic()
+    engine = Execution(timeout_seconds=profile.timeout_seconds, max_calls=profile.max_turns,
+                       max_request_bytes=profile.max_input_tokens * 3,
+                       max_response_bytes=profile.max_output_tokens * 8,
+                       max_total_response_bytes=profile.max_output_tokens * 8)
     for number in range(1, profile.max_turns + 1):
         request = ReviewModelRequest(
             TURN_SCHEMA, role, "", "", guidance_sha256, guidance_text,
@@ -51,25 +57,28 @@ def run_model(*, infer: Infer, profile: RemediationModel, role: str, cell_id: st
                                   "final_required": number == profile.max_turns or queries >= profile.max_queries}},
             tuple(transcript), profile.provider, profile.model, profile.reasoning,
             profile.max_input_tokens, profile.max_output_tokens, cell_id=cell_id)
-        if len(canonical_json({"task": request.task_input, "transcript": transcript,
-                               "guidance": guidance_text})) > profile.max_input_tokens * 3:
-            receipt["reason"] = "input_budget_exceeded"
-            break
+        receipt_count = len(engine.receipts)
         try:
-            turn_started = time.monotonic()
-            result = infer(request, timeout_seconds=profile.timeout_seconds)
-        except (ModelOutputError, TimeoutError, subprocess.TimeoutExpired, RuntimeError, OSError) as exc:
+            result = engine.call(infer, request, timeout_seconds=profile.timeout_seconds)
+        except ExecutionLimit as exc:
+            receipt["reason"] = {"input_byte_bound": "input_budget_exceeded",
+                                 "cumulative_output_byte_bound": "output_budget_exceeded"}.get(exc.code, exc.code)
+            break
+        except ModelOutputError as exc:
+            receipt["reason"] = ("output_budget_exceeded" if "byte bound" in str(exc)
+                                 else f"model_failure:{type(exc).__name__}")
+            break
+        except (TimeoutError, subprocess.TimeoutExpired, ProviderError) as exc:
             receipt["reason"] = f"model_failure:{type(exc).__name__}"
             break
+        finally:
+            call = engine.receipts[-1] if len(engine.receipts) > receipt_count else None
+            if call is not None and call.dispatched:
+                turns.append({"number": number, "response_sha256": call.response_sha256,
+                              **call.usage.actual, "usage_source": call.usage.source,
+                              "usage_unavailable_reason": call.usage.unavailable_reason,
+                              "duration_ms": call.elapsed_ms})
         value = result.proposal
-        payload = canonical_json(value)
-        response_bytes += len(payload)
-        turns.append({"number": number, "response_sha256": hashlib.sha256(payload).hexdigest(),
-                      "input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
-                      "duration_ms": max(0, int((time.monotonic() - turn_started) * 1000))})
-        if len(payload) > profile.max_output_tokens * 8 or response_bytes > profile.max_output_tokens * 8:
-            receipt["reason"] = "output_budget_exceeded"
-            break
         try:
             if not isinstance(value, Mapping) or value.get("schema", TURN_SCHEMA) != TURN_SCHEMA:
                 raise ValueError("reply must be a worker-turn object")
@@ -82,18 +91,31 @@ def run_model(*, infer: Infer, profile: RemediationModel, role: str, cell_id: st
                     canonical_json(answer)).hexdigest())
                 return answer, receipt
             if (body.get("action") != "retrieve" or set(body) != {"action", "request"}
+                    or not isinstance(body.get("request"), Mapping)
                     or retrieve is None or queries >= profile.max_queries):
                 raise ValueError("invalid action or retrieval budget exhausted")
-            queries += 1
-            response = retrieve(body["request"])
-            transcript.extend(({"speaker": "worker", "turn": dict(body)},
-                               {"speaker": "application", "response": dict(response)}))
         except IntegrityError:
             raise
         except (ValueError, TypeError, KeyError) as exc:
             receipt["reason"] = f"invalid_output:{str(exc)[:180]}"
             # Invalid final output is a terminal outcome, not a policy-bypass repair opportunity.
             break
+        queries += 1
+        try:
+            engine.deadline.remaining()
+            try:
+                response = retrieve(body["request"])
+            except IntegrityError:
+                raise
+            except ValueError as exc:
+                receipt["reason"] = f"invalid_output:{str(exc)[:180]}"
+                break
+            engine.deadline.remaining()
+        except ExecutionLimit as exc:
+            receipt["reason"] = exc.code
+            break
+        transcript.extend(({"speaker": "worker", "turn": dict(body)},
+                           {"speaker": "application", "response": dict(response)}))
     receipt["queries"] = queries
     receipt["duration_ms"] = max(0, int((time.monotonic() - started) * 1000))
     return None, receipt
@@ -107,12 +129,16 @@ def emit_model_event(events: Any, receipt: Mapping[str, Any]) -> None:
     def total(key: str) -> int | None:
         return (sum(turn[key] for turn in turns)
                 if turns and all(turn[key] is not None for turn in turns) else None)
+    unavailable_reason = (next((turn.get("usage_unavailable_reason") for turn in turns
+                                if turn.get("usage_unavailable_reason")), "provider_usage_missing")
+                          if unavailable else None)
     events.write("REMEDIATION_MODEL_COMPLETED", role=receipt["role"], cell_id=receipt["cell_id"],
                  outcome=receipt["status"], duration_ms=receipt["duration_ms"],
                  turn_count=len(turns), query_count=receipt["queries"],
                  input_tokens=total("input_tokens"), output_tokens=total("output_tokens"),
                  usage_unavailable=unavailable, usage_unavailable_count=unavailable_count,
                  usage_unavailable_reason=("no_completed_turns" if not turns else
-                                           "provider_usage_missing" if unavailable else None),
+                                           unavailable_reason),
                  timeout_count=int(receipt["reason"] in {"model_failure:TimeoutError",
-                                                         "model_failure:TimeoutExpired"}))
+                                                         "model_failure:TimeoutExpired",
+                                                         "model_failure:ModelTimeout"}))

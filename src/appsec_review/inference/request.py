@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol
+from typing import Any, Literal, Mapping, Protocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +71,8 @@ class ModelResult:
     raw_response: str | None = None
     served_model: str | None = None
     served_provider: str | None = None
+    usage_source: Literal["provider", "replay"] = "provider"
+    usage_unavailable_reason: str | None = None
 
 
 class Infer(Protocol):

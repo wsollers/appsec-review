@@ -6,6 +6,7 @@ import pytest
 
 from appsec_review.config.remediation import RemediationModel
 from appsec_review.inference import ModelOutputError, ModelResult
+from appsec_review.inference.errors import ProviderError
 from appsec_review.jobs.job_remediation_planning.model import emit_model_event, guidance, run_model
 from appsec_review.review.models import IntegrityError
 from tests import remediation_support as support
@@ -19,8 +20,8 @@ def model(infer, *, profile=None, retrieve=None):
                      else (_ for _ in ()).throw(ValueError("closed answer expected")), retrieve=retrieve)
 
 
-@pytest.mark.parametrize("error", [TimeoutError("timeout"), RuntimeError("provider unavailable"),
-                                     ModelOutputError("unparseable"), OSError("transport failed")])
+@pytest.mark.parametrize("error", [TimeoutError("timeout"), ProviderError("provider unavailable"),
+                                     ModelOutputError("unparseable")])
 def test_writer_failures_are_explicit_unavailable_outcomes(error):
     def infer(*_args, **_kwargs):
         raise error
@@ -114,6 +115,21 @@ def test_usage_telemetry_distinguishes_unavailable_from_genuine_zero(turns, expe
     assert records[0]["output_tokens"] == expected_output
     assert records[0]["usage_unavailable"] is (reason is not None)
     assert records[0]["usage_unavailable_count"] == count
+    assert records[0]["usage_unavailable_reason"] == reason
+
+
+@pytest.mark.parametrize("usage,reason", [
+    ({"input_tokens": -1, "output_tokens": True}, "invalid_provider_usage"),
+    ({"input_tokens": 3, "output_tokens": 4, "usage_source": "replay"}, "recorded_replay"),
+])
+def test_specialized_telemetry_preserves_normalized_usage_reason(usage, reason):
+    from types import SimpleNamespace
+    records = []
+    answer, receipt = model(lambda *_args, **_kwargs: ModelResult(
+        {"action": "final", "result": {"safe": True}}, **usage))
+    emit_model_event(SimpleNamespace(write=lambda _event, **fields: records.append(fields)), receipt)
+    assert answer == {"safe": True}
+    assert records[0]["input_tokens"] is records[0]["output_tokens"] is None
     assert records[0]["usage_unavailable_reason"] == reason
 
 

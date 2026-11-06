@@ -714,8 +714,12 @@ Budgets are expressed per lane in team-packages, with cell-level caps beneath th
   recycled; per-package caps remain 3 lead / 5 hunt. The run-wide budget counts every launched package.
 - Each cell is bounded by its model profile's turn, token, query, and timeout caps from
   [R2](#r2-worker-transport-and-bounded-retrieval-loop).
-- `max_model_turns` and the token totals are hard job ceilings. Reaching any ceiling stops new team
-  launches. Every queued package then ends `not_launched` with a `budget_gap`.
+- `max_model_turns` and the token totals govern atomic launch admission, including in-flight
+  reservations and conservative unknown-usage liabilities. They are not hard billed-cost
+  guarantees: provider overruns are retained as actual spend. Reaching a ceiling stops new team
+  launches; queued packages end `not_launched` with a `budget_gap`. Cumulative budgets survive
+  runtime attempts. New budgets measure active cell execution; historical wall-clock budgets
+  keep their original semantics. See [shared bounded execution](bounded-worker-execution.md).
 
 ### Parallel lanes, rounds, and determinism
 
@@ -847,6 +851,9 @@ Retries create new attempt identities under the same cell fingerprint. They may 
 schema, or transient provider failures up to policy limits but may not silently increase tools,
 budgets, readable roots, or output authority. A deterministic invalid response is retried only when
 `retry_on_invalid_output` is enabled and always retains the failed attempt receipt.
+Configured `backoff_seconds` now runs through cancellation-aware shared scheduling and consumes
+the same cell deadline. Only explicitly transient provider errors qualify for provider retries;
+unexpected contract/integrity failures propagate. First-error mode never retries.
 
 ## Independent pluggable scoring
 
