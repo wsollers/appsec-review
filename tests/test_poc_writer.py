@@ -108,15 +108,16 @@ def test_the_guidance_is_the_shared_rules_the_role_and_the_runtime_skill_only(gu
     for forbidden in ("AGENTS.md", "Repository Agent Guidance", "multi-session-coordination", "docs-sync"):
         assert forbidden not in text
     pinned = tmp_path / "run" / "data" / "guidance" / guidance.sha256
-    assert sorted(path.name for path in pinned.iterdir()) == ["governing-rules.md", "model-identity.json",
-                                                              "role.md", "skill.md"]
+    assert sorted(path.name for path in pinned.iterdir()) == ["bundle.json", "prompt.md"]
+    from appsec_review.guidance.compose import verify_bundle
+    assert verify_bundle(json.loads((pinned / "bundle.json").read_text())) == guidance.sha256
     again = writer.load_guidance(ROOT, tmp_path / "run", "job_poc_generation", SETTINGS.writer)
     assert again.sha256 == guidance.sha256
     other = writer.load_guidance(ROOT, tmp_path / "run", "job_poc_generation",
                                  with_models(model="claude-opus-9").writer)
     assert other.sha256 != guidance.sha256                                  # the model identity is part of the pin
-    (pinned / "skill.md").write_text("changed", encoding="utf-8")
-    with pytest.raises(ValueError, match="changed after pinning"):
+    (pinned / "prompt.md").write_text("changed", encoding="utf-8")
+    with pytest.raises(ValueError, match="immutable shared artifact conflicts"):
         writer.load_guidance(ROOT, tmp_path / "run", "job_poc_generation", SETTINGS.writer)
 
 

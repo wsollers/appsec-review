@@ -149,11 +149,15 @@ def test_workbench_selects_role_appropriate_procedure_without_changing_responsib
     task = {"task_id": "t", "question": "Assess the assigned control.", "proof_obligations": [],
             "prohibited_claims": []}
     bundle = workbench_compose(repo, role=role, persona=None, task=task)
-    assert bundle["persona"] is None
-    assert bundle["role"] == {"id": role, "text": load_registry(repo)["roles"][role]["responsibility"]}
-    assert [item["id"] for item in bundle["procedures"]] == expected
+    assert "persona" not in bundle["selected_sections"]
+    assert _section(bundle, "role")["id"] == role
+    assert _section(bundle, "role")["text"] == load_registry(repo)["roles"][role]["responsibility"]
+    assert [item["id"] for item in _section(bundle, "procedures")["items"]] == expected
     if expected:
-        bundle["procedures"][0]["source_sha256"] = "0" * 64
+        procedures = _section(bundle, "procedures")
+        procedures["items"][0]["source_sha256"] = "0" * 64
+        procedures["sha256"] = section_sha256(procedures)
+        bundle["section_sha256"]["procedures"] = procedures["sha256"]
         bundle["sha256"] = bundle_sha256(bundle)
         with pytest.raises(IntegrityError, match="procedure source hash"):
             verify_bundle(bundle)
@@ -176,10 +180,10 @@ def test_workbench_control_area_assignments_match_documented_composed_guidance(r
         bundle = workbench_compose(ROOT, **assignment, task=task)
         source_id = registry["persona_migrations"].get(persona, persona)
         assert f"| `{persona}` | `{source_id}` |" in documentation
-        assert bundle["persona"]["id"] == persona
-        assert bundle["persona"]["source_id"] == source_id
-        assert bundle["role"]["id"] == role
-        assert [item["id"] for item in bundle["procedures"]] == [skill]
+        assert _section(bundle, "persona")["id"] == persona
+        assert _section(bundle, "persona")["source_id"] == source_id
+        assert _section(bundle, "role")["id"] == role
+        assert [item["id"] for item in _section(bundle, "procedures")["items"]] == [skill]
         assert verify_bundle(bundle) == bundle["sha256"]
 
 
@@ -199,18 +203,18 @@ def test_workbench_reuses_pinned_specialist_knowledge_with_closed_task(repo, per
     task = {"task_id": "t", "question": "Assess the assigned control.", "proof_obligations": [],
             "prohibited_claims": []}
     bundle = workbench_compose(repo, role="control_assessor", persona=persona, task=task)
-    assert bundle["persona"]["id"] == persona
-    assert bundle["persona"]["source_id"] == source_id
-    assert "## Effective controls" in bundle["persona"]["text"]
-    assert "## Hand-offs" in bundle["persona"]["text"]
-    assert [item["id"] for item in bundle["procedures"]] == ["effective-control-verification"]
+    assert _section(bundle, "persona")["id"] == persona
+    assert _section(bundle, "persona")["source_id"] == source_id
+    assert "## Effective controls" in _section(bundle, "persona")["text"]
+    assert "## Hand-offs" in _section(bundle, "persona")["text"]
+    assert [item["id"] for item in _section(bundle, "procedures")["items"]] == ["effective-control-verification"]
     assert len(json.dumps(bundle)) < 13000
     assert verify_bundle(bundle) == bundle["sha256"]
-    source = repo / bundle["persona"]["path"]
+    source = repo / _section(bundle, "persona")["path"]
     source.write_text(source.read_text(encoding="utf-8").replace("## Viewpoint\n", "## Viewpoint\nA bounded lens.\n"),
                       encoding="utf-8")
     changed = workbench_compose(repo, role="control_assessor", persona=persona, task=task)
-    assert changed["persona"]["source_sha256"] != bundle["persona"]["source_sha256"]
+    assert _section(changed, "persona")["source_sha256"] != _section(bundle, "persona")["source_sha256"]
     assert changed["sha256"] != bundle["sha256"]
     with pytest.raises(ValueError, match="bounded question contract"):
         workbench_compose(repo, role="control_assessor", persona=persona, task={**task, "tools": ["find"]})

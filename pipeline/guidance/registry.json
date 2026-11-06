@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/guidance-registry/1",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "roles": {
     "build_engineer_native": {"responsibility": "Produce bounded reproducible C/C++ and native build-system recipes."},
     "build_engineer_rust": {"responsibility": "Produce bounded reproducible Rust and Cargo build recipes."},
@@ -11,6 +11,7 @@
     "build_engineer_python": {"responsibility": "Produce bounded reproducible Python packaging recipes."},
     "build_engineer_php": {"responsibility": "Produce bounded reproducible PHP and Composer recipes."},
     "build_engineer_wasm": {"responsibility": "Produce bounded reproducible WebAssembly build recipes."},
+    "build_security_assessor": {"responsibility": "Explain supplied deterministic build-security checks through requested settings, observed compile/link evidence and actual artifact properties; missing or failed producers remain gaps."},
     "component_classifier": {"responsibility": "Classify bounded component purpose and trust roles from cited evidence."},
     "applicability_router": {"responsibility": "Resolve one bounded control-component applicability question."},
     "control_assessor": {"responsibility": "Assess assigned proof obligations and return observations with citations."},

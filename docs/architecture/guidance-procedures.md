@@ -12,6 +12,8 @@ persona, stack, task, procedures, receipt. Each procedure item records its regis
 complete source text and source SHA-256. The section hash and bundle hash cover these items.
 Verification also checks each procedure's source hash. Existing bundle/2 verification, rendering
 and pinning remain supported; old workbench bundle/1 verification remains supported.
+New specialized and workbench publications use the same verifier/publisher with explicit
+job-selected `/4` sections. See the [effective worker inventory and card contract](worker-prompt-contracts.md).
 
 | Role/task | Selected runtime procedure |
 | --- | --- |
@@ -67,7 +69,7 @@ P, M or C label) or name a tool artifact in the same list item or paragraph
 small reviewed allowlist for bullets that only name a weakness pattern.
 
 Workbench composition preserves its closed role/persona allowlists and bounded task/result
-contracts. Its bundle/1 now carries rich knowledge sections and source hashes, including the
+contracts. Its bundle/4 carries rich knowledge sections and source hashes, including the
 existing `api_web` to `network_api_surface` and `deployment_operations` to
 `cloud_container_deployment` migrations. Assessors and applicability routers receive the effective
 control procedure; evidence verifiers and independent reviewers receive predicate verification;
@@ -86,7 +88,7 @@ tests.
 `tests/test_guidance_procedures.py` checks actual rendered guidance for registered review tasks
 (32,000 characters maximum on the representative native persona/stack), selected procedure text
 (2,400 characters each, at most two), workbench examples (13,000 serialized characters), and PoC
-writer guidance (12,500 characters). These are deterministic regression bounds, not token-usage,
+writer runtime skill (12,500 characters, excluding the assembled role/rules/card). These are deterministic regression bounds, not token-usage,
 latency or detection-quality claims; task input and other personas can change prompt size.
 
 The [opt-in evaluation harness](../operations/guidance-evaluation.md) uses separate vulnerable,
