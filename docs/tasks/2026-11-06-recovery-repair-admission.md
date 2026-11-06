@@ -289,3 +289,23 @@ without worker identity is unverified, including a `FAILED` or `SUCCEEDED` recei
 job receipt is not proof that older independent workers have stopped. Four focused regressions
 cover those legacy states; the operations guide now names the resulting historical admission
 limitation. The earlier ready tip was withdrawn before landing.
+
+The final stop-proof code is committed at **`28a07335b0e4a54993b29ea43a1dd4bbf6674d94`**,
+tree **`b2d641dd37e848cf1134814073e66074b0bcb473`**. Its directly affected regressions passed
+**167 tests in 120.042 s**, with no skips or deselections:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py tests/test_repair_dagster_contract.py tests/test_job_runtime.py \
+  tests/test_handoff_interchange.py \
+  tests/test_wave1_resume.py::test_interrupted_running_attempt_is_not_accepted_and_is_retried \
+  tests/test_wave1_resume.py::test_concurrent_resume_attempts_cannot_claim_same_run \
+  tests/test_wave1_resume.py::test_warm_graph_preserves_gap_completion_status \
+  --basetemp=test/tmp/recovery-final-28a0 --tb=short
+```
+
+Configured Ruff checks on the changed stop-proof code/tests passed in **0.049 s**.
+The actual release generator again produced identical bytes twice over **1,333 files/46 jobs**
+in **47.726 s**. Final source-release identity:
+`86f1ca0790481c508dc7ad0772fa23225027c38595b2895a3b296ced4841ae68`.
+This supersedes the earlier release identity; it still does not claim a built or deployed image.
