@@ -79,7 +79,8 @@ HEAD/tree identities. No parity success is claimed here.
 
 ### Published coordinator snapshot
 
-The published plan is version **1.1** and the ledger is event sequence **14**.
+The published plan is version **1.1** and the final bootstrap ledger is event
+sequence **15**, frozen by the coordinator after the initial sequence-14 commit.
 The approved review retains its original review baseline
 `967a1072bc19feeb320ce4b44d6c056616c94d7b`. No package status, event, dependency,
 owner, implementation claim, or review conclusion was independently changed.
@@ -91,15 +92,57 @@ Six links were transformed in the plan and two in the review. JSON URI values we
 not rewritten. This preserves the existing documentation checker's URI policy
 without changing its code or any byte-pinned evidence.
 
-Original session artifacts were left unchanged. A byte-exact sequence-14 capture
-was retained in this session's `files/f00-source-snapshot-14` artifact directory so
-verification does not race a later coordinator snapshot.
+Original session artifacts were left unchanged. Byte-exact sequence-14 and final
+sequence-15 captures were retained in this session's `files/f00-source-snapshot-14`
+and `files/f00-source-snapshot-15` artifact directories so verification does not race
+a later coordinator snapshot. The table below identifies the final publication.
 
 | Coordinator artifact | Repository copy | Source SHA-256 | Published SHA-256 |
 |---|---|---|---|
 | `fleet-plan.md` | `README.md` | `ada31dc6a7c7c60540fd49249fce2ed0030c46cc6590a7a154935b079597e40b` | `8a8bd26d70afd9cab460d5519ac7c7b499e645ed14b498fe571b662668b1e674` |
 | `appsec-system-review.md` | `approved-review.md` | `497debc7e9570025fadcecb104420d59e016cd877a580c2bf2365a2d1a72d8e7` | `54bb83e12dfa4b35e2e3c349e3b308640287920adf0f5e1e4c5e638d8c6f0489` |
-| `fleet-ledger.json` | `ledger.json` | `9ed55a5ec3caf7ec88399f5dcc8c9dd56707ff0d4fd935df386e6e1c01ece67a` | `5e63443445cd77a9e577eb14cd1c936546e13dce4796c7e33dfbf248bbd9b6b0` |
+| `fleet-ledger.json` | `ledger.json` | `7bc1b5f5e09fc483dde6296dbd2da678434bd831d61ca945c8d495075a38025e` | `ac968afee6c7c06a7b26948188f5b78ca43d32904d8a5c33a58b94bf8a9bdedd` |
+
+### Landing-owner preflight and final freeze
+
+After initial documentation commit
+`3dfe503182762c20850a8fbb2adb0b8188886bcd`, the coordinator supplied sequence **15**
+as the final bootstrap snapshot. The plan and approved-review bytes were unchanged.
+The ledger update and this receipt were prepared as an additional documentation
+commit; the initial commit was not amended, reset, or landed.
+
+Sequence 15 identifies landing owner `969abd85-9a4e-42a5-a323-34843205448e`, with
+this session retained as bootstrap support. Its preflight evidence is the owner's
+`files/landing-preflight.json`, schema `appsec-review/fleet-landing-preflight/1`,
+checked at `2026-11-06T12:24:27.7468579-05:00`. The exact source artifact is:
+
+```text
+C:\Users\william.sollers\.copilot\session-state\969abd85-9a4e-42a5-a323-34843205448e\files\landing-preflight.json
+```
+
+Its SHA-256 is
+`842fe67023e53ea5507aee5e7a4a3a740af23d79545b4ea22d3af9cc16b6a5cb`;
+an exact copy is retained beside the sequence-15 source snapshot. F00 read that
+receipt, not the canonical checkouts. The receipt reports:
+
+- Both canonical mains at `f9bb376e02aaef166bc71e736eaba7ee677ce97c`, tree
+  `b433dc16bd187f679a763103b78151ca1fbc4645`, with no refs moved. Windows was clean;
+  WSL tracked content was clean and untracked `data/feeds/` was preserved.
+- Existing Windows exclusive-handle and WSL nonblocking exclusive `flock` probes
+  succeeded and were released without writing. No new lock was created or held
+  after preflight.
+- No Git operation markers or observed main-bound review processes. The unrelated
+  prior-owner gate was untouched; the receipt requires a fresh check under the
+  integration gate before a landing.
+- A clean, detached Linux candidate at the exact baseline with its own environment
+  and verified editable source; a small local bundle verified on both sides with
+  matching hashes and without importing or advancing refs.
+- No merge authorization and no unit/integration/acceptance/live execution.
+
+These are attributed, point-in-time landing-owner observations. They are not this
+session's direct inspection, a landing receipt, a held source freeze, or continuing
+authorization. Later ledger events belong in separate updates, not this frozen
+bootstrap snapshot.
 
 ### Documentation verification
 
@@ -107,7 +150,8 @@ The focused verifier is a persistent session artifact, not repository code:
 `files/verify-f00-docs.py`. It compares all three copies byte-for-byte against the
 captured sources after only the authorized transformations, checks LF bytes,
 validates ledger schema/base/owner and all 19 package IDs, verifies dependency
-closure and acyclicity plus event continuity, and applies the unchanged `LINK`
+closure and acyclicity plus event continuity, checks the frozen preflight receipt's
+identity and agreement with the ledger when supplied, and applies the unchanged `LINK`
 parser and local-target rules from `tests/test_documentation.py` to these three
 Markdown files only.
 
@@ -115,7 +159,7 @@ Run from the assigned worktree:
 
 ```powershell
 $artifacts = Join-Path $env:USERPROFILE '.copilot\session-state\053e6dce-78d3-428d-ac36-f1811056dd67\files'
-python (Join-Path $artifacts 'verify-f00-docs.py') --source (Join-Path $artifacts 'f00-source-snapshot-14') --root . --ghapp-as-code
+python (Join-Path $artifacts 'verify-f00-docs.py') --source (Join-Path $artifacts 'f00-source-snapshot-15') --root . --ghapp-as-code
 git diff --cached --check
 git ls-files --eol -- docs/plans/appsec-system-improvements
 ```
@@ -125,14 +169,24 @@ the copied snapshots already matched the authorized transforms. That failure's
 elapsed time was not captured. The log was then formatted to LF; no assertion,
 checker, approved content, or test limit was weakened.
 
-The corrected checks ran on baseline
+The initial corrected checks used the command above with
+`f00-source-snapshot-14` and ran on baseline
 `f9bb376e02aaef166bc71e736eaba7ee677ce97c` plus only these four documentation files:
 
 | Check | Result | Elapsed wall time |
 |---|---|---|
-| Focused verifier command above | PASS; 19 packages, 14 events, three Markdown files, exact transformed copies | 0.288 s (0.024 s inside the verifier) |
+| Focused verifier, sequence-14 capture | PASS; 19 packages, 14 events, three Markdown files, exact transformed copies | 0.288 s (0.024 s inside the verifier) |
 | `git diff --cached --check` | PASS; no whitespace errors | 0.150 s |
 | `git ls-files --eol -- docs/plans/appsec-system-improvements` | All four files `i/lf`, `w/lf`, `eol=lf` | 0.082 s |
+
+After the coordinator's final freeze, the sequence-15 update was checked on
+`3dfe503182762c20850a8fbb2adb0b8188886bcd` plus only the ledger/log changes:
+
+| Check | Result | Elapsed wall time |
+|---|---|---|
+| Focused verifier, sequence-15 capture | PASS; 19 packages, 15 events, three Markdown files, exact transformed copies, matching pinned preflight receipt | 0.373 s (0.1031 s inside the verifier) |
+| `git diff --cached --check` | PASS; no whitespace errors | 0.117 s |
+| `git ls-files --eol -- docs/plans/appsec-system-improvements` | All four files `i/lf`, `w/lf`, `eol=lf` | 0.083 s |
 
 The staged scope contained only `README.md`, `approved-review.md`, `ledger.json`,
 and `integration-log.md` in this directory. The historical review's companion

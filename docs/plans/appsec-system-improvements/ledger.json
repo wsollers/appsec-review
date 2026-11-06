@@ -1,7 +1,7 @@
 {
   "schema": "appsec-review/implementation-fleet-ledger/1",
   "plan_version": "1.1",
-  "snapshot_event_seq": 14,
+  "snapshot_event_seq": 15,
   "coordinator_session_id": "02825845-7ac6-4a31-b648-999b3823ecf5",
   "authority": "Coordinator session SQLite fleet_* tables; this file is a published snapshot.",
   "initial_base_sha": "f9bb376e02aaef166bc71e736eaba7ee677ce97c",
@@ -9,14 +9,17 @@
     "windows_path": "F:\\XBOX-Repositories\\appsec-review",
     "wsl_path": "/home/wsollers/projects/appsec-review",
     "reported_sha": "f9bb376e02aaef166bc71e736eaba7ee677ce97c",
-    "status": "reported_by_previous_owner_recheck_before_landing",
+    "tree_sha": "b433dc16bd187f679a763103b78151ca1fbc4645",
+    "status": "verified_preflight_no_refs_moved_recheck_before_landing",
+    "checked_at": "2026-11-06T12:24:27.7468579-05:00",
+    "receipt": "C:\\Users\\william.sollers\\.copilot\\session-state\\969abd85-9a4e-42a5-a323-34843205448e\\files\\landing-preflight.json",
     "preserve_untracked": "WSL data/feeds/",
     "integration_owner_session_id": "969abd85-9a4e-42a5-a323-34843205448e",
     "bootstrap_session_id": "053e6dce-78d3-428d-ac36-f1811056dd67",
     "landing_app_url": "ghapp://sessions/969abd85-9a4e-42a5-a323-34843205448e"
   },
   "packages": [
-    {"id":"F00","title":"Integration ledger and Windows/WSL parity","status":"in_flight","depends_on":[],"session_id":"053e6dce-78d3-428d-ac36-f1811056dd67","app_url":"ghapp://sessions/053e6dce-78d3-428d-ac36-f1811056dd67"},
+    {"id":"F00","title":"Integration ledger and Windows/WSL parity","status":"in_flight","depends_on":[],"session_id":"969abd85-9a4e-42a5-a323-34843205448e","app_url":"ghapp://sessions/969abd85-9a4e-42a5-a323-34843205448e","bootstrap_session_id":"053e6dce-78d3-428d-ac36-f1811056dd67","execution_worktree":"/home/wsollers/copilot-worktrees/fleet-main-landing-5b01f5f7","verification_status":"preflight_verified_no_landing"},
     {"id":"F01","title":"Publication and inventory blockers","status":"in_flight","depends_on":[],"session_id":"816be210-1d6f-4a8f-9368-3880b01cbfb1","app_url":"ghapp://sessions/816be210-1d6f-4a8f-9368-3880b01cbfb1","execution_worktree":"/home/wsollers/projects/fleet-f01-816be210/worktree"},
     {"id":"F02","title":"Authoritative job input and dispatch contracts","status":"planned","depends_on":["F01"],"session_id":null},
     {"id":"F03","title":"Shared artifact and accepted-build APIs","status":"planned","depends_on":["F02"],"session_id":null},
@@ -55,6 +58,7 @@
     {"seq":11,"package_id":null,"event":"execution_choice","detail":"User chose WSL/Linux; Ubuntu-22.04 confirmed running and implementation workers already use it"},
     {"seq":12,"package_id":"F08","event":"ownership_extension","detail":"Byte-compatible remediation task assembly extraction permitted; no execution/topology changes"},
     {"seq":13,"package_id":"F00","event":"bootstrap_resumed","detail":"Original worker reports user-granted documentation-only Windows exception"},
-    {"seq":14,"package_id":"F00","event":"landing_executor_dispatched","detail":"969abd85-9a4e-42a5-a323-34843205448e is landing-only main session; inspect first, no merge authorized"}
+    {"seq":14,"package_id":"F00","event":"landing_executor_dispatched","detail":"969abd85-9a4e-42a5-a323-34843205448e is landing-only main session; inspect first, no merge authorized"},
+    {"seq":15,"package_id":"F00","event":"landing_preflight_verified","detail":"Both mains f9bb376e/tree b433dc16; existing locks and local transfer verified; owned Linux candidate ready; no refs moved. Landing owner 969abd85, bootstrap support 053e6dce."}
   ]
 }
