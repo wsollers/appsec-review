@@ -14,7 +14,7 @@ from appsec_review.jobs.build_discovery import descriptor_package, discover_buil
 from appsec_review.jobs.build_topology import (
     compile_build_topology as source_graph, ready_build_units, topological_order, topology_identity,
     validate_build_topology, refine_build_topology, validate_refinement, refinement_unit, proven_product_axes,
-    verify_product_contract, topology_evidence_bundle,
+    verify_product_contract, topology_evidence_bundle, bundle_units,
 )
 from appsec_review.storage import canonical_json
 
@@ -800,3 +800,56 @@ def test_graph2_readiness_rejects_unknown_state_units(tmp_path):
     graph = compile_build_topology(units, source_fingerprint="snapshot")
     with pytest.raises(ValueError, match="state names an unknown build unit"):
         ready_build_units(graph, {"unknown": "SUCCEEDED"}, refinement=_refinement(graph, units))
+
+
+def test_units_without_declared_edges_keep_a_non_blocking_not_independent_gap(tmp_path):
+    units = _pair(tmp_path, dependency="")
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    validate_build_topology(graph)
+    assert graph["edges"] == []
+    assert {node["build_unit_id"] for node in graph["nodes"]} == {unit["build_unit_id"] for unit in units}
+    gaps = [gap for gap in graph["coverage_gaps"] if gap["code"] == "incomplete_dependency_discovery"]
+    assert len(gaps) == 1
+    assert gaps[0]["blocking"] is False
+    assert "absence of an edge is not independence" in gaps[0]["reason"]
+
+
+def test_graph2_and_evidence_bundle_enforce_their_16_mib_byte_bounds(tmp_path):
+    units = _pair(tmp_path)
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    with pytest.raises(ValueError, match="16 MiB byte bound"):
+        validate_build_topology({**graph, "padding": "x" * (16 * 1024 * 1024)})
+    with pytest.raises(ValueError, match="unsupported or changed graph/2 identity"):
+        validate_build_topology({**graph, "padding": "x"})
+    content = "#" * (16 * 1024 * 1024)
+    oversized = copy.deepcopy(units)
+    oversized[0]["descriptor_package"]["documents"].append({
+        "path": oversized[0]["root"] + "/oversized.cmake", "content": content,
+        "sha256": hashlib.sha256(content.encode()).hexdigest(), "size_bytes": len(content)})
+    with pytest.raises(ValueError, match="exceeds the accepted graph byte budget"):
+        topology_evidence_bundle(oversized, source_fingerprint="snapshot", profiles=PROFILE)
+
+
+def test_bundle_units_round_trips_and_refuses_unbound_or_noncanonical_bundles(tmp_path):
+    units = _pair(tmp_path)
+    bundle = topology_evidence_bundle(units, source_fingerprint="snapshot", profiles=PROFILE)
+    restored = bundle_units(copy.deepcopy(bundle))
+    assert [unit["build_unit_id"] for unit in restored] == sorted(unit["build_unit_id"] for unit in units)
+    assert topology_evidence_bundle(restored, source_fingerprint="snapshot", profiles=PROFILE) == bundle
+
+    def refused(mutate, message):
+        changed = copy.deepcopy(bundle)
+        mutate(changed)
+        with pytest.raises(ValueError, match=message):
+            bundle_units(changed)
+
+    refused(lambda value: value.update(schema="appsec-review/build-topology-bundle/0"),
+            "unsupported topology evidence bundle")
+    refused(lambda value: value.update(rules="changed-rules"), "unsupported topology evidence bundle")
+    refused(lambda value: value["documents"].pop(0), "bundle document binding changed")
+    refused(lambda value: value["units"][0]["documents"][0].update(sha256="0" * 64),
+            "bundle document binding changed")
+    refused(lambda value: value["units"].reverse(), "not canonical")
+    refused(lambda value: value.update(unbound_hint={"invented": True}), "not canonical")
+    refused(lambda value: value["documents"][0].update(content="tampered"),
+            "does not resolve its accepted bytes")

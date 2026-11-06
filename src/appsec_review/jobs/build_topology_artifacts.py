@@ -109,7 +109,7 @@ def publish_refinement(run_root: Path, actions: Sequence[Mapping[str, Any]], *,
     complete = list(accepted.values())
     refinement = refine_build_topology(
         graph, complete, policy=policy, profiles=profiles,
-        environment=environment, releases=releases)
+        environment=environment, releases=releases, bundle_profiles=source_bundle["profiles"])
     graph_ref = _retain(root, "graphs", graph)
     plan_ref = _retain(root, "plans", plan)
     actions_ref = _retain(root, "inputs", {"actions": complete})
@@ -133,13 +133,15 @@ def publish_refinement(run_root: Path, actions: Sequence[Mapping[str, Any]], *,
 
 
 @lru_cache(maxsize=2)
-def _verify_derivation(graph_bytes: bytes, input_bytes: bytes, refinement_bytes: bytes) -> None:
-    graph, inputs, refinement = map(json.loads, (graph_bytes, input_bytes, refinement_bytes))
+def _verify_derivation(graph_bytes: bytes, input_bytes: bytes, refinement_bytes: bytes,
+                       bundle_profile_bytes: bytes) -> None:
+    graph, inputs, refinement, bundle_profiles = map(
+        json.loads, (graph_bytes, input_bytes, refinement_bytes, bundle_profile_bytes))
     validate_refinement(graph, refinement)
     expected = refine_build_topology(
         graph, inputs["actions"], policy=refinement["policy"],
         profiles=refinement["profiles"], environment=refinement["environment"],
-        releases=refinement["releases"])
+        releases=refinement["releases"], bundle_profiles=bundle_profiles)
     if expected != refinement:
         raise ValueError("accepted refinement does not reproduce from its complete immutable inputs")
 
@@ -164,7 +166,8 @@ def load_refinement(run_root: Path, receipt: Mapping[str, Any], *, graph=None, p
         raise ValueError("refinement acceptance belongs to a different immutable plan")
     inputs = _read(root, acceptance["inputs"])
     refinement = _read(root, acceptance["refinement"])
-    _verify_derivation(canonical_json(stored_graph), canonical_json(inputs), canonical_json(refinement))
+    _verify_derivation(canonical_json(stored_graph), canonical_json(inputs), canonical_json(refinement),
+                       canonical_json(stored_plan["build_topology"]["evidence_bundle"]["profiles"]))
     if (acceptance["refinement_id"] != refinement["refinement_id"]
             or acceptance["graph_identity"] != stored_graph["topology_id"]):
         raise ValueError("accepted refinement does not reproduce from its immutable complete inputs")

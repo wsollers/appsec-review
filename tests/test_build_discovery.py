@@ -9,7 +9,9 @@ import pytest
 
 from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, android_descriptor_facts, build_recipe_inference_policy,
-    descriptor_package, discover_build_units, is_build_descriptor, normalize_build_recipe, required_image_profile,
+    descriptor_inventory_paths, descriptor_package, discover_build_units, is_build_descriptor,
+    make_default_build_commands, native_build_capability_gap, node_manifest_declares_dependencies,
+    node_workspace, normalize_build_recipe, required_image_profile,
     recipe_execution_cwd, unsupported_build_gaps, validate_build_recipe,
 )
 from appsec_review.storage import canonical_json
@@ -656,10 +658,19 @@ android {
     unit = units[0]
     package = descriptor_package(target, unit, files)
     facts = android_descriptor_facts(package)
+    application = next(document for document in package["documents"]
+                       if document["path"] == "app/build.gradle.kts")
+    # Facts stay in their physical declaring document: the root `apply false` version is not
+    # attributed to the module that applies the plugin without one.
     assert facts == {
         "kind": "android-gradle-application", "plugin_id": "com.android.application",
-        "plugin_version": "8.7.3", "compile_sdk": "35", "target_sdk": "35",
+        "plugin_version": None, "compile_sdk": "35", "target_sdk": "35",
         "build_tools": "35.0.0",
+        "declarations": [{
+            "path": "app/build.gradle.kts", "sha256": application["sha256"],
+            "plugin_id": "com.android.application", "plugin_version": None,
+            "compile_sdk": "35", "target_sdk": "35", "build_tools": "35.0.0",
+        }],
     }
     unit["descriptor_package"] = package
     unit["descriptor_facts"] = facts
@@ -700,3 +711,160 @@ def test_planning_registers_every_build_system_discovery_emits() -> None:
     from appsec_review.jobs.job_target_analysis_plan.planning import BUILD_SYSTEMS
 
     assert {"phpize", "clang"} <= DISCOVERED_BUILD_SYSTEMS <= BUILD_SYSTEMS
+
+
+def _tree(root: Path, values: dict[str, str]) -> list[dict[str, object]]:
+    files = []
+    for relative, content in values.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        files.append(_file(relative, content))
+    return files
+
+
+def test_node_workspace_root_inventory_names_every_member_and_root_lockfile(tmp_path: Path) -> None:
+    files = _tree(tmp_path, {
+        "package.json": '{"private":true,"workspaces":["packages/*","!packages/skip"]}\n',
+        "package-lock.json": '{"lockfileVersion":3}\n',
+        "packages/a/package.json": "{}\n", "packages/b/package.json": "{}\n",
+        "packages/skip/package.json": "{}\n", "tools/other/package.json": "{}\n",
+    })
+    workspace, gaps = node_workspace(tmp_path, {"family": "node", "root": "."}, files)
+    assert gaps == []
+    assert workspace == {
+        "root": ".", "role": "root", "manager": "npm", "declaration": "package.json",
+        "lockfile": "package-lock.json", "members": ["packages/a", "packages/b"],
+        "inventory": ["package-lock.json", "package.json", "packages/a/package.json",
+                      "packages/b/package.json"],
+    }
+    member, member_gaps = node_workspace(tmp_path, {"family": "node", "root": "packages/b"}, files)
+    assert member_gaps == [] and member["role"] == "member" and member["lockfile"] == "package-lock.json"
+    # A nested project the workspace does not claim, and a non-Node unit, install on their own.
+    assert node_workspace(tmp_path, {"family": "node", "root": "packages/skip"}, files) == (None, [])
+    assert node_workspace(tmp_path, {"family": "native", "root": "."}, files) == (None, [])
+
+
+def test_node_workspace_names_missing_member_and_missing_or_ambiguous_lockfiles(tmp_path: Path) -> None:
+    declaration = '{"workspaces":["apps/web","apps/missing"]}\n'
+    files = _tree(tmp_path, {"package.json": declaration, "apps/web/package.json": "{}\n"})
+    workspace, gaps = node_workspace(tmp_path, {"family": "node", "root": "apps/web"}, files)
+    assert workspace["role"] == "member" and workspace["lockfile"] is None
+    assert gaps == [
+        "apps/missing: declared workspace member has no accepted package.json",
+        ".: workspace dependency inventory unavailable: no package-lock.json, pnpm-lock.yaml, "
+        "or yarn.lock at the workspace root",
+    ]
+    ambiguous = files + _tree(tmp_path, {"package-lock.json": "{}\n", "yarn.lock": "# yarn\n"})
+    workspace, gaps = node_workspace(tmp_path, {"family": "node", "root": "apps/web"}, ambiguous)
+    assert workspace["lockfile"] is None
+    assert gaps[-1] == ".: workspace dependency inventory is ambiguous: package-lock.json, yarn.lock"
+    unreadable = _tree(tmp_path / "bad", {"package.json": '{"workspaces":{"packages":"apps/*"}}\n'})
+    assert node_workspace(tmp_path / "bad", {"family": "node", "root": "."}, unreadable) == (None, [
+        "package.json: workspace declaration could not be read; "
+        "the workspace dependency inventory is unavailable"])
+
+
+def test_pnpm_workspace_prefers_its_own_lockfile_and_honors_exclusions(tmp_path: Path) -> None:
+    files = _tree(tmp_path, {
+        "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n  - '!libs/skip'\n",
+        "package.json": "{}\n", "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+        "package-lock.json": "{}\n",
+        "libs/a/package.json": "{}\n", "libs/skip/package.json": "{}\n",
+    })
+    workspace, gaps = node_workspace(tmp_path, {"family": "node", "root": "."}, files)
+    assert gaps == []
+    assert (workspace["manager"], workspace["declaration"], workspace["lockfile"], workspace["members"]) == (
+        "pnpm", "pnpm-workspace.yaml", "pnpm-lock.yaml", ["libs/a"])
+
+
+def test_descriptor_inventory_paths_merge_documents_and_identity_inventory() -> None:
+    unit = {"descriptor_package": {
+        "documents": [{"path": "web/package.json"}, {"path": "web/tsconfig.json"}],
+        "inventory": [{"path": "package-lock.json"}, {"path": "web/package.json"}, "malformed", {}],
+    }}
+    assert descriptor_inventory_paths(unit) == ["package-lock.json", "web/package.json", "web/tsconfig.json"]
+    assert descriptor_inventory_paths({}) == []
+    assert descriptor_inventory_paths({"descriptor_package": ["web/package.json"]}) == []
+
+
+@pytest.mark.parametrize("content,expected", [
+    ('{"dependencies":{"left-pad":"1.3.0"}}', True),
+    ('{"devDependencies":{"typescript":"5.4.0"}}', True),
+    ('{"optionalDependencies":{"fsevents":"2.3.3"}}', True),
+    ('{"dependencies":{},"peerDependencies":{"react":"18"}}', False),
+    ('{"dependencies":["left-pad"]}', False),
+    ("not json", False),
+])
+def test_node_manifest_dependencies_come_only_from_the_units_own_manifest(content, expected) -> None:
+    unit = {"root": "web", "descriptor_package": {"documents": [
+        {"path": "web/package.json", "content": content},
+        {"path": "package.json", "content": '{"dependencies":{"root-only":"1.0.0"}}'},
+    ]}}
+    assert node_manifest_declares_dependencies(unit) is expected
+    assert node_manifest_declares_dependencies({"root": "web", "descriptor_package": {"documents": [
+        {"path": "package.json", "content": '{"dependencies":{"root-only":"1.0.0"}}'}]}}) is False
+
+
+def test_make_default_goal_closure_honors_declared_default_and_excludes_other_targets() -> None:
+    text = ("all:\n\techo not-the-default\n"
+            "build: lib app\n\tcc -o app app.o lib.a\n"
+            "lib:\n\tar rcs lib.a lib.o\n"
+            "app: ; cc -c app.c\n"
+            "clean:\n\trm -f app\n"
+            ".DEFAULT_GOAL := build\n")
+    unit = discover_build_units([_file("native/Makefile", text)])[0]
+    assert make_default_build_commands(unit) is None
+    unit["descriptor_package"] = {"documents": [{"path": "native/Makefile", "content": text}]}
+    marker, body = make_default_build_commands(unit)
+    assert marker["path"] == "native/Makefile"
+    assert [line.strip() for line in body.splitlines()] == [
+        "cc -o app app.o lib.a", "cc -c app.c", "ar rcs lib.a lib.o"]
+    assert native_build_capability_gap(unit) is None
+
+
+_VC_SOLUTION = ('Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Native", '
+                '"Native\\Native.vcxproj", "{11111111-1111-1111-1111-111111111111}"\n')
+_CS_SOLUTION = ('Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", '
+                '"App\\App.csproj", "{22222222-2222-2222-2222-222222222222}"\n')
+_VCXPROJ = ("<Project><ItemGroup><ProjectConfiguration><Platform>Win32</Platform>"
+            "</ProjectConfiguration></ItemGroup><PropertyGroup><PlatformToolset>v143</PlatformToolset>"
+            "</PropertyGroup></Project>")
+
+
+@pytest.mark.parametrize("unit,expected", [
+    ({"family": "dotnet", "root": "win", "markers": [{"path": "win/App.sln", "sha256": "s"}],
+      "descriptor_package": {"documents": [{"path": "win/App.sln", "content": _VC_SOLUTION}]}},
+     "unavailable_native_project_toolchain: win/App.sln@s: accepted solution declares Visual C++"),
+    ({"family": "dotnet", "root": "win", "markers": [{"path": "win/App.sln", "sha256": "s"}],
+      "descriptor_package": {"documents": [{"path": "win/App.sln", "content": _CS_SOLUTION}]}}, None),
+    ({"family": "native", "build_system": "autotools", "root": "native",
+      "markers": [{"path": "native/include/Makefile.am"}]}, "nonstandalone_autotools_fragment: "),
+    ({"family": "native", "build_system": "autotools", "root": "native",
+      "markers": [{"path": "native/configure.ac"}, {"path": "native/Makefile.am"}]}, None),
+    ({"family": "native", "build_system": "make", "root": "native",
+      "markers": [{"path": "native/Makefile", "sha256": "m"}],
+      "descriptor_package": {"documents": [{"path": "native/Makefile",
+                                            "content": "image:\n\tdocker build -t x .\n"}]}},
+     "unsupported_native_orchestration: native/Makefile@m: "),
+    ({"family": "native", "build_system": "msbuild", "root": "modern",
+      "markers": [{"path": "modern/App.vcxproj", "sha256": "v"}],
+      "descriptor_package": {"documents": [{"path": "modern/App.vcxproj", "content": _VCXPROJ}]}},
+     "unavailable_native_windows_toolchain: modern/App.vcxproj@v: MSVC toolset v143, Win32 platform"),
+    ({"family": "native", "build_system": "msbuild", "root": "modern",
+      "markers": [{"path": "modern/App.vcxproj", "sha256": "v"}],
+      "descriptor_package": {"documents": [{"path": "modern/App.vcxproj", "content": "<Project>"}]}},
+     "unavailable_native_project_toolchain: modern/App.vcxproj: descriptor XML cannot be resolved"),
+    ({"family": "native", "build_system": "msbuild", "root": "modern",
+      "markers": [{"path": "modern/App.vcxproj", "sha256": "v"}], "descriptor_package": {"documents": []}},
+     "unavailable_native_project_toolchain: accepted Visual C++ descriptor requires"),
+    ({"family": "native", "build_system": "cmake", "root": "native",
+      "markers": [{"path": "native/CMakeLists.txt"}]}, None),
+    ({"family": "go", "root": "svc", "markers": [{"path": "svc/go.mod"}]}, None),
+])
+def test_native_build_capability_gap_names_each_unavailable_native_authority(unit, expected) -> None:
+    gap = native_build_capability_gap(unit)
+    if expected is None:
+        assert gap is None
+    else:
+        assert gap is not None and gap.startswith(expected)

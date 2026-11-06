@@ -1735,13 +1735,25 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
     return value
 
 
-def refine_build_topology(graph, units, *, policy=None, profiles=None, environment=None, releases=None):
+_SAME_PROFILES = object()
+
+
+def refine_build_topology(graph, units, *, policy=None, profiles=None, environment=None, releases=None,
+                          bundle_profiles=_SAME_PROFILES):
+    """Bind a recipe to the accepted graph.
+
+    ``bundle_profiles`` are the planning profiles bound into the graph's evidence bundle.
+    ``profiles`` are the compiler metadata used for enforcement and recorded in the refinement,
+    which can be a later approved prepared image's metadata.
+    """
     from appsec_review.config.build_selection import parse_build_selection
     validate_build_topology(graph)
     if graph["schema"] != BUILD_TOPOLOGY_SCHEMA:
         raise ValueError("graph/1 is inspectable but requires replanning for graph/2 execution")
+    if bundle_profiles is _SAME_PROFILES:
+        bundle_profiles = profiles
     if compile_build_topology(units, source_fingerprint=graph["source_fingerprint"],
-                              environment=environment, profiles=profiles) != graph:
+                              environment=environment, profiles=bundle_profiles) != graph:
         raise ValueError("refinement inputs differ from the complete accepted source bundle")
     policy = parse_build_selection(policy)
     values = []

@@ -259,6 +259,9 @@ def test_refinement_index_real_32mib_read_and_growth_bounds(tmp_path, monkeypatc
     _, root, _, action = accepted_native(tmp_path)
     refinement = load_refinement(root, action["topology_refinement"])
     inputs = {key: refinement[key] for key in ("policy", "profiles", "environment", "releases")}
+    # Republish the exact accepted input, not the dispatch record that also carries its receipt and image.
+    accepted_input = {key: value for key, value in action.items()
+                      if key not in {"topology_refinement", "image"}}
     pointer = root / "data/build/topology/accepted-refinements.json"
     original = pointer.read_bytes()
     assert INDEX_BYTE_LIMIT == 33554432
@@ -306,12 +309,12 @@ def test_refinement_index_real_32mib_read_and_growth_bounds(tmp_path, monkeypatc
     at_limit = original + b" " * (33554432 - len(original))
     pointer.write_bytes(at_limit)
     assert load_refinement(root, action["topology_refinement"])["refinement_id"]
-    assert publish_refinement(root, [action], **inputs) == action["topology_refinement"]
+    assert publish_refinement(root, [accepted_input], **inputs) == action["topology_refinement"]
     assert current_bytes() == at_limit
     assert reads == [33554433, 33554433]
     pointer.write_bytes(at_limit + b" ")
     for consume in (lambda: load_refinement(root, action["topology_refinement"]),
-                    lambda: publish_refinement(root, [action], **inputs)):
+                    lambda: publish_refinement(root, [accepted_input], **inputs)):
         with pytest.raises(ValueError, match="index exceeds its byte bound"):
             consume()
     assert reads == [33554433, 33554433]
@@ -320,7 +323,7 @@ def test_refinement_index_real_32mib_read_and_growth_bounds(tmp_path, monkeypatc
         expected = (original[:-1] if mutation == "shrink" else
                     original + b" " if mutation == "grow-within-limit" else at_limit + b" ")
         for consume in (lambda: load_refinement(root, action["topology_refinement"]),
-                        lambda: publish_refinement(root, [action], **inputs)):
+                        lambda: publish_refinement(root, [accepted_input], **inputs)):
             pointer.write_bytes(original)
             before_reads = len(reads)
             with pytest.raises(ValueError, match="changed during its bounded read"):

@@ -319,6 +319,11 @@ def test_unscheduled_optional_host_reference_survives_actual_graph_plan_and_run(
     assert stored["reference"] == environment["reference"] and stored["mode"] == "OPTIONAL_PRIOR"
     assert stored["availability"] == ("UNAVAILABLE" if stale else "AVAILABLE")
     assert (stored["evidence"] is None) is stale
+    # A stale optional prior is a named planner gap, never a silent success.
+    plan_gaps = load_accepted_plan(root)["coverage_gaps"]
+    assert ("build environment: STALE optional prior source" in plan_gaps) is stale
+    if stale:
+        assert first["jobs"]["job_target_analysis_plan"]["status"]["status"] == "COMPLETED_WITH_GAPS"
     planned = graph.plan(root.name, source, target_root=target, orchestration=orchestration)
     assert [decision.action for decision in planned] == ["REUSE", "REUSE", "REUSE"]
     again = graph.run(target_root=target, source_fingerprint=source, run_id=root.name,

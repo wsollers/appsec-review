@@ -104,7 +104,8 @@ def test_real_dagster_lifecycle_publishes_and_reuses_shared_artifacts(tmp_path: 
         receipt = shared.verify_receipt(run_root, reference)
         receipts.append((reference, receipt))
         assert receipt["actor"]["orchestration"] == {
-            "system": "dagster", "run_id": invocation, "node": "standalone__fixture__begin"}
+            "system": "dagster", "run_id": invocation, "workflow": "fixture",
+            "node": "standalone__fixture__begin"}
         status = json.loads((attempt / "steps/work/tasks/execute/status.json").read_text())
         assert status["dagster_node"] == "standalone__fixture__work__execute"
         assert status["dagster_run_id"] == invocation

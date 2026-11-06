@@ -175,7 +175,8 @@ def test_direct_compiler_closes_discovered_native_components_only_from_real_acce
     unit["native_components"] = [{key: document[key] for key in ("path", "sha256", "size_bytes")}]
     if not captured:
         unit["descriptor_package"]["documents"].remove(document)
-    graph = compile_build_topology([unit], source_fingerprint="synthetic-component-direct-compiler")
+    graph = compile_build_topology([unit], source_fingerprint="synthetic-component-direct-compiler",
+                                   profiles=_profile())
     bound = refine_build_topology(graph, [unit], profiles=_profile())["units"][0]
     if captured:
         assert bound["blockers"] == []

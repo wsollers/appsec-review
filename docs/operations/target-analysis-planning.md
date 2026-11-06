@@ -149,9 +149,11 @@ its lock. A refused replacement preserves the previous accepted pointer.
 
 ### R8 authoring, not a measured result
 
-`test_actual_catalog_offline_feedback_replay` in `tests/test_target_analysis_plan.py` is an
-explicitly selected **manual external-capture integration replay, authored NOT RUN**. It is
-excluded from the finite fast-unit proposal, not skipped or replaced with a small synthetic
+`test_actual_catalog_offline_feedback_replay` in
+`tests/integration/test_build_topology_r8_feedback_replay.py` is an
+explicitly selected **manual external-capture integration replay, authored NOT RUN**. Its
+location under `tests/integration/` excludes it from implicit unit collection; it is not skipped
+or replaced with a small synthetic
 catalog. It pins the accepted full catalog/handoff/partition and all referenced intake documents,
 295 units, the exact source SHA and each checkout's pytest root/config/package/venv binding.
 It uses the real planner, publication, accepted reader and project selection/preflight with

@@ -15,8 +15,9 @@ from appsec_review.config.build_workspaces import BuildWorkspacePolicy
 from appsec_review.container_runtime.build_executor import BuildCommandResult, BuildProfile
 from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units, validate_build_recipe
 from appsec_review.jobs.build_recipe_replay import (
-    ImageResolution, RecipeCandidate, ReplayContext, ReplayInvocation, ReplayRefused, ProducerProduct, TrialExecution,
-    load_promoted_recipe, load_promoted_revision, promote_recipe, replay_recipe,
+    ImageResolution, PromotedRecipe, RecipeCandidate, ReplayContext, ReplayInvocation, ReplayRefused,
+    ProducerProduct, TrialExecution, load_promoted_recipe, load_promoted_revision, promote_recipe,
+    replay_recipe, verify_selected_trial,
 )
 from appsec_review.jobs.build_topology import compile_build_topology
 from appsec_review.jobs.build_workspace import (
@@ -350,12 +351,56 @@ def test_full_context_detached_replay_promotes_recipe_only_then_reexecutes_b_wit
         writer.begin_attempt(replace(build.context.binding, recipe_identity=canonical_json_sha256(promoted)),
                              "B-production-reexecution", build.context.generation_identity)
         (writer.paths.install / "bin").mkdir()
-        (writer.paths.install / "bin/B").write_bytes(b"production B; not trial bytes")
+        # A real x86-64 executable for the retained-product check, distinct from the trial bytes.
+        (writer.paths.install / "bin/B").write_bytes(NATIVE_OUTPUT + b"production B; not trial bytes")
         writer.commit(build.context.products)
         assert (writer.paths.install / "lib/libA.a").read_bytes() == build.a_bytes
     schema = json.loads((Path(__file__).parents[1] / "docs/schemas/build-recipe-replay.schema.json").read_bytes())
     jsonschema.Draft202012Validator.check_schema(schema)
     jsonschema.validate(trial, schema)
+
+
+def test_selected_revision_rechecks_its_trial_and_guards_cached_execution(build):
+    from appsec_review.jobs.build_iterations import select_promotion
+    from appsec_review.jobs.build_topology_artifacts import guard_cache_action, selected_cache_actions
+    run = build.workspace.run_dir
+    node = build.context.binding.node_id
+    assert selected_cache_actions(run) == {}
+    trial_ref = _trial(build)
+    promotion_ref = select_promotion(run, build.context.view(), trial_ref)
+    promotion, trial = _read(run, promotion_ref), _read(run, trial_ref)
+    revision = load_promoted_revision(build.workspace, build.context, promotion_ref)
+    assert isinstance(revision, PromotedRecipe)
+    assert (revision.recipe, revision.recipe_identity, revision.image_identity, revision.reference) == (
+        build.candidate.recipe, canonical_json_sha256(build.candidate.recipe),
+        promotion["image_identity"], promotion_ref)
+    assert revision.products == tuple(ProductSpec(**item) for item in promotion["products"])
+    verify_selected_trial(run, build.context, promotion, trial)
+    selected = selected_cache_actions(run)
+    assert list(selected) == [node]
+    assert selected[node]["recipe"] == build.candidate.recipe
+    assert selected[node]["image"]["image_id"] == promotion["image_identity"]
+    assert selected[node]["topology_refinement"] == trial["topology_refinement"]
+    guard_cache_action(run, selected[node], releases=build.context.releases)
+    original = _read(run, _read(run, build.context.inputs["failure"])["request"])["dispatch"]
+    with pytest.raises(ValueError, match="differs from the selected immutable recipe revision"):
+        guard_cache_action(run, original, releases=build.context.releases)
+
+    def refused(promotion_document, trial_document, code):
+        with pytest.raises(ReplayRefused) as error:
+            verify_selected_trial(run, build.context, promotion_document, trial_document)
+        assert error.value.reason_code == code
+
+    refused(promotion, {**trial, "status": "FAILED"}, "unverified_trial")
+    refused(promotion, {**trial, "cleanup_complete": False}, "unverified_trial")
+    refused({**promotion, "context": trial["intent"]}, trial, "unverified_trial")
+    refused({**promotion, "recipe": build.context.accepted_recipe}, trial, "trial_binding_mismatch")
+    refused({**promotion, "image_identity": "sha256:" + "2" * 64}, trial, "trial_binding_mismatch")
+    pointer = run / "data/build/iterations/selection.json"
+    with pointer.open("r+b") as handle:
+        handle.truncate(16 * 1024 * 1024 + 1)
+    with pytest.raises(ValueError, match="selected revision pointer exceeds its byte bound"):
+        selected_cache_actions(run)
 
 
 def test_duplicate_and_reason_only_no_op_stop_durably_without_another_executor(build):
@@ -490,15 +535,17 @@ def test_explicit_network_offline_uses_none_and_refuses_fetch_requirements(build
     ref = replay_recipe(build.workspace, build.context, build.candidate, execute=executor, network_offline=True)
     assert _read(build.workspace.run_dir, ref)["status"] == "SUCCEEDED"
     assert seen == ["none"]
+    run = build.workspace.run_dir
     recipe = {**build.context.accepted_recipe, "network_required": True}
     binding = replace(build.context.binding, recipe_identity=canonical_json_sha256(recipe))
-    graph = _read(build.workspace.run_dir, build.context.inputs["graph"])
-    next(node for node in graph["nodes"] if node["build_unit_id"] == binding.node_id)["recipe_revision"] = binding.recipe_identity
-    failure = _read(build.workspace.run_dir, build.context.inputs["failure"])
+    # graph/2 is structural: the revised recipe is bound by its own accepted refinement, not the graph.
+    unit = {**deepcopy(build.context.validation_unit), "recipe": recipe}
+    failure = _read(run, build.context.inputs["failure"])
     failure["binding"] = binding.view()
+    failure["request"] = _json(run, "artifacts/inputs/network-request.json",
+                               {"dispatch": _accepted_dispatch(run, unit, build.context.releases)})
     inputs = {**build.context.inputs,
-              "failure": _json(build.workspace.run_dir, "artifacts/inputs/network-failure.json", failure),
-              "graph": _json(build.workspace.run_dir, "artifacts/inputs/network-graph.json", graph)}
+              "failure": _json(run, "artifacts/inputs/network-failure.json", failure)}
     context = replace(build.context, accepted_recipe=recipe, binding=binding, inputs=inputs)
     candidate = replace(build.candidate, recipe={**build.candidate.recipe, "network_required": True},
                         evidence=(inputs["graph"],))
@@ -531,7 +578,8 @@ def test_distinct_failed_candidate_can_be_followed_by_one_genuinely_different_su
     failed = _trial(build, exit_code=2)
     assert _read(build.workspace.run_dir, failed)["status"] == "FAILED"
     recipe = deepcopy(build.candidate.recipe)
-    recipe["build_commands"][0][-1] = "1"
+    # A genuinely different compiler option; a bare operand would be an unresolved native input.
+    recipe["build_commands"][0][-1] = "-O1"
     revised = replace(build.candidate, recipe=recipe)
     executor = _executor(build)
     second = replay_recipe(build.workspace, build.context, revised, execute=executor)
@@ -649,10 +697,18 @@ def test_shared_command_guard_refuses_wrong_source_before_replay_configure_launc
               "execution_cwd": {"configure": "a-consumer/build", "build": "a-consumer/build"},
               "configure_commands": [["cmake", "-S", ".", "-B", "."]],
               "build_commands": [["cmake", "--build", "."]]}
+    candidate = replace(build.candidate, recipe=recipe)
     execute = Mock(side_effect=AssertionError("wrong-source configure must not launch"))
-    with pytest.raises(ValueError, match="(?i)source|descriptor|origin"):
-        replay_recipe(build.workspace, build.context, replace(build.candidate, recipe=recipe), execute=execute)
+    # Native target admission runs first: a CMake driver never proves the selected target.
+    with pytest.raises(ReplayRefused, match="candidate_target_unenforced"):
+        replay_recipe(build.workspace, build.context, candidate, execute=execute)
     execute.assert_not_called()
+    # The shared per-launch command guard independently refuses the wrong-source configure.
+    invocation = ReplayInvocation(build.context, candidate, build.workspace.paths,
+                                  build.workspace.run_dir / "artifacts/command-plan", "plan-only", "none",
+                                  build.context.binding.image_identity)
+    with pytest.raises(ValueError, match="(?i)source|descriptor|origin"):
+        invocation.prepare_command(0)
 
 
 def test_targeted_compiler_allows_parent_source_from_declared_build_cwd(build):
@@ -727,8 +783,10 @@ def test_execution_cwd_never_relaxes_accepted_recipe_path_authority(build, cwd):
 
 
 def test_non_build_source_cwd_requires_accepted_descriptor_evidence(build):
+    # The compiler names accepted source from that cwd, so target admission passes and the cwd guard decides.
     candidate = replace(build.candidate, recipe={**build.candidate.recipe,
-                                                "execution_cwd": {"build": "a-consumer/undocumented"}})
+                                                "execution_cwd": {"build": "a-consumer/undocumented"},
+                                                "build_commands": [["clang", TARGET, "../b.c", "-o", "B"]]})
     executor = _executor(build)
     with pytest.raises(ReplayRefused, match="unproven_execution_cwd"):
         replay_recipe(build.workspace, build.context, candidate, execute=executor)
@@ -944,13 +1002,19 @@ def test_missing_expected_product_records_a_finished_failure_and_releases_trial_
     assert json.loads((build.workspace.run_dir / replay.state_relative).read_bytes())["attempt"] is None
 
 
-def test_old_source_bytes_as_exports_cannot_make_an_exit_zero_command_a_winner(build):
-    products = (replace(build.context.products[0], path="target/a-consumer/b.c"),)
+@pytest.mark.parametrize("path,reason", [
+    # Old source bytes are not a native executable for the accepted target.
+    ("target/a-consumer/b.c", "product_verification_failed"),
+    # Unchanged prior native bytes pass the target check but are not a new build product.
+    ("install/lib/libA.a", "no_new_or_changed_build_product"),
+])
+def test_old_source_bytes_as_exports_cannot_make_an_exit_zero_command_a_winner(build, path, reason):
+    products = (replace(build.context.products[0], path=path),)
     candidate = replace(build.candidate, products=products)
     ref = replay_recipe(build.workspace, build.context, candidate, execute=_executor(build))
     trial = _read(build.workspace.run_dir, ref)
     assert trial["status"] == "FAILED"
-    assert "no_new_or_changed_build_product" in trial["reason"]
+    assert reason in trial["reason"]
 
 
 def test_upstream_cas_tampering_blocks_promotion_even_with_untouched_trial_receipt(build):
