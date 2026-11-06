@@ -219,3 +219,57 @@ topology assertion expects intake immediately after image verification and omits
 present target-acquisition gate; its explicit baseline check initially could not collect because
 the baseline environment lacked Dagster (`1 skipped`, exit 4). The missing optional dependency
 was restored rather than treating that skipped collection as success.
+
+The restored baseline Dagster check:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/orchestration/dagster/test_definitions.py::test_wave1_exposes_real_producer_shard_topology \
+  --basetemp=test/tmp/recovery-baseline-topology-restored --tb=short
+```
+
+failed at the same intake/target-acquisition assertion in **7.350 s** at `528b3fa6`.
+
+### Ready combined tree
+
+All unpublished package commits were rebased without conflicts onto canonical main
+`dc263b305e500df398b19398260e619253e855a7`, which includes the already landed packages.
+The final code/test candidate is **`e20947f60bc39983cac3acc10b4bf9bb70a48796`**,
+tree **`c61c37b6be4e622a9482cfc12ae75aa8c8a66bac`**.
+
+The following focused command passed **299 tests** in **365.393 s**. The two explicitly
+deselected tests were already run repeatedly, failed on this branch and the unmodified
+baseline, and remain unchanged; this is not a claim that the complete repository suite is green.
+The broader managed/shared/history baseline failures and the stale Dagster assertion remain
+the named gaps above. No integration, acceptance, live-review or image-build command ran.
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py tests/test_repair_dagster_contract.py tests/test_job_test_selection.py \
+  tests/test_job_runtime.py tests/test_handoff_interchange.py tests/test_review_run_cli.py \
+  tests/test_wave1_resume.py tests/test_runtime_launch.py \
+  tests/test_source_history_analysis.py::test_job_binds_mainline_history_ranks_by_sii_and_feeds_the_plan \
+  tests/orchestration/dagster/test_definitions.py::test_definitions_reject_registry_config_drift \
+  tests/orchestration/dagster/test_definitions.py::test_job_level_disabled_setting_is_transparent_to_dagster \
+  tests/orchestration/dagster/test_definitions.py::test_environment_dependency_is_required_or_transparently_disabled \
+  tests/orchestration/dagster/test_definitions.py::test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs \
+  --deselect=tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps \
+  --deselect=tests/test_runtime_launch.py::test_every_registered_job_outside_the_target_set_is_named \
+  --basetemp=test/tmp/recovery-final-e209 --tb=short
+```
+
+The worktree was clean before and after this command. Configured Ruff correctness checks passed
+on the 25 changed Python paths (**0.063 s**), and
+`.venv/bin/python -m mypy src/appsec_review/runtime/job.py` passed (**3.165 s**).
+Every new/manual test module was syntax-parsed, not executed as an integration/acceptance gate.
+
+Two invocations of the real build-time release generator over this exact source tree produced
+identical canonical bytes: **1,333 files**, **46 jobs**, **46.444 s** combined.
+Release content identity:
+`8d52cc8dddb47709a59647fe192d19d82a367e6237d40aecd5b80650fab406cd`.
+The generated verification artifact stays in `test/tmp/recovery-release-verification.json`;
+it is not committed and is not represented as a built/deployed image.
+
+The only change after this tested code SHA is this verification record. The integration handoff
+includes its descendant commit, the exact tested source identity, the complete owned-path list,
+LF/whitespace checks and the explicit manual-validation gaps.
