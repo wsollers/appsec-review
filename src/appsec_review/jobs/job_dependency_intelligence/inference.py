@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
-import hashlib
 from pathlib import Path
 from typing import Any
 
-from appsec_review.guidance.compose import load_registry
-from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import Infer, ModelRequest
-from appsec_review.storage import atomic_bytes, canonical_json
-from appsec_review.storage.shared import publish_named
+from appsec_review.storage import canonical_json
 
 from .resolution import apply_model_resolution
 
@@ -25,40 +21,8 @@ RUNTIME_SKILL_ID = "native-dependency-resolution"
 
 
 def _guidance(repository_root: Path, run_root: Path, model: Mapping[str, Any]) -> tuple[str, str]:
-    registry = load_registry(repository_root)
-    persona_record = registry["personas"].get(PERSONA_ID)
-    role_record = registry["roles"].get(ROLE_ID)
-    task_record = registry["tasks"].get("dependency-intelligence", {}).get(TASK_ID)
-    if (not isinstance(persona_record, Mapping) or not isinstance(role_record, Mapping) or
-            not isinstance(task_record, Mapping)):
-        raise ValueError("dependency resolution guidance is not registered")
-    paths = {
-        "persona.md": repository_root / "pipeline/prompt-fragments/personas/dependency_repository_investigator.md",
-        "role.md": repository_root / "pipeline/prompt-fragments/roles/native_dependency_resolver.md",
-        "task.md": repository_root / str(task_record["path"]),
-    }
-    skill = load_runtime_skill(repository_root, RUNTIME_SKILL_ID, job_id="job_dependency_intelligence")
-    files = {name: path.read_text(encoding="utf-8") for name, path in paths.items()}
-    files["skill.md"] = skill.text
-    identity = {"provider": model["provider"], "model": model["model"], "reasoning": model["reasoning"],
-                "persona": PERSONA_ID, "role": ROLE_ID, "task": TASK_ID,
-                "runtime_skill_sha256": skill.sha256}
-    content = b"\0".join([*(files[name].encode() for name in sorted(files)), canonical_json(identity)])
-    digest = hashlib.sha256(content).hexdigest()
-    destination = run_root / "data" / "guidance" / digest
-    for name, text in sorted(files.items()):
-        path = destination / name
-        payload = text.encode()
-        if path.is_file() and path.read_bytes() != payload:
-            raise ValueError("dependency inference guidance changed after pinning")
-        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
-    metadata = canonical_json({**identity, "guidance_sha256": digest})
-    metadata_path = destination / "model-identity.json"
-    if metadata_path.is_file() and metadata_path.read_bytes() != metadata:
-        raise ValueError("dependency inference model identity changed after pinning")
-    publish_named(run_root, metadata_path, metadata, namespace="guidance", computation=identity)
-    joined = "\n\n".join((files["persona.md"], files["role.md"], files["task.md"], files["skill.md"]))
-    return joined, digest
+    from appsec_review.guidance.workers import publish_worker_guidance
+    return publish_worker_guidance(repository_root, run_root, "dependency_repository", model=model)
 
 
 def resolve_with_inference(dependency: Mapping[str, Any], *, repository_root: Path, run_root: Path,

@@ -43,24 +43,8 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int,
 
 
 def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
-    prompt: dict[str, Any] = {
-        "task": request.guidance, "response_schema": request.schema,
-        "catalog_summary": request.summary,
-        "allowlists": {"scanners": request.allowed_scanners,
-                       "build_systems": request.allowed_build_systems,
-                       "components": request.allowed_components,
-                       "paths": request.allowed_paths,
-                       "build_units": request.allowed_build_units,
-                       "image_profiles": request.allowed_image_profiles},
-        "limits": {"max_input_tokens": request.max_input_tokens,
-                   "max_output_tokens": request.max_output_tokens},
-    }
-    if request.repair_errors:
-        prompt["repair"] = {"validation_errors": request.repair_errors,
-                            "rejected_response": request.prior_response,
-                            "instruction": ("Return only one corrected JSON object. Its top-level "
-                                            f"schema must be exactly {request.schema}.")}
-    return prompt
+    from .request import plan_prompt
+    return plan_prompt(request, include_persona=False)
 
 
 def _post(body: Mapping[str, Any], schema: str, *, key: str, endpoint: str,

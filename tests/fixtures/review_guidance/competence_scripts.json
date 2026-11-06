@@ -1,0 +1,50 @@
+{
+  "schema": "appsec-review/competence-scripts/1",
+  "limitation": "Deterministic scripted answers, never live model-quality evidence.",
+  "scripts": {
+    "retrieve_then_resolve": ["find_source", "read_returned", "answer"],
+    "paging": ["find_first_page", "find_next_page", "read_returned", "answer"],
+    "denial_recovery": ["deny_untrusted_shell", "find_source", "read_returned", "answer"],
+    "missing_artifact": ["find_missing_artifact", "find_source", "read_returned", "answer"],
+    "repeated_denial": ["deny_untrusted_shell", "deny_untrusted_shell"],
+    "final_turn_ignored": ["find_source", "find_source"],
+    "wrong_label": ["find_source", "wrong_label_answer"],
+    "wrong_identity": ["find_source", "wrong_identity_answer"],
+    "path_citation": ["find_source", "path_citation_answer"],
+    "invalid_anchor": ["find_source", "invalid_anchor_answer"],
+    "truncated_excerpt": ["find_source", "read_returned", "truncated_answer"]
+  },
+  "answers": {
+    "vulnerable": {
+      "disposition": "supported",
+      "per_predicate": {
+        "missing_or_ineffective_guard": {
+          "stance": "supports", "cites": [],
+          "why": "The retrieved caller contract and implementation show the required guard is absent."
+        }
+      }
+    },
+    "safe": {
+      "disposition": "contradicted",
+      "per_predicate": {
+        "missing_or_ineffective_guard": {
+          "stance": "contradicts", "cites": [],
+          "why": "The concrete guard on the reachable path enforces the required bound or authorization."
+        }
+      }
+    },
+    "abstain": {
+      "disposition": "insufficient_evidence",
+      "per_predicate": {
+        "missing_or_ineffective_guard": {
+          "stance": "unresolved", "cites": [],
+          "missing": ["The required implementation, allocation, or effective deployment artifact is absent."]
+        }
+      },
+      "evidence_requests": [{
+        "predicate": "missing_or_ineffective_guard", "requested_kind": "source_line",
+        "anchors": ["A1"], "question": "Provide the missing allocation, authorization implementation, or effective deployment artifact."
+      }]
+    }
+  }
+}

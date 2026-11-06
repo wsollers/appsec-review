@@ -27,18 +27,20 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_guidance_bundles_are_group_scoped_immutable_and_reusable(tmp_path: Path) -> None:
+    from appsec_review.guidance.skills import load_runtime_skill
     model = {"provider": "claude-cli", "model": "example", "reasoning": "low"}
-    arguments = {"persona": "persona", "role": "role", "guidance": "task", "model": model,
+    arguments = {"persona": "persona", "role": "role", "guidance": load_runtime_skill(
+        ROOT, "target-analysis-planning", job_id="job_target_analysis_plan").text, "model": model,
                  "family": "native"}
     cmake = publish_guidance_bundle(tmp_path, build_system="cmake", **arguments)
     make = publish_guidance_bundle(tmp_path, build_system="make", **arguments)
     assert cmake != make
     assert publish_guidance_bundle(tmp_path, build_system="cmake", **arguments) == cmake
     root = tmp_path / "data" / "guidance"
-    assert json.loads((root / cmake / "model-identity.json").read_text())["build_system"] == "cmake"
-    assert json.loads((root / make / "model-identity.json").read_text())["build_system"] == "make"
-    (root / cmake / "role.md").write_text("changed", encoding="utf-8")
-    with pytest.raises(ValueError, match="guidance bundle changed"):
+    assert json.loads((root / cmake / "bundle.json").read_text())["identity"]["build_system"] == "cmake"
+    assert json.loads((root / make / "bundle.json").read_text())["identity"]["build_system"] == "make"
+    (root / cmake / "prompt.md").write_text("changed", encoding="utf-8")
+    with pytest.raises(ValueError, match="immutable shared artifact conflicts"):
         publish_guidance_bundle(tmp_path, build_system="cmake", **arguments)
 
 

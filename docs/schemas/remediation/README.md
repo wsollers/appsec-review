@@ -59,12 +59,13 @@ The parsers are `config.remediation.RemediationPlanningSettings.from_mapping` an
 `RemediationValidationSettings.from_mapping`. The central config loader, registry, launch graph,
 profile/model checks, guidance registry and input matrix must register these jobs together.
 The new role fragments are `remediation_writer` and `remediation_reviewer`; no runtime skill is
-loaded. The local assembler calls shared `governing_rules`, `load_registry`, and fragment
+loaded. The role-to-job wrapper calls the shared job-selected `/4` assembler, registry and fragment
 validation, requires the registered bounded responsibility, and checks its closed role-to-job
 allowlist against the actual job context. `remediation_writer` belongs only to planning;
 `remediation_reviewer` belongs only to validation. Tool mentions and conflicting policy are
 rejected before dispatch. The pinned bundle identifies the job, role, registry version,
-responsibility, and exact governing/role file hashes.
+responsibility, output/citation contract and exact governing/role hashes. The common publisher
+stores `bundle.json` and `prompt.md`; legacy remediation bundles are read without rewriting.
 
 The user selected automatic planning and bounded nonexecuting validation for **new
 reviews**; existing runs retain their frozen configuration. The corresponding central tables are:
