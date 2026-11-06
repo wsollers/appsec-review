@@ -149,11 +149,16 @@ RUNTIME_SHARED_NAMESPACES = ("index-shard", "owasp-shard", "guidance", "review-p
 
 
 def dataset_contract(job_id: str, steps: Sequence[str],
-                     declarations: Sequence[DatasetDeclaration]) -> dict[str, Any]:
+                     declarations: Sequence[DatasetDeclaration], *,
+                     job_contract: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Pin the producing attempt's output contract independently of later code changes."""
-    body = {"schema": "appsec-review/attempt-datasets/2", "job_id": job_id,
+    body: dict[str, Any] = {"schema": "appsec-review/attempt-datasets/2", "job_id": job_id,
             "shared_namespaces": list(RUNTIME_SHARED_NAMESPACES),
             "steps": sorted(set(steps)), "datasets": [asdict(item) for item in declarations]}
+    if job_contract is not None:
+        from appsec_review.runtime.contracts import read_job_contract
+        read_job_contract(job_contract).validate(job_id)
+        body.update(schema="appsec-review/attempt-datasets/3", job_contract=dict(job_contract))
     return {**body, "sha256": hashlib.sha256(
         json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
 
@@ -163,13 +168,18 @@ def read_dataset_contract(document: Mapping[str, Any], job_id: str
     body = {key: value for key, value in document.items() if key != "sha256"}
     expected = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     fields = {"schema", "job_id", "steps", "datasets"}
-    if body.get("schema") == "appsec-review/attempt-datasets/2":
+    if body.get("schema") in {"appsec-review/attempt-datasets/2", "appsec-review/attempt-datasets/3"}:
         fields.add("shared_namespaces")
         if (not isinstance(body.get("shared_namespaces"), list)
                 or any(name not in RUNTIME_SHARED_NAMESPACES for name in body["shared_namespaces"])):
             raise ValueError("invalid attempt shared namespaces")
+    if body.get("schema") == "appsec-review/attempt-datasets/3":
+        from appsec_review.runtime.contracts import read_job_contract
+        fields.add("job_contract")
+        read_job_contract(body.get("job_contract")).validate(job_id)
     if document.get("sha256") != expected or body.get("schema") not in {
-            "appsec-review/attempt-datasets/1", "appsec-review/attempt-datasets/2"} \
+            "appsec-review/attempt-datasets/1", "appsec-review/attempt-datasets/2",
+            "appsec-review/attempt-datasets/3"} \
             or body.get("job_id") != job_id or set(body) != fields:
         raise ValueError("invalid attempt dataset contract identity")
     steps = body["steps"]

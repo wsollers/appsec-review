@@ -9,6 +9,7 @@ from appsec_review.config import JobConfig, ToolCapabilityConfig
 from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
 from appsec_review.observability import EventLog
 from appsec_review.runtime.datasets import DatasetDeclaration, validate_declarations
+from appsec_review.runtime.contracts import JobContract
 
 if TYPE_CHECKING:
     from appsec_review.runtime.units import Unit
@@ -76,9 +77,17 @@ class Job:
     # becoming part of their immutable input identity.
     always_execute: bool = False
     propagate_handoff: bool = True
+    contract: JobContract | None = None
 
     def __post_init__(self) -> None:
         validate_declarations(self.job_id, self.datasets)
+        if self.contract is not None:
+            self.contract.validate(self.job_id)
+            if self.consumes and self.consumes != self.contract.consumes:
+                raise ValueError(f"legacy consumes differs from typed contract: {self.job_id}")
+            object.__setattr__(self, "consumes", self.contract.consumes)
+            object.__setattr__(self, "always_execute", self.contract.always_execute)
+            object.__setattr__(self, "propagate_handoff", self.contract.propagate_handoff)
         if self.job_id in self.consumes or len(self.consumes) != len(set(self.consumes)):
             raise ValueError(f"job consumes itself or repeats an upstream job: {self.job_id}")
 
