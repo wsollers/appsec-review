@@ -387,3 +387,93 @@ Additional static verification:
   legacy findings, 655 modules scanned. Tool times: Ruff 0.253 s, mypy 11.144 s, Bandit 19.010 s,
   architecture 5.877 s. Its unit portion was explicitly **NOT RUN**; affected units are run
   separately rather than claiming the static gate covers them.
+
+### Final passing verification
+
+At exact revision `9d09f012e97e5f673e4faa848c16e272d3074100`, the full combined unit command above,
+with `--basetemp=test/tmp/package03-final-units`, passed **876 tests**, no failures or skips:
+pytest 127.73 s, wall 129.11 s. The slowest call was the planner's authentic unit fixture at
+10.29 s; the persisted 599-package budget case took 8.59 s.
+
+The six affected team selectors (the five listed above plus exhausted-team resume) and
+`tests/test_pytest_default_collection.py`, with
+`--basetemp=test/tmp/package03-final-teams -q --tb=short --durations=5`, passed **15 tests**:
+pytest 64.29 s, wall 65.11 s. This verifies actual team isolation/reuse and default exclusion
+of the manual suites, not just a proxy for those requirements.
+
+The static-only quality command on the same frozen source passed again: no new diagnostics,
+47 baseline legacy findings, 655 modules, wall 35.33 s. Ruff 0.151 s, mypy 10.704 s,
+Bandit 18.708 s, architecture 5.259 s. Manual-suite syntax was parsed without importing or
+collecting it, and all four newly added documentation links resolved.
+
+### Recovery-main update
+
+Windows main then advanced to `305a39d993bbd68b4678d309eef0e81463fd01fd`. It was imported by a
+second local Git bundle and merged without conflicts into this branch at
+`7397d7a412a065d548090c6490aac33cfd93359b`. Cold imports succeeded in both orders:
+`appsec_review.runtime` then `appsec_review.inference`, and the reverse.
+
+Affected post-update command:
+
+```text
+.venv/bin/python -m pytest tests/test_bounded_execution.py tests/review/test_bounded_cells.py tests/review/test_execution_budget_wiring.py tests/review/test_team_handler.py::test_blue_cells_never_see_each_other_and_the_verifier_is_blind tests/review/test_team_handler.py::test_a_distinct_verifier_profile_is_recorded_without_changing_independence tests/review/test_team_handler.py::test_provider_and_schema_failures_are_typed_gaps_with_terminal_records tests/review/test_team_handler.py::test_budgets_end_cells_not_launched_or_timed_out_and_are_never_retried tests/review/test_team_handler.py::test_rerunning_a_team_reuses_every_succeeded_cell tests/review/test_team_handler.py::test_resuming_exhausted_team_reconstructs_prior_claims_without_new_calls tests/test_build_topology_feedback.py::test_real_planner_requests_and_publishes_exact_additive_evidence tests/test_post_build_security_assessment.py tests/test_job_test_selection.py --basetemp=test/tmp/package03-recovery-merge -q --tb=short --durations=5
+```
+
+Result: **179 passed, 1 failed**, pytest 83.21 s, wall 84.28 s. The new recovery policy correctly
+refused a post-build resumption whose synthetic upstream C++ claim lacked worker-stop provenance.
+The affected fixture now binds the real release before its first claim and publishes under the
+real `worker_scope`, preserving `WORKER_PROTOCOL` before handoff hashing and asserting that the
+synthetic worker's retained record is `EXITED`. No product stop check was weakened or bypassed.
+
+The first focused correction exposed the required ordering:
+
+```text
+.venv/bin/python -m pytest tests/test_post_build_security_assessment.py::test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards --basetemp=test/tmp/package03-worker-proof -q --tb=short
+```
+
+It failed before dispatch because release binding followed the first claim (wall 1.85 s).
+After fixing that ordering, the same selector at `test/tmp/package03-worker-proof-bound` passed,
+pytest 6.41 s, wall 7.02 s. The complete `tests/test_post_build_security_assessment.py` selection,
+at `test/tmp/package03-post-build-final`, then passed **20 tests**, pytest 12.42 s, wall 13.16 s.
+
+The static-only gate on this combined tree passed: no new diagnostics, 47 legacy findings,
+662 modules, wall 35.19 s (Ruff 0.142 s, mypy 10.538 s, Bandit 18.536 s, architecture 5.443 s).
+This last fixture-only adjustment does not change runtime policy, source execution, or budgets.
+
+### Canonical integration custody
+
+The assigned Windows app worktree and private WSL worktree are development/handoff surfaces,
+not substitutes for an authoritative main checkout. Package 03 has not pushed, opened a PR,
+launched a model/review, deployed, or modified either canonical main.
+
+The primary integration target in the original package is
+`F:\XBOX-Repositories\appsec-review`. Its last observed main ref is
+`305a39d993bbd68b4678d309eef0e81463fd01fd`.
+
+During final coordination, the Package 05 owner relayed the user's clarification that
+`/home/wsollers/projects/appsec-review` in Ubuntu-22.04 is the WSL master and Windows work must
+sync there. That owner then freshly verified the WSL master is still at
+`dc263b305e500df398b19398260e619253e855a7`, with **nine untracked JSON files under
+`data/feeds/nvd/provenance/`** that block its clean-tree gate. The owner reported that its
+integration lock was available and immediately released, but the files' producing/data-custody
+owner and a global freeze owner were not established. Package 03 did not inspect or alter those
+foreign files, infer cleanup authorization, or treat Windows-only landing as synchronized main.
+
+The owning session supplied these observed paths relative to the WSL master:
+
+```text
+data/feeds/nvd/provenance/sha256-043a85b6911198e6/27749a75513307c695d4bfac76bd00964058a236416492321269cc7b201c0362.json
+data/feeds/nvd/provenance/sha256-1469bd3d33eb4026/7eca6c16e6e826c04ed9032e1d332c74eb5d71be9af14ee5a099362caf714fc4.json
+data/feeds/nvd/provenance/sha256-82b0d4a335e49053/a722a111f0f5416a884f49af7f066a940113b05c3489b9d5aaa419b9f9056672.json
+data/feeds/nvd/provenance/sha256-a4372f6ee319d62c/4ab663164a8322e5a9c8c94acfa1eb425a338a41de000b3f53929446c058f8f7.json
+data/feeds/nvd/provenance/sha256-c9b29a6b2c3d3dd9/c5b5c84591dc83c927ce30aad2c814bbee593f1df526f4fed7efbd352c844923.json
+data/feeds/nvd/provenance/sha256-ddc9f6d711fe276d/23b33002ad1633fcfca3a3f90fc4082ef79e305996eecd007d69a87d6628a693.json
+data/feeds/nvd/provenance/sha256-dfa1d05817d8d858/b5abd3ac85a3600c288246ab89452191ed158b76d9d855615286df4d3b246456.json
+data/feeds/nvd/provenance/sha256-dff574e49f810a38/48bdb2882c2e120c2fb767e05ba5c7977b893afd3db6b63d293848b4240853d6.json
+data/feeds/nvd/provenance/sha256-e38cf684c7b1a798/aeb9c8c99f014ff413e786c1a75258b0bde11a19a424e8f72f96b264b226de91.json
+```
+
+Until that custody blocker is resolved by its owner, preserve the exact ready commit and use
+the common OS-backed `appsec-independent-main-integration.lock` for any later main update.
+Do not delete, relocate, hide, overwrite or automatically resolve the untracked provenance files.
+Integration/acceptance suites remain **NOT RUN**, as requested.
