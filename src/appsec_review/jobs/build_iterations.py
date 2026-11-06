@@ -632,7 +632,12 @@ def resume_build_workspace(run_root: Path) -> None:
     ledger_path = run_root / "data/build/iterations/ledger.json"
     pending_path = run_root / "data/build/iterations/pending.json"
     if not ledger_path.exists() and not pending_path.exists():
-        raise WorkspaceError("workspace reconstruction lacks accepted or pending recipe admission")
+        # A run whose every iteration failed restored its materialized generation and admitted
+        # nothing. Only that pristine state has no products to reconstruct from a ledger.
+        with workspace.writer() as writer:
+            pristine = writer.state()["attempt"] is None and not writer.committed_generation()["accepted"]
+        if not pristine:
+            raise WorkspaceError("workspace reconstruction lacks accepted or pending recipe admission")
     if ledger_path.exists():
         ledger = json.loads(ledger_path.read_bytes())
         if ledger.get("schema") != SCHEMA:
