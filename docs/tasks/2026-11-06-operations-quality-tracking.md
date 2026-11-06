@@ -200,7 +200,7 @@ Bandit 19.409s, architecture 5.736s. This gate's own unit selection was **NOT RU
 the affected 107-test suite was executed separately. Static checks are not live vulnerability
 assessment, and their declared type-checking boundary remains the one documented by Package 02.
 
-Final implementation SHA: `4e5e344b8bc03b46ea3cc5205d028c62be45ab29`. Its only code delta
+Final retention revision: `4e5e344b8bc03b46ea3cc5205d028c62be45ab29`. Its only code delta
 from the statically checked candidate rejects malformed sealed-store owner identities.
 The focused final command was:
 
@@ -211,8 +211,27 @@ The focused final command was:
 ```
 
 Result: **16 passed in 1.56s**, and the focused Ruff check passed. These 16 tests overlap the
-combined suite; they are not presented as 16 additional independent cases. Later changes are
-documentation-only, with source/test/deploy byte identity checked against this implementation.
+combined suite; they are not presented as 16 additional independent cases.
 The ready branch includes WSL main `37ae743ca28c26239383d68054accb1826e60ad7`; landing remains
 blocked by the unrelated dirty provenance state. No production data or Windows-primary
 checkout changes were made.
+
+The final current-record compatibility check also covered the existing `JOB_REUSED` shape,
+which records a handoff hash without completion metadata. Revision
+`df49731c418ff7e4394efa91ad82d1292154e435` preserves that hash as an unverified reference and
+reports unknown reused completeness explicitly instead of treating an outer success as
+coverage evidence. On that exact **final implementation SHA**:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operations_reporting.py tests/reporting/test_telemetry_inputs.py \
+  --basetemp=test/tmp/operations-b603f2c2-final-reporting
+.venv/bin/python -m ruff check --ignore-noqa src/appsec_review/observability/operator.py
+```
+
+Result: **36 passed in 4.58s**, and the focused Ruff check passed. These tests overlap earlier
+runs and are not summed into an inflated coverage count. The final handoff adds documentation
+only; source/test/deploy byte identity is checked against this implementation. Disposable
+test state and tool caches created by this package were removed from its isolated worktree.
+Its Linux environment, ready branch and local transfer bundle are retained for integration
+after the independent dirty-main blocker is resolved.

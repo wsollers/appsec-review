@@ -26,6 +26,9 @@ declared/reused gaps, failure categories, receipt hashes and resource cleanup ow
 Operational success is separate from coverage. Even `no_declared_gaps` is not a claim of
 complete analysis. A conflicting application/orchestrator lifecycle is named explicitly.
 The status view never authorizes reuse: runtime receipt validation is still required.
+Legacy `JOB_REUSED`/`TASK_REUSED` records that omit completion metadata produce an explicit
+`reuse_completion_unavailable` gap; a successful outer dispatch does not turn that unknown
+into complete analysis. Flat legacy handoff hashes remain visible as unverified references.
 At most 16 execution receipts of at most 1 MiB each are verified per snapshot through the
 existing run-artifact verifier. Unsupported receipts are named gaps, not inferred successes.
 
