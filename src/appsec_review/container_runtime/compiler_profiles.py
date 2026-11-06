@@ -492,6 +492,7 @@ def _check_targets(record: dict[str, Any]) -> None:
 def _check_format(record: dict[str, Any]) -> None:
     value = record["executable_format"]
     if (not isinstance(value, dict) or set(value) != {"class", "machine", "type"}
+            or not all(isinstance(item, str) for item in value.values())
             or (value["machine"], value["class"]) not in set(_ELF_MACHINES.values())
             or value["type"] not in _ELF_TYPES.values()):
         _fail("profile executable format is invalid")
@@ -561,6 +562,11 @@ def profile_set(image_digest: str, records: Mapping[str, dict[str, Any]]) -> dic
             _fail("profile set entry does not match its image or driver key")
     if len({record["provenance"]["image_signature"] for record in records.values()}) > 1:
         _fail("profile set entry mixes image signature outcomes")
+    # Same image-level invariant as collection: every copied executable shares one class/machine.
+    # This constrains the executables only, never the targets they compile for.
+    if len({(record["executable_format"]["class"], record["executable_format"]["machine"])
+            for record in records.values()}) > 1:
+        _fail("profile set entry mixes executable ELF classes or machines")
     return {"schema": SET_SCHEMA,
             "images": {image_digest: {driver: records[driver] for driver in sorted(records)}}}
 
@@ -688,6 +694,12 @@ def collect_compiler_profiles(profile: BuildProfile, *, scratch: Path, runner: R
     """
     if type(timeout_seconds) is not int or not 0 < timeout_seconds <= 3600:
         raise ValueError("compiler probe timeout must be a bounded positive integer")
+    # The executor verifies a derived image's base, not the derived digest itself, and a record has
+    # no field for that base or its recipe. Step 1 refuses rather than overstate either.
+    if profile.derived_from_image_id is not None:
+        raise CompilerProfileError(
+            f"compiler probe: derived image {profile.name} is not supported; only its base "
+            "would be signature-checked and the record cannot state that")
     runner = runner or _run
     verifier = image_verifier if image_verifier is not None else default_image_verifier()
     image_signature = _signature_outcome(verifier)

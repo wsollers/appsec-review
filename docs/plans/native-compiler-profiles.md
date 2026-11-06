@@ -147,7 +147,10 @@ A new module, `appsec_review.container_runtime.compiler_profiles`, collects
   - `validate_profile` checks a closed shape: no unknown or missing keys, typed and bounded
     values, every probe exit code `0` with a non-empty output digest, the probe script digest
     equal to the shipped script, `target_axes` recomputed from `default_target`, and per-driver
-    facts and semantics. Any malformed record or set raises `CompilerProfileError`.
+    facts and semantics. Any malformed record or set raises `CompilerProfileError`. Set
+    admission (`profile_set`, `merge_profile_sets`) also requires every record of one image to
+    share one `image_signature` outcome and one executable class and machine. This constrains
+    only the executables, never the targets a C or Go compiler builds for.
   - A profile set is `appsec-review/compiler-profile-set/1`: `{"images": {digest: {driver:
     record}}}`. An image with no drivers is present with an empty map (probed, nothing found).
     Merging two sets that both contain an image is an error.
@@ -159,6 +162,11 @@ A new module, `appsec_review.container_runtime.compiler_profiles`, collects
   - They may also be reused from a host cache keyed by image digest plus collector version.
   - A cache hit is re-verified against `docker image inspect`, which needs no execution.
 - **Derived images** (recipe `system_packages` or `image_repairs`):
+  - Step 1 refuses to collect a derived `BuildProfile` before any Docker call. The executor's
+    signature check covers only the base (`derived_from_image_id`), and a `/2` record has no
+    field for that base or its recipe. So the collector does not label a derived digest
+    `verified` when only its base was checked. A later step adds the base and recipe fields,
+    then:
   - re-probe the derived digest;
   - record `image_recipe_digest`, which `guard_action` and `_approved_compiler_metadata`
     already require.

@@ -357,6 +357,40 @@ def test_mixed_executable_machines_in_one_image_fail_closed():
                                  transcript_sha256="c" * 64, image_signature="verified")
 
 
+@pytest.mark.parametrize("field,value", [
+    ("machine", []), ("machine", {}), ("class", {}), ("class", ["elf64"]), ("type", []), ("type", None),
+], ids=["machine-list", "machine-dict", "class-dict", "class-list", "type-list", "type-none"])
+def test_malformed_nested_executable_format_raises_profile_error(field, value):
+    record = _set(_records(CPP)["clang"], ("executable_format", field), value)
+    with pytest.raises(cp.CompilerProfileError, match="executable format is invalid"):
+        cp.validate_profile(record)
+    with pytest.raises(cp.CompilerProfileError, match="executable format is invalid"):
+        cp.profile_set(IMAGE, {"clang": record})
+
+
+def test_persisted_set_rejects_individually_valid_records_with_mixed_executable_formats():
+    records = _records(CPP)
+    arm_gcc = _records(CPP, machine="arm64")["gcc"]
+    cp.validate_profile(records["clang"])
+    cp.validate_profile(arm_gcc)
+    with pytest.raises(cp.CompilerProfileError, match="mixes executable ELF"):
+        cp.profile_set(IMAGE, {"clang": records["clang"], "gcc": arm_gcc})
+    persisted = {"schema": cp.SET_SCHEMA, "images": {IMAGE: {"clang": records["clang"], "gcc": arm_gcc}}}
+    with pytest.raises(cp.CompilerProfileError, match="mixes executable ELF"):
+        cp.merge_profile_sets([persisted])
+
+
+def test_set_consistency_does_not_tie_cross_compiler_targets_to_the_host_machine():
+    cross = CPP.replace("@@probe clang.dumpmachine 0\n|x86_64-pc-linux-gnu",
+                        "@@probe clang.dumpmachine 0\n|aarch64-unknown-linux-gnu")
+    records = _records(cross)
+    assert records["clang"]["target_axes"]["isa"] == "arm64"
+    assert records["clang"]["executable_format"]["machine"] == "x86_64"
+    persisted = cp.profile_set(IMAGE, records)
+    assert cp.merge_profile_sets([persisted])["images"][IMAGE]["clang"]["default_target"] == (
+        "aarch64-unknown-linux-gnu")
+
+
 def test_validation_rejects_ambiguous_and_malformed_sets():
     records = _records(CPP)
     with pytest.raises(cp.CompilerProfileError, match="does not match"):
@@ -504,6 +538,20 @@ def test_collector_records_disabled_signature_policy_as_not_enforced(tmp_path):
     for record in result["images"][IMAGE].values():
         assert record["provenance"]["image_identity"] == "docker-image-id/1"
         assert record["provenance"]["image_signature"] == "not-enforced"
+
+
+@pytest.mark.parametrize("enforced", [True, False], ids=["enforced", "not-enforced"])
+def test_collector_refuses_derived_image_rather_than_claim_its_signature(tmp_path, enforced):
+    # The executor verifies only a derived image's base; no record may present that as the
+    # derived digest's own signature, so step 1 refuses before any Docker call or verification.
+    derived = BuildProfile("cpp", "appsec-review/buildenv-cpp:derived", IMAGE, "10001:10001",
+                           derived_from_image_id=OTHER_IMAGE)
+    engine = Engine(CPP)
+    verifier = Verifier(enforced=enforced)
+    with pytest.raises(cp.CompilerProfileError, match="derived image cpp is not supported"):
+        cp.collect_compiler_profiles(derived, scratch=tmp_path, runner=engine, image_verifier=verifier)
+    assert engine.calls == [] and verifier.calls == []
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_collector_refuses_verifier_without_declared_enforcement_before_any_docker_call(tmp_path):
