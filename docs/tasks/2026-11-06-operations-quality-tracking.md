@@ -119,7 +119,49 @@ No new mounts or deployment were performed. The changed application Python modul
 future user-requested application-image rebuild/reload through the existing signed lifecycle;
 they are not hot-loaded merely because this source branch is integrated.
 
-Serialized WSL-main integration is pending the final ownership, dirty-tree and source-freeze
-inspection. Existing WSL run directories were observed; their age is not evidence of inactivity.
 The final custody audit additionally rejects hardlinked or writable catalog, journal and lock
 control files, not only artifact aliases; its focused regression is included in the final run.
+
+### Final tested implementation and local integration result
+
+Implementation/tested-code SHA: `de3178df75eaea298db22fdd78bcd2266e71031a`.
+The expanded seven-file command above, with
+`--basetemp=test/tmp/operations-b603f2c2-ready`, passed **107 tests in 31.23s** after
+incorporating current WSL main (already up to date). The existing fork warning remains the
+only warning. Subsequent handoff changes are documentation-only.
+
+Canonical WSL `main` remains `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`.
+Integration was **attempted and refused**, not performed. The OS-backed advisory
+`/home/wsollers/projects/appsec-review/.git/appsec-independent-main-integration.lock`
+was held during the final inspection and released on refusal. WSL main contains these nine
+pre-existing untracked provenance files:
+
+```text
+data/feeds/nvd/provenance/sha256-043a85b6911198e6/27749a75513307c695d4bfac76bd00964058a236416492321269cc7b201c0362.json
+data/feeds/nvd/provenance/sha256-1469bd3d33eb4026/7eca6c16e6e826c04ed9032e1d332c74eb5d71be9af14ee5a099362caf714fc4.json
+data/feeds/nvd/provenance/sha256-82b0d4a335e49053/a722a111f0f5416a884f49af7f066a940113b05c3489b9d5aaa419b9f9056672.json
+data/feeds/nvd/provenance/sha256-a4372f6ee319d62c/4ab663164a8322e5a9c8c94acfa1eb425a338a41de000b3f53929446c058f8f7.json
+data/feeds/nvd/provenance/sha256-c9b29a6b2c3d3dd9/c5b5c84591dc83c927ce30aad2c814bbee593f1df526f4fed7efbd352c844923.json
+data/feeds/nvd/provenance/sha256-ddc9f6d711fe276d/23b33002ad1633fcfca3a3f90fc4082ef79e305996eecd007d69a87d6628a693.json
+data/feeds/nvd/provenance/sha256-dfa1d05817d8d858/b5abd3ac85a3600c288246ab89452191ed158b76d9d855615286df4d3b246456.json
+data/feeds/nvd/provenance/sha256-dff574e49f810a38/48bdb2882c2e120c2fb767e05ba5c7977b893afd3db6b63d293848b4240853d6.json
+data/feeds/nvd/provenance/sha256-e38cf684c7b1a798/aeb9c8c99f014ff413e786c1a75258b0bde11a19a424e8f72f96b264b226de91.json
+```
+
+Those files were not read, deleted, moved, ignored, staged or committed by this package.
+The guard stopped at the dirty-tree check, so later source-freeze/runtime ownership checks
+were not claimed complete. Existing WSL run directories are not assumed inactive based on age.
+No customer/local service was queried to bypass the guard.
+
+Ready work is preserved on `william-sollers-xbox-operations-and-quality-tracking` in both
+the app-facing Windows repository and the authoritative WSL repository's Git database, with
+the separate Linux worktree retained. The final branch-tip SHA (including this documentation)
+is recorded in the session handoff. The Windows primary checkout was not touched.
+
+The integration owner must resolve the unrelated dirty provenance state explicitly, then
+incorporate any newer WSL main, rerun the affected offline units and retry the same serialized
+ownership/source-freeze checks before landing. No force checkout, reset, stash, automatic
+conflict resolution, push, PR, deployment or production cleanup was used.
+
+**Integration and acceptance suites: WRITTEN, NOT RUN. Live evaluation and real OTLP export:
+NOT RUN. Production retention application: NOT RUN.**
