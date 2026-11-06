@@ -9,7 +9,7 @@ import re
 import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
-from .model import Limits, Outcome
+from .model import Limits, Outcome, WIRE_STRING_LIMIT
 
 
 @dataclass
@@ -79,6 +79,12 @@ def sequence(node: Node) -> list[Node]:
     return result
 
 
+def bounded_text(value: str) -> str:
+    if len(value) > WIRE_STRING_LIMIT:
+        raise ParseError("scalar_limit", "literal or constructed value exceeds wire bound", "partial")
+    return value
+
+
 def scalar(node: Node, *, numeric: bool = False) -> str:
     tags = {"tag:yaml.org,2002:str"}
     if numeric:
@@ -87,9 +93,7 @@ def scalar(node: Node, *, numeric: bool = False) -> str:
         raise ParseError("expected_scalar", "expected a string" + (" or integer" if numeric else ""))
     if not isinstance(node.value, str):
         raise ParseError("invalid_node", "scalar contains an invalid value")
-    if len(node.value) > 4096:
-        raise ParseError("scalar_limit", "literal value exceeds supported bound", "partial")
-    return node.value
+    return bounded_text(node.value)
 
 
 def boolean(node: Node) -> bool:

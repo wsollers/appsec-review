@@ -166,7 +166,7 @@ def _metadata(builder: Builder, node: Node) -> tuple[str, str, dict[str, str]]:
 
 
 def kubernetes(builder: Builder, roots: list[Node]) -> None:
-    seen: set[tuple[str, str, str]] = set()
+    resource_services: dict[tuple[str, str, str], dict[str, Service]] = {}
     for root in roots:
         top = mapping(root)
         builder.fields(top, {"apiVersion", "kind", "metadata", "spec"}, root)
@@ -185,14 +185,19 @@ def kubernetes(builder: Builder, roots: list[Node]) -> None:
             raise ParseError("missing_spec", "Kubernetes resource requires metadata and spec")
         name, namespace, labels = _metadata(builder, top["metadata"])
         resource_key = (namespace, kind, name)
-        if resource_key in seen:
+        resource_evidence = builder.evidence(root, "kubernetes.resource.v1")
+        duplicate = resource_key in resource_services
+        declared_services = resource_services.setdefault(resource_key, {})
+        if duplicate:
             builder.gap("duplicate_resource", "duplicate resource declarations may be overlays",
-                        evidence=builder.evidence(root, "kubernetes.resource.v1"))
-        seen.add(resource_key)
+                        evidence=resource_evidence)
+            for previous in declared_services.values():
+                previous.unknowns.append("duplicate_declaration")
         spec_node = top["spec"]
         spec = mapping(spec_node)
         if kind == "Service":
-            _kubernetes_service(builder, name, namespace, root, spec)
+            service = _kubernetes_service(builder, name, namespace, root, spec)
+            declared_services[service.id] = service
             continue
         if kind != "Pod":
             builder.fields(spec, {"template", "selector", "replicas"}, spec_node)
@@ -238,7 +243,11 @@ def kubernetes(builder: Builder, roots: list[Node]) -> None:
             ev = builder.evidence(container, "kubernetes.container.v1")
             service = builder.service(f"kubernetes:{namespace}:{kind}:{name}:{container_name}",
                                       name, "kubernetes_workload", ev, namespace)
-            builder.labels[service.id] = labels
+            if duplicate:
+                service.unknowns.append("duplicate_declaration")
+            declared_services[service.id] = service
+            service.evidence.append(resource_evidence)
+            builder.labels.setdefault(service.id, []).append(labels)
             builder.fields(fields, {"name", "image", "ports", "securityContext"}, container, service)
             if "image" in fields:
                 _image(builder, service, fields["image"])
@@ -250,6 +259,13 @@ def kubernetes(builder: Builder, roots: list[Node]) -> None:
                     builder.gap("dynamic_identity", "service account interpolation is unresolved",
                                 service=service, evidence=ev)
                 else:
+                    if len(account) > 253 or not re.fullmatch(
+                        r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?"
+                        r"(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*", account,
+                    ):
+                        raise ParseError(
+                            "invalid_service_account", "serviceAccountName must be a DNS subdomain of at most 253 characters",
+                        )
                     identity_parts.append(f"serviceAccount:{namespace}:{account}")
             if user is not None:
                 identity_parts.append(f"uid:{user}")
@@ -288,7 +304,7 @@ def _security_user(builder: Builder, node: Node | None) -> str | None:
 
 
 def _kubernetes_service(builder: Builder, name: str, namespace: str, root: Node,
-                        spec: dict[str, Node]) -> None:
+                        spec: dict[str, Node]) -> Service:
     ev = builder.evidence(root, "kubernetes.service.v1")
     service = builder.service(f"kubernetes:{namespace}:Service:{name}", name, "kubernetes_service", ev, namespace)
     builder.fields(spec, {"selector", "ports", "type", "clusterIP"}, root, service)
@@ -300,7 +316,7 @@ def _kubernetes_service(builder: Builder, name: str, namespace: str, root: Node,
                      "deployment_declaration")
     if "ports" not in spec:
         builder.gap("ports_unknown", "service has no declared ports", service=service, evidence=ev)
-        return
+        return service
     for node in sequence(spec["ports"]):
         fields = mapping(node)
         builder.fields(fields, {"name", "port", "targetPort", "nodePort", "protocol"}, node, service)
@@ -323,3 +339,4 @@ def _kubernetes_service(builder: Builder, name: str, namespace: str, root: Node,
         if selector:
             builder.routes.append(Route(service.id, namespace, selector, target_port, ev, protocol))
         builder.bound()
+    return service

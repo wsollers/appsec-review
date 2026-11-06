@@ -21,10 +21,19 @@ SCHEMA = "appsec-review/deployment-inventory/1"
 EVIDENCE_SCHEMA = "appsec-review/deployment-evidence/1"
 OBSERVATION_SCHEMA = "appsec-review/deployment-observations/1"
 CATALOG_SCHEMA = "appsec-review/deployment-signatures/1"
+WIRE_STRING_LIMIT = 4096
 
 
 def identity(kind: str, value: object) -> str:
     return f"deployment:{kind}:" + hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def source_line_offsets(data: bytes) -> list[int]:
+    """Original byte boundaries, including empty lines and their exact terminators."""
+    offsets = [0]
+    for line in data.splitlines(keepends=True):
+        offsets.append(offsets[-1] + len(line))
+    return offsets
 
 
 @dataclass(frozen=True)
@@ -252,9 +261,9 @@ def resolve_evidence(evidence: Evidence, source: SourceDocument) -> bytes:
         raise ValueError("deployment evidence source identity differs")
     if not 0 <= evidence.start_byte < evidence.end_byte <= len(source.data):
         raise ValueError("deployment evidence byte span is invalid")
-    prefix = source.data[:evidence.start_byte]
-    span = source.data[evidence.start_byte:evidence.end_byte]
-    if (prefix.count(b"\n") + 1 != evidence.start_line
-            or evidence.start_line + span.rstrip(b"\r\n").count(b"\n") != evidence.end_line):
+    offsets = source_line_offsets(source.data)
+    if (not 1 <= evidence.start_line <= evidence.end_line < len(offsets)
+            or offsets[evidence.start_line - 1] != evidence.start_byte
+            or offsets[evidence.end_line] != evidence.end_byte):
         raise ValueError("deployment evidence line span differs")
-    return span
+    return source.data[evidence.start_byte:evidence.end_byte]

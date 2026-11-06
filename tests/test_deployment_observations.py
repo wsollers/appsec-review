@@ -159,3 +159,13 @@ def test_empty_snapshot_and_unknown_root_fields_are_explicit():
     assert result.outcome == "partial" and result.gaps[0].code == "no_observations"
     data["trusted"] = True
     assert imported(data)[0].outcome == "malformed"
+
+
+@pytest.mark.parametrize("ending", [b"\n\n", b"\n\n\n", b"\r\n\r\n", b"\r\n\r\n\r\n"],
+                         ids=["lf-one-blank", "lf-two-blanks", "crlf-one-blank", "crlf-two-blanks"])
+def test_imported_evidence_preserves_trailing_blank_lines(ending):
+    result, source = imported(json.dumps(batch()).encode() + ending)
+    assert result.outcome == "complete" and result.evidence
+    for reference in result.evidence:
+        assert reference.end_byte == len(source.data)
+        assert resolve_evidence(reference, source) == source.data

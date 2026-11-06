@@ -9,8 +9,9 @@ from yaml.nodes import Node
 
 from .model import (
     Evidence, EvidenceClass, Fact, Gap, Inventory, Limits, Listener, Relationship, Service, SourceDocument, identity,
+    source_line_offsets,
 )
-from .parsing import ParseError, node_lines
+from .parsing import ParseError, bounded_text, node_lines
 
 
 @dataclass(frozen=True)
@@ -39,13 +40,11 @@ class Builder:
         self.graph = Inventory(snapshot)
         self.graph.sources.append(self.source)
         self.claims: list[Claim] = []
-        self.labels: dict[str, dict[str, str]] = {}
+        self.labels: dict[str, list[dict[str, str]]] = {}
         self.routes: list[Route] = []
         self.rules: set[str] = set()
         self.lines = document.data.splitlines(keepends=True)
-        self.offsets = [0]
-        for line in self.lines:
-            self.offsets.append(self.offsets[-1] + len(line))
+        self.offsets = source_line_offsets(document.data)
 
     def bound(self) -> None:
         count = sum(len(getattr(self.graph, name)) for name in (
@@ -88,6 +87,8 @@ class Builder:
     def service(self, key: str, name: str, kind: Literal[
         "compose", "kubernetes_workload", "kubernetes_service", "configuration",
     ], evidence: str, namespace: str | None = None) -> Service:
+        bounded_text(key)
+        bounded_text(name)
         value = Service(identity("service", {
             "snapshot": self.graph.target_snapshot, "deployment": self.document.deployment,
             "variant": self.document.variant, "key": key,
@@ -97,20 +98,21 @@ class Builder:
             self.graph.services.append(value)
         else:
             value = existing
+            value.unknowns.append("duplicate_declaration")
         if evidence not in value.evidence:
             value.evidence.append(evidence)
         self.bound()
         return value
 
     def claim(self, service: Service, name: str, value: str, evidence: str) -> None:
-        self.claims.append(Claim(service.id, name, value, evidence))
+        self.claims.append(Claim(service.id, name, bounded_text(value), evidence))
         if evidence not in service.evidence:
             service.evidence.append(evidence)
         self.bound()
 
     def fact(self, service: Service, detail: str, evidence: str,
              evidence_class: EvidenceClass = "product_hint") -> None:
-        self.graph.facts.append(Fact(service.id, evidence_class, detail, (evidence,)))
+        self.graph.facts.append(Fact(service.id, evidence_class, bounded_text(detail), (evidence,)))
         self.bound()
 
     def listener(self, service: Service, address: str | None, port: int | None, evidence: str | tuple[str, ...], *,
@@ -130,6 +132,9 @@ class Builder:
     def edge(self, service: Service, target: str, target_port: int | None, evidence: str, *,
              kind: Literal["depends_on", "proxy_backend", "selects", "routes_to"] = "proxy_backend",
              route: str | None = None) -> None:
+        bounded_text(target)
+        if route is not None:
+            bounded_text(route)
         payload = {"source_service_id": service.id, "target": target, "target_port": target_port,
                    "kind": kind, "evidence": [evidence], "route": route}
         self.graph.relationships.append(Relationship(

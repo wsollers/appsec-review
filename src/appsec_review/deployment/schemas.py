@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator
 from appsec_review.retrieval.model import normalize_relative_path
 
 from .model import (
-    CATALOG_SCHEMA, EVIDENCE_SCHEMA, OBSERVATION_SCHEMA, SCHEMA, Inventory, Limits, identity,
+    CATALOG_SCHEMA, EVIDENCE_SCHEMA, OBSERVATION_SCHEMA, SCHEMA, WIRE_STRING_LIMIT, Inventory, Limits, identity,
 )
 from .parsing import ParseError
 
@@ -31,7 +31,7 @@ def record_schema(record: type) -> dict[str, Any]:
         if origin in (list, tuple):
             return {"type": "array", "maxItems": 50_000, "items": shape(args[0])}
         if annotation is str:
-            return {"type": "string", "maxLength": 4096}
+            return {"type": "string", "maxLength": WIRE_STRING_LIMIT}
         if annotation is int:
             return {"type": "integer"}
         if annotation is bool:

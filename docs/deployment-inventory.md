@@ -37,6 +37,8 @@ half-open byte range, versioned extraction rule and authority. IDs and JSON outp
 independent of input order. No full source document or secret setting value is copied into
 the inventory; extracted image/address/identity literals remain data. Consumers resolve
 excerpts through the accepted source boundary.
+Construction and resolution share exact full-line byte boundaries; trailing blank lines
+and LF/CRLF terminators are retained, not stripped before line-span verification.
 
 Service keys are:
 
@@ -105,6 +107,10 @@ for a service are **not merged**: product/image/version/identity and selected va
 unknown until the adapter supplies an actual selected/rendered result. Repeated differing
 configuration values are conflicting declarations, not a guessed last-value-wins result.
 Cross-variant services have distinct IDs; cross-deployment names never join.
+Duplicate Kubernetes resources in one stream retain every declaration's evidence, labels
+and listeners, but their services are marked `duplicate_declaration`. Selectors cannot
+combine one declaration's labels with another declaration's ports, or resolve through an
+ambiguous resource; unrelated unambiguous matches remain available.
 
 Outcome semantics:
 
@@ -126,6 +132,10 @@ and 10,000 extracted records. Hard safety ceilings are 256 documents, 2 MiB/docu
 16 MiB total, depth 64, 100,000 syntax events/tokens and 50,000 records.
 Scalar declarations are additionally bounded to 4,096 characters (Nginx tokens to 1,024)
 so extracted records cannot exceed the closed wire schema's literal bounds.
+Constructed identities, claims and fact descriptions are checked against the same wire
+bound. Kubernetes service-account names must be DNS subdomains of at most 253 characters;
+invalid identifiers yield a valid `malformed` outcome, and oversized constructed values
+yield a valid `partial` outcome without truncation.
 
 ## Imported observations and drift
 

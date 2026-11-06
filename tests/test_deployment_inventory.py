@@ -353,3 +353,166 @@ def test_oversized_literals_are_partial_not_invalid_output_or_invented_facts(for
     graph = extract(document(text, format))
     assert graph.outcome == "partial" and not graph.services
     assert "scalar_limit" in {item.code for item in graph.gaps}
+
+
+def test_unchanged_evidence_resolves_trailing_blank_lines():
+    source = document(b"port 6379\n\n", "redis")
+    graph = extract(source)
+    assert graph.outcome == "complete"
+    assert graph.evidence
+    for reference in graph.evidence:
+        assert resolve_evidence(reference, source) == source.data[reference.start_byte:reference.end_byte]
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["original-order", "reversed-order"])
+@pytest.mark.parametrize("target_port", ["web", "6379"], ids=["named", "numeric"])
+def test_duplicate_kubernetes_declarations_cannot_synthesize_selector_join(reverse, target_port):
+    source = document("""
+apiVersion: v1
+kind: Pod
+metadata: {name: cache, labels: {app: old}}
+spec:
+  containers:
+    - name: cache
+      image: redis
+      ports: [{name: web, containerPort: 6379}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: cache, labels: {app: new}}
+spec:
+  containers:
+    - name: cache
+      image: redis
+      ports: [{name: other, containerPort: 6380}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: frontend}
+spec:
+  selector: {app: new}
+  ports: [{port: 80, targetPort: web}]
+""", "kubernetes")
+    declarations = source.data.decode().split("---")
+    if reverse:
+        declarations[:2] = reversed(declarations[:2])
+    source = document("---".join(declarations).replace("targetPort: web", f"targetPort: {target_port}"), "kubernetes")
+    graph = extract(source)
+    assert graph.outcome == "partial"
+    assert {(item.name, item.port) for item in graph.listeners if item.role == "container"} == {
+        ("web", 6379), ("other", 6380),
+    }
+    assert not any(item.resolution == "resolved" for item in graph.relationships)
+    assert {item.resolution for item in graph.relationships} == {"ambiguous"}
+    assert "duplicate_resource" in {item.code for item in graph.gaps}
+    for reference in graph.evidence:
+        resolve_evidence(reference, source)
+
+
+def test_service_account_overflow_returns_valid_outcome():
+    source = document(
+        "apiVersion: v1\nkind: Pod\nmetadata: {name: cache}\nspec:\n"
+        f"  serviceAccountName: {'a' * 4096}\n"
+        "  containers: [{name: cache, image: redis}]\n",
+        "kubernetes",
+    )
+    graph = extract(source)
+    assert graph.outcome == "malformed"
+    assert not graph.services and not graph.evidence
+    assert "invalid_service_account" in {item.code for item in graph.gaps}
+
+
+@pytest.mark.parametrize(("filename", "format"), [
+    ("compose.yaml", "compose"), ("kubernetes.yaml", "kubernetes"), ("nginx.conf", "nginx"),
+    ("redis.conf", "redis"), ("postgresql.conf", "postgresql"),
+], ids=["compose", "kubernetes", "nginx", "redis", "postgresql"])
+@pytest.mark.parametrize("ending", [b"\n\n", b"\n\n\n", b"\r\n\r\n", b"\r\n\r\n\r\n"],
+                         ids=["lf-one-blank", "lf-two-blanks", "crlf-one-blank", "crlf-two-blanks"])
+def test_every_format_preserves_resolving_trailing_blank_line_evidence(filename, format, ending):
+    data = fixture(filename, format).data.rstrip(b"\r\n")
+    if ending.startswith(b"\r\n"):
+        data = data.replace(b"\n", b"\r\n")
+    source = document(data + ending, format, filename)
+    graph = extract(source)
+    assert graph.evidence
+    for reference in graph.evidence:
+        assert resolve_evidence(reference, source) == source.data[reference.start_byte:reference.end_byte]
+    if format in {"redis", "postgresql", "nginx"}:
+        assert any(reference.end_byte == len(source.data) for reference in graph.evidence)
+
+
+def test_duplicate_resource_ambiguity_covers_changed_container_names_and_service_declarations():
+    pod = """apiVersion: v1
+kind: Pod
+metadata: {{name: cache, labels: {{app: cache}}}}
+spec:
+  containers:
+    - name: {container}
+      image: redis
+      ports: [{{name: web, containerPort: 6379}}]
+"""
+    frontend = """apiVersion: v1
+kind: Service
+metadata: {name: frontend}
+spec:
+  selector: {app: cache}
+  ports: [{port: 80, targetPort: web}]
+"""
+    graph = extract(document("---\n".join([
+        pod.format(container="old"), pod.format(container="new"), frontend,
+    ]), "kubernetes"))
+    assert {(item.kind, "duplicate_declaration" in item.unknowns) for item in graph.services} == {
+        ("kubernetes_workload", True), ("kubernetes_service", False),
+    }
+    assert {item.resolution for item in graph.relationships} == {"ambiguous"}
+    assert len([item for item in graph.listeners if item.role == "container"]) == 2
+    healthy = pod.format(container="healthy").replace("name: cache, labels:", "name: healthy, labels:")
+    graph = extract(document("---\n".join([
+        pod.format(container="old"), pod.format(container="new"), healthy, frontend,
+    ]), "kubernetes"))
+    healthy_id = next(item.id for item in graph.services if item.name == "healthy")
+    assert {item.target_service_id for item in graph.relationships if item.resolution == "resolved"} == {healthy_id}
+    assert any(item.resolution == "ambiguous" for item in graph.relationships)
+    graph = extract(document("---\n".join([pod.format(container="one"), frontend, frontend]), "kubernetes"))
+    assert {item.resolution for item in graph.relationships} == {"ambiguous"}
+    assert graph.outcome == "partial"
+
+
+@pytest.mark.parametrize(("account", "valid"), [
+    ("a" * 253, True), ("a" * 254, False), ("valid.account-name", True),
+    ("Invalid", False), ("namespace/account", False), ("-invalid", False), ("", False),
+], ids=["max-name", "over-max-name", "dns-subdomain", "uppercase", "slash", "leading-hyphen", "empty"])
+def test_service_account_identifiers_are_bounded_before_identity_assembly(account, valid):
+    source = document(
+        "apiVersion: v1\nkind: Pod\nmetadata: {name: cache}\nspec:\n"
+        f"  serviceAccountName: '{account}'\n"
+        "  securityContext: {runAsUser: 1234567890}\n"
+        "  containers: [{name: cache, image: redis}]\n",
+        "kubernetes",
+    )
+    graph = extract(source)
+    if valid:
+        assert graph.outcome == "complete"
+        assert graph.services[0].identity == f"serviceAccount:default:{account};uid:1234567890"
+    else:
+        assert graph.outcome == "malformed" and not graph.services
+        assert "invalid_service_account" in {item.code for item in graph.gaps}
+
+
+def test_constructed_fact_overflow_is_a_valid_partial_outcome_not_truncation():
+    source = document(
+        "apiVersion: v1\nkind: Service\nmetadata: {name: frontend}\nspec:\n"
+        f"  type: {'a' * 4096}\n"
+        "  selector: {app: cache}\n  ports: [{port: 80}]\n",
+        "kubernetes",
+    )
+    graph = extract(source)
+    assert graph.outcome == "partial" and not graph.services and not graph.facts and not graph.evidence
+    assert "scalar_limit" in {item.code for item in graph.gaps}
+
+
+def test_evidence_line_boundaries_cannot_be_forged_with_midline_offsets():
+    source = document(b"port 6379\n\n", "redis")
+    reference = extract(source).evidence[0]
+    with pytest.raises(ValueError, match="line span"):
+        resolve_evidence(replace(reference, start_byte=reference.start_byte + 1), source)

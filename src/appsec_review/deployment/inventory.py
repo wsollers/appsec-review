@@ -147,6 +147,7 @@ def _combine(graph: Inventory, builders: list[Builder]) -> None:
             else:
                 existing = services[item.id]
                 existing.evidence.extend(item.evidence)
+                existing.unknowns.extend(item.unknowns)
                 if existing.kind == "configuration" and item.kind != "configuration":
                     existing.kind, existing.name, existing.namespace = item.kind, item.name, item.namespace
             if builder.document.format in {"compose", "kubernetes"}:
@@ -231,6 +232,10 @@ def _select(graph: Inventory, selections: Sequence[Selection]) -> None:
 
 def _relationships(graph: Inventory, builders: list[Builder], limits: Limits) -> None:
     services = {item.id: item for item in graph.services}
+    ambiguous_services = {
+        item.id for item in graph.services
+        if {"duplicate_declaration", "overlay_order_and_effective_values"} & set(item.unknowns)
+    }
     for edge in graph.relationships:
         if edge.resolution == "ambiguous":
             continue
@@ -239,7 +244,10 @@ def _relationships(graph: Inventory, builders: list[Builder], limits: Limits) ->
                       and item.variant == source.variant and item.name == edge.target
                       and item.kind in {"compose", "kubernetes_service"}
                       and (source.namespace is None or item.namespace == source.namespace)]
-        if len(candidates) == 1:
+        if source.id in ambiguous_services or any(item.id in ambiguous_services for item in candidates):
+            edge.resolution = "ambiguous"
+            edge.evidence.extend(ref for item in candidates for ref in item.evidence)
+        elif len(candidates) == 1:
             edge.target_service_id = candidates[0].id
             edge.resolution = "resolved"
             edge.evidence.extend(candidates[0].evidence)
@@ -251,14 +259,22 @@ def _relationships(graph: Inventory, builders: list[Builder], limits: Limits) ->
     labels: dict[str, list[dict[str, str]]] = defaultdict(list)
     for builder in builders:
         for key, value in builder.labels.items():
-            labels[key].append(value)
+            labels[key].extend(value)
     for builder in builders:
         for route in builder.routes:
             source = services[route.service_id]
-            candidates = [item for item in graph.services if item.kind == "kubernetes_workload"
-                          and item.namespace == route.namespace and item.deployment == source.deployment
-                          and item.variant == source.variant and len(labels[item.id]) == 1
-                          and all(labels[item.id][0].get(key) == value for key, value in route.selector.items())]
+            matching = [item for item in graph.services if item.kind == "kubernetes_workload"
+                        and item.namespace == route.namespace and item.deployment == source.deployment
+                        and item.variant == source.variant and any(
+                            all(declaration.get(key) == value for key, value in route.selector.items())
+                            for declaration in labels[item.id]
+                        )]
+            ambiguous = source.id in ambiguous_services or any(
+                item.id in ambiguous_services or len(labels[item.id]) != 1 for item in matching
+            )
+            candidates = ([] if source.id in ambiguous_services else [
+                item for item in matching if item.id not in ambiguous_services and len(labels[item.id]) == 1
+            ])
             resolved = False
             for target in candidates:
                 ports = [item for item in graph.listeners if item.service_id == target.id and item.role == "container"
@@ -276,18 +292,22 @@ def _relationships(graph: Inventory, builders: list[Builder], limits: Limits) ->
                                                             target.id, target.key, listener.port, "selects",
                                                             proof, resolution="resolved"))
                     resolved = True
-            if not resolved:
+            if not resolved or ambiguous:
+                unresolved_proof = sorted(set([
+                    route.evidence, *source.evidence,
+                    *(ref for item in matching if item.id in ambiguous_services for ref in item.evidence),
+                ]))
                 payload = {
                     "source_service_id": source.id, "target_service_id": None,
                     "target": identity("selector", route.selector),
                     "target_port": int(route.target_port) if route.target_port.isdecimal() else None,
-                    "kind": "selects", "evidence": [route.evidence, *source.evidence],
+                    "kind": "selects", "evidence": unresolved_proof,
                 }
                 graph.relationships.append(Relationship(
                     identity("relationship", payload), source.id, None,
                     identity("selector", route.selector),
                     int(route.target_port) if route.target_port.isdecimal() else None,
-                    "selects", [route.evidence, *source.evidence],
+                    "selects", unresolved_proof, resolution="ambiguous" if ambiguous else "unresolved",
                 ))
                 graph.gaps.append(Gap("selector_unresolved", "selector or target port has no unambiguous workload mapping",
                                       service_id=source.id, evidence=(route.evidence,)))
