@@ -526,9 +526,14 @@ def verify_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
     verify_handoff_integrity(root, handoff)
     if admitted:
         return
-    attempt = safe_path(root, handoff["resolving_paths"]["attempt"])
-    pinned = {item["path"]: item for item in handoff["artifacts"]}
-    for artifact in handoff["artifacts"]:
+    verify_attempt_provenance(root, handoff["resolving_paths"]["attempt"], handoff["artifacts"])
+
+
+def verify_attempt_provenance(root: Path, attempt_path: str, artifacts: list[Mapping[str, Any]]) -> None:
+    """Verify pinned shared artifacts and require every attempt-owned provenance file to be pinned."""
+    attempt = safe_path(root, attempt_path)
+    pinned = {item["path"]: item for item in artifacts}
+    for artifact in artifacts:
         if artifact["path"].startswith(OBJECTS + "/"):
             verify_reference(root, artifact)
         elif re.fullmatch(r"data/jobs/[^/]+/attempts/[^/]+/shared/[^/]+/[^/]+\.json", artifact["path"]):
