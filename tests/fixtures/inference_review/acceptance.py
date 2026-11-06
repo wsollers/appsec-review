@@ -90,11 +90,13 @@ def write_scenario(directory: Path, ids: Mapping[str, str], **values: Any) -> Pa
 
 def build_registry():
     from appsec_review.jobs.job_inference_security_review import build_job
+    from appsec_review.jobs.job_review_data_indexing import build_job as build_upstream
     from appsec_review.runtime.registry import JobRegistry
     from tests.fixtures.inference_review.fake_infer import ScriptedInfer
 
     registry = JobRegistry()
     registry.register(JOB, lambda: build_job(infer=ScriptedInfer.from_env(), repository_root=ROOT))
+    registry.register(UPSTREAM, build_upstream)
     return registry
 
 
