@@ -23,6 +23,7 @@ rulepacks = ["PyYAML==6.0.3"]
 # PyYAML. PyYAML is pinned to the deploy/dagster/requirements.lock.txt version.
 test = [
     "pytest>=8",
+    "pytest-xdist==3.8.0",
     "hypothesis==6.170.0",
     "PyYAML==6.0.3",
 ]

@@ -60,11 +60,16 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+SLOW_TEST_SECONDS = 10.0
+
+
 class _TestTimings:
-    """Stream every test's start, finish, phase durations and outcome into SQLite as it happens.
+    """Stream every test's start, finish, phase durations, worker and outcome into SQLite.
 
     The database sits beside ``--basetemp`` (pytest wipes the basetemp itself), and each row is
     committed immediately, so a stalled or killed session still shows the test that never finished.
+    Only the controlling process writes: under pytest-xdist it receives every worker's events.
+    ``duration_s`` is the sum of the test's own setup, call and teardown phases.
     """
 
     def __init__(self, path: Path) -> None:
@@ -76,9 +81,9 @@ class _TestTimings:
         self._db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute(
-            "CREATE TABLE IF NOT EXISTS test_timings (session_started REAL, pid INTEGER, nodeid TEXT, "
-            "file TEXT, started REAL, finished REAL, duration_s REAL, setup_s REAL, call_s REAL, "
-            "teardown_s REAL, outcome TEXT, PRIMARY KEY (session_started, nodeid))")
+            "CREATE TABLE IF NOT EXISTS test_timings (session_started REAL, pid INTEGER, worker TEXT, "
+            "nodeid TEXT, file TEXT, started REAL, finished REAL, duration_s REAL, setup_s REAL, "
+            "call_s REAL, teardown_s REAL, outcome TEXT, PRIMARY KEY (session_started, nodeid))")
         self._session = self._clock()
 
     def start(self, nodeid: str, file: str) -> None:
@@ -91,18 +96,26 @@ class _TestTimings:
         outcome = "xfailed" if hasattr(report, "wasxfail") and report.skipped else report.outcome
         if report.when != "call" and report.failed:
             outcome = "error"
+        gateway = getattr(getattr(report, "node", None), "gateway", None)
+        worker = getattr(gateway, "id", None) or "main"
         self._db.execute(
-            f"UPDATE test_timings SET {column} = ?, outcome = CASE "
+            f"UPDATE test_timings SET {column} = ?, worker = ?, outcome = CASE "
             "WHEN outcome IN ('failed', 'error') THEN outcome "
             "WHEN ? = 'passed' AND outcome <> 'running' THEN outcome ELSE ? END "
             "WHERE session_started = ? AND nodeid = ?",
-            (report.duration, outcome, outcome, self._session, report.nodeid))
+            (report.duration, worker, outcome, outcome, self._session, report.nodeid))
 
     def finish(self, nodeid: str) -> None:
         self._db.execute(
-            "UPDATE test_timings SET finished = ?, duration_s = ? - started "
+            "UPDATE test_timings SET finished = ?, "
+            "duration_s = COALESCE(setup_s, 0) + COALESCE(call_s, 0) + COALESCE(teardown_s, 0) "
             "WHERE session_started = ? AND nodeid = ?",
-            (self._clock(), self._clock(), self._session, nodeid))
+            (self._clock(), self._session, nodeid))
+
+    def slower_than(self, seconds: float) -> list[tuple[str, float, str]]:
+        return self._db.execute(
+            "SELECT nodeid, duration_s, outcome FROM test_timings WHERE session_started = ? "
+            "AND duration_s > ? ORDER BY duration_s DESC", (self._session, seconds)).fetchall()
 
     def close(self) -> None:
         self._db.close()
@@ -111,11 +124,35 @@ class _TestTimings:
 _TIMINGS: _TestTimings | None = None
 
 
+def _is_xdist_worker(config: pytest.Config) -> bool:
+    return hasattr(config, "workerinput")
+
+
+def _is_xdist_controller(config: pytest.Config) -> bool:
+    return not _is_xdist_worker(config) and getattr(config.option, "dist", "no") != "no"
+
+
+def _environment_guard_preflight() -> None:
+    """Under pytest-xdist no single test runs first, so check the guard before any worker starts."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_unit_environment_guard_preflight", _FIRST_TEST_MODULE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        module.test_unit_session_does_not_inherit_production_sizing()
+    except AssertionError as error:
+        pytest.exit(f"unit environment guard failed before starting workers:\n{error}", returncode=1)
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: pytest.Session) -> None:
     global _TIMINGS
     config = session.config
-    if getattr(config.option, "collectonly", False):
+    if getattr(config.option, "collectonly", False) or _is_xdist_worker(config):
         return
+    if _is_xdist_controller(config) and _FIRST_TEST_MODULE.is_file():
+        _environment_guard_preflight()
     basetemp = _resolved_from_invocation(config.getoption("basetemp"), Path(config.invocation_params.dir))
     _TIMINGS = _TestTimings(basetemp.parent / f"{basetemp.name}.timings.sqlite")
 
@@ -135,7 +172,19 @@ def pytest_runtest_logfinish(nodeid: str, location: tuple[str, int | None, str])
         _TIMINGS.finish(nodeid)
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
+    """Flag every test whose own setup, call and teardown took longer than SLOW_TEST_SECONDS."""
+    if _TIMINGS is None:
+        return
+    slow = _TIMINGS.slower_than(SLOW_TEST_SECONDS)
+    terminalreporter.section(f"tests slower than {SLOW_TEST_SECONDS:g}s: {len(slow)}")
+    for nodeid, seconds, outcome in slow:
+        terminalreporter.write_line(f"{seconds:8.2f}s {outcome:<8} {nodeid}")
+    terminalreporter.write_line(f"timings: {_TIMINGS.path}")
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    # Not sessionfinish: the terminal summary that lists slow tests runs inside sessionfinish.
     global _TIMINGS
     if _TIMINGS is not None:
         _TIMINGS.close()
@@ -145,12 +194,29 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 _FIRST_TEST_MODULE = _REPOSITORY_ROOT / "tests" / "test_000_unit_environment_guard.py"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--shuffle-seed", type=int, default=None, metavar="SEED",
+        help="run collected tests in an order shuffled by SEED to expose order-dependent tests; "
+             "rerun with the same SEED to reproduce. Every pytest-xdist worker uses the same order.")
+
+
+def pytest_report_header(config: pytest.Config) -> str | None:
+    seed = config.getoption("shuffle_seed")
+    return None if seed is None else f"test order shuffled with --shuffle-seed={seed}"
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Run the production-sizing guard before every other collected test.
+    """Optionally shuffle, then run the production-sizing guard before every other collected test.
 
     Path order alone does not do this: tests/orchestration/ sorts before tests/test_*.py.
     """
+    seed = config.getoption("shuffle_seed")
+    if seed is not None:
+        import random
+
+        random.Random(seed).shuffle(items)
     first = [item for item in items if Path(str(item.path)).resolve() == _FIRST_TEST_MODULE]
     if first:
         items[:] = first + [item for item in items if Path(str(item.path)).resolve() != _FIRST_TEST_MODULE]
