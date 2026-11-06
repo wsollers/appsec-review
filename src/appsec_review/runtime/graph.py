@@ -196,7 +196,8 @@ class GraphRunner:
                     if job.job_id in TARGET_INDEPENDENT_JOBS:
                         job_target, job_fingerprint = None, "none"
                     selected_upstream = input_projection(
-                        job.job_id, upstream, self.dependencies, self.propagating)
+                        job, completed_handoffs if job.contract is not None else upstream,
+                        self.dependencies, self.propagating)
                     if decision.action == "REUSE":
                         completed_handoffs[job.job_id] = str(decision.handoff_sha256)
                         if job.propagate_handoff:

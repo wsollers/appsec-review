@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.jobs.job_language_build.native import tool_kind as native_tool_kind
 from appsec_review.observability.spans import operation_span
 from appsec_review.runtime import UnitContext

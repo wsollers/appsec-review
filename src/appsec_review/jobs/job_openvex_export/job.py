@@ -18,7 +18,7 @@ from .contracts import (
     SizedArtifactRef, UPSTREAM_LICENSE_SHA256, UPSTREAM_LOCK_SHA256, VERIFIED_INPUTS_NAME,
     VerifiedInputs, canonical_bytes, json_body, normalize_timestamp, parse_json_bytes,
 )
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .inputs import BoundedInputReader, reprove_inputs, verify_inputs
 from .projection import assemble_export
 from .reporting import read_output, upstream_inputs
@@ -231,4 +231,4 @@ def build_job(*, repository_root: Path | None = None) -> Job:
              ("load.verify_inputs", "export.assemble")),
     )
     return Job(JOB_ID, "openvex_export", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=OPENVEX_EXPORT_HANDOFF_SCHEMA, units=units, datasets=DATASETS, consumes=CONSUMES)
+               schema_identity=OPENVEX_EXPORT_HANDOFF_SCHEMA, units=units, datasets=DATASETS, contract=CONTRACT)

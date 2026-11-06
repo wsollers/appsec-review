@@ -29,7 +29,6 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.storage import canonical_json
 
 JOB_ID = "job_openvex_export"
-CONSUMES = ("job_final_publication_gate", "job_inference_security_review")
 OPENVEX_CONTEXT = "https://openvex.dev/ns/v0.2.0"
 UPSTREAM_COMMIT = "61b5f885d0f481f48683c93345e49ef1a6e9fdff"
 UPSTREAM_SCHEMA_ID = "https://github.com/openvex/spec/openvex_json_schema_0.2.0.json"

@@ -53,7 +53,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
 from . import scopes as s
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 JOB_ID = s.JOB_ID
 SCHEMA = "appsec-review/code-graph-index/1"
@@ -418,4 +418,4 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
     implementation = None
     return Job(JOB_ID, "code_graph_index", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, implementation_identity=implementation, units=units, datasets=DATASETS,
-               consumes=CONSUMES)
+               contract=CONTRACT)

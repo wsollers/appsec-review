@@ -3,7 +3,6 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_debug_symbol_indexing/attempts/*"
-CONSUMES = ("job_artifact_indexing", "job_language_build")
 DATASETS = (
     indexed("normalized_symbols", "extract", "symbols", "appsec-review/retrieval-index/2",
             "Build-bound normalized symbols, layouts, inline frames and compilation units.",
@@ -31,3 +30,41 @@ DATASETS = (
                   artifacts=(_A + "/artifacts/debug-symbols/accepted-index.json",),
                   reason="summary identities and counts are represented by indexed coverage"),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+CONTRACT = JobContract(
+    inputs=(
+        InputRequirement("job_artifact_indexing", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_artifact_indexing", "artifact_catalog",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_artifact_indexing", "archive_members",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_artifact_indexing", "artifact_relationships",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_artifact_indexing", "artifact_index_summary",
+                         "appsec-review/artifact-indexing/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "topology_refinement_inputs",
+                         "appsec-review/build-topology-refinement/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "jvm_build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "language_build_receipts",
+                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_workspaces",
+                         "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+    ),
+    schedule_after=('job_artifact_indexing',),
+    dispatch=DispatchClass.REVIEW_GRAPH,
+    target_access=TargetAccess.CHECKOUT,
+    always_execute=False,
+    propagate_handoff=True,
+)
+CONSUMES = CONTRACT.consumes

@@ -202,16 +202,26 @@ def _upstream_records(context: Any, handoffs: Mapping[str, str]) -> list[tuple[s
     return records
 
 
+def _target_permissions(context: Any) -> tuple[bool, bool]:
+    from appsec_review.runtime.contracts import TargetAccess
+    contract = getattr(context, "contract", None)
+    if contract is not None:
+        return contract.target_access is not TargetAccess.CHECKOUT, contract.target_access is TargetAccess.NONE
+    from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS, TARGET_INDEPENDENT_METADATA_JOBS
+    return (context.config.job_id in TARGET_INDEPENDENT_JOBS,
+            context.config.job_id in TARGET_INDEPENDENT_METADATA_JOBS)
+
+
 def _evidence_snapshot(context: Any, records: list[tuple[str, str, Any]]) -> str:
     if context.source_fingerprint == "none":
-        from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS, TARGET_INDEPENDENT_METADATA_JOBS
-        if context.target_root is not None or context.config.job_id not in TARGET_INDEPENDENT_JOBS:
+        independent, metadata = _target_permissions(context)
+        if context.target_root is not None or not independent:
             raise ValueError("managed absent-target claim is not a target-independent job")
         snapshots = {record["target_snapshot"] for _, _, record in records
                      if record is not None and record["target_snapshot"] != "none"}
         if len(snapshots) > 1:
             raise ValueError("claimed upstream admission belongs to a different target")
-        if not snapshots and context.config.job_id not in TARGET_INDEPENDENT_METADATA_JOBS:
+        if not snapshots and not metadata:
             raise ValueError("target-independent consumer requires an authenticated target origin")
         return next(iter(snapshots), "none")
     snapshot = context.source_fingerprint
@@ -226,7 +236,6 @@ def resolve_evidence_target(context: Any, handoffs: Mapping[str, str]) -> str:
     if context.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
         return _evidence_snapshot(context, _upstream_records(context, handoffs))
     from appsec_review.retrieval.core import _accepted_handoff
-    from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS, TARGET_INDEPENDENT_METADATA_JOBS
     from .shared import verify_handoff
     snapshots = set()
     for job_id, digest in sorted(handoffs.items()):
@@ -240,10 +249,11 @@ def resolve_evidence_target(context: Any, handoffs: Mapping[str, str]) -> str:
         if snapshots - {context.source_fingerprint}:
             raise ValueError("claimed upstream handoff belongs to a different target")
         return context.source_fingerprint
-    if context.config.job_id in TARGET_INDEPENDENT_JOBS:
+    independent, metadata = _target_permissions(context)
+    if independent:
         if context.target_root is not None:
             raise ValueError("absent-target claim cannot grant target access")
-        if not snapshots and context.config.job_id not in TARGET_INDEPENDENT_METADATA_JOBS:
+        if not snapshots and not metadata:
             raise ValueError("target-independent consumer requires a verified target origin")
         return next(iter(snapshots), "none")
     return "none"

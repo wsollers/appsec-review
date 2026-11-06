@@ -10,7 +10,6 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_review_intake/attempts/*"
-CONSUMES = ()
 DATASETS = (
     artifact_only("model_preflight", "model_preflight", "configuration", "appsec-review/model-preflight/1",
                   "Provider and model availability report for configured model settings.",
@@ -26,3 +25,27 @@ DATASETS = (
                   artifacts=(_A + "/steps/publish_intake/tasks/publish_handoff/review-intake.json",),
                   reason="run binding record with host paths; its snapshot and hashes are inventory metadata"),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+CONTRACT = JobContract(
+    inputs=(
+        InputRequirement("job_target_acquisition", "target_acquisition",
+                         "appsec-review/target-acquisition/1",
+                         channel=InputChannel.EXTERNAL, authority=EvidenceAuthority.OPERATIONAL),
+        InputRequirement("job_target_acquisition", "system_acquisition",
+                         "appsec-review/target-system-acquisition/1",
+                         channel=InputChannel.EXTERNAL, authority=EvidenceAuthority.OPERATIONAL),
+        InputRequirement("binary_publication", "decompilation",
+                         "appsec-review/binary-decompilation/1", channel=InputChannel.EXTERNAL),
+    ),
+    schedule_after=('job_target_acquisition',),
+    dispatch=DispatchClass.REVIEW_GRAPH,
+    target_access=TargetAccess.CHECKOUT,
+    always_execute=False,
+    propagate_handoff=True,
+)
+CONSUMES = CONTRACT.consumes

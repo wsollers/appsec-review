@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Mapping
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
@@ -40,7 +40,7 @@ from .planning import (
     ambiguity_reasons, deterministic_plan, merge_proposal, summarize_catalog,
     validate_plan, validate_proposal, bounded_feedback, evidence_catalog, _publish_build_graph, model_safe,
 )
-from appsec_review.jobs.job_target_analysis_plan.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_target_analysis_plan.datasets import CONTRACT, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
 
 
@@ -647,4 +647,4 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                implementation_identity=implementation,
                validation_identity=None,
                units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

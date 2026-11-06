@@ -12,7 +12,6 @@ from appsec_review.runtime.datasets import artifact_only, protected
 _A = "data/jobs/job_poc_generation/attempts/*/steps"
 # The job reads the accepted review directly and the accepted native build; it writes
 # attempt-owned files consumed by the optional engineering jobs and the publication gate.
-CONSUMES = ("job_inference_security_review", "job_language_build")
 DATASETS = (
     artifact_only(
         "poc_generation_summary", "publish", "inference_review", "appsec-review/poc-generation-handoff/2",
@@ -36,3 +35,52 @@ DATASETS = (
         reason="model-written source is stored verbatim as data for developers and is never indexed as text, "
                "linked or executed; the report and the handoff carry its hashes"),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+from appsec_review.jobs.bound_artifacts import source_context_inputs
+
+CONTRACT = JobContract(
+    inputs=(
+        *source_context_inputs(),
+        InputRequirement("job_inference_security_review", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
+        InputRequirement("job_inference_security_review", "accepted_scope",
+                         "appsec-review/inference-review-accepted-scope/1", authority=EvidenceAuthority.ROUTING_CONTEXT),
+        InputRequirement("job_inference_security_review", "lead_triage",
+                         "application/json", authority=EvidenceAuthority.PROVISIONAL),
+        InputRequirement("job_inference_security_review", "review_packages",
+                         "appsec-review/review-package/6", authority=EvidenceAuthority.ROUTING_CONTEXT),
+        InputRequirement("job_inference_security_review", "review_cells",
+                         "appsec-review/cell-attempt-receipt/1", authority=EvidenceAuthority.PROVISIONAL),
+        InputRequirement("job_inference_security_review", "claim_ledger",
+                         "appsec-review/ledger-event/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_inference_security_review", "attack_chains",
+                         "appsec-review/attack-chain-manifest/1", authority=EvidenceAuthority.PROVISIONAL),
+        InputRequirement("job_inference_security_review", "scores_and_findings",
+                         "appsec-review/finding-package/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
+        InputRequirement("job_language_build", "topology_refinement_inputs",
+                         "appsec-review/build-topology-refinement/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "jvm_build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "language_build_receipts",
+                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_workspaces",
+                         "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+    ),
+    schedule_after=('job_inference_security_review',),
+    dispatch=DispatchClass.REVIEW_GRAPH,
+    target_access=TargetAccess.ACCEPTED_EVIDENCE,
+    always_execute=False,
+    propagate_handoff=True,
+)
+CONSUMES = CONTRACT.consumes

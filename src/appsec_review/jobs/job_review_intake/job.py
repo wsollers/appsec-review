@@ -11,7 +11,7 @@ from appsec_review.config.loader import (
 from appsec_review.storage import file_sha256
 from appsec_review.jobs.cataloging import Bounds, inventory, source_fingerprint, write_json
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.jobs.job_review_intake.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_review_intake.datasets import CONTRACT, DATASETS
 
 
 PREFLIGHT_SCHEMA = "appsec-review/model-preflight/1"
@@ -99,6 +99,12 @@ def _acquisition(unit: UnitContext, tree_sha256: str) -> Mapping[str, Any] | Non
                            destination=unit.unit_root / "target-acquisition.json")
     if record is not None:
         record["manifest"] = (unit.unit_root / record["manifest"]).relative_to(unit.job.run_root).as_posix()
+        from appsec_review.runtime.inputs import observe_external
+        schema = record["schema"]
+        observe_external(unit.job.run_root, "job_target_acquisition",
+                         "system_acquisition" if schema == "appsec-review/target-system-acquisition/1"
+                         else "target_acquisition", schema,
+                         {"path": record["manifest"], "sha256": file_sha256(unit.job.run_root / record["manifest"])})
     return record
 
 
@@ -142,6 +148,42 @@ def resolved_configuration(run_root: Path) -> Mapping[str, Any]:
     if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
         raise ValueError("run-owned resolved configuration hash mismatch")
     return json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
+
+
+def external_input_identity(target: Path | None, run_root: Path, repository_root: Path) -> str:
+    from appsec_review.target_acquisition.acquire import find_acquisition
+    from appsec_review.runtime.inputs import external_selection
+    document = resolved_configuration(run_root)
+    settings = document.get("target_acquisition") or {}
+    acquisition = (find_acquisition(repository_root, str(settings.get("records_dir", "data/target-acquisitions")),
+                                    target) if target is not None else None)
+    rows = []
+    raw = acquisition.read_bytes() if acquisition is not None else None
+    schema = json.loads(raw)["schema"] if raw is not None else None
+    for kind, expected in (("target_acquisition", "appsec-review/target-acquisition/1"),
+                           ("system_acquisition", "appsec-review/target-system-acquisition/1")):
+        available = schema == expected
+        rows.append({"producer": "job_target_acquisition", "output_kind": kind,
+                     "schema": expected, "selector": "target",
+                     "status": "available" if available else "not_applicable",
+                     "identity": {"sha256": hashlib.sha256(raw).hexdigest()}
+                     if available and raw is not None else None,
+                     "reason": None if available else "no matching acquisition manifest"})
+    binaries = resolve_binary_evidence(document, repository_root)["binaries"]
+    for binary in binaries:
+        available = binary["status"] == "resolved"
+        rows.append({"producer": "binary_publication", "output_kind": "decompilation",
+                     "schema": "appsec-review/binary-decompilation/1", "selector": binary["binary_id"],
+                     "status": "available" if available else "unavailable",
+                     "identity": {key: binary[key] for key in ("binary_id", "binary_sha256", "manifest_sha256")}
+                     if available else None,
+                     "reason": None if available else binary["reason"]})
+    if not binaries:
+        rows.append({"producer": "binary_publication", "output_kind": "decompilation",
+                     "schema": "appsec-review/binary-decompilation/1", "selector": "none",
+                     "status": "not_applicable", "identity": None,
+                     "reason": "no configured binary publications"})
+    return external_selection(rows)
 
 
 def build_job(*, check_models: ModelCheck | None = None) -> Job:
@@ -270,6 +312,13 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
 
     def resolve_publications(unit: UnitContext) -> Mapping[str, Any]:
         document = resolve_binary_evidence(resolved_configuration(unit.job.run_root), unit.job.repository_root)
+        from appsec_review.runtime.inputs import observe_external
+        for binary in document["binaries"]:
+            if binary["status"] == "resolved":
+                observe_external(unit.job.run_root, "binary_publication", "decompilation",
+                                 "appsec-review/binary-decompilation/1",
+                                 {"binary_id": binary["binary_id"], "binary_sha256": binary["binary_sha256"],
+                                  "manifest_sha256": binary["manifest_sha256"]})
         path = unit.unit_root / "binary-evidence.json"
         identity = write_json(path, document)
         identity["path"] = path.relative_to(unit.job.run_root).as_posix()
@@ -320,4 +369,4 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
     return Job("job_review_intake", "review_intake", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity="appsec-review/review-intake-job/1",
                implementation_identity=implementation, validation_identity=validation, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=external_input_identity)

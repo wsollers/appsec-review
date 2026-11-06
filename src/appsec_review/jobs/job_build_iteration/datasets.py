@@ -1,9 +1,9 @@
 """Protected state of internal build transactions, not a review-graph publication lane."""
 
+from appsec_review.runtime.datasets import EvidenceAuthority
 from appsec_review.runtime.datasets import protected
 
 
-CONSUMES = ()
 DATASETS = (
     protected(
         "iteration_records", "execute", "build", "appsec-review/build-iterations/1",
@@ -19,7 +19,7 @@ DATASETS = (
                 "completed", "invalidations", "failure-generation-selections", "contexts", "selections")),
         ),
         reason="requests and receipts retain exact recipes, host paths and environment; a controller "
-               "record is not an accepted top-level build result"),
+               "record is not an accepted top-level build result", authority=EvidenceAuthority.OPERATIONAL),
     protected(
         "workspace_records", "execute", "build", "application/json",
         "Shared build workspace custody, generations, products and recovery records.",
@@ -35,5 +35,30 @@ DATASETS = (
                 "intent", "failure", "recovery")),
         ),
         reason="workspace custody and product bindings are protected operational state; only the "
-               "language-build producer publishes accepted review evidence"),
+               "language-build producer publishes accepted review evidence", authority=EvidenceAuthority.OPERATIONAL),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+from dataclasses import replace
+from appsec_review.jobs.job_language_build.datasets import CONTRACT as LANGUAGE_CONTRACT
+
+CONTRACT = JobContract(
+    inputs=(
+        *(replace(item, availability=Availability.OPTIONAL, missing=MissingPolicy.GAP)
+          for item in LANGUAGE_CONTRACT.inputs),
+        InputRequirement("build_controller", "iteration_request",
+                         "appsec-review/build-iteration-request/1", channel=InputChannel.TRANSACTION,
+                         authority=EvidenceAuthority.OPERATIONAL,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
+    ),
+    schedule_after=(),
+    dispatch=DispatchClass.INTERNAL_TRANSACTION,
+    target_access=TargetAccess.CHECKOUT,
+    always_execute=True,
+    propagate_handoff=False,
+)
+CONSUMES = CONTRACT.consumes

@@ -10,7 +10,6 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_target_catalog/attempts/*"
-CONSUMES = ('job_review_intake',)
 DATASETS = (
     artifact_only("target_artifact_inputs", "repository_discovery", "artifacts",
                   "appsec-review/target-artifact-intake/1",
@@ -38,3 +37,28 @@ DATASETS = (
                   reason="normalized inputs of the source, analysis, components and build shards; the shards are "
                          "the queryable representation"),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+CONTRACT = JobContract(
+    inputs=(
+        InputRequirement("job_review_intake", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
+        InputRequirement("job_review_intake", "model_preflight",
+                         "appsec-review/model-preflight/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "binary_evidence",
+                         "appsec-review/binary-evidence-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "review_intake",
+                         "appsec-review/review-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+    ),
+    schedule_after=('job_review_intake',),
+    dispatch=DispatchClass.REVIEW_GRAPH,
+    target_access=TargetAccess.CHECKOUT,
+    always_execute=False,
+    propagate_handoff=True,
+)
+CONSUMES = CONTRACT.consumes

@@ -21,7 +21,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import SharedArtifacts, put_bytes, verify_reference
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_document_issue_analysis"
@@ -132,4 +132,4 @@ def build_job() -> Job:
     return Job(JOB_ID, "document_issue_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

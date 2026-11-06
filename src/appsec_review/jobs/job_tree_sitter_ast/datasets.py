@@ -11,7 +11,6 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 RAW = "raw tool streams and receipts may contain unredacted target content and host paths"
 _A = "data/jobs/job_tree_sitter_ast/attempts/*"
-CONSUMES = ('job_review_intake', 'job_target_catalog', 'job_language_build')
 DATASETS = (
     indexed("tree_sitter_ast", "parse", "syntax", "appsec-review/tree-sitter-normalizer/1",
             "Bounded Tree-sitter AST nodes, byte-exact spans, parent relations and unresolved syntax navigation.",
@@ -33,3 +32,56 @@ DATASETS = (
               "Parser container requests, raw output and streams.",
               artifacts=("data/treesitter/work/**", "data/treesitter/inputs/**"), reason=RAW),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+CONTRACT = JobContract(
+    inputs=(
+        InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "topology_refinement_inputs",
+                         "appsec-review/build-topology-refinement/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "jvm_build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "language_build_receipts",
+                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_workspaces",
+                         "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "model_preflight",
+                         "appsec-review/model-preflight/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "binary_evidence",
+                         "appsec-review/binary-evidence-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "review_intake",
+                         "appsec-review/review-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
+        InputRequirement("job_target_catalog", "target_artifact_inputs",
+                         "appsec-review/target-artifact-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "source_files",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "declaration_symbols",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "components",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "target_documents",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "build_units",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "catalog_documents",
+                         "appsec-review/target-catalog/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+    ),
+    schedule_after=('job_language_build',),
+    dispatch=DispatchClass.REVIEW_GRAPH,
+    target_access=TargetAccess.CHECKOUT,
+    always_execute=False,
+    propagate_handoff=True,
+)
+CONSUMES = CONTRACT.consumes

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections import defaultdict
 from collections.abc import Callable, Mapping
@@ -38,7 +38,7 @@ from .sources import (
     deployments_from_export, identity_hash, load_export, normalize_review_record, organization_from_export,
     review_records_from_export,
 )
-from appsec_review.jobs.job_change_context_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_change_context_analysis.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/change-context-analysis/1"
@@ -908,4 +908,4 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         if item.unit_id != "load.accepted_history" else item for item in units)
     return Job(PRODUCER, "change_context_analysis", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

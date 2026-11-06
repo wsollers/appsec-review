@@ -8,7 +8,7 @@ from typing import Any
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA, configured_models, resolved_configuration
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.jobs.job_model_connectivity.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_model_connectivity.datasets import CONTRACT, DATASETS
 
 
 ModelCheck = Callable[..., Mapping[str, Any]]
@@ -94,6 +94,6 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         "job_model_connectivity", "model_connectivity", UnitExecutor(units).execute,
         input_validators=(_validate,), schema_identity="appsec-review/model-connectivity-job/1",
         implementation_identity=implementation, validation_identity=implementation,
-        units=units, datasets=DATASETS, consumes=CONSUMES,
+        units=units, datasets=DATASETS, contract=CONTRACT,
         always_execute=True, propagate_handoff=False,
     )

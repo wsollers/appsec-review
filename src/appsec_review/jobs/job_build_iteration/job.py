@@ -10,7 +10,7 @@ from typing import Any
 
 from appsec_review.runtime import Job, Unit, UnitExecutor
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 
 def iteration_definition(worker: Callable[[Mapping[str, Any], str], Mapping[str, Any]]):
@@ -69,7 +69,8 @@ def iteration_inputs(run_root: Path, reference: Mapping[str, Any]):
     source = request["binding"]["source_identity"]
     if source_fingerprint(target) != source:
         raise ValueError("iteration target differs from its immutable source identity")
-    return LaunchInputs(target, source)
+    from appsec_review.runtime.inputs import selected_handoffs
+    return LaunchInputs(target, source, selected_handoffs(build_job(), run_root, None))
 
 
 def registered_definition(config, runner_factory):
@@ -99,6 +100,11 @@ def build_job() -> Job:
         )
         reference = json.loads(raw)
         request = read_reference(unit.job.run_root, reference)
+        from appsec_review.runtime.contracts import InputChannel
+        from appsec_review.runtime.inputs import observe_external
+        observe_external(unit.job.run_root, "build_controller", "iteration_request",
+                         "appsec-review/build-iteration-request/1", reference,
+                         channel=InputChannel.TRANSACTION)
         pending_path = unit.job.run_root / "data/build/iterations/pending.json"
         if not pending_path.is_file():
             raise ValueError("standalone iteration has no active controller claim")
@@ -113,5 +119,17 @@ def build_job() -> Job:
 
     units = (Unit("execute.node", execute),)
     return Job("job_build_iteration", "build_iteration", UnitExecutor(units).execute,
-               units=units, datasets=DATASETS, consumes=CONSUMES,
-               always_execute=True, propagate_handoff=False)
+               units=units, datasets=DATASETS, contract=CONTRACT,
+               always_execute=True, propagate_handoff=False, run_input_identity=iteration_input_identity)
+
+
+def iteration_input_identity(target: Path | None, run_root: Path) -> str:
+    from appsec_review.storage.atomic import canonical_json_sha256
+    from appsec_review.jobs.build_iterations import read_reference
+    from appsec_review.storage.shared import safe_path
+    path = safe_path(run_root, "data/build/iterations/pending.json")
+    if not path.is_file():
+        return canonical_json_sha256({"iteration_request": None})
+    request = json.loads(path.read_bytes())["request"]
+    read_reference(run_root, request)
+    return canonical_json_sha256({"iteration_request": request})

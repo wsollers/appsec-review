@@ -16,7 +16,7 @@ from appsec_review.reporting.dossier_render import render_dossier
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .inputs import bound_json, finding_binding, load_inputs, verify_snapshot
 from .settings import DossierPublicationSettings
 
@@ -49,9 +49,8 @@ def _accepted_review(root: Path, schemas: SchemaSet, *, max_packages: int):
 
 
 def _core(root: Path, manifest: Mapping[str, str]):
-    from appsec_review.retrieval.core import RetrievalCore
-    return RetrievalCore(root.parent, root.name, manifest_sha256=manifest["sha256"],
-                         manifest_path=root / manifest["path"])
+    from appsec_review.jobs.bound_artifacts import source_context_core
+    return source_context_core(root, manifest)
 
 
 def _poc(document: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -268,7 +267,7 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
     units = (Unit("load.verify_inputs", load), Unit("dossiers.create", create, ("load.verify_inputs",)),
              Unit("acceptance.publish_handoff", publish, ("load.verify_inputs", "dossiers.create")))
     return Job(JOB_ID, "dossier_publication", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=DOSSIER_PUBLICATION_HANDOFF_SCHEMA, units=units, datasets=DATASETS, consumes=CONSUMES)
+               schema_identity=DOSSIER_PUBLICATION_HANDOFF_SCHEMA, units=units, datasets=DATASETS, contract=CONTRACT)
 
 
 def verify_publication(root: Path, summary: Mapping[str, Any]) -> None:
