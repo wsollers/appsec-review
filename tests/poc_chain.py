@@ -168,10 +168,7 @@ class PocChain:
             review.pop("poc_candidates")
         else:
             review["poc_candidates"] = [dict(item) for item in candidates]
-        payload = canonical_json(review)
-        review_path.write_bytes(payload)
-        artifact["sha256"], artifact["size_bytes"] = hashlib.sha256(payload).hexdigest(), len(payload)
-        handoff_path.write_bytes(canonical_json(handoff))
+        repin(handoff_path.parent, {review_path: canonical_json(review)})
         pointer["handoff_sha256"] = hashlib.sha256(handoff_path.read_bytes()).hexdigest()
         pointer_path.write_text(json.dumps(pointer, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
@@ -242,6 +239,50 @@ def load_chain(base: Path, meta: Path) -> PocChain:
                      record["findings"], record["packages"])
     chain.restore()
     return chain
+
+
+def repin(attempt: Path, changed: Mapping[Path, bytes]) -> None:
+    """Re-seal an accepted attempt after rewriting artifacts, so only the injected content differs.
+
+    Admission verifies every digest the handoff, result, outcome and unit records pin, so each JSON
+    record in the attempt that carries a replaced digest is rewritten with the new one (and its size),
+    until nothing changes.
+    """
+    digests: dict[str, tuple[str, int]] = {}
+
+    def write(path: Path, payload: bytes) -> None:
+        before, after = hashlib.sha256(path.read_bytes()).hexdigest(), hashlib.sha256(payload).hexdigest()
+        if before != after:
+            digests[before] = (after, len(payload))
+            path.write_bytes(payload)
+
+    def update(node: Any) -> bool:
+        touched = False
+        if isinstance(node, dict):
+            for key, value in list(node.items()):
+                if isinstance(value, str) and value in digests:
+                    node[key] = digests[value][0]
+                    if key == "sha256" and "size_bytes" in node:
+                        node["size_bytes"] = digests[value][1]
+                    touched = True
+                else:
+                    touched = update(value) or touched
+        elif isinstance(node, list):
+            for value in node:
+                touched = update(value) or touched
+        return touched
+
+    for path, payload in changed.items():
+        write(path, payload)
+    while True:
+        rewritten = False
+        for path in sorted(attempt.rglob("*.json")):
+            document = json.loads(path.read_bytes())
+            if update(document):
+                write(path, canonical_json(document))
+                rewritten = True
+        if not rewritten:
+            return
 
 
 def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
