@@ -124,14 +124,15 @@ def test_guidance_validates_and_pins_exact_registered_role_and_job(tmp_path, rol
     import hashlib
     import json
     from appsec_review.storage import canonical_json
+    from appsec_review.guidance.compose import render_prompt, verify_bundle
     text, digest = guidance(support.ROOT, tmp_path, role, job_id=job)
     pinned = tmp_path / "data" / "guidance" / digest
     bundle = json.loads((pinned / "bundle.json").read_text())
-    assert bundle["role"] == role and bundle["job_id"] == job
-    assert hashlib.sha256(canonical_json(bundle)).hexdigest() == digest
-    assert all(hashlib.sha256((pinned / name).read_bytes()).hexdigest() == sha
-               for name, sha in bundle["files"].items())
-    assert text == "\n\n".join((pinned / name).read_text() for name in ("governing-rules.md", f"{role}.md"))
+    assert bundle["role_id"] == role and bundle["job"] == job
+    assert verify_bundle(bundle) == digest
+    section = next(item for item in bundle["sections"] if item["name"] == "role")
+    assert hashlib.sha256(section["text"].encode()).hexdigest() == section["source_sha256"]
+    assert text == render_prompt(bundle) == (pinned / "prompt.md").read_text()
     assert guidance(support.ROOT, tmp_path, role, job_id=job) == (text, digest)
 
 

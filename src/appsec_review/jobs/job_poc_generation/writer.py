@@ -22,7 +22,6 @@ from pathlib import Path, PurePosixPath
 import subprocess
 from typing import Any, Protocol
 
-from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import ModelOutputError, ReviewModelRequest
 from appsec_review.storage import atomic_bytes, canonical_json
 
@@ -60,28 +59,12 @@ class Guidance:
 
 def load_guidance(repository_root: Path, run_root: Path, job_id: str, profile: ModelProfile) -> Guidance:
     """The shared rules, the role and the runtime skill, pinned under ``data/guidance/<sha256>/``."""
-    from appsec_review.storage.shared import publish_named
-    root = Path(repository_root)
-    skill = load_runtime_skill(root, SKILL, job_id=job_id)
-    files = {"governing-rules.md": (root / GOVERNING).read_text(encoding="utf-8"),
-             "role.md": (root / ROLE_FILE).read_text(encoding="utf-8"), "skill.md": skill.text}
-    identity = {"provider": profile.provider, "model": profile.model, "reasoning": profile.reasoning,
-                "role": ROLE, "runtime_skill_sha256": skill.sha256}
-    digest = hashlib.sha256(b"\0".join([*(files[name].encode() for name in sorted(files)),
-                                        canonical_json(identity)])).hexdigest()
-    destination = Path(run_root) / "data" / "guidance" / digest
-    for name, text in sorted(files.items()):
-        path = destination / name
-        payload = text.encode()
-        if path.is_file() and path.read_bytes() != payload:
-            raise ValueError("poc writer guidance changed after pinning")
-        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
-    metadata = canonical_json({**identity, "guidance_sha256": digest})
-    pinned = destination / "model-identity.json"
-    if pinned.is_file() and pinned.read_bytes() != metadata:
-        raise ValueError("poc writer model identity changed after pinning")
-    publish_named(run_root, pinned, metadata, namespace="guidance", computation=identity)
-    return Guidance("\n\n".join((files["governing-rules.md"], files["role.md"], files["skill.md"])), digest)
+    from appsec_review.guidance.fragments import GuidanceError
+    from appsec_review.guidance.workers import publish_worker_guidance
+    if job_id != "job_poc_generation":
+        raise GuidanceError("poc writer is not allowed for this job")
+    text, digest = publish_worker_guidance(repository_root, run_root, "poc_writer", model=asdict(profile))
+    return Guidance(text, digest)
 
 
 @dataclass(slots=True)
@@ -208,7 +191,8 @@ def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfil
                           "max_requests_per_turn": MAX_REQUESTS_PER_TURN,
                           "retrieve_shape": {"action": "retrieve", "requests": [
                               {"tool": "find_declaration", "parameters": {"name": "<name>"}}]},
-                          "tool_catalog": _tool_catalog(), "max_queries": profile.max_queries}}
+                          "tool_catalog": _tool_catalog(), "max_queries": profile.max_queries,
+                          "max_turns": profile.max_turns}}
     for turn_number in range(1, profile.max_turns + 1):
         final_required = turn_number == profile.max_turns or attempt.queries >= profile.max_queries
         request = ReviewModelRequest(

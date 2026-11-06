@@ -127,12 +127,18 @@ agents that inspect or change the repository. It is not a prompt for review work
   gaps. Identify any integration, acceptance, or live Dagster validation still needed; passing
   unit tests does not establish that those checks passed.
 
-## Deferred work
+## Signing policy
 
-- TODO (deferred): design container-image signing and eventual Python distribution/artifact
-  signing. Signature format, verification/trust model, and key ownership remain future design
-  decisions. This is not a restart, merge, or test gate and does not authorize implementation or
-  provisioning.
+- Container-image signing and launch verification are implemented. The typed `[signing]`
+  configuration selects image enforcement: `disabled` by default, or `required` for
+  fail-closed envelope verification against configured trust anchors. Explicit image verification
+  checks signatures even when launch enforcement is disabled. Preserve this existing policy;
+  documentation updates do not authorize enabling enforcement, provisioning keys, or bypassing
+  a configured launch check.
+- Signed Python package-tree manifests, bootstrap verification and verified-byte imports are
+  also implemented under `src/appsec_review/signing/`. Preserve their configured launch
+  enforcement; do not describe implemented verification as deferred or introduce new signing
+  requirements through an unrelated change.
 
 ## Workspace hygiene
 

@@ -305,7 +305,8 @@ def test_registry_keeps_owasp_compatibility_and_closed_records() -> None:
     assert owasp_registry(ROOT)["version"] == registry["version"]
     task = {"task_id": "t", "question": "Assess one bounded control.", "proof_obligations": [],
             "prohibited_claims": []}
-    assert owasp_compose(ROOT, role="control_assessor", persona="api_web", task=task)["persona"]["id"] == "api_web"
+    composed = owasp_compose(ROOT, role="control_assessor", persona="api_web", task=task)
+    assert next(item for item in composed["sections"] if item["name"] == "persona")["id"] == "api_web"
     widened = json.loads(json.dumps(registry))
     widened["roles"]["hypothesis_hunter"]["model"] = "big"
     with pytest.raises(GuidanceError, match="widens shared authority"):

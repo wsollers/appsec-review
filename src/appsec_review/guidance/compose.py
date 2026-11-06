@@ -33,6 +33,9 @@ from .skills import load_runtime_skill, select_review_procedures
 REGISTRY_SCHEMA = "appsec-review/guidance-registry/1"
 BUNDLE_SCHEMA = "appsec-review/guidance-bundle/3"
 LEGACY_BUNDLE_SCHEMA = "appsec-review/guidance-bundle/2"
+SELECTED_BUNDLE_SCHEMA = "appsec-review/guidance-bundle/4"
+WORKBENCH_BUNDLE_SCHEMA = "appsec-review/guidance-bundle/1"
+TRIAGE_BUNDLE_SCHEMA = "appsec-review/guidance-bundle-triage/1"
 REGISTRY_PATH = Path("pipeline") / "guidance" / "registry.json"
 GOVERNING_PATH = Path("pipeline") / "prompt-fragments" / "governing-rules.md"
 REVIEW_JOB = "inference-security-review"
@@ -150,7 +153,11 @@ def governing_rules(repository_root: Path) -> str:
 def _read(repository_root: Path, relative: str, owner: str) -> str:
     path = Path(repository_root) / relative
     _require(path.is_file(), f"{owner} file is unavailable: {relative}")
-    return path.read_text(encoding="utf-8")
+    _require(not path.is_symlink() and not any(parent.is_symlink() for parent in path.parents
+                 if parent != Path(repository_root) and Path(repository_root) in parent.parents),
+             f"{owner} file must not be a symbolic link: {relative}")
+    with path.open(encoding="utf-8", newline="") as stream:
+        return stream.read()
 
 
 def load_fragment(repository_root: Path, registry: Mapping[str, Any], *, kind: str, fragment_id: str,
@@ -285,15 +292,63 @@ def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str
     return bundle
 
 
+def compose_selected_bundle(repository_root: Path, *, job: str, role: str,
+                            sections: list[dict[str, Any]],
+                            identity: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Seal explicitly job-selected sections under the common governing/publishing contract.
+
+    Callers select repository-owned fragments and registered skills, never target-owned guidance.
+    This format does not migrate or rewrite older immutable bundles.
+    """
+    registry = load_registry(repository_root)
+    _require(role in registry["roles"], f"worker role is not registered: {role}")
+    names = [item.get("name") for item in sections]
+    expected = [name for name in SECTION_ORDER if name != "governing_rules" and name in names]
+    _require(names == expected and {"role", "task"} <= set(names),
+             "selected worker sections must contain role/task in assembly order")
+    _require(next(item for item in sections if item["name"] == "role").get("id") == role,
+             "selected role does not match the worker")
+    selected = [_sealed({"name": "governing_rules", "id": "governing-rules",
+                         "text": _read(repository_root, GOVERNING_PATH.as_posix(), "governing rules")})]
+    selected.extend(_sealed(_json_value(item, "selected section")) for item in sections)
+    bundle: dict[str, Any] = {
+        "schema": SELECTED_BUNDLE_SCHEMA, "registry_version": registry["version"], "job": job,
+        "role_id": role, "identity": _json_value(dict(identity or {}), "worker identity"),
+        "selected_sections": [item["name"] for item in selected], "sections": selected,
+        "section_sha256": {item["name"]: item["sha256"] for item in selected},
+    }
+    bundle["sha256"] = bundle_sha256(bundle)
+    verify_bundle(bundle)
+    _require(len(render_prompt(bundle).encode("utf-8")) <= 48 * 1024,
+             "selected worker prompt exceeds its 48 KiB assembly bound")
+    return bundle
+
+
 def verify_bundle(bundle: Mapping[str, Any]) -> str:
     """Recompute section and bundle hashes; any mismatch is a framework-integrity failure."""
     identity = str(bundle.get("sha256", ""))
     _require(bool(re.fullmatch(r"[0-9a-f]{64}", identity)), "guidance bundle identity is invalid")
-    if bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA}:
+    schema = bundle.get("schema")
+    _require(schema in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA, SELECTED_BUNDLE_SCHEMA,
+                        WORKBENCH_BUNDLE_SCHEMA, TRIAGE_BUNDLE_SCHEMA},
+             "unsupported guidance bundle schema")
+    if schema != WORKBENCH_BUNDLE_SCHEMA:
         sections = bundle["sections"]
-        order = SECTION_ORDER if bundle["schema"] == BUNDLE_SCHEMA else LEGACY_SECTION_ORDER
+        order = (SECTION_ORDER if schema == BUNDLE_SCHEMA else
+                 LEGACY_SECTION_ORDER if schema == LEGACY_BUNDLE_SCHEMA else
+                 ("governing_rules", "role", "task") if schema == TRIAGE_BUNDLE_SCHEMA else
+                 tuple(bundle["selected_sections"]))
+        if schema == SELECTED_BUNDLE_SCHEMA:
+            if (order != tuple(name for name in SECTION_ORDER if name in order)
+                    or not {"governing_rules", "role", "task"} <= set(order)):
+                raise IntegrityError("selected guidance sections are not a governed worker contract")
+            role = next(item for item in sections if item["name"] == "role")
+            if role["id"] != bundle["role_id"]:
+                raise IntegrityError("selected guidance role identity mismatch")
         if [section["name"] for section in sections] != list(order):
             raise IntegrityError("guidance bundle sections are not in assembly order")
+        if set(bundle["section_sha256"]) != set(order):
+            raise IntegrityError("guidance section hash inventory mismatch")
         for section in sections:
             recorded = bundle["section_sha256"].get(section["name"])
             if section_sha256(section) != section["sha256"] or recorded != section["sha256"]:
@@ -302,6 +357,9 @@ def verify_bundle(bundle: Mapping[str, Any]) -> str:
                 for procedure in section["items"]:
                     if text_sha256(procedure["text"]) != procedure["source_sha256"]:
                         raise IntegrityError(f"guidance procedure source hash mismatch: {procedure['id']}")
+            if schema == SELECTED_BUNDLE_SCHEMA and "source_sha256" in section:
+                if text_sha256(section["text"]) != section["source_sha256"]:
+                    raise IntegrityError(f"guidance source hash mismatch: {section['name']}")
     for procedure in bundle.get("procedures", ()):
         if text_sha256(procedure["text"]) != procedure["source_sha256"]:
             raise IntegrityError(f"guidance procedure source hash mismatch: {procedure['id']}")
@@ -313,13 +371,14 @@ def verify_bundle(bundle: Mapping[str, Any]) -> str:
 def render_prompt(bundle: Mapping[str, Any]) -> str:
     """Render an inference bundle as delimited sections; the receipt stays structured JSON."""
     verify_bundle(bundle)
-    _require(bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA},
+    _require(bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA, SELECTED_BUNDLE_SCHEMA,
+                                    TRIAGE_BUNDLE_SCHEMA},
              "only inference guidance bundles render")
     parts: list[str] = []
     for section in bundle["sections"]:
-        if section["name"] in {"persona", "stack"}:
+        if section["name"] in {"persona", "stack"} and "sections" in section:
             body = "\n\n".join(f"## {item['heading']}\n{item['text']}" for item in section["sections"])
-        elif section["name"] == "task":
+        elif section["name"] == "task" and "input" in section:
             task_input = canonical_json(section["input"]).decode().strip()
             body = section["text"] + "\n\nTask input (structured):\n" + task_input
         elif section["name"] == "receipt":
@@ -329,6 +388,10 @@ def render_prompt(bundle: Mapping[str, Any]) -> str:
             body = "\n\n".join(item["text"] for item in section["items"])
         else:
             body = section["text"].strip()
+        if bundle["schema"] == SELECTED_BUNDLE_SCHEMA and section["name"] == "task":
+            body += "\n\nOutput contract (application-selected):\n" + canonical_json({
+                key: section[key] for key in ("response_schema", "citation_contract") if key in section
+            }).decode().strip()
         label = section.get("id", section["name"])
         parts.append(f"<<<{section['name']} id={label} sha256={section['sha256']}>>>\n{body.strip()}\n"
                      f"<<<end {section['name']}>>>")
@@ -344,7 +407,8 @@ def pin_bundle(run_root: Path, bundle: Mapping[str, Any], *,
     publish_named(Path(run_root), root / "bundle.json", canonical_json(dict(bundle)),
                   namespace="guidance", computation={"bundle_sha256": identity})
     extra = dict(files or {})
-    if bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA}:
+    if bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA, SELECTED_BUNDLE_SCHEMA,
+                               TRIAGE_BUNDLE_SCHEMA}:
         extra.setdefault("prompt.md", render_prompt(bundle))
     for name, text in sorted(extra.items()):
         _require(bool(re.fullmatch(r"[a-z0-9][a-z0-9.\-]*\.md", name)), f"pinned guidance file name is invalid: {name}")
@@ -353,8 +417,78 @@ def pin_bundle(run_root: Path, bundle: Mapping[str, Any], *,
     return {"bundle_sha256": identity, "path": (Path("data") / "guidance" / identity / "bundle.json").as_posix()}
 
 
+def load_pinned_prompt(run_root: Path, identity: str) -> str:
+    """Read/authenticate a common or legacy specialized publication without rewriting its bytes."""
+    from appsec_review.storage.shared import consume_named, safe_path
+    _require(bool(re.fullmatch(r"[0-9a-f]{64}", identity)), "invalid pinned guidance identity")
+    directory = Path(run_root) / "data" / "guidance" / identity
+
+    def read(name: str) -> bytes:
+        _require(bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.(md|json)", name)),
+                 "invalid pinned guidance file name")
+        path = safe_path(Path(run_root), (directory / name).relative_to(run_root).as_posix())
+        consume_named(Path(run_root), path, namespace="guidance")
+        _require(path.stat().st_size <= 256 * 1024, "pinned guidance file exceeds its byte bound")
+        return path.read_bytes()
+
+    if (directory / "bundle.json").is_file():
+        raw = read("bundle.json")
+        bundle = json.loads(raw)
+        if bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA, SELECTED_BUNDLE_SCHEMA,
+                                    WORKBENCH_BUNDLE_SCHEMA, TRIAGE_BUNDLE_SCHEMA}:
+            if verify_bundle(bundle) != identity:
+                raise IntegrityError("pinned guidance directory identity mismatch")
+            if bundle["schema"] == WORKBENCH_BUNDLE_SCHEMA:
+                return canonical_json(bundle).decode("utf-8")
+            prompt = render_prompt(bundle)
+            if (directory / "prompt.md").is_file() and read("prompt.md") != prompt.encode("utf-8"):
+                raise IntegrityError("pinned guidance prompt differs from its bundle")
+            return prompt
+        native = bundle.get("schema") == "appsec-review/native-inference-guidance/1"
+        remediation = set(bundle) == {"job_id", "role", "registry_version", "responsibility", "files"}
+        _require(native or remediation, "unsupported legacy guidance publication")
+        if hashlib.sha256(raw).hexdigest() != identity:
+            raise IntegrityError("legacy guidance manifest identity mismatch")
+        files = {}
+        for name, ref in bundle["files"].items():
+            payload = read(name)
+            expected = ref["sha256"] if native else ref
+            if hashlib.sha256(payload).hexdigest() != expected or native and len(payload) != ref["size_bytes"]:
+                raise IntegrityError("legacy guidance source identity mismatch")
+            files[name] = payload.decode("utf-8")
+        order = (("governing-rules.md", "role.md", "persona.md", "task.md", "skill.md") if native else
+                 ("governing-rules.md", f"{bundle['role']}.md"))
+        return "\n\n".join(files[name] for name in order)
+
+    metadata = json.loads(read("model-identity.json"))
+    _require(metadata.get("guidance_sha256") == identity, "legacy model identity differs from directory")
+    model = {key: value for key, value in metadata.items() if key != "guidance_sha256"}
+    if model.get("role") == "native_dependency_resolver":
+        names = ("persona.md", "role.md", "task.md", "skill.md")
+        files = {name: read(name) for name in names}
+        original = b"\0".join([*(files[name] for name in sorted(files)), canonical_json(model)])
+    elif model.get("role") == "poc_writer":
+        names = ("governing-rules.md", "role.md", "skill.md")
+        files = {name: read(name) for name in names}
+        original = b"\0".join([*(files[name] for name in sorted(files)), canonical_json(model)])
+    elif str(model.get("role", "")).startswith("build_engineer_"):
+        names = ("persona.md", "role.md", "task.md")
+        files = {name: read(name) for name in names}
+        original = b"\0".join([*(files[name] for name in names), canonical_json(model)])
+    elif set(model) == {"provider", "model", "reasoning"}:
+        names = ("SKILL.md",)
+        files = {name: read(name) for name in names}
+        original = files["SKILL.md"] + b"\0" + canonical_json(model)
+    else:
+        raise GuidanceError("unsupported legacy worker publication")
+    if hashlib.sha256(original).hexdigest() != identity:
+        raise IntegrityError("legacy guidance content identity mismatch")
+    return "\n\n".join(files[name].decode("utf-8") for name in names)
+
+
 __all__ = [
     "BUNDLE_SCHEMA", "PERSONA_VIEWS", "SECTION_ORDER", "bundle_sha256", "compose_bundle", "governing_rules",
     "load_fragment", "load_persona_covers", "load_registry", "load_task", "pin_bundle", "render_prompt",
-    "section_sha256", "text_sha256", "validate_registry", "verify_bundle",
+    "section_sha256", "text_sha256", "validate_registry", "verify_bundle", "load_pinned_prompt",
+    "SELECTED_BUNDLE_SCHEMA", "compose_selected_bundle",
 ]
