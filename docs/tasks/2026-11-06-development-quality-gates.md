@@ -150,3 +150,23 @@ verification and integration evidence are recorded below when available.
 - Final review tightened baseline output-path containment and added a regression against an
   external parent symlink before any baseline initialization write. Structured policy tests
   also reject blanket Ruff/mypy ignore/exclude settings.
+
+### Final code verification and ready handoff
+
+- Final tested code commit: `65f9d8ca5d8040b11f64e42675ae682cb8e87862`;
+  tree: `59e940846f3a97f8d669a4092261341765eb72fd`.
+- Exact command:
+  `.venv/bin/python -m tools.quality check --base 528b3fa681d9e33113932c9fc4abf9ddbc53b6e5 --full`.
+- Result: PASS, exit 0, 49.92s wall. All **149 selected unit tests passed in 15.35s**; no skips,
+  xfails or deselections. Static corpus: 645 modules, 47 unchanged baseline observations and
+  zero new diagnostics. Component elapsed times: Ruff 0.140s, mypy 10.764s, Bandit 17.475s,
+  architecture 5.272s, unit subprocess 15.801s.
+- Final change set is 25 owned paths. Both code commits use the requested Copilot App author,
+  committer and co-author trailer. All application implementation files remain unchanged.
+- The canonical-main owner will receive a local Git bundle with sole prerequisite
+  `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`, exact ready commit/tree and this focused evidence.
+  The requested lock is `appsec-independent-main-integration.lock` in canonical main's Git
+  common directory, held with an OS-backed exclusive handle for the ownership/freeze/clean-state
+  checks, ordinary local merge and final ancestry verification.
+- Integration and acceptance test files remain **NOT RUN**, as do live reviews, container/image
+  operations and a live GitHub Actions dispatch. No push or pull request is authorized.
