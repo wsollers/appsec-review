@@ -35,9 +35,24 @@ When the accepted retrieval manifest includes a configured binary shard, the com
 enable it. The selection participates in the guidance-cache key and pinned bundle hash; it is
 never inferred from target-authored instructions.
 
-Selection is deterministic from validated role/task ids, never target text. The procedures are
+`stateful-invariant-analysis` is additionally selected for the `business_logic_abuse`,
+`authentication_session` and `filesystem_resources` personas, only for hunter `entry_down` /
+`control_gap`, lead analyst `lead_red_preconditions`, refuter `blue_control`, and verifier
+`blind_verifier` dispatches. The legacy `select_review_procedures` call without `persona` keeps
+its existing selection. Remediation writer/reviewer bundles also select this procedure: their
+existing tasks already ask for violated/corrected invariants. Other build, triage, scoring and
+judging workers do not acquire it.
+
+The procedure checks one bounded transition sequence, retries after uncertain commit, ownership
+and lifetime, idempotency scope, rollback and resource accounting. It uses existing output fields,
+not a new state-machine schema or worker panel. Generative and predicate procedures make attacker
+capability, entry and environment assumptions explicit in their existing summaries/obligations;
+they do not presume an anonymous web attacker or invent a deployment selection.
+
+Selection is deterministic from validated role/task/persona ids, never target text. The procedures are
 registered runtime-worker skills, loaded through `load_runtime_skill` for
-`job_inference_security_review`. Composer loads disable package fallback: a missing selected file
+`job_inference_security_review`; the stateful procedure also allows exactly the remediation planning
+and validation jobs. Composer loads disable package fallback: a missing selected file
 is an assembly failure rather than substituted content from another installation. The loader's
 default fallback remains available for existing callers. Procedure validation rejects new tool
 requests, budgets, authority declarations and cross-section policy conflicts.
@@ -87,9 +102,12 @@ tests.
 
 `tests/test_guidance_procedures.py` checks actual rendered guidance for registered review tasks
 (32,000 characters maximum on the representative native persona/stack), selected procedure text
-(2,400 characters each, at most two), workbench examples (13,000 serialized characters), and PoC
+(2,400 characters each, at most two for that native selection), workbench examples (13,000 serialized characters), and PoC
 writer runtime skill (12,500 characters, excluding the assembled role/rules/card). These are deterministic regression bounds, not token-usage,
 latency or detection-quality claims; task input and other personas can change prompt size.
+`tests/test_stateful_guidance.py` additionally covers the selected persona/task matrix (under
+26,000 UTF-8 bytes and at most three procedures without a binary shard), excluded selections,
+job restrictions, source tampering, missing guidance and unchanged remediation schemas/citations.
 
 The [opt-in evaluation harness](../operations/guidance-evaluation.md) uses separate vulnerable,
 fixed and incomplete-evidence fixtures and the actual role bundles. It reports role-appropriate

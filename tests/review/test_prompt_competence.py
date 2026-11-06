@@ -22,7 +22,7 @@ from appsec_review.review.capability import CellCapability
 from appsec_review.review.competence import LIMITATION, ROLE, run_competence_case
 from appsec_review.review.evaluation import OUTCOMES, load_cases, score
 from appsec_review.review.identity import sha256_hex
-from appsec_review.review.models import CellStatus, GapClass, IntegrityError
+from appsec_review.review.models import CellStatus, GapClass, IntegrityError, Role
 from appsec_review.review.package_view import PackageView
 from appsec_review.storage import atomic_json, file_sha256
 from tests.handoff_fixture import write_fixture_handoff
@@ -47,7 +47,8 @@ class Corpus:
 
 def accepted_corpus(directory: Path, case: dict[str, Any], *, page_size: int = 10,
                     max_turns: int = 6, max_queries: int = 8,
-                    max_result_bytes: int = 16384, excerpt_bytes: int = 65536) -> Corpus:
+                    max_result_bytes: int = 16384, excerpt_bytes: int = 65536,
+                    role: Role = ROLE) -> Corpus:
     """A real accepted synthetic producer, shared with the opt-in manual acceptance entrypoint."""
     run_root = directory / "runs" / RUN_ID
     target = directory / "source"
@@ -75,6 +76,10 @@ def accepted_corpus(directory: Path, case: dict[str, Any], *, page_size: int = 1
             source["start_line"], source["start_line"] + len(source["text"].splitlines()) - 1,
             1, 1, {"producer": "competence-synthetic-producer"}, "fixture-exact", 1.0)
         builder.add_entity(EntityRecord(identity, source["path"], source["path"], source["text"], {}, location))
+    lead = None
+    if role is Role.RED_TEAM_ANALYST:
+        lead = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {"question": case["question"]})
+        builder.add_entity(EntityRecord(lead, "fixture-lead", "fixture lead", case["question"], {}))
     builder.add_entity(EntityRecord(LogicalIdentity.parse(OUTSIDE), "outside", PRIVATE, PRIVATE, {}))
     gaps = tuple(case.get("coverage_gaps", ()))
     builder.add_coverage("source", "partial" if gaps else "complete", "; ".join(gaps) or None)
@@ -108,15 +113,18 @@ def accepted_corpus(directory: Path, case: dict[str, Any], *, page_size: int = 1
         "coverage_gaps": list(gaps),
     }
     view = PackageView(
-        document=package, labels={"A1": labels["S1"]},
+        document=package, labels={"A1": labels["S1"], **({"L1": lead.value} if lead else {})},
         files={"gaps.jsonl": tuple({"reason": gap} for gap in gaps)},
         locator_paths=frozenset(source["path"] for source in case["sources"]),
-        lead_refs=(), packaged_refs=frozenset({labels["S1"]}))
+        lead_refs=(lead.value,) if lead else (),
+        packaged_refs=frozenset({labels["S1"], *([lead.value] if lead else [])}))
+    if lead:
+        package["leads"] = [{"label": "L1", "summary": case["question"]}]
     capability = CellCapability.issue(
         run_id=RUN_ID, manifest_sha256=core.manifest_sha256,
-        package_id="competence-" + sha256_hex(package), package_sha256=sha256_hex(package), role=ROLE, round=0,
+        package_id="competence-" + sha256_hex(package), package_sha256=sha256_hex(package), role=role, round=0,
         tools=("find", "read_excerpt"), indexes=("source", "artifacts"),
-        entities=tuple(labels.values()), max_queries=max_queries, max_turns=max_turns,
+        entities=(*labels.values(), *([lead.value] if lead else [])), max_queries=max_queries, max_turns=max_turns,
         page_size=page_size, max_depth=2, max_result_bytes=max_result_bytes)
     return Corpus(core, capability, view, labels)
 

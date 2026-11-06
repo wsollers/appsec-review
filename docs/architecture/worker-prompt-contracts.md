@@ -29,12 +29,15 @@ guidance. The same selected content is verified before rendering and pinned unde
 | Native curation: `native_sbom_investigator` | Substantive `native_dependency_analyst.md`, curation task, `native-sbom-investigation` | `native-component-curation/1`; supplied input candidate IDs and exact supporting paths | No direct tools. Keep physical copies separate and account for selected, rejected and uncertain candidates. |
 | Native metadata planning / proposal | Same analyst/role/skill, component-local metadata task; separately pinned plan and proposal schemas | `native-metadata-plan/1` selects supplied catalog paths; `native-metadata-proposal/1` cites `{path,start_line,end_line,quote}` from displayed excerpts | Application reads selected bounded files between stages. An unread path is not release evidence; omit unsupported/conflicting fields, including parent-SDK or ABI versions presented as component releases. |
 | PoC writing: `poc_writer` | Role plus `poc-writer`; accepted brief and bounded PoC basis | `poc-writer-answer/1`; exact compact function/negative-control or decline contract | Application `read_source` / `find_declaration`, no direct tools. Query/turn limits and denial recovery are retained. Generated source is not an executed reproduction. |
-| Remediation: `remediation_writer` | Bounded correction responsibility, supplied invariant and accepted source/evidence; no additional runtime skill | Worker-turn containing `PlanAnswer`; `evidence_ids` must be supplied **relation IDs**, not paths | Optional application `SourceReader.retrieve` over admitted source windows. Insufficient evidence or architectural changes require the corresponding explicit non-patch outcome. |
-| Remediation review: `remediation_reviewer` | Independent semantic responsibility; planner argument withheld; no additional runtime skill | Worker-turn containing exact `decision`, `reason`, `evidence_ids`, `residual_concerns`; same relation IDs | Current dispatch is final-only. Analyst assessment and static/compile results are not proof of a runtime fix. |
+| Remediation: `remediation_writer` | Bounded correction responsibility, supplied invariant and accepted source/evidence; selected `stateful-invariant-analysis` | Worker-turn containing `PlanAnswer`; `evidence_ids` must be supplied **relation IDs**, not paths | Optional application `SourceReader.retrieve` over admitted source windows. Insufficient evidence or architectural changes require the corresponding explicit non-patch outcome. |
+| Remediation review: `remediation_reviewer` | Independent semantic responsibility; planner argument withheld; selected `stateful-invariant-analysis` | Worker-turn containing exact `decision`, `reason`, `evidence_ids`, `residual_concerns`; same relation IDs | Current dispatch is final-only. Analyst assessment and static/compile results are not proof of a runtime fix. |
 
 `api_web` still maps to `network_api_surface`; `deployment_operations` still maps to
 `cloud_container_deployment`. Native dependency personas are substantive files despite their
 short registry records. Binary-evidence procedures remain conditioned on admitted binary state.
+Selected stateful review personas/tasks add the same bounded invariant procedure; see the
+[selection matrix](guidance-procedures.md#selection-and-provenance). This does not expand grants
+or inject deployment/threat-model artifacts whose producers have not yet supplied them.
 
 `independent_scorer`, `finding_adjudicator`, `completeness_reviewer`, and workbench
 `component_classifier`, `applicability_router`, `evidence_verifier`, `result_adjudicator` describe
@@ -99,7 +102,12 @@ The scripted competence harness adds real multi-turn cells, accepted index manif
 retrieval, paging/truncation, denial recovery, final-turn limits, missing artifacts, wrong
 citations, misleading source text, false-positive controls and justified abstention. Scripts
 fake only the external model boundary. Passing scripts establish **protocol behavior, not model
-quality**. See [manual evaluation](../operations/guidance-evaluation.md) and the package's
+quality**. Discovery now includes both hunter and lead-analyst compact expansion and configured
+red admission. Specialized competence adapters exercise the production planning feedback loop and
+remediation source/build readers and final validators. The remediation writer task is assembled
+once in `job_remediation_planning.inputs.writer_task`, with a baseline wire-shape compatibility
+fixture; its fields and authority did not change.
+See [manual evaluation](../operations/guidance-evaluation.md) and the package's
 [verification record](../tasks/2026-11-06-worker-prompt-contracts.md).
 
 Manual cross-family integration:

@@ -121,3 +121,35 @@ class SourceReader:
 
 
 CoreFactory = Callable[[Path, Mapping[str, Any]], Any]
+
+
+def writer_task(finding: Mapping[str, Any], relations: list[dict[str, Any]],
+                reader: SourceReader) -> dict[str, Any]:
+    """The production writer input, shared with bounded offline competence experiments."""
+    from .contracts import ANSWER_FIELDS
+
+    return {"kind": "remediation_proposal", "finding": binding(finding), "title": finding["title"],
+            "accepted_evidence": relations, "source_files": list(reader.files.values()),
+            "source_gaps": reader.gaps,
+            "answer_fields": sorted(ANSWER_FIELDS),
+            "answer_shape": {
+                "status": "proposal_generated | manual_design_required | insufficient_evidence",
+                "reason": "<bounded explanation>",
+                "violated_invariant": "<current violated security requirement>",
+                "corrected_invariant": "<intended safety requirement>",
+                "evidence_ids": ["<supplied relation_id>"],
+                "patch": "<exact patch object, or null for non-proposal outcomes>",
+                **{key: ["<bounded assessment>"] for key in (
+                    "compatibility_effects", "affected_interfaces", "residual_risks",
+                    "deployment_prerequisites", "validation_checks", "scope_limitations")},
+                "regression_spec": {
+                    "fixtures": ["<synthetic fixture>"], "assertions": ["<safety assertion>"],
+                    "positive_cases": ["<valid input>"], "negative_cases": ["<rejected input>"],
+                    "before": "<baseline expected behavior>", "after": "<corrected behavior>",
+                    "safety_assertion": "<non-faulting, separately derived specification>"}},
+            "patch_format": {"schema": "appsec-review/remediation-exact-patch/1",
+              "files": [{"path": "<admitted path>", "before_sha256": "<original hash or null>",
+                         "absence_proof": False, "edits": [
+                             {"start": 0, "end": 0, "old": "", "new": "<replacement>"}]}]},
+            "regression_spec_fields": ["fixtures", "assertions", "positive_cases", "negative_cases",
+                                       "before", "after", "safety_assertion"]}

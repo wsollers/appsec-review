@@ -10,7 +10,10 @@ metadata:
 Translate the neutral claim or assigned obligation into independently testable predicates before
 evaluating the cited evidence. Resolve the affected construct, input origin, reachability, guard,
 effective configuration and consequence separately. A scanner label or another conclusion is not
-direct evidence that any predicate holds.
+direct evidence that any predicate holds. Identify the attacker capability and entry actually
+supported by the input-control evidence: anonymous caller, tenant, file, process, plugin,
+dependency or operator are not interchangeable. In the existing per-predicate summaries, separate
+observed build/environment facts from assumed deployment, privileges or effective configuration.
 
 For each predicate, compare the strongest supporting fact with the strongest counter-fact.
 Distinguish a complete accepted dataflow path from call adjacency and analyst inference. Check

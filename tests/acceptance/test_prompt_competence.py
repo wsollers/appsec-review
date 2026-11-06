@@ -33,15 +33,15 @@ import pytest
 
 from appsec_review.config import InferenceSecurityReviewSettings, load_config
 from appsec_review.review.budget import JobBudget
-from appsec_review.review.competence import LIMITATION, REPORT_SCHEMA, ROLE, run_competence_case
+from appsec_review.review.competence import LIMITATION, REPORT_SCHEMA, ROLE, ROLE_TASKS, run_competence_case
 from appsec_review.review.evaluation import load_cases, score
 from appsec_review.review.identity import sha256_hex
-from appsec_review.review.models import Lane
+from appsec_review.review.models import Lane, Role
 from appsec_review.storage import atomic_json, file_sha256
 from tests.review.test_prompt_competence import ROOT, accepted_corpus
 
 
-def run_acceptance(argv: Sequence[str]) -> dict:
+def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--config", type=Path, required=True)
@@ -50,6 +50,14 @@ def run_acceptance(argv: Sequence[str]) -> dict:
     parser.add_argument("--model", required=True)
     parser.add_argument("--cases", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--role", choices=[role.value for role in ROLE_TASKS], default=ROLE.value)
+    parser.add_argument("--variant", choices=("full", "without_procedures"), default="full")
+    parser.add_argument("--turn-cap", type=int, help="tighten, never increase, the configured per-cell turn cap")
+    return parser
+
+
+def run_acceptance(argv: Sequence[str]) -> dict:
+    parser = argument_parser()
     args = parser.parse_args(argv)
     if not args.live:
         parser.error("live providers require explicit --live authorization")
@@ -60,11 +68,16 @@ def run_acceptance(argv: Sequence[str]) -> dict:
     settings = config.job("job_inference_security_review").typed_settings
     if not isinstance(settings, InferenceSecurityReviewSettings):
         raise ValueError("inference review settings are unavailable")
-    model = settings.profile_for(ROLE)
+    role = Role(args.role)
+    lane = Lane.HUNT if role is Role.HYPOTHESIS_HUNTER else Lane.LEAD
+    model = settings.profile_for(role)
     if (model.provider, model.model) != (args.provider, args.model):
-        parser.error("--provider/--model must match the resolved verifier profile")
+        parser.error("--provider/--model must match the resolved role profile")
     if not model.enabled or model.max_queries < 1 or model.max_turns < 2:
-        parser.error("the selected verifier profile must enable bounded multi-turn retrieval")
+        parser.error("the selected role profile must enable bounded multi-turn retrieval")
+    turn_cap = model.max_turns if args.turn_cap is None else args.turn_cap
+    if not 2 <= turn_cap <= model.max_turns:
+        parser.error("--turn-cap must be between 2 and the configured role's max_turns")
     cases = load_cases(args.cases)
     output.mkdir(parents=True, exist_ok=False)
     configuration = json.loads(config.resolved_json)
@@ -73,7 +86,8 @@ def run_acceptance(argv: Sequence[str]) -> dict:
     budget = JobBudget.for_run(output, settings.budgets)
     rows = []
     report = {
-        "schema": REPORT_SCHEMA, "execution": "live", "limitation": LIMITATION, "role": ROLE.value,
+        "schema": REPORT_SCHEMA, "execution": "live", "limitation": LIMITATION, "role": role.value,
+        "variant": args.variant, "turn_cap": turn_cap,
         "profile": args.profile, "configuration_sha256": sha256_hex(configuration),
         "config_file_sha256": file_sha256(args.config),
         "settings_sha256": sha256_hex(settings.as_document()),
@@ -81,20 +95,21 @@ def run_acceptance(argv: Sequence[str]) -> dict:
         "model": asdict(model), "rows": rows,
     }
     for case in cases:
-        if not budget.reserve(Lane.LEAD) or not budget.cell_launch_allowed():
+        if not budget.reserve(lane) or not budget.cell_launch_allowed():
             rows.append({"case_id": case["id"], "status": "not_launched",
                          "input_tokens": None, "output_tokens": None,
                          "errors": ["configured acceptance budget exhausted"]})
         else:
             corpus = accepted_corpus(
                 output / "data" / "corpus" / case["id"], case,
-                max_turns=model.max_turns, max_queries=model.max_queries)
+                max_turns=turn_cap, max_queries=model.max_queries, role=role)
             result = run_competence_case(
                 ROOT, case, settings, core=corpus.core, capability=corpus.capability,
                 view=corpus.view, source_labels=corpus.labels,
-                output=corpus.core.run_root / "data" / "experiment", live=True, budget=budget)
+                output=corpus.core.run_root / "data" / "experiment", live=True, budget=budget,
+                variant=args.variant)
             rows.append(dict(result.row))
-        report["metrics"] = score(cases, rows, ROLE.value)
+        report["metrics"] = score(cases, rows, role.value)
         atomic_json(output / "data" / "competence" / "report.json", report)
     return report
 
