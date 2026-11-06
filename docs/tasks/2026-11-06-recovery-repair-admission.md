@@ -390,3 +390,55 @@ explicit gaps. A separate package has reported a newer WSL-master custody instru
 sync refusal involving nine untracked NVD provenance files. The Windows integration worker did
 not inspect or mutate that master, and this record does **not** claim that it was synchronized.
 Those files must be preserved and any separate sync resolved through that checkout's owner.
+
+### WSL master preservation and unresolved landing gate
+
+Package 05 relayed the user's clarification verbatim:
+
+> I'm confused WSL \~/projects/appsec-review is what we have been considering the master repo. Any work in the window repo must sync to there
+
+Two fresh, read-only inspections confirmed the Ubuntu-22.04 repository at
+`/home/wsollers/projects/appsec-review`, common directory
+`/home/wsollers/projects/appsec-review/.git`, is on `main` at
+`dc263b305e500df398b19398260e619253e855a7`. There are no tracked changes, but nine untracked
+NVD provenance files still block the strict clean-tree integration gate. Their producing/data
+custody owner is not established. No exception to that gate was authorized, so no files were
+staged, stashed, moved, deleted or hidden with ignore changes, and WSL `main` was not advanced.
+
+To preserve the completed work in the master repository without bypassing that gate, the bounded
+worker imported the verified local bundle into Git object storage and atomically created the
+previously absent **`refs/remotes/package-01/ready`**, pointing to
+**`5c62c1d45df10d1b93c0db7336e8dd3b5d1f2402`** (tree
+`28eef358e6df17d2ed4d4588ba6bfb9aa99074a4`). It used `git bundle unbundle` and
+`git update-ref --no-deref` with an expected all-zero old SHA; no existing ref was overwritten.
+Bundle SHA-256:
+`8cc0cfa112090ecfb780bf397cf4d424294271f416b75b8d1568724584067434`.
+
+Before/after protected snapshots were identical: current branch, HEAD, `refs/heads/main`, raw
+HEAD file, index bytes/metadata, status paths, all other refs, FETCH_HEAD, and all nine file hashes.
+Index SHA-256: `c4d83fbd8c9099287c05c34b5cc37f9d1faa07aaa7408f67aebf56a753b382d2`.
+NUL-delimited porcelain status SHA-256:
+`d99b7d21f8afc33b57689e4b7eff55a42c0b7edd44cc739d6519faf6a76da580`.
+Each provenance file's content hash equals its filename stem, unchanged before/after.
+Git optional locks, fsmonitor, hooks and automatic maintenance were disabled; no main/index/
+worktree update, integration-owner takeover, merge, test or build occurred.
+
+Exact remaining untracked paths:
+
+```text
+data/feeds/nvd/provenance/sha256-043a85b6911198e6/27749a75513307c695d4bfac76bd00964058a236416492321269cc7b201c0362.json
+data/feeds/nvd/provenance/sha256-1469bd3d33eb4026/7eca6c16e6e826c04ed9032e1d332c74eb5d71be9af14ee5a099362caf714fc4.json
+data/feeds/nvd/provenance/sha256-82b0d4a335e49053/a722a111f0f5416a884f49af7f066a940113b05c3489b9d5aaa419b9f9056672.json
+data/feeds/nvd/provenance/sha256-a4372f6ee319d62c/4ab663164a8322e5a9c8c94acfa1eb425a338a41de000b3f53929446c058f8f7.json
+data/feeds/nvd/provenance/sha256-c9b29a6b2c3d3dd9/c5b5c84591dc83c927ce30aad2c814bbee593f1df526f4fed7efbd352c844923.json
+data/feeds/nvd/provenance/sha256-ddc9f6d711fe276d/23b33002ad1633fcfca3a3f90fc4082ef79e305996eecd007d69a87d6628a693.json
+data/feeds/nvd/provenance/sha256-dfa1d05817d8d858/b5abd3ac85a3600c288246ab89452191ed158b76d9d855615286df4d3b246456.json
+data/feeds/nvd/provenance/sha256-dff574e49f810a38/48bdb2882c2e120c2fb767e05ba5c7977b893afd3db6b63d293848b4240853d6.json
+data/feeds/nvd/provenance/sha256-e38cf684c7b1a798/aeb9c8c99f014ff413e786c1a75258b0bde11a19a424e8f72f96b264b226de91.json
+```
+
+**WSL-main landing remains blocked, not complete.** The preserved ready commit is present in the
+WSL repository but is not an ancestor of its unchanged `main` (ancestry exit 1). An authorized
+data-custody resolution or an explicit, preservation-only exception to the dirty-main gate is
+needed before advancing that master. The Windows landing and passing Linux unit results are not
+represented as WSL-main synchronization or as passing the unrun manual validation suites.
