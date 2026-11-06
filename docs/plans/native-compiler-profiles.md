@@ -1,6 +1,10 @@
 # Native admission from builder-image compiler profiles
 
-Status: **proposed for review**. Nothing here is implemented yet.
+Status: **rollout step 1 implemented** (the `/2` record schema, probe script, transcript parser
+and collector in `appsec_review.container_runtime.compiler_profiles`, with unit tests). Rollout
+steps 2–8 remain **proposed for review**; nothing consumes `/2` records yet. The unit tests use
+explicitly synthetic transcripts shaped like the default builder images and inert, structurally
+valid ELF fixtures. The collector has not yet been validated against the live builder images.
 
 ## Problem
 
@@ -71,9 +75,15 @@ A new module, `appsec_review.container_runtime.compiler_profiles`, collects
 - **Granularity.** One record per *(image digest, driver)*. Drivers are `clang`, `gcc`, `rustc`,
   `cargo` and `go` (`msbuild` is later work). A family image yields every driver it ships; for
   example, rust-wasm yields `rustc` and `cargo`, plus `clang`/`gcc` when present.
-- **Input.** The resolved image ID (`sha256:…`), never a tag. Collection fails closed unless
-  `docker image inspect <tag> --format {{.Id}}` returns exactly that ID and the image signature
-  verifies (the same `BuildContainerExecutor.resolve()` check every build uses), before any run.
+- **Input.** The resolved image ID (`sha256:…`), never a tag. Before any run, collection fails
+  closed unless `docker image inspect <tag> --format {{.Id}}` returns exactly that ID (the same
+  `BuildContainerExecutor.resolve()` check every build uses). Identity is always checked.
+  Signature verification follows the configured `[signing]` image policy and is not enabled by
+  the collector: under the default `disabled` policy the verifier is `DisabledImageVerifier` and
+  no signature is checked; under `required`, an image without a verifying signature is refused.
+  Each record states which applied in `provenance.image_signature` (`not-enforced` or
+  `verified`). A verifier that does not declare whether it enforces is refused before any Docker
+  call.
 - **One probe, native-protocol compatible.** The native engine broker accepts only an isolated
   `docker run` plus `image inspect {{.Id}}`, `rm` and `kill` (`native_commands.py`); it has no
   `docker create`, `docker cp` or JSON inspect. The collector therefore runs one container per
@@ -82,23 +92,36 @@ A new module, `appsec_review.container_runtime.compiler_profiles`, collects
     no-new-privileges`, bounded CPU, memory and pids, a `noexec` tmpfs `/tmp`, a timeout, and one
     rw bind mount `/out` onto a fresh, run-owned, empty directory. No target or run mounts.
   - `/bin/sh -c <fixed script>`; the script is a module constant whose hash is recorded.
-  - On timeout the container is force-removed and cleanup must be confirmed.
+  - Whatever way the run ends (success, timeout, a raised runner error or an interrupt), the
+    container is force-removed and its absence confirmed before the output directory is deleted.
+    If removal cannot be confirmed, the output is preserved and collection fails, naming the
+    container and the preserved path.
 - **Executable identity.**
   - The probe resolves each driver (`command -v`), records every symlink hop with its exact
     target (`wrapper_closure`) and the real path (`readlink -f`), and copies the real file to
     `/out/<driver>`.
   - The host computes `sha256` from the copied bytes. Exactly the expected files must be present;
-    each must be a bounded regular ELF file. A `#!` script wrapper or any other content is a
-    profile error, never a hashed "compiler".
-  - Trust limit: the copy is made by the image's own `/bin/sh` and `cp`, so the hash binds what a
-    signature-verified image exports, not an independent read of its layers.
+    each must be a bounded regular file with a structurally valid ELF header (read with the
+    bounded reader in `job_language_build/elf.py`): version 1, a SysV or Linux OS ABI, type
+    `EXEC` or `DYN`, a supported machine (x86, x86_64, arm64) matching its class, and an entry
+    point inside a loadable segment. A `#!` script wrapper, a bare magic number or any other
+    content is a profile error, never a hashed "compiler". All copied executables of one image
+    must share one class and machine, and for `rustc`/`cargo` that machine must be the host
+    target's ISA. The record keeps the result as `executable_format`.
+  - The real path must equal the normalized end of the recorded symlink chain. Normalization is
+    lexical, so an image whose tool path crosses a symlinked directory fails closed.
+  - Trust limit: the copy is made by the image's own `/bin/sh` and `cp`, so the hash binds what
+    the identified image exports, not an independent read of its layers.
 - **Behaviour probe.**
   - Fixed argv only: `clang|gcc -dumpmachine`, `clang|gcc --version`, `rustc -vV`, the installed
     `rustlib/<target>/lib` directories under `rustc --print sysroot`, `cargo -V`, `go version`,
     `go env -json GOOS GOARCH CGO_ENABLED CC CXX GOROOT`.
   - The transcript (`appsec-review/compiler-probe/1`) is delimited: `@@` section headers and
     `|`-prefixed payload lines, ending with `@@end`. It is untrusted data: parsed strictly with
-    bounded regexes and size, line and encoding limits. Truncation, an unknown or repeated
+    bounded regexes and size, line and encoding limits. Each probe's capture is bounded inside the
+    container (at most 65 536 bytes and 256 lines); a larger output is reported as an explicit
+    overflow section, never silently truncated, and the parser rejects it. Go's JSON environment
+    may not repeat a key. Truncation, overflow, an unknown or repeated
     section, a discontinuous symlink chain, a failed probe or a malformed fact fails the whole
     image closed.
 - **Image environment.**
@@ -115,10 +138,16 @@ A new module, `appsec_review.container_runtime.compiler_profiles`, collects
     `GOOS/GOARCH` for Go) and `target_axes` (via `_compiler_axes`).
   - `supported_targets`: for rustc and cargo, the installed `rustlib` targets (must include the
     host); otherwise the default target only.
-  - `driver_facts` (rustc `release`; Go `cgo_enabled`, `cc`, `cxx`, `goroot`), `image_env` (the
+  - `driver_facts` (rustc `release`; Go `cgo_enabled`, `cc`, `cxx`, `goroot`; empty for the
+    others), `executable_format` (`class`, `machine`, `type`), `image_env` (the
     selected keys only), `probe` (transcript schema, script and transcript digests, per-probe exit
     codes and output digests), and `provenance` (`{"origin": "image-probe/1",
-    "collector_version": …}`).
+    "collector_version": …, "image_identity": "docker-image-id/1", "image_signature":
+    "not-enforced" | "verified"}`).
+  - `validate_profile` checks a closed shape: no unknown or missing keys, typed and bounded
+    values, every probe exit code `0` with a non-empty output digest, the probe script digest
+    equal to the shipped script, `target_axes` recomputed from `default_target`, and per-driver
+    facts and semantics. Any malformed record or set raises `CompilerProfileError`.
   - A profile set is `appsec-review/compiler-profile-set/1`: `{"images": {digest: {driver:
     record}}}`. An image with no drivers is present with an empty map (probed, nothing found).
     Merging two sets that both contain an image is an error.
@@ -262,11 +291,14 @@ These make proofs explicit rather than default-dependent.
 - Probe containers execute only image-owned binaries with fixed argv, with no target content, no
   network, no host mounts and no privileges.
 - Executable hashes are computed on the host from copied bytes.
-- Probe output is length-capped and strictly parsed.
+- Probe output is bounded in the container, reported as overflow rather than truncated, and
+  strictly parsed.
 - The profile is bound to the image **digest**. A tag substitution, derived image or repaired
   image forces a re-probe.
-- When launch enforcement is `required`, image signing verification still precedes any probe. The
-  probe must never become a way to execute an unverified image.
+- Image identity (`docker image inspect {{.Id}}`) is always checked before any probe. When launch
+  enforcement is `required`, image signing verification also precedes any probe, so the probe
+  never becomes a way to execute an unverified image. Under the default `disabled` policy no
+  signature is checked, and records say so (`provenance.image_signature: "not-enforced"`).
 - A profile proves only defaults and intended targets. Retained-binary machine verification
   (`verify_native_product`) remains mandatory and is never relaxed by a proof.
 
@@ -326,7 +358,8 @@ Live planning-model quality stays in the live tier. It is reported, not gated.
 
 ## Rollout
 
-1. Profile record schema `/2`, parser and collector, with unit tests.
+1. Profile record schema `/2`, parser and collector, with unit tests. **Implemented**; synthetic
+   fixtures only, not yet validated against the live builder images.
 2. Profile sets in refinement and `guard_action`, with `/1` compatibility.
 3. Profile binding in `plan.load_recipes` and the image-step re-bind.
 4. Per-driver enforcement: CMake and autotools/phpize first (cpp, PHP), then cargo/wasm, then
