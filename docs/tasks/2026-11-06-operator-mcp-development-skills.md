@@ -215,3 +215,37 @@ The final branch tip is retained in `operator-ready.bundle` and
 incorporated actual main SHA is `f8daf3d34dd9576e2c2ee48f825e740475c1fb7a`; no merge into that
 checkout, lock bypass, source-freeze override, origin-chat handoff or remote push was performed.
 **Integration and acceptance: NOT RUN.** No server, live review or runtime model was started.
+
+### Local-main landing outcome
+
+The two BLOCKED entries above are retained as history. They described this package's own
+worktree session, which could not modify the primary checkout. The user-directed landing was then
+handed to the designated canonical-main integration owner, which merged the exact ready commit
+into local `main` in `F:\XBOX-Repositories\appsec-review`.
+
+- **Ready SHA:** `b8f77b96937ec6d1d8b98a1bdf78ce46779fbb71`
+  (`refs/remotes/operator-package06/ready`, tree `e5d284144a06b9ccb0ebb105dab1c2e89174afa4`).
+- **Previous main:** `0d2c6d7b8830436bda7eed3e2c66f89c6525a17d`. It added only package 02's
+  evidence document, so the landing was a merge rather than a fast-forward. The merge base was
+  `f8daf3d34dd9576e2c2ee48f825e740475c1fb7a`. None of this package's 24 changed paths overlap
+  `f8daf3d3..0d2c6d7b`.
+- **Merge commit:** `37ae743ca28c26239383d68054accb1826e60ad7`, tree
+  `4edb4e1fe254e661ff3b419d2401e662790d5181`, titled
+  "Merge operator-mcp-development-skills (b8f77b96)". Its parents are `0d2c6d7b` and `b8f77b96`,
+  and it carries the Copilot co-author trailer. The merge had no conflicts, and its tree matched
+  the `git merge-tree` prediction.
+- **Checkout and lock checks:** the integration owner opened an exclusive OS file handle on
+  `.git/appsec-independent-main-integration.lock` in the canonical Git common directory
+  (OpenOrCreate, ReadWrite, FileShare.None). It held that handle across the checks and the merge,
+  and released it in `finally`. The checks confirmed that the branch was `main` at `0d2c6d7b`, that
+  `status -uall` was empty, that there were no operation markers or competing owner, and that the
+  ready ref was unchanged. The merge ran with hooks, auto-gc and maintenance disabled. After the
+  merge, `git status -uall` was clean, both `b8f77b96` and `0d2c6d7b` are ancestors of `main`,
+  and the ignored `targets/` clones were preserved.
+- **Validation:** the integration owner ran no tests on the merged tree. The recorded evidence
+  is the 410-test focused run and the static gate on `e617f90c` above. Focused Linux checks on the
+  landed SHA are still pending in this package's worktrees.
+- **WSL:** canonical WSL `main` (`~/projects/appsec-review`) is a separate checkout with its own
+  custodian. When this record was written it remained at
+  `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`. Updating it awaits that custodian's authorized step.
+- No push or pull request was made.
