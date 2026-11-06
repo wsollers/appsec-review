@@ -256,7 +256,7 @@ def build_job(*, providers: Providers = registry_providers,
         resolved_jobs = (_resolved_document(run_root).get("jobs") or {})
         disabled = {job_id for job_id, value in resolved_jobs.items()
                     if not resolved_job_is_enabled(job_id, value)}
-        active = set(_resolved_steps(run_root)) - DOWNSTREAM_JOBS
+        active = set(_resolved_steps(run_root)) - DOWNSTREAM_JOBS - input_matrix.INTERNAL_PRODUCERS
         job_ids = tuple(job_id for job_id in job_ids if job_id in active)
         declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
         consumes = {job_id: tuple(upstream for upstream in values if upstream in active)
@@ -268,7 +268,7 @@ def build_job(*, providers: Providers = registry_providers,
             if run_root.resolve() not in candidate.parents or file_sha256(candidate) != shard["sha256"]:
                 raise ValueError(f"restored shard failed verification: {'/'.join(shard_key(shard))}")
         job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
-                     if job_id not in DOWNSTREAM_JOBS}
+                     if job_id in active}
         feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
                           int(settings_of(unit)["feed_max_age_days"]),
                           max_age_overrides={str(key): int(value) for key, value in dict(

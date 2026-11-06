@@ -81,8 +81,14 @@ re-hashes every handoff artifact, and summarises every accepted shard
 (`indexed`, `artifact_only`, `protected`, `unavailable`), query route, exception reason, producer
 attempt, shard or artifact references and coverage state.
 Files the job runtime writes for every job are claimed as runtime receipts: attempt claims, status,
-results, handoffs and logs, per-task receipts, and the `inputs/retrieval-manifest.json` that
+results, handoffs, `published.json` commit markers and logs, per-task receipts and
+`checkpoint.json` reuse records, and the `inputs/retrieval-manifest.json` that
 `JobRunner` pins into an attempt inheriting more than one upstream index lineage.
+The runtime also explicitly owns `data/recovery/current.json`, `admission.lock`, `successor.json`
+and the JSON records directly under `releases/`, `workers/`, `dispatches/` and `repairs/`.
+Recovery records are protected operational metadata, not target evidence or permission to reuse
+work. Other filenames and nested directories in the recovery tree remain undeclared.
+The run-level `data/publication.lock` is an operational receipt alongside `data/resume.lock`.
 
 File ownership and publication requirements have separate scopes. File ownership includes every
 registered job present in the run-bound configuration, including downstream and disabled jobs.
@@ -90,6 +96,17 @@ Only enabled producers in the indexing stage participate in required-output chec
 handoff reconciliation and coverage rows. A resume can therefore retain downstream receipts,
 document ledgers and inference artifacts without either treating them as stray files or accepting
 them as current evidence. Unknown jobs and files outside a declared pattern still fail the audit.
+
+`job_build_iteration` is an internal child transaction, not an unconditional graph producer.
+Its dataset contract owns the bounded controller/lease records under `data/build/iterations/`,
+workspace custody records, and immutable iteration/workspace artifacts. Strict inventory accounts
+for actual internal attempts (including failed attempts) using their pinned contracts, without
+requiring an internal handoff or emitting missing-output coverage rows when no iteration ran.
+The accepted language-build publication remains the review input. Managed inventory accounts
+only for artifacts in authenticated accepted publications, including any referenced internal
+records; it does not claim to inspect unreferenced internal attempts or scratch.
+The indexing-specific internal-producer exclusion is not inferred from `always_execute` or
+`propagate_handoff`: graph readiness gates can share those flags and remain graph producers.
 
 Every new attempt's `claim.json` pins a hash-checked `dataset_contract` containing its output
 declarations and step topology. Files under that attempt are matched against the pinned contract,

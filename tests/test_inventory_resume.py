@@ -3,6 +3,7 @@
 from dataclasses import replace
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,15 +15,18 @@ from appsec_review.jobs.job_review_data_indexing.job import DOWNSTREAM_JOBS, reg
 from appsec_review.runtime import Job, JobRunner, Unit
 from appsec_review.runtime.datasets import artifact_only, dataset_contract, indexed, read_dataset_contract
 from appsec_review.runtime.resume import ResumePlanner
+from appsec_review.runtime.repair import verify_dispatch_stop
 from appsec_review.storage import file_sha256
+from tests.release_support import write_release
 from tests.test_job_runtime import write_config
-from tests.test_review_data_indexing import SNAPSHOT, _run, accepted
+from tests.test_review_data_indexing import SNAPSHOT, _run, accepted as _accepted_fixture
 
 
+accepted = _accepted_fixture
 RUN_ID = "2026-10-10-0001"
 JOB_ID = "job_inference_security_review"
 STEPS = ("scope", "triage", "packages", "lead_review", "hunt_review", "merge", "adjudicate",
-         "completeness", "publication", "scoring")
+         "completeness", "publication", "scoring", "attack_chains")
 
 
 def _write(root: Path, relative: str, content=None) -> Path:
@@ -165,6 +169,7 @@ def test_historical_backing_files_do_not_satisfy_required_accepted_output(tmp_pa
 
 
 def test_runner_pins_contract_for_successful_and_failed_invocations(tmp_path: Path) -> None:
+    write_release(tmp_path, ("job_fixture",))
     runner = JobRunner(load_config(write_config(tmp_path)))
     declaration = artifact_only("output", "work", "inventory", "application/json", "Fixture output",
                                 artifacts=("data/jobs/job_fixture/attempts/*/steps/work/tasks/only/output.json",),
@@ -187,6 +192,19 @@ def test_runner_pins_contract_for_successful_and_failed_invocations(tmp_path: Pa
     assert reused["reused"] and reused["attempt_id"] == claim["attempt_id"]
     assert runner.finalize_attempt(job, reused)["reused"]
     assert json.loads((root / "claim.json").read_text())["orchestration"]["run_id"] == "first-invocation"
+    claim_bytes = (root / "claim.json").read_bytes()
+    (root / "claim.json").write_text(json.dumps({**claim, "trigger": "changed"}))
+    reasons, _ = ResumePlanner(runner.config, runner.runs.resolve(claim["run_id"]), (job,), "none").accepted(job, {})
+    assert any("artifact changed:" in reason and "claim.json" in reason for reason in reasons)
+    (root / "claim.json").write_bytes(claim_bytes)
+    stopped = SimpleNamespace(
+        get_run_by_id=lambda run_id: SimpleNamespace(
+            tags={"appsec/application_run_id": claim["run_id"]}, is_finished=run_id == "first-invocation"),
+        run_launcher=SimpleNamespace(
+            supports_check_run_worker_health=True,
+            check_run_worker_health=lambda run: SimpleNamespace(status=SimpleNamespace(value="SUCCESS"))))
+    verify_dispatch_stop(runner.config, runner.runs.resolve(claim["run_id"]), "first-invocation",
+                         instance=stopped)
 
     def fail(unit):
         raise ValueError("expected downstream failure")
@@ -199,10 +217,8 @@ def test_runner_pins_contract_for_successful_and_failed_invocations(tmp_path: Pa
     assert second["orchestration"]["run_id"] != claim["orchestration"]["run_id"]
     assert second["attempt_id"] != claim["attempt_id"]
     assert json.loads((root / "claim.json").read_text()) == claim
-    changed = {**claim, "trigger": "changed"}
-    (root / "claim.json").write_text(json.dumps(changed))
     reasons, _ = ResumePlanner(runner.config, runner.runs.resolve(claim["run_id"]), (job,), "none").accepted(job, {})
-    assert any("artifact changed:" in reason and "claim.json" in reason for reason in reasons)
+    assert reasons == ("a newer unaccepted attempt supersedes the accepted job",)
 
 
 def test_registry_exposes_downstream_file_contracts() -> None:

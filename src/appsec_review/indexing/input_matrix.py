@@ -17,6 +17,9 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 
+# Registered internal transactions own files but are not unconditional review input producers.
+INTERNAL_PRODUCERS = frozenset({"job_build_iteration"})
+
 # (source, producers, design state, precomputed query sets, MCP endpoints)
 INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("resolved_configuration", ("job_model_connectivity", "job_image_pin_verification", "job_review_intake"), "extend",
@@ -28,6 +31,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("build_recipes", ("job_target_catalog", "job_target_analysis_plan"), "extend",
      ("build_provenance", "artifact_inventory"), ("core", "query_artifacts")),
     ("analysis_plan", ("job_target_analysis_plan",), "current", ("review_package",), ("coverage", "core")),
+    ("build_environment_analysis", ("job_build_environment_analysis",), "artifact_only", (), ("coverage",)),
     ("git_history", ("job_source_history_analysis",), "current", ("history_context", "hotspot_context"),
      ("query_hotspots", "query_change_context", "query_precomputed")),
     ("github_review_metadata", ("job_source_history_analysis",), "current", ("history_context",),
@@ -166,7 +170,7 @@ def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], r
     named = {resolve_producer(producer, registered) for _source, producers, *_ in INPUT_SOURCES
              for producer in producers if producer.removeprefix("planned:") not in disabled}
     downstream_jobs = {"job_review_package_assembly", "job_document_issue_analysis"}
-    for job_id in sorted(registered - named - {self_job} - downstream_jobs):
+    for job_id in sorted(registered - named - {self_job} - downstream_jobs - INTERNAL_PRODUCERS):
         discrepancies.append(f"registered job {job_id} is absent from the input-source matrix")
     reconciled = []
     for source, producers, state, query_sets, endpoints in INPUT_SOURCES:
