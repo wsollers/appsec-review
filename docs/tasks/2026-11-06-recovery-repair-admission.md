@@ -309,3 +309,84 @@ The actual release generator again produced identical bytes twice over **1,333 f
 in **47.726 s**. Final source-release identity:
 `86f1ca0790481c508dc7ad0772fa23225027c38595b2895a3b296ced4841ae68`.
 This supersedes the earlier release identity; it still does not claim a built or deployed image.
+
+### Verified canonical local-main integration
+
+A bounded integration worker was created for this package in the existing project, on the
+canonical checkout, after the older owners became unavailable. It performed Git-only integration,
+not native Windows development, builds or tests. It verified clean `main`, exact checkout/common
+directory identity, no operation markers, and no current canonical review processes, live run
+directories, conflicting ownership reservation or source freeze. Packages 03 and 05 and the
+surviving target-addition owner directly confirmed no lock/reservation/freeze.
+
+The worker fast-forwarded **actual `F:\XBOX-Repositories\appsec-review` local main**:
+
+- Before: `dc263b305e500df398b19398260e619253e855a7`.
+- Landed ready SHA and resulting main/HEAD:
+  **`305a39d993bbd68b4678d309eef0e81463fd01fd`**.
+- Resulting tree: **`a9c5417de4ba76c4b6631ddcf58aafd6b2adb45d`**.
+- Both ready-tip and previous-main ancestry checks returned zero. The checkout remained on
+  `main` and clean, including untracked status.
+- The existing `.git\appsec-independent-main-integration.lock` was held from
+  `2026-11-06T11:11:07.9651916Z` to `2026-11-06T11:11:15.8623834Z`, using
+  `FileStream(OpenOrCreate, ReadWrite, FileShare.None)`, and released in `finally`.
+  Its empty file was preserved.
+
+Exact landing command:
+
+```sh
+git -c core.hooksPath=NUL -c gc.auto=0 -c maintenance.auto=false \
+  merge --ff-only --no-edit --no-overwrite-ignore 305a39d993bbd68b4678d309eef0e81463fd01fd
+```
+
+No new merge commit, source edits, branch switch, destructive reset, forced checkout,
+cherry-pick, remote push or pull request occurred. All six package commits retain the requested
+Copilot trailer. Diffcheck passed before and after landing. All 33 changed paths were
+`i/lf w/lf`; `git hash-object --no-filters` matched each checked-out file to its ready blob.
+The ready tree differs from tested `28a07335b0e4a54993b29ea43a1dd4bbf6674d94` only in this
+package's verification document. Linux verification was inherited by exact content identity,
+not misrepresented as tests rerun on Windows.
+
+Landed files:
+
+```text
+.gitignore
+README.md
+deploy/dagster/Dockerfile
+docs/operations/job-test-selection.md
+docs/operations/recovery-repair.md
+docs/tasks/2026-11-06-recovery-repair-admission.md
+release-dependencies.json
+src/appsec_review/cli.py
+src/appsec_review/development/__init__.py
+src/appsec_review/development/test_selection.py
+src/appsec_review/orchestration/dagster/adapter.py
+src/appsec_review/orchestration/topology.py
+src/appsec_review/runtime/checkpoints.py
+src/appsec_review/runtime/dependencies.py
+src/appsec_review/runtime/failure_replay.py
+src/appsec_review/runtime/graph.py
+src/appsec_review/runtime/job.py
+src/appsec_review/runtime/launch.py
+src/appsec_review/runtime/release.py
+src/appsec_review/runtime/repair.py
+src/appsec_review/runtime/resume.py
+src/appsec_review/runtime/runner.py
+tests/acceptance/test_repair_fixture_review.py
+tests/integration/test_repair_workflow.py
+tests/job-test-map.json
+tests/release_support.py
+tests/test_handoff_interchange.py
+tests/test_job_runtime.py
+tests/test_job_test_selection.py
+tests/test_repair_admission.py
+tests/test_repair_dagster_contract.py
+tests/test_source_history_analysis.py
+tests/test_wave1_resume.py
+```
+
+Integration/acceptance/live validations remain **NOT RUN**. The baseline failures above remain
+explicit gaps. A separate package has reported a newer WSL-master custody instruction and a
+sync refusal involving nine untracked NVD provenance files. The Windows integration worker did
+not inspect or mutate that master, and this record does **not** claim that it was synchronized.
+Those files must be preserved and any separate sync resolved through that checkout's owner.
