@@ -229,3 +229,26 @@ The earlier named package-03 fixture/parser gaps remain explicit, not counted am
 Only this verification record changes after the frozen implementation test. The integration
 owner receives its final ready SHA/tree, the full changed-path list, local bundle and the evidence
 above, and must append the observed canonical-main ancestry/landing record below.
+
+### Current-main combined-tree revalidation
+
+Canonical main advanced while verification was in progress, incorporating Package 06. The
+unpublished package was rebased again, without conflicts, onto
+**`1a627f23d904c0c86233c92b1ad6e2ef7d0e07a6`**. Neither root agent guidance nor the loaded
+multi-session coordination skill changed across that main update.
+
+Exact combined revision tested: **`b6964e2e053914391916af755cb0990d530af6e7`**.
+The exact 619-case command above was repeated with the sole argument change
+`--basetemp=test/tmp/pkg04-current-main`. Result: **619 passed in 93.11 seconds**.
+Slowest individual call was **4.05 seconds**; the next slowest call was 3.22 seconds.
+This includes actual accepted-shard card assembly, all specialized workers, offline multi-turn
+competence, evidence citation re-resolution, and existing cell behavior.
+
+Changed Markdown files were checked using the repository documentation test's `LINK` parser,
+restricted to `git diff --name-only canonical/main...HEAD`: **all local links resolved**, in
+0.011 seconds. The two repository-wide absent-target links remain the already recorded gap.
+No integration, acceptance, live-provider or review-run validation was executed.
+
+The final handoff adds only this record to the tested combined revision. Disposable package-owned
+test directories are removed after verification; no user target, other checkout, image, service,
+private output, or shared development environment is removed.
