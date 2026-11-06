@@ -17,7 +17,7 @@ from typing import Any, Callable, Iterator, Mapping, ParamSpec, TypeVar
 from appsec_review.runtime.contracts import (
     CoveragePolicy, InputChannel, InputRequirement, JobContract, MissingPolicy,
 )
-from appsec_review.runtime.datasets import DatasetDeclaration, read_dataset_contract
+from appsec_review.runtime.datasets import DatasetDeclaration, read_dataset_contract, shard_owner
 from appsec_review.storage import file_sha256
 from appsec_review.storage.shared import safe_path, verify_handoff
 
@@ -172,7 +172,8 @@ def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
                     raise ValueError(f"producer evidence authority mismatch: {requirement.producer}/{requirement.output_kind}")
                 # Declaration compatibility is distinct from produced availability. The accepted
                 # producer's artifacts/shards, not graph ancestry, establish an emitted dataset.
-                available = _has_output(context.run_root, handoff, declaration)
+                available = _has_output(context.run_root, handoff, declaration,
+                                        tuple(declarations[requirement.producer].values()))
             row.update(handoff_sha256=context.upstream_handoffs[requirement.producer],
                        attempt_id=handoff["attempt_id"], target_snapshot=handoff["target_snapshot"],
                        coverage=dict(handoff["coverage"]))
@@ -193,7 +194,8 @@ def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
             "requirements": rows}
 
 
-def _has_output(root: Path, handoff: Mapping[str, Any], declaration: DatasetDeclaration) -> bool:
+def _has_output(root: Path, handoff: Mapping[str, Any], declaration: DatasetDeclaration,
+                declarations: tuple[DatasetDeclaration, ...]) -> bool:
     from appsec_review.indexing.inventory import compile_glob
     for ref in handoff["artifacts"]:
         if any(compile_glob(pattern).fullmatch(ref["path"]) for pattern in declaration.artifacts):
@@ -201,7 +203,7 @@ def _has_output(root: Path, handoff: Mapping[str, Any], declaration: DatasetDecl
     if declaration.indexes:
         from appsec_review.indexing.store import handoff_manifests
         return any(shard.get("producer", {}).get("job") == handoff["job_id"]
-                   and declaration.claims_shard(shard["name"], shard.get("shard_id", "default"))
+                   and shard_owner(declarations, shard["name"], shard.get("shard_id", "default")) == declaration
                    for manifest in handoff_manifests(root, handoff)
                    for shard in manifest["document"]["indexes"])
     return False
@@ -302,6 +304,24 @@ def check_input_reads() -> None:
 
 
 @_read_boundary
+def input_shard_owner(root: Path, shard: Mapping[str, Any]) -> DatasetDeclaration:
+    """Resolve source-view ownership against the same pinned producer used by observed reads."""
+    producer = shard.get("producer", {}).get("job")
+    reads = _READS.get()
+    if reads is not None:
+        if Path(root).resolve() != reads.context.run_root.resolve():
+            raise ValueError("input producer contract belongs to a foreign run")
+        declarations = reads.producer(producer)[1]
+    else:
+        from appsec_review.indexing.store import accepted_handoff
+        accepted = accepted_handoff(root, producer)
+        if accepted is None:
+            raise ValueError(f"source shard producer has no accepted contract: {producer}")
+        declarations = producer_contract(root, accepted.handoff)
+    return shard_owner(declarations, shard["name"], shard.get("shard_id", "default"))
+
+
+@_read_boundary
 def observe_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
     reads = _READS.get()
     if reads is None or handoff["job_id"] == reads.context.config.job_id:
@@ -333,15 +353,10 @@ def observe_shard(root: Path, shard: Mapping[str, Any]) -> None:
     digest = context.upstream_handoffs.get(producer)
     if digest is None:
         raise ValueError(f"undeclared or unsupplied shard producer: {producer}")
-    handoff, declarations = reads.producer(producer)
-    matches = [(item.claims_shard(shard["name"], shard.get("shard_id", "default")), item)
-               for item in declarations if item.store == "retrieval"]
-    score = max((score for score, _ in matches), default=0)
-    owned = [item for value, item in matches if value == score and score > 0]
-    if len(owned) != 1:
-        raise ValueError("consumed shard has no exact dataset owner")
-    requirement = reads.requirement(producer, owned[0].output_kind, InputChannel.HANDOFF)
-    if requirement.schema != owned[0].schema or requirement.authority != owned[0].authority:
+    handoff, _declarations = reads.producer(producer)
+    owned = input_shard_owner(root, shard)
+    requirement = reads.requirement(producer, owned.output_kind, InputChannel.HANDOFF)
+    if requirement.schema != owned.schema or requirement.authority != owned.authority:
         raise ValueError("consumed dataset schema or authority differs from input contract")
     relative, sha = shard["relative_path"], shard["sha256"]
     if not any(ref["path"] == relative and ref["sha256"] == sha for ref in handoff["artifacts"]):

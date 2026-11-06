@@ -67,6 +67,18 @@ database queries to the selected original shard claims. It does not write a re-e
 producer identities. Operational inventory, history-only context, working artifacts and unrelated
 owners are not implicitly queried. Cursors/session identities include the selected shard view.
 
+Source-view selection, admitted dataset availability and observed reads share
+`runtime.datasets.shard_owner`: a shard belongs to the unique most-specific matching declaration
+in its producer's **complete pinned output contract**, not any matching selected declaration.
+Within typed execution, source-view metadata uses the exact supplied handoff even if the producer's
+current pointer advances. Ambiguous or unclaimed shards fail; caught reader failures remain terminal.
+
+The view explicitly includes `tree_sitter_coverage`, `clangd_coverage`,
+`clang_static_scope_coverage`, `cpg_scope_coverage`, `svf_alias_scope_coverage` and
+`cpp_blocked_branches`. Their unavailable/partial scopes and gap text remain queryable. A
+coverage-only shard does not establish that the broader AST, symbol or observation dataset exists.
+Other output kinds are not implicitly admitted merely because they share an index or producer.
+
 Provenance-unknown historical source views stay unknown and remain readable outside typed execution.
 Inside `JobRunner`, the unchanged observer still refuses a shard without an admitted original owner.
 Removing a required owner from the consumer contract remains a terminal read-contract violation;
@@ -80,6 +92,16 @@ accepted-build readers, and real consumer units under `JobRunner`. Only model tr
 no build, model provider, Docker or target execution is performed. It covers remediation before
 model dispatch, PoC `plan.briefs`, dossier excerpts, unrelated-history exclusion, undeclared/
 unknown-owner refusal, and the bound-PoC gate with no-binding/disabled controls.
+
+Fixtures pin complete real producer declarations, including required catalog/inventory outputs.
+`tests/test_shard_ownership.py` covers each coverage-only sibling, exact availability versus read
+accounting, ambiguous/unclaimed rejection at admission and both reader boundaries, sticky failures,
+and supplied-versus-current historical ownership. Combined six-producer cases execute the real
+`load.verify_inputs` and `assess.propose`, `plan.briefs` or `dossiers.create` units through the runner
+and inspect their actual result/observation receipts. They do not claim a partially executed fixture
+attempt is a published job. Separate full downstream cases retain publication coverage (including
+the Tree-sitter-only remediation regression) without duplicating unrelated publication work in each
+combined coverage-reader check.
 
 `tests/test_standalone_input_contracts.py` executes the actual Dagster begin op on an existing
 fixture run. Untagged single-job supply remains unspecified (`None`) so the same enabled-contract

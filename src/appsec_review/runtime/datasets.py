@@ -115,6 +115,18 @@ class DatasetDeclaration:
         return 1 + (prefix or 0) + (suffix or 0)
 
 
+def shard_owner(declarations: Sequence[DatasetDeclaration], index: str, shard_id: str, *,
+                store: str = "retrieval") -> DatasetDeclaration:
+    """Resolve the unique most-specific claim from the producer's complete pinned contract."""
+    matches = [(item.claims_shard(index, shard_id), item) for item in declarations if item.store == store]
+    score = max((value for value, _ in matches), default=0)
+    owners = [item for value, item in matches if value == score and score > 0]
+    if len(owners) != 1:
+        reason = "unclaimed" if not owners else "ambiguous: " + ", ".join(sorted(item.output_kind for item in owners))
+        raise ValueError(f"shard has no exact dataset owner: {index}/{shard_id} ({reason})")
+    return owners[0]
+
+
 METADATA_ROUTE = "query_dataset_inventory (sanitized identity, hash, status and coverage only)"
 
 

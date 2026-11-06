@@ -10,7 +10,9 @@ from appsec_review.jobs.job_final_publication_gate import build_job as gate_job
 from appsec_review.jobs.job_poc_generation import build_job as poc_job
 from appsec_review.jobs.job_remediation_planning import build_job as remediation_job
 from appsec_review.runtime.inputs import read_input_observations
-from tests.downstream_contract_fixture import ROOT, SOURCE, TEXT, REVIEW, LANGUAGE, fixture, publish_build, publish_poc
+from tests.downstream_contract_fixture import (
+    COVERAGE_SHARDS, ROOT, SOURCE, TEXT, REVIEW, LANGUAGE, fixture, publish_build, publish_poc,
+)
 from tests.remediation_support import answer
 
 
@@ -22,11 +24,14 @@ def test_fixture_uses_real_accepted_review_and_original_source_owners(tmp_path):
         "job_review_data_indexing", "job_source_history_analysis"}
 
 
-@pytest.mark.parametrize("kind", ("remediation", "poc", "dossier"))
-def test_original_shard_reads_execute_under_real_typed_runner(tmp_path, kind):
+@pytest.mark.parametrize("kind,coverage_producers", [
+    ("remediation", ()), ("poc", ()), ("dossier", ()),
+    ("remediation", ("job_tree_sitter_ast",)),
+], ids=("remediation", "poc", "dossier", "remediation-tree-coverage"))
+def test_original_shard_reads_execute_under_real_typed_runner(tmp_path, kind, coverage_producers):
     job_id = {"remediation": "job_remediation_planning", "poc": "job_poc_generation",
               "dossier": "job_dossier_publication"}[kind]
-    case = fixture(tmp_path, engineering=(job_id,))
+    case = fixture(tmp_path, engineering=(job_id,), coverage_producers=coverage_producers)
     build = publish_build(case)
     calls = []
 
@@ -54,6 +59,9 @@ def test_original_shard_reads_execute_under_real_typed_runner(tmp_path, kind):
     assert "job_source_history_analysis" not in result["handoff"]["upstream_handoff_sha256"]
     assert "job_source_history_analysis" not in shard_owners
     assert REVIEW not in shard_owners
+    for producer, output, _index, _shard in COVERAGE_SHARDS:
+        if producer in coverage_producers:
+            assert any(row["producer"] == producer and row["output_kind"] == output for row in observed)
     if kind == "remediation":
         assert calls and calls[0].task_input["task"]["source_files"][0]["path"] == SOURCE
         assert calls[0].task_input["task"]["source_files"][0]["text"] == TEXT
@@ -64,6 +72,57 @@ def test_original_shard_reads_execute_under_real_typed_runner(tmp_path, kind):
     else:
         assert not calls
         assert result["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+
+
+@pytest.mark.parametrize("kind,job_id,unit_id", [
+    ("remediation", "job_remediation_planning", "assess.propose"),
+    ("poc", "job_poc_generation", "plan.briefs"),
+    ("dossier", "job_dossier_publication", "dossiers.create"),
+], ids=("remediation", "poc", "dossier"))
+def test_source_reader_units_handle_all_complete_coverage_inputs(tmp_path, kind, job_id, unit_id):
+    from appsec_review.jobs.bound_artifacts import artifact_ref
+    case = fixture(tmp_path, engineering=(job_id,), coverage_producers=tuple(row[0] for row in COVERAGE_SHARDS))
+    supplied = {REVIEW: case.accepted_review.sha256}
+    if kind != "dossier":
+        supplied[LANGUAGE] = publish_build(case).sha256
+    calls = []
+
+    def model(request, *, timeout_seconds):
+        assert kind == "remediation", "PoC briefs must not dispatch the writer"
+        calls.append(request)
+        value = answer([item["relation_id"] for item in request.task_input["task"]["accepted_evidence"]], None)
+        return ModelResult(proposal={"action": "final", "result": value})
+
+    factory = {"remediation": remediation_job, "poc": poc_job, "dossier": dossier_job}[kind]
+    job = factory(repository_root=ROOT, **({"infer": model} if kind != "dossier" else {}))
+    claim = case.runner.begin_attempt(job, run_id=case.root.name, upstream_handoffs=supplied)
+    case.runner.execute_or_reuse_unit(job, claim, "load.verify_inputs")
+    output = case.runner.execute_or_reuse_unit(job, claim, unit_id)
+    document = read_bound_json(case.root, output["artifact"])
+    if kind == "poc":
+        assert document["entries"] and all(row["brief"] is not None for row in document["entries"].values())
+    elif kind == "remediation":
+        assert calls and calls[0].task_input["task"]["source_files"][0]["text"] == TEXT
+    else:
+        assert document["items"] and document["items"][0]["files"]["json"]
+    context = case.runner._context_from_claim(job, claim)
+    step, task = unit_id.split(".")
+    unit_root = context.attempt_root / "steps" / step / "tasks" / task
+    receipt = read_bound_json(case.root, artifact_ref(case.root, unit_root / "status.json"))
+    assert receipt["status"] == "SUCCEEDED"
+    assert read_bound_json(case.root, {
+        "path": (unit_root / "result.json").relative_to(case.root).as_posix(),
+        "sha256": receipt["result_sha256"],
+    }) == output
+    reads = receipt["input_consumption"]["reads"]
+    assert all(any(value["producer"] == producer and value["output_kind"] == output_kind for value in reads)
+               for producer, output_kind, _index, _shard in COVERAGE_SHARDS)
+    assert {"job_target_catalog", "job_evidence_collection", "job_code_graph_index",
+            "job_review_data_indexing"} <= {
+                value["producer"] for value in reads if value.get("path", "").endswith(".sqlite")}
+    assert not any(value["producer"] == "job_source_history_analysis" for value in reads)
+    assert all(value["cited"] is None for value in reads)
+    assert not (context.attempt_root / "handoff.json").exists(), "unit completion is not accepted job publication"
 
 
 @pytest.mark.parametrize("binding,enabled", ((True, True), (False, True), (True, False)),

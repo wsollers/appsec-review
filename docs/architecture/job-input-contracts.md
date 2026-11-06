@@ -130,3 +130,7 @@ downstream original-owner source view. Runner-mediated source, bound-PoC gate an
 Dagster admission regressions are in `tests/test_downstream_input_contracts.py` and
 `tests/test_standalone_input_contracts.py`. A supplied review manifest never re-owns its inherited
 shards or substitutes for declaring their original output kinds.
+Shard ownership is resolved against the complete producer-pinned declaration set before selecting
+source-view outputs or reporting availability. A more-specific coverage declaration wins over a
+broad AST/symbol/observation declaration; ties and unclaimed shards are errors, never implicit input
+authority. Coverage-only outputs retain their explicit requirements and gaps.

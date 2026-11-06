@@ -43,6 +43,15 @@ REVIEW = "job_inference_security_review"
 LANGUAGE = "job_language_build"
 SOURCE = "src/parse.c"
 TEXT = "void parse(char *input) {\n  char out[8];\n  strcpy(out, input);\n}\n"
+COVERAGE_SHARDS = (
+    ("job_tree_sitter_ast", "tree_sitter_coverage", "analysis", "tree-sitter-coverage-attempt_0001"),
+    ("job_cpp_symbol_index", "clangd_coverage", "analysis", "clangd-coverage-attempt_0001"),
+    ("job_clang_static_analysis", "clang_static_scope_coverage", "observations",
+     "clang-static-coverage-attempt_0001"),
+    ("job_cpg_analysis", "cpg_scope_coverage", "observations", "joern-coverage-attempt_0001"),
+    ("job_svf_alias_analysis", "svf_alias_scope_coverage", "analysis", "svf-coverage-attempt_0001"),
+    ("job_cpp_compiled_analysis", "cpp_blocked_branches", "analysis", "cpp-fixture-compiled"),
+)
 
 
 def configuration(tmp_path, *, engineering=()):
@@ -62,7 +71,7 @@ def configuration(tmp_path, *, engineering=()):
     return config
 
 
-def fixture(tmp_path, *, engineering=()):
+def fixture(tmp_path, *, engineering=(), coverage_producers=()):
     config = configuration(tmp_path, engineering=engineering)
     registry = builtin_registry()
     runner = JobRunner(config)
@@ -95,16 +104,21 @@ def fixture(tmp_path, *, engineering=()):
         ("job_target_catalog", "source_files", "source", "default", [source_file, *spans]),
         ("job_target_catalog", "declaration_symbols", "analysis", "default", [symbol]),
         ("job_target_catalog", "target_documents", "documents", "default", []),
+        ("job_target_catalog", "components", "components", "default", []),
+        ("job_target_catalog", "build_units", "build", "default", []),
         ("job_evidence_collection", "static_tool_observations", "observations", "semgrep", [observation]),
         ("job_code_graph_index", "code_graph_facts", "graph", "graph-fixture", [symbol]),
         ("job_review_data_indexing", "cross_domain_links", "links", "links-fixture", [
             EntityRecord(LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, snapshot, {"fixture": "dependency"}),
                          "dependency", "fixture", "fixture dependency", {"name": "fixture"})]),
         ("job_review_data_indexing", "precomputed_products", "precomputed", "qs-fixture", []),
+        ("job_review_data_indexing", "dataset_inventory", "inventory", "default", []),
         ("job_source_history_analysis", "history_signals", "history", "git-history", [
             EntityRecord(LogicalIdentity.derive(EntityKind.HISTORY_SIGNAL, snapshot, {"fixture": "history"}),
                          "history", "unrelated history context", "one synthetic change", {"commits": 1})]),
-    )
+    ) + tuple((*row, []) for row in COVERAGE_SHARDS if row[0] in coverage_producers)
+    coverage_gaps = {row[1]: f"{row[1]}: fixture scope unavailable"
+                     for row in COVERAGE_SHARDS if row[0] in coverage_producers}
     declarations = {}
     for owner, output_kind, index, shard_id, records in rows:
         declaration = next(item for item in registry.build(owner).datasets if item.output_kind == output_kind)
@@ -113,11 +127,11 @@ def fixture(tmp_path, *, engineering=()):
         builder = IndexBuilder(path, name=index, fingerprint="a" * 64, target_snapshot=snapshot, shard_id=shard_id)
         for record in records:
             builder.add_entity(record)
-        if index == "observations":
+        if index == "observations" and records:
             builder.add_relation(RelationRecord(IndexRelation.OBSERVED_AT, observation.identity.value,
                                                 source_file.identity.value, True, 1.0))
-        builder.add_coverage("fixture", "complete" if records else "unavailable",
-                             None if records else "fixture has no records in this scope")
+        gap = coverage_gaps.get(output_kind, "fixture has no records in this scope")
+        builder.add_coverage("fixture", "complete" if records else "unavailable", None if records else gap)
         shards.append(IndexIdentity(index, "appsec-review/retrieval-index/2", builder.build(), "a" * 64,
                                     path.relative_to(root).as_posix(),
                                     {"job": owner, "unit": declaration.step + ".fixture"}, (), shard_id))
@@ -144,7 +158,7 @@ def fixture(tmp_path, *, engineering=()):
         own = [item for item in shards if item.producer["job"] == owner]
         outputs = {item.producer["unit"] + "_" + item.name: {
             "index_manifest": manifest, "index_identity": asdict(item)} for item in own}
-        originals[owner] = publish(owner, outputs, datasets=declarations[owner],
+        originals[owner] = publish(owner, outputs,
                                   artifacts=[{"path": item.relative_path, "sha256": item.sha256} for item in own])
     pointer = originals["job_review_data_indexing"]
     atomic_json(root / "data/indices/accepted.json", {
@@ -152,7 +166,8 @@ def fixture(tmp_path, *, engineering=()):
         "handoff_path": pointer.path, "handoff_sha256": pointer.sha256,
         "manifest_path": manifest["path"], "manifest_sha256": manifest["sha256"]})
     result = SimpleNamespace(config=config, runner=runner, root=root, target=target, snapshot=snapshot,
-                             ids=identities, manifest=manifest, originals=originals, publish=publish)
+                             ids=identities, manifest=manifest, originals=originals, publish=publish,
+                             coverage_gaps=coverage_gaps)
     result.review = publish_review(result)
     return result
 

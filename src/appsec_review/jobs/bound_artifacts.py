@@ -62,15 +62,16 @@ def source_context_datasets() -> dict[str, tuple[DatasetDeclaration, ...]]:
     from importlib import import_module
     selections = (
         ("job_target_catalog", ("source_files", "declaration_symbols", "target_documents")),
-        ("job_tree_sitter_ast", ("tree_sitter_ast",)),
-        ("job_cpp_compiled_analysis", ("clang_ast", "llvm_ir", "binary_symbols", "infer_observations")),
-        ("job_cpp_symbol_index", ("clangd_symbols",)),
-        ("job_svf_alias_analysis", ("svf_alias_sets",)),
+        ("job_tree_sitter_ast", ("tree_sitter_ast", "tree_sitter_coverage")),
+        ("job_cpp_compiled_analysis", ("clang_ast", "llvm_ir", "binary_symbols", "infer_observations",
+                                       "cpp_blocked_branches")),
+        ("job_cpp_symbol_index", ("clangd_symbols", "clangd_coverage")),
+        ("job_svf_alias_analysis", ("svf_alias_sets", "svf_alias_scope_coverage")),
         ("job_code_graph_index", ("code_graph_facts",)),
         ("job_codeql_analysis", ("codeql_observations",)),
         ("job_evidence_collection", ("static_tool_observations",)),
-        ("job_clang_static_analysis", ("clang_static_observations",)),
-        ("job_cpg_analysis", ("cpg_graph_coverage",)),
+        ("job_clang_static_analysis", ("clang_static_observations", "clang_static_scope_coverage")),
+        ("job_cpg_analysis", ("cpg_graph_coverage", "cpg_scope_coverage")),
         ("job_ci_configuration_analysis", ("ci_observations", "ci_findings")),
         ("job_artifact_security_analysis", ("artifact_security_observations",)),
         ("job_binary_evidence_indexing", ("binary_functions",)),
@@ -98,16 +99,20 @@ def source_context_inputs() -> tuple[InputRequirement, ...]:
 def source_context_core(run_root: Path, manifest: Mapping[str, Any]) -> RetrievalCore:
     """Keep the accepted manifest identity while querying only the explicitly declared source view."""
     from appsec_review.retrieval.core import RetrievalCore
+    from appsec_review.runtime.inputs import input_shard_owner
     datasets = source_context_datasets()
     indexes = {index for declarations in datasets.values() for item in declarations for index in item.indexes}
 
     def selected(shard: Mapping[str, Any]) -> bool:
-        if shard.get("producer", {}).get("job") is None:
+        producer = shard.get("producer", {}).get("job")
+        if producer is None:
             # Preserve provenance-unknown historical views. The runtime observer still refuses
             # to admit these bytes as an original producer's output inside a typed job.
             return shard["name"] in indexes
-        return any(item.claims_shard(shard["name"], shard.get("shard_id", "default"))
-                   for item in datasets.get(shard.get("producer", {}).get("job"), ()))
+        if producer not in datasets:
+            return False
+        owner = input_shard_owner(run_root, shard)
+        return any(item.output_kind == owner.output_kind for item in datasets[producer])
 
     return RetrievalCore(run_root.parent, run_root.name, manifest_path=run_root / manifest["path"],
                          manifest_sha256=manifest["sha256"], shard_filter=selected)
