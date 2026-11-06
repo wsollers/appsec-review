@@ -242,3 +242,80 @@ The source is retained as `files/fleet-ledger-seq28.json` in the landing session
 Plan v1.1 and the approved-review copy remain unchanged. This snapshot and the
 receipt above do not authorize or claim an F01 landing; later events remain
 separate from this frozen candidate.
+
+## 2026-11-06 - F01/F09 receipts and ledger checkpoint 48
+
+The following are attributed observations from landing owner
+`969abd85-9a4e-42a5-a323-34843205448e`, not fresh canonical-main inspection by this
+documentation session. The supplied receipts were read and their exact hashes
+verified. Both remain in that owner's session `files` directory:
+
+| Receipt | SHA-256 |
+|---|---|
+| `f01-landing-receipt.json` | `14413d358d9c508b11e9bc2a38ba3b321677077413f8317eef2beaa4e6950406` |
+| `f09-landing-receipt.json` | `4920f9d02169ffb988e55e761abad22d80bb1c55637a9eafaff20cbff4f6603d` |
+
+### F01 landing
+
+- Both mains advanced from `23b5a5bcde9a8e35d4f39799ccecc5c60a14aef6` to candidate
+  `d4d68d2d99c681437f896bec35043c9b6fb22340`, tree
+  `b1661412793e8c4653edfcc9971237bef4eca17c`; worker ready SHA
+  `808f6944665eddab46f4f5354e29ea3f385a2607` is an ancestor.
+- Completed at `2026-11-06T12:51:57.2874188-05:00` in 7.5487 s. The receipt reports
+  parity, clean Windows/WSL tracked state, preserved WSL `data/feeds/` directory
+  identity, 15 changed LF paths, and released locks; no new commit or remote push.
+- The exact candidate had 79 previously passed cases; landing ran no new tests.
+  Two larger inventory-resume cases and manual integration/acceptance/live validation
+  remain outside that evidence. The landing retained frozen ledger 28 unchanged.
+
+### F09 landing
+
+- Both mains advanced from `d4d68d2d99c681437f896bec35043c9b6fb22340` to candidate
+  `f40ca7733246003a580ac4a3823fd523740510e4`, tree
+  `1de326e9685818d70bacc353623eceee860fc120`; worker ready SHA
+  `a7257269a310eff285defc3758dc8152d2d7cb40` is an ancestor.
+- Completed at `2026-11-06T13:03:34.5797217-05:00` in 5.7841 s. The receipt reports
+  parity, clean Windows/WSL tracked state, preserved WSL `data/feeds/` directory
+  identity, all eight paths matching committed bytes, and released locks. The
+  fixture's `-text` attribute and exact bytes were preserved without normalization.
+- The candidate had 78 previously passed cases plus prior type/lint verification;
+  landing ran no new tests or metadata updates. Full maximal aggregation and manual
+  integration/acceptance/live/campaign execution remain unrun. Runtime consumer and
+  job-test mapping work belongs to F10; no current consumer is implied.
+
+### Frozen checkpoint
+
+The coordinator authorized a separate documentation checkpoint from
+`f40ca7733246003a580ac4a3823fd523740510e4`, tree
+`1de326e9685818d70bacc353623eceee860fc120`. This session fast-forwarded only its clean
+owned branch to that exact base under the existing documentation-only Windows
+exception. It did not access either main checkout, acquire an integration lock,
+run code tests, or perform a landing.
+
+Coordinator ledger **48** was frozen as this session's
+`files/fleet-ledger-snapshot-48.json`; later events are not included. Its source
+SHA-256 is `3c627dec28b1965ee1c9007c072f03c58178fae4a309b17ddd0b0ceef7f908ca`.
+The only publication transform was CRLF to LF, producing SHA-256
+`4468d4d2e7ee03007ba94f8fea73a6679e9bd0c5f2cf3a8b679e21aeccdf9e0f`.
+No ledger values were independently changed. Only `ledger.json` and this appended
+log changed; plan `README.md` and `approved-review.md` retain their exact base bytes.
+
+Focused documentation verification uses the session artifact
+`files/verify-checkpoint48.py`:
+
+```powershell
+python (Join-Path $env:USERPROFILE '.copilot\session-state\053e6dce-78d3-428d-ac36-f1811056dd67\files\verify-checkpoint48.py')
+git diff --cached --check
+git ls-files --eol -- docs/plans/appsec-system-improvements
+```
+
+It checks the exact normalized copy, duplicate-free JSON, 19 package identities,
+48 contiguous events, state/dependency/DAG consistency, pinned receipt agreement,
+append-only log preservation, unchanged plan/review bytes, exact two-path scope,
+and changed-document links/LF using the unchanged repository link parser.
+
+Results on the exact checkpoint base plus these two docs: verifier PASS in
+0.714 s wall (0.4591 s internally); staged whitespace check PASS in 0.131 s;
+line-ending inspection PASS in 0.088 s, with all four plan-directory files
+`i/lf`, `w/lf`, `eol=lf`. No application unit, broad-suite, integration, acceptance,
+live, deployment, model, or target validation was run for this checkpoint.
