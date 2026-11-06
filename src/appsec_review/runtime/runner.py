@@ -62,6 +62,8 @@ class JobRunner:
         manifest_path = destination / "manifest.json"
         safety_path = destination / "execution-safety.json"
         envelope = safety.current_policy()
+        from appsec_review.runtime.repair import check_successor
+        check_successor(self.config, run_root, envelope)
         if safety_path.exists():
             if envelope != json.loads(safety_path.read_text(encoding="utf-8")):
                 raise ValueError("run is bound to another execution safety policy")
@@ -84,6 +86,8 @@ class JobRunner:
                 raise ValueError("run-owned configuration hash mismatch")
             if file_sha256(destination / "resolved.json") != self.config.resolved_sha256:
                 raise ValueError("run-owned resolved configuration hash mismatch")
+            from appsec_review.runtime.repair import bind_release
+            bind_release(self.config, run_root)
             return
         destination.mkdir(parents=True, exist_ok=True)
         atomic_bytes(destination / "appsec-review.toml", self.config.source_path.read_bytes())
@@ -100,6 +104,8 @@ class JobRunner:
                           "source": self.config.selection_source},
             "resolved": {"path": "resolved.json", "sha256": self.config.resolved_sha256},
         })
+        from appsec_review.runtime.repair import bind_release
+        bind_release(self.config, run_root)
 
     def _context_from_claim(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
         safety.check_running()
@@ -112,6 +118,13 @@ class JobRunner:
         if "review_policy" in claim and claim["review_policy"] != policy.view():
             raise ValueError("attempt claim review policy differs from frozen configuration")
         run_root = self.runs.resolve(str(claim["run_id"]))
+        if not claim.get("reused") and claim.get("component_identities") != job.identities(
+                self.config.runtime.repository_root, self.config.review_policy.releases):
+            raise ValueError("attempt implementation differs from the deployed release")
+        if not claim.get("reused") and "deployment_identity" in claim:
+            from appsec_review.runtime.repair import deployment_identity
+            if claim["deployment_identity"] != deployment_identity(self.config.runtime.repository_root):
+                raise ValueError("attempt image/script identity differs from the deployed release")
         if (claim.get("job_id") != job.job_id
                 or claim.get("repository_root") != str(self.config.runtime.repository_root)
                 or claim.get("resolved_config_sha256") != self.config.resolved_sha256):
@@ -191,6 +204,22 @@ class JobRunner:
         target_root: Path | None = None, source_fingerprint: str = "none",
         upstream_handoffs: Mapping[str, str] | None = None,
     ) -> Mapping[str, Any]:
+        from appsec_review.runtime.repair import worker_scope
+        if run_id is None:
+            run_id, run_root = self.runs.create(now or datetime.now(timezone.utc))
+        else:
+            run_root = self.runs.resolve(run_id)
+        with worker_scope(self.config, run_root, preparing_job=job.job_id):
+            return self._begin_attempt(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
+                                       now=now, target_root=target_root, source_fingerprint=source_fingerprint,
+                                       upstream_handoffs=upstream_handoffs)
+
+    def _begin_attempt(
+        self, job: Job, *, run_id: str | None = None, trigger: str = "manual",
+        orchestration: Mapping[str, str] | None = None, now: datetime | None = None,
+        target_root: Path | None = None, source_fingerprint: str = "none",
+        upstream_handoffs: Mapping[str, str] | None = None,
+    ) -> Mapping[str, Any]:
         instant = now or datetime.now(timezone.utc)
         self._check_target_inputs(job, target_root, source_fingerprint)
         if run_id is None:
@@ -247,6 +276,30 @@ class JobRunner:
                 job.datasets),
             "started_at": instant.isoformat(),
         }
+        from appsec_review.runtime.repair import (
+            PUBLICATION_PROTOCOL, WORKER_PROTOCOL, current_binding, deployment_identity,
+        )
+        binding = current_binding(run_root)
+        claim.update(
+            publication_protocol=PUBLICATION_PROTOCOL, worker_protocol=WORKER_PROTOCOL,
+            implementation_release=binding["release"],
+            repair_admission_sha256=binding["repair"]["sha256"] if binding["repair"] else None,
+            deployment_identity=deployment_identity(self.config.runtime.repository_root),
+        )
+        from appsec_review.runtime.checkpoints import select_units
+        claim["unit_reuse"] = {
+            unit.unit_id: {"action": "RUN", "reason": "cross-attempt reuse requires explicit repair admission"}
+            for unit in job.units}
+        if binding["repair"]:
+            from appsec_review.runtime.release import read_document
+            admission = read_document(verify_reference(run_root, binding["repair"]))
+            inspected = admission["unit_decisions"].get(job.job_id, {})
+            for unit_id, decision in select_units(run_root, job, claim).items():
+                if decision == inspected.get(unit_id):
+                    claim["unit_reuse"][unit_id] = decision
+                else:
+                    claim["unit_reuse"][unit_id] = {
+                        "action": "RUN", "reason": "checkpoint was not eligible in the inspected repair plan"}
         context = self._context(job, claim)
         from appsec_review.runtime.scope import review_scope
         from appsec_review.storage.admission import admit_upstreams, resolve_evidence_target, sign_claim
@@ -303,6 +356,7 @@ class JobRunner:
         self._check_target_inputs(job, kwargs.get("target_root"), source_fingerprint)
         if run_id is not None:
             run_root = self.runs.resolve(str(run_id))
+            self._bind_configuration(run_root)
             if job.job_id == "job_target_analysis_plan":
                 from appsec_review.jobs.job_build_environment_analysis.job import (
                     load_environment, planning_environment_inputs,
@@ -444,7 +498,9 @@ class JobRunner:
 
     def execute_or_reuse_unit(self, job: Job, claim: Mapping[str, Any], unit_id: str) -> Mapping[str, Any]:
         try:
-            return self._execute_or_reuse_unit(job, claim, unit_id)
+            from appsec_review.runtime.repair import worker_scope
+            with worker_scope(self.config, self.runs.resolve(str(claim["run_id"]))):
+                return self._execute_or_reuse_unit(job, claim, unit_id)
         except BaseException as exc:
             try:
                 self.fail_attempt(job, claim, exc)
@@ -550,7 +606,14 @@ class JobRunner:
                 admit_upstreams(context, claim.get("upstream_handoffs", {}))
                 for validator in unit.input_validators:
                     validator(unit_context, None)
-                result = dict(unit.handler(unit_context))
+                reuse = claim.get("unit_reuse", {}).get(unit_id, {})
+                if reuse.get("action") == "REUSE":
+                    from appsec_review.runtime.checkpoints import admitted_output
+                    result = admitted_output(context.run_root, reuse, claim, unit_id)
+                    context.events.write("TASK_REUSED", unit_id=unit_id,
+                                         details={"checkpoint": reuse["checkpoint"]})
+                else:
+                    result = dict(unit.handler(unit_context))
                 for validator in unit.output_validators:
                     validator(unit_context, result)
             atomic_json(result_path, result)
@@ -560,6 +623,8 @@ class JobRunner:
                        "producer": result.get("tool_id"), "disposition": result.get("terminal_status"),
                        "shard_identity": result.get("index_identity")}
             atomic_json(status_path, receipt)
+            from appsec_review.runtime.checkpoints import publish_checkpoint
+            publish_checkpoint(context.run_root, unit_root, claim, unit_id, result)
             disposition = result.get("terminal_status")
             task_event = ("TASK_COMPLETED_WITH_GAPS" if disposition not in (None, "SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY")
                           else "TASK_SUCCEEDED")
@@ -751,6 +816,11 @@ class JobRunner:
         self._fail_attempt(self._context_from_claim(job, claim), claim, exc)
 
     def finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
+        from appsec_review.runtime.repair import worker_scope
+        with worker_scope(self.config, self.runs.resolve(str(claim["run_id"]))):
+            return self._finalize_attempt(job, claim)
+
+    def _finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
         context = self._context_from_claim(job, claim)
         if json.loads((context.attempt_root / "status.json").read_bytes()).get("status") == "FAILED":
             raise ValueError("failed attempt cannot publish an accepted handoff")
@@ -764,6 +834,9 @@ class JobRunner:
                     if file_sha256(handoff_path) != pointer["handoff_sha256"]:
                         raise ValueError("finalized handoff changed during publication retry")
                     verify_handoff(context.run_root, json.loads(handoff_path.read_bytes()))
+                    from appsec_review.runtime.repair import verify_publication
+                    verify_publication(context.run_root, json.loads(handoff_path.read_bytes()),
+                                       pointer["handoff_sha256"])
                     claim = {**claim, "reused": True, "handoff_path": expected_path,
                              "handoff_sha256": pointer["handoff_sha256"]}
         if claim.get("reused"):
@@ -820,7 +893,9 @@ class JobRunner:
                 raise ValueError("failed attempt cannot publish an accepted handoff")
             with publication_scope(context), operation_span(context.events, "publication.handoff"):
                 return self._publish_attempt_scoped(job, context, claim, result)
-        return self._with_lock(context.attempt_root / "failure.lock", publish)
+        return self._with_lock(
+            context.run_root / "data/publication.lock",
+            lambda: self._with_lock(context.attempt_root / "failure.lock", publish))
 
     def _publish_attempt_scoped(self, job: Job, context: JobContext, claim: Mapping[str, Any],
                                result: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -856,9 +931,18 @@ class JobRunner:
             }, claim, result)
         from appsec_review.storage.shared import attempt_artifacts
         with operation_span(context.events, "publication.artifacts"):
+            attempt_refs = list(attempt_artifacts(root, context.attempt_root))
+            from appsec_review.runtime.repair import ComputationAdmission
+            computation_admission = ComputationAdmission.for_repair(root, claim)
+            if computation_admission is not None:
+                from appsec_review.storage.shared import verify_receipt
+                prefix = context.attempt_root.relative_to(root).as_posix() + "/shared/"
+                for artifact in attempt_refs:
+                    if artifact["path"].startswith(prefix):
+                        computation_admission.verify(root, verify_receipt(root, artifact))
             artifacts = collect_artifacts(
                 root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
-                outcomes_ref, outcomes, result, attempt_artifacts(root, context.attempt_root))
+                outcomes_ref, outcomes, result, attempt_refs)
         handoff = self._handoff_document(
             context, claim, result, outcomes, outcomes_ref, accepted=True, completed=completed, artifacts=artifacts)
         del outcomes
@@ -901,6 +985,11 @@ class JobRunner:
             # The run-wide summary re-verifies every published handoff, so refreshing it on each
             # publication made finalize cost grow with the run. Run-level drivers write it once.
             self._handoff_event(context, "HANDOFF_ACCEPTED", handoff, handoff_ref, duration_ms, unit_count)
+            from appsec_review.runtime.repair import PUBLICATION_PROTOCOL
+            atomic_json(context.attempt_root / "published.json", {
+                "schema": PUBLICATION_PROTOCOL, "handoff_sha256": handoff_ref["sha256"],
+                "status_sha256": file_sha256(context.attempt_root / "status.json"),
+            })
         except BaseException as original:
             for path, payload in previous.items():
                 try:

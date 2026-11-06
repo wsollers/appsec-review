@@ -1,0 +1,458 @@
+{
+  "schema": "appsec-review/job-test-map/2",
+  "jobs": {
+    "job_artifact_indexing": {
+      "unit": ["tests/test_artifact_indexing.py"],
+      "integration": ["tests/integration/test_artifact_indexing_scale.py"],
+      "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_artifact_index_count_is_bounded_by_the_classified_catalog"],
+      "live": []
+    },
+    "job_artifact_security_analysis": {
+      "unit": ["tests/test_artifact_security_analysis.py"],
+      "integration": ["tests/integration/test_installer_record_scans.py"],
+      "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones"],
+      "live": []
+    },
+    "job_binary_evidence_indexing": {
+      "unit": ["tests/test_binary_evidence_indexing.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_build_environment_analysis": {
+      "unit": ["tests/test_build_environment_analysis.py"],
+      "integration": ["tests/integration/test_build_topology_environment_lifecycle.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_build_iteration": {
+      "unit": ["tests/test_build_iterations.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_change_context_analysis": {
+      "unit": [
+        "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
+        "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
+        "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_ci_configuration_analysis": {
+      "unit": [
+        "tests/test_ci_configuration_analysis.py::test_discovery_is_exact_bounded_and_prompt_text_is_inert",
+        "tests/test_ci_configuration_analysis.py::test_spans_hierarchy_redaction_and_exact_only_correlation",
+        "tests/test_ci_configuration_analysis.py::test_dag_exposes_parallel_provider_branches_and_deterministic_join"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/test_ci_configuration_analysis.py::test_live_target_acceptance_is_static_offline_resumable_and_queryable"]
+    },
+    "job_clang_static_analysis": {
+      "unit": ["tests/test_clang_static_analysis.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/live/test_seeded_clang_live.py"]
+    },
+    "job_code_graph_index": {
+      "unit": ["tests/test_code_graph_index_job.py"],
+      "integration": ["tests/integration/test_code_graph_integration.py"],
+      "acceptance": [],
+      "live": ["tests/live/test_code_graph_live.py"]
+    },
+    "job_codeql_analysis": {
+      "unit": [
+        "tests/test_codeql_analysis.py::test_materialized_workspace_staging_omits_manifest_backed_npm_symlink",
+        "tests/test_codeql_analysis.py::test_materialized_workspace_staging_omits_container_owned_node_modules_symlink",
+        "tests/test_codeql_analysis.py::test_materialized_workspace_staging_rejects_unsafe_directory_links"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/live/test_codeql_analysis_wave1_live.py"]
+    },
+    "job_cpg_analysis": {
+      "unit": [
+        "tests/test_cpg_export.py",
+        "tests/test_cpp_index_jobs.py::test_cpg_job_retains_the_cpg_but_claims_no_coverage",
+        "tests/test_cpp_index_jobs.py::test_cpg_job_is_disabled_by_default_and_runs_no_joern"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_cpp_compiled_analysis": {
+      "unit": [
+        "tests/test_cpp_compiled_analysis.py::test_compile_database_normalization_preserves_only_reviewed_build_semantics",
+        "tests/test_cpp_compiled_analysis.py::test_infer_compile_database_uses_stable_read_only_container_paths",
+        "tests/test_cpp_compiled_analysis.py::test_clang_ast_loader_accepts_bounded_concatenated_declarations"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_cpp_symbol_index": {
+      "unit": ["tests/test_cpp_index_jobs.py::test_symbol_index_publishes_accepted_symbols_with_complete_coverage"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_debug_symbol_indexing": {
+      "unit": ["tests/test_debug_symbol_indexing.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_dependency_intelligence": {
+      "unit": [
+        "tests/test_dependency_intelligence.py::test_native_detection_covers_link_loader_and_metadata_and_deduplicates",
+        "tests/test_dependency_intelligence.py::test_native_detection_records_command_bounds",
+        "tests/test_dependency_intelligence.py::test_normalization_prefers_package_repository_metadata_and_deduplicates"
+      ],
+      "integration": ["tests/integration/test_dependency_job_acceptance.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_document_issue_analysis": {
+      "unit": [],
+      "integration": [
+        "tests/test_target_document_pipeline.py::test_document_issue_path_keeps_claims_private_and_resolves_source",
+        "tests/test_target_document_pipeline.py::test_document_issue_analysis_rejects_changed_source"
+      ],
+      "acceptance": [],
+      "live": []
+    },
+    "job_dossier_publication": {
+      "unit": [
+        "tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer",
+        "tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/test_dossier_live.py"]
+    },
+    "job_evidence_collection": {
+      "unit": ["tests/test_evidence_collection_job.py"],
+      "integration": ["tests/integration/test_signal_job_acceptance.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_final_publication_gate": {
+      "unit": [
+        "tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that",
+        "tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket",
+        "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps"
+      ],
+      "integration": [],
+      "acceptance": ["tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket"],
+      "live": []
+    },
+    "job_final_report_publication": {
+      "unit": [
+        "tests/test_final_report.py::test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden",
+        "tests/test_final_report.py::test_decision_pending_without_bounds_names_the_unrated_severity_itself"
+      ],
+      "integration": [],
+      "acceptance": ["tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections"],
+      "live": []
+    },
+    "job_image_pin_verification": {
+      "unit": ["tests/test_image_pin_verification.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_inference_security_review": {
+      "unit": [
+        "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
+        "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
+        "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema"
+      ],
+      "integration": ["tests/integration/test_review_consumer_acceptance.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_language_build": {
+      "unit": [
+        "tests/test_language_build.py::test_coverage_exchange_artifacts_are_preserved_for_every_build_family",
+        "tests/test_language_build.py::test_profile_exchange_artifacts_are_preserved_for_every_build_family",
+        "tests/test_language_build.py::test_generic_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_inputs"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/integration/test_family_project_builds.py", "tests/test_live_build_toolchains.py"]
+    },
+    "job_model_connectivity": {
+      "unit": ["tests/test_model_preflight.py::test_registry_wires_the_real_check_into_the_first_job_of_a_review"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_openvex_export": {
+      "unit": ["tests/test_openvex_job_units.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_owasp_control_assessment": {
+      "unit": ["tests/test_owasp_assessment_job.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_poc_generation": {
+      "unit": ["tests/test_poc_generation_units.py"],
+      "integration": ["tests/integration/test_authentic_poc_contract.py"],
+      "acceptance": [],
+      "live": ["tests/test_poc_live_compile.py"]
+    },
+    "job_post_build_security_assessment": {
+      "unit": [
+        "tests/test_post_build_security_assessment.py::test_redaction_normalization_and_malicious_inputs_do_not_escape",
+        "tests/test_post_build_security_assessment.py::test_compiler_linker_and_post_link_classification",
+        "tests/test_post_build_security_assessment.py::test_action_provenance_keeps_exact_identity_but_indexes_only_redacted_values"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_profile_data": {
+      "unit": ["tests/test_profile_data.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_project_build": {
+      "unit": [
+        "tests/test_project_build.py::test_android_expected_output_requires_a_structurally_valid_apk",
+        "tests/test_project_build.py::test_build_capture_mode_changes_project_probe_checkpoint_identity",
+        "tests/test_project_build.py::test_build_outputs_policy_changes_project_probe_checkpoint_identity"
+      ],
+      "integration": ["tests/integration/test_build_topology_catalog_planner_publication.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_remediation_planning": {
+      "unit": ["tests/test_remediation_models.py"],
+      "integration": [],
+      "acceptance": ["tests/test_remediation_jobs.py::test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs"],
+      "live": []
+    },
+    "job_remediation_validation": {
+      "unit": ["tests/test_remediation_patches.py"],
+      "integration": [],
+      "acceptance": ["tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment"],
+      "live": []
+    },
+    "job_review_data_indexing": {
+      "unit": ["tests/test_review_data_indexing.py::test_scanner_menu_partition_fits_review_package_page"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_review_intake": {
+      "unit": [
+        "tests/test_model_preflight.py::test_intake_confirms_every_configured_model_before_publishing",
+        "tests/test_model_preflight.py::test_an_unwired_intake_reports_that_no_check_ran"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_review_package_assembly": {
+      "unit": ["tests/review/test_packages.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_review_prioritization": {
+      "unit": [
+        "tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches",
+        "tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_sanitizer_build": {
+      "unit": [
+        "tests/test_sanitizer_build.py::test_invalid_settings_are_rejected",
+        "tests/test_sanitizer_build.py::test_unknown_and_missing_settings_are_rejected",
+        "tests/test_sanitizer_build.py::test_single_sanitizer_configuration_changes_the_flags"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/live/test_sanitizer_live.py"]
+    },
+    "job_security_tagging": {
+      "unit": [
+        "tests/test_security_tagging.py::test_grammar_and_identifier_normalization",
+        "tests/test_security_tagging.py::test_namespace_basis_table_is_enforced",
+        "tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_source_history_analysis": {
+      "unit": [
+        "tests/test_source_history_analysis.py::test_symbols_keep_mixed_languages_and_same_basenames_separate",
+        "tests/test_source_history_analysis.py::test_symbols_keep_exact_node_boundary_and_named_truncation"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_svf_alias_analysis": {
+      "unit": [
+        "tests/test_svf_alias_analysis.py::test_link_command_becomes_one_module_and_unlinked_units_stand_alone",
+        "tests/test_svf_alias_analysis.py::test_unresolved_archives_and_inputs_are_named_open_world_reasons",
+        "tests/test_svf_alias_analysis.py::test_module_bound_omits_trailing_modules_with_a_gap_and_ids_are_deterministic"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": ["tests/live/test_svf_live.py"]
+    },
+    "job_target_acquisition": {
+      "unit": [
+        "tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets",
+        "tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories",
+        "tests/test_target_acquisition.py::test_url_and_path_safety_primitives"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_target_analysis_plan": {
+      "unit": [
+        "tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable",
+        "tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_target_catalog": {
+      "unit": ["tests/test_cataloging_languages.py"],
+      "integration": ["tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_test_coverage": {
+      "unit": ["tests/test_test_coverage.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "job_third_party_data_sync": {
+      "unit": ["tests/test_third_party_data_sync.py"],
+      "integration": ["tests/integration/test_feed_transport_acceptance.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "job_tree_sitter_ast": {
+      "unit": [
+        "tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific",
+        "tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically",
+        "tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    }
+  },
+  "common_contracts": {
+    "fixture-review-repair": {
+      "jobs": [
+        "job_document_issue_analysis",
+        "job_final_report_publication",
+        "job_review_intake"
+      ],
+      "unit": [],
+      "integration": [],
+      "acceptance": ["tests/acceptance/test_repair_fixture_review.py"],
+      "live": []
+    },
+    "recovery-admission": {
+      "jobs": [
+        "job_artifact_indexing",
+        "job_artifact_security_analysis",
+        "job_binary_evidence_indexing",
+        "job_build_environment_analysis",
+        "job_build_iteration",
+        "job_change_context_analysis",
+        "job_ci_configuration_analysis",
+        "job_clang_static_analysis",
+        "job_code_graph_index",
+        "job_codeql_analysis",
+        "job_cpg_analysis",
+        "job_cpp_compiled_analysis",
+        "job_cpp_symbol_index",
+        "job_debug_symbol_indexing",
+        "job_dependency_intelligence",
+        "job_document_issue_analysis",
+        "job_dossier_publication",
+        "job_evidence_collection",
+        "job_final_publication_gate",
+        "job_final_report_publication",
+        "job_image_pin_verification",
+        "job_inference_security_review",
+        "job_language_build",
+        "job_model_connectivity",
+        "job_openvex_export",
+        "job_owasp_control_assessment",
+        "job_poc_generation",
+        "job_post_build_security_assessment",
+        "job_profile_data",
+        "job_project_build",
+        "job_remediation_planning",
+        "job_remediation_validation",
+        "job_review_data_indexing",
+        "job_review_intake",
+        "job_review_package_assembly",
+        "job_review_prioritization",
+        "job_sanitizer_build",
+        "job_security_tagging",
+        "job_source_history_analysis",
+        "job_svf_alias_analysis",
+        "job_target_acquisition",
+        "job_target_analysis_plan",
+        "job_target_catalog",
+        "job_test_coverage",
+        "job_third_party_data_sync",
+        "job_tree_sitter_ast"
+      ],
+      "unit": [
+        "tests/test_repair_admission.py::test_active_workers_and_cleanup_uncertainty_refuse",
+        "tests/test_repair_admission.py::test_application_image_stages_declared_release_inputs",
+        "tests/test_repair_admission.py::test_compatible_shared_computation_survives_explicit_repair",
+        "tests/test_repair_admission.py::test_concurrent_or_stale_repair_claims_are_rejected",
+        "tests/test_repair_admission.py::test_config_schema_and_unknown_release_refuse_repair",
+        "tests/test_repair_admission.py::test_explicit_release_dependency_cannot_be_silently_missing",
+        "tests/test_repair_admission.py::test_failed_job_does_not_fall_back_to_older_accepted_attempt",
+        "tests/test_repair_admission.py::test_failed_publication_stage_never_reuses_partial_handoff",
+        "tests/test_repair_admission.py::test_missing_original_release_evidence_rejects_predecessor_reuse",
+        "tests/test_repair_admission.py::test_named_cache_cannot_hide_an_incompatible_producer_as_legacy",
+        "tests/test_repair_admission.py::test_publication_refuses_incompatible_receipt_even_when_lookup_is_bypassed",
+        "tests/test_repair_admission.py::test_repair_does_not_relabel_an_old_shared_computation_as_new_code",
+        "tests/test_repair_admission.py::test_shared_producer_change_invalidates_its_real_consumer_not_an_independent_job",
+        "tests/test_repair_admission.py::test_successful_portable_unit_is_admitted_into_fresh_attempt"
+      ],
+      "integration": ["tests/integration/test_repair_workflow.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "wave1-reuse": {
+      "jobs": ["job_review_intake", "job_target_catalog"],
+      "unit": [
+        "tests/test_wave1_resume.py::test_every_wave1_job_is_reused_without_handler_execution",
+        "tests/test_wave1_resume.py::test_warm_graph_preserves_gap_completion_status"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    }
+  }
+}

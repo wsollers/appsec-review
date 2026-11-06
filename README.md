@@ -648,13 +648,19 @@ appsec-review metrics --run-id <run-id>
 ```
 
 Explain and then perform a resume (pass `--system <id>` instead of `--target` for a system run).
-`plan-resume` is read-only apart from its audit event:
+`plan-resume` is read-only:
 
 ```bash
 appsec-review plan-resume --run-id <run-id> --target targets/appsec-multi-vuln
 appsec-review resume --run-id <run-id> --target targets/appsec-multi-vuln
 appsec-review resume --run-id <run-id> --target targets/appsec-multi-vuln --force-from job_target_catalog
 ```
+
+An implementation change requires [explicit repair admission](docs/operations/recovery-repair.md),
+not just `--force-from`. Build-time dependency manifests identify job/shared/validator/script
+bytes; release labels alone cannot admit reuse. `plan-repair`, `failure-replay`, and
+`select-job-tests` explain recovery without executing work. Every enabled graph job, including
+post-index consumers, can be forced; only its actual dependents are invalidated.
 
 Other options: the global `--config <path-or-file-URI>` (before the subcommand) selects a
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and

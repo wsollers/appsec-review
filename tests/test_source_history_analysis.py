@@ -387,6 +387,9 @@ def configured(tmp_path: Path, *, github: bool = False, replacements: tuple[tupl
         "[jobs.job_target_analysis_plan.settings.model]\nenabled = true",
         "[jobs.job_target_analysis_plan.settings.model]\nenabled = false")
     if declared_releases:
+        from tests.release_support import write_release
+        write_release(tmp_path, ("job_review_intake", "job_target_catalog",
+                                "job_source_history_analysis", "job_target_analysis_plan"))
         text = text.replace("[review_policy.releases]\n", '[review_policy.releases]\n'
                             'platform = "fixture-platform/1"\nvalidation = "fixture-validation/1"\n', 1)
     for old, new in (*replacements, *((overrides or {}).items())):

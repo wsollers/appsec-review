@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/release-dependencies/1",
+  "common": ["src/appsec_review/**/*", "pyproject.toml", "deploy/dagster/requirements*.txt", "deploy/dagster/requirements.lock.txt", "deploy/dagster/Dockerfile", "containers/**/*", "tools/cve-bin-tool/**/*"],
+  "exclude_common": ["src/appsec_review/jobs/job_*/**", "src/appsec_review/development/**"],
+  "job_pattern": "src/appsec_review/jobs/{job_id}/**/*",
+  "validators": ["docs/schemas/**/*", "pipeline/**/*", "rules/**/*", "data/reference/owasp/fixtures/**/*"],
+  "scripts": ["scripts/**/*"],
+  "environment_requirements": ["APPSEC_REVIEW_CONFIG", "APPSEC_REVIEW_PROFILE", "APPSEC_REVIEW_TARGET"]
+}

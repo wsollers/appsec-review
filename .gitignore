@@ -33,6 +33,8 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+# Build-generated source provenance; copied into run-owned immutable release records.
+/implementation-release.json
 # Pytest owns this disposable tree. Focused or concurrent sessions use named
 # descendants; tests/conftest.py rejects scratch paths anywhere else.
 /test/tmp/

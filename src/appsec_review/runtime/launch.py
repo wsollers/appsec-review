@@ -94,7 +94,7 @@ def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str
 
 
 def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, trigger: str,
-          orchestration: Mapping[str, str]) -> Mapping[str, Any]:
+          orchestration: Mapping[str, str], force: bool = False) -> Mapping[str, Any]:
     """Claim (or reuse) the attempt exactly as every driver does."""
 
     from appsec_review.config.native_dagster import reject_uncommissioned_native_execution
@@ -107,7 +107,7 @@ def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, tr
                 or (inputs.target_root is not None and inputs.target_root.resolve() != Path(contract.target_root))
                 or inputs.source_fingerprint not in {"none", contract.binding["target_snapshot"]}):
             raise ValueError("native launch differs from its exact authorized run/target")
-    begin_method = getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
+    begin_method = runner.begin_attempt if force else getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
     return begin_method(job, run_id=run_id, trigger=trigger, orchestration=dict(orchestration),
                         target_root=inputs.target_root, source_fingerprint=inputs.source_fingerprint,
                         upstream_handoffs=dict(inputs.upstream_handoffs))

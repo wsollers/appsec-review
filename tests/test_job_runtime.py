@@ -281,6 +281,10 @@ def test_unit_executor_attempts_independent_branch_and_skips_only_dependents(tmp
 @pytest.mark.parametrize("mode", ("strict", "first_party_managed"))
 def test_platform_declaration_controls_accepted_attempt_reuse(
         tmp_path: Path, declared: bool, mode: str) -> None:
+    # A label without a generated source manifest no longer admits reuse.
+    if declared:
+        from tests.release_support import write_release
+        write_release(tmp_path, ("job_fixture",))
     from appsec_review.runtime.launch import complete
     from appsec_review.runtime.resume import ResumePlanner
 
@@ -373,28 +377,33 @@ def test_runtime_identity_uses_declarations_without_reading_checkout_or_working_
     from appsec_review.config.assurance import ComponentReleases
     from appsec_review.runtime.registry import builtin_registry
 
-    repository = Path(__file__).resolve().parents[1]
+    repository = tmp_path / "release-root"
+    from tests.release_support import write_release
+    write_release(repository, (job_id,))
     job = builtin_registry().build(job_id)
     assert job.runtime_identity is None
     empty = tmp_path / "empty-root"
     empty.mkdir()
     releases = ComponentReleases({"platform": "fixture-platform/1", "validation": "fixture-validation/1"})
 
-    def no_payload_read(*args, **kwargs):
-        pytest.fail("job identity attempted to read supplied payloads")
+    original_open = Path.open
+    def no_payload_read(path, *args, **kwargs):
+        assert path.name == "implementation-release.json", "job identity attempted to read supplied payloads"
+        return original_open(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", no_payload_read)
     monkeypatch.delenv("APPSEC_REVIEW_CONFIG", raising=False)
     monkeypatch.chdir(repository)
     expected = job.identities(repository, releases)
-    assert expected == {"implementation": "fixture-platform/1", "schema": job.schema_identity,
-                        "validation": "fixture-validation/1"}
+    assert len(expected["implementation"]) == len(expected["validation"]) == 64
+    assert expected["schema"] == job.schema_identity
     monkeypatch.chdir(tmp_path)
-    assert job.identities(repository, releases) == job.identities(empty, releases) == expected
+    assert job.identities(repository, releases) == expected
+    assert job.identities(empty, releases)["implementation"] == "undeclared"
     assert job.identities(empty)["implementation"] == "undeclared"
     assert job.identities(empty)["validation"] == "undeclared"
     assert job.identities(repository, ComponentReleases({
-        **releases.view(), job_id: "fixture-job/2"}))["implementation"] == "fixture-job/2"
+        **releases.view(), job_id: "fixture-job/2"}))["implementation"] != expected["implementation"]
 
 
 def test_builtin_job_construction_does_not_discover_or_read_platform_source(tmp_path, monkeypatch):
@@ -404,6 +413,8 @@ def test_builtin_job_construction_does_not_discover_or_read_platform_source(tmp_
     root = Path(__file__).resolve().parents[1]
     supplied = tuple(root / name for name in ("src", "containers", "rules", ".venv"))
     registry = builtin_registry()
+    from tests.release_support import write_release
+    write_release(tmp_path, registry.job_ids())
     releases = ComponentReleases({"platform": "fixture/1", "validation": "fixture/1"})
     original_glob, original_rglob, original_open = Path.glob, Path.rglob, Path.open
 
@@ -429,5 +440,6 @@ def test_builtin_job_construction_does_not_discover_or_read_platform_source(tmp_
     for job_id in registry.job_ids():
         job = registry.build(job_id)
         assert job.runtime_identity is None
-        assert job.identities(root, releases) == {
-            "implementation": "fixture/1", "validation": "fixture/1", "schema": job.schema_identity}
+        identity = job.identities(tmp_path, releases)
+        assert identity["schema"] == job.schema_identity
+        assert len(identity["implementation"]) == len(identity["validation"]) == 64
