@@ -565,3 +565,148 @@ unchanged. Its isolated verification command passed **104 tests in 5.762 s**:
 That selector verification did not execute the mapped recovery cases or any integration,
 acceptance or live suite. Only selector metadata/tests/documentation changed after the frozen
 runtime verification above.
+
+### Superseding six-package integration and Windows/WSL parity
+
+The user subsequently requested all six named packages on both local mains, with a local commit
+and no agent push. This section supersedes the earlier unresolved-landing status without
+removing its historical receipts.
+
+The conflict-free combined merge is **`dc44a6528aa4472d54b39c8f9d1b921c1f2e5f8b`**, tree
+**`d6b6422a459e885b12c4d2da33ef0cba3a45e27d`**. It was authored and verified in the isolated
+Ubuntu-22.04 worktree `/home/wsollers/appsec-worktrees/six-package-integration-a29d9039`,
+with its own Linux virtual environment and editable installation. Its parents are the final
+Operations candidate and the final Bounded Worker candidate. All six owner-confirmed ready tips
+are ancestors of the merge:
+
+| Package | Ready commit |
+| --- | --- |
+| Recovery and repair admission | `b561817f578133bc0ecb578faa7951337eb7e65a` |
+| Operations and quality tracking | `5170d7e61fab7dee681b76381e2ec795ffedb5d9` |
+| Bounded worker execution | `5fda13d78286f1d0f4f6c254c12ed0298e5d2399` |
+| Worker prompt contracts | `dc263b305e500df398b19398260e619253e855a7` |
+| Operator MCP and development skills | `a79fe222e95d57fb336c7b18c557509089e52672` |
+| Development quality gates | `0d2c6d7b8830436bda7eed3e2c66f89c6525a17d` |
+
+The user explicitly approved both custody resolutions:
+
+- Back up the stale WSL `git am` operation, then use `git am --quit`, not `--abort`, without
+  changing HEAD, the index or the worktree.
+- Preserve the nine untracked NVD provenance files in place during a non-overwriting
+  fast-forward, as an exception limited to those exact files, with backup and before/after hashes.
+
+Before quitting, stable patch ID `5b5d6dcb776d1ae8adec0e414f61e8d53ad55f99` was independently
+verified against both existing WSL-main ancestors
+`c13bfe94ddec7530e8fa0bbfe67fa3bf4785869f` and
+`abb49695449d8f6c66859755d7c31dcaa7105d79`. All 19 operation files and nine provenance files were
+backed up and byte-verified under
+`/home/wsollers/projects/appsec-review/.git/appsec-integration-backups/a29d9039-20261106`.
+Its `receipt.json` records unchanged HEAD/index/status/provenance/other refs across the quit.
+No reset, abort, skip, continuation, stash, provenance relocation or ignore-rule change occurred.
+
+Combined-tree verification ran this exact focused unit command at `dc44a6528`:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py \
+  tests/test_repair_dagster_contract.py \
+  tests/test_job_test_selection.py \
+  tests/test_job_runtime.py \
+  tests/test_handoff_interchange.py \
+  tests/test_review_run_cli.py \
+  tests/test_wave1_resume.py \
+  tests/test_runtime_launch.py \
+  tests/test_source_history_analysis.py::test_job_binds_mainline_history_ranks_by_sii_and_feeds_the_plan \
+  tests/test_shared_artifacts.py::test_same_request_can_preserve_different_results_and_pins_selection \
+  tests/test_shared_artifacts.py::test_concurrent_writers_deduplicate_without_rebinding_receipts \
+  tests/test_shared_artifacts.py::test_interrupted_publication_retains_complete_bytes_and_retries_idempotently \
+  tests/test_shared_artifacts.py::test_missing_or_tampered_shared_state_never_silently_recomputes \
+  tests/test_shared_artifacts.py::test_publication_rejects_noncanonical_or_escaping_paths \
+  tests/test_shared_artifacts.py::test_publication_and_consumption_reject_symlinks_even_with_matching_bytes \
+  tests/test_shared_artifacts.py::test_wrong_existing_object_bytes_are_never_overwritten \
+  tests/test_shared_artifacts.py::test_partial_write_never_publishes_and_retries_without_deleting_evidence \
+  tests/orchestration/dagster/test_definitions.py::test_definitions_reject_registry_config_drift \
+  tests/orchestration/dagster/test_definitions.py::test_job_level_disabled_setting_is_transparent_to_dagster \
+  tests/orchestration/dagster/test_definitions.py::test_environment_dependency_is_required_or_transparently_disabled \
+  tests/orchestration/dagster/test_definitions.py::test_owasp_follows_tag_cloud_and_precedes_hunt_in_both_graphs \
+  tests/test_operations_reporting.py \
+  tests/test_operations_quality.py \
+  tests/test_operations_retention.py \
+  tests/test_pipeline_log.py \
+  tests/test_operation_telemetry_gaps.py \
+  tests/test_pytest_default_collection.py \
+  tests/reporting/test_telemetry_inputs.py \
+  tests/test_bounded_execution.py \
+  tests/review/test_cells.py \
+  tests/review/test_bounded_cells.py \
+  tests/review/test_result_cache.py \
+  tests/review/test_lead_triage.py \
+  tests/review/test_budget.py \
+  tests/review/test_budget_reservations.py \
+  tests/review/test_execution_budget_wiring.py \
+  tests/test_model_recording.py \
+  tests/test_inference.py \
+  tests/test_claude_cli_inference.py \
+  tests/test_copilot_inference.py \
+  tests/test_anthropic_inference.py \
+  tests/test_inference_transport_failures.py \
+  tests/test_bounded_worker_adapters.py \
+  tests/test_poc_writer.py \
+  tests/test_remediation_models.py \
+  tests/test_native_inference_runtime.py \
+  tests/test_build_topology_feedback.py \
+  tests/test_post_build_security_assessment.py \
+  tests/test_owasp_evidence_binding.py \
+  tests/test_dependency_intelligence.py::test_model_resolution_is_validated_and_never_exact \
+  tests/test_dependency_intelligence.py::test_native_inference_is_injectable_and_pins_registered_guidance \
+  tests/test_worker_prompt_contracts.py \
+  tests/test_capability_artifact_cards.py \
+  tests/test_review_model_request.py \
+  tests/test_review_data_indexing.py::test_model_recordings_written_by_a_parity_walk_are_claimed_not_unaccounted \
+  tests/review/test_team_handler.py::test_blue_cells_never_see_each_other_and_the_verifier_is_blind \
+  tests/review/test_team_handler.py::test_a_distinct_verifier_profile_is_recorded_without_changing_independence \
+  tests/review/test_team_handler.py::test_provider_and_schema_failures_are_typed_gaps_with_terminal_records \
+  tests/review/test_team_handler.py::test_budgets_end_cells_not_launched_or_timed_out_and_are_never_retried \
+  tests/review/test_team_handler.py::test_rerunning_a_team_reuses_every_succeeded_cell \
+  tests/review/test_team_handler.py::test_resuming_exhausted_team_reconstructs_prior_claims_without_new_calls \
+  --basetemp=test/tmp/six-package-units-a29d9039 --tb=short --durations=10
+```
+
+Result: **1,334 passed, 2 failed, 1 warning**, pytest 445.48 s, wall **447.880 s**, exit 1.
+No tests were skipped or deselected. The two failures are exactly the unchanged baseline failures
+independently reproduced above: the `node_modules` inventory-gap assertion and the outdated
+explicit target-independent-job set. Their assertions remain intact; this is not a claim that
+all repository tests pass. The existing fork deprecation warning also remains visible.
+No new cross-package failure was observed in this selection.
+
+The existing static gate ran separately:
+
+```sh
+.venv/bin/python -m tools.quality check --static-only \
+  --base b561817f578133bc0ecb578faa7951337eb7e65a
+```
+
+It passed in **35.730 s**, scanning **668 modules** with **zero new diagnostics** and
+47 individually baselined legacy findings. Component times were Ruff 0.208 s, mypy 11.360 s,
+Bandit 18.015 s and architecture 5.639 s. The isolated checkout stayed clean after both commands.
+Exact commands, elapsed times and log hashes also remain in the integration session's
+`six-package-units.json` and `six-package-static.json` receipts.
+
+Under the existing Windows exclusive-file gate and WSL advisory gate, actual WSL `main` was
+fast-forwarded from `dc263b305e500df398b19398260e619253e855a7` to the verified `dc44a6528` merge.
+Actual Windows `main` was then fast-forwarded from `b561817f` to the **same full commit and tree**,
+using a local Git bundle rather than requiring an intermediate push/pull. Both remained on
+`main`; every ready tip above was rechecked as an ancestor of both. Windows status was clean.
+WSL tracked status was clean and its exact nine approved untracked files remained byte-identical.
+Their parent paths did not intersect any incoming change. Unrelated refs and FETCH_HEAD were
+preserved; the stale `rebase-apply` state remained absent.
+
+The operations fixture `tests/fixtures/operations-quality.json` retains its committed CRLF bytes
+because `tests/fixtures/**` is byte-pinned with `-text`. Ordinary whitespace checks passed on all
+other changed paths; the fixture passed with `cr-at-eol` recognized, without suppressing other
+whitespace errors or normalizing its bytes. Changed Windows files matched their committed blobs.
+
+This appended receipt is documentation-only after the verified runtime merge. **Windows/WSL
+local-main parity is now achieved; the earlier blocked entries are historical.** Both locks were
+released. No push, pull request, live review, deployment or image build occurred.
+**Integration, acceptance and live validation remain NOT RUN.**
