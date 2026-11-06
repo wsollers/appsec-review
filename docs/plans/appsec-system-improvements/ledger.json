@@ -1,0 +1,60 @@
+{
+  "schema": "appsec-review/implementation-fleet-ledger/1",
+  "plan_version": "1.1",
+  "snapshot_event_seq": 14,
+  "coordinator_session_id": "02825845-7ac6-4a31-b648-999b3823ecf5",
+  "authority": "Coordinator session SQLite fleet_* tables; this file is a published snapshot.",
+  "initial_base_sha": "f9bb376e02aaef166bc71e736eaba7ee677ce97c",
+  "main_parity": {
+    "windows_path": "F:\\XBOX-Repositories\\appsec-review",
+    "wsl_path": "/home/wsollers/projects/appsec-review",
+    "reported_sha": "f9bb376e02aaef166bc71e736eaba7ee677ce97c",
+    "status": "reported_by_previous_owner_recheck_before_landing",
+    "preserve_untracked": "WSL data/feeds/",
+    "integration_owner_session_id": "969abd85-9a4e-42a5-a323-34843205448e",
+    "bootstrap_session_id": "053e6dce-78d3-428d-ac36-f1811056dd67",
+    "landing_app_url": "ghapp://sessions/969abd85-9a4e-42a5-a323-34843205448e"
+  },
+  "packages": [
+    {"id":"F00","title":"Integration ledger and Windows/WSL parity","status":"in_flight","depends_on":[],"session_id":"053e6dce-78d3-428d-ac36-f1811056dd67","app_url":"ghapp://sessions/053e6dce-78d3-428d-ac36-f1811056dd67"},
+    {"id":"F01","title":"Publication and inventory blockers","status":"in_flight","depends_on":[],"session_id":"816be210-1d6f-4a8f-9368-3880b01cbfb1","app_url":"ghapp://sessions/816be210-1d6f-4a8f-9368-3880b01cbfb1","execution_worktree":"/home/wsollers/projects/fleet-f01-816be210/worktree"},
+    {"id":"F02","title":"Authoritative job input and dispatch contracts","status":"planned","depends_on":["F01"],"session_id":null},
+    {"id":"F03","title":"Shared artifact and accepted-build APIs","status":"planned","depends_on":["F02"],"session_id":null},
+    {"id":"F04","title":"Complete recoverability","status":"planned","depends_on":["F02","F03"],"session_id":null},
+    {"id":"F05","title":"Static service inventory core","status":"in_flight","depends_on":[],"session_id":"7d50b1ec-b93e-4573-aff2-066da4f2ab6f","app_url":"ghapp://sessions/7d50b1ec-b93e-4573-aff2-066da4f2ab6f","execution_worktree":"/home/wsollers/projects/appsec-review-fleet-f05"},
+    {"id":"F06","title":"Deployment exposure jobs and retrieval","status":"planned","depends_on":["F02","F05"],"session_id":null},
+    {"id":"F07","title":"Threat model and document review completion","status":"planned","depends_on":["F02","F06","F08"],"session_id":null},
+    {"id":"F08","title":"Worker competence and stateful guidance","status":"in_flight","depends_on":[],"session_id":"6e6a861e-8d73-42b9-a09c-163b833fea00","app_url":"ghapp://sessions/6e6a861e-8d73-42b9-a09c-163b833fea00","execution_worktree":"/home/wsollers/fleet-f08-6e6a861e"},
+    {"id":"F09","title":"Glasswing reproducibility metrics","status":"in_flight","depends_on":[],"session_id":"0bf0aaeb-d683-4fe7-a68c-ad8dec4d79a5","app_url":"ghapp://sessions/0bf0aaeb-d683-4fe7-a68c-ad8dec4d79a5","execution_worktree":"/home/wsollers/fleet-f09/worktree"},
+    {"id":"F10","title":"Operational telemetry and dashboards","status":"planned","depends_on":["F02","F09"],"session_id":null},
+    {"id":"F11","title":"Experiment planning and harness contracts","status":"planned","depends_on":["F02","F03","F07"],"session_id":null},
+    {"id":"F12","title":"Replay campaigns and reduction","status":"planned","depends_on":["F04","F11","EXT-APS"],"session_id":null},
+    {"id":"F13","title":"Lean formal evidence bridge","status":"planned","depends_on":["F12","EXT-APS"],"session_id":null},
+    {"id":"F14","title":"Patch regression and new publication","status":"planned","depends_on":["F07","F12","F13"],"session_id":null},
+    {"id":"F15","title":"Capability skills and MCP usability","status":"planned","depends_on":["F04","F06","F07","F10","F12","F13"],"session_id":null},
+    {"id":"F16","title":"Measured optimization and native decision","status":"planned","depends_on":["F03","F10","F12"],"session_id":null},
+    {"id":"F17","title":"Acceptance and closeout","status":"planned","depends_on":["F01","F02","F03","F04","F05","F06","F07","F08","F09","F10","F11","F12","F13","F14","F15","F16"],"session_id":null},
+    {"id":"EXT-APS","title":"Existing APS DDNet harness","status":"blocked","depends_on":[],"session_id":"4c594168-d314-4336-b0b4-51aca8ae5462","blocker":"Existing APS project resolving session startup failure; awaiting tested runner/schema commit."}
+  ],
+  "verification_policy": {
+    "unit": "Run focused real-behavior regressions, shuffled and bounded parallel, under 10 seconds per case.",
+    "manual": "Write integration/acceptance/live tests; execution and commissioning remain separately gated.",
+    "completion": "Exact ready SHA reviewed, coordinator-authorized landing, affected unit evidence, and matching Windows/WSL main HEAD/tree; required manual validation separately visible."
+  },
+  "events": [
+    {"seq":1,"package_id":null,"event":"plan_defined","detail":"F00-F17 plus external APS dependency; initial F01/F05/F08/F09 workers."},
+    {"seq":2,"package_id":"F00","event":"ownership_released","detail":"Existing unit-suite owner reports both mains f9bb376e, no landing/freeze; preserve WSL untracked data/feeds."},
+    {"seq":3,"package_id":"F00","event":"dispatched","detail":"053e6dce-78d3-428d-ac36-f1811056dd67; bootstrap plan/docs/parity inspection, await exact-SHA merge authorization"},
+    {"seq":4,"package_id":"F01","event":"dispatched","detail":"816be210-1d6f-4a8f-9368-3880b01cbfb1; publication/inventory repairs"},
+    {"seq":5,"package_id":"F05","event":"dispatched","detail":"7d50b1ec-b93e-4573-aff2-066da4f2ab6f; static service inventory core, no central wiring"},
+    {"seq":6,"package_id":"F08","event":"dispatched","detail":"6e6a861e-8d73-42b9-a09c-163b833fea00; competence/stateful guidance, no model execution core"},
+    {"seq":7,"package_id":"F09","event":"dispatched","detail":"0bf0aaeb-d683-4fe7-a68c-ad8dec4d79a5; Glasswing metrics, no broad telemetry/dashboard edits"},
+    {"seq":8,"package_id":null,"event":"baseline_alignment","detail":"App prewarm at dc263b3; exact f9bb376e private Linux worktrees authorized without resetting main"},
+    {"seq":9,"package_id":null,"event":"wsl_workers_ready","detail":"F01/F05/F08/F09 report owned Linux worktrees at exact f9bb376e"},
+    {"seq":10,"package_id":"F00","event":"execution_scope_blocked","detail":"Original worktree session cannot own canonical-main landing; no files changed at blocker"},
+    {"seq":11,"package_id":null,"event":"execution_choice","detail":"User chose WSL/Linux; Ubuntu-22.04 confirmed running and implementation workers already use it"},
+    {"seq":12,"package_id":"F08","event":"ownership_extension","detail":"Byte-compatible remediation task assembly extraction permitted; no execution/topology changes"},
+    {"seq":13,"package_id":"F00","event":"bootstrap_resumed","detail":"Original worker reports user-granted documentation-only Windows exception"},
+    {"seq":14,"package_id":"F00","event":"landing_executor_dispatched","detail":"969abd85-9a4e-42a5-a323-34843205448e is landing-only main session; inspect first, no merge authorized"}
+  ]
+}
