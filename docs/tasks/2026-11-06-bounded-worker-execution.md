@@ -107,3 +107,30 @@ On that revision plus the shared execution implementation,
 passed **20 tests** (pytest 1.33 s, wall 1.80 s). These cover cancellation checkpoints, fake-clock
 backoff, first-error refusal, deadlines, bounds, immutable correlated receipts, reported/replay
 usage and propagation of unexpected contract failures.
+
+### Review-cell and triage migration
+
+Review cells now share one execution deadline across turns, retries and configured backoff.
+Receipt reuse stays fingerprint-bound; the executor version is bumped to `/3` so old behavior
+is not silently reused. Prior receipt bytes are retained. Per-turn missing usage is null;
+aggregate actual usage becomes unknown when any contributing provider call is unknown.
+Replay preserves reported values separately and adds no new spend. Unexpected model-boundary
+and integrity exceptions are retained and re-raised instead of being relabeled provider gaps.
+The existing blue-only memo gate and verifier/judge blind request construction are untouched.
+Lead triage uses the same execution mechanics, still permits only one schema repair, and grants
+no retrieval or additional authority.
+
+Focused commands on `2c77d7c809d95a734bda86954ea78a315d77ac1f` plus these owned changes:
+
+| Pytest selectors (all prefixed `.venv/bin/python -m pytest`) | Basetemp | Result | Wall time |
+| --- | --- | --- | --- |
+| `tests/review/test_cells.py tests/review/test_bounded_cells.py tests/review/test_result_cache.py -q` | `test/tmp/package03-cells` | 80 passed | 4.01 s |
+| `tests/review/test_lead_triage.py tests/review/test_bounded_cells.py -q` | `test/tmp/package03-triage` | 28 passed | 1.96 s |
+| Same selection, after adding triage contract/replay/first-error cases | `test/tmp/package03-triage-expanded` | 33 passed | 2.17 s |
+| `tests/test_bounded_execution.py tests/review/test_cells.py tests/review/test_bounded_cells.py tests/review/test_result_cache.py tests/review/test_lead_triage.py -q` | `test/tmp/package03-review-core` | 118 passed | 4.26 s |
+
+The model call context preserves run/job/attempt/step/task correlation and optional typed
+package/lane/batch/build-unit/case IDs. Callers with legacy `ModelRequest` can pass the exact
+pinned guidance digest as `Execution(guidance_sha256=...)`; otherwise its existing summary pin
+or the exact guidance-content digest is recorded. Failure codes distinguish execution deadline
+exhaustion from byte/token limits. No arbitrary correlation dictionary is forwarded.

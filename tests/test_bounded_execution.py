@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from appsec_review.inference import ModelResult, ReviewModelRequest
+from appsec_review.inference import ModelRequest, ModelResult, ReviewModelRequest
 from appsec_review.inference.errors import (
     ExecutionContractError, ExecutionLimit, FailureCategory, ModelCancelled, ModelOutputError,
     ProviderError,
@@ -219,3 +219,24 @@ def test_invalid_boundary_result_is_a_contract_error():
     with pytest.raises(ExecutionContractError, match="ModelResult"):
         engine.call(lambda *a, **kw: {}, request(), timeout_seconds=20)
     assert engine.receipts[0].category == "contract"
+
+
+def test_legacy_request_uses_pinned_guidance_and_safe_correlations(tmp_path):
+    context = CallContext(tmp_path, "run", "job", "attempt", package_id="package-1", lane="lead")
+    engine = Execution(timeout_seconds=20, max_calls=1, context=context, guidance_sha256="b" * 64)
+    legacy = ModelRequest("test", "PRIVATE_PERSONA prose", "PRIVATE_ROLE prose", "PRIVATE_GUIDANCE",
+                          {"source": "PRIVATE_SOURCE"}, (), (), (), (), (), "test", "test-model",
+                          "high", 10_000, 1_000)
+    engine.call(lambda *a, **kw: answer(), legacy, timeout_seconds=20)
+    rows, _ = PipelineLog(tmp_path).read()
+    details = rows[-1]["details"]
+    assert details["guidance_bundle_sha256"] == "b" * 64
+    assert details["package_id"] == "package-1" and details["lane"] == "lead"
+    assert "PRIVATE_" not in json.dumps(rows)
+
+
+def test_invalid_retry_contract_is_explicit():
+    with pytest.raises(ValueError, match="switches"):
+        RetryPolicy(on_timeout="true")
+    with pytest.raises(ValueError, match="attempt"):
+        RetryPolicy(2).allows(0, FailureCategory.TIMEOUT)

@@ -59,6 +59,11 @@ class CallContext:
     attempt_id: str
     step_id: str = "-"
     task_id: str = "-"
+    package_id: str | None = None
+    lane: str | None = None
+    batch_id: str | None = None
+    build_unit_id: str | None = None
+    case_id: str | None = None
 
     @classmethod
     def current(cls) -> CallContext | None:
@@ -115,12 +120,17 @@ class RetryPolicy:
             raise ValueError("invalid model attempt bound")
         if any(type(value) is not int or not 0 <= value <= 3600 for value in self.backoff_seconds):
             raise ValueError("invalid model backoff schedule")
+        if any(type(value) is not bool for value in
+               (self.on_timeout, self.on_provider_error, self.on_invalid_output)):
+            raise ValueError("retry switches must be booleans")
 
     @property
     def attempts(self) -> int:
         return 1 if safety.active() else self.max_attempts
 
     def allows(self, attempt: int, error: BaseException | FailureCategory) -> bool:
+        if type(attempt) is not int or attempt < 1:
+            raise ValueError("retry attempt must be a positive integer")
         if attempt >= self.attempts:
             return False
         if isinstance(error, ProviderError) and not error.retryable:
@@ -157,6 +167,7 @@ class CallReceipt:
     requested_model: str
     served_provider: str | None
     served_model: str | None
+    failure_code: str | None = None
 
 
 class Execution:
@@ -165,6 +176,7 @@ class Execution:
     def __init__(self, *, timeout_seconds: float, max_calls: int,
                  context: CallContext | None = None, max_request_bytes: int | None = None,
                  max_response_bytes: int | None = None, max_total_response_bytes: int | None = None,
+                 guidance_sha256: str | None = None,
                  clock: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep,
                  check_cancelled: Callable[[], None] = safety.check_running) -> None:
@@ -173,11 +185,14 @@ class Execution:
         for bound in (max_request_bytes, max_response_bytes, max_total_response_bytes):
             if bound is not None and (type(bound) is not int or bound < 1):
                 raise ValueError("execution byte bounds must be positive integers")
+        if guidance_sha256 is not None and re.fullmatch(r"[0-9a-f]{64}", guidance_sha256) is None:
+            raise ExecutionContractError("guidance identity must be a SHA-256 digest")
         self.deadline = Deadline(timeout_seconds, clock=clock, check_cancelled=check_cancelled)
         self.sleep, self.max_calls, self.calls = sleep, max_calls, 0
         self.max_request_bytes, self.max_response_bytes = max_request_bytes, max_response_bytes
         self.max_total_response_bytes, self.response_bytes = max_total_response_bytes, 0
         self.context = context if context is not None else CallContext.current()
+        self.guidance_sha256 = guidance_sha256
         self.execution_id = uuid4().hex
         self.receipts: list[CallReceipt] = []
 
@@ -203,6 +218,10 @@ class Execution:
         if isinstance(request, ReviewModelRequest):
             fields.update(role=_identity(request.role), persona=_identity(request.persona),
                           cell_id=_identity(request.cell_id))
+        for name in ("package_id", "lane", "batch_id", "build_unit_id", "case_id"):
+            value = getattr(context, name)
+            if value is not None:
+                fields[name] = _identity(value)
         return fields
 
     def _emit(self, event: str, fields: dict[str, Any], **details: Any) -> None:
@@ -221,9 +240,13 @@ class Execution:
             raise ExecutionContractError("retry_reason must be a closed failure category")
         encoded = _json(asdict(request))
         request_hash = hashlib.sha256(encoded).hexdigest()
-        guidance_hash = (request.guidance_bundle_sha256 if isinstance(request, ReviewModelRequest)
-                         else _digest({"guidance": request.guidance, "role": request.role,
-                                       "persona": request.persona}))
+        guidance_hash = self.guidance_sha256 or (
+            request.guidance_bundle_sha256 if isinstance(request, ReviewModelRequest)
+            else request.summary.get("guidance_bundle_sha256"))
+        if not isinstance(guidance_hash, str) or re.fullmatch(r"[0-9a-f]{64}", guidance_hash) is None:
+            guidance_hash = _digest({"guidance": request.guidance_text
+                                    if isinstance(request, ReviewModelRequest) else request.guidance,
+                                    "role": request.role, "persona": request.persona})
         invocation, started = uuid4().hex, self.deadline.clock()
         fields = self._fields(request, invocation, request_hash, guidance_hash, retry_count, retry_reason) \
             if self.context is not None else {}
@@ -249,7 +272,10 @@ class Execution:
             response_hash = hashlib.sha256(payload).hexdigest()
             if result.raw_response is not None and not isinstance(result.raw_response, str):
                 raise ExecutionContractError("ModelResult.raw_response must be text")
-            size = max(len(payload), len(result.raw_response.encode()) if result.raw_response is not None else 0)
+            try:
+                size = max(len(payload), len(result.raw_response.encode()) if result.raw_response is not None else 0)
+            except UnicodeError as exc:
+                raise ModelOutputError("model response is not valid UTF-8") from exc
             self.response_bytes += size
             response_bound = self.max_response_bytes if self.max_response_bytes is not None else \
                 min(2 * 1024 * 1024, request.max_output_tokens * 8)
@@ -269,7 +295,10 @@ class Execution:
             raise
         finally:
             category = failure_category(error) if error is not None else None
+            failure_code = (getattr(error, "code", None) if error is not None else None)
+            failure_code = _identity(failure_code) if isinstance(failure_code, str) else None
             status = ("SUCCEEDED" if category is None else "TIMED_OUT" if category is FailureCategory.TIMEOUT
+                      or failure_code == "execution_deadline"
                       else "CANCELLED" if category is FailureCategory.CANCELLED else "FAILED")
             served_provider = _identity(result.served_provider) if isinstance(result, ModelResult) \
                 and isinstance(result.served_provider, str) else None
@@ -281,7 +310,7 @@ class Execution:
                 category.value if category is not None else None,
                 type(error).__name__ if error is not None else None, status, retry_count, retry_reason,
                 max(0, int((self.deadline.clock() - started) * 1000)), usage,
-                _identity(request.provider), _identity(request.model), served_provider, served_model)
+                _identity(request.provider), _identity(request.model), served_provider, served_model, failure_code)
             self.receipts.append(receipt)
             if self.context is not None:
                 context = self.context
@@ -295,5 +324,6 @@ class Execution:
                 self._emit("MODEL_CALL_COMPLETED", fields, terminal_status=status,
                     duration_ms=receipt.elapsed_ms, error_class=receipt.error_class,
                     failure_category=receipt.category, served_provider=served_provider, served_model=served_model,
+                    failure_code=receipt.failure_code,
                     execution_mode="replay" if usage.source == "replay" else "inference",
                     usage_source=usage.source, usage_unavailable_reason=usage.unavailable_reason, **usage.actual)

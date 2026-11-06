@@ -24,9 +24,13 @@ from pathlib import Path
 import re
 import sqlite3
 import subprocess
+import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
+from appsec_review.inference.errors import ExecutionLimit, FailureCategory, ProviderError, failure_category
+from appsec_review.inference.execution import CallContext, Execution, RetryPolicy
+from appsec_review.inference.usage import Usage
 from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
 from appsec_review.review.capability import (
     EXPAND_SCHEMA, EXPAND_TOOL, GRAPH_ROW_KINDS, LOCATOR_TOOLS, AuthorityDenied, CellCapability, TOOL_SCHEMAS,
@@ -43,7 +47,7 @@ from appsec_review.storage import atomic_json, file_sha256
 
 TURN_SCHEMA = "appsec-review/worker-turn/1"
 RECEIPT_SCHEMA = "appsec-review/cell-attempt-receipt/1"
-EXECUTOR_VERSION = "review-cell-executor/2"
+EXECUTOR_VERSION = "review-cell-executor/3"
 MAX_REQUESTS_PER_TURN = 16
 MAX_REPAIR_ERRORS = 20
 MAX_IDENTICAL_DENIALS = 2        # the second identical denial in a cell ends it (review-protocol-v2.md section 5.5)
@@ -116,7 +120,7 @@ class CellOutcome:
     security_events: tuple[Mapping[str, Any], ...]
     receipt_paths: tuple[Path, ...]
     reused: bool
-    counts: Mapping[str, int]
+    counts: Mapping[str, int | None]
     # How a reused outcome was obtained: "receipt" (this cell's own earlier attempt) or "memo" (another
     # cell's revalidated result, review/result_cache.py); ``None`` when the cell ran.
     reuse_source: str | None = None
@@ -176,8 +180,9 @@ class _Attempt:
     compact: Mapping[str, Any] | None = None
     feedback: list[str] = field(default_factory=list)
     labels: LabelTable = field(default_factory=lambda: LabelTable({}))
-    input_tokens: int = 0
-    output_tokens: int = 0
+    input_tokens: int | None = 0
+    output_tokens: int | None = 0
+    retry_error: BaseException | FailureCategory = FailureCategory.SCHEMA
 
     def end(self, status: CellStatus, gap_class: GapClass, reason: str) -> None:
         self.status, self.gap_class, self.reason = status, gap_class, reason[:256]
@@ -186,7 +191,9 @@ class _Attempt:
 def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapability,
              receipts_root: Path, validate_final: ValidateFinal, max_attempts: int = 1,
              retry_on_timeout: bool = True, retry_on_provider_error: bool = True,
-             retry_on_invalid_output: bool = False) -> CellOutcome:
+             retry_on_invalid_output: bool = False, backoff_seconds: tuple[int, ...] = (),
+             execution_context: CallContext | None = None,
+             clock: Callable[[], float] | None = None, sleep: Callable[[float], None] | None = None) -> CellOutcome:
     """Run one cell to exactly one terminal status, retrying per policy without widening it."""
     from appsec_review.runtime import execution_safety as safety
     safety.check_running()
@@ -195,15 +202,27 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
     attempts: list[_Attempt] = []
     paths: list[Path] = []
     repair: tuple[str, ...] = ()
-    for _ in range(1 if safety.active() else max(1, int(max_attempts))):
+    policy = RetryPolicy(max_attempts, retry_on_timeout, retry_on_provider_error,
+                         retry_on_invalid_output, backoff_seconds)
+    execution = Execution(timeout_seconds=spec.timeout_seconds,
+                          max_calls=capability.max_turns * policy.attempts,
+                          context=execution_context, clock=clock or time.monotonic,
+                          sleep=sleep or time.sleep)
+    for retry_index in range(policy.attempts):
         safety.check_running()
         number = _reserve_number(cell_root)
         attempt = _Attempt(number)
         try:
             attempt = _run_attempt(spec, cell_id, number, infer=infer, core=core, capability=capability,
-                                   validate_final=validate_final, repair_errors=repair, attempt=attempt)
-        except safety.ReviewStopped:
-            attempt.end(CellStatus.FAILED, GapClass.WORKER_GAP, "run_stopped")
+                                   validate_final=validate_final, repair_errors=repair, attempt=attempt,
+                                   execution=execution, retry_index=retry_index,
+                                   retry_reason=(failure_category(attempts[-1].retry_error).value
+                                                 if attempts and isinstance(attempts[-1].retry_error, BaseException)
+                                                 else attempts[-1].retry_error.value if attempts else None))
+        except BaseException as exc:
+            attempt.end(CellStatus.FAILED, GapClass.WORKER_GAP,
+                        "run_stopped" if failure_category(exc) is FailureCategory.CANCELLED
+                        else f"execution_contract_error:{type(exc).__name__}")
             _write_receipt(cell_root, spec, cell_id, capability, attempt)
             raise
         attempts.append(attempt)
@@ -211,8 +230,23 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
         if attempt.status is not CellStatus.SUCCEEDED and attempt.gap_class not in {
                 GapClass.AUTHORITY_ERROR, GapClass.BUDGET_GAP}:
             safety.fail(attempt.reason, action="review.cell")
-        if attempt.status is CellStatus.SUCCEEDED or not _retryable(
-                attempt, retry_on_timeout, retry_on_provider_error, retry_on_invalid_output):
+        if (attempt.status is CellStatus.SUCCEEDED or attempt.gap_class is GapClass.AUTHORITY_ERROR
+                or attempt.reason.startswith("cell_budget_exceeded:")):
+            break
+        try:
+            retry = execution.retry(retry_index + 1, attempt.retry_error, policy)
+        except BaseException as exc:
+            waiting = _Attempt(_reserve_number(cell_root))
+            if isinstance(exc, ExecutionLimit):
+                waiting.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, "cell_budget_exceeded:cell_deadline")
+            else:
+                waiting.end(CellStatus.FAILED, GapClass.WORKER_GAP, "run_stopped")
+            attempts.append(waiting)
+            paths.append(_write_receipt(cell_root, spec, cell_id, capability, waiting))
+            if not isinstance(exc, ExecutionLimit):
+                raise
+            break
+        if not retry:
             break
         repair = attempt.repair_errors
     final = attempts[-1]
@@ -225,8 +259,8 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
               "turns": sum(len(item.turns) for item in attempts),
               "queries": sum(item.queries for item in attempts),
               "denials": sum(item.denials for item in attempts),
-              "input_tokens": sum(item.input_tokens for item in attempts),
-              "output_tokens": sum(item.output_tokens for item in attempts)}
+              "input_tokens": _total(item.input_tokens for item in attempts),
+              "output_tokens": _total(item.output_tokens for item in attempts)}
     return CellOutcome(
         record=_record(spec, cell_id, final.status, final.number, gaps, paths[-1]),
         result=final.result if final.status is CellStatus.SUCCEEDED else None,
@@ -387,7 +421,8 @@ def _bind(spec: CellSpec, capability: CellCapability, core: Any) -> str:
 
 def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, core: Any,
                  capability: CellCapability, validate_final: ValidateFinal,
-                 repair_errors: tuple[str, ...], attempt: _Attempt | None = None) -> _Attempt:
+                 repair_errors: tuple[str, ...], execution: Execution, retry_index: int = 0,
+                 retry_reason: str | None = None, attempt: _Attempt | None = None) -> _Attempt:
     attempt = attempt if attempt is not None else _Attempt(number)
     transcript: list[dict[str, Any]] = []
     citable_package = set(spec.evidence_set)
@@ -416,30 +451,43 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
         entry: dict[str, Any] = {"turn": turn_number, "request_sha256": sha256_hex(asdict(request)),
                                  "transcript_sha256": sha256_hex(transcript),
                                  "final_required": final_required, "action": None,
-                                 "response_sha256": None, "input_tokens": 0, "output_tokens": 0,
+                                 "response_sha256": None, "input_tokens": None, "output_tokens": None,
                                  "retrievals": []}
         attempt.turns.append(entry)
+        recorded_before = len(execution.receipts)
         try:
-            response = infer(request, timeout_seconds=spec.timeout_seconds)
+            response = execution.call(infer, request, timeout_seconds=spec.timeout_seconds,
+                                      retry_count=retry_index, retry_reason=retry_reason)
         except IntegrityError:
             raise
         except CellBudgetExceeded as exc:
             attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, f"cell_budget_exceeded:{exc.reason}")
+            attempt.retry_error = FailureCategory.BUDGET
+            return attempt
+        except ExecutionLimit as exc:
+            reason = "cell_deadline" if exc.code == "execution_deadline" else "cell_token_cap"
+            attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, f"cell_budget_exceeded:{reason}")
+            attempt.retry_error = exc
             return attempt
         except ModelOutputError:
             attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "model_output_unparseable")
             attempt.repair_errors = (f"the reply was not exactly one {TURN_SCHEMA} object",)
             return attempt
-        except (TimeoutError, subprocess.TimeoutExpired):
+        except (TimeoutError, subprocess.TimeoutExpired) as exc:
             attempt.end(CellStatus.TIMED_OUT, GapClass.WORKER_GAP, "provider_timeout")
+            attempt.retry_error = exc
             return attempt
-        except Exception as exc:  # every provider failure is an ordinary cell gap
+        except ProviderError as exc:
             attempt.end(CellStatus.FAILED, GapClass.WORKER_GAP, f"provider_error:{type(exc).__name__}")
+            attempt.retry_error = exc
             return attempt
-        entry["input_tokens"] = int(response.input_tokens or 0)
-        entry["output_tokens"] = int(response.output_tokens or 0)
-        attempt.input_tokens += entry["input_tokens"]
-        attempt.output_tokens += entry["output_tokens"]
+        finally:
+            if len(execution.receipts) > recorded_before:
+                receipt = execution.receipts[-1]
+                _usage(attempt, entry, receipt.usage, dispatched=receipt.dispatched)
+                entry["execution"] = {"version": receipt.execution_version,
+                                      "failure_category": receipt.category,
+                                      "retry_count": receipt.retry_count, "retry_reason": receipt.retry_reason}
         entry["response_sha256"] = sha256_hex(response.raw_response if response.raw_response is not None
                                               else _plain(response.proposal))
         turn, error = _parse_turn(response.proposal)
@@ -768,14 +816,21 @@ def _plain(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-def _retryable(attempt: _Attempt, on_timeout: bool, on_provider: bool, on_invalid: bool) -> bool:
-    if attempt.reason.startswith("cell_budget_exceeded:"):
-        return False
-    if attempt.status is CellStatus.TIMED_OUT:
-        return on_timeout if attempt.gap_class is GapClass.WORKER_GAP else on_invalid
-    if attempt.status is CellStatus.FAILED:
-        return on_provider
-    return attempt.status is CellStatus.INVALID and on_invalid
+def _total(values: Iterator[int | None]) -> int | None:
+    values = list(values)
+    return sum(values) if all(value is not None for value in values) else None
+
+
+def _usage(attempt: _Attempt, entry: dict[str, Any], usage: Usage, *, dispatched: bool) -> None:
+    entry.update(usage_source=usage.source, usage_unavailable_reason=usage.unavailable_reason,
+                 cache_tokens=usage.actual["cache_tokens"])
+    if usage.source == "replay":
+        entry["replayed_usage"] = asdict(usage)
+    for name in ("input_tokens", "output_tokens"):
+        value = usage.actual[name] if dispatched and usage.source != "replay" else 0
+        entry[name] = value
+        prior = getattr(attempt, name)
+        setattr(attempt, name, prior + value if prior is not None and value is not None else None)
 
 
 def _gap(cell_id: str, spec: CellSpec, attempt: int, position: str, gap_class: GapClass | None,

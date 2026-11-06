@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from appsec_review.config.inference_review import ModelProfileSettings
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
@@ -44,6 +46,47 @@ def settings(*rules: TriageRule, max_leads: int = 200) -> TriageSettings:
 
 def reader(_lead: Lead):
     return ["int main(void) {", "  return dangerous(input);", "}"], None
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("contract bug"), TypeError("wrong transport")])
+def test_triage_programming_errors_are_not_provider_gaps(failure):
+    def infer(*args, **kwargs):
+        raise failure
+
+    with pytest.raises(type(failure)) as raised:
+        run_triage([lead("lead-model")], settings=settings(), profile=PROFILE, infer=infer,
+                   read_excerpt=reader, reference=None, guidance=GUIDANCE, schemas=SCHEMAS)
+    assert raised.value is failure
+
+
+@pytest.mark.parametrize("source", ["provider", "replay"])
+def test_triage_usage_retains_unknown_and_replay_provenance(source):
+    def infer(*args, **kwargs):
+        return ModelResult({"schema": RESULT_SCHEMA, "items": [{
+            "lead_id": "lead-model", "severity": None, "basis": "insufficient_context",
+            "reason": "The evidence does not establish reachability.",
+        }]}, input_tokens=-1, output_tokens=30, usage_source=source)
+
+    outcome = run_triage([lead("lead-model")], settings=settings(), profile=PROFILE, infer=infer,
+                        read_excerpt=reader, reference=None, guidance=GUIDANCE, schemas=SCHEMAS)
+    usage = outcome.document["batches"][0]["attempts"][0]["usage"]
+    assert usage["input_tokens"] is None and usage["source"] == source
+    assert usage["output_tokens"] == (30 if source == "provider" else None)
+
+
+def test_triage_first_error_disables_schema_repair(monkeypatch):
+    from appsec_review.runtime import execution_safety
+    monkeypatch.setattr(execution_safety, "active", lambda: True)
+    calls = []
+
+    def infer(request, **kwargs):
+        calls.append(request)
+        return ModelResult({"schema": RESULT_SCHEMA, "items": []})
+
+    outcome = run_triage([lead("lead-model")], settings=settings(), profile=PROFILE, infer=infer,
+                        read_excerpt=reader, reference=None, guidance=GUIDANCE, schemas=SCHEMAS)
+    assert len(calls) == 1 and outcome.model_calls == 1
+    assert outcome.document["batches"][0]["gap"] == "triage_failed:invalid_output"
 
 
 def test_rule_table_runs_before_the_model_and_records_original_and_assessed_severity() -> None:

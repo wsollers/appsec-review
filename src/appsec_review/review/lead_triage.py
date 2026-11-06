@@ -35,6 +35,8 @@ from pathlib import Path
 import subprocess
 from typing import Any, Callable, Collection, Mapping, Sequence
 
+from appsec_review.inference.errors import ExecutionLimit, FailureCategory, ModelOutputError, ProviderError
+from appsec_review.inference.execution import Execution, RetryPolicy
 from appsec_review.retrieval.core import RetrievalIntegrityError
 from appsec_review.review import advisories as advisory_reference
 from appsec_review.review import numeric_reasoning
@@ -677,23 +679,35 @@ def _converse(request: Any, group: Sequence[_Pending], *, infer: Callable[..., A
     attempts: list[dict[str, Any]] = []
     expected = [entry.lead.observation_id for entry in group]
     current, prior = request, None
-    for turn in (1, 2):
+    policy = RetryPolicy(2, on_invalid_output=True)
+    execution = Execution(timeout_seconds=profile.timeout_seconds, max_calls=policy.attempts)
+    for turn in range(1, policy.attempts + 1):
         attempt: dict[str, Any] = {"turn": turn, "request_sha256": request_sha256(current)}
         attempts.append(attempt)
         try:
-            result = infer(current, timeout_seconds=profile.timeout_seconds)
+            result = execution.call(infer, current, timeout_seconds=profile.timeout_seconds,
+                                    retry_count=turn - 1, retry_reason="schema" if turn > 1 else None)
         except (subprocess.TimeoutExpired, TimeoutError) as exc:
             attempt["error"] = f"{type(exc).__name__}"
             return None, attempts, "triage_failed:timeout", turn
-        except Exception as exc:
-            from appsec_review.inference import ModelOutputError
-            attempt["error"] = f"{type(exc).__name__}: {_short(exc, 160)}"
-            if not isinstance(exc, ModelOutputError):
-                return None, attempts, "triage_failed:provider_error", turn
-            errors, prior = [f"the reply was not one {RESULT_SCHEMA} JSON object: {_short(exc, 160)}"], None
+        except ExecutionLimit as exc:
+            attempt["error"] = exc.code
+            return None, attempts, "triage_failed:budget", turn
+        except ProviderError as exc:
+            attempt["error"] = type(exc).__name__
+            return None, attempts, "triage_failed:provider_error", turn
+        except ModelOutputError:
+            attempt["error"] = "ModelOutputError"
+            errors, prior = [f"the reply was not one bounded {RESULT_SCHEMA} JSON object"], None
             attempt["errors"] = errors
         else:
-            attempt["usage"] = {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens}
+            usage = execution.receipts[-1].usage
+            attempt["usage"] = {**usage.actual, "source": usage.source,
+                                "unavailable_reason": usage.unavailable_reason}
+            if usage.source == "replay":
+                attempt["replayed_usage"] = {"input_tokens": usage.input_tokens,
+                                            "output_tokens": usage.output_tokens,
+                                            "cache_tokens": usage.cache_tokens}
             items, errors = validate_result(result.proposal, expected, max_reason_chars=settings.max_reason_chars,
                                             schemas=schemas, fact_ids={entry.lead.observation_id:
                                                                        supplied_fact_ids(entry.item)
@@ -703,12 +717,16 @@ def _converse(request: Any, group: Sequence[_Pending], *, infer: Callable[..., A
                 return items, attempts, None, turn
             attempt["errors"] = errors
             prior = json.dumps(result.proposal, sort_keys=True, default=str)
-        if turn == 2:
+        try:
+            retry = execution.retry(turn, FailureCategory.SCHEMA, policy)
+        except ExecutionLimit:
+            return None, attempts, "triage_failed:budget", turn
+        if not retry:
             break
         current = build_request([entry.item for entry in group], guidance=guidance, profile=profile, name=name,
                                 catalog=catalog, settings=settings, batch_id=batch_id, repair_errors=errors,
                                 prior=prior)
-    return None, attempts, "triage_failed:invalid_output", 2
+    return None, attempts, "triage_failed:invalid_output", len(attempts)
 
 
 # --------------------------------------------------------------------------------------- consuming results
