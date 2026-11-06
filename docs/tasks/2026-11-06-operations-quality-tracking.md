@@ -354,3 +354,24 @@ Only handoff documentation follows the final tested implementation. The final re
 SHA is reported in the session handoff, and both ready checkouts are synchronized through
 local bundles. Main landing remains explicitly blocked, not claimed complete. The owner
 must resolve the dirty state and recheck any newer main/source freeze before integration.
+
+### Additional synchronization blocker: existing git-am operation
+
+On 2026-11-06, Package 03 reported an existing Git apply operation in the authoritative
+WSL repository. This package independently confirmed, using read-only metadata inspection,
+that `/home/wsollers/projects/appsec-review/.git/rebase-apply` contains **19 entries**,
+including the `applying` marker. WSL HEAD was still
+`dc263b305e500df398b19398260e619253e855a7`. The operation's owner was not verified.
+
+This is a separate blocker from the nine previously recorded untracked provenance files.
+Resolving the dirty-file gate alone does not authorize synchronization or integration while
+another owner's Git operation remains unresolved. Before any future synchronization, identify
+that owner and obtain explicit resolution of the existing operation; then repeat the
+serialized clean-tree, operation-state, ownership and source-freeze checks.
+
+No `git am --continue`, `--skip` or `--abort`, state-file changes, master/index/ref updates,
+or synchronization were performed in response to this report. The two ready branches remain
+at their previously synchronized code state. This follow-up updates only the app-facing
+handoff documentation and its local transfer bundle; transferring that documentation to WSL
+is deferred until operation custody is resolved. The previously tested implementation and
+its unit/static results are unchanged.
