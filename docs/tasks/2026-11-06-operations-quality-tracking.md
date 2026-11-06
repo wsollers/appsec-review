@@ -89,4 +89,37 @@ writers do not share the new offline-store deletion lock. No production data has
 deleted, compacted, sealed or migrated. No integration or acceptance execution, live review,
 service startup, deployment or real telemetry export has been performed.
 
-Final candidate verification and serialized WSL-main integration are pending.
+Implementation candidate before the final custody audit:
+`7d8c3901b2660c5f0f0979ecce13d25c0115b7c8`.
+
+The expanded focused command was:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operations_reporting.py tests/test_operations_quality.py tests/test_operations_retention.py \
+  tests/test_pipeline_log.py tests/test_operation_telemetry_gaps.py \
+  tests/test_pytest_default_collection.py tests/reporting/test_telemetry_inputs.py \
+  --basetemp=test/tmp/operations-b603f2c2-candidate
+```
+
+At that exact implementation commit: **106 passed in 30.94s**. Then `git merge --no-edit main`
+in the isolated WSL worktree confirmed the candidate already contained authoritative WSL main
+`528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`. The same command, with
+`--basetemp=test/tmp/operations-b603f2c2-main-candidate`, was rerun on the unchanged merged
+candidate: **106 passed in 31.88s**. The same existing fork warning remained visible.
+
+All three standalone entrypoints (`operator`, `quality`, `retention`) passed offline `--help`
+checks. Both manual suites were syntax-parsed again without execution. The recorded synthetic
+fixture is byte-pinned to SHA-256
+`d7f98edbf8deb0458657ef4fb1f7fee264ee1ff7ee23afa76841955ba3331a33`.
+Its committed bytes are retained under the repository's `-text` fixture rule; portable source
+and documentation were checked/normalized to LF without changing those fixture bytes.
+
+No new mounts or deployment were performed. The changed application Python modules require a
+future user-requested application-image rebuild/reload through the existing signed lifecycle;
+they are not hot-loaded merely because this source branch is integrated.
+
+Serialized WSL-main integration is pending the final ownership, dirty-tree and source-freeze
+inspection. Existing WSL run directories were observed; their age is not evidence of inactivity.
+The final custody audit additionally rejects hardlinked or writable catalog, journal and lock
+control files, not only artifact aliases; its focused regression is included in the final run.

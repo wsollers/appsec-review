@@ -146,3 +146,17 @@ def test_unknown_empty_roots_and_nonregular_files_fail_closed(tmp_path):
     path.unlink()
     os.mkfifo(path)
     assert plan_retention(root)["holds"]
+
+
+def test_control_file_aliases_cannot_bypass_exclusive_store_custody(tmp_path):
+    root = tmp_path / "store"
+    store(root)
+    os.link(root / CATALOG, tmp_path / "catalog-alias")
+    assert plan_retention(root)["holds"]
+    (tmp_path / "catalog-alias").unlink()
+    plan = plan_retention(root)
+    external = tmp_path / "external-lock"
+    external.write_bytes(b"0")
+    os.link(external, root / ".retention.lock")
+    with pytest.raises(ValueError, match="ownership"):
+        apply_retention(root, plan, apply=True)

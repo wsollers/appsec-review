@@ -80,7 +80,10 @@ def _catalog(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     if info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise ValueError("retention root requires exclusive owner-only permissions")
     path = root / CATALOG
-    if path.is_symlink() or path.stat().st_size > 4 * 1024 * 1024:
+    info_file = path.lstat()
+    if (not stat.S_ISREG(info_file.st_mode) or info_file.st_nlink != 1
+            or info_file.st_uid != os.getuid() or info_file.st_mode & 0o022
+            or info_file.st_size > 4 * 1024 * 1024):
         raise ValueError("invalid or unbounded retention catalog")
     value = json.loads(path.read_bytes())
     if (not isinstance(value, dict) or value.get("schema") != "appsec-review/retention-catalog/1"
@@ -186,13 +189,19 @@ def apply_retention(root: Path, plan: Mapping[str, Any], *, apply: bool = False)
         raise ValueError("invalid or held retention plan")
     _catalog(root)
     lock_path = root / ".retention.lock"
-    if lock_path.is_symlink():
-        raise ValueError("symlinked retention lock")
+    if lock_path.exists() or lock_path.is_symlink():
+        info = lock_path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid != os.getuid() or info.st_mode & 0o022):
+            raise ValueError("uncertain retention lock ownership")
     with FileLock(lock_path):
         journal_path = root / JOURNAL
         if journal_path.exists():
-            if journal_path.is_symlink() or journal_path.stat().st_size > 4 * 1024 * 1024:
-                raise ValueError("symlinked or unbounded retention journal")
+            info = journal_path.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                    or info.st_uid != os.getuid() or info.st_mode & 0o022
+                    or info.st_size > 4 * 1024 * 1024):
+                raise ValueError("uncertain or unbounded retention journal ownership")
             journal = json.loads(journal_path.read_bytes())
             if (journal.get("plan_id") != plan["plan_id"] or not isinstance(journal.get("deleted"), list)
                     or not set(journal["deleted"]) <= set(plan["delete"])
