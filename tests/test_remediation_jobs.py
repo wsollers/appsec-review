@@ -20,7 +20,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import JobContext
 from appsec_review.storage import file_sha256
 from tests import remediation_support as support
-from tests.final_report_support import job_tables, run_job
+from tests.final_report_support import environment, job_tables, run_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay, write_scenario
 from tests.fixtures.inference_review.builder import FILES, build_accepted_index_set
 
@@ -35,19 +35,21 @@ def summary(root, job):
 @pytest.fixture(scope="module")
 def chain(tmp_path_factory):
     base = tmp_path_factory.mktemp("rm")
-    fixture = build_accepted_index_set(base / "data")
-    native_ids = support.add_native_graph_facts(fixture)
-    config = write_config(base, fixture.runs_dir,
+    config = write_config(base, base / "data" / "runs",
                           extra=support.toml_tables() + job_tables("job_third_party_data_sync"))
+    overlay = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1))}
+    with environment(overlay):
+        fixture = build_accepted_index_set(base / "data", config=config)
+    native_ids = support.add_native_graph_facts(fixture)
     logs = base / "logs"
     logs.mkdir()
-    env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1)), "APPSEC_C7_CONFIG": str(config),
+    env = {**overlay, "APPSEC_C7_CONFIG": str(config),
            "APPSEC_C7_SCENARIO": str(write_scenario(logs, fixture.ids, calls=str(logs / "calls.jsonl"),
                                                      captures=str(logs / "captures")))}
     from appsec_review.jobs.job_inference_security_review import build_job as inference_review_job
     real_review = inference_review_job(infer=support.native_review_infer({**fixture.ids, **native_ids}),
                                      repository_root=support.ROOT)
-    outcome = run_job(config, real_review, fixture.run_id, env=env)
+    outcome = run_job(config, real_review, fixture.run_id, fixture.upstream_handoffs, env=env)
     assert outcome["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome
     workspace = fixture.run_root / "data" / "remediation-fixture" / "accepted-workspace"
     workspace.mkdir(parents=True)

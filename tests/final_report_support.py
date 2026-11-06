@@ -132,15 +132,17 @@ def run_review_chain(base: Path, logs: Path, *, scenario: Mapping[str, Any] | No
     shutil.rmtree(base, ignore_errors=True)
     base.mkdir(parents=True)
     logs.mkdir(parents=True, exist_ok=True)
-    fixture = build_accepted_index_set(base)
-    config = write_chain_config(base, fixture.runs_dir)
-    env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, teams)),
+    config = write_chain_config(base, base / "runs")
+    overlay = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, teams))}
+    with environment(overlay):
+        fixture = build_accepted_index_set(base, config=config)
+    env = {**overlay,
            "APPSEC_C7_CONFIG": str(config),
            "APPSEC_C7_SCENARIO": str(write_scenario(
                logs, fixture.ids, calls=str(logs / "calls.jsonl"), captures=str(logs / "captures"),
                **dict(scenario or {})))}
     chain = Chain(base, fixture, config, env)
-    chain.review = run_job(config, review_job(), fixture.run_id, env=env)
+    chain.review = run_job(config, review_job(), fixture.run_id, fixture.upstream_handoffs, env=env)
     chain.run_gate()
     chain.run_report()
     chain.snapshot = base.parent / f"{base.name}-snapshot"

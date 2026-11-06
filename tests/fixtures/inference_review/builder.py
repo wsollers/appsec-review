@@ -23,10 +23,16 @@ Usage::
 entity insertion order, which must not change any shard or package byte. ``omit_feeds`` leaves a
 reference feed unpublished (unavailable) and ``stale_feeds`` pins a feed older than its freshness
 bound; ``kev_cves``, ``nvd_records`` and ``mitre_weaknesses`` replace the fixture feed contents.
+
+``config`` binds the run to that configuration file (loaded under the ambient environment, so set any
+capacity overlay first) before the synthetic upstream handoff is frozen. A test that later drives the
+real runner over the run must pass the configuration it will run with: the runner refuses a run bound
+to another resolved configuration, and an accepted handoff must match the run's frozen configuration.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import json
 import random
 from pathlib import Path
 from typing import Any, Iterable
@@ -117,6 +123,8 @@ FILES = {
     ".github/workflows/ci.yml": ("YAML", "on: pull_request_target\njobs:\n  b:\n    steps: []\n"),
 }
 
+INDEXING_JOB = "job_review_data_indexing"
+
 
 @dataclass(frozen=True)
 class FixtureRun:
@@ -128,6 +136,13 @@ class FixtureRun:
     ids: dict[str, str] = field(default_factory=dict)
     shards: tuple[str, ...] = ()
     feed_pins: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def upstream_handoffs(self) -> dict[str, str]:
+        """The accepted indexing handoff a graph run passes to the inference review."""
+        pointer = json.loads((self.run_root / "data" / "jobs" / INDEXING_JOB / "latest.json").read_text(
+            encoding="utf-8"))
+        return {INDEXING_JOB: pointer["handoff_sha256"]}
 
 
 def _identity(kind: EntityKind, native: Any) -> str:
@@ -174,7 +189,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
                              mitre_weaknesses: dict[str, tuple] | None = None,
                              advisory_extra: dict[str, dict[str, Any]] | None = None,
-                             secrets: bool = False, secret_extra: dict[str, Any] | None = None) -> FixtureRun:
+                             secrets: bool = False, secret_extra: dict[str, Any] | None = None,
+                             config: Path | None = None) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -182,6 +198,10 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     advisory_extra = dict(advisory_extra or {})
     runs_dir = Path(runs_dir) if runs_dir is not None else Path(base) / "runs"
     run_root = runs_dir / run_id
+    if config is not None:
+        from appsec_review.config import load_config
+        from appsec_review.runtime.runner import JobRunner
+        JobRunner(load_config(config))._bind_configuration(run_root)
     target = Path(base) / "target"
     files = dict(FILES)
     if secrets:
@@ -409,17 +429,25 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                        "size_bytes": inputs_path.stat().st_size}
     handoff_path = attempt / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
-    write_fixture_handoff(run_root, handoff_path, {"job_id": "job_review_data_indexing",
+    write_fixture_handoff(run_root, handoff_path, {"job_id": INDEXING_JOB,
                                "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
                                "artifacts": [manifest], "outputs": {
                                    "load.accepted_inputs": {"artifact": inputs_artifact},
                                    "publish.inventory_index": {"index_manifest": manifest}},
                                "source_fingerprint": SNAPSHOT})
+    point_latest_handoff(run_root, handoff_path)
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,
         "handoff_path": handoff_path.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff_path),
         "manifest_path": manifest["path"], "manifest_sha256": manifest["sha256"]})
     return FixtureRun(runs_dir, run_root, run_id, target, SNAPSHOT, ids, tuple(published), pins)
+
+
+def point_latest_handoff(run_root: Path, handoff_path: Path) -> None:
+    """Publish the accepted-handoff pointer a real indexing attempt leaves; call again after a rewrite."""
+    atomic_json(run_root / "data" / "jobs" / INDEXING_JOB / "latest.json", {
+        "schema": "appsec-review/latest-handoff/1", "attempt_id": handoff_path.parent.name,
+        "handoff_path": handoff_path.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff_path)})
 
 
 def shard_path(fixture: FixtureRun, name: str, shard_id: str) -> Path:

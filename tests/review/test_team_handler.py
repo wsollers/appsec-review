@@ -50,11 +50,12 @@ class Recording:
 @pytest.fixture()
 def prepared(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("APPSEC_REVIEW_CONFIG_OVERLAY", raising=False)
-    fixture = build_accepted_index_set(tmp_path / "review")
-    config = write_config(tmp_path / "review", fixture.runs_dir)
+    (tmp_path / "review").mkdir()
+    config = write_config(tmp_path / "review", tmp_path / "review" / "runs")
+    fixture = build_accepted_index_set(tmp_path / "review", config=config)
     job = build_job(infer=ScriptedInfer({"ids": fixture.ids}), repository_root=ROOT)
     runner = JobRunner(load_config(config))
-    claim = runner.begin_attempt(job, run_id=fixture.run_id)
+    claim = runner.begin_attempt(job, run_id=fixture.run_id, upstream_handoffs=fixture.upstream_handoffs)
     outputs = {}
     for unit in ("scope.accept_manifest", "scope.assemble_scope", "triage.lead_severity", "packages.assemble_lead_packages",
                  "packages.assemble_hunt_packages"):

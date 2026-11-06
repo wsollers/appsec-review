@@ -25,9 +25,9 @@ from appsec_review.observability.telemetry import aggregate_run_metrics
 from appsec_review.reporting.dossier_render import render_dossier
 from appsec_review.review.secret_redaction import redact_source_line
 from tests import poc_support, remediation_support as support
-from tests.final_report_support import GATE, REPORT, job_tables, run_job
+from tests.final_report_support import GATE, REPORT, environment, job_tables, run_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay
-from tests.fixtures.inference_review.builder import build_accepted_index_set
+from tests.fixtures.inference_review.builder import INDEXING_JOB, build_accepted_index_set
 from tests.test_dossiers import executor_factory
 
 POC, PLAN, VALIDATE, DOSSIERS = (
@@ -86,12 +86,13 @@ def test_completion_job_tables_preserve_every_configured_step():
 
 def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     base = tmp_path_factory.mktemp("n")
-    fixture = build_accepted_index_set(base / "data")
-    native_ids = support.add_native_graph_facts(fixture)
     jobs = (POC, PLAN, VALIDATE, DOSSIERS, GATE, REPORT)
-    config = write_config(base, fixture.runs_dir, extra="".join(
+    config = write_config(base, base / "data" / "runs", extra="".join(
         job_tables(job) for job in ("job_third_party_data_sync", *jobs)))
     env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1))}
+    with environment(env):
+        fixture = build_accepted_index_set(base / "data", config=config)
+    native_ids = support.add_native_graph_facts(fixture)
     root = fixture.run_root
     accepted = {}
     summaries = {}
@@ -109,7 +110,8 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
         return publication
 
     infer = support.native_review_infer({**fixture.ids, **native_ids})
-    run(review_job(infer=infer, repository_root=support.ROOT), "publication.publish_handoff", ())
+    accepted[INDEXING_JOB] = accepted_handoff(root, INDEXING_JOB)
+    run(review_job(infer=infer, repository_root=support.ROOT), "publication.publish_handoff", (INDEXING_JOB,))
     review = summaries[JOB]
     verified = load_accepted_review(root, SchemaSet(support.ROOT / SCHEMA_DIRECTORY), max_packages=10000).document
     projection = read_bound_json(root, verified["inputs"]["projection"])

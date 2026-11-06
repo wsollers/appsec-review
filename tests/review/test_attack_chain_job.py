@@ -202,12 +202,13 @@ def test_chain_challenge_cell_cap_is_explicit_and_never_promoted_to_confirmation
 def test_real_inference_job_handoff_publishes_manifest_metrics_and_no_invented_connections(tmp_path_factory, monkeypatch):
     monkeypatch.delenv("APPSEC_REVIEW_CONFIG_OVERLAY", raising=False)
     directory = tmp_path_factory.mktemp("ac") / "r"
-    fixture = build_accepted_index_set(directory)
-    config = write_config(directory, fixture.runs_dir)
+    directory.mkdir()
+    config = write_config(directory, directory / "runs")
+    fixture = build_accepted_index_set(directory, config=config)
     infer = ChainInfer(inner=ScriptedInfer({"ids": fixture.ids}))
     job = build_job(infer=infer, repository_root=ROOT)
     runner = JobRunner(load_config(config))
-    claim = runner.begin_attempt(job, run_id=fixture.run_id)
+    claim = runner.begin_attempt(job, run_id=fixture.run_id, upstream_handoffs=fixture.upstream_handoffs)
     outputs = {}
     for unit in job.units:
         outputs[unit.unit_id] = runner.execute_or_reuse_unit(job, claim, unit.unit_id)

@@ -26,7 +26,7 @@ from appsec_review.jobs.job_poc_generation.source import WriterAnswer, assemble
 from appsec_review.storage import canonical_json
 from tests import poc_support
 from tests.final_report_support import (
-    GATE, REPORT, job_tables, report_job, review_job, run_job,
+    GATE, REPORT, environment, job_tables, report_job, review_job, run_job,
 )
 from tests.fixtures.inference_review.acceptance import JOB, ROOT, write_config, write_overlay, write_scenario
 from tests.fixtures.inference_review.builder import FixtureRun, build_accepted_index_set
@@ -248,12 +248,14 @@ def _build_chain(base: Path, logs: Path, **settings: int) -> PocChain:
     shutil.rmtree(base, ignore_errors=True)
     base.mkdir(parents=True)
     logs.mkdir(parents=True, exist_ok=True)
-    fixture = build_accepted_index_set(base)
-    config = write_config(base, fixture.runs_dir, extra=job_tables(GATE) + job_tables(REPORT) + poc_tables(**settings))
-    env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1)), "APPSEC_C7_CONFIG": str(config),
+    config = write_config(base, base / "runs", extra=job_tables(GATE) + job_tables(REPORT) + poc_tables(**settings))
+    overlay = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1))}
+    with environment(overlay):
+        fixture = build_accepted_index_set(base, config=config)
+    env = {**overlay, "APPSEC_C7_CONFIG": str(config),
            "APPSEC_C7_SCENARIO": str(write_scenario(logs, fixture.ids, calls=str(logs / "calls.jsonl"),
                                                     captures=str(logs / "captures")))}
-    run_job(config, review_job(), fixture.run_id, env=env)
+    run_job(config, review_job(), fixture.run_id, fixture.upstream_handoffs, env=env)
     chain = PocChain(base, fixture, config, env, base.parent / f"{base.name}-snapshot", [], [])
     handoff = chain.handoff(JOB)
     review = json.loads((fixture.run_root / handoff["outputs"]["publication.publish_handoff"]["artifact"]["path"]

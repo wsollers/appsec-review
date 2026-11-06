@@ -21,6 +21,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from appsec_review.config import load_config
+from appsec_review.orchestration.topology import UPSTREAM_HANDOFFS_TAG
 from appsec_review.guidance import load_registry
 from appsec_review.review.capability import FORBIDDEN_PARAMETERS, IN_PROCESS_TOOLS, TOOL_SCHEMAS, CellCapability
 from appsec_review.review.models import IntegrityError, Role
@@ -47,15 +48,21 @@ def _prepare(base: Path, logs: Path, monkeypatch, *, teams: int, cells: Path | N
     shutil.rmtree(base, ignore_errors=True)
     base.mkdir(parents=True)
     logs.mkdir(parents=True, exist_ok=True)
-    fixture = build_accepted_index_set(base, history_change_count=history_change_count)
+    config = write_config(base, base / "runs", overrides=config_overrides, extra=config_extra)
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG_OVERLAY", str(write_overlay(base, teams)))
+    fixture = build_accepted_index_set(base, history_change_count=history_change_count, config=config)
     if cells is not None:
         shutil.copytree(cells, fixture.run_root / "data" / "jobs" / JOB / "cells")
-    config = write_config(base, fixture.runs_dir, overrides=config_overrides, extra=config_extra)
-    monkeypatch.setenv("APPSEC_REVIEW_CONFIG_OVERLAY", str(write_overlay(base, teams)))
     monkeypatch.setenv("APPSEC_C7_CONFIG", str(config))
     monkeypatch.setenv("APPSEC_C7_SCENARIO", str(write_scenario(
         logs, fixture.ids, calls=str(logs / "calls.jsonl"), captures=str(logs / "captures"), **scenario)))
     return fixture, config
+
+
+def _tags(fixture) -> dict[str, str]:
+    """A standalone launch inside the fixture run, bound to its accepted indexing handoff."""
+    return {"appsec/application_run_id": fixture.run_id,
+            UPSTREAM_HANDOFFS_TAG: json.dumps(fixture.upstream_handoffs)}
 
 
 def _multiprocess(fixture, dagster_root: Path) -> None:
@@ -63,14 +70,12 @@ def _multiprocess(fixture, dagster_root: Path) -> None:
 
     dagster_root.mkdir(parents=True, exist_ok=True)
     with DagsterInstance.local_temp(tempdir=str(dagster_root)) as instance:
-        result = execute_job(reconstructable(define_job), instance=instance,
-                             tags={"appsec/application_run_id": fixture.run_id})
+        result = execute_job(reconstructable(define_job), instance=instance, tags=_tags(fixture))
         assert result.success
 
 
 def _in_process(fixture, *, success: bool = True):
-    result = define_job().execute_in_process(tags={"appsec/application_run_id": fixture.run_id},
-                                            raise_on_error=False)
+    result = define_job().execute_in_process(tags=_tags(fixture), raise_on_error=False)
     assert result.success is success
     return result
 
@@ -109,10 +114,10 @@ def _calls(logs: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
-def _runner_attempt(config: Path, run_id: str, *, stop_before: str | None = None):
+def _runner_attempt(config: Path, fixture, *, stop_before: str | None = None):
     job = build_registry().build(JOB)
     runner = JobRunner(load_config(config))
-    claim = runner.begin_attempt(job, run_id=run_id)
+    claim = runner.begin_attempt(job, run_id=fixture.run_id, upstream_handoffs=fixture.upstream_handoffs)
     for unit in job.units:
         if unit.unit_id == stop_before:
             return runner, job, claim
@@ -205,7 +210,7 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     # Re-executing the lane units reuses every unchanged cell; only failed cells are retried.
     failed = _failed_cells(_attempt(fixture))
     before = len(_calls(logs_5))
-    outcome, _job, _claim = _runner_attempt(config, fixture.run_id)
+    outcome, _job, _claim = _runner_attempt(config, fixture)
     rerun = {item["cell_id"] for item in _calls(logs_5)[before:]}
     assert failed and rerun == failed
     for lane in ("lead_review.teams", "hunt_review.teams"):
@@ -219,7 +224,7 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     shutil.copytree(fixture.run_root / "data" / "jobs" / JOB / "cells", cells)
     logs_shard = tmp_path / "logs-shard"
     fixture, config = _prepare(base, logs_shard, monkeypatch, teams=5, cells=cells, history_change_count=10)
-    _runner_attempt(config, fixture.run_id)
+    _runner_attempt(config, fixture)
     attempt = _attempt(fixture)
     hunt_doc = _json(_unit(attempt, "hunt_review.teams") / "lane.json")
     lead_doc = _json(_unit(attempt, "lead_review.teams") / "lane.json")
@@ -235,7 +240,7 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     # Tampering with an accepted shard after review blocks publication; no handoff is accepted.
     latest = fixture.run_root / "data" / "jobs" / JOB / "latest.json"
     accepted_before = latest.read_bytes()
-    runner, job, claim = _runner_attempt(config, fixture.run_id, stop_before="publication.publish_claim_ledger")
+    runner, job, claim = _runner_attempt(config, fixture, stop_before="publication.publish_claim_ledger")
     with shard_path(fixture, "history", "git-history").open("ab") as handle:
         handle.write(b"tampered")
     with pytest.raises(IntegrityError):

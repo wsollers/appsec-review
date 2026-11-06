@@ -17,7 +17,7 @@ from appsec_review.review.memory_context import SVF_PRODUCER, is_c_family
 from appsec_review.review.packages import PACKAGE_SCHEMA, PackageSettings, assemble_packages
 from appsec_review.review.scope import accept_manifest
 from appsec_review.storage import atomic_json, file_sha256
-from tests.fixtures.inference_review.builder import SNAPSHOT, FixtureRun, build_accepted_index_set
+from tests.fixtures.inference_review.builder import SNAPSHOT, FixtureRun, build_accepted_index_set, point_latest_handoff
 from tests.review.test_graph_admissibility import graph_entity
 from tests.review.test_packages_graph_context import PARSE, _location, attach_graph
 
@@ -67,6 +67,7 @@ def _publish(fixture: FixtureRun, shards: list[tuple[str, str, dict[str, Any], l
     from tests.handoff_fixture import write_fixture_handoff
     write_fixture_handoff(run_root, handoff_path, handoff)
     atomic_json(pointer_path, {**pointer, "manifest_sha256": sha, "handoff_sha256": file_sha256(handoff_path)})
+    point_latest_handoff(run_root, handoff_path)
 
 
 def _svf_record(kind: EntityKind, key: str, payload: dict[str, Any], location) -> EntityRecord:

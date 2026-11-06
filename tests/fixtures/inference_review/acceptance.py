@@ -2,7 +2,9 @@
 
 ``write_config`` copies the repository's own ``[jobs.job_inference_security_review]`` tables and
 applies the slice 1 acceptance overrides (two hunted units, a team-package budget that leaves one
-lane B package unlaunched, caps that exercise lane B triage). ``define_job`` is the reconstructable
+lane B package unlaunched, caps that exercise lane B triage). It also copies the upstream
+``[jobs.job_review_data_indexing]`` tables verbatim, because the fixture run holds that job's accepted
+handoff and a handoff must match its job's configuration in the run's frozen configuration. ``define_job`` is the reconstructable
 Dagster entry point used by multiprocess acceptance runs; the injected ``Infer`` double is the
 scripted :mod:`tests.fixtures.inference_review.fake_infer`.
 """
@@ -24,15 +26,23 @@ OVERRIDES = {
 }
 
 
-def job_tables(overrides: Mapping[str, Any] | None = None) -> str:
+UPSTREAM = "job_review_data_indexing"
+
+
+def repository_job_tables(job_id: str) -> str:
+    """The repository configuration's tables for one job, verbatim."""
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    start = text.index(f"[jobs.{JOB}]\n")
+    start = text.index(f"[jobs.{job_id}]\n")
     lines = []
     for line in text[start:].splitlines():
-        if line.startswith("[") and JOB not in line:
+        if line.startswith("[") and job_id not in line:
             break
         lines.append(line)
-    body = "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n"
+
+
+def job_tables(overrides: Mapping[str, Any] | None = None) -> str:
+    body = repository_job_tables(JOB)
     for key, value in {**OVERRIDES, **dict(overrides or {})}.items():
         body, count = re.subn(rf"(?m)^{key} = .*$", f"{key} = {json.dumps(value)}", body)
         if count != 1:
@@ -60,6 +70,7 @@ inference_teams = 2
 inference_score = 1
 
 {job_tables(overrides)}
+{repository_job_tables(UPSTREAM)}
 {extra}
 {build_capture_toml()}""", encoding="utf-8")
     return path
