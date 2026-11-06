@@ -170,3 +170,48 @@ verification and integration evidence are recorded below when available.
   checks, ordinary local merge and final ancestry verification.
 - Integration and acceptance test files remain **NOT RUN**, as do live reviews, container/image
   operations and a live GitHub Actions dispatch. No push or pull request is authorized.
+
+### Canonical local-main integration - completed
+
+- Ready commit: `f8daf3d34dd9576e2c2ee48f825e740475c1fb7a`;
+  tree: `be72b38366c5372c5918edf6c8b1e0f29a96bbe1`.
+- The prior hold owner explicitly released it: Stage B had never started. The designated
+  integration owner then held an exclusive FileStream (`OpenOrCreate`, `ReadWrite`,
+  `FileShare.None`) on
+  `F:\XBOX-Repositories\appsec-review\.git\appsec-independent-main-integration.lock`.
+  Under that lock it rechecked ownership, source freeze, clean tracked/untracked state and
+  absence of in-progress Git operations, then performed an ordinary `merge --ff-only`.
+- Resulting actual canonical Windows **main**:
+  `f8daf3d34dd9576e2c2ee48f825e740475c1fb7a`, tree
+  `be72b38366c5372c5918edf6c8b1e0f29a96bbe1`, clean. The lock handle was released in `finally`;
+  the empty advisory lock file remains in the Git common directory.
+- Independently verified through the canonical repository's shared refs from the assigned
+  app worktree: `git merge-base --is-ancestor f8daf3d34dd9576e2c2ee48f825e740475c1fb7a main`
+  returned 0, and `git rev-parse main` returned that exact ready SHA.
+- No tests ran in the Windows checkout; the exact WSL code verification above applies.
+  The canonical-main tree contains the same tested code plus documentation-only evidence.
+  No push, PR, destructive reset, rebase, or automatic conflict resolution occurred.
+  The integration owner separately notified the owner of the canonical WSL companion; the
+  requested Windows-main landing is already complete, not merely a private-mirror commit.
+
+### Additional documentation check and honest limitation
+
+At ready revision `f8daf3d34dd9576e2c2ee48f825e740475c1fb7a`, ran:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -q \
+  tests/test_documentation.py --basetemp=test/tmp/package02-docs
+```
+
+Result: **1 failed in 0.66s** (1.14s wall). This pre-existing repository-wide link check requires
+two files from the user-owned target checkout that is deliberately absent in the isolated WSL
+development tree: `targets/appsec-multi-vuln/support/project-matrix.json` and
+`targets/appsec-multi-vuln/README.md`. Both links originate in the unchanged
+`docs/architecture/build-environments-and-execution-capture.md:532-533`. The same named gap was
+already documented in the baseline architecture material. No target was acquired, no unrelated
+documentation was rewritten, and the check's assertions were not weakened.
+
+Reusing that test's link matcher on exactly the changed README, quality guide and package
+document found **no unresolved local links**. The 149-unit quality command remains passing;
+the supplemental whole-documentation check is explicitly not claimed to pass in this checkout.
+This final integration-evidence update changes only this package document.
