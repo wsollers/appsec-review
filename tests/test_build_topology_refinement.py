@@ -215,7 +215,7 @@ def _iterations(runner, root: Path, graph, action):
     from appsec_review.config.build_selection import parse_build_selection
     from appsec_review.jobs.build_iterations import BuildIterations
     target = root.parent / "synthetic-target"
-    target.mkdir()
+    target.mkdir(exist_ok=True)
     for document in _native()["descriptor_package"]["documents"]:
         (target / document["path"]).write_text(document["content"], encoding="utf-8")
     selection = parse_build_selection(runner.config.job("job_project_build").settings["build_selection"])
@@ -269,9 +269,15 @@ def test_workspace_resume_after_failed_iteration_rollback_needs_no_ledger(tmp_pa
     from appsec_review.jobs.build_iterations import resume_build_workspace
     from appsec_review.jobs.build_workspace import BuildWorkspace
     runner, root, graph, action = accepted_native(tmp_path)
+    uid = action["build_unit_id"]
     controller = _iterations(runner, root, graph, action)
     result = controller.run(_failing_worker(root), invoke=_invoke)
-    assert result["states"] == {action["build_unit_id"]: "FAILED"}
+    assert result["states"] == {uid: "FAILED"}
+    failed = next(item for item in result["receipts"] if item["build_unit_id"] == uid)
+    assert "synthetic compiler failure" in failed["gaps"]
+    prepared_dir = root / "data/build/iterations/prepared"
+    failure_evidence = {path.name: path.read_bytes() for path in sorted(prepared_dir.iterdir())}
+    assert len(failure_evidence) == 1
     assert not (root / "data/build/iterations/ledger.json").exists()
     assert not (root / "data/build/iterations/pending.json").exists()
     workspace = BuildWorkspace(root)
@@ -285,6 +291,20 @@ def test_workspace_resume_after_failed_iteration_rollback_needs_no_ledger(tmp_pa
     assert resumed["condition"] == "clean" and resumed["generation"] == rolled_back["generation"]
     assert (workspace.paths.target / "main.c").read_text() == _native()["descriptor_package"]["documents"][1]["content"]
     assert not (workspace.paths.install / "partial.o").exists()
+
+    rerun = _iterations(runner, root, graph, action).run(_succeeding_worker(root, graph, action), invoke=_invoke)
+    assert rerun["states"] == {uid: "SUCCEEDED"}
+    assert not next(item for item in rerun["receipts"] if item["build_unit_id"] == uid)["gaps"]
+    ledger = json.loads((root / "data/build/iterations/ledger.json").read_bytes())
+    assert ledger["order"] == [uid] and ledger["nodes"][uid]["before_generation"] == rolled_back["generation"]
+    assert not (root / "data/build/iterations/pending.json").exists()
+    with workspace.writer() as writer:
+        assert writer.committed_generation()["accepted"]
+        assert writer.state()["generation"] == ledger["nodes"][uid]["generation"] != rolled_back["generation"]
+        assert writer.state()["attempt"] is None
+    assert (workspace.paths.target / "build/control").exists()
+    for name, data in failure_evidence.items():
+        assert (prepared_dir / name).read_bytes() == data
 
 
 @pytest.mark.parametrize("state", ["unfinished-attempt", "accepted-without-admission", "corrupt-state"])
