@@ -55,7 +55,7 @@ def prepared(tmp_path: Path, monkeypatch):
     base = tmp_path / "review"
     base.mkdir()
     config = write_config(base, base / "runs", overrides={"backoff_seconds": [0]},
-                          extra=job_tables("job_third_party_data_sync") + job_tables("job_review_data_indexing"))
+                          extra=job_tables("job_third_party_data_sync"))
     fixture = build_accepted_index_set(tmp_path / "review")
     job = build_job(infer=ScriptedInfer({"ids": fixture.ids}), repository_root=ROOT)
     runner = JobRunner(load_config(config))
