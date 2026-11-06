@@ -1,13 +1,41 @@
+from functools import lru_cache
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from appsec_review.config.assurance import parse_review_policy
+from appsec_review.interchange import handoff_input_projection, input_set_sha256
 from appsec_review.storage.admission import create_admission
 from appsec_review.storage.atomic import atomic_json, file_sha256
 from appsec_review.storage.shared import put_private_file, verify_handoff, verify_reference
 from appsec_review.storage.validation import validation_scope
+from tests.handoff_fixture import write_fixture_handoff
+
+
+@lru_cache(maxsize=1)
+def _frozen_text() -> str:
+    from appsec_review.config import load_config
+    document = json.loads(load_config(Path(__file__).parents[1] / "appsec-review.toml").resolved_json)
+    for job_id in ("fixture", "consumer"):
+        document["jobs"].setdefault(job_id, {"name": job_id, "workers": 1, "settings": {}, "steps": {}})
+    return json.dumps(document)
+
+
+def _frozen_document() -> dict:
+    """Frozen job configuration the canonical handoff contract binds, per test and unshared."""
+    return json.loads(_frozen_text())
+
+
+def republish(root: Path, handoff: dict, *, job_id: str, attempt_id: str, **changes) -> dict:
+    """Publish the same evidence from another producer attempt under the canonical handoff contract."""
+    artifacts = [item for item in handoff["artifacts"]
+                 if not item["path"].startswith(handoff["resolving_paths"]["attempt"] + "/")]
+    path = write_fixture_handoff(root, root / "data" / "jobs" / job_id / "attempts" / attempt_id / "handoff.json", {
+        "job_id": job_id, "attempt_id": attempt_id, "source_fingerprint": handoff["source_fingerprint"],
+        "artifacts": artifacts, **changes})
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def admitted_fixture(tmp_path: Path, before_admission=None, *, attempt_id="one", named=False):
@@ -21,7 +49,7 @@ def admitted_fixture(tmp_path: Path, before_admission=None, *, attempt_id="one",
         "target_root": str(target), "custody": "application_private_v1",
     })
     configuration = root / "data" / "configuration"
-    atomic_json(configuration / "resolved.json", {"review_policy": policy.view()})
+    atomic_json(configuration / "resolved.json", {**_frozen_document(), "review_policy": policy.view()})
     atomic_json(configuration / "manifest.json", {
         "resolved_sha256": file_sha256(configuration / "resolved.json")})
     source = root / "builder-output"
@@ -32,11 +60,9 @@ def admitted_fixture(tmp_path: Path, before_admission=None, *, attempt_id="one",
         ref = _link(root, root / ref["path"], "data/indices/source/fixture.sqlite", ref["sha256"])
     attempt = root / "data" / "jobs" / "fixture" / "attempts" / attempt_id
     attempt.mkdir(parents=True)
-    handoff = {
-        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
-        "job_id": "fixture", "attempt_id": attempt_id, "source_fingerprint": "target",
-        "artifacts": [ref], "resolving_paths": {"attempt": attempt.relative_to(root).as_posix()},
-    }
+    handoff_path = write_fixture_handoff(root, attempt / "handoff.json", {
+        "job_id": "fixture", "attempt_id": attempt_id, "source_fingerprint": "target", "artifacts": [ref]})
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     context = SimpleNamespace(run_root=root, target_root=target, review_policy=policy,
                               source_fingerprint="target")
     if before_admission is not None:
@@ -50,8 +76,11 @@ def test_managed_admission_detaches_builder_and_removes_rehash(tmp_path, monkeyp
     source.write_bytes(b"changed!")
     assert (root / ref["path"]).read_bytes() == b"evidence"
     import appsec_review.storage.validation as validation
+    payload, original = (root / ref["path"]).resolve(), validation.file_sha256
     def forbidden(path):
-        raise AssertionError("accepted managed payload must not be rehashed")
+        if Path(path).resolve() == payload:
+            raise AssertionError("accepted managed payload must not be rehashed")
+        return original(path)
     monkeypatch.setattr(validation, "file_sha256", forbidden)
     with validation_scope(root):
         verify_handoff(root, handoff)
@@ -332,7 +361,8 @@ def aliased_publication(tmp_path):
     context = SimpleNamespace(run_root=root, target_root=Path(policy.target_root),
                               review_policy=policy, source_fingerprint="target")
     handoff = {key: value for key, value in previous.items() if key != "validation_record"}
-    handoff["artifacts"] = [shared.reference(root, path) for path in paths]
+    handoff["artifacts"] = ([item for item in previous["artifacts"] if item["path"] != ref["path"]]
+                            + [shared.reference(root, path) for path in paths])
     return root, context, handoff, paths
 
 
@@ -584,10 +614,13 @@ from pathlib import Path
 from appsec_review.storage.shared import verify_handoff, verify_reference
 from appsec_review.storage.validation import validation_scope
 import appsec_review.storage.validation as validation
-def forbidden(path):
-    raise AssertionError("managed consumer rehashed an admitted payload")
-validation.file_sha256 = forbidden
 root, handoff, reference = Path(sys.argv[1]), json.loads(sys.argv[2]), json.loads(sys.argv[3])
+payload, original = (root / reference["path"]).resolve(), validation.file_sha256
+def forbidden(path):
+    if Path(path).resolve() == payload:
+        raise AssertionError("managed consumer rehashed an admitted payload")
+    return original(path)
+validation.file_sha256 = forbidden
 if hasattr(os, "sched_getaffinity"):
     assert sorted(os.sched_getaffinity(0)) == json.loads(sys.argv[4])
 with validation_scope(root):
@@ -620,8 +653,10 @@ def test_admission_rejects_a_different_run_and_changed_operator_policy(tmp_path)
     root, _, _, handoff = admitted_fixture(tmp_path)
     other = tmp_path / "other-run"
     shutil.copytree(root, other)
-    with pytest.raises(ValueError, match="escapes its run"):
+    with pytest.raises(ValueError, match="run_id mismatch"):
         verify_handoff(other, handoff)
+    with pytest.raises(ValueError, match="escapes its run"):
+        verify_handoff(other, {**handoff, "run_id": other.name})
     configuration = root / "data" / "configuration"
     value = json.loads((configuration / "resolved.json").read_bytes())
     value["review_policy"]["project_id"] = "another-project"
@@ -660,8 +695,7 @@ def test_publication_reuses_authenticated_custody_without_copying_upstream_paylo
     with validation_scope(root):
         verify_handoff(root, handoff)
         monkeypatch.setattr(admission, "_detach_payload", forbidden)
-        republished = {key: value for key, value in handoff.items() if key != "validation_record"}
-        republished["attempt_id"] = "two"
+        republished = republish(root, handoff, job_id="fixture", attempt_id="two")
         republished["validation_record"] = create_admission(context, republished)
     verify_handoff(root, republished)
 
@@ -671,9 +705,11 @@ def test_fresh_process_publication_restores_only_claimed_authenticated_upstreams
     import os
     import subprocess
     import sys
-    root, _, _, handoff = admitted_fixture(tmp_path, attempt_id="attempt_0001")
+    root, _, ref, handoff = admitted_fixture(tmp_path, attempt_id="attempt_0001")
     path = root / handoff["resolving_paths"]["attempt"] / "handoff.json"
     atomic_json(path, handoff)
+    republished = republish(root, handoff, job_id="consumer", attempt_id="attempt_0001",
+                            upstream_handoff_sha256={"fixture": file_sha256(path)})
     code = """
 import json, os, sys
 from pathlib import Path
@@ -683,7 +719,7 @@ from appsec_review.storage.shared import verify_handoff
 from appsec_review.storage.validation import validation_scope
 import appsec_review.storage.admission as admission
 import appsec_review.storage.validation as validation
-root, handoff, digest = Path(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3]
+root, republished, payload = Path(sys.argv[1]), json.loads(sys.argv[2]), Path(sys.argv[3]).resolve()
 if hasattr(os, "sched_getaffinity"):
     assert sorted(os.sched_getaffinity(0)) == json.loads(sys.argv[4])
 policy_value = json.loads((root / "data/configuration/resolved.json").read_bytes())["review_policy"]
@@ -691,22 +727,22 @@ policy = parse_review_policy({key: value for key, value in policy_value.items()
     if key not in {"scope_version", "validation_version", "platform_payload_verification"}})
 context = SimpleNamespace(run_root=root, target_root=Path(policy.target_root),
                           review_policy=policy, source_fingerprint="target")
-attempt = root / "data/jobs/consumer/attempts/attempt_0001"
-attempt.mkdir(parents=True)
-republished = {key: value for key, value in handoff.items() if key != "validation_record"}
-republished.update(job_id="consumer", resolving_paths={"attempt": attempt.relative_to(root).as_posix()},
-                   upstream_handoff_sha256={"fixture": digest})
+original = validation.file_sha256
 def forbidden(*args):
     raise AssertionError("fresh publication rehashed or detached an admitted upstream payload")
-validation.file_sha256 = forbidden
+def forbidden_hash(path):
+    if Path(path).resolve() == payload:
+        forbidden(path)
+    return original(path)
+validation.file_sha256 = forbidden_hash
 admission._detach_payload = forbidden
 republished["validation_record"] = admission.create_admission(context, republished)
 with validation_scope(root):
     verify_handoff(root, republished)
 """
     affinity = sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else []
-    result = subprocess.run([sys.executable, "-c", code, str(root), json.dumps(handoff),
-                             file_sha256(path), json.dumps(affinity)],
+    result = subprocess.run([sys.executable, "-c", code, str(root), json.dumps(republished),
+                             str(root / ref["path"]), json.dumps(affinity)],
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
 
@@ -728,6 +764,8 @@ def test_publication_upstream_claim_does_not_grant_unauthenticated_trust(tmp_pat
         payload.write_bytes(b"changed!")
     elif invalid == "wrong_target":
         handoff["source_fingerprint"] = "other-target"
+        # Reseal the structural envelope so only the admission target check can reject it.
+        handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
     path = root / handoff["resolving_paths"]["attempt"] / "handoff.json"
     atomic_json(path, handoff)
     claim = {"fixture": "0" * 64 if invalid == "wrong_claim" else file_sha256(path)}
