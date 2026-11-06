@@ -447,7 +447,7 @@ not substitutes for an authoritative main checkout. Package 03 has not pushed, o
 launched a model/review, deployed, or modified either canonical main.
 
 The primary integration target in the original package is
-`F:\XBOX-Repositories\appsec-review`. The last main revision incorporated by this package is
+`F:\XBOX-Repositories\appsec-review`. Before the additional integration attempt below, this branch incorporated
 `5c62c1d45df10d1b93c0db7336e8dd3b5d1f2402`: the recovery package's documentation-only
 integration record on top of `305a39d993bbd68b4678d309eef0e81463fd01fd`. That documentation
 update was included in the private branch at `6cf699aa30fd72f51e1ef22292a28498f33236e0`;
@@ -486,3 +486,69 @@ and exported to a local Git bundle. The assigned app worktree was fast-forwarded
 only after verifying its feature-branch identity and clean state; no tests or development ran
 there. Subsequent documentation-only descendants retain the same verified implementation.
 The final ready bundle/feature ref is the handoff, not a claim of canonical-main landing.
+
+### Bounded canonical integration attempt and preserved master ref
+
+After the user requested continued completion, the latest documentation-only Windows main
+`455ea837a13aee176cb99add5b84a227a1ce42f3` was merged into the ready branch at
+`59034b42319c25b27bbd3a6136d5f7f755114a75`. Runtime source was unchanged. A dedicated integration
+session, operating in the canonical checkout, investigated a preservation-in-place fast-forward
+under the existing integration procedure. The parent did not operate on canonical working files.
+The user-permission prompt returned "user unavailable", not an approval or gate exception.
+
+The integration worker independently found an additional decisive blocker: the WSL master
+reports **"You are in the middle of an am session"** and has **19 existing files under
+`.git/rebase-apply`, including `applying`**. Its owner must resolve that operation. No `am`
+continue, skip or abort, branch switch, reset, stash, cleanup or conflict resolution was performed.
+The untracked-file/custody and source-freeze questions also remain unresolved; historical run
+directories and two bash processes with canonical cwd do not prove either an active run or a
+cleared freeze.
+
+Verified integration inputs:
+
+- Ready commit: `59034b42319c25b27bbd3a6136d5f7f755114a75`.
+- Ready tree: `181c06acf2fe3c4352b9c84a8fb6e758753227c4`.
+- Bundle SHA-256: `933808481662eca672a4011579084ecc95a6a229979f64b118369383e6ae58d1`.
+- Windows canonical main remained clean at `455ea837a13aee176cb99add5b84a227a1ce42f3`.
+- WSL canonical main remained tracked-clean at `dc263b305e500df398b19398260e619253e855a7`,
+  with the same nine untracked provenance files. Both main HEADs are ancestors of the ready
+  commit; neither main was moved.
+
+The permitted fallback preserved the complete ready history **inside the WSL master Git object
+store** using `git bundle unbundle`, then created the previously absent
+`refs/remotes/package-03/ready` by compare-and-set:
+
+```text
+git update-ref --no-deref refs/remotes/package-03/ready 59034b42319c25b27bbd3a6136d5f7f755114a75 0000000000000000000000000000000000000000
+```
+
+The ref identity was verified. No fetch occurred, FETCH_HEAD was preserved, and the existing
+package-01 ready ref was unchanged. This is **metadata-only preservation, not a main merge**.
+
+Both existing integration locks were held concurrently, without takeover or waiting:
+Windows `FileStream(Open, ReadWrite, FileShare.None)` from
+`2026-11-06T12:01:39.3891770Z` through final verification at `12:01:59.7797135Z`, and WSL
+nonblocking exclusive `flock` plus `lockf` from `12:01:40.312400Z` through `12:01:59.036869Z`.
+Both were released in `finally`; their contents and metadata were preserved. No executable
+non-sample WSL hook or configured fsmonitor was present, and no hook was bypassed or executed.
+
+Before/after equality covered branch, HEAD/main, raw HEAD, index bytes/metadata, porcelain status,
+FETCH_HEAD, ORIG_HEAD/config/packed-refs when present, all unrelated refs, all 19 am-state files,
+and every protected file's SHA-256, size, inode/device, mode, link count, UID/GID and timestamp
+metadata. Every protected content hash still equals its filename stem.
+
+- WSL index SHA-256: `c4d83fbd8c9099287c05c34b5cc37f9d1faa07aaa7408f67aebf56a753b382d2`.
+- WSL NUL-porcelain SHA-256: `d99b7d21f8afc33b57689e4b7eff55a42c0b7edd44cc739d6519faf6a76da580`.
+- Windows index SHA-256: `2aa689d9ce5310d2579c41c54934cbee146d814cb317633a2be176671c107026`.
+
+The complete before/after audit was copied into this session's artifacts as
+`package03-preservation-audit.json`, verified SHA-256
+`c1dc5ac9283e7fe62d69ef58fc64877d6aa8b10e35bbc9225509d6a34ec2140a`.
+An initial attempt stopped before any WSL mutation when a second handle could not hash the
+exclusively held Windows lock; the corrected attempt hashed the already-held handle and
+completed safely. The temporary operational helper was removed.
+
+**Canonical-main integration remains blocked.** The fallback preserves all completed code,
+tests, documentation and evidence without disturbing someone else's am operation or NVD data.
+No integration/acceptance/live/model validation, deployment or remote push occurred during this
+integration attempt.
