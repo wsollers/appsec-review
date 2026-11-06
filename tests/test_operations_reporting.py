@@ -390,3 +390,22 @@ def test_legacy_job_reuse_preserves_unknown_completeness_and_handoff_identity(tm
     assert report["analysis_completeness"] == "unknown"
     assert report["reuse_gaps"][0]["reason"] == "reuse_completion_unavailable"
     assert report["reusable_evidence"][0]["sha256"] == "a" * 64
+
+
+def test_checkpoint_writer_and_reader_share_the_exact_byte_bound(tmp_path, monkeypatch):
+    from appsec_review.observability import operator
+    emit(PipelineLog(tmp_path), "JOB_STARTED")
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    path = tmp_path / "checkpoint.json"
+    follower.save_checkpoint(path)
+    original = path.read_bytes()
+    monkeypatch.setattr(operator, "MAX_CHECKPOINT_BYTES", len(original))
+    follower.save_checkpoint(path)
+    OperatorFollower(tmp_path).restore_checkpoint(path)
+    monkeypatch.setattr(operator, "MAX_CHECKPOINT_BYTES", len(original) - 1)
+    with pytest.raises(ValueError, match="exceeds bound"):
+        follower.save_checkpoint(path)
+    assert path.read_bytes() == original
+    with pytest.raises(ValueError, match="exceeds bound"):
+        OperatorFollower(tmp_path).restore_checkpoint(path)

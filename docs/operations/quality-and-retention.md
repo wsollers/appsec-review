@@ -38,6 +38,8 @@ the cursor. Inode changes, truncation and changed accepted-boundary bytes explic
 This is an append-stream cursor, not a forensic proof that every historical byte is immutable.
 Checkpoint the derived state **with** the cursor; a cursor alone is not an aggregate.
 Checkpoints retain alert deduplication across restarts. They are derived local state, not evidence.
+Both checkpoint writing and reading enforce the same 32 MiB byte limit; an oversized update
+fails without replacing the prior checkpoint.
 
 Only replaceable span progress samples are coalesced. Counts remain cumulative. All other
 records are retained until the explicit capacity bound (default 10,000); reaching it stops

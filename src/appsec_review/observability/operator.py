@@ -18,9 +18,11 @@ from appsec_review.observability.telemetry import validate_event
 from appsec_review.reporting.telemetry.inputs import (
     JOB_TERMINALS, RUN_TERMINALS, job_spans, event_timestamp, STATUS_ALIASES,
 )
-from appsec_review.storage import canonical_json, atomic_json
+from appsec_review.storage import canonical_json
+from appsec_review.storage.atomic import atomic_bytes
 
 SCHEMA = "appsec-review/operator-status/1"
+MAX_CHECKPOINT_BYTES = 32 * 1024 * 1024
 _ACTIVE = {"STARTED", "STARTING", "MANAGED", "CANCELING"}
 _QUEUED = {"QUEUED", "NOT_STARTED"}
 _TERMINAL = {"SUCCESS", "FAILURE", "CANCELED", "CANCELLED"}
@@ -44,10 +46,13 @@ class OperatorFollower:
         state = {"schema": "appsec-review/operator-checkpoint/1", "run_log": str(self.log.path.absolute()),
                  "cursor": asdict(self.cursor), "records": list(self.records.values()),
                  "counts": dict(self.counts), "alert_keys": sorted(self.alert_keys)}
-        atomic_json(path, {**state, "sha256": hashlib.sha256(canonical_json(state)).hexdigest()})
+        payload = canonical_json({**state, "sha256": hashlib.sha256(canonical_json(state)).hexdigest()})
+        if len(payload) > MAX_CHECKPOINT_BYTES:
+            raise ValueError("operator checkpoint exceeds bound")
+        atomic_bytes(path, payload)
 
     def restore_checkpoint(self, path: Path) -> None:
-        if path.stat().st_size > 32 * 1024 * 1024:
+        if path.stat().st_size > MAX_CHECKPOINT_BYTES:
             raise ValueError("operator checkpoint exceeds bound")
         state = json.loads(path.read_bytes())
         digest = state.pop("sha256", None)
