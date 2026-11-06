@@ -124,7 +124,7 @@ def _sha(value: Any) -> str:
     return hashlib.sha256(canonical_json(json.loads(json.dumps(value, default=str)))).hexdigest()
 
 
-def _tool_catalog() -> list[dict[str, Any]]:
+def tool_catalog() -> list[dict[str, Any]]:
     return [
         {"name": "read_source", "description": "Read a window of a source or header file of the accepted build. "
          "path is a workspace-relative path shown in the brief; at most 120 lines.",
@@ -210,7 +210,7 @@ def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfil
                           "max_requests_per_turn": MAX_REQUESTS_PER_TURN,
                           "retrieve_shape": {"action": "retrieve", "requests": [
                               {"tool": "find_declaration", "parameters": {"name": "<name>"}}]},
-                          "tool_catalog": _tool_catalog(), "max_queries": profile.max_queries,
+                          "tool_catalog": tool_catalog(), "max_queries": profile.max_queries,
                           "max_turns": profile.max_turns}}
     for turn_number in range(1, profile.max_turns + 1):
         final_required = turn_number == profile.max_turns or attempt.queries >= profile.max_queries

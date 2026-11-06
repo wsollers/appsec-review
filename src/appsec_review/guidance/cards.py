@@ -272,14 +272,14 @@ def request_card(request: Any) -> dict[str, Any]:
                 "locator_must_match_accepted_identity_and_custody": True,
                 "source_lines_must_be_ordered_within_subject_and_configured_cap": True}
         elif request.role == "poc_writer":
-            from appsec_review.jobs.job_poc_generation.writer import _tool_catalog
+            from appsec_review.jobs.job_poc_generation.writer import tool_catalog
             citation = "poc_source_location"
             body = task.get("input", {})
             scope_ids("paths", [row.get("path") for row in body.get("declarations", ())])
             scope_files(body.get("declarations", ()))
             rows = [dataset("accepted_declarations", available=bool(body.get("declarations")), authority="direct"),
                     dataset("build_facts", available=bool(body.get("build_facts")))]
-            expected = {item["name"]: item for item in _tool_catalog()}
+            expected = {item["name"]: item for item in tool_catalog()}
             for operation in protocol.get("tool_catalog", ()):
                 if operation["name"] not in expected or operation["parameters"] != expected[
                         operation["name"]]["parameters"]:
