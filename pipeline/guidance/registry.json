@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/guidance-registry/1",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "roles": {
     "build_engineer_native": {"responsibility": "Produce bounded reproducible C/C++ and native build-system recipes."},
     "build_engineer_rust": {"responsibility": "Produce bounded reproducible Rust and Cargo build recipes."},
@@ -105,6 +105,7 @@
     "deployment_operations": "cloud_container_deployment"
   },
   "runtime_skills": {
+    "stateful-invariant-analysis": {"path": "pipeline/skills/stateful-invariant-analysis/SKILL.md", "jobs": ["job_inference_security_review", "job_remediation_planning", "job_remediation_validation"]},
     "generative-investigation": {"path": "pipeline/skills/generative-investigation/SKILL.md", "jobs": ["job_inference_security_review"]},
     "effective-control-verification": {"path": "pipeline/skills/effective-control-verification/SKILL.md", "jobs": ["job_inference_security_review", "job_owasp_control_assessment"]},
     "predicate-verification": {"path": "pipeline/skills/predicate-verification/SKILL.md", "jobs": ["job_inference_security_review", "job_owasp_control_assessment"]},

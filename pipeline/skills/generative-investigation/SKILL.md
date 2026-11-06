@@ -9,8 +9,10 @@ metadata:
 
 Start with the assigned seed, not a catalogue of possible bugs. State the invariant that the
 operation must preserve and identify the smallest input or state change that could violate it.
-For each candidate, distinguish the affected operation, attacker influence, path, controlling
-predicate, deployment preconditions, and supported consequence.
+In each candidate's entry/trigger and obligation fields, name the attacker (anonymous caller,
+authenticated tenant, uploaded file, adjacent process, plugin, dependency or operator), controlled
+inputs and required privileges. Bind the entry to cited evidence; do not assume a browser or
+remote service. Separate supplied environment/build facts from unresolved deployment assumptions.
 
 Trace the relevant value and state transitions in the assigned direction. Separate accepted
 dataflow or source-mapped analysis from an analyst's plausible connection. A call graph edge alone

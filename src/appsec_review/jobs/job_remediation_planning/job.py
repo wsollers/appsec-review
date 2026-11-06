@@ -17,9 +17,12 @@ from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
-from .contracts import ANSWER_FIELDS, STATUSES, PlanAnswer, verify_patch_scope, verify_plan
+from .contracts import STATUSES, PlanAnswer, verify_patch_scope, verify_plan
 from .datasets import CONSUMES, DATASETS
-from .inputs import CoreFactory, SourceReader, binding, confirmed_findings, evidence_relations, load_review, retrieval_core
+from .inputs import (
+    CoreFactory, SourceReader, binding, confirmed_findings, evidence_relations, load_review,
+    retrieval_core, writer_task,
+)
 from .model import emit_model_event, guidance, run_model
 from .patches import PatchError
 
@@ -99,31 +102,7 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
                         text, guidance_sha = guidance(repo(unit), root, "remediation_writer",
                                                       job_id=unit.job.config.job_id)
                     evidence_ids = {item["relation_id"] for item in relations}
-                    task = {"kind": "remediation_proposal", "finding": identity, "title": finding["title"],
-                            "accepted_evidence": relations, "source_files": list(reader.files.values()),
-                            "source_gaps": reader.gaps,
-                            "answer_fields": sorted(ANSWER_FIELDS),
-                            "answer_shape": {
-                                "status": "proposal_generated | manual_design_required | insufficient_evidence",
-                                "reason": "<bounded explanation>",
-                                "violated_invariant": "<current violated security requirement>",
-                                "corrected_invariant": "<intended safety requirement>",
-                                "evidence_ids": ["<supplied relation_id>"],
-                                "patch": "<exact patch object, or null for non-proposal outcomes>",
-                                **{key: ["<bounded assessment>"] for key in (
-                                    "compatibility_effects", "affected_interfaces", "residual_risks",
-                                    "deployment_prerequisites", "validation_checks", "scope_limitations")},
-                                "regression_spec": {
-                                    "fixtures": ["<synthetic fixture>"], "assertions": ["<safety assertion>"],
-                                    "positive_cases": ["<valid input>"], "negative_cases": ["<rejected input>"],
-                                    "before": "<baseline expected behavior>", "after": "<corrected behavior>",
-                                    "safety_assertion": "<non-faulting, separately derived specification>"}},
-                            "patch_format": {"schema": "appsec-review/remediation-exact-patch/1",
-                              "files": [{"path": "<admitted path>", "before_sha256": "<original hash or null>",
-                                         "absence_proof": False, "edits": [
-                                             {"start": 0, "end": 0, "old": "", "new": "<replacement>"}]}]},
-                            "regression_spec_fields": ["fixtures", "assertions", "positive_cases", "negative_cases",
-                                                       "before", "after", "safety_assertion"]}
+                    task = writer_task(finding, relations, reader)
                     answer, receipt = run_model(
                         infer=infer or default_infer, profile=configured.writer, role="remediation_writer",
                         cell_id=f"remediation-writer:{finding['claim_id']}", guidance_text=text,

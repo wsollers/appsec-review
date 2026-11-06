@@ -166,12 +166,14 @@
     },
     "job_inference_security_review": {
       "unit": [
+        "tests/review/test_discovery_competence.py",
+        "tests/review/test_prompt_competence.py",
         "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
         "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
         "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema"
       ],
       "integration": ["tests/integration/test_review_consumer_acceptance.py"],
-      "acceptance": [],
+      "acceptance": ["tests/acceptance/test_prompt_competence.py::test_live_prompt_competence"],
       "live": []
     },
     "job_language_build": {
@@ -451,12 +453,30 @@
       "acceptance": [],
       "live": []
     },
+    "stateful-guidance": {
+      "jobs": [
+        "job_inference_security_review",
+        "job_remediation_planning",
+        "job_remediation_validation"
+      ],
+      "unit": ["tests/test_stateful_guidance.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
     "wave1-reuse": {
       "jobs": ["job_review_intake", "job_target_catalog"],
       "unit": [
         "tests/test_wave1_resume.py::test_every_wave1_job_is_reused_without_handler_execution",
         "tests/test_wave1_resume.py::test_warm_graph_preserves_gap_completion_status"
       ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "worker-competence": {
+      "jobs": ["job_remediation_planning", "job_target_analysis_plan"],
+      "unit": ["tests/review/test_worker_competence.py"],
       "integration": [],
       "acceptance": [],
       "live": []

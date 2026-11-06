@@ -223,7 +223,8 @@ def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str
     _require(not unlisted, f"task {task} requests a tool absent from role {role}: {', '.join(unlisted)}")
     procedures = [
         load_runtime_skill(root, name, job_id=f"job_{job.replace('-', '_')}", fallback_to_package=False)
-        for name in select_review_procedures(role=role, task=task, binary_evidence=binary_evidence)
+        for name in select_review_procedures(role=role, task=task, binary_evidence=binary_evidence,
+                                            persona=persona)
     ]
     for procedure in procedures:
         validate_procedure_text(f"procedure {procedure.name}", procedure.body, tools)

@@ -1,0 +1,43 @@
+{
+  "kind": "remediation_proposal",
+  "answer_fields": [
+    "affected_interfaces", "compatibility_effects", "corrected_invariant",
+    "deployment_prerequisites", "evidence_ids", "patch", "reason", "regression_spec",
+    "residual_risks", "scope_limitations", "status", "validation_checks", "violated_invariant"
+  ],
+  "answer_shape": {
+    "status": "proposal_generated | manual_design_required | insufficient_evidence",
+    "reason": "<bounded explanation>",
+    "violated_invariant": "<current violated security requirement>",
+    "corrected_invariant": "<intended safety requirement>",
+    "evidence_ids": ["<supplied relation_id>"],
+    "patch": "<exact patch object, or null for non-proposal outcomes>",
+    "compatibility_effects": ["<bounded assessment>"],
+    "affected_interfaces": ["<bounded assessment>"],
+    "residual_risks": ["<bounded assessment>"],
+    "deployment_prerequisites": ["<bounded assessment>"],
+    "validation_checks": ["<bounded assessment>"],
+    "scope_limitations": ["<bounded assessment>"],
+    "regression_spec": {
+      "fixtures": ["<synthetic fixture>"],
+      "assertions": ["<safety assertion>"],
+      "positive_cases": ["<valid input>"],
+      "negative_cases": ["<rejected input>"],
+      "before": "<baseline expected behavior>",
+      "after": "<corrected behavior>",
+      "safety_assertion": "<non-faulting, separately derived specification>"
+    }
+  },
+  "patch_format": {
+    "schema": "appsec-review/remediation-exact-patch/1",
+    "files": [{
+      "path": "<admitted path>",
+      "before_sha256": "<original hash or null>",
+      "absence_proof": false,
+      "edits": [{"start": 0, "end": 0, "old": "", "new": "<replacement>"}]
+    }]
+  },
+  "regression_spec_fields": [
+    "fixtures", "assertions", "positive_cases", "negative_cases", "before", "after", "safety_assertion"
+  ]
+}

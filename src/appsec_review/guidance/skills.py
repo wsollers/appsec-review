@@ -138,18 +138,27 @@ def load_runtime_skill(repository_root: Path, name: str, *, job_id: str,
     raise GuidanceError(f"runtime skill file is unavailable: {name}")
 
 
-def select_review_procedures(*, role: str, task: str, binary_evidence: bool = False) -> tuple[str, ...]:
-    """Select bounded procedures from trusted role/task IDs, never from target text.
+def select_review_procedures(*, role: str, task: str, binary_evidence: bool = False,
+                             persona: str | None = None) -> tuple[str, ...]:
+    """Select bounded procedures from trusted dispatch IDs, never from target text.
 
     ``binary_evidence`` comes from the accepted retrieval manifest (a ``binary`` shard holds a
     configured binary), never from the model, and adds the binary-derived evidence procedure.
     """
-    binary = ("binary-evidence",) if binary_evidence else ()
+    stateful = ("stateful-invariant-analysis",) if (
+        persona in {"business_logic_abuse", "authentication_session", "filesystem_resources"}
+        and (role, task) in {
+            ("hypothesis_hunter", "entry_down"), ("hypothesis_hunter", "control_gap"),
+            ("red_team_analyst", "lead_red_preconditions"),
+            ("blue_team_refuter", "blue_control"), ("independent_verifier", "blind_verifier"),
+        }
+    ) else ()
+    selected = stateful + (("binary-evidence",) if binary_evidence else ())
     if role in {"hypothesis_hunter", "red_team_analyst"}:
         return (("generative-investigation", "effective-control-verification") if task == "control_gap"
-                else ("generative-investigation",)) + binary
+                else ("generative-investigation",)) + selected
     return {
         "blue_team_refuter": ("effective-control-verification",),
         "independent_verifier": ("predicate-verification",),
         "adjudication_judge": ("conflict-resolution",),
-    }.get(role, ()) + binary
+    }.get(role, ()) + selected

@@ -52,9 +52,10 @@ SPECIALIZED_WORKERS = {
     "poc_writer": Worker("job_poc_generation", "poc_writer", "write_poc_function",
         "appsec-review/poc-writer-answer/1", "poc_source_location", skill="poc-writer"),
     "remediation_writer": Worker("job_remediation_planning", "remediation_writer", "remediation_proposal",
-        "appsec-review/worker-turn/1", "relation_id"),
+        "appsec-review/worker-turn/1", "relation_id", skill="stateful-invariant-analysis"),
     "remediation_reviewer": Worker("job_remediation_validation", "remediation_reviewer",
-        "remediation_assessment", "appsec-review/worker-turn/1", "relation_id"),
+        "remediation_assessment", "appsec-review/worker-turn/1", "relation_id",
+        skill="stateful-invariant-analysis"),
 }
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
 REVIEW_DISPATCHED = frozenset({
@@ -152,7 +153,7 @@ def worker_bundle(repository_root: Path, worker_id: str, *, family: str | None =
         if "procedure" in supplied and supplied["procedure"] != procedure.text:
             raise GuidanceError("selected procedure differs from its registered runtime skill")
         _validate_selected(procedure.body, owner=procedure.name, tools=tools)
-        if worker_id.startswith("native_"):
+        if worker_id.startswith(("native_", "remediation_")):
             validate_procedure_text(worker.task, task_text, tools)
             validate_procedure_text(worker.skill, procedure.body, tools)
         sections.append({"name": "procedures", "items": [{
