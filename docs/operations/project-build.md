@@ -23,7 +23,8 @@ provisioning, new deployment or live acceptance is implied by this source update
 An image-changing recipe without matching prebound compiler/recipe metadata is blocked before
 image derivation/cache access, even if its base image is known. Project-declared Android/iOS
 scope does not supply an ISA, SDK, deployment target, device kind or hardware generation;
-native stages still need explicit supported target proof, and 32-bit proof remains incompatible.
+native stages still need explicit supported target proof, and 32-bit proof remains incompatible
+unless the ISA is listed in the selection policy's `allowed_32bit_isas` (default `["wasm32"]`).
 
 ## Steps
 

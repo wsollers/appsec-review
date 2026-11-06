@@ -20,22 +20,29 @@ _ISA = {
     "arm": "armv7", "arm32": "armv7", "armv7": "armv7", "armv7a": "armv7",
     "armeabi-v7a": "armv7", "wasm32": "wasm32",
 }
+THIRTY_TWO_BIT_ISAS = frozenset({"x86", "armv7", "wasm32"})
+DEFAULT_ALLOWED_32BIT_ISAS = ("wasm32",)
 
 
 @dataclass(frozen=True)
 class BuildSelectionPolicy:
     identity: str
     rules: tuple[Mapping[str, Any], ...]
+    allowed_32bit_isas: tuple[str, ...] = DEFAULT_ALLOWED_32BIT_ISAS
 
     def view(self) -> dict[str, Any]:
         return {"schema": SCHEMA, "policy_id": self.identity,
-                "ambiguity_policy": "block", "rules": [
+                "ambiguity_policy": "block",
+                "allowed_32bit_isas": list(self.allowed_32bit_isas), "rules": [
                     {"selectors": dict(rule["selectors"]), "axes": dict(rule["axes"]),
                      "provenance": rule["provenance"]} for rule in self.rules]}
 
     @property
     def sha256(self) -> str:
         return hashlib.sha256(canonical_json(self.view())).hexdigest()
+
+    def forbids_isa(self, isa: str | None) -> bool:
+        return isa in THIRTY_TWO_BIT_ISAS and isa not in self.allowed_32bit_isas
 
     def select(self, unit: Mapping[str, Any]) -> dict[str, Any]:
         matches = []
@@ -59,7 +66,7 @@ class BuildSelectionPolicy:
                     axes[axis] = next(iter(values))
         else:
             reasons.append("selection_unbound")
-        if axes["isa"] in {"x86", "armv7", "wasm32"}:
+        if self.forbids_isa(axes["isa"]):
             reasons.append("32bit_selection_forbidden")
         value = {"build_unit_id": unit["build_unit_id"], "policy_sha256": self.sha256,
                  "required_axes": axes, "reasons": sorted(reasons),
@@ -78,12 +85,19 @@ def parse_build_selection(value: object = None) -> BuildSelectionPolicy:
                                ("windows", ("msbuild", "vcbuild")),
                                ("linux", ("make", "autotools", "cmake")))
                            for system in systems]}
+    required = {"schema", "policy_id", "rules", "ambiguity_policy"}
     if (not isinstance(value, Mapping)
-            or set(value) != {"schema", "policy_id", "rules", "ambiguity_policy"}
+            or not required <= set(value) <= required | {"allowed_32bit_isas"}
             or value["schema"] != SCHEMA or value["ambiguity_policy"] != "block"
             or not isinstance(value["policy_id"], str) or not value["policy_id"].strip()
             or not isinstance(value["rules"], list) or len(value["rules"]) > 1024):
         raise ValueError("unsupported build selection policy")
+    allowed = value.get("allowed_32bit_isas", list(DEFAULT_ALLOWED_32BIT_ISAS))
+    if (not isinstance(allowed, list)
+            or any(not isinstance(item, str) or item.lower() not in _ISA
+                   or _ISA[item.lower()] not in THIRTY_TWO_BIT_ISAS for item in allowed)):
+        raise ValueError("allowed_32bit_isas must list recognized 32-bit ISAs")
+    allowed = tuple(sorted({_ISA[item.lower()] for item in allowed}))
     rules = []
     for rule in value["rules"]:
         if (not isinstance(rule, Mapping) or set(rule) != {"selectors", "axes", "provenance"}
@@ -102,4 +116,4 @@ def parse_build_selection(value: object = None) -> BuildSelectionPolicy:
         rules.append(MappingProxyType({
             "selectors": MappingProxyType(dict(rule["selectors"])),
             "axes": MappingProxyType(axes), "provenance": rule["provenance"]}))
-    return BuildSelectionPolicy(value["policy_id"], tuple(rules))
+    return BuildSelectionPolicy(value["policy_id"], tuple(rules), allowed)

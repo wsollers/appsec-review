@@ -39,8 +39,8 @@ def _isolated_wasm_action(tmp_path, mode, *, missing=None):
     policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
         approved_first_party_projects=("fixture",), target_root=str(target.resolve()),
         custody="application_private_v1", releases=ComponentReleases(declarations))
-    # Accepted topology refuses wasm32 native targets and unresolved script tools, so the isolated
-    # checkpoint fixture is an AssemblyScript package built through the admitted webpack tool.
+    # Accepted topology refuses unresolved script tools, so the isolated checkpoint fixture is an
+    # AssemblyScript package built through the admitted webpack tool.
     (target / "web" / "assembly").mkdir(parents=True)
     (target / "web" / "package.json").write_text(json.dumps({
         "scripts": {"asbuild": "webpack --config webpack.config.js"},

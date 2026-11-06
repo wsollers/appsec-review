@@ -56,10 +56,42 @@ def test_selection_uses_canonical_64bit_aliases(alias, expected):
     assert "32bit_selection_forbidden" not in selected["reasons"]
 
 
-@pytest.mark.parametrize("alias", ["i386", "i686", "arm32", "armeabi-v7a", "wasm32"])
-def test_every_recognized_32bit_alias_remains_unselectable(alias):
+@pytest.mark.parametrize("alias", ["i386", "i686", "arm32", "armeabi-v7a"])
+def test_every_recognized_native_32bit_alias_remains_unselectable(alias):
     selected = _policy([_rule({"build_unit_id": "chosen"}, {"isa": alias})]).select({"build_unit_id": "chosen"})
     assert "32bit_selection_forbidden" in selected["reasons"]
+
+
+def test_wasm32_is_allowed_by_default_and_recorded_in_policy_identity():
+    policy = _policy([_rule({"build_unit_id": "chosen"}, {"isa": "wasm32"})])
+    selected = policy.select({"build_unit_id": "chosen"})
+    assert policy.view()["allowed_32bit_isas"] == ["wasm32"]
+    assert selected["required_axes"]["isa"] == "wasm32"
+    assert selected["reasons"] == [] and selected["status"] == "selected"
+
+
+def test_empty_exemption_list_forbids_wasm32_and_changes_policy_identity():
+    rules = [_rule({"build_unit_id": "chosen"}, {"isa": "wasm32"})]
+    strict = parse_build_selection({"schema": SCHEMA, "policy_id": "inline/1", "ambiguity_policy": "block",
+                                    "allowed_32bit_isas": [], "rules": rules})
+    assert "32bit_selection_forbidden" in strict.select({"build_unit_id": "chosen"})["reasons"]
+    assert strict.sha256 != _policy(rules).sha256
+
+
+def test_exemption_list_canonicalizes_aliases_and_round_trips_through_view():
+    policy = parse_build_selection({"schema": SCHEMA, "policy_id": "inline/1", "ambiguity_policy": "block",
+                                    "allowed_32bit_isas": ["i686", "wasm32"],
+                                    "rules": [_rule({"build_unit_id": "chosen"}, {"isa": "x86"})]})
+    assert policy.allowed_32bit_isas == ("wasm32", "x86")
+    assert "32bit_selection_forbidden" not in policy.select({"build_unit_id": "chosen"})["reasons"]
+    assert parse_build_selection(policy.view()) == policy
+
+
+@pytest.mark.parametrize("allowed", [["x86_64"], ["invented"], "wasm32", [1]])
+def test_exemption_list_accepts_only_recognized_32bit_isas(allowed):
+    with pytest.raises(ValueError, match="allowed_32bit_isas"):
+        parse_build_selection({"schema": SCHEMA, "policy_id": "inline/1", "ambiguity_policy": "block",
+                               "allowed_32bit_isas": allowed, "rules": []})
 
 
 def test_unrecognized_isa_does_not_create_an_unbounded_policy_escape():

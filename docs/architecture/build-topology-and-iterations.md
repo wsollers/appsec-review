@@ -16,7 +16,10 @@ rule or override; missing policy is not a host fallback or mobile selection. The
 separately supplies explicit .NET/Go/Rust/mobile rules. Explicit unit/root rules can select
 another confirmed platform. Equal-specificity conflicts
 block. Project declarations, including 32-bit ones, remain in the graph without granting
-permission to select or build prohibited 32-bit code. Mobile hardware/device policy is not
+permission to select or build prohibited 32-bit code. 32-bit native ISAs (x86, armv7) are
+prohibited; the policy's `allowed_32bit_isas` list exempts named 32-bit ISAs and defaults to
+`["wasm32"]`, the standard WebAssembly target. The list is part of the policy identity, so
+changing it changes `policy_sha256`. Mobile hardware/device policy is not
 fabricated.
 
 `appsec-review/build-topology-refinement/1` binds the complete graph, source/bundle identity,

@@ -1497,7 +1497,7 @@ def _compiler_axes(target):
     return axes
 
 
-def _native_enforcement(unit, graph, recipe, selection, operation, facts, profiles):
+def _native_enforcement(unit, graph, recipe, selection, operation, facts, profiles, policy):
     facts = [fact for fact in facts if not fact["predicate"].startswith(("container:", "unity:"))
              and not (fact["predicate"] == "coverage_gap"
                       and fact["value"] == "unity_platform_plugin_semantics_partial")]
@@ -1711,7 +1711,7 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
         axes = {}
     axes = {key: axes.get(key) for key in AXES}
     required = selection["required_axes"]
-    incompatible = (axes["isa"] in {"x86", "armv7", "wasm32"} or any(
+    incompatible = (policy.forbids_isa(axes["isa"]) or any(
         value is not None and axes.get(key) is not None and axes[key] != value
         for key, value in required.items()))
     for key in ("os", "isa"):
@@ -1778,7 +1778,8 @@ def refine_build_topology(graph, units, *, policy=None, profiles=None, environme
                                                 if key != "selection_id"})
         recipe = unit.get("recipe")
         operations, facts = _selected_operations(unit, graph, recipe, selection)
-        enforcement = [_native_enforcement(unit, graph, recipe, selection, operation, facts, profiles)
+        enforcement = [_native_enforcement(unit, graph, recipe, selection, operation, facts, profiles,
+                                           policy)
                        for operation in operations if operation["kind"] in {
                            "native_compile", "native_link", "native_aot"}]
         requires_native = any(operation["kind"] in {"native_compile", "native_link", "native_aot"}

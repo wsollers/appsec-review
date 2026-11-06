@@ -1078,6 +1078,8 @@ repair_attempts = 3
 schema = "appsec-review/build-selection-policy/1"
 policy_id = "confirmed-x64/1"
 ambiguity_policy = "block"
+# 32-bit ISAs exempt from the 32-bit ban (x86, armv7, wasm32). Part of the policy identity.
+allowed_32bit_isas = ["wasm32"]
 rules = [
   { selectors = { build_system = "msbuild" }, axes = { os = "windows", isa = "x86_64" }, provenance = "confirmed-user-intent" },
   { selectors = { build_system = "vcbuild" }, axes = { os = "windows", isa = "x86_64" }, provenance = "confirmed-user-intent" },
