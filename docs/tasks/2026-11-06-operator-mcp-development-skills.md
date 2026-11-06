@@ -144,7 +144,7 @@ The latest canonical local `main` reference observed before preparing the ready 
 checkout; the primary checkout was not read or written, and no integration lock or merge was
 attempted there. A private clone's `main` is not reported as canonical-main integration.
 
-### Committed verification and integration outcome
+### Initial committed verification and preservation
 
 - **Tested implementation SHA:** `adbd2fcdffbebbffc76005112b29db6360ed529e`.
 - **Canonical local-main ref:** `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`.
@@ -174,3 +174,44 @@ attempted there. A private clone's `main` is not reported as canonical-main inte
 All 24 changed files passed LF index/worktree checks and `git diff --check`; the repository root
 was inspected. Disposable test outputs are confined to this package's unique `test/tmp` directories.
 The isolated environment and ready Git bundle are retained for later authorized local integration.
+
+### Final combined-tree verification and local-main outcome
+
+Canonical main advanced during preservation. Its new actual ref
+`f8daf3d34dd9576e2c2ee48f825e740475c1fb7a` contains package 02's offline quality gate.
+That ref was fetched through a local bundle and merged normally, without conflicts, into this
+package's **Linux feature branch**, producing
+`e617f90c1ffc7a322c6d06b23b72c706207e6028`. This is not a merge into canonical main.
+Ancestry against the newly incorporated canonical-main ref was verified.
+
+The same complete 13-file focused command above was rerun on this clean combined revision:
+
+| Environment and basetemp | Result | Wall time |
+| --- | --- | --- |
+| Existing environment, `--basetemp=test/tmp/operator06-combined-main` | 410 passed, 2 manual stdio cases deselected; pytest time 69.75 s | 70.57 s |
+| Main's pinned quality/test dependencies, `--basetemp=test/tmp/operator06-pinned-combined` | 410 passed, 2 manual stdio cases deselected; pytest 8.4.2, pytest time 39.88 s | 40.66 s |
+
+After the dependency-manifest change from main, the isolated environment was aligned with
+`uv pip install --python .venv/bin/python --require-hashes -r requirements/quality.lock`.
+No global environment was changed. On exact revision
+`e617f90c1ffc7a322c6d06b23b72c706207e6028`, the newly available static gate ran:
+
+```sh
+.venv/bin/python -m tools.quality check --base refs/remotes/canonical/main --static-only
+```
+
+**PASS**, 36.18 s wall time. Ruff, the configured scoped mypy gate, Bandit and architecture checks
+scanned the declared 649-module corpus, reported no new diagnostics, and retained the 47 existing
+shrink-only baseline findings without modification. Per-tool times were 0.154 s, 10.774 s,
+18.893 s and 5.972 s respectively. The static command intentionally ran no extra unit, integration,
+acceptance or live suites. Its bounded mypy scope is not a claim that every adapter is strictly typed.
+
+**Final ready implementation/test revision:** `e617f90c1ffc7a322c6d06b23b72c706207e6028`.
+The following record-only commit changes this document, not the tested source, tests or skills.
+The final branch tip is retained in `operator-ready.bundle` and
+`refs/remotes/operator-package06/ready` in the original repository's Git database.
+
+**Canonical-main landing remains BLOCKED** by the primary-checkout access restriction. The last
+incorporated actual main SHA is `f8daf3d34dd9576e2c2ee48f825e740475c1fb7a`; no merge into that
+checkout, lock bypass, source-freeze override, origin-chat handoff or remote push was performed.
+**Integration and acceptance: NOT RUN.** No server, live review or runtime model was started.
