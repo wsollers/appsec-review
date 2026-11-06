@@ -413,12 +413,15 @@ sets `PYTHONPATH=src` so the worktree's code is the code under test. Each run ge
 Options: `--dry-run` prints the command and log path, `--background` starts detached and prints the
 log path and how to follow it (`tail -f`), `--parallel` adds `-n auto` only when `pytest-xdist` is
 installed (otherwise it warns and runs serially), `--strict` also fails on known failures. For an
-arbitrary selection pass pytest arguments after `--` instead of a suite name.
+arbitrary selection pass pytest arguments after `--` instead of a suite name. `-n auto` starts one
+worker per core, which overloads a host that also runs the review stack; there, pass a bounded
+count instead (`scripts/run-tests.sh -- -n 8 --shuffle-seed=<seed> <paths>`). Test standards and
+the working loop are in [`../architecture/testing.md`](../architecture/testing.md).
 
 `scripts/known-failures.txt` lists node ids that fail without any change of yours, one
 `<node id> | <reason>` per line. The final summary reads `N failures, M known`, marks each known
-failure, and exits 0 when only known failures remain (unless `--strict`). Remove a line when the
-failure is fixed.
+failure, and exits 0 when only known failures remain (unless `--strict`). Remove a line in the same
+commit that fixes the failure.
 
 ```bash
 scripts/run-tests.sh                        # fast suite

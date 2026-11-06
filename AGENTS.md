@@ -117,6 +117,20 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Meet the limit by making the test faster or narrower, never by weakening correctness or
   assertions, silently skipping coverage, enlarging timeouts, or relabelling heavyweight
   integration tests as unit tests. Report slow checks and genuine coverage gaps honestly.
+- Collection must be deterministic: parametrize from sorted sequences, never sets or unordered
+  directory listings, and keep test ids short and free of newlines and carriage returns.
+- Unit tests never inherit production configuration. `tests/test_000_unit_environment_guard.py`
+  runs first in every session and fails on production profile, overlay, native, Dagster-home or
+  acceptance bindings; fix the environment, never the guard. Skips name what is missing and are
+  coverage gaps, never passes; do not use `xfail` to hide a failure.
+- Use a bounded worker count (`-n 8` or similar) on shared hosts, never `-n auto`. Before
+  integrating, run the affected files shuffled and in parallel; a failure that passes alone is a
+  test-isolation defect to fix.
+- Integration, acceptance, and live tests follow the same isolation, deterministic-id, and
+  named-skip rules, and each case carries an explicit declared time budget that is never raised
+  to make a slow case pass.
+- [`docs/architecture/testing.md`](docs/architecture/testing.md) describes the tiers, the harness,
+  and the working loop.
 - Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
   default. Apply the same scope after merging changes from another branch.
 - Required collection behavior: exclude known integration/live paths from implicit default

@@ -2,6 +2,9 @@
 
 Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is navigation only.
 
+- [`testing.md`](testing.md) — test tiers and their collection boundary, the unit harness
+  (production-sizing guard, timing table, shuffle, xdist), unit and higher-tier standards, and the
+  working loop.
 - [`bounded-acceptance.md`](bounded-acceptance.md) - dependency-ready authentic producer stages,
   strict post-cleanup publication detachment, invocation-specific custody, private readers,
   telemetry origin, qualified bounded exhaustive series, revision-bound warm evidence and explicit gaps;

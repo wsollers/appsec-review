@@ -897,15 +897,23 @@ Dagster tests are skipped when the `dagster` extra is not installed, and live or
 tests are skipped, naming what is missing, until the opt-in requirements in the
 [Software inventory](#software-inventory) are met.
 
-```bash
-python -m pytest -q
-```
+Bare `pytest` collects only unit tests; `tests/integration`, `tests/acceptance`, `tests/live` and
+`tests/test_live_*.py` run only when named explicitly. The first test of every session,
+`tests/test_000_unit_environment_guard.py`, fails if the shell exports production configuration
+(for example `APPSEC_REVIEW_PROFILE=prod`, an overlay, `APPSEC_NATIVE_*` or `DAGSTER_HOME`). Each
+unit test must be independent and finish in under 10 seconds; the run ends with a list of those
+that do not, and every test's timing is kept in `<basetemp>.timings.sqlite`.
 
-Use a named base directory beneath `test/tmp/` for focused or concurrent sessions:
+Use a named base directory beneath `test/tmp/` for every session, and a bounded worker count:
 
 ```bash
 python -m pytest -q tests/test_static_adapters.py --basetemp=test/tmp/static-adapters
+python -m pytest -q -n 8 --shuffle-seed=1234 tests/test_static_adapters.py --basetemp=test/tmp/static-shuffled
+python -m pytest -q -rfEs -n 8 --basetemp=test/tmp/unit-gate      # the whole unit tier
 ```
+
+Standards, tiers and the working loop are in
+[`docs/architecture/testing.md`](docs/architecture/testing.md).
 
 ### Bounded integration acceptance
 

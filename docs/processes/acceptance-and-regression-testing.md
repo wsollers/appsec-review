@@ -1,5 +1,8 @@
 # Per-job output correctness, acceptance, and anti-regression
 
+Test tiers, the unit harness and the standards shared by every tier are in
+[`../architecture/testing.md`](../architecture/testing.md).
+
 ## The requirement
 
 Each job must produce a *correct* result for its inputs. Not a result of the right shape, not a
