@@ -139,6 +139,19 @@ agents that inspect or change the repository. It is not a prompt for review work
   signing. Signature format, verification/trust model, and key ownership remain future design
   decisions. This is not a restart, merge, or test gate and does not authorize implementation or
   provisioning.
+- TODO (deferred): decide what to do with unit-collected tests that invoke a real Docker engine,
+  which makes them close to integration tests and makes their outcome depend on host state
+  (engine running, images present). Those that run `docker` and skip when it or an image is
+  missing: `tests/test_banned_functions.py`, `tests/test_cpp_cert_rules.py`,
+  `tests/test_cpp_memory_safety_rules.py`, `tests/test_dossier_live.py`,
+  `tests/test_lua_game_rules.py`, `tests/test_native_sbom_image.py`,
+  `tests/test_poc_live_compile.py`, `tests/test_syntax_retrieval.py`,
+  `tests/test_tree_sitter_ast.py`, `tests/reporting/test_pdf_docker.py`, and
+  `tests/orchestration/dagster/test_definitions.py::test_wave1_dagster_path_runs_application_graph`
+  (whose `skipif` decorates the helper `_missing_catalog_images`, not the test). Options include
+  moving them to an explicit integration path or replacing the engine with a fake at the
+  subprocess boundary. Tests that only assert `docker` argv through fakes are unit tests and are
+  out of scope. This is not a merge or test gate.
 
 ## Workspace hygiene
 
