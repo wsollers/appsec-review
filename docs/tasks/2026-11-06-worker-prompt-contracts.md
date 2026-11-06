@@ -252,3 +252,42 @@ No integration, acceptance, live-provider or review-run validation was executed.
 The final handoff adds only this record to the tested combined revision. Disposable package-owned
 test directories are removed after verification; no user target, other checkout, image, service,
 private output, or shared development environment is removed.
+
+### Local-main landing outcome
+
+Landed by the canonical Windows local-main integration owner (`F:\XBOX-Repositories\appsec-review`)
+through its serialized gate.
+
+- Ready commit: **`825627981a1c5bebbe1cc7cd64b9155c3be385ec`** (tree
+  `083aa0d450363622902e534747964c44664b1dc2`). It was fetched from the package's local bundle
+  `worker-contracts-ready.bundle` (sha256
+  `0b4eaab8bd401b97f8778c612cc496290a4ef403134bb2f197d696bbe0612d1d`). The bundle verified, has
+  prerequisite `1a627f23d904c0c86233c92b1ad6e2ef7d0e07a6`, and contains three linear commits with
+  no merges, each carrying the Copilot co-author trailer.
+- Pre-landing checks:
+  - `git diff --check` against the base was clean.
+  - None of the changed paths contain CR bytes.
+  - All 44 changed paths match the handed-off list.
+  - None of them overlap the single main-side commit since the base (`a79fe222`). That commit
+    only appended a Package 06 documentation record.
+- Canonical main before landing: `a79fe222e95d57fb336c7b18c557509089e52672`, a descendant of the
+  ready commit's base. Landing was therefore an ordinary non-fast-forward merge.
+- Gate:
+  - An exclusive OS-backed handle (FileShare.None) was held on
+    `appsec-independent-main-integration.lock` in the canonical Git common directory across the
+    checks, the merge and the post-merge verification. It was released in `finally`.
+  - Inside the lock: the branch was `main` at `a79fe222`; the tracked and untracked status was
+    clean; there was no rebase, merge, cherry-pick, revert, bisect or index/HEAD lock in progress;
+    and there was no active source freeze or competing owner. Hooks were disabled for the merge.
+- Merge commit: **`5887bec4cfc919249300c3af410a77894e0968d8`** ("Merge worker-prompt-contracts
+  (82562798)", Copilot co-author trailer), with parents `a79fe222` and `82562798`.
+  - Tree `ab63a82dda1af46b8e82f64bf64e49651f20be0c`, identical to the `git merge-tree
+    --write-tree` prediction. There were no conflicts.
+  - `git merge-base --is-ancestor 825627981a1c5bebbe1cc7cd64b9155c3be385ec main` exits 0, and the
+    checkout was clean after the merge.
+- No tests were executed by the integration owner. The package's recorded unit evidence (619 passed
+  on `b6964e2e`) covers the package code. The merged tree adds only Package 06 documentation
+  records relative to that revision's base. Integration, acceptance, live-provider and review-run
+  validation were NOT RUN. Nothing was pushed and no pull request was opened.
+- This record is a documentation-only commit on top of the merge. Package 03 retains ownership of
+  its provider/execution changes when they are later combined.
