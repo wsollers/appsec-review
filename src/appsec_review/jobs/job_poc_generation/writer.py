@@ -24,6 +24,9 @@ from typing import Any, Protocol
 
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import ModelOutputError, ReviewModelRequest
+from appsec_review.inference.errors import ExecutionContractError, ExecutionLimit, FailureCategory, ProviderError
+from appsec_review.inference.execution import Execution, RetryPolicy
+from appsec_review.inference.usage import total_reported
 from appsec_review.storage import atomic_bytes, canonical_json
 
 from .brief import ANSWER_SCHEMA, Brief
@@ -40,12 +43,26 @@ ROLE_FILE = Path("pipeline") / "prompt-fragments" / "roles" / "poc_writer.md"
 MAX_REQUESTS_PER_TURN = 3
 MAX_WINDOW_LINES = 120
 MAX_RESPONSE_BYTES = 12_000
-TOOLS = ("read_source", "find_declaration")
 ANSWER_NAME = "writer-answer"
+
+
+@dataclass(frozen=True, slots=True)
+class ReaderCapabilities:
+    """Private, application-mediated reads; never a registry or transport tool grant."""
+
+    tools: tuple[str, ...] = ("read_source", "find_declaration")
+    scope: str = "hash-verified-accepted-workspace"
+    read_only: bool = True
+
+
+READER_CAPABILITIES = ReaderCapabilities()
+TOOLS = READER_CAPABILITIES.tools
 
 
 class Reader(Protocol):
     """Read-only access to the accepted workspace for the writer's retrieval requests."""
+
+    capabilities: ReaderCapabilities
 
     def read_source(self, path: str, start_line: int, end_line: int) -> dict[str, Any] | None: ...
 
@@ -94,8 +111,9 @@ class Attempt:
     turns: list[dict[str, Any]] = field(default_factory=list)
     queries: int = 0
     denials: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    failure: BaseException | FailureCategory = FailureCategory.SCHEMA
     denied: dict[str, int] = field(default_factory=dict)
 
 
@@ -199,7 +217,8 @@ def _bounded(response: dict[str, Any]) -> dict[str, Any]:
 
 
 def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfile, infer: Callable[..., Any],
-             reader: Reader, schemas: Any, repair: tuple[str, ...], claim_id: str) -> Attempt:
+             reader: Reader, schemas: Any, repair: tuple[str, ...], claim_id: str,
+             engine: Execution, retry_reason: str | None) -> Attempt:
     attempt = Attempt(number)
     transcript: list[dict[str, Any]] = []
     task_input = {
@@ -221,22 +240,32 @@ def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfil
                                  "final_required": final_required, "action": None, "response_sha256": None,
                                  "retrievals": []}
         attempt.turns.append(entry)
+        receipt_count = len(engine.receipts)
         try:
-            response = infer(request, timeout_seconds=profile.timeout_seconds)
+            response = engine.call(infer, request, timeout_seconds=profile.timeout_seconds,
+                                   retry_count=number - 1, retry_reason=retry_reason)
         except ModelOutputError:
             attempt.status, attempt.reason = "invalid", "model_output_unparseable"
             attempt.repair_errors = (f"the reply was not exactly one {TURN_SCHEMA} object",)
             return attempt
-        except (TimeoutError, subprocess.TimeoutExpired):
+        except (TimeoutError, subprocess.TimeoutExpired) as exc:
             attempt.status, attempt.reason = "timed_out", "provider_timeout"
+            attempt.failure = exc
             return attempt
-        except Exception as exc:  # every provider failure is an ordinary, named outcome
+        except ProviderError as exc:
             attempt.status, attempt.reason = "failed", f"provider_error:{type(exc).__name__}"
+            attempt.failure = exc
             return attempt
-        entry["input_tokens"] = int(response.input_tokens or 0)
-        entry["output_tokens"] = int(response.output_tokens or 0)
-        attempt.input_tokens += entry["input_tokens"]
-        attempt.output_tokens += entry["output_tokens"]
+        except ExecutionLimit as exc:
+            attempt.status, attempt.reason, attempt.failure = "cap_reached", exc.code, exc
+            return attempt
+        finally:
+            if len(engine.receipts) > receipt_count:
+                receipt = engine.receipts[-1]
+                entry.update(receipt.usage.actual, usage_source=receipt.usage.source,
+                             usage_unavailable_reason=receipt.usage.unavailable_reason)
+                attempt.input_tokens = total_reported([item["input_tokens"] for item in attempt.turns])
+                attempt.output_tokens = total_reported([item["output_tokens"] for item in attempt.turns])
         entry["response_sha256"] = _sha(response.raw_response if response.raw_response is not None
                                         else response.proposal)
         turn, error = _parse_turn(response.proposal)
@@ -265,7 +294,13 @@ def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfil
                                   "reason": "the query budget is spent; answer with a final turn"})
                 continue
             attempt.queries += 1
-            outcome, denial = _answer_request(attempt, item, reader)
+            try:
+                engine.deadline.remaining()
+                outcome, denial = _answer_request(attempt, item, reader)
+                engine.deadline.remaining()
+            except ExecutionLimit as exc:
+                attempt.status, attempt.reason, attempt.failure = "cap_reached", exc.code, exc
+                return attempt
             call = {"index": index, "tool": item.get("tool") if isinstance(item, Mapping) else None,
                     "status": outcome["status"], "code": outcome.get("code")}
             entry["retrievals"].append(call)
@@ -290,27 +325,40 @@ def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfil
 def run_writer(brief: Brief, *, guidance: Guidance, settings: PocGenerationSettings, infer: Callable[..., Any],
                reader: Reader, schemas: Any, claim_id: str) -> WriterOutcome:
     """Run the writer to one terminal outcome, repairing per the retry policy without widening it."""
+    if getattr(reader, "capabilities", None) != READER_CAPABILITIES:
+        raise ExecutionContractError("PoC reader must declare the private accepted-workspace capability contract")
     profile = settings.writer
+    policy = RetryPolicy(settings.max_attempts, settings.retry_on_timeout,
+                         settings.retry_on_provider_error, settings.retry_on_invalid_output)
+    engine = Execution(timeout_seconds=profile.timeout_seconds,
+                       max_calls=policy.attempts * profile.max_turns)
     attempts: list[Attempt] = []
     repair: tuple[str, ...] = ()
-    for number in range(1, settings.max_attempts + 1):
-        attempt = _attempt(number, brief, guidance, profile, infer, reader, schemas, repair, claim_id)
+    retry_reason = None
+    for number in range(1, policy.attempts + 1):
+        attempt = _attempt(number, brief, guidance, profile, infer, reader, schemas, repair, claim_id,
+                           engine, retry_reason)
         attempts.append(attempt)
         if attempt.status in {"answered", "declined"}:
             return WriterOutcome("answered" if attempt.status == "answered" else "declined", attempt.result, "",
                                  tuple(attempts))
-        retry = ((attempt.status == "timed_out" and settings.retry_on_timeout)
-                 or (attempt.status == "failed" and settings.retry_on_provider_error)
-                 or (attempt.status in {"invalid", "cap_reached"} and settings.retry_on_invalid_output))
+        try:
+            retry = engine.retry(number, attempt.failure, policy)
+        except ExecutionLimit:
+            retry = False
         if not retry:
             break
         repair = attempt.repair_errors
+        retry_reason = ("timeout" if attempt.status == "timed_out" else
+                        "provider" if attempt.status == "failed" else "schema")
     last = attempts[-1]
     return WriterOutcome("failed", None, f"writer_{last.status}:{last.reason}", tuple(attempts))
 
 
 class WorkspaceReader:
     """The writer's retrieval over the hash-verified accepted workspace (read-only, path-scoped)."""
+
+    capabilities = READER_CAPABILITIES
 
     def __init__(self, workspace: Path, manifest: Mapping[str, str], allowed_directories: Sequence[str],
                  finder: Callable[[str], list[dict[str, Any]]]) -> None:
@@ -343,4 +391,5 @@ class WorkspaceReader:
         return self.finder(name)
 
 
-__all__ = ["ANSWER_NAME", "Guidance", "Reader", "WorkspaceReader", "WriterOutcome", "load_guidance", "run_writer"]
+__all__ = ["ANSWER_NAME", "Guidance", "Reader", "ReaderCapabilities", "READER_CAPABILITIES",
+           "WorkspaceReader", "WriterOutcome", "load_guidance", "run_writer"]

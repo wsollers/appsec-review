@@ -581,7 +581,7 @@ def _transport(monkeypatch, tmp_path, send):
 
 
 @pytest.mark.parametrize("kind", ["output", "timeout"])
-def test_proposal3_transport_repairs_spend_the_same_finite_budget_before_raw_retention(
+def test_proposal3_transport_first_error_refuses_repair_before_raw_retention(
         tmp_path, monkeypatch, kind):
     from appsec_review.inference import ModelOutputError
     secret = "synthetic-sensitive-provider-data"
@@ -596,15 +596,17 @@ def test_proposal3_transport_repairs_spend_the_same_finite_budget_before_raw_ret
     result = bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
         read_document=lambda *_: pytest.fail("invalid output must not read evidence"),
         cache_root=tmp_path / "cache", identity={})
-    assert result["status"] == "BUDGET_EXCEEDED" and result["calls"] == len(calls) == 4
+    assert result["status"] == "BUDGET_EXCEEDED" and result["calls"] == len(calls) == 1
     assert not list((tmp_path / "cache").glob("*.json"))
     records = [json.loads(path.read_bytes()) for path in (tmp_path / "data/execution-failures").glob("*.json")]
-    assert len(records) == 4
+    assert len(records) == 2
+    records = [record for record in records if record["action"] != "inference.execution"]
+    assert len(records) == 1
     assert all(record["raw_response"] is None and record["repairable"] is True
                and record["outcome"] == "REJECTED" for record in records)
     assert secret not in json.dumps(records)
-    assert len([item for item in controller.events if item[0] == "admit"]) == 4
-    assert len([item for item in controller.events if item[0] == "check"]) == 4
+    assert len([item for item in controller.events if item[0] == "admit"]) == 1
+    assert len([item for item in controller.events if item[0] == "check"]) == 3
     assert all(item[1]["succeeded"] is True for item in controller.events if item[0] == "finish")
     assert not any(item[0] == "failure" for item in controller.events)
 
@@ -645,6 +647,8 @@ def test_proposal3_transport_unexpected_failure_still_latches_before_any_repair(
     assert secret not in "".join(traceback.format_exception(
         type(caught.value), caught.value, caught.value.__traceback__))
     records = [json.loads(path.read_bytes()) for path in (tmp_path / "data/execution-failures").glob("*.json")]
+    assert len(records) == 2
+    records = [record for record in records if record["action"] != "inference.execution"]
     assert len(records) == 1 and records[0]["repairable"] is False
     assert records[0]["raw_response"] is None and secret not in json.dumps(records)
     assert len([item for item in controller.events if item[0] == "failure"]) == 1
@@ -673,9 +677,14 @@ def test_proposal3_transport_cannot_repair_global_stop_kill_deadline_or_teardown
         bounded_feedback(infer, request, catalog=catalog, limits=PlanningFeedbackSettings(),
             read_document=lambda *_: pytest.fail("cancellation must not read evidence"),
             cache_root=tmp_path / "cache", identity={})
-    assert len(calls) == 1 and not list((tmp_path / "cache").glob("*.json"))
-    assert not list((tmp_path / "data/execution-failures").glob("*.json"))
-    assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == [False]
+    assert len(calls) == (0 if kind == "deadline" else 1)
+    assert not list((tmp_path / "cache").glob("*.json"))
+    records = [json.loads(path.read_bytes()) for path in (tmp_path / "data/execution-failures").glob("*.json")]
+    assert len(records) == (0 if kind == "deadline" else 1)
+    assert all(record["action"] == "inference.execution" and record["error_type"] == "ReviewStopped"
+               for record in records)
+    assert [item[1]["succeeded"] for item in controller.events if item[0] == "finish"] == (
+        [] if kind == "deadline" else [False])
     if kind == "stop":
         assert caught.value is stop
 
