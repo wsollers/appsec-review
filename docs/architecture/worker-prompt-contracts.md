@@ -103,8 +103,13 @@ retrieval, paging/truncation, denial recovery, final-turn limits, missing artifa
 citations, misleading source text, false-positive controls and justified abstention. Scripts
 fake only the external model boundary. Passing scripts establish **protocol behavior, not model
 quality**. Discovery now includes both hunter and lead-analyst compact expansion and configured
-red admission. Specialized competence adapters exercise the production planning feedback loop and
-remediation source/build readers and final validators. The remediation writer task is assembled
+red admission, including the admitted outcome when raw no-claim and blocked entries overlap.
+Specialized competence adapters exercise the production planning feedback loop and
+remediation accepted-review, scope, source/build readers and final validators. Remediation
+experiments cannot substitute an unverified review mapping or a different retrieval manifest.
+Their fixture derives finding/adjudication/partition identities by applying production publication
+functions to synthetic review inputs rather than assigning a confirmed state directly.
+The remediation writer task is assembled
 once in `job_remediation_planning.inputs.writer_task`, with a baseline wire-shape compatibility
 fixture; its fields and authority did not change.
 See [manual evaluation](../operations/guidance-evaluation.md) and the package's

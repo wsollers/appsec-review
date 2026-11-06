@@ -220,12 +220,14 @@ def run_competence_case(
         else:
             proposals = {item["local_id"]: item for item in outcome.result["proposals"]}
             refs = {item["local_id"]: item for item in outcome.result["evidence_refs"]}
+            blocked_leads = {item["observation_id"] for item in outcome.result["lead_accounting"]
+                             if item["outcome"] == "blocked"}
             # An unresolvable blocked label is auto-accounted as missing by the expander;
-            # that is not a worker's justified abstention on an admitted lead.
+            # no_claim also takes precedence over blocked for the same lead.
             compact["blocked"] = [
                 item for item in compact.get("blocked", ())
                 if view.labels.get(item if isinstance(item, str) else item["lead"],
-                                   item if isinstance(item, str) else item["lead"]) in invocation.lead_ids
+                                   item if isinstance(item, str) else item["lead"]) in blocked_leads
             ]
             for claim in compact["claims"]:
                 proposal = proposals[claim["id"]]

@@ -101,7 +101,9 @@ Focused offline unit command:
 Scripted fixtures establish protocol behavior, not live efficacy. No-claim discovery output is
 not a safety verdict and earns no safe-resolution credit. Unknown citation labels are scored
 only after production expansion; a fabricated blocked-lead label earns no justified-abstention
-credit. Hunter output with no lead menu has no lead-level blocked decision: an empty hunt is not
+credit. If a lead appears in both `no_claim` and `blocked`, the production `lead_accounting`
+outcome decides; a `no_proposal` outcome cannot score as abstention. Hunter output with no lead
+menu has no lead-level blocked decision: an empty hunt is not
 an abstention result. Source citation metrics remain proxies and reuse the existing evaluator.
 
 `review.worker_competence.run_planning_case` uses real governed build-family bundles, the shared
@@ -110,11 +112,20 @@ final recipe validation. A foreign path/hash can recover only through the produc
 budget; an incomplete final never enters the complete-response cache. It uses a synthetic native
 build catalog, not a real build or cross-family toolchain-coverage claim.
 
-`run_remediation_case` consumes an already admitted review at the production assess boundary,
-checks confirmed-only membership, reads the hash-bound projection and accepted native-build
+`run_remediation_case` re-reads the accepted review through production `load_review` before
+dispatch. The supplied review snapshot must match this verified document; a self-consistent
+mapping is not an alternative authority. It reconstructs retrieval through `retrieval_core` from
+that review's hash-bound scope and rejects a different supplied manifest. It then checks
+confirmed-only membership and the candidate cap, reads the bound projection and accepted native-build
 handoff, runs `SourceReader`, the shared `writer_task` / `review_prompt` and real `run_model`,
-then `PlanAnswer` and `verify_patch_scope`. Synthetic upstream artifacts are published through
-the real handoff helper. Build/index hash mismatches fail before dispatch; an exact patch is
+then `PlanAnswer` and `verify_patch_scope`. Experiment inputs retain the accepted review references.
+
+The synthetic review fixture seeds scanner/model observations, not a final confirmed partition.
+It uses production scope/package assembly, R5 adjudication, sealed ledger merging/projection,
+finding generation, accounting and handoff construction; `load_review` derives the resulting
+partition and identities. Removing or corrupting the accepted pointer, handoffs, ledger/shards,
+projection, finding, scope or package manifest blocks model dispatch. No accepted-review loader
+or final validator is mocked. Build/index hash mismatches also fail before dispatch; an exact patch is
 checked but never applied or executed. Initial source text is already supplied in production:
 line-window retrieval here tests re-reading, **not** a claim that a hidden page improved the model.
 Invalid remediation retrieval/final output remains terminal, unlike recoverable discovery and

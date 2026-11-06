@@ -159,6 +159,19 @@ def test_unknown_blocked_label_is_not_a_justified_discovery_abstention(tmp_path)
     assert not result.row["correct"] and result.row["decision"] == "no_claim"
 
 
+def test_no_claim_and_blocked_overlap_follows_the_admitted_lead_outcome(tmp_path):
+    def transport(request, *, timeout_seconds):
+        return ModelResult({"action": "final", "result": {
+            "claims": [], "no_claim": ["L1"], "blocked": ["L1"]}})
+
+    _, result = execute(tmp_path, STATEFUL[2], Role.RED_TEAM_ANALYST, transport=transport)
+    assert result.outcome.record.status is CellStatus.SUCCEEDED
+    assert result.outcome.result["lead_accounting"][0]["outcome"] == "no_proposal"
+    assert result.outcome.result["gaps"] == []
+    assert result.row["decision"] == "no_claim"
+    assert not result.row["correct"] and not result.row["named_gap"]
+
+
 @pytest.mark.parametrize("role", DISCOVERY, ids=lambda role: role.value)
 def test_discovery_final_turn_cap_cannot_be_relabelled_as_abstention(tmp_path, role):
     _, result = execute(tmp_path, STATEFUL[0], role, "final_turn_ignored", max_turns=2)

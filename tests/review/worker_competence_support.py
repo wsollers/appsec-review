@@ -10,8 +10,8 @@ from appsec_review.jobs.bound_artifacts import artifact_ref
 from appsec_review.jobs.build_discovery import build_recipe_inference_policy, required_image_profile
 from appsec_review.jobs.job_target_analysis_plan.planning import summarize_catalog
 from appsec_review.storage import atomic_bytes, atomic_json, file_sha256
-from appsec_review.review.identity import sha256_hex
 from tests.handoff_fixture import write_fixture_handoff
+from tests.review.accepted_competence_review import publish_review
 from tests.review.test_prompt_competence import ROOT, accepted_corpus, Corpus
 from tests.test_build_topology_feedback import _inputs
 
@@ -70,8 +70,9 @@ class RemediationCorpus:
     finding: dict[str, Any]
 
 
-def remediation_corpus(directory: Path, *, build: bool = True, wrong_build: bool = False) -> RemediationCorpus:
-    corpus = accepted_corpus(directory, NATIVE_CASE)
+def remediation_corpus(directory: Path, *, build: bool = True, wrong_build: bool = False,
+                       independent: bool = True, candidates: int = 1) -> RemediationCorpus:
+    corpus = accepted_corpus(directory, NATIVE_CASE, source_files=True)
     run_root = corpus.core.run_root
     workspace = run_root / "data" / "build" / "f08" / "workspace"
     manifest = {}
@@ -106,15 +107,5 @@ def remediation_corpus(directory: Path, *, build: bool = True, wrong_build: bool
             "acceptance.publish_handoff": {"artifact": artifact_ref(run_root, receipts)}}})
         atomic_json(run_root / "data" / "jobs" / "job_language_build" / "latest.json", {
             "handoff_path": handoff.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff)})
-    relations = [{"relation_id": "evrel-" + label, "entity_id": identity, "relation": "supports",
-                  "predicate": "missing_or_ineffective_guard"} for label, identity in corpus.labels.items()]
-    finding = {
-        "claim_id": "claim-f08", "finding_package_id": "finding-f08", "state": "confirmed",
-        "sha256": sha256_hex(relations), "title": NATIVE_CASE["question"],
-        "adjudication_id": "adjudication-f08", "direct_evidence": [row["relation_id"] for row in relations],
-    }
-    projection = base / "projection.json"
-    atomic_json(projection, {"relations": {finding["claim_id"]: relations}})
-    review = {"run_id": run_root.name, "partition": {"confirmed": [finding["finding_package_id"]]},
-              "packages": [finding], "inputs": {"projection": artifact_ref(run_root, projection)}}
-    return RemediationCorpus(corpus, review, workspace, manifest, finding)
+    review = publish_review(corpus, REMEDIATION_SETTINGS.bounds, independent=independent, candidates=candidates)
+    return RemediationCorpus(corpus, review, workspace, manifest, review["packages"][0])

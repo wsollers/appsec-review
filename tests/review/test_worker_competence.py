@@ -134,8 +134,9 @@ def test_planning_final_call_identity_and_abstention_are_not_interchangeable(tmp
         assert not list((tmp_path / "experiment" / "data" / "planning-feedback").glob("*.json"))
 
 
-def remediation(tmp_path, scenario="patch", *, turns=3, queries=2, variant="full"):
-    fixture = remediation_corpus(tmp_path, build=scenario != "missing_build", wrong_build=scenario == "wrong_build")
+def remediation(tmp_path, scenario="patch", *, turns=3, queries=2, variant="full", fixture=None):
+    fixture = fixture or remediation_corpus(
+        tmp_path, build=scenario != "missing_build", wrong_build=scenario == "wrong_build")
     counter = 0
 
     def transport(request, *, timeout_seconds):
@@ -195,6 +196,9 @@ def test_remediation_real_build_admission_line_retrieval_and_exact_patch_preserv
     assert "MISLEADING_UNTRUSTED" in json.dumps(result.requests[0].task_input["task"])
     assert all(request.guidance_text == result.requests[0].guidance_text for request in result.requests)
     assert result.result["patch"]["files"][0]["before_sha256"] == fixture.manifest["native/decode.c"]
+    assert result.receipt["review_handoff"] == fixture.review["inputs"]["review_handoff"]
+    saved = json.loads((tmp_path / "experiment" / "inputs.json").read_text())
+    assert saved["review_inputs"] == fixture.review["inputs"]
     bundle_path = fixture.corpus.core.run_root / "data" / "guidance" / result.receipt["guidance_sha256"] / "bundle.json"
     verify_bundle(json.loads(bundle_path.read_text()))
 
@@ -231,8 +235,9 @@ def test_remediation_missing_build_is_justified_nonproposal_with_named_source_ga
 
 
 def test_remediation_procedure_ablation_keeps_real_intake_and_output_contract(tmp_path):
-    _, first = remediation(tmp_path / "full")
-    _, second = remediation(tmp_path / "ablated", variant="without_procedures")
+    fixture = remediation_corpus(tmp_path / "corpus")
+    _, first = remediation(tmp_path / "full", fixture=fixture)
+    _, second = remediation(tmp_path / "ablated", variant="without_procedures", fixture=fixture)
     assert first.receipt["status"] == second.receipt["status"] == "proposal_generated"
     assert first.result == second.result
     assert first.requests[0].task_input == second.requests[0].task_input
@@ -250,9 +255,8 @@ def test_remediation_exhausted_turns_or_queries_do_not_produce_a_patch(tmp_path,
 
 
 def test_remediation_cannot_promote_supported_finding_into_confirmed_intake(tmp_path):
-    fixture = remediation_corpus(tmp_path)
-    fixture.review["partition"]["confirmed"] = []
-    fixture.finding["state"] = "supported"
+    fixture = remediation_corpus(tmp_path, independent=False)
+    assert fixture.review["partition"]["confirmed"] == [] and fixture.finding["state"] == "supported"
     with pytest.raises(ValueError, match="confirmed partition"):
         run_remediation_case(ROOT, review=fixture.review, finding_id=fixture.finding["finding_package_id"],
                              core=fixture.corpus.core, settings=REMEDIATION_SETTINGS,
@@ -261,18 +265,106 @@ def test_remediation_cannot_promote_supported_finding_into_confirmed_intake(tmp_
     assert not (tmp_path / "experiment").exists()
 
 
+def test_remediation_missing_accepted_review_blocks_dispatch(tmp_path):
+    from appsec_review.jobs.job_remediation_planning.inputs import load_review
+
+    fixture = remediation_corpus(tmp_path)
+    run_root = fixture.corpus.core.run_root
+    (run_root / "data/jobs/job_inference_security_review/latest.json").unlink(missing_ok=True)
+    with pytest.raises(IntegrityError, match="accepted.*handoff"):
+        load_review(run_root, ROOT, REMEDIATION_SETTINGS.bounds)
+    with pytest.raises(IntegrityError, match="accepted.*handoff"):
+        run_remediation_case(
+            ROOT, review=fixture.review, finding_id=fixture.finding["finding_package_id"],
+            core=fixture.corpus.core, settings=REMEDIATION_SETTINGS, output=tmp_path / "experiment",
+            transport=lambda *_a, **_kw: pytest.fail("Missing accepted review reached the model"))
+    assert not (tmp_path / "experiment").exists()
+
+
+@pytest.mark.parametrize("artifact", (
+    "pointer", "job_handoff", "review_handoff", "projection", "claim_ledger", "finding", "scope",
+    "package_manifest", "model_shard",
+))
+def test_remediation_corrupt_accepted_chain_blocks_dispatch(tmp_path, artifact):
+    from appsec_review.jobs.bound_artifacts import read_bound_json
+
+    fixture = remediation_corpus(tmp_path)
+    root = fixture.corpus.core.run_root
+    if artifact == "pointer":
+        path = root / "data/jobs/job_inference_security_review/latest.json"
+    elif artifact == "finding":
+        path = root / fixture.finding["path"]
+    elif artifact in {"scope", "package_manifest"}:
+        handoff = read_bound_json(root, fixture.review["inputs"]["job_handoff"])
+        output = handoff["outputs"]["scope.accept_manifest" if artifact == "scope" else
+                                    "packages.assemble_lead_packages"]
+        reference = output["artifact"]
+        if artifact == "package_manifest":
+            reference = read_bound_json(root, reference)["package_manifest"]
+        path = root / reference["path"]
+    elif artifact == "model_shard":
+        review = read_bound_json(root, fixture.review["inputs"]["review_handoff"])
+        path = root / review["shards"][0]["path"]
+    else:
+        path = root / fixture.review["inputs"][artifact]["path"]
+    path.write_bytes(b"corrupted" if artifact == "pointer" else path.read_bytes() + b" ")
+    with pytest.raises(IntegrityError):
+        run_remediation_case(
+            ROOT, review=fixture.review, finding_id=fixture.finding["finding_package_id"],
+            core=fixture.corpus.core, settings=REMEDIATION_SETTINGS, output=tmp_path / "experiment",
+            transport=lambda *_a, **_kw: pytest.fail("Corrupt accepted review reached the model"))
+    assert not (tmp_path / "experiment").exists()
+
+
+@pytest.mark.parametrize("field", ("partition", "projection"))
+def test_remediation_supplied_mapping_cannot_replace_accepted_review_authority(tmp_path, field):
+    fixture = remediation_corpus(tmp_path)
+    forged = deepcopy(fixture.review)
+    if field == "partition":
+        forged["partition"]["confirmed"] = []
+    else:
+        forged["inputs"]["projection"]["sha256"] = "f" * 64
+    with pytest.raises(IntegrityError, match="differs from the accepted review"):
+        run_remediation_case(
+            ROOT, review=forged, finding_id=fixture.finding["finding_package_id"],
+            core=fixture.corpus.core, settings=REMEDIATION_SETTINGS, output=tmp_path / "experiment",
+            transport=lambda *_a, **_kw: pytest.fail("Forged review snapshot reached the model"))
+    assert not (tmp_path / "experiment").exists()
+
+
+def test_remediation_binds_retrieval_to_the_accepted_review_scope(tmp_path):
+    from appsec_review.indexing.store import as_identity
+    from appsec_review.retrieval import RetrievalCore, write_manifest
+
+    fixture = remediation_corpus(tmp_path)
+    core = fixture.corpus.core
+    path = core.run_root / "data/indices/manifests/unadmitted.json"
+    write_manifest(
+        path, run_id=core.run_root.name, target_snapshot=core.manifest["target_snapshot"],
+        target_root=core.target_root,
+        indexes=[as_identity(row) for row in core.manifest["indexes"] if row["name"] == "source"])
+    unadmitted = RetrievalCore(core.run_root.parent, core.run_root.name,
+                              manifest_path=path, manifest_sha256=file_sha256(path))
+    assert unadmitted.manifest_sha256 != core.manifest_sha256
+    with pytest.raises(IntegrityError, match="differs from the accepted review scope"):
+        run_remediation_case(
+            ROOT, review=fixture.review, finding_id=fixture.finding["finding_package_id"],
+            core=unadmitted, settings=REMEDIATION_SETTINGS, output=tmp_path / "experiment",
+            transport=lambda *_a, **_kw: pytest.fail("Unaccepted retrieval scope reached the model"))
+    assert not (tmp_path / "experiment").exists()
+
+
 @pytest.mark.parametrize("case", ("foreign_run", "candidate_bound", "disabled"))
 def test_remediation_experiment_retains_run_identity_and_configured_admission(tmp_path, case):
-    fixture = remediation_corpus(tmp_path)
+    from appsec_review.jobs.job_remediation_planning.inputs import confirmed_findings
+
+    fixture = remediation_corpus(tmp_path, candidates=2 if case == "candidate_bound" else 1)
     settings = REMEDIATION_SETTINGS
     finding_id = fixture.finding["finding_package_id"]
     if case == "foreign_run":
         fixture.review["run_id"] = "another-run"
     elif case == "candidate_bound":
-        second = {**fixture.finding, "finding_package_id": "finding-second", "claim_id": "claim-second"}
-        fixture.review["packages"].append(second)
-        fixture.review["partition"]["confirmed"].append(second["finding_package_id"])
-        finding_id = second["finding_package_id"]
+        finding_id = confirmed_findings(fixture.review)[1]["finding_package_id"]
         settings = replace(settings, bounds=replace(settings.bounds, max_candidates=1))
     else:
         settings = replace(settings, enabled=False)

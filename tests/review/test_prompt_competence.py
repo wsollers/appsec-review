@@ -48,7 +48,7 @@ class Corpus:
 def accepted_corpus(directory: Path, case: dict[str, Any], *, page_size: int = 10,
                     max_turns: int = 6, max_queries: int = 8,
                     max_result_bytes: int = 16384, excerpt_bytes: int = 65536,
-                    role: Role = ROLE) -> Corpus:
+                    role: Role = ROLE, source_files: bool = False) -> Corpus:
     """A real accepted synthetic producer, shared with the opt-in manual acceptance entrypoint."""
     run_root = directory / "runs" / RUN_ID
     target = directory / "source"
@@ -58,7 +58,8 @@ def accepted_corpus(directory: Path, case: dict[str, Any], *, page_size: int = 1
         name="source", target_snapshot=snapshot,
         producer_artifacts=[{"sha256": sha256_hex(case["sources"])}],
         tool_identity={"tool": "competence-synthetic-producer", "version": "1"},
-        parser_identity="competence-source/1", normalizer_identity="retrieval/2",
+        parser_identity="competence-source-files/1" if source_files else "competence-source/1",
+        normalizer_identity="retrieval/2",
         mapping_identity="exact-source/1")
     path = run_root / "data" / "indices" / "source" / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="source", fingerprint=fingerprint, target_snapshot=snapshot)
@@ -76,6 +77,12 @@ def accepted_corpus(directory: Path, case: dict[str, Any], *, page_size: int = 1
             source["start_line"], source["start_line"] + len(source["text"].splitlines()) - 1,
             1, 1, {"producer": "competence-synthetic-producer"}, "fixture-exact", 1.0)
         builder.add_entity(EntityRecord(identity, source["path"], source["path"], source["text"], {}, location))
+        if source_files:
+            file_identity = LogicalIdentity.derive(
+                EntityKind.SOURCE_FILE, snapshot, {"path": source["path"], "sha256": file_sha256(file)})
+            builder.add_entity(EntityRecord(
+                file_identity, source["path"], source["path"], source["text"],
+                {"path": source["path"], "language": "C"}, location))
     lead = None
     if role is Role.RED_TEAM_ANALYST:
         lead = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {"question": case["question"]})

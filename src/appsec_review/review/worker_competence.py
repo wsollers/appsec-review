@@ -19,7 +19,7 @@ from appsec_review.inference.request import plan_prompt, review_prompt
 from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds
 from appsec_review.jobs.job_remediation_planning.contracts import PlanAnswer, verify_patch_scope
 from appsec_review.jobs.job_remediation_planning.inputs import (
-    SourceReader, confirmed_findings, evidence_relations, writer_task,
+    SourceReader, confirmed_findings, evidence_relations, load_review, retrieval_core, writer_task,
 )
 from appsec_review.jobs.job_remediation_planning.model import run_model
 from appsec_review.jobs.job_remediation_planning.patches import PatchError
@@ -123,14 +123,21 @@ def run_remediation_case(
 ) -> WorkerCompetenceResult:
     """Exercise confirmed-only intake, real source/build resolution and exact patch validation.
 
-    ``review`` is an already admitted review document, just as at the production assess boundary.
-    Its projection reference and the run's accepted native-build receipts are read normally.
-    This adapter neither fabricates upstream review state nor applies or executes a patch.
+    ``review`` must match the run's freshly verified accepted review, not just a self-consistent
+    mapping. Retrieval is reconstructed from that review's accepted scope. Supplied snapshots
+    remain compatibility/identity assertions, never alternative admission authorities.
     """
     if not settings.enabled:
         raise ValueError("remediation planning is disabled")
     if review.get("run_id") != core.run_root.name:
         raise IntegrityError("competence review belongs to a different run")
+    accepted = load_review(core.run_root, root, settings.bounds)
+    if review != accepted:
+        raise IntegrityError("competence review differs from the accepted review")
+    scoped_core = retrieval_core(core.run_root, accepted)
+    if core.manifest_sha256 != scoped_core.manifest_sha256:
+        raise IntegrityError("competence retrieval differs from the accepted review scope")
+    core, review = scoped_core, accepted
     candidates = confirmed_findings(review)
     findings = {item["finding_package_id"]: item for item in candidates}
     if finding_id not in findings:
@@ -150,7 +157,8 @@ def run_remediation_case(
     bundle = procedure_variant(worker_bundle(root, "remediation_writer"), variant)
     pin_bundle(core.run_root, bundle)
     atomic_json(capture.output / "inputs.json", {
-        "settings": asdict(settings), "task": task, "manifest_sha256": core.manifest_sha256})
+        "settings": asdict(settings), "task": task, "manifest_sha256": core.manifest_sha256,
+        "review_inputs": dict(review["inputs"])})
     evidence_ids = {item["relation_id"] for item in relations}
     answer, receipt = run_model(
         infer=capture, profile=settings.writer, role="remediation_writer",
@@ -172,4 +180,5 @@ def run_remediation_case(
         "worker": "remediation_writer", "status": status, "model_receipt": receipt,
         "guidance_sha256": bundle["sha256"], "variant": variant,
         "source_gaps": reader.gaps, "manifest_sha256": core.manifest_sha256,
+        "review_handoff": dict(review["inputs"]["review_handoff"]),
     })
