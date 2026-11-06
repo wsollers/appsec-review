@@ -447,8 +447,11 @@ not substitutes for an authoritative main checkout. Package 03 has not pushed, o
 launched a model/review, deployed, or modified either canonical main.
 
 The primary integration target in the original package is
-`F:\XBOX-Repositories\appsec-review`. Its last observed main ref is
-`305a39d993bbd68b4678d309eef0e81463fd01fd`.
+`F:\XBOX-Repositories\appsec-review`. Its final observed main ref is
+`5c62c1d45df10d1b93c0db7336e8dd3b5d1f2402`: the recovery package's documentation-only
+integration record on top of `305a39d993bbd68b4678d309eef0e81463fd01fd`. That documentation
+update was included in the private branch at `6cf699aa30fd72f51e1ef22292a28498f33236e0`;
+runtime source was unchanged, so no additional unit run was warranted for it.
 
 During final coordination, the Package 05 owner relayed the user's clarification that
 `/home/wsollers/projects/appsec-review` in Ubuntu-22.04 is the WSL master and Windows work must
@@ -477,3 +480,9 @@ Until that custody blocker is resolved by its owner, preserve the exact ready co
 the common OS-backed `appsec-independent-main-integration.lock` for any later main update.
 Do not delete, relocate, hide, overwrite or automatically resolve the untracked provenance files.
 Integration/acceptance suites remain **NOT RUN**, as requested.
+
+The code/tests/package handoff was preserved at `520e0fe39a5a8eec45f419babbdcd704f32c1444`
+and exported to a local Git bundle. The assigned app worktree was fast-forwarded to that commit
+only after verifying its feature-branch identity and clean state; no tests or development ran
+there. Subsequent documentation-only descendants retain the same verified implementation.
+The final ready bundle/feature ref is the handoff, not a claim of canonical-main landing.
