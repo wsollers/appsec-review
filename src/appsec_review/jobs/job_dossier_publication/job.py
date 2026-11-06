@@ -49,9 +49,8 @@ def _accepted_review(root: Path, schemas: SchemaSet, *, max_packages: int):
 
 
 def _core(root: Path, manifest: Mapping[str, str]):
-    from appsec_review.retrieval.core import RetrievalCore
-    return RetrievalCore(root.parent, root.name, manifest_sha256=manifest["sha256"],
-                         manifest_path=root / manifest["path"])
+    from appsec_review.jobs.bound_artifacts import source_context_core
+    return source_context_core(root, manifest)
 
 
 def _poc(document: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:

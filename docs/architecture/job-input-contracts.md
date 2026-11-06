@@ -124,3 +124,9 @@ new merged manifest when the supplied roots are already contained in one accepte
 No live target, model, image build, deployment or review execution is implied by these units.
 `tests/acceptance/test_job_input_contracts.py` is a read-only manual check of an already completed
 review named by `APPSEC_F02_ACCEPTANCE_RUN`; it does not launch a review.
+
+The [consumer read-path inventory](job-consumer-read-paths.md) enumerates all jobs and records the
+downstream original-owner source view. Runner-mediated source, bound-PoC gate and actual standalone
+Dagster admission regressions are in `tests/test_downstream_input_contracts.py` and
+`tests/test_standalone_input_contracts.py`. A supplied review manifest never re-owns its inherited
+shards or substitutes for declaring their original output kinds.

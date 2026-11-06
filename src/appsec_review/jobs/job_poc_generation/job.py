@@ -407,9 +407,8 @@ def _core(services: Services, run_root: Path, document: Mapping[str, Any]) -> An
     manifest = document["upstream"]["manifest"]
     if services.core_factory is not None:
         return services.core_factory(run_root, manifest)
-    from appsec_review.retrieval.core import RetrievalCore
-    return RetrievalCore(Path(run_root).parent, document["run_id"], manifest_sha256=manifest["sha256"],
-                         manifest_path=Path(run_root) / manifest["path"])
+    from appsec_review.jobs.bound_artifacts import source_context_core
+    return source_context_core(Path(run_root), manifest)
 
 
 def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,

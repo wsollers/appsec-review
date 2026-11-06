@@ -10,7 +10,7 @@ order. Only scheduling differs between the two drivers.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
@@ -44,7 +44,7 @@ class LaunchInputs:
 
     target_root: Path | None
     source_fingerprint: str
-    upstream_handoffs: Mapping[str, str] = field(default_factory=dict)
+    upstream_handoffs: Mapping[str, str] | None = None
 
 
 def configured_target(repository_root: Path, targets_dir: str = "targets") -> Path:
@@ -68,14 +68,15 @@ def configured_target(repository_root: Path, targets_dir: str = "targets") -> Pa
     return Path(target or Path(repository_root) / "targets" / "appsec-multi-vuln").absolute()
 
 
-def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str]) -> LaunchInputs:
+def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str] | None) -> LaunchInputs:
     from appsec_review.jobs.cataloging import source_fingerprint
 
     if (job.contract.target_access is not TargetAccess.CHECKOUT if job.contract is not None
             else job.job_id not in TARGET_JOBS):
-        return LaunchInputs(None, "none", dict(upstream_handoffs))
+        return LaunchInputs(None, "none", dict(upstream_handoffs) if upstream_handoffs is not None else None)
     target = Path(target).resolve()
-    return LaunchInputs(target, source_fingerprint(target), dict(upstream_handoffs))
+    return LaunchInputs(target, source_fingerprint(target),
+                        dict(upstream_handoffs) if upstream_handoffs is not None else None)
 
 
 def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, trigger: str,
@@ -95,7 +96,7 @@ def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, tr
     begin_method = runner.begin_attempt if force else getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
     return begin_method(job, run_id=run_id, trigger=trigger, orchestration=dict(orchestration),
                         target_root=inputs.target_root, source_fingerprint=inputs.source_fingerprint,
-                        upstream_handoffs=dict(inputs.upstream_handoffs))
+                        upstream_handoffs=dict(inputs.upstream_handoffs) if inputs.upstream_handoffs is not None else None)
 
 
 def unit_order(job: Job) -> tuple[str, ...]:

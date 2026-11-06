@@ -15,8 +15,11 @@ from appsec_review.runtime.contracts import (
     JobContract, MissingPolicy, TargetAccess,
 )
 
+from appsec_review.jobs.bound_artifacts import source_context_inputs
+
 CONTRACT = JobContract(
     inputs=(
+        *source_context_inputs(),
         InputRequirement("job_inference_security_review", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE,
                          availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),

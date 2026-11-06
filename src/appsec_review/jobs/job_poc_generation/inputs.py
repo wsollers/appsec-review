@@ -88,10 +88,8 @@ def load_package(run_root: Path, inputs: VerifiedInputs, package_id: str) -> Map
 
 def retrieval_core(run_root: Path, inputs: VerifiedInputs) -> Any:
     """The retrieval core pinned to the manifest the review accepted (it reads the target through the index)."""
-    from appsec_review.retrieval.core import RetrievalCore
-
-    return RetrievalCore(Path(run_root).parent, inputs.run_id, manifest_sha256=inputs.manifest_sha256,
-                         manifest_path=Path(run_root) / inputs.manifest_path)
+    from appsec_review.jobs.bound_artifacts import source_context_core
+    return source_context_core(Path(run_root), {"path": inputs.manifest_path, "sha256": inputs.manifest_sha256})
 
 
 def sink_of(package: Mapping[str, Any]) -> Mapping[str, Any] | None:

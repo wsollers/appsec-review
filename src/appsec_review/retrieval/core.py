@@ -297,7 +297,8 @@ class RetrievalCore:
     def __init__(self, runs_dir: Path, run_id: str, *, manifest_sha256: str | None = None,
                  manifest_path: Path | None = None,
                  limits: RetrievalLimits | None = None, clock: Callable[[], float] = time.monotonic,
-                 graph_settings: GraphSettings | None = None, log: PipelineLog | None = None):
+                 graph_settings: GraphSettings | None = None, log: PipelineLog | None = None,
+                 shard_filter: Callable[[Mapping[str, Any]], bool] | None = None):
         if not _RUN_ID.fullmatch(run_id):
             raise ValueError("invalid run id")
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
@@ -338,13 +339,20 @@ class RetrievalCore:
         self.clock = clock
         grouped: dict[str, list[Mapping[str, Any]]] = {}
         for item in self.manifest["indexes"]:
+            if shard_filter is not None and not shard_filter(item):
+                continue
             grouped.setdefault(str(item["name"]), []).append(item)
         self.indexes = {name: ShardGroup(sorted(items, key=lambda item: str(item.get("shard_id", "default"))))
                         for name, items in grouped.items()}
-        self._cursor_key = hashlib.sha256(f"{run_id}:{self.manifest_sha256}".encode()).digest()
+        view_identity = f"{run_id}:{self.manifest_sha256}"
+        if shard_filter is not None:
+            view_identity += ":" + hashlib.sha256(canonical_json([
+                (name, row.get("shard_id", "default"), row["sha256"])
+                for name, rows in sorted(self.indexes.items()) for row in rows])).hexdigest()
+        self._cursor_key = hashlib.sha256(view_identity.encode()).digest()
         self.log = log if log is not None else PipelineLog(self.run_root)
         self.mcp_session_id = hashlib.sha256(
-            f"{run_id}:{self.manifest_sha256}".encode()).hexdigest()
+            view_identity.encode()).hexdigest()
 
     def begin_mcp_invocation(self, tool: str, parameters: Mapping[str, Any]) -> tuple[object, Mapping[str, str]]:
         invocation = {"mcp_session_id": self.mcp_session_id,

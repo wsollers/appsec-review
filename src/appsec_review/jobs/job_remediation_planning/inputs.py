@@ -46,11 +46,10 @@ def evidence_relations(run_root: Path, review: Mapping[str, Any], finding: Mappi
 
 
 def retrieval_core(run_root: Path, review: Mapping[str, Any]) -> Any:
-    from appsec_review.retrieval.core import RetrievalCore
+    from appsec_review.jobs.bound_artifacts import source_context_core
     handoff = read_bound_json(run_root, review["inputs"]["job_handoff"])
     scope = read_bound_json(run_root, handoff["outputs"]["scope.accept_manifest"]["artifact"])
-    return RetrievalCore(run_root.parent, review["run_id"], manifest_sha256=scope["manifest_sha256"],
-                         manifest_path=run_root / scope["manifest_path"])
+    return source_context_core(run_root, {"path": scope["manifest_path"], "sha256": scope["manifest_sha256"]})
 
 
 class SourceReader:

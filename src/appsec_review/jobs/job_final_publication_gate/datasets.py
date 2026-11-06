@@ -25,6 +25,8 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_dossier_publication", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE,
                          availability=Availability.WHEN_ENABLED, missing=MissingPolicy.REJECT),

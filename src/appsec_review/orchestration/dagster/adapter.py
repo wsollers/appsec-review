@@ -198,12 +198,12 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                 if selected.job_id == "job_build_iteration" and not iteration_request:
                     raise ValueError("internal build iteration requires an immutable request tag")
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
-                upstream_handoffs = dict(upstream.get("handoffs", {}))
+                upstream_handoffs = None
                 tagged = launch_upstream_handoffs(config.runtime.runs_dir, tags,
-                                                  in_graph=bool(upstream_values))
+                                                  in_graph=len(jobs) > 1 or bool(upstream_values))
                 if tagged is not None:
                     upstream_handoffs = tagged
-                else:
+                elif len(jobs) > 1 or upstream_values:
                     from appsec_review.runtime.dependencies import input_projection
                     upstream_handoffs = input_projection(
                         selected, dict(upstream["completed_handoffs"]), dependencies_by_job,
