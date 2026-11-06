@@ -336,3 +336,43 @@ def test_raw_stderr_source_and_credentials_do_not_enter_central_details(tmp_path
          source_text="private source", api_key="private key",
          receipt={"path": "data/a", "sha256": "a" * 64})
     assert "private" not in log.path.read_text()
+
+
+def test_unsupported_and_incomplete_lifecycles_are_not_success(tmp_path):
+    log = PipelineLog(tmp_path)
+    emit(log, "JOB_STARTED")
+    emit(log, "RUN_COMPLETED", completion_status="SUCCEEDED")
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    report = follower.snapshot()
+    assert report["operational_status"] == "UNKNOWN"
+    assert report["lifecycle_gaps"][0]["reason"] == "missing_job_terminal"
+    emit(log, "RUN_STARTED")
+    emit(log, "RUN_COMPLETED", completion_status="future-status")
+    follower.poll()
+    report = follower.snapshot()
+    assert report["operational_status"] == report["analysis_completeness"].upper() == "UNKNOWN"
+    assert report["lifecycle_gaps"][0]["reason"] == "unsupported_run_completion_status"
+
+
+def test_conflicting_model_status_with_equal_usage_does_not_estimate_cost(tmp_path):
+    log = PipelineLog(tmp_path)
+    events = [model_event(log, "same", terminal_status="SUCCEEDED"),
+              model_event(log, "same", terminal_status="FAILED")]
+    result = account_calls(events)
+    assert result["calls"][0]["reason"] == "conflicting_call_records"
+    assert result["run"]["usage"]["input_tokens"] is None
+
+
+def test_step_and_task_attempts_remain_correlated(tmp_path):
+    log = PipelineLog(tmp_path)
+    for attempt in ("a1", "a2"):
+        for task in ("t1", "t2"):
+            log.write("TASK_STARTED", run_id=tmp_path.name, job_id="job", attempt_id=attempt,
+                      step_id="step", task_id=task)
+    log.write("TASK_COMPLETED", run_id=tmp_path.name, job_id="job", attempt_id="a1", step_id="step", task_id="t1")
+    follower = OperatorFollower(tmp_path)
+    follower.poll()
+    units = follower.snapshot()["units"]
+    assert len(units) == 4
+    assert [unit["reported_status"] for unit in units] == ["COMPLETED", "RUNNING", "RUNNING", "RUNNING"]

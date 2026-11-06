@@ -46,12 +46,17 @@ def account_calls(events: Iterable[Mapping[str, Any]], *,
             "call_id": key, "job_id": str(event.get("job_id") or "-"),
             "invocation_id": invocation, "provider": details.get("served_provider") or details.get("provider"),
             "model": details.get("served_model") or details.get("model"),
+            "terminal_status": details.get("terminal_status"),
+            "request_sha256": details.get("request_sha256"),
+            "execution_mode": details.get("execution_mode"),
             "input_tokens": _tokens(details.get("input_tokens")),
             "output_tokens": _tokens(details.get("output_tokens")),
             "cache_tokens": _tokens(details.get("cache_tokens")),
             "amount": None, "currency": None, "provenance": "unknown",
             "reason": "provider_charge_unavailable", "price_version": None,
         }
+        if any(row[name] is None for name in ("input_tokens", "output_tokens", "cache_tokens")):
+            row["reason"] = "provider_usage_unavailable_or_invalid"
         reused = (details.get("execution_mode") in {"replay", "cache", "cached", "reused"}
                   or details.get("terminal_status") in {"REUSED", "REPLAYED", "CACHED"}
                   or details.get("usage_unavailable_reason") == "recorded_replay")

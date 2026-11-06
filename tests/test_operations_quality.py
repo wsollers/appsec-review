@@ -1,4 +1,7 @@
 from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 
 import pytest
 
@@ -63,3 +66,28 @@ def test_empty_denominators_and_unknown_usage_are_explicit():
     assert result["metrics"]["precision"]["status"] == "empty_denominator"
     assert result["metrics"]["tokens_per_correct_resolution"] is None
     assert result["metrics"]["usage_complete"] is False
+
+
+def test_pinned_recorded_fixture_thresholds():
+    payload = (Path(__file__).parent / "fixtures/operations-quality.json").read_bytes()
+    assert hashlib.sha256(payload).hexdigest() == "d7f98edbf8deb0458657ef4fb1f7fee264ee1ff7ee23afa76841955ba3331a33"
+    document = json.loads(payload)
+    report, _ = fixture()
+    report["variants"]["full"]["rows"] = [{**row, "guidance_sha256": "a" * 64} for row in document["rows"]]
+    first = trend(report, document["cases"])
+    second = trend(report, document["cases"], "2")
+    assert compare_trends(first, second, thresholds=document["thresholds"])["status"] == "passed"
+
+
+def test_acceptance_adapter_uses_existing_detector_scorer():
+    from appsec_review.acceptance.scoring import score
+    from appsec_review.acceptance.scoring_model import KeyEntry, EntryKind, ScoringKey, Report
+    from appsec_review.observability.quality import acceptance_trend
+    key = ScoringKey({"identity": "fixture"}, (
+        KeyEntry("defect", EntryKind.DEFECT, "fixture.c", "CWE-121", (5,), (1, 10)),))
+    report = score(key, [Report("review", "fixture.c", 5, 5, "fixture", frozenset({"CWE-121"}))]).as_dict()
+    observation = acceptance_trend(report, producer="review", implementation_sha="1" * 40,
+                                   identities={name: "a" * 64 for name in ("corpus", "configuration", "prompts", "model")})
+    assert observation["metrics"]["precision"]["value"] == report["producers"][0]["precision"]
+    assert observation["metrics"]["recall"]["value"] == report["producers"][0]["recall"]
+    assert observation["metrics"]["abstention_precision"] is None

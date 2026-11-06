@@ -15,7 +15,9 @@ from appsec_review.observability.costs import account_calls
 from appsec_review.observability.diagnostics import execution_summary, diagnostic_reference, read_execution_receipt
 from appsec_review.observability.events import EventCursor, PipelineLog
 from appsec_review.observability.telemetry import validate_event
-from appsec_review.reporting.telemetry.inputs import JOB_TERMINALS, RUN_TERMINALS, job_spans, _timestamp
+from appsec_review.reporting.telemetry.inputs import (
+    JOB_TERMINALS, RUN_TERMINALS, job_spans, _timestamp, _STATUS_ALIASES,
+)
 from appsec_review.storage import canonical_json, atomic_json
 
 SCHEMA = "appsec-review/operator-status/1"
@@ -116,15 +118,35 @@ class OperatorFollower:
                          default=0)
         terminals = [event for event in events
                      if event["event_type"] in RUN_TERMINALS and event["sequence"] > last_start]
-        statuses = {str(event["details"].get("completion_status") or RUN_TERMINALS[event["event_type"]])
-                    for event in terminals}
-        statuses.discard("None")
+        raw_statuses = {str(event["details"].get("completion_status") or RUN_TERMINALS[event["event_type"]])
+                        for event in terminals}
+        raw_statuses.discard("None")
+        statuses = {_STATUS_ALIASES.get(status, status) for status in raw_statuses}
+        supported = {"SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED", "CANCELLED", "TIMED_OUT", "BLOCKED", "PARTIAL"}
+        lifecycle_gaps = []
+        if not statuses <= supported:
+            statuses = set()
+            lifecycle_gaps.append({"reason": "unsupported_run_completion_status"})
         operation = next(iter(statuses)) if len(statuses) == 1 else "CONFLICT" if statuses else "UNKNOWN"
         gaps, failures, references, resources, blocked = [], [], {}, {}, []
         execution_receipts, receipt_gaps = {}, []
+        units: dict[tuple[str, ...], dict[str, Any]] = {}
         progress = []
         for event in events:
             details, kind = event["details"], event["event_type"]
+            if event.get("step_id") or event.get("task_id"):
+                key = tuple(str(event.get(name) or "-") for name in (
+                    "job_id", "attempt_id", "step_id", "task_id"))
+                unit = units.setdefault(key, {
+                    **dict(zip(("job_id", "attempt_id", "step_id", "task_id"), key)),
+                    "reported_status": "UNKNOWN", "last_event": None, "last_update": None})
+                unit.update(last_event=kind, last_update=event["timestamp"])
+                if kind == "TASK_STARTED":
+                    unit["reported_status"] = "RUNNING"
+                elif kind.startswith("TASK_") and kind.endswith((
+                    "SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED", "REUSED", "TIMED_OUT", "CANCELLED"
+                )):
+                    unit["reported_status"] = details.get("completion_status") or kind.removeprefix("TASK_")
             stamp = _timestamp(event["timestamp"])
             if kind in {"OPERATION_PROGRESS", "JOB_STARTED", "TASK_STARTED", "TASK_COMPLETED",
                         "TASK_COMPLETED_WITH_GAPS", "TOOL_INVOCATION_COMPLETED", "MODEL_CALL_COMPLETED"}:
@@ -198,8 +220,23 @@ class OperatorFollower:
             liveness, action = "unknown", "verify_process_and_orchestrator_before_recovery"
         jobs = [asdict(span) for span in job_spans(events)]
         attempts = Counter(row["job_id"] for row in jobs)
+        job_terminals: dict[tuple[str, str], set[str]] = {}
+        for event in events:
+            if event["event_type"] in JOB_TERMINALS:
+                key = (event["job_id"], event["attempt_id"])
+                job_terminals.setdefault(key, set()).add(JOB_TERMINALS[event["event_type"]])
         for job in jobs:
             job["retry_attempts_observed"] = max(0, attempts[job["job_id"]] - 1)
+            key = (job["job_id"], job["attempt_id"])
+            if len(job_terminals.get(key, ())) > 1:
+                job["status"] = "CONFLICT"
+                lifecycle_gaps.append({"job_id": key[0], "attempt_id": key[1],
+                                       "reason": "conflicting_job_terminals"})
+            elif liveness == "terminal" and job["status"] == "RUNNING":
+                lifecycle_gaps.append({"job_id": key[0], "attempt_id": key[1],
+                                       "reason": "missing_job_terminal"})
+        if lifecycle_gaps and operation == "SUCCEEDED":
+            operation = "UNKNOWN"
         candidates = []
         if caught_up and states & _ACTIVE and (age is None or age >= alert_after_seconds):
             candidates.append(("progress_unconfirmed", run_id))
@@ -221,11 +258,13 @@ class OperatorFollower:
             "analysis_completeness": "declared_gaps" if gaps else
             "no_declared_gaps_not_proof_of_coverage" if caught_up and operation == "SUCCEEDED" else "unknown",
             "liveness": liveness, "safe_action": action, "dispatches": selected, "jobs": jobs,
+            "units": list(units.values()),
             "last_progress": last_progress.isoformat() if last_progress else None,
             "progress_age_seconds": age, "event_counts": dict(self.counts),
             "gaps": gaps, "failures": failures, "reusable_evidence": list(references.values()),
             "blocked": blocked,
             "execution_receipts": list(execution_receipts.values()), "receipt_gaps": receipt_gaps,
+            "lifecycle_gaps": lifecycle_gaps,
             "resources": list(resources.values()), "alerts": alerts,
             "alert_capacity_reached": len(self.alert_keys) >= max_alerts,
             "costs": account_calls(events, prices=prices),

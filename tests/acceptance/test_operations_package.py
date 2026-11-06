@@ -14,6 +14,7 @@ from appsec_review.storage import atomic_json
 
 def test_pinned_recorded_corpus_trends(tmp_path):
     fixture = Path(__file__).parents[1] / "fixtures/operations-quality.json"
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == "d7f98edbf8deb0458657ef4fb1f7fee264ee1ff7ee23afa76841955ba3331a33"
     document = json.loads(fixture.read_bytes())
     rows = [{**row, "guidance_sha256": "a" * 64} for row in document["rows"]]
     report = {"schema": REPORT_SCHEMA, "cases_sha256": sha256_hex(document["cases"]),

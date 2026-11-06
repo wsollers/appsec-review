@@ -42,5 +42,51 @@ confirmed both repositories at `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`.
 
 ## Implementation and verification record
 
-Pending implementation. No integration, acceptance, live review, service startup, deployment,
-or telemetry export has been performed.
+The specification was committed before coding as
+`605daf95` (full SHA available in Git). Initial implementation was committed as `843aba70`;
+receipt/checkpoint/retention revisions and manual suites were committed as `c8ad7e1b`.
+All are on `william-sollers-xbox-operations-and-quality-tracking`.
+
+Verification uses the isolated Linux-filesystem worktree
+`/home/wsollers/copilot-worktrees/operations-quality-b603f2c2`, with its own editable install
+and Python 3.12.15 `.venv`. Its imported `appsec_review.__file__` was confirmed inside that
+worktree. The Windows worktree's `.git` file contains a Windows absolute path and cannot be
+read directly by Linux Git; local Git bundles transfer exact commits instead. No network push
+was performed. The initial system interpreter was Python 3.10.12 and lacked pytest, so the
+test extra was installed into this separate Python 3.12 environment with:
+
+```sh
+uv venv --python python3.12 .venv
+uv pip install --python .venv/bin/python -e '.[test]'
+```
+
+Focused unit commands, executed from the isolated worktree:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_operations_reporting.py tests/test_operations_quality.py tests/test_operations_retention.py \
+  tests/test_pipeline_log.py tests/test_operation_telemetry_gaps.py \
+  --basetemp=test/tmp/operations-b603f2c2-first
+```
+
+At `843aba70`: **75 passed, 1 failed in 31.55s**. The new timeout regression omitted two
+required `ReviewModelRequest` token-limit fields; the fixture was corrected, without weakening
+the exception or redaction assertions.
+
+The same selectors at `c8ad7e1b`, using
+`--basetemp=test/tmp/operations-b603f2c2-second`: **85 passed in 31.45s**.
+Both runs emitted an existing Python warning from the explicit fork regression in
+`test_operation_telemetry_gaps.py`; it was not suppressed. These are offline unit results, not
+live acceptance. The selected pre-existing sampler tests make this check roughly 32 seconds.
+
+The integration and acceptance suites were syntax-parsed only, not imported or executed.
+Their exact manual commands and service prerequisites are in
+`docs/operations/quality-and-retention.md`.
+
+Supported retention application is deliberately restricted to explicitly sealed, private
+offline artifact stores. Ordinary production/legacy roots remain named holds: existing live
+writers do not share the new offline-store deletion lock. No production data has been
+deleted, compacted, sealed or migrated. No integration or acceptance execution, live review,
+service startup, deployment or real telemetry export has been performed.
+
+Final candidate verification and serialized WSL-main integration are pending.
