@@ -442,3 +442,53 @@ WSL repository but is not an ancestor of its unchanged `main` (ancestry exit 1).
 data-custody resolution or an explicit, preservation-only exception to the dirty-main gate is
 needed before advancing that master. The Windows landing and passing Linux unit results are not
 represented as WSL-main synchronization or as passing the unrun manual validation suites.
+
+### Provenance-closure follow-up while the master gate is blocked
+
+Four additional focused regressions exposed concrete gaps in the initial implementation:
+a repaired job selected an old shared computation despite changed measured code; an unaffected
+predecessor reused after its original release snapshot was removed; an explicitly named missing
+build dependency was silently omitted; and the Docker build had not copied the declared recipe
+and locks into the release generator's root.
+
+The reproducer command was:
+
+```sh
+.venv/bin/python -m pytest -q \
+  tests/test_repair_admission.py::test_repair_does_not_relabel_an_old_shared_computation_as_new_code \
+  tests/test_repair_admission.py::test_missing_original_release_evidence_rejects_predecessor_reuse \
+  tests/test_repair_admission.py::test_explicit_release_dependency_cannot_be_silently_missing \
+  tests/test_repair_admission.py::test_application_image_stages_declared_release_inputs \
+  --basetemp=test/tmp/recovery-provenance-closure --tb=short
+```
+
+It failed all four cases in **5.875 s**. The fixes add a repair-scoped shared-computation admission
+guard, verify original release evidence independently of customer artifacts, follow reused
+computation origins during resume/publication, refuse incompatible named-cache legacy fallbacks,
+reject missing literal build dependencies, and stage the required recipe/locks before generating
+the image's manifest. The manifest also covers non-Python package resources, bundled container
+assets, reference fixtures and all scripts. No model-loop or public cache API was redesigned.
+
+Focused follow-up commands, still on the changing development tree:
+
+```sh
+.venv/bin/python -m pytest -q tests/test_repair_admission.py tests/test_repair_dagster_contract.py \
+  tests/test_job_runtime.py tests/test_handoff_interchange.py \
+  --basetemp=test/tmp/recovery-provenance-closed --tb=short --maxfail=4
+.venv/bin/python -m pytest -q tests/test_repair_admission.py \
+  --basetemp=test/tmp/recovery-shared-admission --tb=short
+```
+
+Results: **168 passed in 81.106 s**, followed by **54 passed in 32.292 s** after adding compatible
+cache reuse, bypassed-publication rejection, actual shared-producer dependency and named-cache
+regressions. The expanded real source manifest covered **1,612 files/46 jobs** in **23.707 s**
+at that intermediate state. Final committed verification is recorded below when complete.
+
+Package03 subsequently reported a second independent WSL-master blocker: an existing
+`.git/rebase-apply` operation with 19 state files and `applying`. Its read-only metadata showed
+`next=1`, `last=1`, `abort-safety=78f43d9d1d5802e6b2ed4a9354d432e3749baee9`, and a leading mailbox
+header for `abb49695449d8f6c66859755d7c31dcaa7105d79`. That October 27 capacity-overlay commit is
+already an ancestor of WSL main, but this does not authorize clearing someone else's operation.
+Neither this session nor its integration worker ran `git am` or changed those state files.
+Its owner must resolve that operation; an untracked-file exception alone would not permit
+landing. The nine provenance files remain protected.

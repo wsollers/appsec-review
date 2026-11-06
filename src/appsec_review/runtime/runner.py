@@ -931,9 +931,18 @@ class JobRunner:
             }, claim, result)
         from appsec_review.storage.shared import attempt_artifacts
         with operation_span(context.events, "publication.artifacts"):
+            attempt_refs = list(attempt_artifacts(root, context.attempt_root))
+            from appsec_review.runtime.repair import ComputationAdmission
+            computation_admission = ComputationAdmission.for_repair(root, claim)
+            if computation_admission is not None:
+                from appsec_review.storage.shared import verify_receipt
+                prefix = context.attempt_root.relative_to(root).as_posix() + "/shared/"
+                for artifact in attempt_refs:
+                    if artifact["path"].startswith(prefix):
+                        computation_admission.verify(root, verify_receipt(root, artifact))
             artifacts = collect_artifacts(
                 root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
-                outcomes_ref, outcomes, result, attempt_artifacts(root, context.attempt_root))
+                outcomes_ref, outcomes, result, attempt_refs)
         handoff = self._handoff_document(
             context, claim, result, outcomes, outcomes_ref, accepted=True, completed=completed, artifacts=artifacts)
         del outcomes

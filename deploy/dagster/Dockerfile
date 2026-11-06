@@ -38,6 +38,7 @@ COPY pipeline ./pipeline
 COPY rules ./rules
 COPY scripts ./scripts
 COPY release-dependencies.json ./
+COPY deploy/dagster/Dockerfile deploy/dagster/requirements*.txt ./deploy/dagster/
 COPY tools/cve-bin-tool ./tools/cve-bin-tool
 RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
     && python -m appsec_review.runtime.release \

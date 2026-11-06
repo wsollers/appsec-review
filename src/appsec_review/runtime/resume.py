@@ -5,7 +5,7 @@ from enum import Enum
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 from appsec_review.config import AppConfig
@@ -157,6 +157,21 @@ class ResumePlanner:
             claim = read_document(safe_path(self.run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
             if claim.get("deployment_identity") != deployment_identity(self.config.runtime.repository_root):
                 reasons.append("deployment image/scripts identity changed")
+            from appsec_review.runtime.release import load_release
+            from appsec_review.runtime.repair import ComputationAdmission
+            from appsec_review.storage.shared import verify_receipt
+            release = load_release(self.config.runtime.repository_root)
+            if release is not None:
+                admission = ComputationAdmission(
+                    release, self.config.review_policy.releases.view(), self.config.resolved_sha256,
+                    deployment_identity(self.config.runtime.repository_root), job.job_id, job.schema_identity)
+                for artifact in handoff["artifacts"]:
+                    parts = PurePosixPath(artifact["path"]).parts
+                    if (len(parts) == 8 and parts[:2] == ("data", "jobs")
+                            and parts[3] == "attempts" and parts[5] == "shared"):
+                        receipt = verify_receipt(self.run_root, artifact)
+                        if receipt.get("producer_receipt") is not None:
+                            admission.verify(self.run_root, receipt)
             if handoff["coverage"]["retry_required"]:
                 reasons.append("accepted job contains a retriable failed producer")
         except (OSError, ValueError, KeyError, TypeError) as exc:

@@ -342,6 +342,8 @@ def verify_outcomes(root: Path, handoff: Mapping[str, Any]) -> dict[str, Any]:
     if claim_ref is None:
         raise ValueError("handoff does not bind its attempt claim")
     claim = _read(root, claim_ref)
+    from appsec_review.runtime.release import validate_claim_release
+    validate_claim_release(root, claim)
     document = read_document() if "unit_ids" not in claim else None
     unit_ids = claim["unit_ids"] if document is None else [unit["unit_id"] for unit in document["units"]]
     if (not isinstance(unit_ids, list) or any(not isinstance(unit, str) for unit in unit_ids)

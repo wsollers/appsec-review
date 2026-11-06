@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import ast
 import fnmatch
+from glob import has_magic
 import hashlib
 import json
 from pathlib import Path
@@ -75,7 +76,11 @@ def load_release(repository_root: Path) -> dict[str, Any] | None:
 
 def identities(job_id: str, schema: str, repository_root: Path,
                declarations: Mapping[str, str]) -> dict[str, str]:
-    release = load_release(repository_root)
+    return identities_from_release(load_release(repository_root), job_id, schema, declarations)
+
+
+def identities_from_release(release: Mapping[str, Any] | None, job_id: str, schema: str,
+                            declarations: Mapping[str, str]) -> dict[str, str]:
     identity = release["jobs"].get(job_id) if release else None
     if identity is None:
         return {"implementation": "undeclared", "schema": schema, "validation": "undeclared"}
@@ -86,6 +91,34 @@ def identities(job_id: str, schema: str, repository_root: Path,
         "schema": schema,
         "validation": digest({"source": identity["validation"], "label": declarations.get("validation")}),
     }
+
+
+def validate_claim_release(run_root: Path, claim: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Verify implementation metadata as control-plane provenance, not customer evidence."""
+    artifact = claim.get("implementation_release")
+    if artifact is None:
+        return None
+    from appsec_review.storage.shared import verify_reference
+    try:
+        release = validate_release(read_document(verify_reference(run_root, artifact)))
+        components = claim["component_identities"]
+        declarations = claim["review_policy"]["releases"]
+        if (not isinstance(components, Mapping)
+                or any(not isinstance(components.get(key), str) or not components[key].strip()
+                       for key in ("implementation", "schema", "validation"))
+                or not isinstance(declarations, Mapping)):
+            raise ValueError("claim has invalid implementation declarations")
+        from appsec_review.config.assurance import ComponentReleases
+        declarations = ComponentReleases(declarations).view()
+        expected = identities_from_release(
+            release, claim["job_id"], components["schema"], declarations)
+        if "undeclared" in expected.values() or components != expected:
+            raise ValueError("claim components differ from their measured release")
+        if claim["deployment_identity"]["scripts_sha256"] != release["scripts_sha256"]:
+            raise ValueError("claim scripts differ from their measured release")
+        return release
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(f"implementation release evidence is invalid: {exc}") from exc
 
 
 def build_release(root: Path, manifest: Mapping[str, Any], job_ids: Sequence[str]) -> dict[str, Any]:
@@ -104,16 +137,20 @@ def build_release(root: Path, manifest: Mapping[str, Any], job_ids: Sequence[str
         for pattern in patterns:
             if not isinstance(pattern, str) or Path(pattern).is_absolute() or ".." in Path(pattern).parts:
                 raise ValueError("dependency patterns must be repository-relative")
+            found = False
             for path in sorted(root.glob(pattern)):
                 if not path.is_file() or "__pycache__" in path.parts:
                     continue
                 relative = path.relative_to(root).as_posix()
                 if any(fnmatch.fnmatchcase(relative, excluded) for excluded in excludes):
                     continue
+                found = True
                 if not path.resolve().is_relative_to(root) or path.is_symlink():
                     raise ValueError(f"release dependency escapes its source tree: {relative}")
                 files.setdefault(relative, file_sha256(path))
                 result[relative] = files[relative]
+            if not found and not has_magic(pattern):
+                raise ValueError(f"missing release dependency: {pattern}")
         return dict(sorted(result.items()))
 
     common = select(manifest["common"], manifest.get("exclude_common", ()))

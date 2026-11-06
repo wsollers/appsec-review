@@ -6,17 +6,19 @@ commands, workers, Docker builds, or models.
 
 ## Release and deployment identity
 
-`release-dependencies.json` declares job packages, shared application code, validators/schema
-assets, runtime guidance/rules, dependency locks, the image recipe, and scripts. The release
+`release-dependencies.json` declares job packages, shared application code and package resources,
+container catalogs/query packs/adapters, validators/schema assets, bundled reference fixtures,
+runtime guidance/rules, dependency locks, the image recipe, and scripts. The release
 builder follows static cross-job helper imports as well. It rejects a release lacking shared
-code or validator coverage. At build time:
+code or validator coverage, or an absent explicitly named dependency. At build time:
 
 ```sh
 python -m appsec_review.runtime.release
 ```
 
 This creates byte-deterministic `implementation-release.json`; it is generated, not source.
-The Dagster Dockerfile runs this builder after installation. Job handlers never scan or hash
+The Dagster Dockerfile stages the declared recipe and dependency locks beside the source, then
+runs this builder after installation. Job handlers never scan or hash
 installed platform payloads as customer evidence. They read the bounded generated manifest.
 Changing a source/helper/schema/script and rebuilding changes the appropriate identity even
 when operator release labels are unchanged. Labels can invalidate an identity, but cannot
@@ -98,6 +100,19 @@ missing/corrupt checkpoints, and units whose dependencies are not admitted rerun
 being transplanted. Old attempt receipts remain untouched. Model budgets are not copied or reset
 by recovery; their old receipts remain in their original attempt.
 
+Shared computation receipts have a separate provenance check: an unchanged cache key does not
+authorize reusing a computation from an incompatible implementation, configuration or deployment.
+Repair-scoped lookups reuse compatible producers and recompute incompatible ones; publication
+checks the same rule even if a caller bypasses lookup. Resume also checks the origins of reused
+shared computations, retaining genuinely independent branches. Missing or corrupt original
+release snapshots reject admission; those snapshots are control-plane metadata, not indexed
+customer evidence.
+
+A named cache cannot silently relabel an incompatible producer as unknown legacy provenance.
+Regenerate it under a new computation identity, preserving the original artifact, or use a
+successor run when it cannot be regenerated in place. Verified public-feed bytes remain data
+inputs rather than being mistaken for application computations.
+
 Publication has an explicit final commit marker binding the handoff and terminal status.
 A crash between outcomes, handoff, index/latest pointers, events and that marker never admits
 partial output on recovery. A newer rejected or interrupted attempt prevents falling back to
@@ -140,7 +155,8 @@ The following are **manual and were not run as implementation gates**:
 Integration prerequisites: Linux/Python 3.12, checkout-local `.[test,dagster]`, no live models
 or Docker builds. It uses real local worker/process and Dagster lifecycle execution while faking
 only external launcher health/telemetry. Acceptance additionally requires an isolated fixture
-configuration (`APPSEC_REPAIR_ACCEPTANCE_CONFIG`) with all required jobs enabled, nonproduction
+configuration (`APPSEC_REPAIR_ACCEPTANCE_CONFIG`) and its matching generated implementation-release
+manifest, with all required jobs enabled, nonproduction
 `runs_dir`, prebuilt pinned tool images/data, a fixture target
 (`APPSEC_REPAIR_ACCEPTANCE_TARGET`), and complete offline recordings
 (`APPSEC_REVIEW_MODEL_REPLAY_DIR`). Model recording mode is forced to `replay` with no live

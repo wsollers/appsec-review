@@ -429,6 +429,202 @@ def test_inspected_checkpoint_cannot_change_after_new_attempt_claim(tmp_path):
         runner.execute_or_reuse_unit(broken, claim, "work.only")
     assert not (root / claim["attempt_path"] / "published.json").exists()
 
+
+def test_repair_does_not_relabel_an_old_shared_computation_as_new_code(tmp_path):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts, put_bytes, verify_receipt
+    from appsec_review.runtime.release import digest
+    config, (job,), _ = fixture(tmp_path)
+    computed = []
+    fingerprint = digest({"request": "same application inputs"})
+    def implementation(version):
+        def produce(unit):
+            owner = SharedArtifacts.for_job(unit.job)
+            hit = owner.lookup("fixture", fingerprint)
+            if hit is None:
+                computed.append(version)
+                receipt = owner.computed("fixture", fingerprint, put_bytes(unit.job.run_root, str(version).encode()),
+                                         computation={"request": "same application inputs"})
+            else:
+                _, receipt = hit
+            return {"artifact": receipt}
+        return produce
+    declaration = artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=("data/jobs/job_fixture/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+    first_job = replace(job, units=(Unit("work.only", implementation(1)),), datasets=(declaration,))
+    first = JobRunner(config).run(first_job)
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    (tmp_path / "release-src/shared.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id,))
+    repaired = replace(first_job, units=(Unit("work.only", implementation(2)),))
+    plan = plan_repair(config, root, (repaired,), "none")
+    admit_repair(config, root, (repaired,), plan)
+    result = JobRunner(config).run(repaired, run_id=root.name)
+    receipt = verify_receipt(root, result["result"]["outputs"]["work.only"]["artifact"])
+    assert (root / receipt["object"]["path"]).read_bytes() == b"2"
+    assert computed == [1, 2]
+
+
+def test_missing_original_release_evidence_rejects_predecessor_reuse(tmp_path):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    edges = {"job_a": (), "job_b": ()}
+    graph = GraphRunner(config, jobs, dependencies=edges)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    old_release = current_binding(root)["release"]
+    (tmp_path / "release-src/job_b/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=edges)
+    admit_repair(config, root, jobs, plan, dependencies=edges)
+    (root / old_release["path"]).unlink()
+    decisions = graph.plan(root.name, "none")
+    assert decisions[0].action == "RUN"
+    assert any("implementation release" in reason for reason in decisions[0].reasons)
+
+
+def test_explicit_release_dependency_cannot_be_silently_missing(tmp_path):
+    from appsec_review.runtime.release import build_release
+    fixture(tmp_path)
+    manifest = {"schema": "appsec-review/release-dependencies/1",
+                "common": ["release-src/shared.py", "missing-runtime.lock"],
+                "validators": ["release-src/validator.json"], "scripts": ["release-src/mounted.sh"],
+                "job_pattern": "release-src/{job_id}/*.py"}
+    with pytest.raises(ValueError, match="missing.*dependency"):
+        build_release(tmp_path, manifest, ("job_fixture",))
+
+
+def test_application_image_stages_declared_release_inputs():
+    dockerfile = (Path(__file__).parents[1] / "deploy/dagster/Dockerfile").read_text()
+    assert "COPY deploy/dagster/Dockerfile deploy/dagster/requirements*.txt ./deploy/dagster/" in dockerfile
+    assert dockerfile.index("COPY deploy/dagster/Dockerfile") < dockerfile.index(
+        "&& python -m appsec_review.runtime.release")
+
+
+def test_compatible_shared_computation_survives_explicit_repair(tmp_path):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.runtime.release import digest
+    from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts, put_bytes, verify_receipt
+    config, (job,), _ = fixture(tmp_path)
+    computations = []
+    def produce(unit):
+        owner = SharedArtifacts.for_job(unit.job)
+        key = digest({"request": "stable"})
+        hit = owner.lookup("fixture", key)
+        if hit is None:
+            computations.append(unit.job.attempt_id)
+            ref = owner.computed("fixture", key, put_bytes(unit.job.run_root, b"stable"),
+                                 computation={"request": "stable"})
+        else:
+            _, ref = hit
+        return {"artifact": ref}
+    declaration = artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=("data/jobs/job_fixture/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+    job = replace(job, units=(Unit("work.only", produce),), datasets=(declaration,))
+    first = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    plan = plan_repair(config, root, (job,), "none", force_from=job.job_id)
+    admit_repair(config, root, (job,), plan)
+    second = JobRunner(config).run(job, run_id=root.name)
+    receipt = verify_receipt(root, second["result"]["outputs"]["work.only"]["artifact"])
+    assert receipt["mode"] == "reused"
+    assert computations == ["attempt_0001"]
+    assert receipt["producer_receipt"] == first["result"]["outputs"]["work.only"]["artifact"]
+
+
+def test_publication_refuses_incompatible_receipt_even_when_lookup_is_bypassed(tmp_path):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.runtime.release import digest
+    from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts, put_bytes, verify_receipt
+    config, (job,), _ = fixture(tmp_path)
+    key = digest({"request": "stable"})
+    def original(unit):
+        ref = SharedArtifacts.for_job(unit.job).computed(
+            "fixture", key, put_bytes(unit.job.run_root, b"old"), computation={"request": "stable"})
+        return {"artifact": ref}
+    declaration = artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=("data/jobs/job_fixture/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+    job = replace(job, units=(Unit("work.only", original),), datasets=(declaration,))
+    first = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    producer_ref = first["result"]["outputs"]["work.only"]["artifact"]
+    producer = verify_receipt(root, producer_ref)
+    (tmp_path / "release-src/shared.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id,))
+    def bypass(unit):
+        _, ref = SharedArtifacts.for_job(unit.job)._record(
+            "fixture", key, producer["object"], computation=producer["computation"],
+            mode="reused", producer=producer_ref)
+        return {"artifact": ref}
+    changed = replace(job, units=(Unit("work.only", bypass),))
+    plan = plan_repair(config, root, (changed,), "none")
+    admit_repair(config, root, (changed,), plan)
+    with pytest.raises(ValueError, match="incompatible"):
+        JobRunner(config).run(changed, run_id=root.name)
+    assert not (root / "data/jobs/job_fixture/attempts/attempt_0002/published.json").exists()
+    assert json.loads((root / "data/jobs/job_fixture/latest.json").read_bytes())["handoff_sha256"] == first["handoff_sha256"]
+
+
+def test_shared_producer_change_invalidates_its_real_consumer_not_an_independent_job(tmp_path):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.runtime.release import digest
+    from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts, put_bytes
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    key = digest({"request": "shared calculation"})
+    def shared(unit):
+        owner = SharedArtifacts.for_job(unit.job)
+        hit = owner.lookup("fixture", key)
+        ref = (hit[1] if hit is not None else owner.computed(
+            "fixture", key, put_bytes(unit.job.run_root, b"value"), computation={"request": "shared calculation"}))
+        return {"artifact": ref}
+    measured = []
+    for job in jobs[:2]:
+        declaration = artifact_only(
+            "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+            artifacts=(f"data/jobs/{job.job_id}/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+        measured.append(replace(job, units=(Unit("work.only", shared),), datasets=(declaration,)))
+    measured.append(jobs[2])
+    edges = {job.job_id: () for job in jobs}
+    graph = GraphRunner(config, measured, dependencies=edges)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    decisions = graph.plan(first["run_id"], "none")
+    assert [item.action for item in decisions] == ["RUN", "RUN", "REUSE"]
+    assert any("cached computation from job_a" in reason for reason in decisions[1].reasons)
+
+
+def test_named_cache_cannot_hide_an_incompatible_producer_as_legacy(tmp_path):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts
+    config, (job,), _ = fixture(tmp_path)
+    def build(unit):
+        path = unit.job.run_root / "data/indices/fixture.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"value": 1}\n')
+        return {"artifact": SharedArtifacts.for_job(unit.job).named(
+            "index-shard", path, computed=True, computation={"request": "fixture"})}
+    declaration = artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=("data/jobs/job_fixture/attempts/*/shared/index-shard/*.json",), reason="offline fixture")
+    job = replace(job, units=(Unit("work.only", build),), datasets=(declaration,))
+    first = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    (tmp_path / "release-src/shared.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id,))
+    def reuse(unit):
+        return {"artifact": SharedArtifacts.for_job(unit.job).named(
+            "index-shard", root / "data/indices/fixture.json", computed=False,
+            computation={"request": "fixture"})}
+    changed = replace(job, units=(Unit("work.only", reuse),))
+    plan = plan_repair(config, root, (changed,), "none")
+    admit_repair(config, root, (changed,), plan)
+    with pytest.raises(RuntimeError, match="regenerate"):
+        JobRunner(config).run(changed, run_id=root.name)
+    assert not (root / "data/jobs/job_fixture/attempts/attempt_0002/published.json").exists()
+
 def test_partial_repair_publication_does_not_change_binding(tmp_path, monkeypatch):
     import appsec_review.runtime.repair as repair
     config, (job,), _ = fixture(tmp_path)

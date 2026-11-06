@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,54 @@ PLAN_SCHEMA = "appsec-review/repair-plan/1"
 COMPATIBILITY = "appsec-review/same-input-contracts/1"
 PUBLICATION_PROTOCOL = "appsec-review/committed-publication/1"
 WORKER_PROTOCOL = "appsec-review/recovery-worker/1"
+
+
+class IncompatibleComputation(ValueError):
+    """A complete cached computation belongs to an incompatible implementation."""
+
+
+@dataclass(frozen=True, slots=True)
+class ComputationAdmission:
+    release: Mapping[str, Any]
+    declarations: Mapping[str, str]
+    configuration_sha256: str
+    deployment: Mapping[str, Any]
+    job_id: str
+    schema_identity: str
+
+    @classmethod
+    def for_repair(cls, root: Path, claim: Mapping[str, Any]) -> ComputationAdmission | None:
+        if not claim.get("repair_admission_sha256"):
+            return None
+        from appsec_review.runtime.release import validate_claim_release
+        release = validate_claim_release(root, claim)
+        if release is None:
+            raise ValueError("repair computation admission requires measured implementation evidence")
+        return cls(release, claim["review_policy"]["releases"], claim["resolved_config_sha256"],
+                   claim["deployment_identity"], claim["job_id"], claim["component_identities"]["schema"])
+
+    def verify(self, root: Path, receipt: Mapping[str, Any]) -> None:
+        from appsec_review.runtime.release import identities_from_release, validate_claim_release
+        from appsec_review.storage.shared import verify_receipt
+        value = receipt
+        while value.get("producer_receipt") is not None:
+            value = verify_receipt(root, value["producer_receipt"])
+        if value.get("layout") == "public-feed" or value.get("mode") != "computed":
+            return
+        producer = read_document(verify_reference(root, value["actor"]["claim"]))
+        original = validate_claim_release(root, producer)
+        if original is None:
+            raise IncompatibleComputation("cached computation has no measured implementation")
+        producer_id = producer["job_id"]
+        schema = (self.schema_identity if producer_id == self.job_id
+                  else producer["component_identities"]["schema"])
+        expected = identities_from_release(self.release, producer_id, schema, self.declarations)
+        if ("undeclared" in expected.values() or producer["component_identities"] != expected
+                or producer["resolved_config_sha256"] != self.configuration_sha256
+                or producer.get("deployment_identity") != self.deployment):
+            raise IncompatibleComputation(
+                f"cached computation from {producer_id}/{producer['attempt_id']} has incompatible "
+                "implementation, configuration or deployment")
 
 
 def deployment_identity(repository_root: Path) -> dict[str, Any]:
