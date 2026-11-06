@@ -79,12 +79,35 @@ def parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
     target_choice(plan)
-    plan.add_argument("--force-from", choices=GRAPH_JOB_IDS)
+    plan.add_argument("--force-from", choices=(*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
     resume.add_argument("--run-id", required=True)
     target_choice(resume)
-    resume.add_argument("--force-from", choices=GRAPH_JOB_IDS)
+    resume.add_argument("--force-from", choices=(*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
+
+    repair = commands.add_parser("plan-repair", help="explain immutable repair, stop and unit-reuse admission")
+    repair.add_argument("--run-id", required=True)
+    repair.add_argument("--target", type=Path, required=True)
+    repair.add_argument("--force-from", choices=(*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
+    repair.add_argument("--historical-rerun", action="store_true",
+                        help="explicitly refuse all unverified historical successes")
+    repair.add_argument("--successor", action="store_true",
+                        help="prepare a new run; retain old evidence without importing unverified successes")
+    admit = commands.add_parser("admit-repair", help="admit an inspected repair plan; does not execute jobs")
+    admit.add_argument("--run-id", required=True)
+    admit.add_argument("--target", type=Path, required=True)
+    admit.add_argument("--plan", type=Path, required=True)
+    stopped = commands.add_parser("verify-repair-stop", help="verify a terminal Dagster worker; never cancel it")
+    stopped.add_argument("--run-id", required=True)
+    stopped.add_argument("--dispatch-id", required=True)
+    failure = commands.add_parser("failure-replay", help="print bounded, redacted references; never execute commands")
+    failure.add_argument("--run-id", required=True)
+    failure.add_argument("--job-id", required=True)
+    failure.add_argument("--attempt-id", required=True)
+    selection = commands.add_parser("select-job-tests", help="print explicit test selectors without executing tests")
+    selection.add_argument("--job", action="append", required=True)
+    selection.add_argument("--kind", choices=("unit", "integration", "acceptance", "live"), default="unit")
 
     tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
     tools.add_argument("--run-id", required=True)
@@ -149,13 +172,18 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command == "select-job-tests":
+        from appsec_review.development.test_selection import select_tests
+        print(json.dumps(select_tests(Path.cwd(), args.job, kind=args.kind), sort_keys=True, indent=2))
+        return 0
     if getattr(args, "admit_manual_poc", False) and (
             args.job_id != "job_final_publication_gate" or not args.upstream_from_run or not args.run_id):
         parser().error("--admit-manual-poc requires run job_final_publication_gate --run-id --upstream-from-run")
     if args.command == "signing":
         return run_signing(args, lambda: load_config(args.config, profile=args.profile))
     compiler = getattr(args, "compiler_target", None)
-    if args.command in {"run", "plan-resume", "resume", "build-failure-context",
+    if args.command in {"run", "plan-resume", "resume", "plan-repair", "admit-repair", "verify-repair-stop",
+                        "failure-replay", "build-failure-context",
                         "replay-build-recipe", "promote-build-recipe"} and getattr(args, "run_id", None):
         preliminary = load_config(args.config, profile=args.profile)
         manifest_path = (preliminary.runtime.runs_dir / args.run_id /
@@ -164,6 +192,42 @@ def main(argv: Sequence[str] | None = None) -> int:
             compiler = json.loads(manifest_path.read_text(encoding="utf-8")).get(
                 "selection", {}).get("compiler_target", "clang")
     config = load_config(args.config, profile=args.profile, compiler_target=compiler)
+    if args.command == "verify-repair-stop":
+        from appsec_review.runtime.repair import verify_dispatch_stop
+        from appsec_review.storage import RunStore
+        print(json.dumps(verify_dispatch_stop(
+            config, RunStore(config.runtime.runs_dir).resolve(args.run_id), args.dispatch_id), sort_keys=True))
+        return 0
+    if args.command == "failure-replay":
+        from appsec_review.runtime.failure_replay import failure_manifest
+        from appsec_review.storage import RunStore
+        document = failure_manifest(config, RunStore(config.runtime.runs_dir).resolve(args.run_id),
+                                    args.job_id, args.attempt_id)
+        print(json.dumps(document, sort_keys=True, indent=2))
+        return 0
+    if args.command in {"plan-repair", "admit-repair"}:
+        from appsec_review.runtime.repair import admit_repair, plan_repair
+        from appsec_review.runtime.release import read_document
+        from appsec_review.storage import RunStore
+        run_root = RunStore(config.runtime.runs_dir).resolve(args.run_id)
+        registry = builtin_registry()
+        registry.require_matches(config.jobs, surface="repair CLI")
+        selected = active_job_ids(config, (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
+        if getattr(args, "force_from", None) and args.force_from not in selected:
+            raise ValueError(f"cannot force from disabled job: {args.force_from}")
+        jobs = [registry.build(job_id) for job_id in selected]
+        fingerprint = source_fingerprint(args.target)
+        if args.command == "plan-repair":
+            document = plan_repair(config, run_root, jobs, fingerprint, target_root=args.target,
+                                   force_from=args.force_from, historical_rerun=args.historical_rerun,
+                                   successor=args.successor)
+        else:
+            plan = read_document(args.plan)
+            if plan.get("run_id") != args.run_id or plan.get("source_fingerprint") != fingerprint:
+                raise ValueError("repair plan run or target differs from requested admission")
+            document = admit_repair(config, run_root, jobs, plan, target_root=args.target)
+        print(json.dumps(document, sort_keys=True, indent=2))
+        return 2 if document.get("admissible") is False else 0
     if args.command in {"build-failure-context", "replay-build-recipe", "promote-build-recipe"}:
         from appsec_review.jobs.build_iterations import (
             captured_replay, decode_replay_context, failure_context, read_reference, select_promotion,

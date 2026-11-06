@@ -36,8 +36,11 @@ COPY containers ./containers
 COPY data ./data
 COPY pipeline ./pipeline
 COPY rules ./rules
+COPY scripts ./scripts
+COPY release-dependencies.json ./
 COPY tools/cve-bin-tool ./tools/cve-bin-tool
 RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
+    && python -m appsec_review.runtime.release \
     && mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /opt/app/runs /opt/app/data \
     && chmod 1777 /opt/dagster/home /var/dagster /var/dagster/compute-logs /var/dagster/artifacts \
     && python -c "from appsec_review.application_paths import verify_runtime_assets; verify_runtime_assets()" \

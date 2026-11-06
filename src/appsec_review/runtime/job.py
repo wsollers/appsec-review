@@ -57,7 +57,7 @@ class Job:
     schema_identity: str = "appsec-review/job-result/1"
     implementation_identity: str | None = None
     validation_identity: str | None = None
-    # Legacy callbacks are not invoked; identities() uses operator declarations only.
+    # Legacy callbacks are not invoked; release manifests are computed at build time.
     runtime_identity: Callable[[Path], str] | None = None
     units: tuple["Unit", ...] = ()
     result_transform: Callable[[JobContext, Mapping[str, Any]], Mapping[str, Any]] | None = None
@@ -94,12 +94,9 @@ class Job:
         return self.result_transform(context, result) if self.result_transform is not None else result
 
     def identities(self, repository_root: Path, releases: ComponentReleases | None = None) -> Mapping[str, str]:
-        declared = releases.values if releases is not None else {}
-        return {
-            "implementation": declared.get(self.job_id, declared.get("platform", "undeclared")),
-            "schema": self.schema_identity,
-            "validation": declared.get("validation", "undeclared"),
-        }
+        from appsec_review.runtime.release import identities
+        return identities(self.job_id, self.schema_identity, repository_root,
+                          releases.values if releases is not None else {})
 
     def execute(self, context: JobContext) -> Mapping[str, Any]:
         for validator in self.input_validators:

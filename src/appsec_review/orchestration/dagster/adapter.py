@@ -193,6 +193,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                                          for decision in value.get("resume_decisions", [])],
                 }
                 tags = dict(context.dagster_run.tags)
+                force_from = tags.get("appsec/force_from")
+                from appsec_review.runtime.dependencies import force_selected
+                forced = force_selected(selected.job_id, force_from, dependencies_by_job)
                 iteration_request = tags.get("appsec/iteration_request")
                 if selected.job_id == "job_build_iteration" and not iteration_request:
                     raise ValueError("internal build iteration requires an immutable request tag")
@@ -209,7 +212,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                     orchestration={"system": "dagster", "run_id": context.run_id,
                                     "workflow": context.dagster_run.job_name,
                                    "node": context.op.name,
-                                   **({"iteration_request": iteration_request} if iteration_request else {})})
+                                   **({"iteration_request": iteration_request} if iteration_request else {})},
+                    **({"force": True} if forced else {}))
                 created_at = getattr(context.dagster_run, "create_timestamp", None)
                 if isinstance(created_at, (int, float)):
                     queue_delay_ms = max(0, int((datetime.now(timezone.utc).timestamp() - created_at) * 1000))
@@ -441,7 +445,8 @@ def build_definitions(
     def gate_jobs() -> list[Job]:
         return [registry.build(job_id) for job_id in gates]
 
-    wave_dependencies = wave1_dependencies(registered)
+    from appsec_review.orchestration.topology import enabled_wave1_dependencies
+    wave_dependencies = enabled_wave1_dependencies(registered, set(registry.job_ids()))
     if wave_dependencies is not None:
         wave_jobs = [registry.build(job_id) for job_id in wave_dependencies]
         wave_job = _build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
