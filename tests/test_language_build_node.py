@@ -24,6 +24,7 @@ from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import file_sha256
+from tests.accepted_topology_fixture import accept_isolated_dispatch
 from tests.capture_fakes import capturing_fake
 
 
@@ -111,7 +112,20 @@ def test_node_lifecycle_validation_blocks_test_runners_and_target_applications(t
 
 
 def test_checkpoint_workspace_manifest_tampering_is_framework_integrity_failure(tmp_path: Path) -> None:
-    workspace = tmp_path / "data" / "build" / "node" / "units" / "unit" / "workspace"
+    target = tmp_path / "target"
+    (target / "web").mkdir(parents=True)
+    (target / "web" / "package.json").write_text('{"scripts": {"build": "tsc"}}\n', encoding="utf-8")
+    dispatch = {"build_unit_id": "unit", "root": "web", "family": "node", "build_system": "node",
+                "source_fingerprint": source_fingerprint(target),
+                "recipe": {"schema": "appsec-review/build-recipe/1", "build_unit_id": "unit",
+                           "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+                           "system_packages": [], "environment": {}, "dependency_files": ["web/package.json"],
+                           "configure_commands": [], "build_commands": [["npm", "run", "build"]],
+                           "expected_outputs": ["web/dist"], "network_required": True,
+                           "reason": "checkpoint manifest fixture"}}
+    run_root, dispatch = accept_isolated_dispatch(
+        tmp_path / "accepted-plan", target, dispatch, ["web/package.json"], releases={})
+    workspace = run_root / "data" / "build" / "node" / "units" / "unit" / "workspace"
     workspace.mkdir(parents=True)
     output = workspace / "dist.js"
     output.write_text("original\n", encoding="utf-8")
@@ -119,13 +133,14 @@ def test_checkpoint_workspace_manifest_tampering_is_framework_integrity_failure(
     manifest.write_text(json.dumps({"schema": "appsec-review/build-workspace-manifest/1",
                                     "build_unit_id": "unit",
                                     "files": {"dist.js": file_sha256(output)}}), encoding="utf-8")
-    receipt = {"workspace": workspace.relative_to(tmp_path).as_posix(), "artifacts": [], "commands": [],
-               "workspace_manifest": {"path": manifest.relative_to(tmp_path).as_posix(),
-                                      "sha256": file_sha256(manifest)}}
-    _validate_checkpoint_artifacts(tmp_path, receipt)
+    receipt = {key: dispatch[key] for key in ("build_unit_id", "recipe", "topology_refinement")}
+    receipt.update({"workspace": workspace.relative_to(run_root).as_posix(), "artifacts": [], "commands": [],
+                    "workspace_manifest": {"path": manifest.relative_to(run_root).as_posix(),
+                                           "sha256": file_sha256(manifest)}})
+    _validate_checkpoint_artifacts(run_root, receipt)
     output.write_text("tampered\n", encoding="utf-8")
     with pytest.raises(FrameworkIntegrityError, match="workspace identity changed"):
-        _validate_checkpoint_artifacts(tmp_path, receipt)
+        _validate_checkpoint_artifacts(run_root, receipt)
 
 
 def test_node_catalog_and_package_script_provenance_include_maps_packages_and_native_addons(tmp_path: Path) -> None:

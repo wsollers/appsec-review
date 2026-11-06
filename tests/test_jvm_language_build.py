@@ -30,6 +30,7 @@ from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import IndexIdentity, RetrievalCore, write_manifest
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import atomic_json, file_sha256
+from tests.accepted_topology_fixture import accept_isolated_dispatch, rebind_dispatch
 from tests.capture_fakes import capturing_fake
 
 
@@ -486,12 +487,23 @@ def _isolated_jvm_action(tmp_path, monkeypatch, mode, *, missing=None):
     policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
         approved_first_party_projects=("fixture",), target_root=str(target.resolve()),
         custody="application_private_v1", releases=ComponentReleases(declarations))
-    run_root = tmp_path / "run"
-    run_root.mkdir()
+    dispatch = {"build_unit_id": "jvm-fixture", "root": "maven", "family": "java",
+        "source_fingerprint": source_fingerprint(target), "recipe_identity": "recipe",
+        "probe_identity": "probe", "build_system": "maven",
+        "recipe": {"schema": "appsec-review/build-recipe/1", "build_unit_id": "jvm-fixture",
+                   "image_profile": "java", "source_dir": "maven", "build_dir": "maven/target",
+                   "system_packages": [], "environment": {}, "dependency_files": ["maven/pom.xml"],
+                   "configure_commands": [], "build_commands": [["mvn", "-B", "-DskipTests", "package"]],
+                   "expected_outputs": ["maven/target"], "network_required": True,
+                   "reason": "isolated JVM checkpoint fixture"},
+        "image": {"family": "java", "image_tag": "fixture:local", "image_id": "sha256:" + "d" * 64,
+                  "user": "1000:1000", "dependency_hashes": {}}}
+    run_root, dispatch = accept_isolated_dispatch(
+        tmp_path / "accepted-plan", target, dispatch, ["maven/pom.xml"], releases=policy.releases.view())
     records, calls = [], []
     unit = SimpleNamespace(unit_id="execute.java", job=SimpleNamespace(
         config=config.job("job_language_build"), review_policy=policy, run_root=run_root,
-        metadata_root=tmp_path / "metadata", target_root=target, source_fingerprint=source_fingerprint(target),
+        metadata_root=tmp_path / "metadata", target_root=target, source_fingerprint=dispatch["source_fingerprint"],
         run_id="fixture-run", attempt_id="fixture-attempt",
         events=SimpleNamespace(write=lambda event, **values: records.append((event, values)))))
 
@@ -502,13 +514,6 @@ def _isolated_jvm_action(tmp_path, monkeypatch, mode, *, missing=None):
 
     monkeypatch.setattr(generic, "_copy_source", copy_source)
     monkeypatch.setattr(jvm, "_index", lambda *_args: {"fixture": True})
-    dispatch = {"build_unit_id": "jvm-fixture", "root": "maven", "family": "java",
-        "source_fingerprint": unit.job.source_fingerprint, "recipe_identity": "recipe",
-        "probe_identity": "probe", "build_system": "maven",
-        "recipe": {"source_dir": "maven", "image_profile": "java", "configure_commands": [],
-                   "build_commands": [["mvn", "-B", "-DskipTests", "package"]], "environment": {}},
-        "image": {"family": "java", "image_tag": "fixture:local", "image_id": "sha256:" + "d" * 64,
-                  "user": "1000:1000", "dependency_hashes": {}}}
     return unit, dispatch, {"project_build_handoff_sha256": "handoff"}, calls, records
 
 
@@ -627,6 +632,7 @@ def test_jvm_changed_release_invalidates_family_checkpoint(tmp_path, monkeypatch
     first = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
     declarations = {**unit.job.review_policy.releases.view(), component: "fixture/2"}
     unit.job.review_policy = replace(unit.job.review_policy, releases=ComponentReleases(declarations))
+    dispatch = rebind_dispatch(unit.job.run_root, dispatch, releases=declarations)
     second = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
     assert first["fingerprint"] != second["fingerprint"]
     assert not second["checkpoint_reused"] and len(calls) == 2

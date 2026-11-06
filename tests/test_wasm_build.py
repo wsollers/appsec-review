@@ -23,6 +23,7 @@ from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import file_sha256
+from tests.accepted_topology_fixture import accept_isolated_dispatch, rebind_dispatch
 from tests.capture_fakes import capturing_fake
 
 
@@ -38,22 +39,35 @@ def _isolated_wasm_action(tmp_path, mode, *, missing=None):
     policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
         approved_first_party_projects=("fixture",), target_root=str(target.resolve()),
         custody="application_private_v1", releases=ComponentReleases(declarations))
-    run_root = tmp_path / "run"
-    run_root.mkdir()
+    # Accepted topology refuses wasm32 native targets and unresolved script tools, so the isolated
+    # checkpoint fixture is an AssemblyScript package built through the admitted webpack tool.
+    (target / "web" / "assembly").mkdir(parents=True)
+    (target / "web" / "package.json").write_text(json.dumps({
+        "scripts": {"asbuild": "webpack --config webpack.config.js"},
+        "devDependencies": {"as-loader": "0.12.0", "assemblyscript": "0.27.0",
+                            "webpack": "5.90.0"}}) + "\n", encoding="utf-8")
+    (target / "web" / "assembly" / "index.ts").write_text(
+        "export function demo(): i32 { return 1; }\n", encoding="utf-8")
+    dispatch = {"build_unit_id": "wasm-fixture", "root": "web", "family": "node",
+        "source_fingerprint": source_fingerprint(target), "recipe_identity": "recipe",
+        "probe_identity": "probe", "build_system": "node",
+        "recipe": {"schema": "appsec-review/build-recipe/1", "build_unit_id": "wasm-fixture",
+                   "image_profile": "node", "source_dir": "web", "build_dir": "web/build",
+                   "system_packages": [], "environment": {}, "dependency_files": ["web/package.json"],
+                   "configure_commands": [], "build_commands": [["npm", "run", "asbuild"]],
+                   "expected_outputs": ["web/build"], "network_required": True,
+                   "reason": "isolated WebAssembly checkpoint fixture"},
+        "image": {"image_tag": "fixture:local", "image_id": "sha256:" + "d" * 64,
+                  "user": "1000:1000", "dependency_hashes": {}}}
+    run_root, dispatch = accept_isolated_dispatch(
+        tmp_path / "accepted-plan", target, dispatch, ["web/package.json"],
+        releases=policy.releases.view())
     events, calls = [], []
     unit = SimpleNamespace(unit_id="execute.wasm", job=SimpleNamespace(
         config=config.job("job_language_build"), review_policy=policy, run_root=run_root,
-        metadata_root=tmp_path / "metadata", target_root=target, source_fingerprint=source_fingerprint(target),
+        metadata_root=tmp_path / "metadata", target_root=target, source_fingerprint=dispatch["source_fingerprint"],
         run_id="fixture-run", attempt_id="fixture-attempt",
         events=SimpleNamespace(write=lambda event, **values: events.append((event, values)))))
-    dispatch = {"build_unit_id": "wasm-fixture", "root": "crate", "family": "rust",
-        "source_fingerprint": unit.job.source_fingerprint, "recipe_identity": "recipe",
-        "probe_identity": "probe", "build_system": "cargo",
-        "recipe": {"source_dir": "crate", "image_profile": "rust", "configure_commands": [],
-                   "build_commands": [["cargo", "build", "--target", "wasm32-unknown-unknown"]],
-                   "environment": {}},
-        "image": {"image_tag": "fixture:local", "image_id": "sha256:" + "d" * 64,
-                  "user": "1000:1000", "dependency_hashes": {}}}
     return unit, dispatch, {"project_build_handoff_sha256": "handoff"}, calls, events
 
 
@@ -73,17 +87,17 @@ def test_wasm_declared_release_reuses_target_evidence_without_platform_hashes(tm
 
     monkeypatch.setattr(wasm, "file_sha256", target_evidence_hash)
     monkeypatch.setattr(generic, "file_sha256", target_evidence_hash)
-    first = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    first = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     assert all(row["artifact_origin"] == "build-output" and row["scope_version"]
                for row in first["artifacts"])
     assert any("delivery_fact_unavailable" in gap for gap in first["gaps"])
-    second = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    second = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     assert not first["checkpoint_reused"] and second["checkpoint_reused"] and len(calls) == 1
     artifact = unit.job.run_root / first["artifacts"][0]["path"]
     assert artifact.resolve() in hashed
     artifact.write_bytes(b"changed target output")
     with pytest.raises(wasm.WasmIntegrityError, match="artifact identity changed"):
-        wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+        wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
 
 
 @pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
@@ -94,7 +108,7 @@ def test_wasm_missing_release_denies_checkpoint_reuse(tmp_path, mode, missing):
     unit, dispatch, accepted, calls, events = _isolated_wasm_action(tmp_path, mode, missing=missing)
     original_publications = None
     for _ in range(2):
-        receipt = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+        receipt = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
         assert not receipt["checkpoint_reused"]
         assert receipt["checkpoint_reuse_reason"] == "missing_release_identity"
         publications = {
@@ -120,7 +134,7 @@ def test_wasm_repeated_protected_publication_rejects_conflicts(
 
     unit, dispatch, accepted, calls, _events = _isolated_wasm_action(
         tmp_path, mode, missing="wasm_instrumentation")
-    receipt = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    receipt = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     identity = (receipt["commands"][0]["protected_argv"] if publication == "command"
                 else receipt["protected_tool_invocations"])
     path = unit.job.run_root / identity["path"]
@@ -134,7 +148,7 @@ def test_wasm_repeated_protected_publication_rejects_conflicts(
     conflict = path.read_bytes()
 
     with pytest.raises(ValueError, match="immutable shared artifact conflicts|shared artifact symlink"):
-        wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+        wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     assert retained.read_bytes() == previous
     assert path.read_bytes() == conflict
     assert path.is_symlink() is (corruption == "symlink")
@@ -148,10 +162,11 @@ def test_wasm_changed_release_invalidates_family_checkpoint(tmp_path, mode, comp
     from appsec_review.jobs.job_language_build import wasm
 
     unit, dispatch, accepted, calls, _events = _isolated_wasm_action(tmp_path, mode)
-    first = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    first = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     declarations = {**unit.job.review_policy.releases.view(), component: "fixture/2"}
     unit.job.review_policy = replace(unit.job.review_policy, releases=ComponentReleases(declarations))
-    second = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    dispatch = rebind_dispatch(unit.job.run_root, dispatch, releases=declarations)
+    second = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     assert first["fingerprint"] != second["fingerprint"]
     assert not second["checkpoint_reused"] and len(calls) == 2
 
@@ -161,9 +176,9 @@ def test_wasm_delivery_policy_invalidates_family_checkpoint(tmp_path, monkeypatc
     from appsec_review.jobs.job_language_build import wasm
 
     unit, dispatch, accepted, calls, _events = _isolated_wasm_action(tmp_path, mode)
-    first = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    first = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     monkeypatch.setattr(wasm, "POLICY_IDENTITY", "fixture-delivery-policy/2")
-    second = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    second = wasm._execute_one(unit, dispatch, accepted, "assemblyscript", {}, lambda *_: WasmExecutor(calls))
     assert first["fingerprint"] != second["fingerprint"]
     assert not second["checkpoint_reused"] and len(calls) == 2
 
