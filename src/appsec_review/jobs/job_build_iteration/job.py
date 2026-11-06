@@ -10,6 +10,8 @@ from typing import Any
 
 from appsec_review.runtime import Job, Unit, UnitExecutor
 
+from .datasets import CONSUMES, DATASETS
+
 
 def iteration_definition(worker: Callable[[Mapping[str, Any], str], Mapping[str, Any]]):
     from dagster import In, Out, graph, op
@@ -111,4 +113,5 @@ def build_job() -> Job:
 
     units = (Unit("execute.node", execute),)
     return Job("job_build_iteration", "build_iteration", UnitExecutor(units).execute,
-               units=units, always_execute=True, propagate_handoff=False)
+               units=units, datasets=DATASETS, consumes=CONSUMES,
+               always_execute=True, propagate_handoff=False)

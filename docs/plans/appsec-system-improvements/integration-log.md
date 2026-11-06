@@ -195,3 +195,50 @@ source inventory and Glasswing mockup are not included in this bootstrap.
 Application unit tests, full-suite checks, integration/acceptance/live validations,
 review runs, deployments, and fuzz campaigns were not run. This documentation-only
 check establishes neither implementation quality nor canonical-main parity.
+
+## 2026-11-06 - F00 exact bootstrap landing
+
+The coordinator separately authorized landing only the frozen bootstrap commit
+`23b5a5bcde9a8e35d4f39799ccecc5c60a14aef6`, tree
+`4e00db3a00a92be08e400ef21332de5b2ace34df`, onto both canonical mains at
+`f9bb376e02aaef166bc71e736eaba7ee677ce97c`. The landing completed at
+`2026-11-06T12:33:51.1117175-05:00`; no additional commit was created.
+
+- Windows `F:\XBOX-Repositories\appsec-review` and WSL
+  `/home/wsollers/projects/appsec-review` both reached that exact HEAD and tree.
+  Windows was fully clean; WSL tracked state was clean and untracked `data/feeds/`
+  was preserved, including its directory identity and modification time.
+- The existing Windows exclusive `FileStream` and WSL nonblocking exclusive
+  `flock` were held together across baseline/freeze/operation checks, both
+  `git merge --ff-only --no-edit` operations, and ancestry/parity/EOL verification.
+  Both locks were released. The separate unit gate was untouched.
+- `f00-landing-journal.jsonl` records the intermediate Windows-advanced,
+  WSL-at-base state before the second fast-forward. The transaction took 3.8133 s.
+- The 47,094-byte bundle verified on both sides with SHA-256
+  `b080688e39923c123eff41f814d14d80f2f910930d50a8a5182c4a17326cdd8b`.
+- In the isolated Linux candidate, the frozen-source/link/JSON verifier passed
+  in 0.2184 s wall time (0.0508 s inside the verifier), covering 19 packages,
+  15 events and three Markdown files. Whitespace and four-file LF checks passed.
+
+The immutable receipt is retained at:
+
+```text
+C:\Users\william.sollers\.copilot\session-state\969abd85-9a4e-42a5-a323-34843205448e\files\f00-landing-receipt.json
+```
+
+Receipt SHA-256:
+`da534a4492249459c01951cc9bf72fee37b4dfbc24fa0ca257f6b9fab2b8a24e`.
+The journal and `f00-docs-verification.json` are beside it. No application unit,
+full-suite, integration, acceptance, live, Docker, model or target execution
+was performed for this documentation-only landing; no remote push occurred.
+
+### Separately authorized ledger snapshot
+
+The coordinator subsequently authorized publishing frozen ledger sequence **28**
+while preparing the F01 candidate, with LF-only normalization and no semantic
+edits. Its captured source SHA-256 is
+`27a29402f7b28fe2fe53d98cdb2a9adaa0adceedb6df68e98723a0587c487556`.
+The source is retained as `files/fleet-ledger-seq28.json` in the landing session.
+Plan v1.1 and the approved-review copy remain unchanged. This snapshot and the
+receipt above do not authorize or claim an F01 landing; later events remain
+separate from this frozen candidate.

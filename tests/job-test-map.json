@@ -375,6 +375,13 @@
       "acceptance": ["tests/acceptance/test_repair_fixture_review.py"],
       "live": []
     },
+    "inventory-publication": {
+      "jobs": ["job_build_iteration", "job_review_data_indexing"],
+      "unit": ["tests/test_inventory_publication.py"],
+      "integration": ["tests/integration/test_inventory_publication.py"],
+      "acceptance": ["tests/acceptance/test_inventory_publication.py"],
+      "live": []
+    },
     "recovery-admission": {
       "jobs": [
         "job_artifact_indexing",

@@ -89,11 +89,12 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
                 "provenance is not accepted evidence", sensitivity="sensitive", disposition="protected")))
         claims.append(Claim(job_id, "lifecycle", "attempt_receipts", _runtime_declaration(
             "attempt_receipts", "lifecycle", "execution_receipts", HANDOFF_SCHEMA,
-            "Attempt claims, status, results, handoffs, event logs and the attempt's pinned retrieval "
-            "input manifest.",
+            "Attempt claims, status, results, handoffs, publication commit markers, event logs and "
+            "the attempt's pinned retrieval input manifest.",
             (f"{base}/latest.json", f"{base}/attempts/*/claim.json", f"{base}/attempts/*/status.json",
              f"{base}/attempts/*/result.json", f"{base}/attempts/*/handoff.json", f"{base}/attempts/*/logs/**",
              f"{base}/attempts/*/outcomes.json", f"{base}/attempts/*/failure.lock",
+             f"{base}/attempts/*/published.json",
              f"{base}/attempts/*/failure-finalized.json",
              f"{base}/attempts/*/rejected-handoff.json", f"{base}/attempts/*/rejected-outcomes.json",
              # Written by the runner (materialize_attempt_input_manifest) when an attempt inherits
@@ -105,12 +106,20 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
             root = f"{base}/attempts/*/steps/{step}"
             claims.append(Claim(job_id, step, "step_receipts", _runtime_declaration(
                 "step_receipts", step, "execution_receipts", "appsec-review/unit-execution/2",
-                "Per-task status, result receipts and task event logs of one configured step.",
+                "Per-task status, result receipts, reuse checkpoints and task event logs of one configured step.",
                 (f"{root}/lifecycle.json", f"{root}/lifecycle.lock", f"{root}/tasks/*/status.json",
-                 f"{root}/tasks/*/result.json", f"{root}/tasks/*/traceback.txt", f"{root}/tasks/*/logs/**"),
+                 f"{root}/tasks/*/result.json", f"{root}/tasks/*/checkpoint.json",
+                 f"{root}/tasks/*/traceback.txt", f"{root}/tasks/*/logs/**"),
                 "unit results may embed exact recipes, host paths and unredacted records; only status, counts "
                 "and hashes are published", sensitivity="sensitive", disposition="protected")))
     run_level = (
+        ("recovery_records", "execution_receipts", "application/json",
+         "Implementation bindings, release snapshots, worker registration and repair admission records.",
+         ("data/recovery/current.json", "data/recovery/admission.lock", "data/recovery/successor.json",
+          "data/recovery/releases/*.json", "data/recovery/workers/*.json",
+          "data/recovery/dispatches/*.json", "data/recovery/repairs/*.json"),
+         "operational recovery state may include host paths and deployment inputs; ownership does not "
+         "establish successful execution or authorize reuse", "sensitive", "protected"),
         ("shared_immutable_artifacts", "execution_receipts", "appsec-review/shared-receipt/1",
          "Exact-byte objects and immutable computation-to-producer receipt references.",
          ("data/shared/objects/*", "data/shared/requests/*/*/*.json", "data/shared/named/*/*.json"),
@@ -122,7 +131,8 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
          "artifact_only"),
         ("run_telemetry", "execution_receipts", "appsec-review/telemetry-event/1",
          "Run-wide structured log, metrics, locks and orchestration receipts.",
-         ("data/logs/**", "data/telemetry/**", "data/orchestration/**", "data/resume.lock"),
+         ("data/logs/**", "data/telemetry/**", "data/orchestration/**",
+          "data/resume.lock", "data/publication.lock"),
          "operational telemetry, not review evidence; durations and statuses are inventory metadata", "internal",
          "artifact_only"),
         ("model_guidance", "configuration", "appsec-review/guidance-bundle/1",

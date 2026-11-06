@@ -994,7 +994,8 @@ def test_input_source_matrix_matches_design_document_and_registry() -> None:
     registered = set(builtin_registry().job_ids())
     named = {input_matrix.resolve_producer(producer, registered)
              for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
-    assert registered - {"job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis"} <= named
+    assert registered - input_matrix.INTERNAL_PRODUCERS - {
+        "job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis"} <= named
     assert {producer for producer in named if producer.startswith("job_")} <= registered
 
 
