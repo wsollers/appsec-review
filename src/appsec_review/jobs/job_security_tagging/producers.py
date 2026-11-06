@@ -66,6 +66,8 @@ class AcceptedIndexes:
                       key=lambda item: str(item.get("shard_id", "default")))
 
     def _open(self, identity: Mapping[str, Any]) -> sqlite3.Connection:
+        from appsec_review.runtime.inputs import observe_shard
+        observe_shard(self.run_root, identity)
         path = (self.run_root / str(identity["relative_path"])).resolve()
         if self.run_root.resolve() not in path.parents or not path.is_file():
             raise ValueError(f"index is unavailable: {identity['name']}/{identity.get('shard_id')}")

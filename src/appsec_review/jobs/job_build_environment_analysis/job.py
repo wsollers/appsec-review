@@ -9,12 +9,12 @@ import re
 import time
 
 from appsec_review.config.loader import BuildEnvironmentSettings, parse_bounded_settings
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.storage import atomic_bytes, canonical_json
 from appsec_review.storage.shared import safe_path
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 JOB_ID = "job_build_environment_analysis"
 SCHEMA = "appsec-review/build-environment-analysis/1"
@@ -359,4 +359,4 @@ def build_job():
                   ("environment_analysis.analyze_scripts",)))
     return Job(JOB_ID, "build_environment_analysis", UnitExecutor(units).execute,
                input_validators=(validate_config,), schema_identity=SCHEMA,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT)

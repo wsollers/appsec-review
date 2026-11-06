@@ -19,7 +19,8 @@ from appsec_review.owasp_workbench import (
     partition_work, pin_bundle, publish_manifest, publish_shard, select_profiles,
     standards_manifest, verify_results,
 )
-from appsec_review.jobs.job_owasp_control_assessment.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, DATASETS
+from appsec_review.runtime.inputs import feed_input_identity
 from appsec_review.owasp_workbench.assessment import run_batch
 from appsec_review.owasp_workbench.evidence import EvidenceResolver, accepted_inputs
 from appsec_review.review.scope import accept_manifest
@@ -410,4 +411,4 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
     return Job("job_owasp_control_assessment", "owasp_control_assessment", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=identity, validation_identity=identity, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity)

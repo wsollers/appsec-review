@@ -35,9 +35,10 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest, write_manifest
 from appsec_review.retrieval.model import EntityKind, EntityRecord, LogicalIdentity
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor, resolved_job_is_enabled
+from appsec_review.runtime.inputs import feed_input_identity
 from appsec_review.storage import atomic_json, file_sha256
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_review_data_indexing"
@@ -50,26 +51,27 @@ TOPOLOGY = {"load": ("accepted_inputs",), "links": ("cross_domain",), "precomput
             "fts": ("image_validation",), "audit": ("inventory",), "matrix": ("coverage",),
             "publish": ("inventory_index",)}
 Providers = Callable[[], tuple[tuple[str, ...], Mapping[str, Sequence[Any]], Mapping[str, Sequence[str]]]]
-DOWNSTREAM_JOBS = frozenset({
-    "job_review_package_assembly", "job_document_issue_analysis", "job_inference_security_review",
-    "job_final_publication_gate", "job_openvex_export", "job_poc_generation", "job_final_report_publication",
-    "job_remediation_planning", "job_remediation_validation", "job_dossier_publication",
-})
+def downstream_jobs() -> frozenset[str]:
+    return frozenset(name for name, _ in input_matrix.downstream_consumers(JOB_ID))
+
+
+def __getattr__(name: str):
+    if name == "DOWNSTREAM_JOBS":
+        return downstream_jobs()
+    raise AttributeError(name)
 
 
 def registry_providers() -> tuple[tuple[str, ...], dict[str, tuple[Any, ...]], dict[str, tuple[str, ...]]]:
     """All registered file owners, their datasets, and consumed upstream jobs."""
     from appsec_review.runtime.registry import builtin_registry
-    job_ids = tuple(builtin_registry().job_ids())
+    registry = builtin_registry()
+    job_ids = registry.job_ids()
     declarations: dict[str, tuple[Any, ...]] = {}
     consumes: dict[str, tuple[str, ...]] = {}
     for job_id in job_ids:
-        try:
-            module = importlib.import_module(f"appsec_review.jobs.{job_id}.datasets")
-        except ModuleNotFoundError:
-            continue
-        declarations[job_id] = tuple(getattr(module, "DATASETS", ()))
-        consumes[job_id] = tuple(getattr(module, "CONSUMES", ()))
+        job = registry.build(job_id)
+        declarations[job_id] = job.datasets
+        consumes[job_id] = job.consumes
     return job_ids, declarations, consumes
 
 
@@ -167,6 +169,14 @@ def owasp_status(run_root: Path) -> dict[str, Any]:
     if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file() or \
             file_sha256(manifest_path) != pointer.get("manifest_sha256"):
         raise ValueError("accepted OWASP workbench manifest identity changed")
+    accepted = accepted_handoff(run_root, "job_owasp_control_assessment")
+    relative = manifest_path.relative_to(run_root).as_posix()
+    if accepted is None or not any(ref["path"] == relative and ref["sha256"] == pointer["manifest_sha256"]
+                                   for ref in accepted.handoff["artifacts"]):
+        raise ValueError("OWASP manifest is not bound to its accepted producer handoff")
+    from appsec_review.runtime.inputs import observe_output
+    observe_output(run_root, "job_owasp_control_assessment", "owasp_workbench",
+                   {"path": relative, "sha256": pointer["manifest_sha256"]})
     from appsec_review.storage.shared import consume_named
     consume_named(run_root, manifest_path, namespace="owasp-shard", expected_sha256=pointer["manifest_sha256"])
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -251,12 +261,17 @@ def build_job(*, providers: Providers = registry_providers,
         if manifest.get("target_snapshot") != unit.job.source_fingerprint:
             raise ValueError("accepted index snapshot differs from the graph target snapshot")
         job_ids, declarations, consumes = providers()
+        registered_jobs = job_ids
         file_job_steps = {job_id: steps for job_id, steps in _resolved_steps(
             run_root, include_disabled=True).items() if job_id in job_ids}
         resolved_jobs = (_resolved_document(run_root).get("jobs") or {})
         disabled = {job_id for job_id, value in resolved_jobs.items()
                     if not resolved_job_is_enabled(job_id, value)}
-        active = set(_resolved_steps(run_root)) - DOWNSTREAM_JOBS - input_matrix.INTERNAL_PRODUCERS
+        from appsec_review.runtime.contracts import DispatchClass
+        from appsec_review.runtime.registry import builtin_contracts
+        contracts = builtin_contracts()
+        active = {name for name in _resolved_steps(run_root)
+                  if name not in contracts or contracts[name].dispatch is DispatchClass.REVIEW_GRAPH} - downstream_jobs()
         job_ids = tuple(job_id for job_id in job_ids if job_id in active)
         declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
         consumes = {job_id: tuple(upstream for upstream in values if upstream in active)
@@ -275,10 +290,13 @@ def build_job(*, providers: Providers = registry_providers,
                               settings_of(unit).get("feed_max_age_days_overrides") or {}).items()})
         mismatch = sorted(set(job_ids) ^ set(job_steps))
         document = {
-            "schema": "appsec-review/review-data-indexing-inputs/1", "target_snapshot": manifest["target_snapshot"],
+            "schema": "appsec-review/review-data-indexing-inputs/2", "target_snapshot": manifest["target_snapshot"],
             "accepted_manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha},
             "shards": accepted, "restored_shards": restored, "shard_conflicts": conflicts,
             "registry_jobs": list(job_ids), "registry_configuration_mismatch": mismatch, "job_steps": job_steps,
+            "registered_jobs": list(registered_jobs),
+            "dispatch_classes": {name: contracts[name].dispatch.value for name in registered_jobs
+                                 if name in contracts},
             "file_job_steps": file_job_steps,
             "disabled_jobs": sorted(disabled),
             "declarations": {job_id: [item.output_kind for item in values] for job_id, values in declarations.items()},
@@ -487,13 +505,19 @@ def build_job(*, providers: Providers = registry_providers,
                  "accepted" if document["handoffs"].get(job_id) else "not_executed"}
                 for job_id in document["registry_jobs"]]
         reconciled, discrepancies = input_matrix.reconcile(
-            document["registry_jobs"], jobs, inventory["rows"], product_status, JOB_ID,
+            document["registered_jobs"], jobs, inventory["rows"], product_status, JOB_ID,
             disabled_jobs=document.get("disabled_jobs", ()))
-        matrices = {"schema": "appsec-review/coverage-matrices/1", "target_snapshot": document["target_snapshot"],
+        from appsec_review.runtime.inputs import read_input_observations
+        consumer_handoffs = {job_id: accepted_handoff(unit.job.run_root, job_id)
+                             for job_id in document["registry_jobs"] if job_id != JOB_ID}
+        matrices = {"schema": "appsec-review/coverage-matrices/2", "target_snapshot": document["target_snapshot"],
                     "languages": matrix.language_matrix(
                         view.store, leads, enable_swift=unit.job.tools.enable_swift),
                     "build_units": matrix.build_unit_matrix(view.store),
-                    "producer_consumer": matrix.producer_consumer_matrix(jobs, document["consumes"]),
+                    "producer_consumer": matrix.producer_consumer_matrix(
+                        jobs, document["consumes"], handoffs=consumer_handoffs,
+                        observations={name: read_input_observations(unit.job.run_root, value.handoff)
+                                      for name, value in consumer_handoffs.items() if value is not None}),
                     "input_sources": reconciled, "input_source_discrepancies": discrepancies,
                     "query_sets": product_status}
         matrices["graph_follow_up"] = graph_follow_up(matrices["languages"])
@@ -605,7 +629,7 @@ def build_job(*, providers: Providers = registry_providers,
                        "audit.inventory", "matrix.coverage")))
     return Job(JOB_ID, "review_data_indexing", UnitExecutor(tuple(units)).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, units=tuple(units),
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity)
 
 
 # Query sets this job does not produce: the stage-3 compositions over accepted graph families and

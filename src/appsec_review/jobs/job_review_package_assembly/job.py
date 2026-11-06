@@ -13,7 +13,7 @@ from appsec_review.review_packages import publish_review_packages, verify_review
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import file_sha256
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_review_package_assembly"
@@ -99,4 +99,4 @@ def build_job() -> Job:
     return Job(JOB_ID, "review_package_assembly", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

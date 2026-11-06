@@ -153,10 +153,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                          job_dependencies: Mapping[str, tuple[str, ...]] | None = None):
     configs = configurations(config)
     plan_jobs(jobs, configs.base)
-    dependencies_by_job = dict(job_dependencies or {})
-    if not dependencies_by_job:
-        dependencies_by_job = {job.job_id: (() if position == 0 else (jobs[position - 1].job_id,))
-                               for position, job in enumerate(jobs)}
+    from appsec_review.runtime.dependencies import graph_dependencies
+    dependencies_by_job = graph_dependencies(jobs, job_dependencies)
     begin_ops = {}
     unit_ops: dict[tuple[str, str], Any] = {}
     finalize_ops = {}
@@ -205,6 +203,11 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                                                   in_graph=bool(upstream_values))
                 if tagged is not None:
                     upstream_handoffs = tagged
+                else:
+                    from appsec_review.runtime.dependencies import input_projection
+                    upstream_handoffs = input_projection(
+                        selected, dict(upstream["completed_handoffs"]), dependencies_by_job,
+                        set(upstream["handoffs"]))
                 inputs = launch_inputs(selected, target=configured_target(config.runtime.repository_root, config.target_acquisition.targets_dir),
                                        upstream_handoffs=upstream_handoffs)
                 claim = launch_begin(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Collection, Mapping, Sequence
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
@@ -65,7 +65,7 @@ from appsec_review.jobs.build_iterations import (
 from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec, WorkspacePaths
 from appsec_review.observability.spans import operation_phase
 from appsec_review.config.build_outputs import BuildOutputPolicy
-from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_language_build.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
@@ -2036,4 +2036,4 @@ def build_job(*, executor_factory=None) -> Job:
     return Job("job_language_build", "language_build", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

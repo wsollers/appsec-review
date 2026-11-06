@@ -221,9 +221,25 @@ def build_unit_matrix(shards: ShardSet) -> list[dict[str, Any]]:
     return rows
 
 
-def producer_consumer_matrix(jobs: Sequence[Mapping[str, Any]], consumes: Mapping[str, Sequence[str]]) -> list[dict[str, Any]]:
+def producer_consumer_matrix(jobs: Sequence[Mapping[str, Any]], consumes: Mapping[str, Sequence[str]], *,
+                             handoffs: Mapping[str, Any] | None = None,
+                             observations: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     status = {str(item["job_id"]): item.get("status") for item in jobs}
-    return [{"cell_type": "producer_consumer", "consumer": consumer, "producer": producer,
-             "consumer_status": status.get(consumer), "producer_status": status.get(producer),
-             "state": "complete" if status.get(producer) == "accepted" else "unavailable"}
-            for consumer, producers in sorted(consumes.items()) for producer in producers]
+    rows = []
+    for consumer, producers in sorted(consumes.items()):
+        accepted = (handoffs or {}).get(consumer)
+        handoff = accepted.handoff if accepted is not None else {}
+        observation = (observations or {}).get(consumer)
+        reads = observation["reads"] if observation is not None else []
+        for producer in producers:
+            observed = [record for record in reads if record["producer"] == producer]
+            rows.append({
+                "cell_type": "producer_consumer", "consumer": consumer, "producer": producer,
+                "consumer_status": status.get(consumer), "producer_status": status.get(producer),
+                "state": "available" if status.get(producer) == "accepted" else "unavailable",
+                "available": status.get(producer) == "accepted",
+                "supplied": producer in handoff.get("upstream_handoff_sha256", {}) if handoff else None,
+                "read": bool(observed) if observation is not None else None,
+                "cited": None, "read_identities": observed,
+            })
+    return rows

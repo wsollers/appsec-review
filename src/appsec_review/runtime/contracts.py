@@ -8,7 +8,7 @@ import json
 import re
 from typing import Any, Mapping, Sequence
 
-from appsec_review.runtime.datasets import DatasetDeclaration
+from appsec_review.runtime.datasets import DatasetDeclaration, EvidenceAuthority as EvidenceAuthority
 
 CONTRACT_SCHEMA = "appsec-review/job-contract/1"
 _NAME = re.compile(r"[a-z][a-z0-9_]{0,127}")
@@ -42,14 +42,6 @@ class MissingPolicy(StrEnum):
     REJECT = "reject"
     GAP = "gap"
     NOT_APPLICABLE = "not_applicable"
-
-
-class EvidenceAuthority(StrEnum):
-    PRODUCER_EVIDENCE = "producer_evidence"
-    ROUTING_CONTEXT = "routing_context"
-    OPERATIONAL = "operational"
-    REFERENCE = "reference"
-    PROVISIONAL = "provisional"
 
 
 class CoveragePolicy(StrEnum):
@@ -181,5 +173,6 @@ def accepted_inputs(producer: str, datasets: Sequence[DatasetDeclaration], *,
         raise ValueError(f"unknown input output kind for {producer}")
     return (
         InputRequirement(producer, "handoff", HANDOFF_SCHEMA, authority, availability, missing),
-        *(InputRequirement(producer, item.output_kind, item.schema, authority) for item in selected),
+        *(InputRequirement(producer, item.output_kind, item.schema,
+                           item.authority if item.authority is not None else authority) for item in selected),
     )

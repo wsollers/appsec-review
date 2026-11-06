@@ -25,7 +25,7 @@ from typing import Any
 
 from appsec_review.config.target_acquisition import parse_target_acquisition
 from appsec_review.jobs.cataloging import write_json
-from appsec_review.jobs.job_target_acquisition.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_target_acquisition.datasets import CONTRACT, DATASETS
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 
 
@@ -169,5 +169,5 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
     return Job(
         JOB_ID, "target_acquisition", UnitExecutor(units).execute,
         input_validators=(_validate,), schema_identity=SCHEMA, units=units, datasets=DATASETS,
-        consumes=CONSUMES, always_execute=True, propagate_handoff=False,
+        contract=CONTRACT, always_execute=True, propagate_handoff=False,
     )

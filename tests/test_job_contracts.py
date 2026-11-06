@@ -104,15 +104,25 @@ def test_duplicates_self_and_unknown_outputs():
 
 def test_historical_dataset_contract_readability_without_retrospective_provenance():
     historical = dataset_contract("job_consumer", ("publish",), (output(),))
+    historical["datasets"][0].pop("authority")
+    resign(historical)
     original = json.dumps(historical, sort_keys=True)
     contract = JobContract(inputs=accepted_inputs("job_source", (output(),)))
     current = dataset_contract("job_consumer", ("publish",), (output(),), job_contract=contract.document())
     assert historical["schema"] == "appsec-review/attempt-datasets/2"
     assert current["schema"] == "appsec-review/attempt-datasets/3"
     assert current["sha256"] != historical["sha256"]
-    assert read_dataset_contract(current, "job_consumer") == read_dataset_contract(historical, "job_consumer")
+    old_steps, old_outputs = read_dataset_contract(historical, "job_consumer")
+    new_steps, new_outputs = read_dataset_contract(current, "job_consumer")
+    assert old_steps == new_steps
+    assert old_outputs[0].schema == new_outputs[0].schema
+    assert old_outputs[0].authority is None
+    assert new_outputs[0].authority is EvidenceAuthority.PRODUCER_EVIDENCE
     assert json.dumps(historical, sort_keys=True) == original
     assert "job_contract" not in historical
     changed = replace(contract, target_access=TargetAccess.NONE)
     assert dataset_contract("job_consumer", ("publish",), (output(),),
                             job_contract=changed.document())["sha256"] != current["sha256"]
+    legacy = {key: value for key, value in historical.items() if key != "shared_namespaces"}
+    legacy["schema"] = "appsec-review/attempt-datasets/1"
+    assert read_dataset_contract(resign(legacy), "job_consumer") == (old_steps, old_outputs)

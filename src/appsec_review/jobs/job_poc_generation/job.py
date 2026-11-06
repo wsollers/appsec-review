@@ -34,7 +34,7 @@ from . import buildcheck, inputs as review_inputs
 from .brief import Brief, build_brief
 from .buildctx import AcceptedBuilds, BuildUnit, Headers, MissingBuild, declarations
 from .candidates import PocCandidate, parse_candidates
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .package import describe, source_file_name, write_candidate
 from .policy import check_ast
 from .settings import PocGenerationSettings
@@ -395,7 +395,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
     implementation = None
     return Job(JOB_ID, "poc_generation", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=POC_GENERATION_HANDOFF_SCHEMA, implementation_identity=implementation,
-               validation_identity=implementation, units=units, datasets=DATASETS, consumes=CONSUMES)
+               validation_identity=implementation, units=units, datasets=DATASETS, contract=CONTRACT)
 
 
 def _default_infer() -> Callable[..., Any]:

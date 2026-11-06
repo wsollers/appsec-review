@@ -36,6 +36,7 @@ class JobContext:
     # Authenticated evidence identity, not permission to read a target checkout.
     evidence_target_snapshot: str | None = None
     upstream_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    contract: JobContract | None = None
 
 
 class JobHandler(Protocol):
@@ -68,6 +69,7 @@ class Job:
     input_identity: Callable[[Path | None], str] | None = None
     # Source discovery may also need the accepted, bounded catalog of this run.
     run_input_identity: Callable[[Path | None, Path], str] | None = None
+    external_input_identity: Callable[[Path | None, Path, Path], str] | None = None
     # Publication contract: every output kind this job may emit, and the accepted upstream jobs
     # whose handoffs it reads. The dataset audit compares both with what a run actually produced.
     datasets: tuple[DatasetDeclaration, ...] = ()
@@ -88,13 +90,26 @@ class Job:
             object.__setattr__(self, "consumes", self.contract.consumes)
             object.__setattr__(self, "always_execute", self.contract.always_execute)
             object.__setattr__(self, "propagate_handoff", self.contract.propagate_handoff)
+            if (any(item.channel.value != "handoff" for item in self.contract.inputs)
+                    and not self.always_execute and self.external_input_identity is None
+                    and self.run_input_identity is None and self.input_identity is None):
+                raise ValueError(f"external inputs require an identity probe or fresh execution: {self.job_id}")
         if self.job_id in self.consumes or len(self.consumes) != len(set(self.consumes)):
             raise ValueError(f"job consumes itself or repeats an upstream job: {self.job_id}")
 
-    def probe_input_identity(self, target_root: Path | None, run_root: Path | None = None) -> str | None:
-        if self.run_input_identity is not None and run_root is not None:
-            return self.run_input_identity(target_root, run_root)
-        return self.input_identity(target_root) if self.input_identity is not None else None
+    def probe_input_identity(self, target_root: Path | None, run_root: Path | None = None, *,
+                             repository_root: Path | None = None) -> str | None:
+        identity = (self.run_input_identity(target_root, run_root)
+                    if self.run_input_identity is not None and run_root is not None else
+                    self.input_identity(target_root) if self.input_identity is not None else None)
+        if self.external_input_identity is not None:
+            if run_root is None or repository_root is None:
+                raise ValueError("external input identity requires the bound run and repository")
+            from appsec_review.storage.atomic import canonical_json_sha256
+            return canonical_json_sha256({
+                "schema": "appsec-review/job-external-inputs/1", "source": identity,
+                "external": self.external_input_identity(target_root, run_root, repository_root)})
+        return identity
 
     def configured_workers(self, step_id: str, task_id: str) -> int:
         return self.worker_lookup(step_id, task_id) if self.worker_lookup is not None else 1

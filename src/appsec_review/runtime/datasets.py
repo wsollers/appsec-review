@@ -10,6 +10,7 @@ not evidence: nothing here claims a dataset was produced.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 import hashlib
 import json
 import re
@@ -26,6 +27,13 @@ FAMILIES = (
 )
 STORES = ("retrieval", "owasp")
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+class EvidenceAuthority(StrEnum):
+    PRODUCER_EVIDENCE = "producer_evidence"
+    ROUTING_CONTEXT = "routing_context"
+    OPERATIONAL = "operational"
+    REFERENCE = "reference"
+    PROVISIONAL = "provisional"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,8 +63,12 @@ class DatasetDeclaration:
     reason: str | None = None
     required: bool = False
     store: str = "retrieval"
+    # Missing on historical declarations; never infer retrospective evidence authority.
+    authority: EvidenceAuthority | None = None
 
     def __post_init__(self) -> None:
+        if self.authority is not None and not isinstance(self.authority, EvidenceAuthority):
+            raise ValueError(f"unknown dataset evidence authority: {self.output_kind}")
         if not _NAME.fullmatch(self.output_kind) or not _NAME.fullmatch(self.step):
             raise ValueError(f"invalid dataset output kind or step: {self.output_kind}/{self.step}")
         if self.family not in FAMILIES:
@@ -109,24 +121,27 @@ METADATA_ROUTE = "query_dataset_inventory (sanitized identity, hash, status and 
 def indexed(output_kind: str, step: str, family: str, schema: str, description: str, *,
             indexes: tuple[str, ...], route: str, prefixes: tuple[str, ...] = (),
             suffixes: tuple[str, ...] = (), artifacts: tuple[str, ...] = (), sensitivity: str = "internal",
-            required: bool = False, store: str = "retrieval") -> DatasetDeclaration:
+            required: bool = False, store: str = "retrieval",
+            authority: EvidenceAuthority = EvidenceAuthority.PRODUCER_EVIDENCE) -> DatasetDeclaration:
     return DatasetDeclaration(output_kind, step, family, schema, sensitivity, "indexed", description,
                               indexes=indexes, shard_prefixes=prefixes, shard_suffixes=suffixes,
-                              artifacts=artifacts, query_route=route, required=required, store=store)
+                              artifacts=artifacts, query_route=route, required=required, store=store, authority=authority)
 
 
 def artifact_only(output_kind: str, step: str, family: str, schema: str, description: str, *,
                   artifacts: tuple[str, ...], reason: str, sensitivity: str = "internal",
-                  route: str = METADATA_ROUTE) -> DatasetDeclaration:
+                  route: str = METADATA_ROUTE,
+                  authority: EvidenceAuthority = EvidenceAuthority.PRODUCER_EVIDENCE) -> DatasetDeclaration:
     return DatasetDeclaration(output_kind, step, family, schema, sensitivity, "artifact_only", description,
-                              artifacts=artifacts, query_route=route, reason=reason)
+                              artifacts=artifacts, query_route=route, reason=reason, authority=authority)
 
 
 def protected(output_kind: str, step: str, family: str, schema: str, description: str, *,
               artifacts: tuple[str, ...], reason: str, sensitivity: str = "sensitive",
-              route: str = METADATA_ROUTE) -> DatasetDeclaration:
+              route: str = METADATA_ROUTE,
+              authority: EvidenceAuthority = EvidenceAuthority.PRODUCER_EVIDENCE) -> DatasetDeclaration:
     return DatasetDeclaration(output_kind, step, family, schema, sensitivity, "protected", description,
-                              artifacts=artifacts, query_route=route, reason=reason)
+                              artifacts=artifacts, query_route=route, reason=reason, authority=authority)
 
 
 def validate_declarations(job_id: str, declarations: tuple[DatasetDeclaration, ...]) -> None:
@@ -191,6 +206,8 @@ def read_dataset_contract(document: Mapping[str, Any], job_id: str
         if not isinstance(record, dict):
             raise ValueError("invalid attempt dataset declaration")
         values = dict(record)
+        if values.get("authority") is not None:
+            values["authority"] = EvidenceAuthority(values["authority"])
         for name in ("output_kind", "step", "family", "schema", "sensitivity", "disposition", "description"):
             if not isinstance(values.get(name), str):
                 raise ValueError(f"invalid attempt dataset declaration {name}")

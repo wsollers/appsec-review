@@ -112,6 +112,13 @@ canonical UTF-8 JSON with sorted keys, compact separators, non-ASCII preserved, 
 under `{"schema":"appsec-review/job-inputs/1","identity":<projection>}`.
 Use the shared helper rather than independently reimplementing this projection.
 
+New typed attempts embed `appsec-review/job-contract/1` in `appsec-review/attempt-datasets/3`.
+The existing dataset-contract identity therefore invalidates reuse after an input/dispatch contract
+change. Dataset `/1` and `/2` remain readable for historical accounting, without inventing their
+missing read provenance. `claim.json` records admitted availability/supply; existing hash-bound
+unit status receipts carry `appsec-review/input-reads/1`. These record reader access, not model
+citation or use in reasoning. See [job input contracts](job-input-contracts.md).
+
 ## Native result and common observation
 
 `appsec-review/native-result-reference/1` binds a retained immutable file by path/hash/size to a

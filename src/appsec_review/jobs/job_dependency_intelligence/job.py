@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff, feed_input_identity
 
 from collections.abc import Mapping
 from dataclasses import asdict
@@ -25,7 +25,7 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 from appsec_review.storage.shared import safe_path, verify_reference
 from appsec_review.observability.spans import operation_span
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .inference import resolve_with_inference
 from .native_inference_integration import inference_bounds, run_native_inference
 from .integration import (
@@ -518,7 +518,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
     return Job(JOB_ID, "dependency_intelligence", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity)
 
 
 def load_accepted_dependency_intelligence(run_root: Path) -> Mapping[str, Any]:

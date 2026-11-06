@@ -126,7 +126,8 @@ def test_every_registered_job_outside_the_target_set_is_named() -> None:
     assert set(builtin_registry().job_ids()) - TARGET_JOBS == {
         "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition",
         "job_third_party_data_sync", "job_inference_security_review", "job_final_publication_gate", "job_poc_generation",
-        "job_final_report_publication"}
+        "job_final_report_publication", "job_openvex_export", "job_remediation_planning",
+        "job_remediation_validation", "job_dossier_publication"}
 
 
 def test_accepted_upstream_handoffs_requires_and_verifies_each_pointer(tmp_path: Path) -> None:

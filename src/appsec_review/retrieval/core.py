@@ -255,6 +255,11 @@ def materialize_attempt_input_manifest(
     for identity, path in roots.items():
         values, lineage = _flatten_manifest(run_root, path, identity[1], verified=verified, flattened=flattened)
         expanded.append((identity, values, lineage))
+    maximal = [item for item in expanded if not any(
+        item[0] in other[2] for other in expanded if other[0] != item[0])]
+    if len(maximal) == 1:
+        identity = maximal[0][0]
+        return roots[identity], identity[1]
     merged: dict[tuple[str, str], tuple[Mapping[str, Any], tuple[str, str]]] = {}
     for root_identity, values, lineage in sorted(expanded, key=lambda item: (len(item[2]), item[0])):
         for key, value in values.items():
@@ -363,6 +368,8 @@ class RetrievalCore:
         _ACTIVE_MCP.reset(token)
 
     def _database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
+        from appsec_review.runtime.inputs import observe_shard
+        observe_shard(self.run_root, identity)
         from appsec_review.storage.shared import safe_path
         from appsec_review.storage.validation import verified_digest
 

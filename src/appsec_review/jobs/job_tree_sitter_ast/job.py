@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Callable, Mapping
 from concurrent.futures import as_completed
@@ -24,7 +24,7 @@ from .model import GrammarLock, partition_scopes, plan_scopes
 from .normalize import NORMALIZER_SCHEMA
 from .scope_execution import parse_scope
 from .generated_sources import load_generated_sources
-from appsec_review.jobs.job_tree_sitter_ast.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_tree_sitter_ast.datasets import CONTRACT, DATASETS
 
 
 TOPOLOGY = {
@@ -281,4 +281,4 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
     return Job("job_tree_sitter_ast", "tree_sitter_ast", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SCHEMA,
                implementation_identity=implementation, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

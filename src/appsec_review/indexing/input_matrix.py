@@ -17,8 +17,11 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 
-# Registered internal transactions own files but are not unconditional review input producers.
-INTERNAL_PRODUCERS = frozenset({"job_build_iteration"})
+def internal_producers() -> frozenset[str]:
+    from appsec_review.runtime.contracts import DispatchClass
+    from appsec_review.runtime.registry import builtin_contracts
+    return frozenset(name for name, contract in builtin_contracts().items()
+                     if contract.dispatch is DispatchClass.INTERNAL_TRANSACTION)
 
 # (source, producers, design state, precomputed query sets, MCP endpoints)
 INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str, ...]], ...] = (
@@ -135,19 +138,22 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("poc_generation", ("job_poc_generation",), "artifact_only", (), ("coverage",)),
 )
 
-# Downstream accepted-handoff consumers, in publication order.
-PLANNED_CONSUMERS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("job_poc_generation", ("job_inference_security_review", "job_language_build")),
-    ("job_remediation_planning", ("job_inference_security_review", "job_poc_generation")),
-    ("job_remediation_validation", ("job_inference_security_review", "job_remediation_planning")),
-    ("job_dossier_publication", ("job_inference_security_review", "job_poc_generation",
-                                "job_remediation_planning", "job_remediation_validation")),
-    ("job_final_publication_gate", ("job_inference_security_review", "job_poc_generation",
-                                  "job_remediation_planning", "job_remediation_validation",
-                                  "job_dossier_publication")),
-    ("job_openvex_export", ("job_final_publication_gate", "job_inference_security_review")),
-    ("job_final_report_publication", ("job_final_publication_gate",)),
-)
+def downstream_consumers(producer: str = "job_inference_security_review") -> tuple[tuple[str, tuple[str, ...]], ...]:
+    from appsec_review.orchestration.topology import wave1_dependencies, upstream_closure
+    from appsec_review.runtime.registry import builtin_contracts
+    contracts = builtin_contracts()
+    graph = wave1_dependencies(set(contracts)) or {}
+    return tuple((name, contracts[name].consumes) for name in graph
+                 if producer in upstream_closure(name, graph, set(graph)))
+
+
+def __getattr__(name: str):
+    # Compatibility views, evaluated lazily to avoid importing factories during registration.
+    if name == "INTERNAL_PRODUCERS":
+        return internal_producers()
+    if name == "PLANNED_CONSUMERS":
+        return downstream_consumers()
+    raise AttributeError(name)
 
 
 def resolve_producer(producer: str, registered: Iterable[str]) -> str:
@@ -170,7 +176,7 @@ def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], r
     named = {resolve_producer(producer, registered) for _source, producers, *_ in INPUT_SOURCES
              for producer in producers if producer.removeprefix("planned:") not in disabled}
     downstream_jobs = {"job_review_package_assembly", "job_document_issue_analysis"}
-    for job_id in sorted(registered - named - {self_job} - downstream_jobs - INTERNAL_PRODUCERS):
+    for job_id in sorted(registered - disabled - named - {self_job} - downstream_jobs - internal_producers()):
         discrepancies.append(f"registered job {job_id} is absent from the input-source matrix")
     reconciled = []
     for source, producers, state, query_sets, endpoints in INPUT_SOURCES:
@@ -204,3 +210,28 @@ def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], r
             "mcp_endpoints": list(endpoints),
         })
     return reconciled, discrepancies
+
+
+def job_contract_matrix(config: Any, registry: Any) -> list[dict[str, Any]]:
+    """Every configured job, including disabled, internal and maintenance dispatch."""
+    from dataclasses import asdict
+    from appsec_review.runtime.selection import job_is_enabled
+    registry.require_matches(config.jobs, surface="job contracts")
+    jobs = {name: registry.build(name) for name in registry.job_ids()}
+    rows = []
+    for name, job in jobs.items():
+        if job.contract is None:
+            raise ValueError(f"registered job lacks an input/dispatch contract: {name}")
+        for item in job.contract.inputs:
+            if item.channel.value != "handoff":
+                continue
+            if item.producer not in jobs:
+                raise ValueError(f"unregistered input producer: {name}/{item.producer}")
+            if item.output_kind != "handoff" and not any(
+                    output.output_kind == item.output_kind and output.schema == item.schema
+                    and output.authority == item.authority
+                    for output in jobs[item.producer].datasets):
+                raise ValueError(f"unknown input output/schema: {name}/{item.producer}/{item.output_kind}")
+        rows.append({"job_id": name, "enabled": job_is_enabled(config, name),
+                     "contract": job.contract.document(), "datasets": [asdict(item) for item in job.datasets]})
+    return rows

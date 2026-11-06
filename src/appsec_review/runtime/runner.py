@@ -133,6 +133,9 @@ class JobRunner:
             from appsec_review.storage.admission import verify_claim
             verify_claim(run_root, claim)
         persisted = json.loads(safe_path(run_root, str(claim["attempt_path"]) + "/claim.json").read_bytes())
+        if job.contract is not None and persisted.get("dataset_contract", {}).get(
+                "job_contract") != job.contract.document():
+            raise ValueError("attempt input/dispatch contract differs from current job")
         if not claim.get("reused"):
             from appsec_review.storage.admission import claim_identity
             if canonical_json(claim_identity(claim)) != canonical_json(claim_identity(persisted)):
@@ -182,6 +185,7 @@ class JobRunner:
             review_policy=self.config.review_policy,
             evidence_target_snapshot=claim.get("evidence_target_snapshot"),
             upstream_handoffs=MappingProxyType(dict(claim.get("upstream_handoffs", {}))),
+            contract=job.contract,
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
             input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
@@ -192,8 +196,13 @@ class JobRunner:
 
     def _check_target_inputs(self, job: Job, target_root: Path | None, source_fingerprint: str) -> None:
         from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
+        from appsec_review.runtime.contracts import TargetAccess
+        independent = (job.contract.target_access is not TargetAccess.CHECKOUT if job.contract is not None
+                       else job.job_id in TARGET_INDEPENDENT_JOBS)
+        if job.contract is not None and independent and (target_root is not None or source_fingerprint != "none"):
+            raise ValueError("target-independent contract cannot grant target checkout access")
         if self.config.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED and source_fingerprint == "none":
-            if target_root is not None or job.job_id not in TARGET_INDEPENDENT_JOBS:
+            if target_root is not None or not independent:
                 raise ValueError("managed absent-target claim is not a target-independent job")
             return
         self.config.review_policy.check_target(target_root)
@@ -234,6 +243,20 @@ class JobRunner:
             raise ValueError(f"job name mismatch: code={job.name} config={job_config.name}")
         if not job.units:
             raise ValueError(f"job does not expose orchestratable units: {job.job_id}")
+        correlation = dict(orchestration or {})
+        from appsec_review.runtime.inputs import selected_handoffs
+        from appsec_review.runtime.selection import active_job_ids
+        enabled_inputs = set(active_job_ids(self.config, self.config.jobs))
+        required_upstream = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled_inputs)
+        if job.job_id == "job_target_analysis_plan":
+            from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
+            contract, required_upstream = planning_environment_inputs(
+                self.config, run_root, source_fingerprint, correlation, required_upstream)
+            correlation["build_environment_contract"] = canonical_json(contract).decode()
+        if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
+            raise ValueError("orchestration correlation must contain string keys and values")
+        input_identity = job.probe_input_identity(
+            target_root, run_root, repository_root=self.config.runtime.repository_root)
         attempts = run_root / "data" / "jobs" / job.job_id / "attempts"
         attempts.mkdir(parents=True, exist_ok=True)
         for serial in range(1, 10_000):
@@ -246,15 +269,6 @@ class JobRunner:
                 continue
         else:
             raise RuntimeError(f"attempt id space exhausted for {run_id}/{job.job_id}")
-        correlation = dict(orchestration or {})
-        required_upstream = dict(upstream_handoffs or {})
-        if job.job_id == "job_target_analysis_plan":
-            from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
-            contract, required_upstream = planning_environment_inputs(
-                self.config, run_root, source_fingerprint, correlation, required_upstream)
-            correlation["build_environment_contract"] = canonical_json(contract).decode()
-        if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
-            raise ValueError("orchestration correlation must contain string keys and values")
         claim = {
             "schema": "appsec-review/attempt-claim/1", "run_id": run_id,
             "job_id": job.job_id, "attempt_id": attempt_id,
@@ -266,14 +280,14 @@ class JobRunner:
             "resolved_config_sha256": self.config.resolved_sha256,
             "review_policy": self.config.review_policy.view(),
             "upstream_handoffs": required_upstream,
-            "input_identity": job.probe_input_identity(target_root, run_root),
+            "input_identity": input_identity,
             "job_config_sha256": job_config_sha256(self.config, job.job_id),
             "unit_ids": [unit.unit_id for unit in job.units],
             "component_identities": job.identities(
                 self.config.runtime.repository_root, self.config.review_policy.releases),
             "dataset_contract": dataset_contract(
                 job.job_id, sorted(set(job_config.steps) | {unit.unit_id.split(".")[0] for unit in job.units}),
-                job.datasets),
+                job.datasets, job_contract=job.contract.document() if job.contract is not None else None),
             "started_at": instant.isoformat(),
         }
         from appsec_review.runtime.repair import (
@@ -310,6 +324,8 @@ class JobRunner:
                 claim["evidence_target_snapshot"] = snapshot
                 context = replace(context, evidence_target_snapshot=snapshot)
                 admit_upstreams(context, claim["upstream_handoffs"])
+                from appsec_review.runtime.inputs import admit_inputs
+                claim["input_admission"] = admit_inputs(context, enabled_inputs)
                 input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
                     run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
                     target_snapshot=source_fingerprint, target_root=target_root,
@@ -357,6 +373,10 @@ class JobRunner:
         if run_id is not None:
             run_root = self.runs.resolve(str(run_id))
             self._bind_configuration(run_root)
+            from appsec_review.runtime.inputs import selected_handoffs
+            from appsec_review.runtime.selection import active_job_ids
+            upstream = selected_handoffs(job, run_root, kwargs.get("upstream_handoffs"),
+                                         enabled=set(active_job_ids(self.config, self.config.jobs)))
             if job.job_id == "job_target_analysis_plan":
                 from appsec_review.jobs.job_build_environment_analysis.job import (
                     load_environment, planning_environment_inputs,
@@ -598,8 +618,11 @@ class JobRunner:
         atomic_json(status_path, running)
         context.events.write("TASK_STARTED", unit_id=unit_id)
         unit_context = UnitContext(context, unit_id, step_id, task_id, unit_root, MappingProxyType(outputs))
+        input_reads = None
         try:
-            with operation_span(context.events, "unit.execute", unit_id=unit_id), \
+            from appsec_review.runtime.inputs import input_read_scope
+            with input_read_scope(context) as input_reads, \
+                    operation_span(context.events, "unit.execute", unit_id=unit_id), \
                     publication_scope(context), unit_scope(run_root=context.run_root, job_id=job.job_id,
                             repository_root=context.repository_root, target_root=context.target_root):
                 from appsec_review.storage.admission import admit_upstreams
@@ -616,12 +639,15 @@ class JobRunner:
                     result = dict(unit.handler(unit_context))
                 for validator in unit.output_validators:
                     validator(unit_context, result)
+                input_consumption = input_reads.document() if input_reads is not None else None
             atomic_json(result_path, result)
             completed = datetime.now(timezone.utc).isoformat()
             receipt = {**running, "status": "SUCCEEDED", "completed_at": completed,
                        "result_sha256": file_sha256(result_path),
                        "producer": result.get("tool_id"), "disposition": result.get("terminal_status"),
                        "shard_identity": result.get("index_identity")}
+            if input_consumption is not None:
+                receipt["input_consumption"] = input_consumption
             atomic_json(status_path, receipt)
             from appsec_review.runtime.checkpoints import publish_checkpoint
             publish_checkpoint(context.run_root, unit_root, claim, unit_id, result)
@@ -642,6 +668,8 @@ class JobRunner:
                                   datetime.fromisoformat(started)).total_seconds() * 1000))
             atomic_json(status_path, {**running, "status": "FAILED", "completed_at": failed,
                                       "duration_ms": duration,
+                                      **({"input_consumption": input_reads.document()}
+                                         if input_reads is not None else {}),
                                       "error": {"type": type(exc).__name__, "message": str(exc)}})
             context.events.write("TASK_FAILED", unit_id=unit_id, error_type=type(exc).__name__,
                                  duration_ms=duration)
@@ -943,6 +971,8 @@ class JobRunner:
             artifacts = collect_artifacts(
                 root, reference(root, result_path), reference(root, context.attempt_root / "claim.json"),
                 outcomes_ref, outcomes, result, attempt_refs)
+            from appsec_review.runtime.inputs import verify_external_inputs
+            verify_external_inputs(context, artifacts)
         handoff = self._handoff_document(
             context, claim, result, outcomes, outcomes_ref, accepted=True, completed=completed, artifacts=artifacts)
         del outcomes

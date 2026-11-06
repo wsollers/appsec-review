@@ -10,7 +10,6 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_cpp_compiled_analysis/attempts/*"
-CONSUMES = ('job_language_build',)
 DATASETS = (
     indexed("cpp_build_graph", "compiled", "build", "appsec-review/retrieval-index/2",
             "C/C++ projects, compile units, sources and compile/link relations.",
@@ -48,3 +47,64 @@ DATASETS = (
               reason="exact compile arguments, bulky AST and IR dumps and raw tool output; bounded "
                      "source-mapped facts are indexed"),
 )
+
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    JobContract, MissingPolicy, TargetAccess,
+)
+
+CONTRACT = JobContract(
+    inputs=(
+        InputRequirement("job_evidence_collection", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_evidence_collection", "static_tool_observations",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_evidence_collection", "static_tool_evidence",
+                         "appsec-review/static-tool-evidence/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_evidence_collection", "static_tool_io",
+                         "appsec-review/container-execution/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
+        InputRequirement("job_language_build", "topology_refinement_inputs",
+                         "appsec-review/build-topology-refinement/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "jvm_build_actions",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "language_build_receipts",
+                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_language_build", "build_workspaces",
+                         "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "planning_feedback_cache",
+                         "appsec-review/target-analysis-proposal/3", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "analysis_plan",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "analysis_plan_documents",
+                         "appsec-review/target-analysis-plan/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "target_artifact_inputs",
+                         "appsec-review/target-artifact-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "source_files",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "declaration_symbols",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "components",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "target_documents",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "build_units",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "catalog_documents",
+                         "appsec-review/target-catalog/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+    ),
+    schedule_after=('job_language_build', 'job_evidence_collection'),
+    dispatch=DispatchClass.REVIEW_GRAPH,
+    target_access=TargetAccess.CHECKOUT,
+    always_execute=False,
+    propagate_handoff=True,
+)
+CONSUMES = CONTRACT.consumes

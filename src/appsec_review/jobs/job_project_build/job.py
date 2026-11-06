@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Mapping, Sequence
 import hashlib
@@ -50,7 +50,7 @@ from appsec_review.runtime.resources import ImagePreparationUnavailable
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
 
 from .repair import REPAIR_SCHEMA, apply_repair, repair_options, validate_repair_proposal
-from appsec_review.jobs.job_project_build.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_project_build.datasets import CONTRACT, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
 
 
@@ -1488,4 +1488,4 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, implementation_identity=implementation,
                validation_identity=None, units=tuple(units),
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

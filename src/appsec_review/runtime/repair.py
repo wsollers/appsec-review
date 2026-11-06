@@ -340,7 +340,8 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
             from appsec_review.runtime.datasets import dataset_contract
             expected_contract = dataset_contract(
                 job.job_id, sorted(set(config.job(job.job_id).steps)
-                                   | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets)
+                                   | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets,
+                job_contract=job.contract.document() if job.contract is not None else None)
             if claim.get("dataset_contract", {}).get("sha256") != expected_contract["sha256"]:
                 reasons.append(f"unsupported dataset compatibility change for {job.job_id}")
         from appsec_review.runtime.checkpoints import select_units
@@ -352,9 +353,10 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
             "job_config_sha256": job_config_sha256(config, job.job_id),
             "component_identities": job.identities(config.runtime.repository_root, config.review_policy.releases),
             "source_fingerprint": ResumePlanner(config, run_root, (job,), source_fingerprint).job_fingerprint(job),
-            "upstream_handoffs": input_projection(job.job_id, hashes, dependencies,
+            "upstream_handoffs": input_projection(job, hashes, dependencies,
                                                  {item.job_id for item in jobs if item.propagate_handoff}),
-            "input_identity": job.probe_input_identity(target_root, run_root),
+            "input_identity": job.probe_input_identity(
+                target_root, run_root, repository_root=config.runtime.repository_root),
             "deployment_identity": deployment_identity(config.runtime.repository_root),
         }
         unit_decisions[job.job_id] = (

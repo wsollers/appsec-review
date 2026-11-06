@@ -380,6 +380,25 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
                      {"window": {"months": 12}, "rank": 1, "tier": 1, "score": 0.91},
                      _file_location(target, "src/auth.c"))])
 
+    from appsec_review.runtime.registry import builtin_registry
+    registry = builtin_registry()
+    producers = sorted({item.producer["job"] for item in shards})
+    for producer in producers:
+        for declaration in registry.build(producer).datasets:
+            if declaration.required and declaration.indexes and not any(
+                    item.producer["job"] == producer and declaration.claims_shard(item.name, item.shard_id)
+                    for item in shards):
+                shard(declaration.indexes[0],
+                      (declaration.shard_prefixes or ("fixture-" + declaration.output_kind,))[0],
+                      {"job": producer, "unit": declaration.step + ".fixture"}, [],
+                      coverage=(declaration.output_kind, "unavailable", "fixture omits this producer scope"))
+    owned_shards = []
+    for item in shards:
+        declarations = registry.build(item.producer["job"]).datasets
+        claim = max(declarations, key=lambda value: value.claims_shard(item.name, item.shard_id))
+        assert claim.claims_shard(item.name, item.shard_id)
+        owned_shards.append(replace(item, producer={**item.producer, "unit": claim.step + ".fixture"}))
+    shards[:] = owned_shards
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture-attempt_0001.json"
     write_manifest(manifest_path, run_id=run_id, target_snapshot=SNAPSHOT, target_root=target, indexes=shards)
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
@@ -387,9 +406,18 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
     def handoff(job_id: str, artifacts: list[dict[str, str]], outputs: dict[str, Any]) -> tuple[Path, str]:
         attempt = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
         path = attempt / "handoff.json"
-        if job_id == "job_review_prioritization":
-            atomic_json(attempt / "claim.json", {
-                "dataset_contract": dataset_contract(job_id, ("extract", "publish"), PRIORITY_DATASETS)})
+        declarations = registry.build(job_id).datasets
+        atomic_json(attempt / "claim.json", {
+            "dataset_contract": dataset_contract(
+                job_id, sorted({item.step for item in declarations} | {key.split(".")[0] for key in outputs}),
+                declarations)})
+        outputs = {**outputs, **{
+            f"{item.producer['unit'].split('.')[0]}.fixture_{position}": {
+                "index_manifest": manifest, "index_identity": asdict(item)}
+            for position, item in enumerate(shards) if item.producer["job"] == job_id}}
+        artifacts = [*artifacts, manifest, *[
+            {"path": item.relative_path, "sha256": item.sha256}
+            for item in shards if item.producer["job"] == job_id]]
         write_fixture_handoff(run_root, path, {"job_id": job_id, "attempt_id": "attempt_0001",
                            "status": "ACCEPTED", "completion_status": "SUCCEEDED", "outputs": outputs,
                            "artifacts": artifacts, "source_fingerprint": SNAPSHOT})
@@ -407,6 +435,9 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
             {"signal_id": "sup-1", "tool": "semgrep", "scope": "line", "start_line": 3, "path": "src/util.c"}]},
         "src/auth.c": {"component_id": "core", "language": "C", "suppression_count": 0, "suppressions": []}}})
     syntax = {"path": syntax_path.relative_to(run_root).as_posix(), "sha256": file_sha256(syntax_path)}
+    for producer in producers:
+        if producer not in {"job_evidence_collection", "job_language_build", "job_review_prioritization"}:
+            handoff(producer, [], {})
     handoff("job_evidence_collection", [], {"evidence_publication.assemble_manifest": {"dispositions": [
         {"tool_id": "tool-semgrep", "terminal_status": "SUCCEEDED"},
         {"tool_id": "tool-opengrep", "terminal_status": "PARTIAL"}]}})
@@ -669,6 +700,9 @@ def test_metric_vectors_mark_missing_values_unknown_not_zero(accepted) -> None:
     assert metrics["cyclomatic_mean"]["gap_id"] == "cyclomatic_mean_not_produced_by_prioritization"
 
 
+@pytest.mark.time_budget(60, reason="User-approved F02 exception, 2026-11-06 via coordinator "
+                        "02825845-7ac6-4a31-b648-999b3823ecf5: real indexing-to-package publication, "
+                        "partial-tree recovery and context bindings; includes setup/call/teardown")
 def test_package_job_publishes_accepted_manifest_and_receipts(accepted, monkeypatch) -> None:
     config, run_id, run_root, target, ids, indexing, _executor = accepted
     from appsec_review.review_packages import assemble_review_packages
@@ -707,6 +741,9 @@ def test_package_job_publishes_accepted_manifest_and_receipts(accepted, monkeypa
     assert auth["compiled_context"]
 
 
+@pytest.mark.time_budget(45, reason="User-approved F02 exception, 2026-11-06 via coordinator "
+                        "02825845-7ac6-4a31-b648-999b3823ecf5: real 16-unit indexing publication, "
+                        "inventory, matrices, links and FTS transport; includes setup/call/teardown")
 def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
     config, run_id, _run_root, _target, ids, outcome, executor = accepted
     core = RetrievalCore(config.runtime.runs_dir, run_id)
@@ -1121,9 +1158,10 @@ def test_downstream_review_consumers_preserve_certified_completion_order() -> No
     assert set(DOWNSTREAM) <= named
     assert PLANNED_CONSUMER_JOBS == tuple(
         job for job in DOWNSTREAM if job not in {"job_poc_generation", "job_dossier_publication"})
-    assert tuple(consumer for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
-    for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
-        earlier = set(DOWNSTREAM[:index])
+    projected = input_matrix.downstream_consumers()
+    assert {consumer for consumer, _ in projected} == set(DOWNSTREAM)
+    for index, (_consumer, producers) in enumerate(projected):
+        earlier = {name for name, _ in projected[:index]}
         assert set(producers) <= {"job_inference_security_review", "job_language_build"} | earlier
     assert all(item["status"] == "planned" and item["reads"] for item in PLANNED_CONSUMERS)
     # Remediation reads only confirmed findings (decision 4); never the verification backlog.

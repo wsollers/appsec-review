@@ -147,6 +147,11 @@ def record_snapshot(root: Path, feed: str, snapshot_id: str, *, computed: bool,
     manifest = reference(root, safe_path(root, f"snapshots/{snapshot_id}/manifest.json"))
     document = _verify_snapshot(root, manifest, feed)
     owner = current()
+    if owner is not None and owner.actor["job_id"] != "job_third_party_data_sync" and not computed:
+        from appsec_review.runtime.inputs import observe_external
+        observe_external(owner.run_root, "job_third_party_data_sync", "feed_snapshot", PROOF_SCHEMA,
+                         {"feed_id": feed, "snapshot_id": snapshot_id,
+                          "manifest_sha256": manifest["sha256"], "manifest_schema": document["schema"]})
     if owner is None:
         if not computed:
             if producer is not None:

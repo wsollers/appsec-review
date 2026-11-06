@@ -59,7 +59,7 @@ from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import chains, stages
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
 from .teams import PackageWork, ReviewContext, lane_failure, run_lane
 
@@ -764,4 +764,4 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
 
     return Job(JOB_ID, "inference_security_review", UnitExecutor(units).execute, input_validators=(validate,),
                schema_identity=SCHEMA, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

@@ -26,7 +26,7 @@ from appsec_review.jobs.job_remediation_planning.patches import (
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from .compiler import compare_build
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .inputs import load_planning
 from .workspace import WorkspaceLimit, cleanup, manifest, materialize
 
@@ -336,4 +336,4 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
     units = (Unit("load.verify_inputs", load), Unit("assess.validate", assess, ("load.verify_inputs",)),
              Unit("acceptance.publish_handoff", publish, ("load.verify_inputs", "assess.validate")))
     return Job(JOB_ID, "remediation_validation", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=REMEDIATION_VALIDATION_HANDOFF_SCHEMA, units=units, datasets=DATASETS, consumes=CONSUMES)
+               schema_identity=REMEDIATION_VALIDATION_HANDOFF_SCHEMA, units=units, datasets=DATASETS, contract=CONTRACT)

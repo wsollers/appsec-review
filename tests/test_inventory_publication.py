@@ -146,6 +146,10 @@ def test_default_registry_contract_and_internal_eligibility(tmp_path, internal_a
     assert "job_build_iteration" not in document["registry_jobs"]
     assert "job_build_iteration" not in document["job_steps"]
     assert "job_build_iteration" not in document["handoffs"]
+    assert "job_third_party_data_sync" not in document["registry_jobs"]
+    assert document["dispatch_classes"]["job_third_party_data_sync"] == "maintenance"
+    assert document["dispatch_classes"]["job_build_iteration"] == "internal_transaction"
+    assert len(document["registered_jobs"]) == 46
     assert document["file_job_steps"]["job_build_iteration"] == ["execute"]
     assert document["registry_configuration_mismatch"] == []
     assert "job_build_environment_analysis" in document["registry_jobs"]
@@ -203,6 +207,13 @@ def test_internal_attempts_are_accounting_only(tmp_path, mode, state):
 
     def produce(unit):
         nonlocal completion
+        from appsec_review.jobs.build_iterations import REQUEST_SCHEMA, read_reference
+        from appsec_review.runtime.contracts import InputChannel
+        from appsec_review.runtime.inputs import observe_external
+        request = retain(root, "requests", {"schema": REQUEST_SCHEMA, "fixture": "inventory-only"})
+        assert read_reference(root, request)["schema"] == REQUEST_SCHEMA
+        observe_external(root, "build_controller", "iteration_request", REQUEST_SCHEMA, request,
+                         channel=InputChannel.TRANSACTION)
         workspace = BuildWorkspace(unit.job.run_root)
         generation = workspace.materialize(target, SNAPSHOT)
         binding = NodeBinding("fixture", SNAPSHOT, "graph/1", "config/1", "recipe/1",

@@ -105,17 +105,26 @@ requiring an internal handoff or emitting missing-output coverage rows when no i
 The accepted language-build publication remains the review input. Managed inventory accounts
 only for artifacts in authenticated accepted publications, including any referenced internal
 records; it does not claim to inspect unreferenced internal attempts or scratch.
-The indexing-specific internal-producer exclusion is not inferred from `always_execute` or
-`propagate_handoff`: graph readiness gates can share those flags and remain graph producers.
+Internal and maintenance eligibility is projected from `Job.contract.dispatch`, not an
+indexing-specific exception or inference from `always_execute`/`propagate_handoff`. Readiness gates
+can share those flags and remain graph producers. Feed snapshots are external accepted inputs;
+maintenance does not need to publish a handoff in every review run.
 
 Every new attempt's `claim.json` pins a hash-checked `dataset_contract` containing its output
-declarations and step topology. Files under that attempt are matched against the pinned contract,
+declarations, step topology and typed input/dispatch contract (`attempt-datasets/3`). Files under that attempt are matched against the pinned contract,
 not a later implementation's declarations. Successful handoffs also hash-pin `claim.json` as an
 artifact, so later alteration invalidates accepted-artifact verification and resume reuse.
 Older attempts without this field use the current
 registered declarations and are explicitly labeled `current_declarations_legacy_attempt`; their
 claims are not rewritten. A missing claim is a provenance warning; a malformed, mismatched or
 hash-invalid claim is an audit violation.
+
+The producer-consumer matrix now distinguishes `available`, `supplied` and observed `read`
+identities. `cited` remains unknown: framework reads do not attest model reasoning. Historical
+receipts without reader observations remain unknown rather than being retroactively marked read.
+The complete registered/configured matrix includes all 46 jobs, including disabled graph jobs,
+maintenance and internal transactions; only eligible producers enter the publication-stage audit.
+See [job input contracts](../architecture/job-input-contracts.md) for missing/partial policies.
 
 The report's `file_ownership` groups files by job, step, output kind and producing attempt.
 Each group records the count, bytes, deterministic path/size listing hash, bounded example paths,

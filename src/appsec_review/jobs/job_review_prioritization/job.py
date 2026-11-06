@@ -41,7 +41,7 @@ from .rules import RULES_IDENTITY
 from .semantic import CODEQL_LANGUAGES, codeql_paths, semgrep_signals
 from .streaming import FilesDocumentWriter, ShardRowIndex
 from .syntax import SourceFile, build_tree, code_lines
-from appsec_review.jobs.job_review_prioritization.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_review_prioritization.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/review-prioritization/1"
@@ -962,7 +962,7 @@ def build_job() -> Job:
     return Job(JOB_ID, "review_prioritization", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA,
                units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)
 
 
 def load_accepted_prioritization(run_root: Path) -> Mapping[str, Any] | None:

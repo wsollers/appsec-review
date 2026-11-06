@@ -86,6 +86,8 @@ def as_identity(shard: Mapping[str, Any]) -> IndexIdentity:
 
 
 def open_shard(run_root: Path, shard: Mapping[str, Any]) -> sqlite3.Connection:
+    from appsec_review.runtime.inputs import observe_shard
+    observe_shard(run_root, shard)
     path = (run_root / str(shard["relative_path"])).resolve()
     if run_root.resolve() not in path.parents or not path.is_file():
         raise ValueError(f"index shard is unavailable: {shard_key(shard)}")
