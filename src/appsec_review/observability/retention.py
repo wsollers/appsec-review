@@ -15,6 +15,7 @@ import stat
 from typing import Any, Iterator, Mapping, Sequence
 
 from appsec_review.storage import FileLock, atomic_json, canonical_json
+from appsec_review.storage.atomic import timed_fsync
 
 CATALOG = "retention-catalog.json"
 JOURNAL = "retention-journal.json"
@@ -25,6 +26,15 @@ _ROLES = {"artifact", "accepted_receipt", "audit_root", "configuration", "log", 
 
 def _digest(value: Any) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def _persist_journal(root: Path, value: Mapping[str, Any]) -> None:
+    atomic_json(root / JOURNAL, value)
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        timed_fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _relative(value: Any) -> str:
@@ -218,7 +228,7 @@ def apply_retention(root: Path, plan: Mapping[str, Any], *, apply: bool = False)
             if relative in journal["deleted"]:
                 continue
             journal["pending"] = relative
-            atomic_json(journal_path, journal)
+            _persist_journal(root, journal)
             if _catalog(root)[1] != plan["custody"]:
                 raise ValueError("retention claims changed during apply")
             with _parent(root, relative) as (parent, name):
@@ -234,10 +244,10 @@ def apply_retention(root: Path, plan: Mapping[str, Any], *, apply: bool = False)
                     ) or not stat.S_ISREG(actual.st_mode):
                         raise ValueError("retention object replaced during apply")
                     os.unlink(name, dir_fd=parent)
-                    os.fsync(parent)
+                    timed_fsync(parent)
             journal["deleted"].append(relative)
             journal["pending"] = None
-            atomic_json(journal_path, journal)
+            _persist_journal(root, journal)
         return {"status": "applied", "deleted": journal["deleted"], "plan_id": plan["plan_id"]}
 
 

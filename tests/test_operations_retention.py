@@ -163,3 +163,37 @@ def test_control_file_aliases_cannot_bypass_exclusive_store_custody(tmp_path):
     os.link(external, root / ".retention.lock")
     with pytest.raises(ValueError, match="ownership"):
         apply_retention(root, plan, apply=True)
+
+
+def test_write_ahead_journal_directory_is_durable_before_deletion(tmp_path, monkeypatch):
+    from appsec_review.observability import retention
+    root = tmp_path / "store"
+    store(root)
+    plan = plan_retention(root)
+    events = []
+    sync, unlink = retention.timed_fsync, os.unlink
+    def recorded_sync(descriptor):
+        events.append("directory_fsync")
+        sync(descriptor)
+    def recorded_unlink(name, **kwargs):
+        events.append("unlink")
+        unlink(name, **kwargs)
+    monkeypatch.setattr(retention, "timed_fsync", recorded_sync)
+    monkeypatch.setattr(os, "unlink", recorded_unlink)
+    apply_retention(root, plan, apply=True)
+    assert events[0] == "directory_fsync"
+    assert events.count("unlink") == len(plan["delete"])
+    assert events.count("directory_fsync") == 3 * len(plan["delete"])
+
+
+def test_journal_directory_sync_failure_deletes_nothing(tmp_path, monkeypatch):
+    from appsec_review.observability import retention
+    root = tmp_path / "store"
+    catalog = store(root)
+    plan = plan_retention(root)
+    def failed_sync(descriptor):
+        raise OSError("directory sync failed")
+    monkeypatch.setattr(retention, "timed_fsync", failed_sync)
+    with pytest.raises(OSError, match="directory sync"):
+        apply_retention(root, plan, apply=True)
+    assert all((root / item["path"]).is_file() for item in catalog["objects"])

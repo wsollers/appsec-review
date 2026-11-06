@@ -190,6 +190,8 @@ plan, rechecks ownership/content/claims under the OS-backed lock and journals ea
 Interrupted deletion resumes only with its original plan/journal. The same plan is idempotent;
 a changed catalog or concurrent claim refuses deletion. Existing production runs were neither
 deleted nor migrated during development.
+The write-ahead journal's parent directory is fsynced before an unlink, and deletion and
+completion are directory-synced as well; a failed journal directory sync aborts before deletion.
 
 ## Optional OTLP adapter
 
