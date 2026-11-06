@@ -8,14 +8,7 @@ import subprocess
 from typing import Any, Mapping, Sequence
 
 from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
-
-
-class ModelOutputError(ValueError):
-    def __init__(self, message: str, *, raw_response: str | None = None,
-                 rejected_output: str | None = None) -> None:
-        super().__init__(message)
-        self.raw_response = raw_response
-        self.rejected_output = rejected_output
+from .errors import ModelOutputError
 
 
 def _text_from_envelope(value: Any) -> str:
