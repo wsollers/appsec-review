@@ -1,6 +1,6 @@
 # Appsec implementation fleet
 
-**Plan version 1.1 - 6 November 2026**
+**Plan version 1.2 - 6 November 2026**
 
 Coordinator: `02825845-7ac6-4a31-b648-999b3823ecf5` (Appsec system review).
 Repository: `wsollers/appsec-review`.
@@ -8,6 +8,10 @@ Approved design: `appsec-system-review.md`, including the revised Glasswing meas
 contract. Review baseline: `967a1072bc19feeb320ce4b44d6c056616c94d7b`.
 Initial implementation baseline: `f9bb376e02aaef166bc71e736eaba7ee677ce97c`.
 The later baseline includes the new isolation/shuffle/parallel/timing test standards.
+Version 1.2 adds the narrowly scoped inherited test-harness repair X01 to the
+closeout ledger. The original 18 implementation packages are unchanged. Current
+owners, ready commits, landings and blockers are in the versioned ledger rather
+than inferred from this plan's initial-wave descriptions.
 
 ## User authorization
 
@@ -421,7 +425,7 @@ that native work is not warranted. Real heavy benchmarks remain manually gated.
 
 ### F17 - Acceptance and closeout
 
-**Dependencies:** all F01-F16; F00 owns landing mechanics.
+**Dependencies:** all F01-F16 and supplemental X01; F00 owns landing mechanics.
 
 - Reconcile directly related docs, job/input/output inventories, release closure,
   test mappings, supported-mode claims and outstanding conditional work.
@@ -433,16 +437,33 @@ that native work is not warranted. Real heavy benchmarks remain manually gated.
 live efficacy and deferred-by-evidence decisions are individually labeled. No "everything
 complete" declaration while required acceptance or an external dependency remains unresolved.
 
+### X01 - Inherited default-collection fixture regression
+
+**Dependencies:** none. **Supplemental infrastructure repair, not another feature.**
+Original owner: unit-suite session `d963e6fd-4153-401f-842f-1f6c18def977`.
+**Own:** `tests/test_pytest_default_collection.py` only.
+
+The implementation baseline introduced a `tests/time_budgets.py` dependency in
+`conftest.py`; the isolated collection fixture copied only `conftest.py`. Carry both
+files into each fixture project, preserving the existing collection and exclusion
+assertions. No production code, harness policy, timeout or test-tier change.
+
+**Exit:** the nine existing cases pass shuffled/in parallel in the combined candidate,
+and the exact one-file fix lands through the same two-main parity gate. This repair
+supports the fleet's test infrastructure; it does not authorize a full-suite run.
+
 ### EXT-APS - Existing DDNet harness work
 
 External owner: Lean Formalization coordinator
 `4c594168-d314-4336-b0b4-51aca8ae5462`.
-Known implementation child at planning time:
-`138ddad5-7906-45ec-8c01-5eb475d656cc`.
+The live ledger identifies its current implementation child. The initial child and
+its replacement encountered request-service failures without source changes; WSL
+availability was independently established. Do not equate either a responsive host
+or a newly created session with a tested runner.
 
-Latest observed status: that project is resolving a session startup failure; no tested
-runner commit has been received. Its current model/design are available. This fleet does
-not restart its work or answer its pending user decision on the user's behalf.
+The model/design are available; the executable dependency stays gated until an exact
+tested runner/schema handoff is received. This fleet does not restart that project's
+work or answer its pending user decisions on the user's behalf.
 
 Required handoff: exact source/model/harness/schema/build commits, tested runner APIs,
 observability/oracle scope, allocator/caller modes, artifact semantics and remaining

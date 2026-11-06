@@ -319,3 +319,105 @@ Results on the exact checkpoint base plus these two docs: verifier PASS in
 line-ending inspection PASS in 0.088 s, with all four plan-directory files
 `i/lf`, `w/lf`, `eol=lf`. No application unit, broad-suite, integration, acceptance,
 live, deployment, model, or target validation was run for this checkpoint.
+
+## 2026-11-06 - X01/F08/F05 receipts and checkpoint 71
+
+These are attributed observations from landing owner
+`969abd85-9a4e-42a5-a323-34843205448e`, not direct canonical-main inspection by this
+documentation session. The exact receipts remain in that owner's session `files`
+directory; their supplied SHA-256 identities were verified before use:
+
+| Receipt | SHA-256 |
+|---|---|
+| `x01-landing-receipt.json` | `d44f5132d7114f56ce123acd35977f1627d002617b39ace55aeaf52889ca3fc8` |
+| `f08-landing-receipt.json` | `ed3672aa38c81dd359f37692fca03e54aac64e0d78fc7f9e6530f4de2baf3303` |
+| `f05-landing-receipt.json` | `2b1ad572f57dc565d09fd4b6772196375e308e9a5d295ec05fc285c7ad71df4a` |
+
+### X01 landing
+
+- Both mains advanced from `f0a0f354f130899b4e2fec451d362be2bcaec964` to candidate
+  `b202e887a997ab4294264e3aa22e33e5479853fc`, tree
+  `f2d0f886d52fe22a7265efd6ed6037302ed4d4ae`; worker ready SHA
+  `be6386e40586855d56c2ab52f2f08dfad3d2471e` is an ancestor.
+- Completed at `2026-11-06T13:28:07.7659725-05:00` in 7.0198 s. The one-file
+  inherited collection-fixture repair had nine previously passed cases.
+  The worker branch was preserved; no broader fleet validation gap was closed.
+
+### F08 landing
+
+- Both mains advanced from `b202e887a997ab4294264e3aa22e33e5479853fc` to candidate
+  `9932eed5fbac85562cb579f14950b330542bdcfe`, tree
+  `b21b768472dcfea11fd9e472b67fadffa33d5cff`; worker ready SHA
+  `bc50376e91462ab1224f23a8810a88e5fcce59bb` is an ancestor.
+- Completed at `2026-11-06T13:35:50.9778123-05:00` in 7.837 s. The exact 24-file
+  candidate had 342 previously passed cases and prior lint verification. Two
+  `-text` fixtures retained exact bytes without normalization.
+- Live-provider acceptance and model efficacy remain unexecuted. The F02-owned
+  obsolete all-registered assertion and pre-existing global target-link gaps
+  were not changed by the landing.
+
+### F05 landing
+
+- Both mains advanced from `9932eed5fbac85562cb579f14950b330542bdcfe` to candidate
+  `11b1046f7d670cdec188719223c882d3aa68c6e1`, tree
+  `e27f2c74319f9716c2f6b63001824ca21bc6f5cb`; worker ready SHA
+  `7a9a03ef398b48cd1f221e6405ab80c0c1612752` is an ancestor.
+- Completed at `2026-11-06T13:40:01.8227866-05:00` in 5.4453 s. The exact 20-file
+  candidate had 148 previously passed cases and prior type/lint verification.
+  Five `-text` fixtures retained exact bytes without normalization.
+- Central admission, wiring, publication, retrieval, and applicable test-map work
+  remain with F06. Bounded static support is not runtime exposure, connected
+  collector, or commissioning evidence.
+
+All three receipts report both-main HEAD/tree parity, clean tracked content,
+exact committed-byte agreement, preserved WSL `data/feeds/` directory identity,
+and released locks. The transactions created no new commits, ran no new tests,
+and made no remote push or extra metadata update. Full/manual/live validation
+and service, model, build, campaign, cloud, or target execution were not performed.
+
+### Frozen plan and ledger
+
+The coordinator authorized this separate documentation checkpoint from
+`11b1046f7d670cdec188719223c882d3aa68c6e1`, tree
+`e27f2c74319f9716c2f6b63001824ca21bc6f5cb`. This session fast-forwarded only its clean
+owned branch to that base under the existing documentation-only Windows exception.
+It did not inspect a canonical checkout or perform a landing.
+
+The source capture is this session's `files/checkpoint71-sources` directory.
+Plan **1.2** and ledger **71** are frozen; future events are excluded. The plan
+retains the original 18 implementation packages, explicitly adds supplemental
+infrastructure repair X01 to F17's dependencies, and defers current APS child
+ownership/status to the ledger. The ledger contains 20 records: F00-F17, X01,
+and external dependency EXT-APS.
+
+| Source | Published copy | Source SHA-256 | Published SHA-256 |
+|---|---|---|---|
+| `fleet-plan.md` | `README.md` | `be2d24b3dc647bf0ae674d548f86d6c1587ce963f71490ed72e40197a4b3f7d6` | `9ce99844be6f23a05db2b03e62dd1e16d02c21e480e403b1ca662ea5b7907f61` |
+| `fleet-ledger.json` | `ledger.json` | `c35c9993fe9ae7a473b3e768a36afd51c93c734142ecf88609b16123f7ac3c16` | `2577b1d489b713ca76a92556d5571ddce0fa93751621e73275029fb737ca02ed` |
+
+Only the approved presentation transforms were applied: CRLF to LF, plus six
+plan Markdown links using `ghapp` rendered with unchanged labels and inline-code
+original URIs. JSON URI values and all semantic ledger fields are unchanged.
+Only `README.md`, `ledger.json`, and this append-only log changed;
+`approved-review.md` retains its exact base bytes.
+
+Focused documentation verification uses the session artifact
+`files/verify-checkpoint71.py`:
+
+```powershell
+python (Join-Path $env:USERPROFILE '.copilot\session-state\053e6dce-78d3-428d-ac36-f1811056dd67\files\verify-checkpoint71.py')
+git diff --cached --check
+git ls-files --eol -- docs/plans/appsec-system-improvements
+```
+
+It checks exact source-normalized equality, duplicate-free JSON, the 20 explicit
+records with supplemental X01 and F17 dependency, all 18 original plan headings,
+71 contiguous events, state/dependency/DAG consistency, the pinned receipt chain
+and ledger agreement, unchanged approved review, append-only log, exact three-path
+scope, and changed-document links/LF using the unchanged repository link parser.
+
+Results on the exact checkpoint base plus these three docs: verifier PASS in
+0.633 s wall (0.3888 s internally); staged whitespace check PASS in 0.140 s;
+line-ending inspection PASS in 0.081 s, with all four plan-directory files
+`i/lf`, `w/lf`, `eol=lf`. No source, tests, global checker, or approved-review edits
+were made; no code, broad-suite, integration, acceptance, or live checks were run.
