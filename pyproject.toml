@@ -32,7 +32,7 @@ quality = [
     "mypy==1.18.2",
     "bandit==1.8.6",
     "pytest==8.4.2",
-    "setuptools==80.9.0",
+    "setuptools==84.1.0",
 ]
 dagster = [
     "dagster==1.13.21",
