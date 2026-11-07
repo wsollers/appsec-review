@@ -131,7 +131,7 @@ def test_catalog_indices_are_queried_without_target_scan(tmp_path: Path) -> None
 
 def test_catalog_path_index_accepts_structured_inventory_gaps(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
-    excluded = target / "node_modules" / "fixture"
+    excluded = target / ".hg" / "fixture"
     excluded.mkdir(parents=True)
     (excluded / "index.js").write_text("module.exports = 1;\n", encoding="utf-8")
 
@@ -143,7 +143,7 @@ def test_catalog_path_index_accepts_structured_inventory_gaps(tmp_path: Path) ->
     result_path = (run_root / "data/jobs/job_target_catalog/attempts" / attempt_id /
                    "steps/retrieval_indexes/tasks/build_path_index/result.json")
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    assert result["gaps"] == ["node_modules: excluded_directory"]
+    assert result["gaps"] == [".hg: excluded_directory"]
     assert result["index_identity"]["gaps"] == result["gaps"]
 
 
