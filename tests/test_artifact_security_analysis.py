@@ -17,9 +17,9 @@ from appsec_review.jobs.job_artifact_security_analysis.formats import (
 from appsec_review.jobs.job_artifact_security_analysis.scanners import ADAPTERS, _execution_token
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, RetrievalCore, write_manifest
 from appsec_review.retrieval.index import INDEX_SCHEMA
-from appsec_review.runtime import GraphRunner, plan_jobs
+from appsec_review.runtime import JobRunner, plan_jobs
 from appsec_review.storage import RunStore, atomic_json, file_sha256
-from tests.handoff_fixture import write_fixture_handoff
+from tests.artifact_input_support import recorded_graph, recorded_job
 
 
 ROOT = Path(__file__).parents[1]
@@ -116,7 +116,7 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
                 result["payload"] = b""
             return result
 
-        outcome = GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        outcome = recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
         assert outcome["status"] == "COMPLETED_WITH_GAPS"
         accepted = load_accepted_artifact_security_analysis(run_root)
@@ -131,7 +131,7 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
              duplicate_artifact: bool = False, no_artifacts: bool = False,
              name: str = "module.wasm", kind: str = "wasm-module", declared_releases: bool = True,
-             artifacts_factory=None):
+             artifacts_factory=None, seed_accepted: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
@@ -160,58 +160,46 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
         artifacts.append({**artifact, "path": duplicate.relative_to(run_root).as_posix(),
                           "workspace_path": "build/module-copy.wasm"})
     fingerprint = "a" * 64
-    index_path = run_root / "data" / "indices" / "artifacts" / "fixture.sqlite"
+    index_path = run_root / "data" / "indices" / "artifacts" / "catalog-fixture.sqlite"
     builder = IndexBuilder(index_path, name="artifacts", fingerprint="b" * 64,
-                           target_snapshot=fingerprint, shard_id="language-build")
+                           target_snapshot=fingerprint, shard_id="catalog-fixture")
     index_sha = builder.build()
     index_identity = IndexIdentity("artifacts", INDEX_SCHEMA, index_sha, "b" * 64,
-        index_path.relative_to(run_root).as_posix(), {"job": "job_language_build"}, (), "language-build")
-    manifest_path = run_root / "data" / "indices" / "manifests" / "language-build.json"
+        index_path.relative_to(run_root).as_posix(),
+        {"job": "job_artifact_indexing", "unit": "index.fixture"}, (), "catalog-fixture")
+    manifest_path = run_root / "data" / "indices" / "manifests" / "artifact-fixture.json"
     write_manifest(manifest_path, run_id=run_id, target_snapshot=fingerprint, target_root=target,
                    indexes=[] if no_artifacts else [index_identity])
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(),
                 "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
-    accepted_path = run_root / "data" / "upstream" / "accepted-language-builds.json"
-    accepted_path.parent.mkdir(parents=True)
-    atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/1",
+    language_manifest_path = manifest_path.with_name("language-fixture.json")
+    write_manifest(language_manifest_path, run_id=run_id, target_snapshot=fingerprint, target_root=target, indexes=[])
+    language_document = {"schema": "appsec-review/language-build-handoff/1",
         "source_fingerprint": fingerprint, "upstream_project_build_handoff_sha256": "c" * 64,
-        "receipts": [{"build_unit_id": "build-unit-fixture", "family": "wasm", "fingerprint": "d" * 64,
+        "receipts": [] if no_artifacts else [{"build_unit_id": "build-unit-fixture", "family": "wasm", "fingerprint": "d" * 64,
                       "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": artifacts}],
-        "gaps": ["no produced artifacts"] if no_artifacts else []})
-    accepted = {"path": accepted_path.relative_to(run_root).as_posix(), "sha256": file_sha256(accepted_path),
-                "size_bytes": accepted_path.stat().st_size}
-    handoff_path = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "attempt_0001" / "handoff.json"
-    handoff_path.parent.mkdir(parents=True)
-    write_fixture_handoff(run_root, handoff_path, {"status": "ACCEPTED",
-        "job_id": "job_language_build", "attempt_id": "attempt_0001", "artifacts": [accepted, manifest],
-        "outputs": {"acceptance.publish_handoff": {"artifact": accepted, "index_manifest": manifest}}})
-    pointer = handoff_path.parents[2] / "latest.json"
-    atomic_json(pointer, {"handoff_path": handoff_path.relative_to(run_root).as_posix(),
-                          "handoff_sha256": file_sha256(handoff_path)})
-    indexing_summary_path = run_root / "data" / "upstream" / "accepted-artifact-index.json"
-    atomic_json(indexing_summary_path, {"schema": "appsec-review/artifact-indexing/1",
-        "source_fingerprint": fingerprint, "language_build_handoff_sha256": file_sha256(handoff_path),
+        "gaps": ["no produced artifacts"] if no_artifacts else []}
+    indexing_document = {"schema": "appsec-review/artifact-indexing/1", "source_fingerprint": fingerprint,
         "artifact_shard_count": 0 if no_artifacts else 1, "reused_shard_count": 0,
         "artifact_count": len(artifacts), "gaps": ["no produced artifacts"] if no_artifacts else [],
-        "index_manifest": manifest})
-    indexing_summary = {"path": indexing_summary_path.relative_to(run_root).as_posix(),
-        "sha256": file_sha256(indexing_summary_path), "size_bytes": indexing_summary_path.stat().st_size}
-    indexing_handoff_path = (run_root / "data" / "jobs" / "job_artifact_indexing" / "attempts" /
-                             "attempt_0001" / "handoff.json")
-    indexing_handoff_path.parent.mkdir(parents=True)
-    write_fixture_handoff(run_root, indexing_handoff_path, {"status": "ACCEPTED",
-        "job_id": "job_artifact_indexing", "attempt_id": "attempt_0001",
-        "artifacts": [indexing_summary, manifest],
-        "outputs": {"acceptance.publish_handoff": {"artifact": indexing_summary, "index_manifest": manifest}}})
-    atomic_json(indexing_handoff_path.parents[2] / "latest.json", {
-        "handoff_path": indexing_handoff_path.relative_to(run_root).as_posix(),
-        "handoff_sha256": file_sha256(indexing_handoff_path)})
+        "index_manifest": manifest}
+    seeds = run_root / "data/inputs/artifact-fixture"
+    atomic_json(seeds / "job_language_build.json", {"document": language_document, "manifest": {
+        "path": language_manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(language_manifest_path)}})
+    atomic_json(seeds / "job_artifact_indexing.json", {"document": indexing_document, "manifest": manifest})
+    if seed_accepted:
+        runner = JobRunner(config)
+        language = runner.run(recorded_job(run_root, "job_language_build"), run_id=run_id,
+                              target_root=target, source_fingerprint=fingerprint)
+        runner.run(recorded_job(run_root, "job_artifact_indexing"), run_id=run_id,
+                   target_root=target, source_fingerprint=fingerprint,
+                   upstream_handoffs={"job_language_build": language["handoff_sha256"]})
     return config, run_id, run_root, target, fingerprint, produced
 
 
 def test_no_artifacts_is_a_named_gap_with_verified_empty_index(tmp_path: Path) -> None:
     config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path, no_artifacts=True)
-    outcome = GraphRunner(config, [build_job()]).run(
+    outcome = recorded_graph(config, [build_job()], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_security_analysis(run_root)
@@ -229,7 +217,7 @@ def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tm
         return {"stdout": b'{"packages":[]}', "stderr": b"", "exit_code": 0,
                 "observation": {"packages": []},
                 "tool_identity": {"scanner": capability, "image": "sha256:" + "e" * 64, "rules": "fixture"}}
-    outcome = GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    outcome = recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_security_analysis(run_root)
@@ -260,12 +248,56 @@ def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tm
         assert raw_path.is_file() and file_sha256(raw_path) == identity["sha256"]
 
 
-def test_changed_accepted_artifact_is_an_integrity_failure(tmp_path: Path) -> None:
-    config, run_id, _run_root, target, fingerprint, produced = _fixture(tmp_path)
-    produced.write_bytes(b"changed")
-    with pytest.raises(RuntimeError, match="partial failure"):
-        GraphRunner(config, [build_job()]).run(target_root=target,
-            source_fingerprint=fingerprint, run_id=run_id)
+@pytest.mark.parametrize("tamper", (False, True), ids=("unchanged-control", "accepted-bytes-changed"))
+def test_changed_accepted_artifact_is_an_integrity_failure(tmp_path: Path, tamper: bool) -> None:
+    from appsec_review.indexing.store import accepted_handoff
+
+    config, run_id, run_root, target, fingerprint, produced = _fixture(tmp_path, seed_accepted=True)
+    producers = ("job_language_build", "job_artifact_indexing")
+    supplied, history = {}, {}
+    for producer in producers:
+        directory = run_root / "data/jobs" / producer
+        assert (directory / "latest.json").is_file(), "producer must be accepted before artifact mutation"
+        accepted = accepted_handoff(run_root, producer)
+        assert accepted is not None and accepted.handoff["status"] == "ACCEPTED"
+        supplied[producer] = accepted.sha256
+        history[producer] = {
+            path.relative_to(directory).as_posix(): path.read_bytes()
+            for path in directory.rglob("*") if path.is_file()
+        }
+    indexed = json.loads(history["job_artifact_indexing"]["attempts/attempt_0001/handoff.json"])
+    assert indexed["upstream_handoff_sha256"] == {"job_language_build": supplied["job_language_build"]}
+    language = json.loads(history["job_language_build"]["attempts/attempt_0001/handoff.json"])
+    relative = produced.relative_to(run_root).as_posix()
+    bound = next(ref for ref in language["artifacts"] if ref["path"] == relative)
+    assert bound["sha256"] == file_sha256(produced)
+
+    def forbidden_scanner(*args):
+        pytest.fail("admission and load must not invoke a scanner")
+
+    runner, job = JobRunner(config), build_job(scanner_runner=forbidden_scanner)
+    if tamper:
+        produced.write_bytes(b"\xff" * produced.stat().st_size)
+        assert produced.stat().st_size == bound["size_bytes"]
+        assert file_sha256(produced) != bound["sha256"]
+        with pytest.raises(ValueError, match="^target evidence integrity mismatch$"):
+            runner.begin_attempt(job, run_id=run_id, target_root=target,
+                                 source_fingerprint=fingerprint, upstream_handoffs=supplied)
+        assert not (run_root / "data/jobs" / job.job_id / "attempts").exists()
+    else:
+        claim = runner.begin_attempt(job, run_id=run_id, target_root=target,
+                                     source_fingerprint=fingerprint, upstream_handoffs=supplied)
+        assert claim["upstream_handoffs"] == supplied
+        loaded = runner.execute_or_reuse_unit(job, claim, "load.accepted_artifacts")
+        assert loaded["artifact_count"] == 1
+        assert loaded["artifacts"][0]["verified_path"] == relative
+    for producer in producers:
+        directory = run_root / "data/jobs" / producer
+        assert {
+            path.relative_to(directory).as_posix(): path.read_bytes()
+            for path in directory.rglob("*") if path.is_file()
+        } == history[producer], "consumer must not republish or rewrite accepted producer generations"
+    assert not (run_root / "data/jobs" / job.job_id / "latest.json").exists()
 
 
 def test_no_package_scan_exposes_native_reference_closure_without_a_finding(tmp_path: Path) -> None:
@@ -280,7 +312,7 @@ def test_no_package_scan_exposes_native_reference_closure_without_a_finding(tmp_
                 "payload": b'{"results":[]}', "execution_receipt": {
                     "path": execution.relative_to(run_root).as_posix(), "sha256": file_sha256(execution),
                     "size_bytes": execution.stat().st_size}}
-    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     handoff_path = run_root / json.loads((
         run_root / "data" / "jobs" / "job_artifact_security_analysis" / "latest.json").read_bytes())["handoff_path"]
@@ -303,7 +335,7 @@ def test_finding_record_bound_is_reported_in_publication_coverage(tmp_path: Path
         payload = ({"matches": [{"vulnerability": {"id": "CVE-A"}}, {"vulnerability": {"id": "CVE-B"}}]}
                    if capability == "grype" else {"artifacts": []})
         return {"stdout": b"", "stderr": b"", "exit_code": 0, "payload": json.dumps(payload).encode()}
-    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert accepted["finding_count"] == 1
@@ -320,10 +352,10 @@ def test_resume_reuses_verified_artifact_capability_shards(tmp_path: Path, decla
         return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
                 "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
     job = build_job(scanner_runner=scanner)
-    GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    recorded_graph(config, [job], run_id).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert first_calls
     first_calls.clear()
-    GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id,
+    recorded_graph(config, [job], run_id).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id,
                                    force_from="job_artifact_security_analysis")
     assert bool(first_calls) is not declared_releases
 
@@ -336,7 +368,7 @@ def test_equal_content_artifacts_have_distinct_observation_checkpoints(tmp_path:
         return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
                 "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
 
-    outcome = GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    outcome = recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_security_analysis(run_root)
@@ -363,7 +395,7 @@ def test_configured_disabled_grype_never_calls_runner_and_publishes_gap(tmp_path
         calls.append(capability)
         return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
                 "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
-    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert "grype" not in calls
@@ -661,7 +693,7 @@ def test_scan_fingerprint_adds_scanner_input_only_for_record_scans(tmp_path: Pat
         return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
                 "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
 
-    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     rows = {row["workspace_path"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}
     record_sha, addon_sha = rows[RECORD]["sha256"], rows["node_modules/a/build/Release/addon.node"]["sha256"]
@@ -702,7 +734,7 @@ def test_installer_record_findings_are_attributed_to_verified_anchors(tmp_path: 
         return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": observation,
                 "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
 
-    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+    recorded_graph(config, [build_job(scanner_runner=scanner)], run_id).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert sorted(calls) == [("grype", RECORD), ("osv", RECORD), ("syft", RECORD)]
     rows = {row["workspace_path"]: row for row in security._accepted_artifacts(run_root)["artifacts"]}

@@ -36,7 +36,8 @@ from appsec_review.runtime.contracts import (
 CONTRACT = JobContract(
     inputs=(
         InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
-                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
         InputRequirement("job_language_build", "topology_refinement_inputs",
                          "appsec-review/build-topology-refinement/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_language_build", "build_actions",
@@ -44,7 +45,8 @@ CONTRACT = JobContract(
         InputRequirement("job_language_build", "jvm_build_actions",
                          "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_language_build", "language_build_receipts",
-                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
         InputRequirement("job_language_build", "build_workspaces",
                          "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_target_catalog", "handoff", "appsec-review/job-handoff/2",

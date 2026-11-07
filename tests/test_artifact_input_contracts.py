@@ -1,0 +1,67 @@
+"""Mandatory artifact inputs fail at admission, before scanner or container work."""
+import json
+
+import pytest
+
+from appsec_review.jobs.job_artifact_indexing import build_job as indexing_job
+from appsec_review.jobs.job_artifact_security_analysis import build_job as security_job
+from appsec_review.runtime import JobRunner
+from tests.downstream_contract_fixture import configuration
+from tests.test_artifact_security_analysis import _fixture
+
+
+@pytest.mark.parametrize("factory", (indexing_job, security_job), ids=("indexing", "security"))
+def test_artifact_consumers_require_supplied_build_handoffs(tmp_path, factory):
+    config = configuration(tmp_path)
+    target = tmp_path / "source"
+    target.mkdir()
+    with pytest.raises(ValueError, match="required input unavailable"):
+        JobRunner(config).begin_attempt(factory(), target_root=target,
+                                        source_fingerprint="fixture", upstream_handoffs={})
+
+
+@pytest.mark.parametrize("factory,unit", [
+    (indexing_job, "load.accepted_builds"), (security_job, "load.accepted_artifacts"),
+], ids=("indexing", "security"))
+def test_supplied_empty_build_inputs_reach_real_loaders(tmp_path, factory, unit):
+    config, run_id, root, target, snapshot, _ = _fixture(tmp_path, no_artifacts=True, seed_accepted=True)
+    names = ("job_language_build",) if factory is indexing_job else ("job_language_build", "job_artifact_indexing")
+    supplied = {name: json.loads((root / "data/jobs" / name / "latest.json").read_bytes())["handoff_sha256"]
+                for name in names}
+    job, runner = factory(), JobRunner(config)
+    claim = runner.begin_attempt(job, run_id=run_id, target_root=target,
+                                 source_fingerprint=snapshot, upstream_handoffs=supplied)
+    output = runner.execute_or_reuse_unit(job, claim, unit)
+    assert claim["upstream_handoffs"] == supplied
+    if factory is indexing_job:
+        assert output["receipt_count"] == 0
+        assert "no produced artifacts" in output["producer_gaps"]
+    else:
+        assert output["artifact_count"] == 0
+
+
+@pytest.mark.parametrize("mutation", ("stale", "tampered", "missing-summary"))
+def test_artifact_input_identity_is_checked_before_load(tmp_path, mutation):
+    from tests.artifact_input_support import recorded_job
+    config, run_id, root, target, snapshot, _ = _fixture(tmp_path, no_artifacts=True, seed_accepted=True)
+    pointer = json.loads((root / "data/jobs/job_language_build/latest.json").read_bytes())
+    handoff = json.loads((root / pointer["handoff_path"]).read_bytes())
+    if mutation == "stale":
+        pointer["handoff_sha256"] = "0" * 64
+    elif mutation == "tampered":
+        summary = root / handoff["outputs"]["acceptance.publish_handoff"]["artifact"]["path"]
+        summary.write_bytes(summary.read_bytes() + b"\n")
+    else:
+        # A newly published generation omits the required receipt dataset, without rewriting history.
+        from dataclasses import replace
+        from appsec_review.runtime import Unit
+        original = (root / pointer["handoff_path"]).read_bytes()
+        job = recorded_job(root, "job_language_build")
+        incomplete = replace(job, units=(Unit("acceptance.publish_handoff", lambda _: {"gaps": ["no summary"]}),))
+        accepted = JobRunner(config).run(incomplete, run_id=run_id, target_root=target, source_fingerprint=snapshot)
+        assert (root / pointer["handoff_path"]).read_bytes() == original
+        pointer["handoff_sha256"] = accepted["handoff_sha256"]
+    with pytest.raises(ValueError, match="stale|changed|mismatch|required input unavailable"):
+        JobRunner(config).begin_attempt(indexing_job(), run_id=run_id, target_root=target,
+                                        source_fingerprint=snapshot,
+                                        upstream_handoffs={"job_language_build": pointer["handoff_sha256"]})

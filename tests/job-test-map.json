@@ -2,13 +2,19 @@
   "schema": "appsec-review/job-test-map/2",
   "jobs": {
     "job_artifact_indexing": {
-      "unit": ["tests/test_artifact_indexing.py"],
+      "unit": [
+        "tests/test_artifact_indexing.py",
+        "tests/test_artifact_input_contracts.py"
+      ],
       "integration": ["tests/integration/test_artifact_indexing_scale.py"],
       "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_artifact_index_count_is_bounded_by_the_classified_catalog"],
       "live": []
     },
     "job_artifact_security_analysis": {
-      "unit": ["tests/test_artifact_security_analysis.py"],
+      "unit": [
+        "tests/test_artifact_security_analysis.py",
+        "tests/test_artifact_input_contracts.py"
+      ],
       "integration": ["tests/integration/test_installer_record_scans.py"],
       "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones"],
       "live": []
@@ -174,7 +180,8 @@
         "tests/review/test_prompt_competence.py",
         "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
         "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
-        "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema"
+        "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema",
+        "tests/test_inference_fixture_contracts.py"
       ],
       "integration": ["tests/integration/test_review_consumer_acceptance.py"],
       "acceptance": ["tests/acceptance/test_prompt_competence.py::test_live_prompt_competence"],

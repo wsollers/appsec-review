@@ -134,3 +134,17 @@ Shard ownership is resolved against the complete producer-pinned declaration set
 source-view outputs or reporting availability. A more-specific coverage declaration wins over a
 broad AST/symbol/observation declaration; ties and unclaimed shards are errors, never implicit input
 authority. Coverage-only outputs retain their explicit requirements and gaps.
+
+Artifact indexing requires an accepted language-build envelope and its receipt-set dataset.
+Artifact security analysis additionally requires the artifact-indexing envelope and summary.
+An accepted empty receipt/artifact set remains a named producer gap; a missing prerequisite is
+rejected at admission rather than labelled optional and discovered by an unconditional reader.
+Single-consumer test graphs must include real fixture producers or use explicit standalone supply;
+an existing `latest.json` never grants an input to an explicitly empty graph projection.
+
+The inference-review fixture pins the complete original producers' declarations and artifacts,
+publishes current input-summary metadata, and supplies verified package publication where the
+scanner-correlation prerequisite exists. Required but unpopulated fixture datasets publish explicit
+unavailable coverage, not fabricated evidence. Fixtures deliberately omitting package prerequisites
+do not manufacture an accepted package handoff. These synthetic publications do not establish live
+review coverage or authorize execution of the full review test chains.
