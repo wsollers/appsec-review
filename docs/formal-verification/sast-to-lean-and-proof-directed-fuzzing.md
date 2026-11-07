@@ -6,6 +6,8 @@
 **Document role:** Engineering specification and phased implementation plan, not a runtime skill or authorization to execute targets  
 **Prepared:** 2026-11-07
 
+**Revision:** Design-review corrections; assurance gates G0-G4 below govern rollout
+
 The file-level implementation sequence, job contracts, run-owned paths, container definitions,
 MCP tools, and runtime-guidance changes are specified in the companion
 [buildout plan](buildout-plan.md).
@@ -25,7 +27,7 @@ Two deliverables are in scope:
 
 For a supported, pinned target and a supported finding class, the system produces one of:
 
-- **Model safety proof:** A Lean-kernel-checked theorem about an explicit model, with the source-to-model correspondence level accurately described.
+- **Model safety proof:** A checked theorem about an explicit model, with its `kernel_only` or `approved_native` assurance and source-to-model correspondence accurately described.
 - **Source-connected path refutation:** A safely closed path property with adequate dependency coverage and justified semantic connection to the actual program, not merely an LLM conclusion.
 - **Model counterexample:** A machine-checkable violating assignment/trace; still a candidate until shown feasible for the real program.
 - **Concrete reproduced violation:** A minimized input and deterministic replay in an explicitly authorized isolated lab showing the actual target violates the stated property.
@@ -107,8 +109,10 @@ remain authoritative unless separately changed and reviewed.
 
 Accept two controlled entrypoints:
 
-1. **From an accepted SAST lead:** `run_id`, immutable accepted manifest SHA, `package_id`, exact `lead_observation_id`, and rule/class identifiers. This is the primary way to test whether a vulnerability can be established **from ingestion** before an LLM reviewer labels it.
-2. **From an accepted review claim:** The same source-bound identity plus its `claim_id`, security predicate, supporting/contradicting refs and review status. This enables targeted escalation of difficult already-adjudicated findings.
+1. **Producer-stage request (`entry_kind = producer_lead`):** `run_id`, immutable upstream accepted manifest SHA, exact scanner/build/graph handoff and shard hashes, `lead_observation_id`, and rule/class identifiers. No `package_id` or `claim_id` is required or permitted. This request can precede package assembly; the manifest must contain all required upstream producers but cannot depend on this formal attempt or downstream indexing.
+2. **Post-review request (`entry_kind = review_claim`):** Exact accepted package/index manifest, `package_id`, `claim_id`, original lead/source/build identities, security predicate, evidence refs and review status. This is a standalone escalation against a completed package; it cannot be used as input to a producer that precedes that package in the same graph generation.
+
+Both entry kinds use a discriminated request schema. Bind the producer manifest separately from a later consumer/index manifest; do not resolve either through a moving latest pointer during an attempt. The first detached experiment may consume a completed run's accepted producer artifacts without requiring a review claim. Optional ordinary-graph integration uses only `producer_lead`.
 
 Do not accept an arbitrary source path or free-form SARIF file as privileged proof input. Ad hoc SARIF must first go through the accepted scanner ingestion path and immutable run binding. Every attempted lead, including unsupported ones, receives one accountable status.
 
@@ -120,6 +124,10 @@ Deterministic candidate selection:
 - Pin a verification attempt to one source commit, target snapshot, toolchain and accepted manifest; changed input means a new attempt.
 
 ### 4.2 V1 property families and explicit exclusions
+
+The first implemented subset is `local_copy_bounds/1`, specializing `index_and_copy_bounds`: a single nonrecursive C/C++ function with fixed-width unsigned scalar inputs, constant-size local byte arrays, initialization, supported comparisons/guards/returns, and an exact recognized `memcpy` operation. The first property checks both source-read and destination-write extents. Require disjoint live objects, known initialization, and exact length conversion to the pinned ABI's `size_t`; reject any unmatched AST construct. Use the paired example in section 10.5.1 only after measuring its real scanner alerts.
+
+Exclude loops, heap allocation, pointer arithmetic beyond this recognized copy, indirect calls, user-defined conversions, exceptions, recursion, volatile/atomic operations, and external state from this initial subset. No caller assumption is needed for a safety theorem quantified over every value of the declared unsigned input type. A vulnerability witness still needs a legitimate input route before implementation-level confirmation. Broader families below are expansion targets, each requiring its own semantics and certificate extension after G2:
 
 Start with deliberately narrow, meaningful goals:
 
@@ -161,6 +169,14 @@ For authorization, clarify whether the property concerns the entry-time session,
 
 Each template records where a **property mismatch** (wrong notion of ownership, missing terminating byte, assumed buffer capacity, etc.) would invalidate an argument.
 
+### 4.3.1 Assumption ledger and vacuity checks
+
+Every premise has a stable ID, formal proposition, provenance, affected scope, owner, and one of `discharged`, `external_guarantee`, or `unresolved`, with resolving evidence. Distinguish caller preconditions, language-definedness obligations, environment restrictions, and abstraction assumptions. A source-safety certificate requires discharged premises or explicit independently established guarantees matching the advertised scope; guessed caller bounds remain conditional.
+
+Check that the admitted initial-state predicate is satisfiable and retain a checked witness. An empty entry domain is `vacuous_entry_scope`, not successful safety certification. A deliberately unreachable sink is valid only when proved unreachable from that nonempty admissible entry domain. Check that the violation predicate is the exact logical dual over the same domain, transitions and bad event. Reject circular premises that assume the target property; prove caller obligations without importing the callee safety conclusion as an assumption.
+
+Mandatory regressions include contradictory assumptions, an assumed copy bound never established by callers, omitted input values, a false initial-state predicate, and sink unreachability confused with impossible function entry. Satisfiability alone does not establish that premises cover the actual program; the correspondence certificate supplies that separate obligation.
+
 ### 4.4 Semantic slice construction and closure
 
 Build `VerificationSliceBuilder` **on top of existing retrieval and graph identities**; do not make an unrestricted on-demand source crawler available to agents.
@@ -185,6 +201,12 @@ Store both:
 
 These may differ substantially in size.
 
+### 4.4.1 Loops, recursion, and correctness scope
+
+The first subset rejects loops and recursion. Later support must define transition semantics and prove invariant initialization, preservation on every iteration, and safety of intermediate operations, including abnormal exits. Unrolling or interpreter fuel exhaustion yields `bounded_only`/`unknown`; it must never become a successful terminating execution or an unbounded safety theorem. A bounded property records its bound in both theorem and public scope.
+
+Contracts declare `partial_correctness` or `total_correctness`. A postcondition on returning executions does not establish absence of bad intermediate events, termination, or availability. Total correctness requires a termination argument. Recursive or mutually recursive summaries require a checked induction/fixed-point rule and explicit strongly connected dependency groups; circular reuse of unproved contracts is rejected. Resource exhaustion and liveness are separate properties, outside initial certification.
+
 ### 4.5 Source-aware semantic translation
 
 Do not translate arbitrary decompiled C-like prose or ask a model to invent C semantics. Implement a **small typed intermediate representation** as the interface between supported source/LLVM analyses and Lean.
@@ -202,7 +224,36 @@ V1 IR requirements:
 
 Start with a restricted C/C++ frontend using Clang-produced build/IR facts where available. Avoid a claim of fully certified C or LLVM-to-Lean translation. Emit **translation obligations** and a machine-checkable traceability manifest from original operations to model operations. Validate model traces against concrete execution when possible, but mark this as testing evidence, **not a proof of equivalence**.
 
-A future verified frontend or per-function refinement proof may upgrade correspondence from `assumed` to `checked`. Until then, a Lean proof is at most a **model proof / conditional source claim**.
+Correspondence is `checked` only through the certificate below. Before that checker and its soundness theorem exist, all generated Lean results remain model-only or conditional. Traceability, JSON schema validation, source hashes and matching test traces cannot substitute for this certificate.
+
+### 4.5.1 Initial semantics and undefined behavior
+
+Use a restricted Clang AST frontend for `local_copy_bounds/1`, before optimizer transformations. Preserve the exact preprocessed translation unit, included-file closure, compiler version, flags, target triple and ABI. Match every relevant AST node against the closed supported grammar and reject unmatched constructs. LLVM/graph facts provide navigation and corroboration; optimized IR is not the source-safety semantics authority for this subset.
+
+Define source execution as an explicit transition system that emits `ReadOOB` or `WriteOOB` at the offending copy operation **before** undefined behavior. Unknown/unsupported behavior must remain an explicit gap or a sound overapproximation. Never assume absence of UB to prove the memory-safety property under investigation. Evaluate source and destination extents separately, preserve integer promotions/conversions, and discharge pointer validity, lifetime, initialization and non-overlap obligations. A `memcpy` summary cannot assume its own bounds precondition and thereby erase the alleged violation.
+
+Any future LLVM path must record the extraction/pass stage and handle `poison`, `undef`, `freeze`, and immediate UB explicitly. Attributes such as `inbounds`, `nsw`, `nuw`, `nonnull`, and `noundef` are not automatically source facts: their preconditions must be established or the claim restricted. An optimizer may remove a UB-triggering source path; disappearance in optimized IR cannot refute a source finding. Changes to the semantic authority or supported grammar require a versioned certificate extension.
+
+### 4.5.2 Source-correspondence certificate and verdict acceptance
+
+Add `formal-correspondence/1`, binding the exact source/preprocessed/AST, verification slice, IR, generated Lean definitions, property template, assumption ledger, supported-subset version, build identity and proof assurance profile. The initial trusted base explicitly includes the pinned source parser/extractor and its source-to-AST binding, the certificate checker, the formal source semantics and the accepted Lean checking path. This is a claim about the selected source-language semantics/configuration, not a proof of parser, compiler, executable, other build configurations or whole-program correctness.
+
+The certificate contains these separately checked obligations; a status flag cannot replace their resolving receipts:
+
+| Obligation | Required evidence and checker |
+|---|---|
+| Property binding | Closed rule/sink/template matcher binds the alleged event, input quantification and exact violation dual; the registry owns the statement |
+| Source binding and supported grammar | Trusted extractor binds all preprocessed source bytes and AST identities; a separate structural validator checks complete function-body coverage, guards, returns, widths, conversions, object declarations and copy arguments against the restricted grammar |
+| Initial states | Checked relation maps every concrete admissible entry state to a model entry state; the assumption ledger and non-vacuity witness establish the advertised input domain |
+| Transition preservation | A Lean-checked generic lowering theorem for the supported AST semantics, instantiated with a validated per-function derivation, establishes forward simulation (including explicit stuttering where justified) into the IR/model |
+| Bad-event preservation | Checked lemma establishes that each concrete scoped bad event has a corresponding abstract bad event; unsupported operations cannot disappear from the trace |
+| Slice completeness | Checked derivation accounts for every relevant branch, effect and dependency; initial V1 models the complete supported function body, with no heuristic pruning |
+| Premises and dependencies | All caller/environment/frame obligations are discharged or independently guaranteed for the exact scope; all dependent contracts and certificates are current and unchallenged |
+| Final theorem | Independently accepted proof of the fixed universal model property under an eligible assurance profile, bound to the same definitions and certificate hashes |
+
+The application derives `SOURCE_PROPERTY_PROVEN` only when **all** rows pass and the certificate carries no unresolved, truncated, bounded-only, contradicted or revoked dependency. The source claim records the trusted base and exact property/configuration scope. For the initial source-certification gate, require `kernel_only` proof assurance. An `approved_native` result remains eligible for model evidence but cannot silently satisfy this gate.
+
+A structural validator must not be the same lowering code merely reporting its own success. Retain a derivation that can be checked independently against the accepted AST and generic semantic theorem. If the first implementation cannot provide this path, G0/G1 may pass but G2 remains unmet; `SOURCE_PROPERTY_PROVEN` stays unavailable. Tests of a translator are useful validation, never a replacement for the stated simulation argument.
 
 ### 4.6 Lean semantics, contract format and checker
 
@@ -214,6 +265,8 @@ AppSecVerify/
   Semantics/Memory.lean
   Semantics/ControlFlow.lean
   Semantics/Transitions.lean
+  Correspondence/LocalCopyBounds.lean
+  Correspondence/Certificate.lean
   Security/Predicates.lean
   Security/Reachability.lean
   Abstraction/Soundness.lean
@@ -229,10 +282,22 @@ Required checker behavior:
 - Use pinned Lean 4/mathlib versions and lockfile; capture kernel and package identities.
 - Check generated files with the actual Lean elaborator/kernel.
 - Inspect `#print axioms` and imported dependencies; reject `sorryAx`, self-asserted target theorems, unchecked `axiom` declarations, and disallowed extensions of the trusted base.
-- Prefer kernel-checked `bv_decide` proofs for bitvectors. External SMT or CBMC results are **hints/counterexample candidates** unless their proofs are imported and checked under a documented trusted path.
+- Treat `bv_decide` as an approved-native candidate mechanism unless the pinned implementation demonstrably produces a proof accepted by the kernel-only profile below. External SMT or CBMC results are **hints/counterexample candidates** unless their proofs are imported and checked under a documented trusted path.
 - Prevent model-generated `unsafe` or arbitrary import/IO/macro metaprogramming from bypassing the generation/checking boundary; compile in a resource-constrained sandbox in all cases.
 - Record proof term/theorem qualified name, normalized statement, imports, axiom audit, exit status, time and digest.
 - For timeouts or unchecked dependencies, emit `unknown`, not `proved`.
+
+#### Proof assurance profiles and independent acceptance
+
+Record `proof_assurance` independently of logical result, source correspondence, and reproduction:
+
+- `kernel_only`: the complete proof dependency closure uses only the explicitly approved logical axioms (initial allowlist: `propext`, `Classical.choice`, `Quot.sound`) and passes independent kernel replay. Native-computation axioms, `sorryAx`, unchecked declarations and arbitrary user axioms are rejected.
+- `approved_native`: the pinned Lean compiler/runtime and specific audited native-evaluation procedures additionally enter the trusted base. Record every generated native axiom and its exact statement, origin and toolchain; never allow arbitrary axioms by a wildcard name. This profile is model evidence, not initial G2 source certification.
+- `unaccepted`: failed, incomplete, unaudited or unsupported checking; no proved verdict.
+
+Lean's `bv_decide` may verify SAT certificates using native computation and introduce native axioms; it must not be described as kernel-only solely because a Lean build succeeds. The exact behavior depends on the pinned release. Pin and test the axiom policy for that release, including legacy `Lean.trustCompiler` and newer per-computation axioms. If needed, replay certificate checking through kernel reduction or another explicitly validated kernel-only path; do not assume a cached certificate removes native trust.
+
+Generate the challenge theorem and all referenced definitions in a trusted application stage. Elaborate untrusted proof candidates in the existing sandbox with a closed syntax/tactic/options allowlist; reject arbitrary elaborator hooks and kernel-check-disabling options. Outside that candidate process, validate exported artifacts, compare the elaborated theorem/type and definition closure against the trusted challenge, independently replay the proof, and audit transitive axioms. Use a pinned compatible `lean4checker`/`comparator` path or an equivalent documented checker; record its identity and limitations. Neither stdout text, a pretty-printed statement nor an axiom audit performed only inside the candidate process is acceptance evidence. Add forged-receipt, changed-definition, disabled-kernel-check and native-axiom regressions.
 
 Reusable summary format is a Hoare-style contract:
 
@@ -244,14 +309,14 @@ with `modifies`/frame conditions, exact source hash, build/ABI assumptions, and 
 
 ### 4.7 Proof and counterexample states
 
-Use **two orthogonal fields**, rather than one overloaded “verified” flag:
+Keep logical result and source correspondence separate, rather than one overloaded “verified” flag:
 
 1. **Logical result:** `proved_safe_model`, `witness_in_model`, `unsat_path_model`, `proof_failed`, `timeout`, `unsupported`, `unknown`.
 2. **Source correspondence:** `checked`, `assumed`, `tested_only`, `open`, `unsupported`.
 
-Concrete reproduction is a **third** independent status: `not_attempted`, `reproduced`, `not_reproduced`, `unstable`, `lab_failed`, `policy_denied`.
+Concrete reproduction is another independent status: `not_attempted`, `reproduced`, `not_reproduced`, `unstable`, `lab_failed`, `policy_denied`.
 
-An actual source-level safety conclusion requires (a) an appropriate universal property, (b) a sound overapproximation/coverage argument, (c) a justified semantic correspondence, and (d) environmental assumptions matching the claim. A single path-refutation conclusion applies **only to that path**, not automatically to all paths to the sink.
+Also record `proof_assurance`, `correctness_scope`, explicit bounds and current validity; none is inferred from the other status fields. An actual source-level safety conclusion requires (a) an appropriate universal property, (b) a sound overapproximation/coverage argument, (c) a justified semantic correspondence, and (d) environmental assumptions matching the claim. A single path-refutation conclusion applies **only to that path**, not automatically to all paths to the sink.
 
 A model counterexample can be spurious. For an actual implementation vulnerability, demand a feasible witness anchored to the source/execution assumptions and, in M2, concrete reproduction where possible. A bounded search that finds no witness establishes only its bounded scope.
 
@@ -259,11 +324,13 @@ A model counterexample can be spurious. For an actual implementation vulnerabili
 
 Publish immutable protected attempts with a minimal schema family:
 
-- `formal-request/1`: parent accepted run/manifest/package/lead/claim, scope, property template, intent.
+- `formal-request/1`: discriminated producer-lead or post-review request with exact upstream identities, scope, property template and intent; package/claim fields belong only to post-review requests.
 - `formal-slice/1`: typed nodes/edges, closure state, omitted deps, semantics gaps, resolution roots.
 - `formal-obligation/1`: theorem and violation dual, quantified input model, preconditions/environment.
 - `formal-translation/1`: source/IR/model traceability, transformation decisions, tool versions, correspondence status.
-- `formal-proof/1`: Lean compilation, axiom audit, lemma dependencies, proof status, theorem artifact digest.
+- `formal-proof/1`: Lean compilation, independent replay, challenge comparison, assurance profile, axiom audit, lemma dependencies, proof status, theorem artifact digest.
+- `formal-correspondence/1`: source-binding, grammar, simulation, bad-event, closure and premise certificates.
+- `formal-assumption-ledger/1`: formal premises, provenance, discharge/guarantee status, scope and non-vacuity evidence.
 - `formal-witness/1`: symbolic assignments/trace, constraints, source mapping, feasibility/validation.
 - `formal-attempt/1`: aggregate identity, completion/gap counts, dispositions and artifact refs.
 
@@ -278,13 +345,15 @@ Example **proposed record** (not an existing API):
   "input": {
     "run_id": "<accepted-run>",
     "accepted_manifest_sha256": "<sha256>",
-    "package_id": "<package-id>",
+    "entry_kind": "producer_lead",
     "lead_observation_id": "<observation-id>",
     "target_snapshot_sha256": "<sha256>"
   },
-  "property": "integer_wrap_bounds",
+  "property": "index_and_copy_bounds",
+  "semantic_subset": "local_copy_bounds/1",
   "logical_result": "witness_in_model",
   "source_correspondence": "open",
+  "proof_assurance": "kernel_only",
   "reproduction": "not_attempted",
   "proof_ref": "<run-owned-ref>",
   "witness_ref": "<run-owned-ref>",
@@ -292,7 +361,7 @@ Example **proposed record** (not an existing API):
 }
 ```
 
-The exemplar's `witness_in_model` is **not** an automatically confirmed security finding.
+The exemplar's `witness_in_model` represents a separately checked violating assignment under the recorded assurance profile; it is **not** an automatically confirmed security finding. Raw solver assignments without that check remain witness candidates.
 
 ### 4.9 M1 operator interface (proposed, not implemented)
 
@@ -306,7 +375,7 @@ appsec-review formal-verify inspect --attempt-id ATTEMPT
 
 Commands accept **logical identities** validated against the accepted manifest, not arbitrary host paths. They write a new immutable attempt and never mutate the original finding status.
 
-Later, after M1 acceptance, an optional `job_formal_verification` may consume accepted review packages; that requires separate graph, dataset, configuration, gate and schema integration work with its own tests. Do not claim it exists yet.
+After G2, an optional `job_formal_verification` may be integrated before indexing using only producer-stage requests; enabling it requires a separate G4 rollout decision. Post-review package/claim requests remain standalone. Graph integration requires separate graph, dataset, configuration, gate and schema integration work with its own tests. Do not claim it exists yet.
 
 ## 5. M2 — Proof-directed fuzzing and contract reuse
 
@@ -358,7 +427,7 @@ It must map every symbolic value to a **concrete controllable input** (buffer by
 
 Fuzz only `candidate_witness`, `observable_guard_question`, `input_boundary_question` or `model_discrepancy_replay`. The planner must distinguish these from a stuck proof due to missing lemmas, unsupported language/ABI semantics, or an unproved model-to-source mapping; the latter produce `not_experimentally_answerable` without executing anything.
 
-Every proposed `formal-experiment-request/1` must include: `run_id`, `accepted_manifest_sha256`, `lead_observation_id`, `formal_attempt_id`, **`obligation_id`**, exact function symbol/source and build hashes, relevant real caller chain, valid preconditions, a specific testable hypothesis, typed input encoding/constraints, witness/boundary seeds, negative control, oracle, branch/coverage focus, and an operator admission reference. No arbitrary function discovery, raw commands, host paths or network destinations.
+Every proposed `formal-experiment-request/1` must include: `run_id`, `accepted_manifest_sha256`, `lead_observation_id`, `formal_attempt_id`, **`obligation_id`**, exact function symbol/source and build hashes, relevant real caller chain, valid preconditions, a specific testable hypothesis, typed input encoding/constraints, witness/boundary seeds, negative control, oracle, branch/coverage focus, and a stable request digest. Planning cannot require an admission that does not yet exist: the later admission binds this request digest, and execution receipts bind both. No arbitrary function discovery, raw commands, host paths or network destinations.
 
 Example: If Lean cannot establish whether a length-check guard makes a copy safe, derive valid inputs immediately below, at and above the accepted threshold and capture the **actual function's** branch decisions and memory effects. If a model witness does not map to a valid caller-controlled argument, report `witness_not_concretizable`; do not invent impossible state.
 
@@ -395,11 +464,19 @@ extern "C" int LLVMFuzzerTestOneInput(
 
 **Primary required tool profile:** pinned Clang + libFuzzer + SanitizerCoverage + AddressSanitizer/UndefinedBehaviorSanitizer. Reuse accepted sanitizer build custody when link-compatible; otherwise rebuild the **original source function** in a separate isolated workspace, recording all changed flags and assumptions. AFL++ is an optional alternative for a particular selected target, not a second general fuzzing framework. Do not mislabel a GCC sanitizer object as a Clang libFuzzer target without validating link/runtime compatibility. Keep branch/edge coverage and observed state changes tied to the exact obligation; a clean campaign is not proof of safety.
 
+#### Instrumentation, oracle calibration and coverage
+
+Before treating a campaign as informative, run a separate known-failing calibration fixture for the selected sanitizer/oracle under the same toolchain/runtime policy. This is a tool-health positive control, not evaluator truth or a vulnerability seeded into the target. A negative control alone cannot show that detection works. Record both controls separately from target results and exclude calibration runs from target discovery metrics.
+
+Bind the analyzed build and instrumented reproduction build separately, including changed optimization flags, sanitizer options/recovery behavior, linked objects, runtime versions and source mappings. Validate instrumentation at the admitted target function and relevant operation, not only that a sanitizer library was linked. Attribute faults to the target, adapter or calibration fixture. A sanitizer signal is not automatically the selected security-property violation.
+
+Publish obligation-specific `sink_reached`, branch/operation coverage, oracle-health and instrumentation-coverage evidence, including uninstrumented dependencies. Distinguish `target_sink_not_reached`, `oracle_unavailable`, `instrumentation_gap`, `no_violation_observed`, and `violation_observed`. An optimized-away operation is a named coverage gap, not a successful negative result. Three replays establish repeatability only for the recorded build/input/reset; they do not establish source-to-binary equivalence or universal safety.
+
 The generated harness is **not** the existing compile-only PoC: do not pass it to `job_poc_generation` for execution or change the no-run policy of that job.
 
 ### 5.3 Separate opt-in execution lab
 
-**The ordinary review graph remains non-executing; the function-fuzzing container is a required part of this M2 design.** The operator explicitly authorizes a **bounded investigation envelope** for one accepted target/finding, selected obligations and functions, pinned image, allowed build/fuzz/minimize/replay operations, total run/time/resource limits and network profile. Within that envelope, the deterministic controller may **automatically run multiple generated inputs, minimization and clean replay without new approvals**. It revalidates admission and remaining quota for every subrun. An AI model cannot extend the target, function, caller, network, commands or budget; changing scope requires a new admission.
+**The ordinary review graph remains non-executing; the function-fuzzing container is a required part of this M2 design.** The operator explicitly authorizes a **bounded investigation envelope** for one accepted target/finding, selected obligations and functions, pinned image, allowed build/calibrate/fuzz/minimize/replay operations, total run/time/resource limits and network profile. Within that envelope, the deterministic controller may **automatically run multiple generated inputs, minimization and clean replay without new approvals**. It revalidates admission and remaining quota for every subrun. An AI model cannot extend the target, function, caller, network, commands or budget; changing scope requires a new admission.
 
 Build the isolated lab with these requirements:
 
@@ -412,6 +489,12 @@ Build the isolated lab with these requirements:
 - Per-input and campaign timeouts, input bytes and output bytes caps, no infinite auto-retry.
 - Kill and account for the entire process tree after completion or timeout.
 - Protected capture of stdout, stderr, sanitizer stacks, exit/signal, process-map details when available, exact seed, target/build/image hashes.
+
+#### Atomic admission accounting and interruption
+
+Admission validation and quota reservation are one durable atomic operation scoped to the admission ID. Each compile, calibration, fuzz, minimize and replay operation has an idempotency key, reserved worst-case resource allowance, durable state and execution lease. Concurrent workers cannot spend the same remaining quota; retries cannot create a second execution for the same key. Account actual use on completion and release unused reservation only after the supervisor verifies termination. After a crash, reconcile the process/container identity before retrying or releasing quota; uncertain consumption stays reserved or conservatively charged.
+
+Specify `requested -> reserved -> running -> completed/failed/cancelled` transitions and crash-recovery receipts. Expiry or revocation prevents new reservations; cancellation/revocation signals the supervisor to terminate active process trees and retain partial evidence. Campaign time limits and the admission deadline also constrain minimization and replay. Admission records stay immutable; revocation and quota events are append-only. Admission identity/authentication implementation may vary, but these semantics cannot be deferred.
 
 Proposed first two profiles:
 
@@ -478,6 +561,12 @@ Contract lookup may narrow search, but cannot silently assume the caller satisfi
 
 Invalidate or mark stale when source, compilation flags, layouts/ABI, assumptions, callee contracts, or semantic frontend changes. If a proof establishes only model safety, store it as a model-level contract; never promote it to source-certified reuse by repetition.
 
+#### Contradictions and transitive invalidation
+
+A feasible accepted observation apparently contradicting a current source certificate immediately records `challenged` and suspends new use of that certificate and its dependent contracts pending deterministic lineage checks and independent adjudication. Classify wrong build/scope, invalid harness/oracle, model mismatch, translation defect, and actual certificate failure separately. A confirmed certificate failure records `revoked`; an invalid challenge records a resolving disposition rather than deleting the challenge.
+
+Add append-only `formal-invalidation/1` events binding the challenged attempt/certificate, observation, reason, review disposition and transitive dependency closure. Maintain reverse dependencies to identify affected contracts, packages and published reports. New consumers reject challenged/revoked dependencies. Historical manifests and proofs remain immutable; an operator-visible affected-publication list drives a new accepted index/package/report generation with a visible correction. Historical readers display the pinned result as historical and disclose later invalidation when available; current validity uses a separately authenticated immutable checkpoint with its own hash/as-of identity alongside the proof manifest; they cannot present it as current certification without the current validity view. Superseding an attempt is not revocation by itself and cannot conceal a soundness failure. No automatic target execution or downstream review launch is implied.
+
 ### 5.6 Findings and feedback to the existing review
 
 M2 findings can create independent evidence relations only after validators resolve their references to exact source or run artifacts. Runtime traces do not become self-authorizing accepted claims.
@@ -489,6 +578,23 @@ M2 findings can create independent evidence relations only after validators reso
 - Proven path infeasible: scoped contradiction to that path, not an automatic claim that no vulnerability exists.
 - Missing/failed execution: named gap.
 - Final report: a sanitized summary of certified outcomes, never raw witness bytes, exploit source or private harness artifacts.
+
+#### Versioned formal-evidence admission
+
+Define a `formal-evidence-admission/1` adapter before integrating formal rows into review. A new index family or generic artifact reference does not itself satisfy existing predicates. The adapter validates exact claim/sink, property, scope, correspondence certificate, assurance profile, premises, current validity and resolving artifacts, then emits only the relations allowed below:
+
+| Result | Permitted effect under the adapter |
+|---|---|
+| Model theorem or abstract witness | Context/conditional evidence only; no direct source predicate or finding closure |
+| Source-certified universal copy-bounds theorem | Scoped contradiction to the matching bounds/ineffective-guard allegation; does not refute another property or another build |
+| Source-certified path infeasibility | Contradicts reachability of that exact path only; other paths remain open |
+| Replayed original-target violation | Direct support only for observed affected construct, exercised path and the exact failed property after harness/input/oracle validation; attacker control requires separate evidence of a legitimate controllable entry route |
+| Build/configuration custody | Supports only the configuration facts its structured receipt establishes |
+| Failed, unknown, challenged or revoked result | Gap or invalidation; no supporting safety conclusion |
+
+Each property family must instantiate this table with exact existing predicate IDs and support/contradiction polarity; unmatched mappings default to non-counting. Impact remains derived under existing policy. A source-safety certificate is not an automatic finding-state transition.
+
+Record `derived_from` lineage across scanner, slice, assumptions, theorem, witness, harness and replay. The same source claim repackaged across stages is not independent corroboration. Concrete execution supplies a distinct observation but shares the modeled hypothesis and harness/oracle assumptions; independence evaluation must record these dependencies. A fresh review actor or different provider alone cannot erase shared evidence dependencies. Extend the admission adapter and lineage checks as a separately versioned integration change; retain existing R5/R6 thresholds and final-gate authority.
 
 Do not modify R5/R6 policy or existing publication gates as part of the prototype. Any future gate integration is its own versioned design and test milestone.
 
@@ -598,7 +704,10 @@ src/appsec_review/
     slice.py              # property-specific semantic dependency closure
     semantics_ir.py       # typed IR, validation and serialization
     frontend.py           # supported Clang/IR lowering
-    correspondence.py     # mapping/coverage obligations and audit
+    correspondence.py     # independent certificate/derivation validation
+    assumptions.py        # premise provenance, discharge and non-vacuity
+    validity.py           # challenge/revocation and reverse dependencies
+    evidence_admission.py # exact predicate/polarity and lineage mapping
     lean_generate.py      # IR -> Lean modules, no free-form execution
     lean_check.py         # pinned tool, kernel and axiom verification
     witness.py            # model assignment / trace and feasibility
@@ -611,7 +720,9 @@ src/appsec_review/
     planning.py           # per-obligation seeds/constraints and input mapping
     harness.py            # actual source function + caller, AST validation
     build.py              # target/harness custody and instrumentation
-    admission.py          # investigation authorization and quota enforcement
+    admission.py          # investigation authorization
+    quota.py              # atomic reservations, leases, recovery, cancellation
+    calibration.py        # oracle health and target instrumentation
     execution.py          # restricted container runner, no model shell
     coverage.py           # relevant branch and behavior feedback
     feedback.py           # observed behavior -> Lean model recheck
@@ -639,6 +750,10 @@ docs/
       formal-obligation.schema.json
       formal-translation.schema.json
       formal-proof.schema.json
+      formal-correspondence.schema.json
+      formal-assumption-ledger.schema.json
+      formal-invalidation.schema.json
+      formal-quota-event.schema.json
       formal-witness.schema.json
       formal-attempt.schema.json
       formal-contract.schema.json
@@ -697,6 +812,8 @@ Use strict typed, versioned, centralized config in `appsec-review.toml`. Do not 
 | Network access | `none`, except dedicated internal lab profile |
 | Raw packets or host network | Disabled / out of scope |
 
+Add aggregate formal-work limits across candidates, obligations, workbench checks, retries and refinement: initial proposed ceilings are 32 checker invocations, 1,800 checker wall-seconds, 3,600 checker CPU-seconds and 3,600 total job wall-seconds, plus the existing typed aggregate model-token/cost limit. Per-obligation limits remain maxima, not entitlements. Reserve quota atomically before dispatch, count failed attempts, and stop scheduling when any aggregate ceiling would be exceeded. Publish deferred obligations and the exhausted budget dimension. These prototype values require G1 measurement before rollout; do not silently enlarge them to pass a gate.
+
 Use existing container admission, policy, image identity and signing infrastructure; these are *resource planning values*, not evidence that host-specific images or permissions already exist. Frozen review configurations stay unchanged. Tool and compiler versions must be pinned before acceptance.
 
 ## 9. Phased implementation work packages
@@ -707,18 +824,19 @@ The order below intentionally builds **one usable end-to-end path** before expan
 
 | ID | Exact build work | Dependency | Required completion evidence |
 |---|---|---|---|
-| **F0** | Baseline repository state and applicable schemas; choose first supported CWE and pinned known-vulnerable C target | None | Inventory and immutable target/run/lead IDs; documented gaps |
+| **F0** | Freeze initial subset, certificate/assurance contracts and pinned real scanner pair | None | Inventory, immutable target/run/lead IDs and exact semantic/trust boundary |
 | **F1** | Accepted-lead/claim resolver and candidate planner | F0 | Rejects fake IDs, stale hashes, missing source/build; handles real accepted lead |
-| **F2** | Property registry with safety and existential witness duals | F1 | Two synthetic positive/negative unit pairs per first class |
-| **F3** | Semantic slice closure and typed missing-dependency report | F1 | Correct guards, def-use and calls; no false closure on truncation/alias gaps |
-| **F4** | Restricted source/IR frontend with validated widths/control flow | F2,F3 | Compiler-grounded fixtures, supported/unsupported matrix, traceability |
-| **F5** | Lean semantics/translation/checker, axiom gate and job-scoped fixed-theorem proof workbench | F4 | Iterative real Lean theorem check and witness model; changed statement/import, exhausted budget and `sorry`/axiom bypass rejected |
-| **F6** | Immutable attempt schema, CLI/report projection and contracts v1 | F5 | Byte-hash verification, clean retry identities, honest verdicts |
-| **F7** | Blind accepted-ingestion experiment and evaluation harness | F6 | Pinned result table for supported positives/controls, all unknowns counted |
+| **F2** | Property registry, exact safety/witness duals, premise ledger and non-vacuity | F1 | Positive/negative units; empty domains, assumed bounds and circular premises rejected |
+| **F3** | Complete supported-function AST coverage and typed missing-dependency report | F1 | Every branch/effect accounted for; no false closure from graph bounds |
+| **F4** | Restricted AST-to-IR frontend, error-event semantics and checkable correspondence derivation | F2,F3 | Source binding, grammar validation and initial/transition/bad-event proof obligations |
+| **F5** | Lean semantics, generic lowering proof, independent checker/comparator, assurance policy and fixed-theorem workbench | F4 | Checked model/witness and certificate lemmas; forged receipt, changed definitions, native-trust mislabeling and bypass rejected |
+| **F6** | Detached accepted-attempt/CLI projection and contract record format; reuse deferred | F5 | Byte-hash verification, clean retry identities, honest verdicts and aggregate budgets |
+| **F7** | Blind detached accepted-ingestion experiment and evaluation harness | F6 | G0/G1 result table; all unknowns counted, no source-certification inference |
 | **F8** | Establish safe/vulnerable paired corpus with actual **same-rule** scanner alerts | F1,F2 | Pinned SARIF/observation identity on both twins; unflagged controls excluded from strict benchmark |
-| **F9** | Lean false-positive proof evaluation using independent hidden truth | F6,F8 | Source-connected safety proofs, vulnerable witnesses, false-safe failures and abstentions counted |
+| **F9** | Independent correspondence checker and strict source-proof evaluation | F4-F8 | G2 certificates and same-rule safe/vulnerable evidence; model-only results leave G2 unmet |
 
-**M1 definition of done:**
+**M1 model demonstration (G0/G1; not source-certification or rollout):**
+
 - Safe-but-flagged findings are discharged only by a checked, source-connected theorem; scanner-quiet controls cannot count as eliminated alerts.
 - A real SAST lead from a pinned target travels through the accepted ingestion path, creates a property-specific slice and an actual checked Lean artifact, and returns an auditable outcome.
 - A real *supported* positive case produces a checked violating model assignment or a valid source-connected witness with explicit translation caveats.
@@ -730,15 +848,15 @@ The order below intentionally builds **one usable end-to-end path** before expan
 
 | ID | Exact build work | Dependency | Required completion evidence |
 |---|---|---|---|
-| **P1** | Classify experiment-eligible Lean obligations and generate typed testable questions, valid inputs and boundary seeds | M1 F6 | Only selected obligations fuzzed; missing lemma produces no-run result |
+| **P1** | Classify experiment-eligible Lean obligations and generate typed testable questions, valid inputs and boundary seeds | G1 | Only selected obligations fuzzed; missing lemma produces no-run result |
 | **P2** | Generate real-function/required-caller harness through the bounded proposal workbench, with preconditions, reset, seeds and specific oracle | P1 | Deterministically rendered harness compiles against pinned original implementation; commands, widened scope and invalid setup rejected |
-| **P3** | Build required Clang/libFuzzer/ASan/UBSan container and bounded investigation admission/quota supervisor | P2 | One authorized envelope permits automated subruns; wrong target/function denied |
-| **P4** | Obligation-specific libFuzzer driver with source branch/edge, sanitizer and property-oracle observations | P3 | Observations trace to original source and exact Lean obligation |
-| **P5** | Same-fault minimization, clean replay, observation-to-Lean refinement/recheck | P4 | Minimum reproducer + 3-replay receipt; model discrepancy creates new checked attempt |
-| **P6** | Proof contract cache, transitive invalidation and caller obligations | M1 F5 | Valid contract reuse; changed source/assumptions invalidate reuse |
-| **P7** | Read-only MCP evidence lookup and report integration proposal | P5,P6 | Capability denies execution and cross-run refs; no R5/R6 bypass |
+| **P3** | Build fuzz image and atomic reservation/idempotency/recovery/cancellation supervisor | P2 | Concurrent quota, crash/retry, revocation and process-tree checks; wrong target/function denied |
+| **P4** | Obligation-specific fuzz driver, calibration and instrumentation/coverage validation | P3 | Positive/negative controls, target-operation coverage and exact analyzed/reproduction build relationship |
+| **P5** | Same-fault minimization, replay, refinement and contradiction lifecycle | P4 | G3 replay evidence; discrepancy creates a new attempt, certificate challenge suspends dependent reuse |
+| **P6** | Contract reuse, reverse dependencies, transitive invalidation and caller obligations | G2 and lifecycle checks | Challenged/revoked contracts cannot be reused; affected publications identified |
+| **P7** | Formal evidence-admission/lineage adapter, read-only lookup and report projection | G2,P5,P6 | Exact predicate mapping; no derived-evidence double counting or R5/R6 bypass |
 | **P8** | Optional **separate later** application-protocol driver and session replay | P5 | Internal-network-only authorized sequences; not a core M2 gate |
-| **P9** | Blind corpus comparison and regressions | P5,P6 | Reproductions on original target and matched negative controls |
+| **P9** | Grouped held-out comparison against matched-budget review/fuzz baselines | P5-P7 | G4 decision with incremental value, abstention, confidence intervals and total cost |
 
 **M2 definition of done:**
 - At least one real ingested finding yields several Lean obligations, but only an **experimentally answerable** one triggers targeted fuzzing.
@@ -809,22 +927,24 @@ Record whether the known defect is **applicable and triggerable** in the compile
 
 ### 10.4 Metrics and proposed acceptance gates
 
-Record per case: `lead_ingested`, `lead_correlated`, `slice_closed`, `source_correspondence`, `model_result`, `concrete_reproduced`, `replay_rate`, `confirmed_weakness`, `false_safe`, `false_alarm`, `inconclusive_reason`, `elapsed_seconds`, `CPU_seconds`, `tokens`, and evidence completeness.
+Record per case: `proof_assurance`, `certificate_status`, `premise_status`, `validity_checkpoint`, `correctness_scope`, `lead_ingested`, `lead_correlated`, `slice_closed`, `source_correspondence`, `model_result`, `concrete_reproduced`, `replay_rate`, `confirmed_weakness`, `false_safe`, `false_alarm`, `inconclusive_reason`, `elapsed_seconds`, `CPU_seconds`, `tokens`, and evidence completeness.
 
-**M1 minimum demonstration (not a statistical generalization claim):**
+**G1 model-usefulness demonstration (not source-certification or rollout):**
+
 - At least **two** supported vulnerable cases yield checked model witnesses with correct source assumptions, and at least **two** matched controls yield checked scoped refutations/safety arguments; if full correspondence is unavailable, status must remain conditional.
 - **Zero** incorrect unconditional “source safe” conclusions on the pinned positive set.
 - **100%** of attempted cases receive a final typed result and a complete/gapped coverage record.
 - A tampered source hash, missing accepted lead, open alias, `sorry` dependency, or incomplete slice fails closed.
 
-**M2 minimum demonstration:**
+**G3 dynamic-lab demonstration:**
+
 - Paired safe/vulnerable harnesses may corroborate results, but clean fuzzing cannot establish source safety without an adequate proof.
 - At least **two distinct** supported vulnerable cases produce a minimized, **three-times replayable** violation against the actual admitted target.
 - Matching controls are tested with the same harness and oracle and do not display that violation in the tested scope.
 - Unauthorized, out-of-scope or over-budget execution is rejected; multiple permitted test inputs and retries under one valid investigation admission proceed without new per-input approval.
 - Missing sanitizer, failed harness compilation, timeouts and nondeterminism are classified as gaps, never as safe.
 
-The initial minimums establish that the path works; they do not imply acceptable coverage for all CWE classes. Before rollout, score a held-out set of known-vulnerable projects and report confidence intervals and class-level tradeoffs. Do not tune to a blind test set after seeing its labels.
+The initial minimums establish that the path works; they do not imply acceptable coverage for all CWE classes. Before G4 rollout, score a held-out set of known-vulnerable projects and report confidence intervals and class-level tradeoffs. Do not tune to a blind test set after seeing its labels. Group related vulnerable/fixed twins, shared source ancestry and near-duplicate templates into the same development or held-out split. Freeze the split and selection policy before scoring; neutral filenames alone do not prevent leakage. Compare against existing scanner-plus-review and ordinary fuzzing with matched target scope, harness/oracle access, compute and time budgets. Report preparation/proof overhead, eligible and total-alert denominators, abstentions, time to valid evidence and incremental confirmed/refuted cases. State whether any measured gain comes from better harnesses, extra budget or proof-directed seeds.
 
 ### 10.5 False-positive proof benchmark: safe code that still triggers SAST
 
@@ -944,7 +1064,7 @@ The formal-verification extension should add an **evaluator-only** `appsec-revie
 
 | Actual condition | Verification conclusion | Evaluation |
 |---|---|---|
-| Safe + real alert | Kernel-checked safety theorem **plus sufficient source correspondence** | Successful source-level false-positive adjudication |
+| Safe + real alert | `kernel_only` theorem **plus accepted section 4.5.2 certificate** | Successful source-level false-positive adjudication |
 | Vulnerable + real alert | Feasible counterexample; preferably original-target replay | Correct vulnerable classification |
 | Vulnerable + alert | Unconditional “source proved safe” | **Critical false-safe failure** |
 | Safe + alert | Model theorem with incomplete source link | Conditional/inconclusive, **not** a proved false positive |
@@ -963,7 +1083,7 @@ The formal-verification extension should add an **evaluator-only** `appsec-revie
 {\#(\mathrm{vulnerable,\ attempted})}.
 \]
 
-Report per rule/class: same-rule twin alerts, coverage/eligibility, proved safe, vulnerable witnesses, reproduced cases, abstentions, proof effort, and false-safe claims. **Zero incorrect unconditional source-safe claims** on the pinned positive corpus is a hard gate, not a statement of universal correctness. The first milestone must demonstrate at least **two** independently constructed *safe and flagged* cases with valid checked source-safety evidence and **two** paired *vulnerable and flagged* cases with violating evidence; if source correspondence cannot be justified, report the milestone unmet rather than weakening the standard.
+Report per rule/class: same-rule twin alerts, coverage/eligibility, proved safe, vulnerable witnesses, reproduced cases, abstentions, proof effort, and false-safe claims. **Zero incorrect unconditional source-safe claims** on the pinned positive corpus is a hard gate, not a statement of universal correctness. The G2 source-certification milestone must demonstrate at least **two** independently constructed *safe and flagged* cases with valid checked source-safety evidence and **two** paired *vulnerable and flagged* cases with violating evidence; if source correspondence cannot be justified, report the milestone unmet rather than weakening the standard.
 
 #### 10.5.5 Mandatory negative regression cases
 
@@ -976,6 +1096,19 @@ Report per rule/class: same-rule twin alerts, coverage/eligibility, proved safe,
 - Hidden labels/pairs/expected proof are visible to the verification agent: benchmark contamination failure.
 - Successful fuzzing with no crash is treated as a proof of universal safety: reject.
 
+### 10.6 Named assurance and rollout gates
+
+These gates replace ambiguous references to "M1 acceptance". Passing a lower gate cannot satisfy a higher one. Each decision has a frozen evidence manifest, exact revision/tool identities, outcome, gaps and operator decision; none authorizes live execution by itself.
+
+| Gate | Evidence required | Capability it permits |
+|---|---|---|
+| G0: pipeline functionality | One actual accepted alert yields an immutable typed attempt with complete/gapped accounting; unsupported and tampered inputs rejected | Detached development path only |
+| G1: model usefulness | At least two supported positives and two matched controls meet section 10.4's checked model/witness criteria, with premise/vacuity and proof-assurance negative cases | Model-only/conditional evaluation; no source certification or ordinary-graph enablement |
+| G2: source certification | Section 4.5.2 checker and soundness obligations implemented; at least two independently constructed safe-and-flagged cases and two vulnerable-and-flagged twins meet section 10.5.4; kernel-only assurance and zero false-safe results | Scoped source certification for the exact registered subset; mandatory before ordinary graph integration work |
+| G3: dynamic lab | Section 10.4's two distinct reproducible violations, calibrated oracle/instrumentation, matched controls, atomic admission/recovery and invalidation checks | Separately admitted function-lab use; never automatic target execution |
+| G4: rollout | Held-out class-level evaluation, matched-budget baselines, confidence intervals, measured cost/abstention, deterministic evidence-admission/lineage checks and explicit operator decision | Optional ordinary verification enablement after G2; fuzz planning additionally requires G3 and its own enablement decision |
+
+G0/G1 can succeed while G2 is unmet. Record that outcome honestly rather than changing the source-certification standard. The disabled standalone lab can be developed and explicitly exercised for G3 after G1 for conditional witnesses, but routine admitted use requires G3; it is not evidence of G2. Contract reuse and broader semantic families follow G2 and lifecycle validation. General automation is not the criterion for the first experiment: useful, defensible evidence is.
 
 ## 11. Negative and failure-mode tests that must exist
 
@@ -983,6 +1116,9 @@ Report per rule/class: same-rule twin alerts, coverage/eligibility, proved safe,
 
 - A hand-written Lean model with an omitted unsafe branch must **not** certify source safety.
 - A proof with `sorry`, a forbidden user axiom, unreviewed trust dependency or self-assumed theorem must be rejected.
+- Forged checker output, native axioms mislabeled kernel-only, changed elaborated definitions, kernel-check-disabling options and stale checker artifacts fail independent acceptance.
+- Contradictory/empty entry premises, assumed bounds and a violation predicate with a different domain fail certification.
+- UB-triggering paths removed by optimization or assumed-away copy bounds cannot refute source defects; loops/recursion outside the supported subset and exhausted fuel remain unsupported/unknown.
 - A satisfying model assignment on an impossible concrete path must remain **model witness only**.
 - Truncated slice, unresolved indirect call, uncertain alias, unmodeled global state, unknown object size or missing compilation flags must prevent unconditional safety.
 - Integer promotion, signed overflow, narrowing, alignment, object boundaries, endianness and optimizer-sensitive transformations must be checked or explicitly unsupported.
@@ -999,7 +1135,11 @@ Report per rule/class: same-rule twin alerts, coverage/eligibility, proved safe,
 - Model instructions embedded in source strings or decompiled text are treated as data.
 - Running without authorization, expanding a target/function/network scope, or exhausting a budget is denied; internal authorized repeats are allowed and accounted.
 - Resource exhaustion, timeout, partial logs, sanitizer-runtime absence, build failure, and flaky replay preserve a failure or gap status, not a pass.
-- Negative controls and the evaluator guide cannot be read by verification workers; evaluation is a separate role/process.
+- Concurrent reservations, crash/retry duplication, uncertain quota consumption, cancellation and revocation cannot exceed the admission or leave active processes unaccounted.
+- Failed positive calibration, an uninstrumented target operation, unreachable sink or a fault in the adapter is not a successful target negative result.
+- Contradicting an accepted certificate suspends dependent reuse and identifies affected publications; replacing an attempt cannot erase invalidation.
+- Producer-stage requests cannot require downstream packages; formal evidence without an exact predicate mapping is non-counting, and derived artifacts do not create independent corroboration.
+- Evaluator-only control labels, pair relationships and the evaluator guide cannot be read by verification workers; evaluation is separate. Neutral operational seeds/calibration fixtures are allowed without hidden target truth, and calibration is excluded from target scores.
 
 ### Test placement and execution policy
 
@@ -1021,8 +1161,8 @@ Recommended final vocabulary:
 
 | Label | Meaning |
 |---|---|
-| `MODEL_PROVEN_SAFE` | Kernel-checked theorem for a stated model only |
-| `SOURCE_PROPERTY_PROVEN` | Proof plus fully justified source correspondence and scope |
+| `MODEL_PROVEN_SAFE` | Accepted theorem for a stated model only; assurance profile shown separately |
+| `SOURCE_PROPERTY_PROVEN` | Kernel-only proof plus accepted correspondence certificate and current validity for the exact source/property/configuration scope |
 | `PATH_INFEASIBLE_SCOPED` | One exact alleged path ruled out under recorded assumptions |
 | `MODEL_WITNESS` | Lean/solver model violates an abstract property |
 | `CONCRETE_VIOLATION_REPRODUCED` | Observed original-target violation under authorized repeatable execution |
@@ -1033,15 +1173,15 @@ No “clean program” or “false positive” label is emitted from `MODEL_PROV
 
 ## 13. Operational sequencing and rollback
 
-- **First PR:** only M1 F0–F2 and small paired fixtures; no Docker executor or job graph changes.
+- **First PR:** freeze the initial subset, certificate/checker contract and proof-assurance policy; implement only M1 F0–F2 and small paired fixtures; no Docker executor or job graph changes.
 - **Second PR:** semantic slice, IR/Lean checker, bounded fixed-theorem workbench, immutable proof
   receipts and strict capability/axiom tests.
-- **Third PR:** offline accepted-lead end-to-end evaluation, including at least one real vulnerable and one negative case.
+- **Third PR:** detached accepted-lead evaluation through G0/G1, then implement and validate the restricted correspondence certificate for G2. A model-only result leaves G2 unmet; no graph integration, broad contract reuse or source-safe verdict is enabled.
 - **Fourth PR:** M2 per-obligation question selection, real-function harness, required Clang/libFuzzer container and bounded investigation policy; denied-execution tests first.
-- **Fifth PR:** authorized automatic bounded fuzz/minimize/replay, observation-to-Lean feedback and initial contract reuse.
+- **Fifth PR:** authorized automatic bounded fuzz/minimize/replay, observation-to-Lean feedback and contradiction/invalidation handling. Enable source-certified contract reuse only after G2 and lifecycle validation.
 - **Later PR:** optional external read-only MCP retrieval, gated report projections, protocol
   adapter and job graph integration. The job-scoped proof workbench is not deferred because it is
-  required to make M1 proof development usable.
+  required to make M1 proof development usable. Ordinary-graph integration follows G2; enablement requires the separate G4 decision. The buildout plan uses this same ordering.
 
 At each stage: maintain exact branch ownership, coherent commits, focused unit tests and honest gap accounting. If a new component fails, disable the new feature without modifying accepted SAST evidence, existing final gate, original PoC implementation, or existing source identities. Never replace a prior accepted attempt in place; create a new immutable attempt.
 
@@ -1055,19 +1195,19 @@ At each stage: maintain exact branch ownership, coherent commits, focused unit t
 - Auto-triage that changes existing R5/R6 finding status or automatically executes generated PoCs.
 - Claims of general vulnerability detection rate or exploitability from tiny demonstrations.
 
-Those are valuable later directions, but must not be prerequisites for a working source-level milestone.
+Those are valuable later directions, but must not be prerequisites for the restricted G2 source-certification milestone. The explicit restricted correspondence proof is required; arbitrary C/C++ correspondence remains deferred.
 
 ## 15. Open decisions for the first implementation PR
 
 Resolve these using actual first-case evidence, and record the decision in a follow-up ADR rather than silently choosing:
 
-1. Exact initial C/C++ weakness family (recommend unsigned length multiplication/truncation plus bounds checks).
-2. Whether the first frontend uses an LLVM IR subset, restricted Clang AST subset or a combination, and exactly which constructs it proves semantically faithful.
+1. Record the measured scanner rule/fixture pair for the fixed initial `local_copy_bounds/1` subset; if the proposed pair does not alert, select another genuine same-rule pair without broadening semantics silently.
+2. Pin the Clang release, AST serialization and ABI implementing section 4.5.1. AST is the initial semantic authority; LLVM support is a later certificate extension.
 3. Whether CBMC is used in the first vertical as a witness generator; its bounded/no-witness result must never substitute for unbounded Lean proof.
 4. How the existing accepted source/build custody supplies a compiler-ready isolated fixture without granting model-written execution commands.
 5. Which initial positive/negative cases from the blind known-vulnerable projects have resolvable scanner leads and compatible builds.
 6. An isolated application-protocol session driver follows successful core function-level M2 and requires separate authorization; it is not required for M2 acceptance.
-7. When a future sound translation/link proof can upgrade `source_correspondence` to `checked`.
+7. Record the implementation evidence for the mandatory section 4.5.2 correspondence checker and generic soundness theorem; an ADR cannot substitute a weaker certification rule. Pin the independent Lean checker and approved-native procedure allowlist separately.
 
 These decisions do not block creating the M1 skeleton, data model, tests, and first genuine end-to-end experiment.
 
@@ -1094,6 +1234,9 @@ These decisions do not block creating the M1 skeleton, data model, tests, and fi
 
 ### Upstream technical documentation
 
+- [Lean proof validation and independent checking](https://lean-lang.org/doc/reference/latest/ValidatingProofs/)
+- [Lean tactic reference, including native trust in `bv_decide`](https://lean-lang.org/doc/reference/latest/Tactic-Proofs/Tactic-Reference/)
+- [LLVM undefined behavior semantics](https://llvm.org/docs/UndefinedBehavior.html)
 - Lean mathlib `bv_decide`: <https://leanprover-community.github.io/mathlib4_docs/Lean/Elab/Tactic/BVDecide.html>
 - CBMC bounded model checking: <https://www.cprover.org/cbmc/>
 - LLVM libFuzzer: <https://llvm.org/docs/LibFuzzer.html>
