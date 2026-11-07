@@ -59,9 +59,8 @@ def prepared(tmp_path: Path, monkeypatch):
     fixture = build_accepted_index_set(tmp_path / "review")
     job = build_job(infer=ScriptedInfer({"ids": fixture.ids}), repository_root=ROOT)
     runner = JobRunner(load_config(config))
-    accepted = json.loads((fixture.run_root / "data" / "indices" / "accepted.json").read_text())
     claim = runner.begin_attempt(job, run_id=fixture.run_id,
-                                 upstream_handoffs={"job_review_data_indexing": accepted["handoff_sha256"]})
+                                 upstream_handoffs=fixture.upstream_handoffs)
     outputs = {}
     for unit in ("scope.accept_manifest", "scope.assemble_scope", "triage.lead_severity", "packages.assemble_lead_packages",
                  "packages.assemble_hunt_packages"):
