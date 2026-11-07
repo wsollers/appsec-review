@@ -342,7 +342,10 @@
       "live": []
     },
     "job_target_catalog": {
-      "unit": ["tests/test_cataloging_languages.py"],
+      "unit": [
+        "tests/test_cataloging_languages.py",
+        "tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps"
+      ],
       "integration": ["tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent"],
       "acceptance": [],
       "live": []
