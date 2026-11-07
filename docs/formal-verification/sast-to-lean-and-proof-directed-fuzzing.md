@@ -15,7 +15,7 @@ This is **not** a system for asking an LLM to write an attractive mathematical p
 Two deliverables are in scope:
 
 1. **M1 — SAST-to-Lean adjudicator.** Consume an accepted lead/finding and its exact build, graph, source, and evidence identities. Extract a property-specific semantic slice; generate an explicit security obligation; translate a **restricted supported subset** to Lean; check a theorem, find a candidate counterexample, or return `inconclusive`. Preserve evidence and named gaps.
-2. **M2 — Proof-directed verification lab.** Turn candidate counterexamples and boundary conditions into bounded input corpora and reviewable harnesses; run only under **separate operator authorization** in isolated containers; minimize and replay against the actual target; store immutable observations; add proven function summaries and reusable contracts that are invalidated when their source or assumptions change.
+2. **M2 — Obligation-directed function fuzzing with a reusable container.** For a selected Lean proof obligation that poses an experimentally answerable question, generate a targeted harness around the **actual source function** (and real caller/state setup where necessary), then run bounded Clang/libFuzzer/ASan/UBSan experiments in a pinned container. One operator approval grants an exact investigation envelope; within it, the system automatically seeds, fuzzes, minimizes, replays and refines the model without per-testcase approvals. This is not a generic whole-project/function-discovery fuzzing framework. Keep reusable verified contracts and reserve an optional separate track for stateful network fuzzing.
 
 ### Success means
 
@@ -27,7 +27,7 @@ For a supported, pinned target and a supported finding class, the system produce
 - **Concrete reproduced violation:** A minimized input and deterministic replay in an explicitly authorized isolated lab showing the actual target violates the stated property.
 - **Inconclusive:** A typed reason such as an unresolved call, alias, environment dependency, unsupported semantic feature, missing build evidence, unproved translation, proof timeout, or nonreproducible witness.
 
-**Never equate `Lean failed to prove safe` with `the program is vulnerable`. Never equate a safe model with a safe source program unless the correspondence and scope justify that conclusion.**
+**Never equate `Lean failed to prove safe` with `the program is vulnerable`. Never equate a safe model with a safe source program unless the correspondence and scope justify that conclusion.** A failed proof initiates dynamic testing **only when there is a concrete, experimentally answerable question**. Missing mathematical lemmas, unsound abstractions and unproved source correspondence do not automatically justify fuzzing.
 
 ## 2. Repository baseline and mandatory compatibility
 
@@ -306,6 +306,38 @@ Later, after M1 acceptance, an optional `job_formal_verification` may consume ac
 
 ## 5. M2 — Proof-directed fuzzing and contract reuse
 
+**M2 design decision (revised):** The **Lean proof obligation** is the unit of work—not the whole SAST finding, not every function in the slice, and not an unrestricted fuzz target. One ingested finding may yield multiple obligations; only those requiring concrete information about a specific reachable implementation path are eligible for function fuzzing. Use **one reusable Clang/libFuzzer/sanitizer container** and produce a **different function/caller harness, oracle, seed set and evidence receipt for each selected obligation**. Lean guides *what question to ask*; the fuzzer observes *what the actual function does*; checked proofs still determine universal statements about the model.
+
+```text
+SAST finding -> property-specific slice -> Lean obligations
+                                   |
+                          attempt static proof
+                           /             \
+                     discharged      unresolved
+                                         |
+                               concrete question?
+                                /         \
+                               no         yes
+                               |           |
+                          proof/model   generate targeted
+                          work item     real-function harness
+                                            |
+                                    confirm bounded operator
+                                    investigation admission
+                                            |
+                              Clang/libFuzzer/ASan/UBSan container
+                                            |
+                              coverage / behavior / crash / oracle
+                                            |
+                              same-fault minimization + clean replay
+                                            |
+                                model refinement + Lean recheck
+                                            |
+                                qualified evidence/adjudication
+```
+
+**No generic fuzzer is being developed.** Reuse libFuzzer's existing mutation/coverage engine; build only the deterministic, question-directed harness, input encoder, isolation runner, oracle, observation pipeline and Lean feedback. A reusable **network protocol session driver** may be built as a later separate, internally isolated profile and is not part of core M2 completion.
+
 ### 5.1 Inputs from M1
 
 The M2 planner consumes only an immutable, validated M1 attempt and its accepted build custody. It may use:
@@ -318,9 +350,23 @@ The M2 planner consumes only an immutable, validated M1 attempt and its accepted
 
 It must map every symbolic value to a **concrete controllable input** (buffer bytes, command argument, file contents, or structured protocol message), recording an encoding and any remaining uncontrolled values. If no valid input encoding exists, issue `witness_not_concretizable` rather than inventing one.
 
+#### Obligation triage and experiment request
+
+Fuzz only `candidate_witness`, `observable_guard_question`, `input_boundary_question` or `model_discrepancy_replay`. The planner must distinguish these from a stuck proof due to missing lemmas, unsupported language/ABI semantics, or an unproved model-to-source mapping; the latter produce `not_experimentally_answerable` without executing anything.
+
+Every proposed `formal-experiment-request/1` must include: `run_id`, `accepted_manifest_sha256`, `lead_observation_id`, `formal_attempt_id`, **`obligation_id`**, exact function symbol/source and build hashes, relevant real caller chain, valid preconditions, a specific testable hypothesis, typed input encoding/constraints, witness/boundary seeds, negative control, oracle, branch/coverage focus, and an operator admission reference. No arbitrary function discovery, raw commands, host paths or network destinations.
+
+Example: If Lean cannot establish whether a length-check guard makes a copy safe, derive valid inputs immediately below, at and above the accepted threshold and capture the **actual function's** branch decisions and memory effects. If a model witness does not map to a valid caller-controlled argument, report `witness_not_concretizable`; do not invent impossible state.
+
+
+
 ### 5.2 Harness generation
 
 Initially support **C/C++ function-level harnesses** for parsing and length-checking functions. Generate the smallest wrapper that uses the real target function and a fixed, documented setup:
+
+**The target is always the original function compiled from the exact accepted source snapshot**, not a Lean-inspired C reimplementation. Model guidance may generate the wrapper, argument decoder and oracle, but cannot replace the function under test. Include the smallest *actual caller* when preconditions, globals, allocations or authentication/session state cannot be established at the callee boundary. Validate legitimate entry conditions and object lifetimes; harness-created invalid states and harness crashes are not evidence of a target defect.
+
+
 
 - Input adapter: `uint8_t *data, size_t size` or an explicitly typed decoded structure.
 - Deterministic state reset and teardown for every input; no dependence on previous fuzz cases.
@@ -343,15 +389,15 @@ extern "C" int LLVMFuzzerTestOneInput(
 }
 ```
 
-Use Clang's libFuzzer/SanitizerCoverage or AFL++ as selected by a **closed tool profile**. Prefer reusing the existing sanitizer build custody; where incompatible with an actual fuzzer toolchain, rebuild in a separate authorized workspace with fully recorded flags and provenance. Do not mislabel a GCC sanitizer object as a Clang libFuzzer target without validating link/runtime compatibility.
+**Primary required tool profile:** pinned Clang + libFuzzer + SanitizerCoverage + AddressSanitizer/UndefinedBehaviorSanitizer. Reuse accepted sanitizer build custody when link-compatible; otherwise rebuild the **original source function** in a separate isolated workspace, recording all changed flags and assumptions. AFL++ is an optional alternative for a particular selected target, not a second general fuzzing framework. Do not mislabel a GCC sanitizer object as a Clang libFuzzer target without validating link/runtime compatibility. Keep branch/edge coverage and observed state changes tied to the exact obligation; a clean campaign is not proof of safety.
 
 The generated harness is **not** the existing compile-only PoC: do not pass it to `job_poc_generation` for execution or change the no-run policy of that job.
 
 ### 5.3 Separate opt-in execution lab
 
-**No automatically scheduled or worker-triggered execution of a target** within the existing review graph.
+**The ordinary review graph remains non-executing; the function-fuzzing container is a required part of this M2 design.** The operator explicitly authorizes a **bounded investigation envelope** for one accepted target/finding, selected obligations and functions, pinned image, allowed build/fuzz/minimize/replay operations, total run/time/resource limits and network profile. Within that envelope, the deterministic controller may **automatically run multiple generated inputs, minimization and clean replay without new approvals**. It revalidates admission and remaining quota for every subrun. An AI model cannot extend the target, function, caller, network, commands or budget; changing scope requires a new admission.
 
-Build a separately authorized operator action and isolated lab with these requirements:
+Build the isolated lab with these requirements:
 
 - Only user-owned or expressly authorized targets from an allowlisted, immutable input snapshot.
 - Explicit authorization attached to each admitted attempt (target digest, runner profile, allowed operations, duration and resource budget, optional network mode).
@@ -367,8 +413,8 @@ Proposed first two profiles:
 
 | Profile | Behavior | Network |
 |---|---|---|
-| `function_sanitized` | In-process instrumented harness (libFuzzer/AFL++) | None |
-| `protocol_isolated` | Target service plus structured application-protocol driver in a dedicated container network | Only lab-internal service and driver |
+| `function_sanitized` (**required core M2**) | Original-function harness, Clang/libFuzzer/ASan/UBSan | None |
+| `protocol_isolated` (**later separate extension**) | Structured application-protocol driver in a dedicated container network | Only lab-internal service and driver |
 
 **Defer raw-socket injection, kernel stack fuzzing, privileged network namespaces and Internet-facing tests.** An application-layer protocol sequence adapter can be included in M2 after the function harness is proven. Packet-level networking and binary-only execution are later tracks needing separate authorization and safety designs.
 
@@ -400,6 +446,13 @@ Define a *reproduction receipt* with:
 `testcase_sha256`, `target_snapshot`, `harness_sha256`, `image_digest`, `compile_flags`, `seed`, `fuzzer_version`, `environment`, `oracle_id`, `expected`, `observed`, `minimization_steps`, `replay_attempts`, `replay_successes`, `coverage`, `sanitizer_reports` and exact protected log refs.
 
 No claim of reproducibility without a clean reset and repeat against the **original accepted implementation**, rather than only the handwritten Lean model or a reimplemented function.
+
+#### Evidence feeding formal verification
+
+Add `formal-observation/1` with the selected `obligation_id`, test input digest, exact target function/source/harness identities, covered branches, state/return observations, expected outcome from the Lean model, actual outcome, sanitizer/oracle signature, and the challenged model assumption. The **feedback loop** is: observe -> compare with formal prediction -> expand the relevant slice or correct a model assumption -> generate a new hash-pinned Lean attempt -> recheck the theorem. Do not treat one or millions of clean tests as a universal proof.
+
+Stop on a properly scoped proven theorem, a reproduced real violation, exhausted admission, absent meaningful coverage progress, unconstructible valid inputs, or a question that cannot be answered experimentally. Every outcome—including `no_failure_observed` and `proof_still_open`—is recorded without upgrading to `source_safe`.
+
 
 ### 5.5 Reusable verified contract registry
 
@@ -455,7 +508,7 @@ Existing `query_code_graph` remains the graph retrieval authority. New capabilit
 
 ### 6.2 Operator-only mutation/execution
 
-Operator interfaces (CLI or a separately authenticated privileged service) would admit `formal-verify plan/check` and `formal-fuzz prepare/run/replay`. They must require explicit closed-scope authorization, log all decisions, and return immutable job IDs. **Do not grant these tools to inference workers.**
+Operator interfaces (CLI or separately authenticated privileged service) would admit `formal-verify plan/check` and `formal-fuzz admit/prepare/run/replay`. Authorization covers a fixed **investigation envelope**, not every test input; a deterministic runner may run a bounded sequence of approved per-obligation experiments automatically and must recheck scope/quota on every operation. Log every decision and return immutable job IDs. **Do not grant admission or privileged execution tools to inference workers.**
 
 A runtime worker skill, if needed, must live only under `pipeline/skills/formal-verification/SKILL.md` and be registered in `pipeline/guidance/registry.json` with allowed roles. It describes how to interpret result types and cite evidence, **not** how to bypass authority or run targets. Development instructions belong separately in `.claude/skills/` under the repository's existing separation rules.
 
@@ -482,14 +535,18 @@ src/appsec_review/
     schemas.py            # strict contracts, no ad hoc JSON
   fuzz_lab/
     __init__.py
-    planning.py           # seed/witness to concrete input mapping
-    harness.py            # fixed templates and AST validation
-    build.py              # target/harness provenance and linking
-    execution.py          # separately admitted sandbox runner
-    oracle.py             # precise property/sanitizer signatures
+    obligations.py        # classify experiment-eligible Lean questions
+    planning.py           # per-obligation seeds/constraints and input mapping
+    harness.py            # actual source function + caller, AST validation
+    build.py              # target/harness custody and instrumentation
+    admission.py          # investigation authorization and quota enforcement
+    execution.py          # restricted container runner, no model shell
+    coverage.py           # relevant branch and behavior feedback
+    feedback.py           # observed behavior -> Lean model recheck
+    oracle.py             # question-specific safety/sanitizer conditions
     minimize.py           # same-fault reduction
     replay.py             # clean-process repeat
-    protocol.py           # optional isolated app-protocol adapter
+    protocol.py           # later separately authorized network driver
     custody.py
   mcp/
     # extend existing read-only retrieval registry and schemas
@@ -508,12 +565,15 @@ docs/
       formal-witness.schema.json
       formal-attempt.schema.json
       formal-contract.schema.json
+      formal-experiment-request.schema.json
+      formal-lab-admission.schema.json
+      formal-observation.schema.json
       formal-fuzz-plan.schema.json
       formal-fuzz-result.schema.json
 
 containers/tools/
   lean-verifier/       # pinned Lean 4/mathlib, restricted compiler runner
-  formal-fuzz/         # pinned compiler/fuzzer/sanitizer lab runner
+  formal-fuzz/         # required pinned Clang/libFuzzer/ASan/UBSan runner
 
 tests/
   formal_verification/ # fast isolated unit/contract regression tests
@@ -541,8 +601,11 @@ Use strict typed, versioned, centralized config in `appsec-review.toml`. Do not 
 | Slice nodes / call expansion | 2,000 nodes / 4 rounds; truncation is a gap |
 | Max generated Lean file bytes | 1 MiB per attempt |
 | Lean CPU / memory / timeout | 2 CPUs / 4 GiB / 120 seconds per obligation |
-| Fuzzing allowed | `false` without separate authorization |
-| Fuzzer duration | 60 seconds per admitted case initially |
+| Function fuzzing | Required M2 container; no execution before bounded admission |
+| Authorization granularity | One target/finding, specific obligations/functions, pinned image; no per-input approvals |
+| Campaign limit | 4 admitted campaigns initially, counted globally across obligations |
+| Lean model refinement | 2 bounded feedback cycles per selected obligation |
+| Fuzzer duration | 60 seconds per admitted campaign initially |
 | Per-test input cap | 64 KiB |
 | Fuzz lab CPU / memory / PIDs | 2 CPUs / 4 GiB / 256 |
 | Replay attempts | 3 with clean reset |
@@ -579,17 +642,22 @@ The order below intentionally builds **one usable end-to-end path** before expan
 
 | ID | Exact build work | Dependency | Required completion evidence |
 |---|---|---|---|
-| **P1** | Convert M1 witnesses/constraints into exact input bytes and boundary seeds | M1 F6 | Deterministic seed mapping and `not_concretizable` result |
-| **P2** | Generate fixed-template harness with AST/symbol/oracle validators | P1 | Harness compiles against pinned actual target; unsafe API requests rejected |
-| **P3** | Separate manual-admission sandbox runner with pinned images | P2 | No unauthorized execution/network/mounts; resource and process caps tested |
-| **P4** | libFuzzer or AFL++ driver, sanitizer and oracle capture | P3 | Fuzzer corpus/exits/reports captured and hash-bound to source |
-| **P5** | Same-fault minimization and clean replay | P4 | Minimum reproducer with 3-repeat receipt or explicit instability |
+| **P1** | Classify experiment-eligible Lean obligations and generate typed testable questions, valid inputs and boundary seeds | M1 F6 | Only selected obligations fuzzed; missing lemma produces no-run result |
+| **P2** | Generate real-function/required-caller harness with preconditions, reset, seeds and specific oracle | P1 | Harness compiles against pinned original implementation; invalid setup rejected |
+| **P3** | Build required Clang/libFuzzer/ASan/UBSan container and bounded investigation admission/quota supervisor | P2 | One authorized envelope permits automated subruns; wrong target/function denied |
+| **P4** | Obligation-specific libFuzzer driver with source branch/edge, sanitizer and property-oracle observations | P3 | Observations trace to original source and exact Lean obligation |
+| **P5** | Same-fault minimization, clean replay, observation-to-Lean refinement/recheck | P4 | Minimum reproducer + 3-replay receipt; model discrepancy creates new checked attempt |
 | **P6** | Proof contract cache, transitive invalidation and caller obligations | M1 F5 | Valid contract reuse; changed source/assumptions invalidate reuse |
 | **P7** | Read-only MCP evidence lookup and report integration proposal | P5,P6 | Capability denies execution and cross-run refs; no R5/R6 bypass |
-| **P8** | Optional isolated application-protocol adapter and bounded session replay | P5 | Internal-network-only request sequences, session reset and trace logs |
+| **P8** | Optional **separate later** application-protocol driver and session replay | P5 | Internal-network-only authorized sequences; not a core M2 gate |
 | **P9** | Blind corpus comparison and regressions | P5,P6 | Reproductions on original target and matched negative controls |
 
 **M2 definition of done:**
+- At least one real ingested finding yields several Lean obligations, but only an **experimentally answerable** one triggers targeted fuzzing.
+- The required container executes a **real original source function** with valid caller state; one bounded operator admission covers its automatic seed/fuzz/minimize/replay/refinement loop without per-testcase prompts.
+- Branch/coverage/state observations are attached to the exact obligation and fed to a new, separately checked Lean model attempt; clean fuzz cases never certify source safety.
+- No generalized function discovery or whole-application fuzzing engine is needed for the milestone.
+
 - An ingested finding can lead to a model witness, generated concrete seed, policy-validated harness, **authorized** bounded fuzz run and deterministic replay against the original source-built target.
 - A sanitizer error is distinguished from a security-property violation; both are evidence with a specified oracle.
 - A minimal failing input and negative control are preserved, with exact hashes/flags/images/seed and retry counts.
@@ -645,7 +713,7 @@ Record whether the known defect is **applicable and triggerable** in the compile
 2. Choose a class-balanced predeclared set of positives/controls. Start with supported cases from existing pinned paired corpora; don't quietly drop hard cases after inspecting outcomes.
 3. Execute **ordinary ingestion** in the existing pipeline only when the operator explicitly authorizes that review.
 4. Blindly run the sidecar formal verifier on every qualifying accepted lead; record no-lead, ineligible, failed and unknown outcomes separately.
-5. Only for explicitly authorized tests, execute M2 fuzzing and clean replay in the isolated lab.
+5. Under an explicitly authorized investigation envelope, automatically run **only selected obligation-specific** fuzzing, clean replay and bounded Lean-feedback cycles; no general function-wide campaign is implied.
 6. Freeze receipts before looking up expected labels in the evaluator guide.
 7. Compare case-level results by weakness, proof status, source correspondence, reproducibility, false-safe rate, budgets and effort.
 8. Repeat with fixed-version counterparts; inspect any bug witness that also fires on the control.
@@ -664,7 +732,7 @@ Record per case: `lead_ingested`, `lead_correlated`, `slice_closed`, `source_cor
 **M2 minimum demonstration:**
 - At least **two distinct** supported vulnerable cases produce a minimized, **three-times replayable** violation against the actual admitted target.
 - Matching controls are tested with the same harness and oracle and do not display that violation in the tested scope.
-- Unauthorized or out-of-scope execution is rejected in a negative policy test.
+- Unauthorized, out-of-scope or over-budget execution is rejected; multiple permitted test inputs and retries under one valid investigation admission proceed without new per-input approval.
 - Missing sanitizer, failed harness compilation, timeouts and nondeterminism are classified as gaps, never as safe.
 
 The initial minimums establish that the path works; they do not imply acceptable coverage for all CWE classes. Before rollout, score a held-out set of known-vulnerable projects and report confidence intervals and class-level tradeoffs. Do not tune to a blind test set after seeing its labels.
@@ -680,6 +748,8 @@ The initial minimums establish that the path works; they do not imply acceptable
 - Integer promotion, signed overflow, narrowing, alignment, object boundaries, endianness and optimizer-sensitive transformations must be checked or explicitly unsupported.
 - A proved single path not reachable must not suppress a finding supported by another path.
 - A failed/absent source analyzer must not be silently replaced by lexical source-text reasoning.
+- A failed Lean proof without a concrete experimental question does not launch fuzzing; a clean campaign cannot establish source safety.
+- A harness must invoke actual source, not an AI-authored imitation, and must not manufacture invalid caller states.
 
 ### Custody and execution policy
 
@@ -687,7 +757,7 @@ The initial minimums establish that the path works; they do not imply acceptable
 - Cross-run, cross-target and unaccepted evidence refs are refused.
 - Generated harness cannot call shell, use production credentials, connect outside the lab, or touch the host filesystem.
 - Model instructions embedded in source strings or decompiled text are treated as data.
-- Running, retrying or opening a network profile without the operator's explicit admission is denied.
+- Running without authorization, expanding a target/function/network scope, or exhausting a budget is denied; internal authorized repeats are allowed and accounted.
 - Resource exhaustion, timeout, partial logs, sanitizer-runtime absence, build failure, and flaky replay preserve a failure or gap status, not a pass.
 - Negative controls and the evaluator guide cannot be read by verification workers; evaluation is a separate role/process.
 
@@ -726,8 +796,8 @@ No “clean program” or “false positive” label is emitted from `MODEL_PROV
 - **First PR:** only M1 F0–F2 and small paired fixtures; no Docker executor or job graph changes.
 - **Second PR:** semantic slice, IR/Lean checker, immutable proof receipts and strict axiom tests.
 - **Third PR:** offline accepted-lead end-to-end evaluation, including at least one real vulnerable and one negative case.
-- **Fourth PR:** M2 harness compiler and manual lab policy, with denied-execution tests first.
-- **Fifth PR:** authorized fuzz/minimize/replay and initial contract reuse.
+- **Fourth PR:** M2 per-obligation question selection, real-function harness, required Clang/libFuzzer container and bounded investigation policy; denied-execution tests first.
+- **Fifth PR:** authorized automatic bounded fuzz/minimize/replay, observation-to-Lean feedback and initial contract reuse.
 - **Later PR:** optional read-only MCP retrieval, gated report projections, protocol adapter and job graph integration.
 
 At each stage: maintain exact branch ownership, coherent commits, focused unit tests and honest gap accounting. If a new component fails, disable the new feature without modifying accepted SAST evidence, existing final gate, original PoC implementation, or existing source identities. Never replace a prior accepted attempt in place; create a new immutable attempt.
@@ -738,7 +808,7 @@ At each stage: maintain exact branch ownership, coherent commits, focused unit t
 - Full application proofs, OS/network-stack global properties and concurrent race proofs.
 - Machine-code P-code/VEX semantics and formal correspondence to executable instructions.
 - Binary-only Ghidra-to-Lean pipeline and AFL++ QEMU/Frida runs against old games.
-- Internet-facing penetration testing, privileged raw packet injection, kernel-level protocol fuzzing.
+- General-purpose function discovery/whole-application fuzzing, Internet-facing penetration testing, privileged raw packet injection, kernel-level protocol fuzzing.
 - Auto-triage that changes existing R5/R6 finding status or automatically executes generated PoCs.
 - Claims of general vulnerability detection rate or exploitability from tiny demonstrations.
 
@@ -753,7 +823,7 @@ Resolve these using actual first-case evidence, and record the decision in a fol
 3. Whether CBMC is used in the first vertical as a witness generator; its bounded/no-witness result must never substitute for unbounded Lean proof.
 4. How the existing accepted source/build custody supplies a compiler-ready isolated fixture without granting model-written execution commands.
 5. Which initial positive/negative cases from the blind known-vulnerable projects have resolvable scanner leads and compatible builds.
-6. Whether `protocol_isolated` belongs at M2 completion or follows a successful function-level milestone.
+6. An isolated application-protocol session driver follows successful core function-level M2 and requires separate authorization; it is not required for M2 acceptance.
 7. When a future sound translation/link proof can upgrade `source_correspondence` to `checked`.
 
 These decisions do not block creating the M1 skeleton, data model, tests, and first genuine end-to-end experiment.
