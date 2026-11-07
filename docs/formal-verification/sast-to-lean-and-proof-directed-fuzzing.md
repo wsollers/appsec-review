@@ -630,8 +630,11 @@ The order below intentionally builds **one usable end-to-end path** before expan
 | **F5** | Lean semantics/translation/checker and axiom gate | F4 | Real Lean theorem check and witness model; `sorry`/axiom bypass rejected |
 | **F6** | Immutable attempt schema, CLI/report projection and contracts v1 | F5 | Byte-hash verification, clean retry identities, honest verdicts |
 | **F7** | Blind accepted-ingestion experiment and evaluation harness | F6 | Pinned result table for supported positives/controls, all unknowns counted |
+| **F8** | Establish safe/vulnerable paired corpus with actual **same-rule** scanner alerts | F1,F2 | Pinned SARIF/observation identity on both twins; unflagged controls excluded from strict benchmark |
+| **F9** | Lean false-positive proof evaluation using independent hidden truth | F6,F8 | Source-connected safety proofs, vulnerable witnesses, false-safe failures and abstentions counted |
 
 **M1 definition of done:**
+- Safe-but-flagged findings are discharged only by a checked, source-connected theorem; scanner-quiet controls cannot count as eliminated alerts.
 - A real SAST lead from a pinned target travels through the accepted ingestion path, creates a property-specific slice and an actual checked Lean artifact, and returns an auditable outcome.
 - A real *supported* positive case produces a checked violating model assignment or a valid source-connected witness with explicit translation caveats.
 - A *supported* negative control demonstrates either a properly scoped, justified infeasibility/safety proof or an honest `inconclusive` if the source correspondence cannot be established.
@@ -730,12 +733,164 @@ Record per case: `lead_ingested`, `lead_correlated`, `slice_closed`, `source_cor
 - A tampered source hash, missing accepted lead, open alias, `sorry` dependency, or incomplete slice fails closed.
 
 **M2 minimum demonstration:**
+- Paired safe/vulnerable harnesses may corroborate results, but clean fuzzing cannot establish source safety without an adequate proof.
 - At least **two distinct** supported vulnerable cases produce a minimized, **three-times replayable** violation against the actual admitted target.
 - Matching controls are tested with the same harness and oracle and do not display that violation in the tested scope.
 - Unauthorized, out-of-scope or over-budget execution is rejected; multiple permitted test inputs and retries under one valid investigation admission proceed without new per-input approval.
 - Missing sanitizer, failed harness compilation, timeouts and nondeterminism are classified as gaps, never as safe.
 
 The initial minimums establish that the path works; they do not imply acceptable coverage for all CWE classes. Before rollout, score a held-out set of known-vulnerable projects and report confidence intervals and class-level tradeoffs. Do not tune to a blind test set after seeing its labels.
+
+### 10.5 False-positive proof benchmark: safe code that still triggers SAST
+
+This milestone must answer **both sides** of SAST adjudication: can Lean establish a concrete violation in a flagged program, and can it establish that a flagged **safe** program cannot violate the *specific alleged property*?
+
+A true false-positive proof experiment requires three independently verified facts:
+
+\[
+\mathrm{SASTAlert}(P,R)\ \land\
+\mathrm{SafeUnderScope}(P,\varphi)\ \land\
+\mathrm{CheckedSourceConnectedProof}(P,\varphi).
+\]
+
+The first is an **actual scanner result** under the pinned rule/version `R`, not synthetic SARIF. The second is independent evaluator-only ground truth; the third is a checked Lean theorem with the required model-to-source correspondence. If source correspondence remains unproved, the outcome is `MODEL_PROVEN_SAFE` or `CONDITIONAL`, **not** a closed false positive.
+
+**Terminology:** Some appsec-review rules are purposely **informational review signals**, not claims of vulnerability. A safe match to one is a `safe_flagged_review_lead` and need not be a scanner defect. Reserve `true_sast_false_positive` for a tool claiming a weakness the program cannot exhibit in the stated scope. Score both cohorts separately.
+
+#### 10.5.1 First paired scanner experiment — identical sink, different guards
+
+Start with the repository's existing Semgrep rule [`appsec-review.review-signal.sink.cpp-copy-length-not-bounded`](../../rules/semgrep/review-signals.yml). This rule matches variable-length `memcpy`/`memmove` when the length expression lacks certain recognizable syntactic bounds. **Do not modify the rule to fabricate false positives.**
+
+Safe candidate:
+
+```cpp
+#include <cstdint>
+#include <cstring>
+
+uint8_t checked_copy(uint32_t n) {
+    uint8_t src[16] = {1};
+    uint8_t dst[16] = {};
+    if (n > 8) return 0;
+    std::memcpy(dst, src, n);
+    return dst[0];
+}
+```
+
+Vulnerable candidate:
+
+```cpp
+#include <cstdint>
+#include <cstring>
+
+uint8_t checked_copy(uint32_t n) {
+    uint8_t src[16] = {1};
+    uint8_t dst[16] = {};
+    if (n > 24) return 0;
+    std::memcpy(dst, src, n);
+    return dst[0];
+}
+```
+
+Both are **proposed fixtures**; the actual scanner results still need to be measured. The safe variant reaches the copy only for `n ≤ 8`, which fits the 16-byte source and destination. The vulnerable twin reaches the copy for `n = 17`, requesting 17 bytes from and to 16-byte arrays.
+
+The required safe-model property is
+
+\[
+\forall n:\mathrm{UInt32},\qquad
+\mathrm{CopyReached}(n)\Longrightarrow n\le 8\le 16.
+\]
+
+Illustrative Lean theorem (model only until source correspondence is justified):
+
+```lean
+import Mathlib
+
+def copyReached (n : BitVec 32) : Prop :=
+  n.toNat ≤ 8
+
+def copyOutOfBounds (n : BitVec 32) : Prop :=
+  copyReached n ∧ 16 < n.toNat
+
+theorem safe_copy (n : BitVec 32) :
+    ¬ copyOutOfBounds n := by
+  intro h
+  rcases h with ⟨hreach, hoob⟩
+  unfold copyReached at hreach
+  omega
+```
+
+Required source correspondence: exact guard semantics and control flow, input width and promotion to `size_t`, array extent and lifetime, valid pointer operands, all reachable caller paths, build/compiler identity and no omitted mutation or alternate path. A short mathematical proof without those obligations must not dismiss the real finding. For the vulnerable twin, Lean/CBMC can provide `n = 17` as a candidate; M2 may fuzz/replay the **original** instrumented function in the separately authorized container, subject to build and optimization limits.
+
+**Scanner precondition to score this pair:** Run the real pinned Semgrep profile against each staged target; respect its `tests/` path-exclusion behavior. Require a matching native rule ID and resolved sink location in **both** scan outputs. If the safe case is not flagged, score it as a normal true-negative control, not as a Lean-eliminated false alarm.
+
+#### 10.5.2 Progressive classes of safe-but-flagged pairs
+
+Plan an initial 10–20 paired cases, beginning with two locally provable examples and two interprocedural examples.
+
+| Family | Safe-but-flagged implementation | Vulnerable counterpart | Lean proof requirement |
+|---|---|---|---|
+| Local bounds | Variable copy with unrecognized but sufficient guard | Same sink, weakened bound | Every reached read/write fits both objects |
+| Interprocedural guard | Caller validation establishes callee precondition | Caller check missing or weakened | Precondition is established at every real call |
+| Infeasible path | Contradictory branch guards prevent bad sink | Relaxed guard makes path feasible | Every admissible bad-path constraint is unsatisfiable |
+| Arithmetic range | Input range prevents narrow multiplication overflow | Range admits wrap | Exact `BitVec` arithmetic cannot exceed limits |
+| Authorization | Caller/session ownership invariant protects sensitive sink | Authentication/ownership guard bypassed | Every reachable protected operation is authorized |
+
+Variants should test aliases, state mutation after validation, signedness, off-by-one checks, indirect callers, error paths and contracts reused across functions. If the verifier cannot justify the semantics or source correspondence, **abstain** rather than issuing a false safety claim.
+
+#### 10.5.3 Corpus and hidden truth
+
+The scanner-visible corpus must have neutral names, comments, commit messages and paths. Ground truth (vulnerable/safe labels, pair relationships, source property, expected witness, proof notes and fixed-version mapping) stays in a separate **evaluator-only** guide, outside model and worker mounts. Reuse the existing [test-target and guide isolation policy](../operations/test-targets.md).
+
+For each case, freeze:
+
+- Original target commit, exact file/source hashes, build system/toolchain/options.
+- Scanner, native rule ID and rule digest, output observation/SARIF identity, sink coordinates, severity and whether an alert was truly produced.
+- `formal_attempt_id`, `obligation_id`, exact proof theorem/axiom audit, translation/coverage gaps, model-to-source correspondence.
+- Any M2 concrete reproduction with the original instrumented function, exact harness and authorization evidence; clean fuzzing is never a safety proof.
+- **Only in the evaluator:** `pair_id`, `expected_label` and independent reference rationale.
+
+Route each genuine alert through the **existing accepted SAST ingestion path**. Do not inject fabricated scanner observations to improve a benchmark score. Distinguish `safe_flagged`, `vulnerable_flagged`, `safe_unflagged`, `vulnerable_unflagged`, `unsupported_scan` and `ambiguous_match`. Only the first two support the strict same-rule false-positive adjudication benchmark.
+
+The existing Case-094 pairs (seven defects and seven controls) and CASTLE-C250 controls are reusable *candidate cases*, but **do not assume their safe versions trigger any actual SAST alert**. The normal scanner scoring and the new conditional-on-alert Lean adjudication score are distinct.
+
+The formal-verification extension should add an **evaluator-only** `appsec-review/formal-fp-case/1` schema and scoring module (suggested `src/appsec_review/formal_verification/fp_benchmark.py`) that reads frozen verification receipts and joins them with hidden labels after attempts finish. Add unit pairs under `tests/fixtures/formal_verification/paired_controls/`; acceptance targets remain separately pinned outside the repository's own source checkout. Do not expose answer keys in `pipeline/skills`, source prompts, retrieval MCP, or the fuzzer's seed corpus.
+
+#### 10.5.4 Verdicts and quantitative gates
+
+| Actual condition | Verification conclusion | Evaluation |
+|---|---|---|
+| Safe + real alert | Kernel-checked safety theorem **plus sufficient source correspondence** | Successful source-level false-positive adjudication |
+| Vulnerable + real alert | Feasible counterexample; preferably original-target replay | Correct vulnerable classification |
+| Vulnerable + alert | Unconditional “source proved safe” | **Critical false-safe failure** |
+| Safe + alert | Model theorem with incomplete source link | Conditional/inconclusive, **not** a proved false positive |
+| Either + alert | Missing proof, unsupported semantics or timeout | Honest abstention |
+| Safe + no alert | No alert to refute | Scanner true negative, **excluded** from false-alarm elimination |
+
+\[
+\mathrm{FlaggedSafeProofRate}=
+\frac{\#(\mathrm{safe,\ alerted,\ source\!-\!proved})}
+{\#(\mathrm{safe,\ alerted,\ attempted})}.
+\]
+
+\[
+\mathrm{FalseSafeRate}=
+\frac{\#(\mathrm{vulnerable,\ incorrectly\ certified\ safe})}
+{\#(\mathrm{vulnerable,\ attempted})}.
+\]
+
+Report per rule/class: same-rule twin alerts, coverage/eligibility, proved safe, vulnerable witnesses, reproduced cases, abstentions, proof effort, and false-safe claims. **Zero incorrect unconditional source-safe claims** on the pinned positive corpus is a hard gate, not a statement of universal correctness. The first milestone must demonstrate at least **two** independently constructed *safe and flagged* cases with valid checked source-safety evidence and **two** paired *vulnerable and flagged* cases with violating evidence; if source correspondence cannot be justified, report the milestone unmet rather than weakening the standard.
+
+#### 10.5.5 Mandatory negative regression cases
+
+- Safe twin does not trigger the configured scanner: exclude it from “alert eliminated” metrics.
+- Scanner rule/line mismatch or fabricated SARIF: refuse the false-positive test.
+- Unsafe branch omitted from generated Lean model: reject source-safety certification.
+- Proof depends on `sorryAx` or an untrusted axiom: reject.
+- Unresolved alias, caller, ABI, arithmetic or translation: only conditional/inconclusive.
+- A nominally fixed twin still contains another reachable bad path: cannot certify it.
+- Hidden labels/pairs/expected proof are visible to the verification agent: benchmark contamination failure.
+- Successful fuzzing with no crash is treated as a proof of universal safety: reject.
+
 
 ## 11. Negative and failure-mode tests that must exist
 
@@ -831,6 +986,10 @@ These decisions do not block creating the M1 skeleton, data model, tests, and fi
 ## 16. References
 
 ### Existing appsec-review authorities
+
+- [Semgrep review-signal rules](../../rules/semgrep/review-signals.yml)
+- [False-positive detector scoring and controls](../reviews/castle-style-detector-scoring.md)
+- [Acceptance-funnel scoring](../operations/acceptance-funnel.md)
 
 - [Repository AGENTS.md](../../AGENTS.md)
 - [Inference security review](../architecture/inference-security-review.md)
