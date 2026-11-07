@@ -43,8 +43,10 @@ implementation pull request:
   fuzzing may supply candidates or observations; their clean completion is not a proof.
 - Raw Lean sources, proof terms, harnesses, corpora, sanitizer logs, and reproducer bytes are
   protected artifacts. Only bounded summaries and resolving references are indexed.
-- Runtime workers receive read-only, package-scoped retrieval. No inference worker receives a
-  shell, Docker, build, admission, fuzz, replay, or network tool.
+- Ordinary review workers receive read-only, package-scoped retrieval. Formal-analysis workers
+  additionally receive a job-scoped workbench for bounded property, slice, proof and harness
+  proposals, but no worker receives a shell, filesystem, Docker, admission, target-execution or
+  network capability.
 - Formal methods is a responsibility and procedure, not a security-domain viewpoint. The first
   implementation adds roles, tasks, and runtime skills, but no new persona.
 
@@ -61,7 +63,7 @@ The buildout must extend the current architecture rather than create a second re
 | `job_language_build` and `job_sanitizer_build` | Supply accepted build custody and instrumented native outputs | Add exact function/object selection and link-compatibility checks; never execute sanitizer outputs in these jobs |
 | Run-local shared objects | Content-address large immutable bytes | Store Lean modules, proof outputs, harnesses, corpora, and logs as shared objects referenced from attempts |
 | Dataset declarations and inventory | Account for every formal output and sanitized query route | Add dataset family `formal`, formal shard ownership, and protected-output declarations |
-| Retrieval core and MCP adapters | Serve accepted, hash-verified, bounded evidence | Add a `formal` index and five read-only formal query tools |
+| Retrieval core and MCP adapters | Serve accepted, hash-verified, bounded evidence | Add a `formal` index, five read-only formal query tools, and a separate job-scoped formal workbench that cannot execute targets or publish directly |
 | Guidance registry and pinned bundles | Select roles, tasks, personas, and runtime skills deterministically | Add formal roles/tasks/skills and preserve exact bundle pinning |
 | Existing container catalog and admission limits | Pin images, enforce offline execution, resource bounds, and provenance | Add Lean and fuzz images plus a fuzz-specific execution admission profile |
 | Review package assembly and inference review | Carry formal summaries into evidence-bound review | Add exact formal identities and scoped formal query grants to packages |
@@ -273,6 +275,11 @@ runs/<run-id>/
           steps/
             scope/tasks/resolve_inputs/accepted-inputs.json
             candidates/tasks/select/candidates.json
+            candidates/tasks/select/workbench/<session-id>/
+              work-item.json
+              capability-receipt.json
+              events/*.json
+              property-proposals/*.json
             slicing/tasks/build/formal/<formal-id>/slice.json
             obligations/tasks/instantiate/formal/<formal-id>/
               request.json
@@ -289,6 +296,9 @@ runs/<run-id>/
               axiom-audit.json
               witness.json                 # only when produced
               checker-receipt.json
+              candidates/<candidate-id>/
+                proof-body.lean
+                check-receipt.json
               stdout.ref.json              # protected shared-object reference
               stderr.ref.json              # protected shared-object reference
             contracts/tasks/publish/contracts/*.json
@@ -307,6 +317,11 @@ runs/<run-id>/
             harness-spec.json
             harness.cc
             input-encoding.json
+            workbench/<session-id>/
+              work-item.json
+              capability-receipt.json
+              events/*.json
+              harness-proposals/*.json
           oracle/tasks/bind/experiments/<experiment-id>/
             oracle.json
             seeds.json
@@ -369,6 +384,10 @@ Add closed schemas under `docs/schemas/formal-verification/`:
 | --- | --- | --- | --- |
 | `formal-candidate.schema.json` | Formal candidate selection | Yes, sanitized | Operator query, package assembly |
 | `formal-request.schema.json` | Formal verifier | Yes, sanitized | Slice/obligation stages |
+| `formal-work-item.schema.json` | Formal verifier workbench | No; attempt-local context | Formal property/proof worker only |
+| `formal-property-proposal.schema.json` | Formal property analyst | No; untrusted proposal | Deterministic property validator |
+| `formal-proof-candidate.schema.json` | Formal property analyst | No; untrusted proposal | Pinned Lean checker |
+| `formal-workbench-event.schema.json` | Workbench adapter | No; protected diagnostic | Attempt audit and budget accounting |
 | `formal-slice.schema.json` | Slice builder | Summary only | Translator, operator query |
 | `formal-ir.schema.json` | Frontend | No; protected artifact | Lean generator/checker |
 | `formal-obligation.schema.json` | Property compiler | Yes, normalized statement and scope only | Proof, planning, package assembly |
@@ -379,6 +398,7 @@ Add closed schemas under `docs/schemas/formal-verification/`:
 | `formal-attempt.schema.json` | Formal verifier/refinement | Yes | All downstream consumers |
 | `formal-experiment-request.schema.json` | Fuzz planner | Summary only | Admission CLI/lab |
 | `formal-harness.schema.json` | Fuzz planner | No; protected artifact | Policy, compile check, lab |
+| `formal-harness-proposal.schema.json` | Formal harness designer | No; untrusted proposal | Deterministic harness renderer/policy |
 | `formal-lab-admission.schema.json` | Operator CLI | No; protected authorization | Lab admission validator |
 | `formal-fuzz-plan.schema.json` | Fuzz planner | Summary only | Lab |
 | `formal-fuzz-result.schema.json` | Lab | Yes, sanitized | Review/refinement/MCP |
@@ -593,6 +613,7 @@ src/appsec_review/
     formal.py
   mcp/
     formal.py
+    formal_workbench.py
 
 docs/
   architecture/formal-verification.md
@@ -605,6 +626,7 @@ pipeline/
   prompt-fragments/roles/formal_property_analyst.md
   prompt-fragments/roles/formal_harness_designer.md
   skills/formal-obligation-analysis/SKILL.md
+  skills/lean-proof-development/SKILL.md
   skills/proof-directed-harness-design/SKILL.md
   skills/formal-evidence-interpretation/SKILL.md
 
@@ -638,6 +660,10 @@ max_functions = 64
 max_expansion_rounds = 4
 max_generated_bytes = 1048576
 max_obligations_per_candidate = 8
+max_workbench_calls_per_obligation = 32
+max_proof_checks_per_obligation = 8
+max_proof_candidate_bytes = 131072
+max_slice_refinement_requests = 4
 lean_image_id = "<review-host-owned-pin>"
 lean_timeout_seconds = 120
 lean_memory_bytes = 4294967296
@@ -689,14 +715,24 @@ configuration validation. Frozen runs retain their resolved configuration under
 
 ### 9.1 Boundary decision
 
-The MCP surface is read-only. It lets an operator or scoped review worker inspect already accepted
-formal records. It cannot plan a new attempt, invoke Lean, generate a harness, create an admission,
-build a target, fuzz, minimize, replay, rerun a job, or update a finding.
+Use three separate capability planes rather than making one MCP catalog serve incompatible trust
+levels:
 
-Mutation and execution use existing authenticated operator/job-launch surfaces. The local admission
-CLI writes one immutable authorization record and logs the decision; the job launcher accepts its
-logical ID. If a remote control service is later required, it needs separate authenticated API and
-threat-model work. It must not be smuggled into the retrieval MCP.
+1. The external/operator MCP and ordinary review-package retrieval are read-only. They inspect
+   already accepted formal records and cannot plan a new attempt, invoke Lean, generate a harness,
+   create an admission, build a target, fuzz, replay, rerun a job, or update a finding.
+2. Formal-analysis jobs receive a separate job-scoped workbench bound to one candidate or
+   obligation. It supports bounded property, slice, proof and harness proposals plus pinned Lean
+   checks, but cannot execute target code, widen scope, create admission or publish directly.
+3. Mutation of accepted run state and target execution use authenticated operator/job-launch
+   surfaces outside both model capability planes.
+
+The workbench may use MCP framing internally, but it is not added to the external
+`appsec-review-mcp` catalog or to inference review-cell transports. Its writes are immutable
+untrusted proposals and diagnostics inside the active attempt, never accepted evidence. The local
+admission CLI writes one immutable authorization record and logs the decision; the job launcher
+accepts its logical ID. A future remote control service needs separate authenticated API and
+threat-model work and must not be smuggled into either model-facing surface.
 
 ### 9.2 New read-only tools
 
@@ -739,16 +775,83 @@ Suggested role grants:
 
 | Role | Formal tools |
 | --- | --- |
-| `formal_property_analyst` | `query_formal_slice`, `query_formal_contracts`, plus existing scoped graph/source tools |
-| `formal_harness_designer` | `query_formal_slice`, `query_formal_proof`, plus exact scoped source/build evidence |
 | `red_team_analyst` / `hypothesis_hunter` | `query_formal_proof`, `query_formal_reproduction` for package-granted IDs |
 | `blue_team_refuter` / `independent_verifier` / `adjudication_judge` | `query_formal_proof`, `query_formal_contracts`, `query_formal_reproduction` for package-granted IDs |
 | `completeness_reviewer` | Candidate/attempt coverage through package summaries and `query_dataset_inventory`; no raw slice |
 
 No role gains an execution tool. A formal result is evidence to cite, not authority to set claim
-state.
+state. The formal property and harness roles use the job-scoped workbench below, not a review
+package capability.
 
-### 9.4 Operator CLI
+### 9.4 Job-scoped formal workbench
+
+Implement `src/appsec_review/mcp/formal_workbench.py` as an application-mediated adapter with a
+separate catalog. An expiring capability binds `run_id`, accepted manifest, job/attempt,
+candidate/obligation, source and build identities, exact operations, byte/page bounds, Lean-check
+count, refinement count, model-call budget and expiry. The adapter reconstructs and checks this
+binding on every call. It accepts no caller-supplied path, command, import, executable, mount,
+container, network destination or theorem statement.
+
+| Operation | Input | Result | Authority retained by the application |
+| --- | --- | --- | --- |
+| `get_formal_work_item` | Bound work-item ID | Allegation, applicable template IDs, evidence identities, current slice/model, open obligations, gaps and remaining budget | Selects and pins all identities; no broad search |
+| `instantiate_formal_property` | Registered template ID plus typed parameters | Proposal receipt or exact mismatch diagnostics | Validates equivalence to the accepted SAST allegation and owns the final obligation |
+| `request_slice_refinement` | One open dependency ID and registered refinement reason | New candidate slice view or named unavailable gap | Expands only accepted bounded facts; never launches an analyzer or scans the target during the call |
+| `inspect_formal_model` | Bound obligation ID and bounded section selector | Normalized IR, generated definitions, fixed theorem, assumptions and correspondence obligations | Owns source selection, generation, imports and theorem statement |
+| `check_proof_candidate` | Proof body/term for the fixed theorem | Structured elaboration/tactic diagnostics, resource status and axiom audit | Creates files, invokes pinned Lean, enforces limits and decides whether a checked result is admissible |
+| `analyze_formal_witness` | Bound witness ID | Path constraints, source mapping, controllable/uncontrolled values and concretization status | Does not execute the target or invent caller-controlled inputs |
+| `submit_harness_proposal` | Declarative adapter/caller/reset/oracle/seeds/negative control | Proposal receipt plus AST/ABI/symbol/policy/compile diagnostics when the job reaches those stages | Renders final source, selects fixed compiler mode and rejects commands/mounts/destinations |
+| `submit_experiment_request` | Eligible obligation plus accepted harness proposal ID | Non-executable request receipt | Cannot create admission or start the lab |
+| `inspect_experiment` | Bound experiment ID | Admission state and accepted sanitized result/replay summary | Does not expose raw harness, testcase, corpus, logs or mutable polling controls |
+
+Grant operations by trusted role/task ID, not by target content:
+
+| Workbench role/task | Operations |
+| --- | --- |
+| `formal_property_analyst` / property and invariant tasks | `get_formal_work_item`, `instantiate_formal_property`, `request_slice_refinement`, `inspect_formal_model`, `check_proof_candidate`, `analyze_formal_witness` |
+| `formal_property_analyst` / observation-refinement task | `get_formal_work_item`, `request_slice_refinement`, `inspect_formal_model`, `check_proof_candidate`, `analyze_formal_witness`, `inspect_experiment` |
+| `formal_harness_designer` / harness and oracle tasks | `get_formal_work_item`, `inspect_formal_model`, `analyze_formal_witness`, `submit_harness_proposal`, `submit_experiment_request` |
+
+An operation absent from the task's signed capability is rejected even when another role in the
+same job can use it. The capability is not inferred from prose or a requested tool name.
+
+`check_proof_candidate` accepts only a bounded theorem body or proof term. The generated
+definitions, imports, theorem name/type and project remain immutable. Reject unknown fields,
+changed statements, arbitrary modules, IO, `unsafe`, unregistered macros/extensions, `sorryAx`,
+unapproved axioms, oversized input and exhausted check budgets. Its stdout/stderr are protected;
+the model receives only stable diagnostic codes, bounded source spans within the generated proof
+body, messages scrubbed of host paths, resource accounting and the axiom audit.
+
+`request_slice_refinement` is a model proposal to the formal job, not an on-demand retrieval
+analyzer. If the requested fact is absent from accepted producers, the result is a gap or an
+operator-visible prerequisite for a later ordinary job run. The workbench cannot use an arbitrary
+call-depth increase as a soundness argument.
+
+All workbench calls publish `formal-workbench-event/1` receipts beneath the attempt, including the
+capability digest, operation, input/output digest, budget before/after, status and relevant artifact
+refs. Only deterministic job validators can promote a proposal to the formal attempt. Review
+workers later see only accepted indexed projections through the read-only tools.
+
+The intended worker loop is explicit:
+
+```text
+get work item
+  -> instantiate registered property
+  -> inspect/close semantic slice
+  -> inspect fixed generated model and correspondence obligations
+  -> submit bounded proof candidates and interpret checker diagnostics
+  -> if proved, finish with the independent correspondence audit
+  -> if a witness exists, analyze whether it maps to legitimate controllable input
+  -> if and only if experimentally answerable, submit harness and experiment proposals
+  -> after accepted observations, refine the challenged model assumption and check a new attempt
+  -> otherwise finish conditional/inconclusive with named gaps
+```
+
+The workbench must always offer a terminal `conditional` or `inconclusive` route. It must never
+force a proof, fabricate an experiment, or treat budget exhaustion as evidence for or against the
+finding.
+
+### 9.5 Operator CLI
 
 Add narrowly scoped commands after their underlying job contracts exist:
 
@@ -773,7 +876,7 @@ Add two model roles to `pipeline/guidance/registry.json` and matching role fragm
 
 | Role | Responsibility | Output | Prohibited actions |
 | --- | --- | --- | --- |
-| `formal_property_analyst` | Instantiate one registered property against one accepted bounded slice; propose invariants, summaries, and proof strategy while naming unresolved semantics | `formal-property-proposal/1` | Change the template, declare proof success, invent source facts, execute code, request unlisted tools, widen scope, set claim state |
+| `formal_property_analyst` | Instantiate one registered property against one accepted bounded slice; propose invariants/summaries and iteratively develop a proof for the fixed generated theorem while naming unresolved semantics | `formal-property-proposal/1`, `formal-proof-candidate/1` | Change the template/theorem/imports, declare proof success without a checker receipt, invent source facts, execute code, request unlisted tools, widen scope, set claim state |
 | `formal_harness_designer` | Propose one declarative adapter/oracle/seed plan for one experimentally answerable accepted obligation | `formal-harness-proposal/1` | Supply shell/commands/mounts/network destinations, replace the target function, fabricate caller state, execute, admit, widen scope, set claim state |
 
 Deterministic validators select templates, generate final Lean definitions, render final harness
@@ -789,6 +892,7 @@ Add `pipeline/guidance/tasks/formal-verification/`:
 | --- | --- | --- |
 | `instantiate_property.md` | `formal_property_analyst` | Which registered property parameters and exact source facts apply to this obligation? |
 | `propose_invariants.md` | `formal_property_analyst` | Which invariants/summaries may discharge the obligation, and which premises remain open? |
+| `develop_proof.md` | `formal_property_analyst` | Which bounded proof body establishes the fixed generated theorem, and what does each checker diagnostic require without weakening the statement or trust base? |
 | `classify_experiment.md` | `formal_property_analyst` | Is the unresolved obligation experimentally answerable under the closed eligibility enum? |
 | `design_harness.md` | `formal_harness_designer` | How should validated input bytes establish legitimate state and call the exact function/caller? |
 | `design_oracle.md` | `formal_harness_designer` | What exact observable predicate, negative control, and same-fault signature answer the obligation? |
@@ -799,11 +903,12 @@ worker pools, images, and tools remain in typed configuration and role capabilit
 
 ### 10.3 Runtime skills
 
-Three runtime skills are justified because they are reusable procedures across more than one task:
+Four runtime skills are justified because they are reusable procedures across more than one task:
 
 | Skill | Registered jobs | Procedure scope |
 | --- | --- | --- |
 | `formal-obligation-analysis` | `job_formal_verification`, `job_formal_refinement` | Distinguish model/source claims, use registered templates, preserve exact semantics, name gaps, and avoid proof-authority claims |
+| `lean-proof-development` | `job_formal_verification`, `job_formal_refinement` | Inspect generated definitions, keep the theorem/imports fixed, use bounded trusted tactics and registered lemmas, interpret checker diagnostics, audit dependencies, and stop instead of weakening the property or adding trust assumptions |
 | `proof-directed-harness-design` | `job_formal_fuzz_planning` | Map an eligible obligation to legitimate caller state, controllable inputs, oracle, seeds, and negative controls without executable authority |
 | `formal-evidence-interpretation` | `job_inference_security_review` | Interpret logical result, correspondence, reproduction, and scope independently; cite exact records and never treat clean fuzzing as proof |
 
@@ -892,10 +997,12 @@ process, but it does not authorize a live review.
 
 ### B5 — Retrieval, MCP, packages, and guidance
 
-- Add `formal` retrieval, the five read-only MCP tools, package capability binding, roles/tasks,
-  the three runtime skills, and generated-prompt tests.
-- Add no execution capability.
-- Prove cross-package/cross-run/raw-artifact requests are denied.
+- Add `formal` retrieval, the five read-only MCP tools, package capability binding, the separate
+  job-scoped formal workbench, roles/tasks, the four runtime skills, and generated-prompt tests.
+- Add bounded proof-candidate checks and proposal receipts, but no shell, arbitrary filesystem,
+  admission, target-execution or network capability.
+- Prove cross-package/cross-run/raw-artifact requests, changed theorem/imports, exhausted workbench
+  budgets and work-item scope escalation are denied.
 
 ### B6 — Fuzz planning without execution
 
@@ -952,6 +1059,7 @@ tests/formal_verification/test_contracts.py
 tests/formal_verification/test_job_contract.py
 tests/formal_verification/test_index_and_retrieval.py
 tests/formal_verification/test_mcp_capability.py
+tests/formal_verification/test_formal_workbench.py
 tests/formal_verification/test_guidance.py
 tests/fuzz_lab/test_obligation_triage.py
 tests/fuzz_lab/test_harness_policy.py
@@ -976,6 +1084,11 @@ guidance composition, and package-scoped MCP capabilities.
 - Signedness, promotion, narrowing, endianness, ABI, lifetime, or UB not supported by the model.
 - Omitted unsafe branch in the generated model.
 - `sorryAx`, unapproved axiom/import, self-assumed theorem, unsafe IO, timeout, or modified proof bytes.
+- Workbench proof candidate changes the theorem/imports/definitions, requests a host path, exceeds
+  its check budget, reuses another work item's capability, or receives unsanitized host paths in a
+  diagnostic.
+- Slice refinement requests an ungranted dependency, arbitrary depth increase, target scan or new
+  analyzer execution during the model call.
 - Contract applied to a different source/build/ABI or without discharged preconditions/frame.
 - Proof failure caused only by a missing lemma incorrectly classified as fuzzable.
 - Harness calling a reimplementation instead of the admitted target function.
@@ -1036,6 +1149,9 @@ The buildout is complete only when all of the following are true:
   new accepted index/package chain.
 - Formal MCP results are bounded, accepted-manifest-pinned, package-scoped, sanitized, and deny raw
   protected data.
+- The formal workbench supports iterative fixed-theorem proof checks and bounded proposal/refinement
+  feedback while denying cross-work-item access, arbitrary files/imports/commands, admission,
+  target execution and direct accepted publication.
 - Roles/tasks/skills are hash-pinned and separation tests prove development guidance never reaches
   runtime workers.
 - Existing SAST observations, PoC compile-only behavior, claim adjudication, and final publication

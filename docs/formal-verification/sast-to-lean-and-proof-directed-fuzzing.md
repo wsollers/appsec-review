@@ -496,6 +496,19 @@ Do not modify R5/R6 policy or existing publication gates as part of the prototyp
 
 Do **not** expose a model-writable Docker shell or a network socket factory.
 
+The model-facing design has three separate capability planes:
+
+1. the external/operator MCP and ordinary review-package retrieval remain read-only views over
+   accepted evidence;
+2. formal-analysis workers receive a job-scoped workbench bound to one candidate or obligation so
+   they can iterate on property, slice, proof and harness proposals; and
+3. admission and target execution remain operator-only application operations outside both model
+   capability planes.
+
+The first plane is sufficient for consuming results but not for developing a nontrivial proof. The
+second plane is therefore required for the M1/M2 worker experience. It is not added to inference
+review-cell transports and cannot publish accepted evidence directly.
+
 ### 6.1 Read-only retrieval available to reviewers
 
 Propose typed, bounded, versioned capabilities behind the existing MCP authorization and exact run scope:
@@ -514,7 +527,62 @@ Existing `query_code_graph` remains the graph retrieval authority. New capabilit
 
 Operator interfaces (CLI or separately authenticated privileged service) would admit `formal-verify plan/check` and `formal-fuzz admit/prepare/run/replay`. Authorization covers a fixed **investigation envelope**, not every test input; a deterministic runner may run a bounded sequence of approved per-obligation experiments automatically and must recheck scope/quota on every operation. Log every decision and return immutable job IDs. **Do not grant admission or privileged execution tools to inference workers.**
 
-A runtime worker skill, if needed, must live only under `pipeline/skills/formal-verification/SKILL.md` and be registered in `pipeline/guidance/registry.json` with allowed roles. It describes how to interpret result types and cite evidence, **not** how to bypass authority or run targets. Development instructions belong separately in `.claude/skills/` under the repository's existing separation rules.
+Runtime worker procedures must live only under their registered `pipeline/skills/<name>/SKILL.md`
+paths and be registered in `pipeline/guidance/registry.json` with allowed jobs. They describe
+bounded analysis, proof, harness-design or evidence-interpretation procedures, **not** how to
+bypass authority or run targets. Development instructions belong separately in `.claude/skills/`
+under the repository's existing separation rules.
+
+### 6.3 Job-scoped formal workbench
+
+The formal worker needs a fluent, bounded proof-development loop. Provide a separate
+application-mediated workbench, optionally using MCP framing internally, that is never included in
+the external `appsec-review-mcp` catalog. Its expiring capability binds the application run,
+accepted manifest, candidate, formal attempt, obligation, source/build identities, permitted
+operations, response/page bounds, Lean-check count, slice-refinement count, model-call budget and
+expiry. Every call revalidates that binding and writes only immutable candidate/diagnostic material
+inside the current job attempt.
+
+| Workbench operation | Purpose | Deterministic boundary |
+|---|---|---|
+| `get_formal_work_item` | Return the SAST allegation, applicable registered property templates, exact evidence identities, current slice/model state, open obligations and remaining budget | One bound candidate/obligation; no broad search or target-tree scan |
+| `instantiate_formal_property` | Submit a registered template ID and typed parameters | The application validates that the instantiated property still matches the accepted rule, sink and alleged bad event |
+| `request_slice_refinement` | Request one named unresolved call, alias, guard, state or layout dependency | The application expands only through already accepted bounded facts; missing producer evidence remains a gap rather than launching an analyzer during retrieval |
+| `inspect_formal_model` | Read the normalized IR, generated Lean definitions, fixed theorem statement, assumptions and correspondence obligations needed to develop a proof | No arbitrary run file, import, theorem-statement or source-path access |
+| `check_proof_candidate` | Submit a theorem body/proof term for the fixed generated obligation and receive bounded elaboration, tactic, timeout and axiom diagnostics | The application owns imports, definitions, theorem statement, files, pinned Lean invocation and axiom acceptance; no shell or arbitrary Lean project |
+| `analyze_formal_witness` | Inspect a model trace, path constraints, source mapping and controllable/uncontrolled variables | Classifies infeasible or non-concretizable state; does not execute the target |
+| `submit_harness_proposal` | Submit a declarative adapter, legitimate caller setup, reset, oracle, seeds and negative control | Deterministic rendering, AST/ABI/symbol policy and compile-check own the final harness; commands, mounts and destinations are absent from the schema |
+| `submit_experiment_request` | Record a non-executable request tied to one eligible obligation | Cannot create admission, select a new target/function or start the lab |
+| `inspect_experiment` | Read admission state and accepted sanitized observations/replay status | No polling that mutates a run and no access to protected testcase, harness or log bytes |
+
+Workbench writes are untrusted proposals and diagnostics, not accepted proof or evidence. Only the
+ordinary job validators, Lean checker, dataset declarations and handoff publication can promote a
+validated result. A slice-refinement request cannot cause a new scanner/compiler/graph execution
+inside a model call; required missing producer coverage schedules ordinary operator/job work or
+leaves the attempt inconclusive.
+
+`check_proof_candidate` is intentionally more capable than the read-only reviewer tools but less
+capable than a shell. It accepts only a proof body for an existing generated theorem, caps bytes and
+attempts, compiles in the pinned Lean sandbox, returns structured diagnostics, and rejects changed
+definitions, theorem statements, imports, `unsafe`, IO, macros, unapproved axioms and `sorryAx`.
+
+### 6.4 Runtime skills for the workbench
+
+The formal jobs require four separately registered runtime procedures:
+
+- **Formal obligation analysis:** preserve exact semantics, instantiate registered properties,
+  identify source-correspondence obligations and distinguish proof gaps from security evidence.
+- **Lean proof development:** inspect generated definitions, keep the theorem fixed, select bounded
+  tactics (`simp`, `omega`, `bv_decide`, case analysis and registered lemmas), interpret checker
+  diagnostics and stop rather than weakening the property or adding trust assumptions.
+- **Proof-directed harness design:** map only experimentally answerable obligations to legitimate
+  caller state, controllable inputs, an exact oracle, boundary seeds and a negative control.
+- **Formal evidence interpretation:** keep logical result, source correspondence, concrete
+  reproduction and coverage scope independent when review workers consume accepted results.
+
+These skills guide use of application-enforced capabilities; they grant no tool, budget,
+publication, admission or execution authority. Formal methods remains a responsibility/procedure,
+not a new security-domain persona.
 
 ## 7. Proposed repository changes
 
@@ -553,7 +621,8 @@ src/appsec_review/
     protocol.py           # later separately authorized network driver
     custody.py
   mcp/
-    # extend existing read-only retrieval registry and schemas
+    formal.py             # accepted read-only formal retrieval
+    formal_workbench.py   # attempt-scoped proposal/proof-check adapter; not external MCP
 
 docs/
   formal-verification/
@@ -562,6 +631,10 @@ docs/
   schemas/
     formal-verification/
       formal-request.schema.json
+      formal-work-item.schema.json
+      formal-property-proposal.schema.json
+      formal-proof-candidate.schema.json
+      formal-workbench-event.schema.json
       formal-slice.schema.json
       formal-obligation.schema.json
       formal-translation.schema.json
@@ -570,6 +643,7 @@ docs/
       formal-attempt.schema.json
       formal-contract.schema.json
       formal-experiment-request.schema.json
+      formal-harness-proposal.schema.json
       formal-lab-admission.schema.json
       formal-observation.schema.json
       formal-fuzz-plan.schema.json
@@ -586,10 +660,17 @@ tests/
     formal_verification/ # synthetic paired vulnerable/safe C samples
 
 pipeline/skills/
-  formal-verification/SKILL.md   # only when explicitly registered
+  formal-obligation-analysis/SKILL.md
+  lean-proof-development/SKILL.md
+  proof-directed-harness-design/SKILL.md
+  formal-evidence-interpretation/SKILL.md
 ```
 
-Additional integration edits once individual components work: `src/appsec_review/cli.py`, typed configuration parsers, `appsec-review.toml`, image catalog/policy, schema registrations, run dataset declarations and custody validators, job dispatch/graph **only if separately approved**, read-only MCP schema/capability bindings, ledger relation consumers, and documentation/operations pages.
+Additional integration edits once individual components work: `src/appsec_review/cli.py`, typed
+configuration parsers, `appsec-review.toml`, image catalog/policy, schema registrations, run dataset
+declarations and custody validators, job dispatch/graph **only if separately approved**, read-only
+MCP schema/capability bindings, job-scoped workbench capability/budget enforcement, ledger relation
+consumers, and documentation/operations pages.
 
 Do not create unregistered `runs/` files or bypass the existing accepted-manifest and dataset reconciliation machinery.
 
@@ -631,7 +712,7 @@ The order below intentionally builds **one usable end-to-end path** before expan
 | **F2** | Property registry with safety and existential witness duals | F1 | Two synthetic positive/negative unit pairs per first class |
 | **F3** | Semantic slice closure and typed missing-dependency report | F1 | Correct guards, def-use and calls; no false closure on truncation/alias gaps |
 | **F4** | Restricted source/IR frontend with validated widths/control flow | F2,F3 | Compiler-grounded fixtures, supported/unsupported matrix, traceability |
-| **F5** | Lean semantics/translation/checker and axiom gate | F4 | Real Lean theorem check and witness model; `sorry`/axiom bypass rejected |
+| **F5** | Lean semantics/translation/checker, axiom gate and job-scoped fixed-theorem proof workbench | F4 | Iterative real Lean theorem check and witness model; changed statement/import, exhausted budget and `sorry`/axiom bypass rejected |
 | **F6** | Immutable attempt schema, CLI/report projection and contracts v1 | F5 | Byte-hash verification, clean retry identities, honest verdicts |
 | **F7** | Blind accepted-ingestion experiment and evaluation harness | F6 | Pinned result table for supported positives/controls, all unknowns counted |
 | **F8** | Establish safe/vulnerable paired corpus with actual **same-rule** scanner alerts | F1,F2 | Pinned SARIF/observation identity on both twins; unflagged controls excluded from strict benchmark |
@@ -650,7 +731,7 @@ The order below intentionally builds **one usable end-to-end path** before expan
 | ID | Exact build work | Dependency | Required completion evidence |
 |---|---|---|---|
 | **P1** | Classify experiment-eligible Lean obligations and generate typed testable questions, valid inputs and boundary seeds | M1 F6 | Only selected obligations fuzzed; missing lemma produces no-run result |
-| **P2** | Generate real-function/required-caller harness with preconditions, reset, seeds and specific oracle | P1 | Harness compiles against pinned original implementation; invalid setup rejected |
+| **P2** | Generate real-function/required-caller harness through the bounded proposal workbench, with preconditions, reset, seeds and specific oracle | P1 | Deterministically rendered harness compiles against pinned original implementation; commands, widened scope and invalid setup rejected |
 | **P3** | Build required Clang/libFuzzer/ASan/UBSan container and bounded investigation admission/quota supervisor | P2 | One authorized envelope permits automated subruns; wrong target/function denied |
 | **P4** | Obligation-specific libFuzzer driver with source branch/edge, sanitizer and property-oracle observations | P3 | Observations trace to original source and exact Lean obligation |
 | **P5** | Same-fault minimization, clean replay, observation-to-Lean refinement/recheck | P4 | Minimum reproducer + 3-replay receipt; model discrepancy creates new checked attempt |
@@ -953,11 +1034,14 @@ No “clean program” or “false positive” label is emitted from `MODEL_PROV
 ## 13. Operational sequencing and rollback
 
 - **First PR:** only M1 F0–F2 and small paired fixtures; no Docker executor or job graph changes.
-- **Second PR:** semantic slice, IR/Lean checker, immutable proof receipts and strict axiom tests.
+- **Second PR:** semantic slice, IR/Lean checker, bounded fixed-theorem workbench, immutable proof
+  receipts and strict capability/axiom tests.
 - **Third PR:** offline accepted-lead end-to-end evaluation, including at least one real vulnerable and one negative case.
 - **Fourth PR:** M2 per-obligation question selection, real-function harness, required Clang/libFuzzer container and bounded investigation policy; denied-execution tests first.
 - **Fifth PR:** authorized automatic bounded fuzz/minimize/replay, observation-to-Lean feedback and initial contract reuse.
-- **Later PR:** optional read-only MCP retrieval, gated report projections, protocol adapter and job graph integration.
+- **Later PR:** optional external read-only MCP retrieval, gated report projections, protocol
+  adapter and job graph integration. The job-scoped proof workbench is not deferred because it is
+  required to make M1 proof development usable.
 
 At each stage: maintain exact branch ownership, coherent commits, focused unit tests and honest gap accounting. If a new component fails, disable the new feature without modifying accepted SAST evidence, existing final gate, original PoC implementation, or existing source identities. Never replace a prior accepted attempt in place; create a new immutable attempt.
 
