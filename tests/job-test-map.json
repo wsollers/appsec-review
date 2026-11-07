@@ -276,6 +276,7 @@
     "job_review_prioritization": {
       "unit": [
         "tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches",
+        "tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output",
         "tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion"
       ],
       "integration": [],
