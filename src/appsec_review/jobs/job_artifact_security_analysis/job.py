@@ -571,13 +571,10 @@ def _validate_config(context, _result) -> None:
 
 
 def load_accepted_artifact_security_analysis(run_root: Path) -> Mapping[str, Any]:
-    pointer_path = run_root / "data" / "jobs" / "job_artifact_security_analysis" / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted artifact-security-analysis handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = json.loads(_safe_file(run_root, {"path": pointer.get("handoff_path"),
-                                              "sha256": pointer.get("handoff_sha256")}).read_text(encoding="utf-8"))
-    decode_handoff(handoff, run_id=run_root.name, job_id="job_artifact_security_analysis")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_artifact_security_analysis")
+    handoff = accepted.handoff
+    pointer = {"handoff_sha256": accepted.sha256}
     identity = handoff.get("outputs", {}).get("acceptance.publish_handoff", {}).get("artifact")
     if not isinstance(identity, Mapping): raise ValueError("artifact-security publication is unavailable")
     if not any(item.get("path") == identity.get("path") and item.get("sha256") == identity.get("sha256")

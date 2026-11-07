@@ -284,7 +284,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
         # The C/C++ lane is downstream of job_language_build, so its accepted handoff exists in a
         # real run; read it through its own integrity-checked pointer.
         load_gaps: list[str] = []
-        if (unit.job.run_root / "data" / "jobs" / "job_language_build" / "latest.json").is_file():
+        from appsec_review.runtime.consume import has_accepted_upstream
+        if has_accepted_upstream(unit.job.run_root, "job_language_build"):
             cases.update(family_build_cases(load_accepted_language_build(unit.job.run_root),
                                             unit.job.run_root))
         else:

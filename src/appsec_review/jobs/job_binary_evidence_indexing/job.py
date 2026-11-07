@@ -73,13 +73,10 @@ def _read_verified(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
 
 def accepted_binary_evidence(run_root: Path) -> tuple[Mapping[str, Any], str]:
     """The binary-evidence document the accepted intake froze, and the intake handoff hash."""
-    pointer_path = run_root / "data" / "jobs" / "job_review_intake" / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted job_review_intake handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = decode_handoff(
-        _read_verified(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]}),
-        run_id=run_root.name, job_id="job_review_intake")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_review_intake")
+    handoff = accepted.handoff
+    pointer = {"handoff_sha256": accepted.sha256}
     output = handoff.get("outputs", {}).get("publish_intake.publish_handoff", {})
     intake = _read_verified(run_root, output.get("artifact", {}))
     if intake.get("schema") != "appsec-review/review-intake/1":

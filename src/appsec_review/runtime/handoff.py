@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 from appsec_review.interchange import (
-    ArtifactReference, CoverageDisposition, CoverageSummary, ExecutionStatus, GapCode,
+    ArtifactReference, CoverageDisposition, CoverageSummary, ExecutionStatus, GapCode, ProducerStatus,
     OUTCOMES_SCHEMA, ProducerGap, UnitOutcome, artifact_reference_from_mapping,
     classify_producer_status, decode_handoff, gap_id,
 )
@@ -26,18 +26,12 @@ from appsec_review.storage.shared import reference, safe_path, verify_reference
 from appsec_review.storage.validation import validation_operation
 
 
-_COVERAGE_ALIASES = {
-    "COMPLETE": "complete", "PARTIAL": "partial", "UNAVAILABLE": "unavailable",
-    "NOT_APPLICABLE": "not_applicable", "SKIPPED_NA": "not_applicable",
-    "SKIPPED_POLICY": "skipped_policy", "CONFIGURED_DISABLED": "skipped_policy",
-}
+from appsec_review.interchange import COVERAGE_ALIASES as _COVERAGE_ALIASES
 _DETERMINISTIC_FAILURES = {"INVALID_COMPILE_DATABASE", "BLOCKED_BY_COMPILE"}
-_KNOWN_STATUSES = {
-    "SUCCEEDED", "COMPLETE", "COMPLETED", "FAILED", "GAP", "BLOCKED", "BLOCKED_BY_COMPILE",
-    "INVALID_COMPILE_DATABASE", "UNAVAILABLE", "TIMED_OUT", "TIMEOUT", "OOM_KILLED",
-    "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY", "CONFIGURED_DISABLED",
-    "PARTIAL", "COMPLETED_WITH_GAPS", "DEGRADED",
-}
+# The closed vocabulary lives in interchange.ProducerStatus; publication of a new attempt rejects
+# anything else (runtime.runner validates every unit result), and this mapping only keeps older
+# accepted attempts verifiable as they were recorded.
+_KNOWN_STATUSES = frozenset(str(item) for item in ProducerStatus)
 _REFERENCE_FIELD = re.compile(r"(?:.*_)?(?:artifact|artifacts|reference|references|receipt|receipts)$")
 _REFERENCE_FIELDS = {
     "index_manifest", "outcomes", "input_manifest", "object", "dependencies", "evidence_refs",
@@ -194,8 +188,14 @@ def frozen_job_config_sha256(document: Mapping[str, Any], job_id: str) -> str:
 
 
 def _producer_outcome(unit_id: str, state: ExecutionStatus, result: Mapping[str, Any],
-                      result_ref: ArtifactReference | None, status_ref: ArtifactReference
-                      ) -> tuple[UnitOutcome, dict[str, ProducerGap]]:
+                      result_ref: ArtifactReference | None, status_ref: ArtifactReference, *,
+                      strict_gaps: bool = False) -> tuple[UnitOutcome, dict[str, ProducerGap]]:
+    # The control-layer contract: a closed terminal_status vocabulary, well-formed dispositions and
+    # gap records. A violation is a rejected publication (never "published with a gap"), and the
+    # diagnostic reconstruction below records it as unknown_producer_status.
+    from appsec_review.interchange import validate_unit_output
+    if state is ExecutionStatus.SUCCEEDED:
+        validate_unit_output(result, unit_id=unit_id, strict_gaps=strict_gaps)
     refs = tuple(ref for ref in (result_ref, status_ref) if ref is not None)
     declared: dict[str, ProducerGap] = {}
     raw_gaps = result.get("gaps", [])
@@ -259,7 +259,7 @@ def _producer_outcome(unit_id: str, state: ExecutionStatus, result: Mapping[str,
 
 
 def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, target_snapshot: str,
-                   unit_ids: Sequence[str], diagnostic: bool = False) -> dict[str, Any]:
+                   unit_ids: Sequence[str], diagnostic: bool = False, strict_gaps: bool = False) -> dict[str, Any]:
     units: list[UnitOutcome] = []
     gaps: dict[str, ProducerGap] = {}
     verified: set[ArtifactReference] = set()
@@ -290,7 +290,8 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
             gaps[gap.gap_id] = gap
             continue
         try:
-            unit, declared = _producer_outcome(unit_id, state, result, result_ref, status_ref)
+            unit, declared = _producer_outcome(unit_id, state, result, result_ref, status_ref,
+                                               strict_gaps=strict_gaps)
             for gap in declared.values():
                 for evidence in gap.evidence_refs:
                     if evidence not in verified:

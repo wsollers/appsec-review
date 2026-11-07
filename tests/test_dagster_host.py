@@ -102,9 +102,11 @@ def test_application_codeql_runner_has_exact_readonly_host_backing():
     root = Path(__file__).resolve().parents[1]
     compose = yaml.safe_load((root / "deploy/dagster/compose.yaml").read_text())
     mounts = compose["services"]["code-location"]["volumes"]
+    # The runner arrives with the whole read-only containers/ mount of the tooling-only image
+    # (docs/architecture/deployment-image-and-source-mount.md); no single-file mount remains.
     asset = "containers/tools/codeql/codeql_runner.py"
-    matching = [mount for mount in mounts if f":/opt/app/{asset}" in mount]
-    assert matching == [f"../../{asset}:/opt/app/{asset}:ro"]
+    assert "../../containers:/opt/app/containers:ro" in mounts
+    assert not [mount for mount in mounts if f":/opt/app/{asset}" in mount]
     assert (root / asset).is_file() and not (root / asset).is_symlink()
 
 
@@ -210,6 +212,10 @@ def test_lifecycle_supplies_github_token_only_when_creating_containers(tmp_path,
     monkeypatch.setattr(lifecycle, "environment_file", tmp_path / ".env")
     monkeypatch.setattr(lifecycle, "signing_settings", lambda _environ: Settings())
     monkeypatch.setattr(lifecycle, "verified_image", lambda *_a, **_k: verified)
+    # Launching actions also sign the mounted sources; that step is not under test here.
+    monkeypatch.setattr(lifecycle, "module_environment",
+                        lambda settings, environ, runner=None: {"APPSEC_SIGNED_MODULES": "1",
+                                                                "APPSEC_MODULE_SIGNATURE": "/opt/appsec-review/signing/python-modules.json"})
     monkeypatch.setattr(lifecycle, "compose_environment",
                         lambda environ: {**environ, "GITHUB_TOKEN": "from-gh"})
 

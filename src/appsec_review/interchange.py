@@ -10,7 +10,7 @@ from enum import StrEnum
 import hashlib
 import json
 import re
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 HANDOFF_SCHEMA = "appsec-review/job-handoff/2"
@@ -57,6 +57,52 @@ class SelectorKind(StrEnum):
     JSON_POINTER = "json_pointer"
     XML_ORDINAL = "xml_ordinal"
     BYTE_RANGE = "byte_range"
+
+
+class ProducerStatus(StrEnum):
+    """The closed ``terminal_status`` vocabulary of a unit result or a per-scope disposition.
+
+    Anything a job wants to say about an item that is not one of these is a payload fact (a
+    ``mode``, ``availability`` or ``probe_disposition`` field), not a terminal status.
+    """
+    SUCCEEDED = "SUCCEEDED"
+    COMPLETE = "COMPLETE"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    GAP = "GAP"
+    BLOCKED = "BLOCKED"
+    BLOCKED_BY_COMPILE = "BLOCKED_BY_COMPILE"
+    INVALID_COMPILE_DATABASE = "INVALID_COMPILE_DATABASE"
+    UNAVAILABLE = "UNAVAILABLE"
+    TIMED_OUT = "TIMED_OUT"
+    TIMEOUT = "TIMEOUT"
+    OOM_KILLED = "OOM_KILLED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    SKIPPED_NA = "SKIPPED_NA"
+    SKIPPED_POLICY = "SKIPPED_POLICY"
+    CONFIGURED_DISABLED = "CONFIGURED_DISABLED"
+    PARTIAL = "PARTIAL"
+    COMPLETED_WITH_GAPS = "COMPLETED_WITH_GAPS"
+    DEGRADED = "DEGRADED"
+
+
+# Upper-case spellings a unit may use for coverage_disposition; the runtime maps them onto
+# CoverageDisposition (runtime/handoff.py keeps the same table).
+COVERAGE_ALIASES = {
+    "COMPLETE": "complete", "PARTIAL": "partial", "UNAVAILABLE": "unavailable",
+    "NOT_APPLICABLE": "not_applicable", "SKIPPED_NA": "not_applicable",
+    "SKIPPED_POLICY": "skipped_policy", "CONFIGURED_DISABLED": "skipped_policy",
+}
+UNIT_OUTPUT_SCHEMA = "appsec-review/unit-output/1"
+TASK_RECEIPT_SCHEMA = "appsec-review/task-receipt/1"
+ATTEMPT_STATUS_SCHEMA = "appsec-review/attempt-status/1"
+UNIT_EXECUTION_SCHEMA = "appsec-review/unit-execution/2"
+# The keys of a unit result that the runner projects into the handoff's ``outputs`` (the control
+# layer every consumer reads). Everything else a unit returns stays in its result.json payload.
+UNIT_OUTPUT_KEYS = (
+    "schema", "artifact", "graph_export_artifact", "identity", "pointer", "metadata_path", "item_count",
+    "gaps", "index_manifest", "index_identity", "terminal_status",
+)
 
 
 class GapCode(StrEnum):
@@ -453,3 +499,73 @@ def decode_handoff(value: Any, *, run_id: str | None = None, job_id: str | None 
     if value["input_set_sha256"] != input_set_sha256(handoff_input_projection(value)):
         raise ValueError("handoff input set hash mismatch")
     return dict(value)
+
+
+class UnitOutputContractError(ValueError):
+    """A unit result violates the control-layer contract and must not be published."""
+
+
+def validate_unit_output(result: Any, *, unit_id: str, strict_gaps: bool = False) -> None:
+    """Check the control fields of one unit result before the runtime records it.
+
+    ``terminal_status`` and every ``dispositions[].terminal_status`` must be a :class:`ProducerStatus`;
+    ``coverage_disposition`` a :class:`CoverageDisposition` (or its upper-case alias); ``gaps`` an
+    array whose members are nonempty text, structured records or ``producer-gap/1`` records, and only
+    ``producer-gap/1`` records when ``strict_gaps`` is set. Payload keys are not inspected.
+    """
+    if not isinstance(result, Mapping):
+        raise UnitOutputContractError(f"{unit_id}: unit result must be an object")
+    status = result.get("terminal_status")
+    if status is not None and (not isinstance(status, str) or status not in set(ProducerStatus)):
+        raise UnitOutputContractError(
+            f"{unit_id}: terminal_status {status!r} is not a ProducerStatus; "
+            "record non-status facts in a payload field such as mode or availability")
+    explicit = result.get("coverage_disposition")
+    if explicit is not None and (not isinstance(explicit, str)
+                                 or COVERAGE_ALIASES.get(explicit, explicit) not in set(CoverageDisposition)):
+        raise UnitOutputContractError(f"{unit_id}: coverage_disposition {explicit!r} is not a CoverageDisposition")
+    dispositions = result.get("dispositions", [])
+    if not isinstance(dispositions, list):
+        raise UnitOutputContractError(f"{unit_id}: dispositions must be an array")
+    for index, disposition in enumerate(dispositions):
+        if not isinstance(disposition, Mapping):
+            raise UnitOutputContractError(f"{unit_id}: dispositions[{index}] must be a record")
+        producer = disposition.get("terminal_status", disposition.get("disposition"))
+        if producer is not None and (not isinstance(producer, str) or producer not in set(ProducerStatus)):
+            raise UnitOutputContractError(
+                f"{unit_id}: dispositions[{index}].terminal_status {producer!r} is not a ProducerStatus")
+        scope = disposition.get("scope_id")
+        if scope is not None and (not isinstance(scope, str) or not scope.strip()):
+            raise UnitOutputContractError(f"{unit_id}: dispositions[{index}].scope_id must be nonempty text")
+    gaps = result.get("gaps", [])
+    if not isinstance(gaps, list):
+        raise UnitOutputContractError(f"{unit_id}: gaps must be an array")
+    for index, gap in enumerate(gaps):
+        if isinstance(gap, Mapping) and gap.get("schema") == GAP_SCHEMA:
+            try:
+                ProducerGap(**{**gap, "evidence_refs": tuple(
+                    artifact_reference_from_mapping(ref) for ref in gap.get("evidence_refs", ()))})
+            except (TypeError, ValueError) as exc:
+                raise UnitOutputContractError(f"{unit_id}: gaps[{index}] is not a valid producer-gap/1: {exc}") from exc
+            continue
+        if strict_gaps:
+            raise UnitOutputContractError(
+                f"{unit_id}: gaps[{index}] must be a producer-gap/1 record (appsec_review.interchange.producer_gap)")
+        if isinstance(gap, str):
+            if not gap.strip():
+                raise UnitOutputContractError(f"{unit_id}: gaps[{index}] is empty text")
+        elif not isinstance(gap, Mapping) or not gap:
+            raise UnitOutputContractError(f"{unit_id}: gaps[{index}] must be nonempty text or a record")
+
+
+def producer_gap(code: GapCode | str, reason: str, *, unit_id: str | None = None, scope_id: str | None = None,
+                 retryable: bool = False, evidence_refs: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """Build one ``producer-gap/1`` record for a unit result's ``gaps`` array.
+
+    The gap identity is derived from the unit, scope, code and reason, exactly as the runtime derives
+    it for a free-text gap, so a job that migrates keeps stable gap ids.
+    """
+    code = GapCode(code)
+    refs = tuple(artifact_reference_from_mapping(ref) for ref in evidence_refs)
+    identity = {"unit_id": unit_id, "scope_id": scope_id, "code": str(code), "reason": reason}
+    return ProducerGap(gap_id(identity), str(code), unit_id, scope_id, reason, bool(retryable), refs).as_dict()

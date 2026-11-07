@@ -13,7 +13,7 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.interchange import (
-    HANDOFF_SCHEMA, ProducerGap, artifact_reference_from_mapping, decode_handoff, gap_id,
+    CoverageDisposition, HANDOFF_SCHEMA, ProducerGap, artifact_reference_from_mapping, decode_handoff, gap_id,
     handoff_input_projection, input_set_sha256,
 )
 from appsec_review.observability import EventLog, PipelineLog, aggregate_run_metrics
@@ -90,7 +90,6 @@ def test_common_envelope_binds_verified_outcomes_without_copying_task_payload(tm
     ({"terminal_status": "FAILED"}, "unavailable", True),
     ({"terminal_status": "TIMED_OUT"}, "unavailable", True),
     ({"terminal_status": "OOM_KILLED"}, "unavailable", True),
-    ({"terminal_status": "future-status"}, "unavailable", False),
 ])
 def test_producer_coverage_does_not_override_successful_execution(tmp_path, producer, expected, retry):
     _, _, _, outcome, root = publish(tmp_path, lambda unit: producer)
@@ -100,8 +99,31 @@ def test_producer_coverage_does_not_override_successful_execution(tmp_path, prod
     assert handoff["coverage"]["retry_required"] is retry
     document = verify_outcomes(root, handoff)
     assert document["units"][0]["producer_status"] == producer.get("terminal_status")
-    if producer.get("terminal_status") == "future-status":
-        assert any(gap["code"] == "unknown_producer_status" for gap in document["gaps"])
+
+
+def test_every_producer_status_is_published_and_classified(tmp_path):
+    from appsec_review.interchange import ProducerStatus, classify_producer_status
+    for status in ProducerStatus:
+        summary = classify_producer_status(str(status))
+        assert summary.disposition in set(CoverageDisposition)
+    assert len(ProducerStatus) == 19
+
+
+@pytest.mark.parametrize("producer", [
+    {"terminal_status": "future-status"},
+    {"terminal_status": "NOT_REQUESTED"},
+    {"dispositions": [{"scope_id": "a", "terminal_status": "NOT_RUN"}]},
+    {"coverage_disposition": "mostly"},
+])
+def test_unknown_terminal_status_is_rejected_not_published_as_a_gap(tmp_path, producer):
+    """The terminal_status vocabulary is closed: a new word is a contract error, never coverage."""
+    config, job, runner = setup(tmp_path, lambda unit: producer)
+    with pytest.raises(ValueError, match="ProducerStatus|CoverageDisposition"):
+        runner.run(job, source_fingerprint="snapshot")
+    rejected_path, = config.runtime.runs_dir.glob("*/data/jobs/job_fixture/attempts/*/rejected-handoff.json")
+    handoff = json.loads(rejected_path.read_bytes())
+    assert handoff["status"] == "REJECTED" and handoff["execution_status"] == "SUCCEEDED"
+    assert not list(config.runtime.runs_dir.glob("*/data/jobs/job_fixture/latest.json"))
 
 
 def test_mixed_operational_failure_requires_retry_but_deterministic_gaps_do_not(tmp_path):

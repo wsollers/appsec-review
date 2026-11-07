@@ -73,6 +73,15 @@ agents that inspect or change the repository. It is not a prompt for review work
   and direct replacement over migration layers.
 - Keep configuration typed, centralized, and deterministic. Keep job handlers and validators
   explicit and independently testable.
+- The job control layer is standardized and validated
+  ([`docs/architecture/job-interchange.md`](docs/architecture/job-interchange.md), "The control
+  layer beneath the envelope"): `terminal_status` only from `interchange.ProducerStatus`, gaps as
+  `producer-gap/1` records via `interchange.producer_gap` (new jobs set `strict_gaps=True`), control
+  records with `schema` ids validated at publication, and producers read only through
+  `runtime.consume.accepted_upstream` against the claim's pins. Never read another job's
+  `latest.json` directly, never add a word to `terminal_status`, and never add a job to the legacy
+  free-text gap list in `tests/test_gap_contract.py`. Referenced payload files keep their own
+  formats; the records that reference them do not.
 - Retrieval facilities should query bounded indices rather than scan large target trees during
   inference. Every retrieved result retains source identity and resolving evidence.
 - Add tests for behavior that survives the refactor. Do not restore archived tests merely to retain

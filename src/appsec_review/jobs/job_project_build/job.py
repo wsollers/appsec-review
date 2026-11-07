@@ -917,17 +917,9 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
 
 
 def load_accepted_builds(run_root: Path, *, for_execution: bool = False) -> Mapping[str, Any]:
-    pointer = run_root / "data" / "jobs" / "job_project_build" / "latest.json"
-    if not pointer.is_file():
-        raise ValueError("accepted job_project_build handoff is required")
-    value = json.loads(pointer.read_text(encoding="utf-8"))
-    handoff_path = (run_root / str(value.get("handoff_path", ""))).resolve()
-    if run_root.resolve() not in handoff_path.parents or not handoff_path.is_file() or handoff_path.is_symlink():
-        raise ValueError("project-build handoff path is invalid")
-    if file_sha256(handoff_path) != value["handoff_sha256"]:
-        raise ValueError("project-build handoff identity changed")
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_project_build")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_project_build")
+    handoff = accepted.handoff
     artifact = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
     path = (run_root / str(artifact.get("path", ""))).resolve()
     if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
@@ -943,7 +935,7 @@ def load_accepted_builds(run_root: Path, *, for_execution: bool = False) -> Mapp
         from appsec_review.jobs.build_topology_artifacts import guard_cache_action
         for dispatch in document.get("build_dispatches", ()):
             guard_cache_action(run_root, dispatch, graph=document["execution_graph"])
-    return {**document, "project_build_handoff_sha256": value["handoff_sha256"],
+    return {**document, "project_build_handoff_sha256": accepted.sha256,
             "project_build_artifact_sha256": artifact["sha256"]}
 
 

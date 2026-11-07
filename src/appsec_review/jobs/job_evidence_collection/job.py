@@ -164,15 +164,10 @@ def _read_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
 
 
 def load_target_catalog(run_root: Path) -> ScanCatalog:
-    latest_path = run_root / "data" / "jobs" / "job_target_catalog" / "latest.json"
-    if not latest_path.is_file():
-        raise ValueError("accepted job_target_catalog handoff is required")
-    latest = json.loads(latest_path.read_text(encoding="utf-8"))
-    handoff_path = (run_root / latest["handoff_path"]).resolve()
-    if run_root.resolve() not in handoff_path.parents or file_sha256(handoff_path) != latest["handoff_sha256"]:
-        raise ValueError("target catalog handoff identity mismatch")
-    handoff = decode_handoff(json.loads(handoff_path.read_text(encoding="utf-8")),
-                             run_id=run_root.name, job_id="job_target_catalog")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_target_catalog")
+    handoff = accepted.handoff
+    latest = {"handoff_sha256": accepted.sha256}
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
     catalog_doc = _read_artifact(run_root, published["artifact"])
     if catalog_doc.get("schema") != "appsec-review/target-catalog/1":
@@ -184,11 +179,9 @@ def load_target_catalog(run_root: Path) -> ScanCatalog:
         run_root, catalog_doc["artifacts"]["build_discovery.discover_compile_commands"])
     artifacts = tuple(item for item in builds.get("targets", []) if item.get("artifact_kind") == "built")
     target_root = None
-    intake_latest = run_root / "data" / "jobs" / "job_review_intake" / "latest.json"
-    if intake_latest.is_file():
-        intake_pointer = json.loads(intake_latest.read_text(encoding="utf-8"))
-        intake_handoff = _read_artifact(run_root, {
-            "path": intake_pointer["handoff_path"], "sha256": intake_pointer["handoff_sha256"]})
+    intake_accepted = accepted_upstream(run_root, "job_review_intake", required=False)
+    if intake_accepted is not None:
+        intake_handoff = intake_accepted.handoff
         intake_artifact = intake_handoff.get("outputs", {}).get("publish_intake.publish_handoff", {}).get("artifact")
         if isinstance(intake_artifact, Mapping):
             intake = _read_artifact(run_root, intake_artifact)

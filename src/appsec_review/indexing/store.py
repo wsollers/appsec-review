@@ -34,24 +34,21 @@ class AcceptedHandoff:
 
 
 def accepted_handoff(run_root: Path, job_id: str) -> AcceptedHandoff | None:
-    """Return the hash-verified accepted handoff of one job, or ``None`` when it has not run."""
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.is_file() or pointer_path.is_symlink():
+    """Return the hash-verified accepted handoff of one job, or ``None`` when it has not run.
+
+    Inside an attempt the consumer's claim pin selects the attempt (``runtime.consume``); outside
+    one, the hash-verified ``latest.json`` pointer does. Either way the handoff's shared evidence is
+    verified and consumed before it is returned.
+    """
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, job_id, required=False)
+    if accepted is None:
         return None
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    path = (run_root / str(pointer.get("handoff_path", ""))).resolve()
-    if run_root.resolve() not in path.parents or not path.is_file():
-        raise ValueError(f"accepted handoff is unavailable or outside the run: {job_id}")
-    sha = file_sha256(path)
-    if sha != pointer.get("handoff_sha256"):
-        raise ValueError(f"accepted handoff identity changed: {job_id}")
     count_work("handoff_validations")
-    handoff = decode_handoff(json.loads(path.read_text(encoding="utf-8")),
-                             run_id=run_root.name, job_id=job_id)
     from appsec_review.storage.shared import verify_handoff, consume_handoff
-    verify_handoff(run_root, handoff)
-    consume_handoff(run_root, handoff)
-    return AcceptedHandoff(job_id, handoff, sha, path.relative_to(run_root.resolve()).as_posix())
+    verify_handoff(run_root, accepted.handoff)
+    consume_handoff(run_root, accepted.handoff)
+    return AcceptedHandoff(job_id, accepted.handoff, accepted.sha256, accepted.path)
 
 
 def handoff_manifests(run_root: Path, handoff: Mapping[str, Any]) -> list[Mapping[str, Any]]:

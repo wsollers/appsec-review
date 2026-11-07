@@ -160,13 +160,8 @@ def _retain(run_root: Path, source: Path, destination: Path, limit: int) -> dict
 
 
 def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], str]:
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError(f"accepted {job_id} handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
-    return handoff, str(pointer["handoff_sha256"])
+    from appsec_review.runtime.consume import accepted_upstream
+    return accepted_upstream(run_root, job_id).as_tuple()
 
 
 def _load_inputs(run_root: Path) -> dict[str, Any]:
@@ -195,9 +190,11 @@ def _load_inputs(run_root: Path) -> dict[str, Any]:
 
 def load_accepted_history(run_root: Path) -> Mapping[str, Any] | None:
     """Return the accepted history document, or ``None`` when the job has not run in this graph."""
-    if not (Path(run_root) / "data" / "jobs" / "job_source_history_analysis" / "latest.json").is_file():
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(Path(run_root), "job_source_history_analysis", required=False)
+    if accepted is None:
         return None
-    handoff, handoff_sha = _accepted_handoff(Path(run_root), "job_source_history_analysis")
+    handoff, handoff_sha = accepted.as_tuple()
     document = _read(Path(run_root), handoff["outputs"]["publish.publish_handoff"]["artifact"])
     if document.get("schema") != SCHEMA:
         raise ValueError("accepted source history schema is unsupported")
@@ -232,8 +229,8 @@ def _settings(context) -> HistorySettings:
 
 
 def _run_history_identity(target_root: Path | None, run_root: Path) -> str:
-    catalog = run_root / "data" / "jobs" / "job_target_catalog" / "latest.json"
-    if not catalog.is_file():
+    from appsec_review.runtime.consume import has_accepted_upstream
+    if not has_accepted_upstream(run_root, "job_target_catalog"):
         return history_identity(target_root)
     inputs = _load_inputs(run_root)
     roots = tuple(str(item["root"]) for item in inputs["components"])

@@ -93,15 +93,11 @@ def _read_artifact(run_root: Path, identity: Mapping[str, Any], *,
 
 def _accepted_catalog(run_root: Path) -> dict[str, Any]:
     from appsec_review.storage.shared import safe_path
-    pointer_path = safe_path(run_root, "data/jobs/job_target_catalog/latest.json")
-    if not pointer_path.is_file():
-        raise ValueError("accepted job_target_catalog handoff is required")
-    if pointer_path.stat().st_size > 65536:
-        raise ValueError("accepted catalog pointer exceeds its byte bound")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_artifact(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]},
-                             byte_limit=32 * 1024 * 1024)
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_target_catalog")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_target_catalog")
+    if safe_path(run_root, accepted.path).stat().st_size > 32 * 1024 * 1024:
+        raise ValueError("accepted catalog handoff exceeds its byte bound")
+    handoff = accepted.handoff
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
     catalog = _read_artifact(run_root, published.get("artifact", {}), byte_limit=32 * 1024 * 1024)
     if catalog.get("schema") != "appsec-review/target-catalog/1":
@@ -138,7 +134,7 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
             *builds.get("gaps", ()), *compile_databases.get("gaps", ()), *targets.get("gaps", ())]
     return {
         "source_fingerprint": catalog["source_fingerprint"],
-        "catalog_handoff_sha256": pointer["handoff_sha256"],
+        "catalog_handoff_sha256": accepted.sha256,
         "files": files, "projects": tuple(projects.get("projects", ())),
         "components": tuple(components.get("components", ())),
         "build_files": tuple(by_path[key] for key in sorted(by_path)),
@@ -170,15 +166,11 @@ def _verify_source_topology(plan_bytes: bytes) -> None:
 
 def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
     from appsec_review.storage.shared import safe_path
-    pointer_path = safe_path(Path(run_root), "data/jobs/job_target_analysis_plan/latest.json")
-    if not pointer_path.is_file():
-        raise ValueError("accepted job_target_analysis_plan handoff is required")
-    if pointer_path.stat().st_size > 65536:
-        raise ValueError("accepted planning pointer exceeds its byte bound")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_artifact(Path(run_root), {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]},
-                             byte_limit=32 * 1024 * 1024)
-    handoff = decode_handoff(handoff, run_id=Path(run_root).name, job_id="job_target_analysis_plan")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(Path(run_root), "job_target_analysis_plan")
+    if safe_path(Path(run_root), accepted.path).stat().st_size > 32 * 1024 * 1024:
+        raise ValueError("accepted planning handoff exceeds its byte bound")
+    handoff = accepted.handoff
     identity = handoff.get("outputs", {}).get("plan_acceptance.publish_handoff", {}).get("artifact")
     plan = _read_artifact(Path(run_root), identity or {}, byte_limit=32 * 1024 * 1024)
     if plan.get("schema") != PLAN_SCHEMA:

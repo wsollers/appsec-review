@@ -54,13 +54,9 @@ def _read_json_artifact(run_root: Path, identity: Mapping[str, Any]) -> Any:
 
 def load_accepted_cpp(run_root: Path) -> Mapping[str, Any]:
     """Load and verify the accepted ``job_cpp_compiled_analysis`` handoff, result, and manifest."""
-    pointer_path = run_root / "data" / "jobs" / "job_cpp_compiled_analysis" / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted job_cpp_compiled_analysis handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_json_artifact(run_root, {"path": pointer.get("handoff_path"),
-                                            "sha256": pointer.get("handoff_sha256")})
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_cpp_compiled_analysis")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_cpp_compiled_analysis")
+    handoff = accepted.handoff
     result_path = str(handoff.get("resolving_paths", {}).get("result", ""))
     result_identity = next((item for item in handoff.get("artifacts", ())
                             if item.get("path") == result_path), None)
@@ -81,7 +77,7 @@ def load_accepted_cpp(run_root: Path) -> Mapping[str, Any]:
     ):
         raise ValueError("accepted C++ index manifest is not bound to its handoff")
     load_verified_manifest(run_root, manifest_path, manifest_sha)
-    return {"handoff": handoff, "handoff_sha256": pointer["handoff_sha256"], "result": result,
+    return {"handoff": handoff, "handoff_sha256": accepted.sha256, "result": result,
             "manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha}}
 
 

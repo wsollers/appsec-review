@@ -48,7 +48,9 @@ records instead of growing the common envelope with every unit result. A unit na
 and native producer status, coverage disposition, result/status references, and gap IDs. A gap
 names its stable hash ID, closed code, optional unit/scope, reason, retryability, and resolving
 artifact references. Missing, blocked, failed, empty, unparsed, truncated, and unresolved evidence
-remain distinguishable. Unknown producer statuses classify as unavailable, never complete.
+remain distinguishable. A producer status outside `interchange.ProducerStatus` rejects a new
+publication (see the control layer below); in diagnostic reconstruction of an older attempt it
+classifies as unavailable, never complete.
 
 The outcomes root is `{schema, run_id, job_id, attempt_id, target_snapshot, units, gaps, coverage}`.
 `units` and `gaps` are arrays of serialized shared records; `coverage` is the same summary bound by
@@ -75,6 +77,36 @@ does not replace that identity.
 Required-index preflight and input-manifest consumption finish before the publication freezes its
 artifact closure. If later publication I/O fails, the runtime attempts to restore both the job
 latest pointer and accepted-index pointer; rollback errors are attached to the original failure.
+
+## The control layer beneath the envelope
+
+The envelope above is one shape for every job and byte-verified. The records beneath it that every
+consumer reads form the **job control layer**, and they are standardized and validated the same way
+(`docs/schemas/job-control.schema.json`, `src/appsec_review/interchange.py`):
+
+| Record | Schema id | Where | Contract |
+| --- | --- | --- | --- |
+| Task receipt | `appsec-review/task-receipt/1` | `steps/<step>/tasks/<task>/status.json` | closed keys; `status` in `RUNNING`/`SUCCEEDED`/`FAILED`/`SKIPPED`; binds `result_sha256` |
+| Attempt status | `appsec-review/attempt-status/1` | `attempts/<attempt>/status.json` | `RUNNING` at claim, then the terminal attempt status |
+| Unit execution | `appsec-review/unit-execution/2` | `attempts/<attempt>/result.json` | the only version written; `/1` is read for older attempts |
+| Unit output | `appsec-review/unit-output/1` | the control fields of a unit's `result.json` | `interchange.UNIT_OUTPUT_KEYS` is exactly what the runner projects into handoff `outputs` |
+| Producer status | `interchange.ProducerStatus` | `terminal_status` and `dispositions[].terminal_status` | **closed**: nineteen words; anything else (`NOT_RUN`, `NOT_REQUESTED`, `REUSED`, ...) is a payload fact (`mode`, `availability`, `probe_disposition`), never a status |
+| Producer gap | `appsec-review/producer-gap/1` | `gaps[]` of a unit result | `interchange.producer_gap(code, reason, unit_id=, scope_id=, retryable=, evidence_refs=)`; free text is tolerated only for jobs listed in `tests/test_gap_contract.py` |
+
+Validation happens at publication: `build_outcomes` runs `interchange.validate_unit_output` over
+every succeeded unit result, and a violation **rejects the attempt** (`rejected-handoff.json`,
+`REJECTED`, no `latest.json`) instead of publishing it with an `unknown_producer_status` gap. A job
+with `Job.strict_gaps = True` is also rejected when a gap is not a `producer-gap/1` record. Older
+accepted attempts remain verifiable as recorded; the vocabulary is enforced on new publications.
+
+Consumers read producers through one path, `runtime.consume.accepted_upstream(run_root, job_id)`.
+Inside an attempt it resolves the digest the consumer's claim pinned (`claim.consumable_handoffs`:
+the projected `upstream_handoffs` plus the accepted handoffs of declared `CONSUMES` and topology
+ancestors as they stood at claim time) and refuses a producer the claim did not pin, even when a
+`latest.json` exists; outside an attempt (operator tooling, tests) it follows the hash-verified
+pointer and reports `pinned=False`. A job reading its own earlier attempt for checkpoint reuse uses
+`accepted_latest`. No job reads `data/jobs/<job>/latest.json` directly. `tests/test_consumes_parity.py`
+requires every `CONSUMES` entry to be a registered job scheduled before the consumer.
 
 ## Validation and identity boundaries
 

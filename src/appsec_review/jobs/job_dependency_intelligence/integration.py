@@ -83,17 +83,13 @@ def read_json(run_root: Path, identity: Mapping[str, Any], limit: int) -> dict[s
 
 
 def accepted_framework(run_root: Path, job_id: str, limit: int) -> tuple[dict[str, Any], dict[str, Any]]:
-    pointer_path = safe_path(run_root, f"data/jobs/{job_id}/latest.json")
-    if not pointer_path.is_file():
-        raise ValueError(f"accepted {job_id} handoff is required")
-    if pointer_path.stat().st_size > limit:
-        raise ValueError("accepted handoff pointer exceeds its byte bound")
-    pointer = json.loads(pointer_path.read_bytes())
-    path = safe_path(run_root, str(pointer["handoff_path"]))
-    identity = reference(run_root, path, expected_sha256=str(pointer["handoff_sha256"]))
-    framework = decode_handoff(read_json(run_root, identity, limit),
-                                run_id=run_root.name, job_id=job_id)
-    return framework, identity
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, job_id)
+    path = safe_path(run_root, accepted.path)
+    if path.stat().st_size > limit:
+        raise ValueError("accepted handoff exceeds its byte bound")
+    identity = reference(run_root, path, expected_sha256=accepted.sha256)
+    return dict(accepted.handoff), identity
 
 
 def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict[str, Any]:

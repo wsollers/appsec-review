@@ -10,7 +10,9 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_security_tagging/attempts/*"
-CONSUMES = ()
+# Tagging reads the accepted retrieval manifest its claim pins; these are the manifest publishers
+# it follows in the topology (orchestration/topology.py) and therefore the producers it consumes.
+CONSUMES = ("job_review_prioritization", "job_code_graph_index", "job_codeql_analysis")
 DATASETS = (
     indexed("tag_assignments", "publication", "tags", "appsec-review/tag-assignment/1",
             "Security tag assignments per family with subject and evidence identities.",

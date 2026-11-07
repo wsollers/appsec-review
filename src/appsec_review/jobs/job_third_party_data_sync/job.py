@@ -261,4 +261,4 @@ def build_job(
 
     return Job("job_third_party_data_sync", "third_party_data_sync", executor.execute,
                (validate_input,), (validate_output,), units=units, result_transform=transform,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, consumes=CONSUMES, strict_gaps=True)

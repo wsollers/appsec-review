@@ -74,18 +74,11 @@ def _safe_file(run_root: Path, identity: Mapping[str, Any], label: str) -> Path:
 
 
 def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], str]:
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.is_file() or pointer_path.is_symlink():
-        raise CoverageIntegrityError(f"accepted {job_id} handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff_path = _safe_file(run_root, {
-        "path": pointer.get("handoff_path"), "sha256": pointer.get("handoff_sha256")}, f"{job_id} handoff")
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    from appsec_review.runtime.consume import accepted_upstream
     try:
-        handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
+        return accepted_upstream(run_root, job_id).as_tuple()
     except ValueError as exc:
-        raise CoverageIntegrityError(f"{job_id} handoff is not accepted") from exc
-    return handoff, str(pointer["handoff_sha256"])
+        raise CoverageIntegrityError(f"accepted {job_id} handoff is required: {exc}") from exc
 
 
 def _load_catalog_files(run_root: Path) -> tuple[list[Mapping[str, Any]], str, Mapping[str, str]]:

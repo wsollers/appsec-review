@@ -120,9 +120,22 @@ def test_shared_runtime_build_checks_packaged_catalog(tmp_path: Path) -> None:
     dockerfile = (ROOT / "deploy/dagster/Dockerfile").read_text(encoding="utf-8")
     runtime = dockerfile.split(" AS runtime-base\n", 1)[1].split("\nFROM ", 1)[0]
     assert "WORKDIR /opt/app\n" in runtime
-    command, = [command for command in re.findall(r'python -c "([^"]+)"', runtime)
-                if "appsec_review.container_runtime.catalog" in command]
-    assert runtime.index("COPY containers ./containers") < runtime.index(command)
+    # The tooling image carries no catalog: the launch step verifies the mounted one
+    # (runtime.release --verify-assets -> verify_deployment_assets), and the test stage, the one
+    # stage that copies sources, runs the same check at build time after copying containers/.
+    assert "COPY containers" not in runtime
+    from appsec_review.runtime.release import verify_deployment_assets
+    import inspect
+    assert "container_runtime.catalog" in inspect.getsource(verify_deployment_assets)
+    test_stage = dockerfile.split(" AS test\n", 1)[1]
+    assert test_stage.index("COPY containers ./containers") < test_stage.index("runtime.release --root /opt/app --verify-assets")
+    import yaml
+    compose = yaml.safe_load((ROOT / "deploy/dagster/compose.yaml").read_text(encoding="utf-8"))
+    launch = compose["services"]["code-location"]["command"]
+    assert "--verify-assets" in launch and "../../containers:/opt/app/containers:ro" in compose["services"]["code-location"]["volumes"]
+    # What the launch step loads, run against the catalog subset the build context carries.
+    command = ("from pathlib import Path; from appsec_review.container_runtime.catalog import load_catalog; "
+               "load_catalog(Path.cwd())")
     for stage in ("runtime", "runtime-copilot-base", "runtime-windows-base", "test"):
         assert f"FROM runtime-base AS {stage}\n" in dockerfile
     assert "FROM runtime-copilot-base AS runtime-copilot\n" in dockerfile

@@ -121,7 +121,8 @@ def _target_artifacts(unit: UnitContext) -> tuple[list[dict[str, Any]], list[str
     from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
     from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
     from appsec_review.storage.shared import verify_reference
-    if not (unit.job.run_root / "data/jobs/job_target_catalog/latest.json").is_file():
+    from appsec_review.runtime.consume import has_accepted_upstream
+    if not has_accepted_upstream(unit.job.run_root, "job_target_catalog"):
         return [], ["accepted target artifact intake is unavailable"], None
     catalog = load_target_catalog(unit.job.run_root)
     if catalog.source_fingerprint != unit.job.source_fingerprint:
@@ -370,18 +371,11 @@ def _safe_file(run_root: Path, identity: Mapping[str, Any], label: str) -> Path:
 
 
 def _accepted_language_manifest(run_root: Path) -> dict[str, str]:
-    pointer_path = run_root / "data" / "jobs" / "job_language_build" / "latest.json"
-    if not pointer_path.is_file():
-        raise ArtifactIndexIntegrityError("accepted language-build handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff_path = _safe_file(run_root, {"path": pointer.get("handoff_path"),
-                                        "sha256": pointer.get("handoff_sha256")},
-                              "language-build handoff")
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    from appsec_review.runtime.consume import accepted_upstream
     try:
-        handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_language_build")
+        handoff = accepted_upstream(run_root, "job_language_build").handoff
     except ValueError as exc:
-        raise ArtifactIndexIntegrityError("language-build handoff is not accepted") from exc
+        raise ArtifactIndexIntegrityError(f"accepted language-build handoff is required: {exc}") from exc
     raw = handoff.get("outputs", {}).get("acceptance.publish_handoff", {}).get("index_manifest")
     if not isinstance(raw, Mapping):
         raise ArtifactIndexIntegrityError("accepted language-build index manifest is required")
@@ -959,15 +953,10 @@ def _validate_config(context, _result) -> None:
 
 
 def load_accepted_artifact_index(run_root: Path) -> Mapping[str, Any]:
-    pointer_path = Path(run_root) / "data" / "jobs" / "job_artifact_indexing" / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted artifact-indexing handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff_path = _safe_file(Path(run_root), {"path": pointer.get("handoff_path"),
-                                               "sha256": pointer.get("handoff_sha256")},
-                              "artifact-indexing handoff")
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    handoff = decode_handoff(handoff, run_id=Path(run_root).name, job_id="job_artifact_indexing")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(Path(run_root), "job_artifact_indexing")
+    handoff = accepted.handoff
+    pointer = {"handoff_sha256": accepted.sha256}
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
     manifest = published.get("index_manifest") if isinstance(published, Mapping) else None

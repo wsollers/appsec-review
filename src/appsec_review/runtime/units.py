@@ -8,6 +8,7 @@ import traceback
 from types import MappingProxyType
 from typing import Any, Callable, Protocol
 
+from appsec_review.interchange import TASK_RECEIPT_SCHEMA, UNIT_EXECUTION_SCHEMA
 from appsec_review.runtime.job import JobContext
 from appsec_review.storage import atomic_json
 from appsec_review.observability import EventLog
@@ -97,6 +98,7 @@ class UnitExecutor:
             started = _stamp()
             if blocked_by:
                 receipt = {
+                    "schema": TASK_RECEIPT_SCHEMA,
                     "unit_id": unit.unit_id,
                     "step_id": step_id,
                     "task_id": task_id,
@@ -125,6 +127,7 @@ class UnitExecutor:
                 outputs=MappingProxyType(outputs),
             )
             running = {
+                "schema": TASK_RECEIPT_SCHEMA,
                 "unit_id": unit.unit_id,
                 "step_id": step_id,
                 "task_id": task_id,
@@ -198,7 +201,7 @@ class UnitExecutor:
                                                for value in dispositions):
             completion = "COMPLETED_WITH_GAPS"
         return {
-            "schema": "appsec-review/unit-execution/1",
+            "schema": UNIT_EXECUTION_SCHEMA,
             "status": completion,
             "steps": steps,
             "units": receipts,
@@ -225,7 +228,7 @@ class UnitExecutor:
                                                for value in dispositions):
             completion = "COMPLETED_WITH_GAPS"
         return {
-            "schema": "appsec-review/unit-execution/2",
+            "schema": UNIT_EXECUTION_SCHEMA,
             "status": completion,
             "steps": steps,
             "units": dict(receipts),

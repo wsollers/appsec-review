@@ -315,7 +315,8 @@ def test_nested_catalog_source_metadata_is_part_of_resume_identity(tmp_path: Pat
     from appsec_review.jobs.job_source_history_analysis import job as history_module
     target, run = tmp_path / "target", tmp_path / "run"
     repository(target / "nested" / "repo")
-    atomic_json(run / "data" / "jobs" / "job_target_catalog" / "latest.json", {})
+    from appsec_review.runtime import consume
+    monkeypatch.setattr(consume, "has_accepted_upstream", lambda root, job_id: job_id == "job_target_catalog")
     monkeypatch.setattr(history_module, "_load_inputs", lambda root: {
         "components": [{"component_id": "nested", "root": "nested/repo"}]})
     job = history_module.build_job()

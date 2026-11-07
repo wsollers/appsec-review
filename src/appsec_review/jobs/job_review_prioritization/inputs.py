@@ -36,17 +36,13 @@ def read_lines(run_root: Path, identity: Mapping[str, Any]) -> Iterator[Mapping[
 
 
 def has_handoff(run_root: Path, job_id: str) -> bool:
-    return (run_root / "data" / "jobs" / job_id / "latest.json").is_file()
+    from appsec_review.runtime.consume import has_accepted_upstream
+    return has_accepted_upstream(run_root, job_id)
 
 
 def accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], str]:
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.is_file() or pointer_path.is_symlink():
-        raise ValueError(f"accepted {job_id} handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = read_json(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
-    return handoff, str(pointer["handoff_sha256"])
+    from appsec_review.runtime.consume import accepted_upstream
+    return accepted_upstream(run_root, job_id).as_tuple()
 
 
 def producer_entities(run_root: Path, manifest: Mapping[str, Any], *, job: str, kind: str,

@@ -71,6 +71,10 @@ class Job:
     # whose handoffs it reads. The dataset audit compares both with what a run actually produced.
     datasets: tuple[DatasetDeclaration, ...] = ()
     consumes: tuple[str, ...] = ()
+    # When set, every gap a unit reports must be a producer-gap/1 record (interchange.producer_gap);
+    # free text and ad-hoc records are rejected before the result is written. Jobs opt in as they
+    # migrate; tests/test_gap_contract.py keeps the list of jobs still allowed free-text gaps.
+    strict_gaps: bool = False
     # Live readiness gates must execute for every graph dispatch, even when the application run
     # can otherwise reuse accepted work.  A non-propagating gate orders downstream jobs without
     # becoming part of their immutable input identity.

@@ -220,9 +220,8 @@ def test_invalid_target_artifact_provenance_is_rejected_before_payload_access(tm
     from appsec_review.jobs.job_artifact_indexing.job import ArtifactIndexIntegrityError, _target_artifacts
     from appsec_review.jobs.job_evidence_collection import job as evidence
     from appsec_review.storage import shared
-    latest = tmp_path / "data/jobs/job_target_catalog/latest.json"
-    latest.parent.mkdir(parents=True)
-    latest.write_text("{}")
+    from appsec_review.runtime import consume
+    monkeypatch.setattr(consume, "has_accepted_upstream", lambda root, job_id: job_id == "job_target_catalog")
     raw = {"path": "data/shared/objects/" + "a" * 64, "sha256": "a" * 64, "size_bytes": 8,
            "schema": "appsec-review/target-artifact-intake/1",
            "kind": "wasm-module", "workspace_path": "module.wasm", "target_relative_path": "module.wasm",

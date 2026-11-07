@@ -135,14 +135,9 @@ def _safe_read(run_root: Path, identity: Mapping[str, Any], *, max_bytes: int | 
 
 
 def _accepted_job(run_root: Path, job_id: str) -> tuple[dict[str, Any], str]:
-    latest = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not latest.is_file():
-        raise ValueError(f"accepted {job_id} handoff is required")
-    pointer = json.loads(latest.read_text(encoding="utf-8"))
-    handoff = json.loads(_safe_read(run_root, {"path": pointer.get("handoff_path"),
-                                               "sha256": pointer.get("handoff_sha256")}).decode())
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
-    return handoff, str(pointer["handoff_sha256"])
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, job_id)
+    return dict(accepted.handoff), accepted.sha256
 
 
 def _target_dependencies(run_root: Path) -> tuple[list[dict[str, Any]], str]:

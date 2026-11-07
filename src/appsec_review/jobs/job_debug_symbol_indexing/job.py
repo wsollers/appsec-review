@@ -124,8 +124,8 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
             if isinstance(item, Mapping) and "canonical_identity" in item}
     language_sha = None
     build_images = {}
-    language_pointer = unit.job.run_root / "data" / "jobs" / "job_language_build" / "latest.json"
-    if language_pointer.is_file():
+    from appsec_review.runtime.consume import has_accepted_upstream
+    if has_accepted_upstream(unit.job.run_root, "job_language_build"):
         language = load_accepted_language_build(unit.job.run_root)
         language_sha = language["language_build_handoff_sha256"]
         if (language.get("source_fingerprint") != unit.job.source_fingerprint
@@ -689,16 +689,10 @@ def _validate_config(context, _result) -> None:
 def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
     from appsec_review.interchange import decode_handoff
 
-    pointer_path = run_root / "data" / "jobs" / JOB_ID / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted debug-symbol handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff_ref = {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]}
-    path = safe_path(run_root, handoff_ref["path"])
-    handoff_ref["size_bytes"] = path.stat().st_size
-    handoff = decode_handoff(
-        json.loads(_verify(run_root, handoff_ref, "accepted debug-symbol handoff").read_text()),
-        run_id=run_root.name, job_id=JOB_ID)
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, JOB_ID)
+    handoff = accepted.handoff
+    pointer = {"handoff_sha256": accepted.sha256}
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     artifact = published.get("artifact", {})
     if not any(item.get("path") == artifact.get("path") and item.get("sha256") == artifact.get("sha256")

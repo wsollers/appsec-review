@@ -114,4 +114,4 @@ def build_job() -> Job:
     units = (Unit("execute.node", execute),)
     return Job("job_build_iteration", "build_iteration", UnitExecutor(units).execute,
                units=units, datasets=DATASETS, consumes=CONSUMES,
-               always_execute=True, propagate_handoff=False)
+               always_execute=True, propagate_handoff=False, strict_gaps=True)

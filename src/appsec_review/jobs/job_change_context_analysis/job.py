@@ -82,15 +82,9 @@ def _read(run_root: Path, identity: Mapping[str, Any]) -> Any:
 
 
 def _accepted_handoff(run_root: Path, job_id: str, *, required: bool) -> tuple[Mapping[str, Any], str] | None:
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.is_file():
-        if required:
-            raise ValueError(f"accepted {job_id} handoff is required")
-        return None
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
-    return handoff, str(pointer["handoff_sha256"])
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, job_id, required=required)
+    return None if accepted is None else accepted.as_tuple()
 
 
 def _accepted_outputs(run_root: Path, handoff: Mapping[str, Any]) -> Mapping[str, Any]:

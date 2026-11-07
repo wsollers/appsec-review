@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/job-control.schema.json",
+  "title": "Job control records beneath the handoff envelope",
+  "$comment": "The control layer every consumer reads: task receipts, attempt status, the unit result fields the runner projects into handoff outputs, and the closed producer-status vocabulary. The authoritative Python contracts are in src/appsec_review/interchange.py (ProducerStatus, UNIT_OUTPUT_KEYS, validate_unit_output) and src/appsec_review/runtime/runner.py (receipt writers). Payload fields of a unit result are job-specific and are not described here.",
+  "oneOf": [
+    {"$ref": "#/$defs/taskReceipt"},
+    {"$ref": "#/$defs/attemptStatus"},
+    {"$ref": "#/$defs/unitOutput"}
+  ],
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "pattern": "\\S", "not": {"pattern": "\\u0000"}},
+    "sha256": {"type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "minLength": 20, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T"},
+    "unitId": {"type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"},
+    "jobId": {"type": "string", "pattern": "^job_[a-z0-9_]+$"},
+    "attemptId": {"type": "string", "pattern": "^attempt_[0-9]{4,}$"},
+    "producerStatus": {
+      "description": "interchange.ProducerStatus: the only words a unit may use as terminal_status or as a disposition status.",
+      "enum": ["SUCCEEDED", "COMPLETE", "COMPLETED", "FAILED", "GAP", "BLOCKED", "BLOCKED_BY_COMPILE",
+               "INVALID_COMPILE_DATABASE", "UNAVAILABLE", "TIMED_OUT", "TIMEOUT", "OOM_KILLED",
+               "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY", "CONFIGURED_DISABLED",
+               "PARTIAL", "COMPLETED_WITH_GAPS", "DEGRADED"]
+    },
+    "coverageDisposition": {
+      "enum": ["complete", "partial", "unavailable", "not_applicable", "skipped_policy",
+               "COMPLETE", "PARTIAL", "UNAVAILABLE", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY", "CONFIGURED_DISABLED"]
+    },
+    "artifactReference": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/text"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "producerGap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "gap_id", "code", "unit_id", "scope_id", "reason", "retryable", "evidence_refs"],
+      "properties": {
+        "schema": {"const": "appsec-review/producer-gap/1"},
+        "gap_id": {"$ref": "#/$defs/sha256"},
+        "code": {"enum": ["producer_failed", "producer_blocked", "input_unavailable", "output_missing", "parser_error",
+                          "truncated", "location_unresolved", "empty_result", "provenance_unavailable",
+                          "unknown_producer_status", "producer_reported_gap"]},
+        "unit_id": {"oneOf": [{"$ref": "#/$defs/unitId"}, {"type": "null"}]},
+        "scope_id": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "reason": {"$ref": "#/$defs/text"},
+        "retryable": {"type": "boolean"},
+        "evidence_refs": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/artifactReference"}}
+      }
+    },
+    "disposition": {
+      "type": "object",
+      "properties": {
+        "scope_id": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "terminal_status": {"$ref": "#/$defs/producerStatus"},
+        "disposition": {"$ref": "#/$defs/producerStatus"},
+        "coverage_disposition": {"$ref": "#/$defs/coverageDisposition"},
+        "reason": {"type": "string"}
+      }
+    },
+    "taskReceipt": {
+      "description": "steps/<step>/tasks/<task>/status.json, written by the runner before and after one unit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "unit_id", "step_id", "task_id", "status", "started_at", "dependencies"],
+      "properties": {
+        "schema": {"const": "appsec-review/task-receipt/1"},
+        "unit_id": {"$ref": "#/$defs/unitId"},
+        "step_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "task_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "status": {"enum": ["RUNNING", "SUCCEEDED", "FAILED", "SKIPPED"]},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "completed_at": {"$ref": "#/$defs/timestamp"},
+        "dependencies": {"type": "array", "items": {"$ref": "#/$defs/unitId"}},
+        "blocked_by": {"type": "array", "items": {"$ref": "#/$defs/unitId"}},
+        "dagster_run_id": {"type": ["string", "null"]},
+        "dagster_node": {"type": ["string", "null"]},
+        "result_sha256": {"$ref": "#/$defs/sha256"},
+        "producer": {"type": ["string", "null"]},
+        "disposition": {"oneOf": [{"$ref": "#/$defs/producerStatus"}, {"type": "null"}]},
+        "shard_identity": {},
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "message"],
+          "properties": {"type": {"type": "string"}, "message": {"type": "string"}}
+        }
+      }
+    },
+    "attemptStatus": {
+      "description": "attempts/<attempt>/status.json: RUNNING at claim, then the terminal attempt status.",
+      "type": "object",
+      "required": ["schema", "job_id", "run_id", "attempt_id", "status", "started_at"],
+      "properties": {
+        "schema": {"const": "appsec-review/attempt-status/1"},
+        "job_id": {"$ref": "#/$defs/jobId"},
+        "run_id": {"$ref": "#/$defs/text"},
+        "attempt_id": {"$ref": "#/$defs/attemptId"},
+        "trigger": {"type": "string"},
+        "orchestration": {"type": "object"},
+        "status": {"enum": ["RUNNING", "SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED", "REJECTED"]},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "completed_at": {"$ref": "#/$defs/timestamp"},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "error": {"type": "object"}
+      }
+    },
+    "unitOutput": {
+      "description": "The control fields of one unit result (steps/<step>/tasks/<task>/result.json). interchange.UNIT_OUTPUT_KEYS is the subset the runner projects into handoff outputs; this schema validates those fields and ignores the job's payload fields.",
+      "type": "object",
+      "properties": {
+        "schema": {"type": "string", "pattern": "^appsec-review/[a-z0-9-]+(/[a-z0-9_-]+)*/[0-9]+$"},
+        "artifact": {"$ref": "#/$defs/artifactReference"},
+        "graph_export_artifact": {"$ref": "#/$defs/artifactReference"},
+        "identity": {},
+        "pointer": {},
+        "metadata_path": {"type": "string"},
+        "item_count": {"type": "integer", "minimum": 0},
+        "index_manifest": {"$ref": "#/$defs/artifactReference"},
+        "index_identity": {},
+        "terminal_status": {"oneOf": [{"$ref": "#/$defs/producerStatus"}, {"type": "null"}]},
+        "coverage_disposition": {"$ref": "#/$defs/coverageDisposition"},
+        "dispositions": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/disposition"}},
+        "gaps": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {"anyOf": [{"$ref": "#/$defs/producerGap"}, {"$ref": "#/$defs/text"},
+                              {"type": "object", "minProperties": 1, "not": {"required": ["schema"], "properties": {"schema": {"const": "appsec-review/producer-gap/1"}}}}]}
+        }
+      }
+    }
+  }
+}

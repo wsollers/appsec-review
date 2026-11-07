@@ -127,22 +127,17 @@ def _safe_json(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, Any]
 
 
 def _accepted_handoff_identity(run_root: Path, job_id: str) -> Mapping[str, str]:
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.is_file() or pointer_path.is_symlink():
-        raise FrameworkIntegrityError(f"accepted {job_id} handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    identity = {"path": str(pointer.get("handoff_path", "")),
-                "sha256": str(pointer.get("handoff_sha256", ""))}
-    handoff = _safe_json(run_root, identity)
-    decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
-    return identity
+    from appsec_review.runtime.consume import accepted_upstream
+    try:
+        return accepted_upstream(run_root, job_id).identity
+    except ValueError as exc:
+        raise FrameworkIntegrityError(f"accepted {job_id} handoff is required: {exc}") from exc
 
 
 def _optional_accepted_handoff_identity(run_root: Path, job_id: str) -> Mapping[str, str] | None:
-    pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
-    if not pointer_path.exists():
-        return None
-    return _accepted_handoff_identity(run_root, job_id)
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, job_id, required=False)
+    return None if accepted is None else accepted.identity
 
 
 def _accepted_index_manifests(run_root: Path, identity: Mapping[str, str]) -> tuple[Mapping[str, str], ...]:
@@ -772,10 +767,10 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                            result_limit=settings.result_limit)
         original_execution = existing.get("query_execution")
         if original_execution is None:
-            pointer = unit.job.run_root / "data" / "jobs" / "job_codeql_analysis" / "latest.json"
-            if pointer.is_file():
-                accepted = _safe_json(unit.job.run_root,
-                    _accepted_handoff_identity(unit.job.run_root, "job_codeql_analysis"))
+            from appsec_review.runtime.consume import accepted_latest
+            previous = accepted_latest(unit.job.run_root, "job_codeql_analysis")  # this job's own prior attempt
+            if previous is not None:
+                accepted = _safe_json(unit.job.run_root, previous.identity)
                 execution_path = (root / "executions" / "query" / "receipt.json").relative_to(
                     unit.job.run_root).as_posix()
                 original_execution = next((item for item in accepted["artifacts"]

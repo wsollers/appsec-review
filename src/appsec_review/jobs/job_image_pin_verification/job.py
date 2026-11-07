@@ -132,5 +132,5 @@ def build_job(*, runner: Runner | None = None) -> Job:
         input_validators=(_validate,), schema_identity="appsec-review/image-pin-verification-job/1",
         implementation_identity=implementation, validation_identity=implementation,
         units=units, datasets=DATASETS, consumes=CONSUMES,
-        always_execute=True, propagate_handoff=False,
+        always_execute=True, propagate_handoff=False, strict_gaps=True,
     )

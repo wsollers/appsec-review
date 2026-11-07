@@ -27,8 +27,8 @@ def load_generated_sources(run_root: Path, *, target_snapshot: str, relevant: bo
     if min(max_files, max_file_bytes, max_total_bytes) < 1:
         raise ValueError("generated source bounds must be positive")
     max_file_bytes = min(max_file_bytes, 16 * 1024 * 1024)
-    pointer = run_root / "data/jobs/job_language_build/latest.json"
-    if not pointer.is_file():
+    from appsec_review.runtime.consume import has_accepted_upstream
+    if not has_accepted_upstream(run_root, "job_language_build"):
         return [], ([{"path": "@generated", "reason": "generated_source_producer_unavailable"}]
                     if relevant else []), None
     accepted = load_accepted_language_build(run_root)

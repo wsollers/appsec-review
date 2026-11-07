@@ -263,6 +263,16 @@ def _accepted(reader: BoundedInputReader, job: str, *, optional: bool = False) -
         raise
     pointer = reader.json(reader.pin(relative).reference)
     reference = ArtifactRef(pointer["handoff_path"], pointer["handoff_sha256"])
+    # Inside an attempt the claim's pin, not the pointer, decides which accepted attempt is read.
+    from appsec_review.runtime.consume import accepted_upstream, current_pins
+    pins = current_pins(reader.root)
+    if pins is not None:
+        if job not in pins:
+            if optional:
+                return None
+            _require(False, f"{job} is not a pinned upstream of this attempt", Reason.INPUT_MISSING)
+        pinned = accepted_upstream(reader.root, job)
+        reference = ArtifactRef(pinned.path, pinned.sha256)
     _require(reference.path.startswith(f"data/jobs/{job}/attempts/"),
              "accepted pointer belongs to another job", Reason.IDENTITY_CONFLICT)
     handoff = reader.json(reference)

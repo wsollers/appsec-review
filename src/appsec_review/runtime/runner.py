@@ -23,6 +23,7 @@ from appsec_review.runtime.handoff import build_outcomes, collect_artifacts, exe
 from appsec_review.interchange import HANDOFF_SCHEMA, handoff_input_projection, input_set_sha256
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.runtime.units import UnitContext, UnitExecutor
+from appsec_review.interchange import ATTEMPT_STATUS_SCHEMA, TASK_RECEIPT_SCHEMA
 from appsec_review.runtime import execution_safety as safety
 from appsec_review.storage import RunStore, FileLock, LockUnavailable, atomic_bytes, atomic_json, file_sha256
 from appsec_review.storage.shared import (
@@ -255,6 +256,10 @@ class JobRunner:
             correlation["build_environment_contract"] = canonical_json(contract).decode()
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
             raise ValueError("orchestration correlation must contain string keys and values")
+        from appsec_review.runtime.consume import consumable_handoffs, upstream_scope
+        consumable = consumable_handoffs(run_root, job.job_id, job.consumes, required_upstream)
+        with upstream_scope(run_root, job.job_id, consumable):
+            input_identity = job.probe_input_identity(target_root, run_root)
         claim = {
             "schema": "appsec-review/attempt-claim/1", "run_id": run_id,
             "job_id": job.job_id, "attempt_id": attempt_id,
@@ -266,7 +271,10 @@ class JobRunner:
             "resolved_config_sha256": self.config.resolved_sha256,
             "review_policy": self.config.review_policy.view(),
             "upstream_handoffs": required_upstream,
-            "input_identity": job.probe_input_identity(target_root, run_root),
+            # What this attempt may read (runtime.consume): the projection above plus the accepted
+            # handoffs of declared/ancestor producers as they stood when this claim was written.
+            "consumable_handoffs": consumable,
+            "input_identity": input_identity,
             "job_config_sha256": job_config_sha256(self.config, job.job_id),
             "unit_ids": [unit.unit_id for unit in job.units],
             "component_identities": job.identities(
@@ -303,9 +311,11 @@ class JobRunner:
         context = self._context(job, claim)
         from appsec_review.runtime.scope import review_scope
         from appsec_review.storage.admission import admit_upstreams, resolve_evidence_target, sign_claim
+        from appsec_review.runtime.consume import upstream_scope
         try:
             with review_scope(self.config.runtime.repository_root, run_root, target_root), \
-                    validation_scope(run_root), operation_span(context.events, "attempt.prepare_inputs"):
+                    validation_scope(run_root), operation_span(context.events, "attempt.prepare_inputs"), \
+                    upstream_scope(run_root, job.job_id, claim.get("consumable_handoffs", claim["upstream_handoffs"])):
                 snapshot = resolve_evidence_target(context, claim["upstream_handoffs"])
                 claim["evidence_target_snapshot"] = snapshot
                 context = replace(context, evidence_target_snapshot=snapshot)
@@ -335,7 +345,8 @@ class JobRunner:
             PipelineLog(run_root).write("GRAPH_STARTED", run_id=run_id, trigger=trigger,
                                         orchestrator=correlation.get("system", "application"),
                                         details={"dagster_run_id": correlation.get("run_id")})
-        status = {key: claim[key] for key in ("job_id", "run_id", "attempt_id", "trigger", "orchestration", "started_at")}
+        status = {"schema": ATTEMPT_STATUS_SCHEMA,
+                  **{key: claim[key] for key in ("job_id", "run_id", "attempt_id", "trigger", "orchestration", "started_at")}}
         atomic_json(attempt_root / "status.json", {**status, "status": "RUNNING"})
         context.events.write("JOB_STARTED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id,
                              trigger=trigger, orchestration=correlation)
@@ -591,7 +602,8 @@ class JobRunner:
         unit_root.mkdir(parents=True, exist_ok=True)
         self._start_step(job, context, step_id)
         started = datetime.now(timezone.utc).isoformat()
-        running = {"unit_id": unit_id, "step_id": step_id, "task_id": task_id, "status": "RUNNING",
+        running = {"schema": TASK_RECEIPT_SCHEMA, "unit_id": unit_id, "step_id": step_id, "task_id": task_id,
+                   "status": "RUNNING",
                    "started_at": started, "dependencies": list(unit.dependencies),
                    "dagster_run_id": dict(context.orchestration).get("run_id"),
                    "dagster_node": dict(context.orchestration).get("node", unit_id)}
@@ -599,9 +611,12 @@ class JobRunner:
         context.events.write("TASK_STARTED", unit_id=unit_id)
         unit_context = UnitContext(context, unit_id, step_id, task_id, unit_root, MappingProxyType(outputs))
         try:
+            from appsec_review.runtime.consume import upstream_scope
             with operation_span(context.events, "unit.execute", unit_id=unit_id), \
                     publication_scope(context), unit_scope(run_root=context.run_root, job_id=job.job_id,
-                            repository_root=context.repository_root, target_root=context.target_root):
+                            repository_root=context.repository_root, target_root=context.target_root), \
+                    upstream_scope(context.run_root, job.job_id,
+                                   claim.get("consumable_handoffs", claim.get("upstream_handoffs", {}))):
                 from appsec_review.storage.admission import admit_upstreams
                 admit_upstreams(context, claim.get("upstream_handoffs", {}))
                 for validator in unit.input_validators:
@@ -689,7 +704,7 @@ class JobRunner:
 
     def _write_failed_attempt(self, context: JobContext, claim: Mapping[str, Any], exc: BaseException) -> None:
         failed = datetime.now(timezone.utc).isoformat()
-        status = {"job_id": context.config.job_id, "run_id": context.run_id,
+        status = {"schema": ATTEMPT_STATUS_SCHEMA, "job_id": context.config.job_id, "run_id": context.run_id,
                   "attempt_id": context.attempt_id, "trigger": context.trigger,
                   "orchestration": dict(context.orchestration), "status": "FAILED",
                   "started_at": claim["started_at"], "completed_at": failed,
@@ -726,10 +741,8 @@ class JobRunner:
         handoff_outputs = {}
         for unit_id, output in result.get("outputs", {}).items():
             if isinstance(output, Mapping):
-                handoff_outputs[unit_id] = {key: output[key] for key in (
-                    "schema", "artifact", "graph_export_artifact", "identity", "pointer", "metadata_path", "item_count",
-                    "gaps", "index_manifest", "index_identity", "terminal_status",
-                ) if key in output}
+                from appsec_review.interchange import UNIT_OUTPUT_KEYS
+                handoff_outputs[unit_id] = {key: output[key] for key in UNIT_OUTPUT_KEYS if key in output}
         attempt = context.attempt_root.relative_to(context.run_root).as_posix()
         handoff = {
             "schema": HANDOFF_SCHEMA, "run_id": context.run_id, "job_id": context.config.job_id,
@@ -904,14 +917,16 @@ class JobRunner:
         admit_upstreams(context, claim.get("upstream_handoffs", {}))
         completed = datetime.now(timezone.utc).isoformat()
         completion_status = str(result.get("status", "SUCCEEDED"))
-        status = {"job_id": job.job_id, "run_id": context.run_id, "attempt_id": context.attempt_id,
+        status = {"schema": ATTEMPT_STATUS_SCHEMA, "job_id": job.job_id, "run_id": context.run_id,
+                  "attempt_id": context.attempt_id,
                   "trigger": context.trigger, "orchestration": dict(context.orchestration),
                   "status": completion_status, "started_at": claim["started_at"], "completed_at": completed}
         root = context.run_root
         with operation_span(context.events, "publication.outcomes"):
             outcomes = build_outcomes(
                 root, run_id=context.run_id, job_id=job.job_id, attempt_id=context.attempt_id,
-                target_snapshot=claim["evidence_target_snapshot"], unit_ids=claim["unit_ids"])
+                target_snapshot=claim["evidence_target_snapshot"], unit_ids=claim["unit_ids"],
+                strict_gaps=job.strict_gaps)
             if execution_status(outcomes) == "FAILED":
                 raise ValueError("failed task execution cannot publish an accepted handoff")
             outcomes_ref = immutable_bytes(root, context.attempt_root.relative_to(root).as_posix()

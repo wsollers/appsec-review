@@ -129,13 +129,9 @@ def _safe_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
 
 
 def load_accepted_language_build(run_root: Path, *, for_execution: bool = False) -> Mapping[str, Any]:
-    pointer_path = run_root / "data" / "jobs" / "job_language_build" / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted job_language_build handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _safe_artifact(run_root, {"path": pointer.get("handoff_path"),
-                                      "sha256": pointer.get("handoff_sha256")})
-    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_language_build")
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_language_build")
+    handoff = accepted.handoff
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
     if not isinstance(identity, Mapping):
@@ -153,7 +149,7 @@ def load_accepted_language_build(run_root: Path, *, for_execution: bool = False)
     reject_swift_derived(
         document, enabled=swift_enabled_from_run(run_root),
         context="accepted language-build handoff")
-    return {**document, "language_build_handoff_sha256": pointer["handoff_sha256"]}
+    return {**document, "language_build_handoff_sha256": accepted.sha256}
 
 
 def _dispatches(
