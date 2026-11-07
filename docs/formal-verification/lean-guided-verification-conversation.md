@@ -2,7 +2,7 @@
 
 > **Archive status:** Discussion transcript for the `appsec-review` project. This is a conversation record, not an approved architecture, implementation claim, validated proof, or authorization to run security tests.
 >
-> **Scope:** All substantive user/assistant turns in this ChatGPT discussion through the request to save it in `wsollers/appsec-review`. Rich UI diagrams have been translated to Markdown flow diagrams and tables; ephemeral tool progress, citations rendered by the chat interface, and interface-only widgets are not reproduced verbatim. Where necessary, prose has been lightly normalized for portability. **Use the original ChatGPT conversation for a byte-for-byte chat export.**
+> **Scope:** The substantive discussion through the request to update the design and transcript (2026-11-07). Original user prompts are preserved; assistant responses are rendered in portable Markdown, with earlier material lightly normalized and Turns 8–13 marked as archival renderings/condensations. Rich UI diagrams are translated to text/tables. This is not a byte-for-byte ChatGPT message export; the original conversation remains authoritative.
 >
 > **Relevant existing project documentation:** [Binary decompilation](../architecture/binary-decompilation.md), [bounded dataflow slices](../architecture/dataflow-bounded-slices.md), [code-graph precomputation](../architecture/code-graph-precomputation.md), [Clang static analysis](../architecture/clang-static-analysis.md).
 
@@ -985,3 +985,297 @@ This transcript is an archival input for future Codex work. It does **not** clai
 - What is the correct split among CodeQL, compiler IR, Ghidra/P-code, angr, CBMC, Lean, and AFL++?
 - How should function-level and network-level fuzzing be orchestrated and replayed in isolated containers?
 - Which evidence records and assurance levels are necessary for a defensible SAST adjudication?
+
+---
+
+## Turn 8 — User: Feasibility of the approach
+
+> Do you think this is a feasible thing?
+
+### Assistant — archival rendering
+
+**Yes. The design is technically feasible as a targeted SAST-to-formal-verification tool.** I would treat it as a staged research-and-engineering effort, not a claim that an AI can automatically prove arbitrary applications safe.
+
+The most valuable approach is to begin with a *specific* SAST alert, determine the security property the alert alleges, analyze a minimal relevant program slice, and either obtain a source-connected checked proof or produce a candidate witness to validate against the implementation.
+
+I examined the existing `wsollers/appsec-review` repository. It already has substantial infrastructure: CodeQL findings and dataflow paths; precomputed graphs; bounded finding-oriented source context; an MCP retrieval surface; sanitized builds and source provenance; and a Ghidra binary-evidence pipeline. **It does not already have a Lean source-to-model verifier, sound translation, reusable formal contracts, or proof-directed fuzzing.** Build on existing findings and custody rather than creating a parallel scanner/graph platform.
+
+| Capability | Assessment |
+|---|---|
+| Lean proofs of bitvector arithmetic and bounds | Strongly feasible |
+| Selected parser and finite control-flow properties | Feasible with careful semantics |
+| Generated witnesses and dedicated fuzz harnesses | Feasible engineering |
+| SAST path infeasibility for a supported subset | Feasible but depends on model/source coverage |
+| General automatic C/C++-to-Lean correspondence | Difficult research problem |
+| Arbitrary closed-source binary proof | Much harder, suitable for later research |
+| Universal automatic whole-program verification | Not a realistic initial goal |
+
+The greatest difficulty is **semantic correspondence**. An LLM can generate a Lean theorem that proves its own simplified model safe while having overlooked a real source branch. The design must justify each link between accepted source/compiled semantics, relevant slice, Lean model, and claimed property. Missing coverage is an explicit gap, never an implicit proof of safety.
+
+A practical prototype should ingest a **real CodeQL finding** from a pinned vulnerable C/C++ test project, produce a source-specific formal obligation, check it with Lean (and use CBMC/other tools for supporting path reasoning), and record a proof, witness or honestly inconclusive outcome. Only afterwards should it generate a bounded harness that invokes the **original implementation** to test a concrete suspected violation.
+
+The implementation should be tested on known-vulnerable and known-safe versions, with independent ground truth, reproducibility records, axiom audits, and explicit distinctions among model proof, source-connected proof, and observed dynamic behavior.
+
+The long-term payoff is compositional verification: when a function's preconditions, postconditions and source correspondence have actually been established, later findings can reuse those contracts, checking the caller-side premises instead of re-proving the function.
+
+**The credible objective is not “AI proves applications clean.” It is “take one difficult finding and deliver a checked scoped safety proof or a concrete replayable violation, with evidence and open assumptions.”**
+
+---
+
+## Turn 9 — User: Request for an M1/M2 implementation design
+
+> Can you add a design doc for 1&2 into that folder that details exactly what we must build. I have known vuln projects we can test it against and see if it can prove things are bad from the ingestion source.
+
+### Assistant — archival rendering
+
+I added an implementation specification under:
+
+```text
+docs/formal-verification/sast-to-lean-and-proof-directed-fuzzing.md
+```
+
+The design separates:
+
+- **M1 — SAST-to-Lean adjudication:** ingested scanner observation and pinned source identity; property-directed semantic slice; controlled source/IR translation; Lean proof and axiom checks; witnesses, assumptions and source-correspondence gaps.
+- **M2 — Proof-directed fuzzing and reusable contracts:** per-obligation input and harness planning; isolated execution under explicit authorization; sanitizer/coverage evidence; same-fault minimization and reproducible replay; immutable receipts and contract reuse with invalidation.
+
+The proposed implementation included exact modules, schemas, container/tool surfaces, work packages **F0–F7** and **P1–P9**, acceptance gates, and evaluation against the user's known-vulnerable projects. Existing `appsec-multi-vuln`/Case-094 fixtures and a separately isolated evaluator guide were identified as suitable for blind tests. The ordinary compile-only PoC pipeline remained non-executing.
+
+The first design commit was `19f960d1aa221949c36fdcfe9c088ee46899e36d`. This transcript records the initial design decision; the [living specification](sast-to-lean-and-proof-directed-fuzzing.md) contains subsequent revisions.
+
+---
+
+## Turn 10 — User: Make the fuzzer a built-in, authorized function-specific container
+
+> I want to build the fuzzing authorized env as part of this a container running the fuzzer. Ie since we are building the fuzzer and have wrapped the function in our lean inspired and guided code we should be good with a container. We aren't building a generalized fuzzer other than for network. We are fuzzing the functions that lean specifies that it needs more detailed flow about. Make sense? Opinions?
+
+### Assistant — archival rendering
+
+**Yes. That makes sense, and it improves the architecture.** This is not a conventional generalized fuzzing service. It is **Lean-guided, function-specific testing**: the formal verifier chooses a concrete unresolved obligation, generates a wrapper and oracle for that question, then executes it in a controlled container against the real implementation.
+
+The workflow:
+
+```text
+SAST finding / accepted CodeQL flow
+             |
+Lean security property + relevant program slice
+             |
+attempt proof
+       /            \
+proved within scope   experimentally answerable missing fact?
+                      /        \
+                    no          yes
+                    |            |
+             more proof work   Lean-guided harness
+                                 |
+                           original source function
+                           valid caller and state
+                                 |
+                        authorized Clang/libFuzzer/
+                           ASan/UBSan container
+                                 |
+                         coverage / observed behavior
+                                 |
+                        minimize + clean replay
+                                 |
+                          Lean model refinement
+                                 |
+                          scoped result + evidence
+```
+
+The **unit of work should be a Lean proof obligation**, not the SAST finding and not the entire function. One alert may create three obligations; two might be proved without dynamic tests, while only the third has an observable question worth fuzzing.
+
+Generate the smallest harness that exercises the **actual target function**, not an AI-authored reimplementation. Formal preconditions must guide valid structure decoding, input ranges, object lifetimes, session/setup state and caller selection. If the fault depends on a caller, include that caller; do not fabricate an impossible internal state just to trigger a sanitizer.
+
+The reusable tool image should contain pinned **Clang, libFuzzer, SanitizerCoverage, ASan and UBSan**. Reuse an existing vetted build where possible, but instrumented rebuilds need separately recorded flags and dependencies. Use the fuzzer's existing coverage/mutation engine, not a new generalized mutation framework. Obtain seeds and boundary conditions from the formal model, and attach a **question-specific oracle**. Sanitizer crashes, property violations, coverage evidence and model discrepancies are different result kinds.
+
+**Authorization decision:** The operator grants a bounded investigation for exact target/source, selected obligation and functions, pinned image, duration/resource quotas and network profile. Once authorized, the controller can automatically perform permitted fuzzing, minimization, replay and bounded Lean-feedback iterations without requesting permission for every individual input. Revalidate the envelope and remaining limits for every execution. The model cannot expand targets, functions, commands or network access.
+
+For initial function fuzzing, use **no network**, no host Docker socket, no production credentials, non-root and resource-limited execution, immutable source identity and bounded scratch. The existing compile-only PoC job must remain never-executed. Network-protocol session fuzzing may later use a separate internal-only lab profile; it is not a prerequisite to core function-level verification.
+
+**Important logical limit:** Fuzzing can establish reachability for a *particular* input, reveal unexpected runtime behavior and provide concrete witnesses. Even millions of clean executions do not prove that a universal security property holds. If a Lean proof is blocked only by a missing mathematical lemma or an unproved semantic translation, an unstructured fuzz campaign may be unhelpful: send the obligation back to proof/model work.
+
+The preferred implementation is therefore a **formal-verification assistant with a narrow experimental facility**, not an all-purpose fuzzer.
+
+---
+
+## Turn 11 — User: Incorporate the container approach in the design
+
+> Add to design doc
+
+### Assistant — archival rendering
+
+The existing design document was revised, preserving the user's preference for **obligation-directed function testing**. The update added an exact per-obligation experiment request, original-function/caller harness requirements, a required Clang/libFuzzer/ASan/UBSan container, bounded investigation admission, coverage/behavior feedback into Lean, minimization and clean replay, new suggested schemas and modules, and updated M2 work packages and acceptance criteria.
+
+The existing compile-only PoC pipeline remained separate and non-executing. Generalized whole-project fuzzing was excluded; an isolated network-protocol driver was deferred to a separate extension.
+
+Committed revision: `4e0db4a2295e346ce1cc758a86f4b62e55612700`.
+
+---
+
+## Turn 12 — User: Construct SAST false positives that Lean can prove safe
+
+> We need to figure how to make false positives. Ie things that trigger a sast finding but arent actual issues and lean verification would prove safe
+
+### Assistant — archival rendering
+
+**Yes. This is one of the most important tests of the proposed verifier.**
+
+Finding a genuine vulnerability is valuable; but being able to take a SAST alert and **prove that the alleged vulnerability is impossible** is how the system can materially reduce false-positive review effort.
+
+The benchmark should consist of **safe-but-flagged programs**. It is not enough to take a safe code example that produces no scanner alert.
+
+The intended conditions are:
+
+\[
+\operatorname{SASTReports}(P)=\mathrm{true},\qquad
+\operatorname{Vulnerable}(P)=\mathrm{false},\qquad
+\operatorname{LeanProvesSafe}(P)=\mathrm{true}.
+\]
+
+The third condition requires a checked proof and adequate correspondence between the model and actual source. A false positive can only be dismissed within the exact proved property and environmental scope.
+
+### Use a rule already present in appsec-review
+
+A suitable candidate is the repository's Semgrep rule `appsec-review.review-signal.sink.cpp-copy-length-not-bounded`. This targets variable-length `memcpy`/`memmove` calls where the length expression lacks certain syntactically recognizable bounds.
+
+**Program A — Safe (intended to still trigger the scanner)**
+
+```cpp
+#include <cstdint>
+#include <cstring>
+
+uint8_t example_a(uint32_t n) {
+    uint8_t src[16] = {1};
+    uint8_t dst[16] = {};
+
+    if (n > 8)
+        return 0;
+
+    memcpy(dst, src, n);
+    return dst[0];
+}
+```
+
+The memory copy cannot exceed 8 bytes. Both arrays have 16 bytes.
+
+**Program B — Vulnerable (intended to trigger the same rule)**
+
+```cpp
+#include <cstdint>
+#include <cstring>
+
+uint8_t example_b(uint32_t n) {
+    uint8_t src[16] = {1};
+    uint8_t dst[16] = {};
+
+    if (n > 24)
+        return 0;
+
+    memcpy(dst, src, n);
+    return dst[0];
+}
+```
+
+This version admits `n = 17` and therefore may attempt a 17-byte copy from and to 16-byte arrays. The two examples have the same dangerous-looking sink; the essential difference is the guard.
+
+**Status of scanner claims:** These were proposed examples, not a statement that a pinned scanner run had already observed matching alerts. The benchmark must execute the actual rule on both versions and preserve its native evidence. A safe but unflagged case remains a useful ordinary negative control, but not an eliminated false alarm.
+
+### What Lean should establish
+
+For the safe version:
+
+\[
+n\le 8,\quad 8\le16
+\quad\Longrightarrow\quad n\le16.
+\]
+
+The model proof:
+
+```lean
+import Mathlib
+
+def copyReached (n : BitVec 32) : Prop :=
+  n.toNat ≤ 8
+
+def copyOutOfBounds (n : BitVec 32) : Prop :=
+  copyReached n ∧ 16 < n.toNat
+
+theorem safe_copy (n : BitVec 32) :
+    ¬ copyOutOfBounds n := by
+  intro h
+  rcases h with ⟨hreach, hoob⟩
+  unfold copyReached at hreach
+  omega
+```
+
+This proves the modeled copy is never reached with a length greater than 16. Source-level adjudication must also justify that the model faithfully represents the C/C++ branch, machine width/promotions, real array extents, caller constraints and relevant paths. A model theorem alone cannot close the finding.
+
+For the vulnerable version, `n = 17` is the candidate violating input. A bounded, authorized sanitizer harness can test the original compiled function and produce a concrete reproducer, subject to correct instrumentation and a valid caller state.
+
+| | Scanner | Lean objective | Runtime |
+|---|---|---|---|
+| Safe | Same alert | Source-connected safety theorem | No defect for admissible tested inputs |
+| Vulnerable | Same alert | Feasible violating witness | Reproduce against real source with sanitizer/oracle |
+
+The key is that the scanner might see the same pattern in both but Lean must determine whether the guard actually makes the dangerous path impossible.
+
+### Progressively more difficult false positives
+
+Five classes were proposed:
+
+| Class | Why SAST may report it | What Lean proves |
+|---|---|---|
+| Local bounds | Variable copy length or dangerous API | Guard bounds source and destination accesses |
+| Interprocedural validation | Validation is done in a different function | Caller contract ensures safe callee arguments |
+| Infeasible path | Syntactic source-to-sink connection | Branch conditions cannot simultaneously hold |
+| Integer arithmetic | Potential wrap or narrowing | Input range proves arithmetic stays safe |
+| Authorization | Sensitive operation with request-controlled values | Every reachable operation preserves principal/ownership requirements |
+
+Start with local bounds and interprocedural validation, then add infeasible paths, arithmetic and authorization.
+
+Make the examples challenging, not artificial. Derive a safe twin from a real vulnerability by changing the minimum necessary guard or invariant while preserving the scanner-relevant API, sink, path and entry shape. Then run **the same scanner rule** on both. If a high-precision CodeQL rule already suppresses the safe variant, that's good scanner behavior, but it does not demonstrate Lean refuting an actual alert. Do not change a tool to emit an artificial warning just to pass a benchmark.
+
+### Evaluation and failure criterion
+
+| Actual code | Formal result | Evaluation |
+|---|---|---|
+| Safe and flagged | Adequate Lean/source proof of safety | Correct false-positive adjudication |
+| Vulnerable and flagged | Source-connected violation | Correct positive adjudication |
+| Vulnerable and flagged | Unconditional “safe” verdict | **Critical soundness failure** |
+| Either | Honest inconclusive with named gaps | Abstention; not a successful proof |
+
+The two key metrics:
+
+\[
+\mathrm{FalseAlarmEliminationRate} =
+\frac{\#\{\text{safe flagged cases proven safe}\}}
+     {\#\{\text{safe flagged cases attempted}\}},
+\]
+
+\[
+\mathrm{FalseSafeRate} =
+\frac{\#\{\text{vulnerable cases incorrectly certified safe}\}}
+     {\#\{\text{vulnerable cases attempted}\}}.
+\]
+
+Keep false-safe certifications at **zero** in the pinned evaluation corpus, and report abstentions rather than hiding them.
+
+The proposed benchmark groups were: **A** synthetic safe/vulnerable pairs (initial target 10–20); **B** interprocedural cases with validators, guards and aliases; **C** real SAST false positives from known target projects. Ground-truth labels, minimal fixes and reference proofs remain hidden from the agent, following the existing blind-evaluation design. Safe-but-flagged informational review signals should be distinguished from actual scanner claims erroneously alleging a vulnerability.
+
+**Preferred first experiment:** Have the same real SAST rule flag both versions of the `memcpy` example; Lean prove the guarded one safe; and the formal/fuzzing workflow derive and validate a violating counterexample for the other. This exercises both sides of the system.
+
+---
+
+## Turn 13 — User: Update the design and discussion archive
+
+> Update the design doc and transcript
+
+### Assistant — archive update note
+
+The existing [M1/M2 design specification](sast-to-lean-and-proof-directed-fuzzing.md) was extended with **Section 10.5 — False-positive proof benchmark: safe code that still triggers SAST**. It specifies the paired C++ example, real scanner-alert gate, source-connected Lean proof requirement, evaluator-only ground truth, test categories, scoring/acceptance thresholds, and soundness regression tests. Work packages **F8/F9** were added without changing the existing normal review execution policy.
+
+Design revision commit: `471232edd982c64c3aaf1ac3d316964fab53067d`.
+
+This transcript continuation is an **archival rendering** of the intervening discussion. As with the earlier archive, UI diagrams are converted to Markdown and some assistant prose is normalized; it is **not a byte-for-byte export** of ChatGPT's underlying message records. The original chat remains the authoritative transcript.
+
