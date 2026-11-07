@@ -248,12 +248,56 @@ def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tm
         assert raw_path.is_file() and file_sha256(raw_path) == identity["sha256"]
 
 
-def test_changed_accepted_artifact_is_an_integrity_failure(tmp_path: Path) -> None:
-    config, run_id, _run_root, target, fingerprint, produced = _fixture(tmp_path)
-    produced.write_bytes(b"changed")
-    with pytest.raises(RuntimeError, match="partial failure"):
-        recorded_graph(config, [build_job()], run_id).run(target_root=target,
-            source_fingerprint=fingerprint, run_id=run_id)
+@pytest.mark.parametrize("tamper", (False, True), ids=("unchanged-control", "accepted-bytes-changed"))
+def test_changed_accepted_artifact_is_an_integrity_failure(tmp_path: Path, tamper: bool) -> None:
+    from appsec_review.indexing.store import accepted_handoff
+
+    config, run_id, run_root, target, fingerprint, produced = _fixture(tmp_path, seed_accepted=True)
+    producers = ("job_language_build", "job_artifact_indexing")
+    supplied, history = {}, {}
+    for producer in producers:
+        directory = run_root / "data/jobs" / producer
+        assert (directory / "latest.json").is_file(), "producer must be accepted before artifact mutation"
+        accepted = accepted_handoff(run_root, producer)
+        assert accepted is not None and accepted.handoff["status"] == "ACCEPTED"
+        supplied[producer] = accepted.sha256
+        history[producer] = {
+            path.relative_to(directory).as_posix(): path.read_bytes()
+            for path in directory.rglob("*") if path.is_file()
+        }
+    indexed = json.loads(history["job_artifact_indexing"]["attempts/attempt_0001/handoff.json"])
+    assert indexed["upstream_handoff_sha256"] == {"job_language_build": supplied["job_language_build"]}
+    language = json.loads(history["job_language_build"]["attempts/attempt_0001/handoff.json"])
+    relative = produced.relative_to(run_root).as_posix()
+    bound = next(ref for ref in language["artifacts"] if ref["path"] == relative)
+    assert bound["sha256"] == file_sha256(produced)
+
+    def forbidden_scanner(*args):
+        pytest.fail("admission and load must not invoke a scanner")
+
+    runner, job = JobRunner(config), build_job(scanner_runner=forbidden_scanner)
+    if tamper:
+        produced.write_bytes(b"\xff" * produced.stat().st_size)
+        assert produced.stat().st_size == bound["size_bytes"]
+        assert file_sha256(produced) != bound["sha256"]
+        with pytest.raises(ValueError, match="^target evidence integrity mismatch$"):
+            runner.begin_attempt(job, run_id=run_id, target_root=target,
+                                 source_fingerprint=fingerprint, upstream_handoffs=supplied)
+        assert not (run_root / "data/jobs" / job.job_id / "attempts").exists()
+    else:
+        claim = runner.begin_attempt(job, run_id=run_id, target_root=target,
+                                     source_fingerprint=fingerprint, upstream_handoffs=supplied)
+        assert claim["upstream_handoffs"] == supplied
+        loaded = runner.execute_or_reuse_unit(job, claim, "load.accepted_artifacts")
+        assert loaded["artifact_count"] == 1
+        assert loaded["artifacts"][0]["verified_path"] == relative
+    for producer in producers:
+        directory = run_root / "data/jobs" / producer
+        assert {
+            path.relative_to(directory).as_posix(): path.read_bytes()
+            for path in directory.rglob("*") if path.is_file()
+        } == history[producer], "consumer must not republish or rewrite accepted producer generations"
+    assert not (run_root / "data/jobs" / job.job_id / "latest.json").exists()
 
 
 def test_no_package_scan_exposes_native_reference_closure_without_a_finding(tmp_path: Path) -> None:
