@@ -1,0 +1,1067 @@
+# Buildout Plan: SAST-to-Lean Verification and Proof-Directed Fuzzing
+
+**Status:** Proposed implementation plan; no capability described here is implemented merely by
+this document
+
+**Design authority:** [SAST-to-Lean Verification and Proof-Directed
+Fuzzing](sast-to-lean-and-proof-directed-fuzzing.md)
+
+**Discussion input:** [Lean-Guided Formal Verification
+Conversation](lean-guided-verification-conversation.md)
+
+**Initial scope:** Source-available C/C++, accepted SAST leads, Lean 4 model checking, and
+obligation-directed function fuzzing
+
+**Out of initial scope:** Binary-only verification, arbitrary C/C++ semantics, whole-application
+fuzzing, raw packet generation, Internet-facing tests, and automatic finding closure
+
+## 1. Outcome and binding decisions
+
+This plan turns the design into an implementation sequence tied to the repository's current job,
+dataset, configuration, container, retrieval, guidance, and run-custody contracts. The completed
+vertical path must take one accepted SAST observation through a source-bound formal attempt and
+produce one of three honest outcomes:
+
+1. a kernel-checked model theorem with an explicit source-correspondence level;
+2. a model witness that may be promoted only after feasibility and, where applicable, concrete
+   reproduction; or
+3. an inconclusive result with named coverage, semantics, proof, or execution gaps.
+
+The following decisions are part of the buildout and should not be reopened implicitly in an
+implementation pull request:
+
+- Formal verification is a new evidence producer. It does not replace CodeQL, scanner ingestion,
+  the claim ledger, R4/R5/R6 adjudication, or the final publication gate.
+- The normal review graph remains non-executing with respect to target binaries. It may build Lean
+  models, check Lean proofs, generate harness source, and compile-check a harness, but it does not
+  run the target function.
+- Target execution occurs only in `job_formal_fuzz_lab`, a standalone, operator-admitted job that
+  is never an automatic dependency of `wave1_review`.
+- The unit of dynamic work is one accepted Lean obligation and exact function/caller scope, not a
+  finding, project, arbitrary function, or model-selected command.
+- The Lean kernel is the proof authority for Lean theorems. CBMC, SMT, concolic execution, and
+  fuzzing may supply candidates or observations; their clean completion is not a proof.
+- Raw Lean sources, proof terms, harnesses, corpora, sanitizer logs, and reproducer bytes are
+  protected artifacts. Only bounded summaries and resolving references are indexed.
+- Runtime workers receive read-only, package-scoped retrieval. No inference worker receives a
+  shell, Docker, build, admission, fuzz, replay, or network tool.
+- Formal methods is a responsibility and procedure, not a security-domain viewpoint. The first
+  implementation adds roles, tasks, and runtime skills, but no new persona.
+
+## 2. Existing facilities to reuse
+
+The buildout must extend the current architecture rather than create a second review system.
+
+| Existing facility | Reuse in this buildout | Required extension |
+| --- | --- | --- |
+| Accepted job handoffs and `latest.json` pointers | Bind every input to one run, target snapshot, producer attempt, schema, and hash | Add formal jobs to the registry, topology where applicable, input-source matrix, and reuse invalidation |
+| `job_codeql_analysis` and scanner observations | Supply the accepted lead, rule, sink, SARIF path, and scanner coverage | Add deterministic candidate qualification and exact observation binding |
+| `job_code_graph_index` | Supply accepted calls, guards, ranges, SARIF paths, and producer neighborhoods | Add formal slice construction over bounded graph identities; do not run graph analysis during inference |
+| `job_cpp_compiled_analysis`, `job_cpp_symbol_index`, and `job_svf_alias_analysis` | Supply compile units, LLVM/CFG facts, symbols, layout, and aliases | Add a supported-semantics matrix and explicit unresolved-edge accounting |
+| `job_language_build` and `job_sanitizer_build` | Supply accepted build custody and instrumented native outputs | Add exact function/object selection and link-compatibility checks; never execute sanitizer outputs in these jobs |
+| Run-local shared objects | Content-address large immutable bytes | Store Lean modules, proof outputs, harnesses, corpora, and logs as shared objects referenced from attempts |
+| Dataset declarations and inventory | Account for every formal output and sanitized query route | Add dataset family `formal`, formal shard ownership, and protected-output declarations |
+| Retrieval core and MCP adapters | Serve accepted, hash-verified, bounded evidence | Add a `formal` index and five read-only formal query tools |
+| Guidance registry and pinned bundles | Select roles, tasks, personas, and runtime skills deterministically | Add formal roles/tasks/skills and preserve exact bundle pinning |
+| Existing container catalog and admission limits | Pin images, enforce offline execution, resource bounds, and provenance | Add Lean and fuzz images plus a fuzz-specific execution admission profile |
+| Review package assembly and inference review | Carry formal summaries into evidence-bound review | Add exact formal identities and scoped formal query grants to packages |
+
+The implementation must not treat a declaration, configured image tag, generated model, accepted
+handoff, or successful container exit as evidence that the underlying security property is true.
+
+## 3. End-state flows
+
+### 3.1 Ordinary review flow: proof work, no target execution
+
+When enabled, the normal graph gains two optional non-executing producers before dataset indexing:
+
+```text
+accepted target/build/scanner/graph handoffs
+                   |
+         job_formal_verification
+     resolve -> slice -> lower -> prove
+                   |
+       job_formal_fuzz_planning (optional)
+   triage -> harness design -> policy/compile check
+                   |
+        job_review_data_indexing
+                   |
+      job_review_package_assembly
+                   |
+       job_inference_security_review
+```
+
+`job_formal_verification` is disabled by default until the M1 acceptance gate passes.
+`job_formal_fuzz_planning` is independently disabled by default and can run only when formal
+verification is enabled. Neither job may execute a produced target binary.
+
+### 3.2 Authorized function-fuzzing flow
+
+The operator selects an accepted experiment request and creates one immutable admission record.
+The generic job launcher then starts the standalone lab with exact upstream handoff identities:
+
+```text
+accepted formal experiment request
+accepted sanitizer/native build custody
+operator-created formal-lab admission
+                   |
+          job_formal_fuzz_lab
+ verify admission -> build -> fuzz -> minimize -> replay -> publish
+                   |
+       accepted formal observation and fuzz result
+                   |
+        job_formal_refinement
+ compare model -> refine slice/model -> recheck Lean -> publish
+```
+
+The admission covers one run, target snapshot, lead, formal attempt, selected obligation set,
+function/caller allowlist, image digest, operation allowlist, network profile, total campaign
+count, wall-clock budget, CPU/memory/PID limits, input limit, output limit, and expiry. The lab
+revalidates the admission and remaining quota before compile, campaign, minimization, and replay.
+Changing any scoped value requires a new admission.
+
+`job_formal_refinement` is also standalone. It shares the formal library with the initial verifier
+but publishes a new immutable attempt linked by `supersedes_attempt_id`; it never edits the earlier
+attempt.
+
+### 3.3 Returning authorized observations to review
+
+Lab and refinement results occur after the original accepted index may already exist. They do not
+mutate that index in place. To make the results visible to review workers, the operator explicitly
+reruns the affected downstream publication chain:
+
+```text
+job_formal_refinement accepted handoff
+             |
+job_review_data_indexing (new accepted manifest)
+             |
+job_review_package_assembly (new packages)
+             |
+job_document_issue_analysis / job_inference_security_review
+             |
+normal deterministic gate and reporting
+```
+
+Every rerun binds the new accepted upstream hashes. Frozen earlier configurations and packages
+remain immutable. This downstream rerun is not implied by successful fuzzing and is not started by
+an inference worker.
+
+### 3.4 Later application-protocol flow
+
+After core M2 acceptance, a separate `job_formal_protocol_lab` may consume a protocol experiment
+request and a service image. It uses only a lab-internal network shared by the target service and a
+protocol driver. It is not a prerequisite for M1/M2 and cannot add raw sockets, host networking,
+external destinations, production credentials, or privileged containers without a new design and
+authorization review.
+
+## 4. New semantic jobs
+
+### 4.1 Job inventory and topology
+
+| Job | Graph status | Primary responsibility | Accepted inputs | Accepted outputs |
+| --- | --- | --- | --- | --- |
+| `job_formal_verification` | Optional `wave1_review` producer before data indexing | Qualify leads, build a property-specific semantic slice, lower supported semantics, check Lean, and publish formal attempts | Target catalog; language/native build; C++ compiled facts; CodeQL/scanner observations; code graph; aliases/symbols when available; prioritization | Candidate records, slices, IR, obligations, translation receipts, proof/witness records, contracts, attempt summaries, formal index shards |
+| `job_formal_fuzz_planning` | Optional non-executing graph producer after formal verification and sanitizer build | Select experimentally answerable obligations and generate a declarative real-function harness package | Formal verification; sanitizer build; language build; exact source/build custody | Experiment requests, harness specs/source, oracles, seeds, compile-check receipts, planning summaries |
+| `job_formal_fuzz_lab` | Standalone only; never a `wave1_review` vertex | Execute the fixed admitted build/fuzz/minimize/replay state machine | Formal fuzz plan; sanitizer/native build; target catalog; immutable lab admission | Build receipt, campaign receipt, minimized cases, replay receipts, observations, fuzz result summary |
+| `job_formal_refinement` | Standalone only | Compare observations with formal predictions, refine only challenged assumptions, and check a new Lean attempt | Original formal attempt; accepted fuzz-lab handoff; code graph/build inputs | Refined slice/translation/proof/witness/attempt, explicit relationship to prior attempt |
+| `job_formal_protocol_lab` | Deferred standalone job | Execute application-protocol sequences in an internal-only lab | Protocol request, service image, protocol admission | Logical transcript, sanitized state observations, protected captures and replay receipt |
+
+`src/appsec_review/runtime/registry.py` must register each implemented job exactly once.
+`src/appsec_review/orchestration/topology.py` must place only the two non-executing jobs in the
+ordinary graph. `job_review_data_indexing` remains the closing inventory producer and must wait for
+each enabled formal producer. The lab and refinement jobs must be absent from
+`wave1_dependencies`; a unit test must assert that absence.
+
+### 4.2 `job_formal_verification` step/task contract
+
+| Step | Stable task | Behavior |
+| --- | --- | --- |
+| `scope` | `resolve_inputs` | Verify accepted upstream handoffs, accepted manifest/observation identities, target snapshot, compile unit, source hashes, and supported language/toolchain facts |
+| `candidates` | `select` | Apply the closed property registry, deterministic rank/budget, and supported-semantics preconditions; publish a status for every considered lead |
+| `slicing` | `build` | Construct property-specific data/control/call/memory dependencies and explicit closure/gap records from accepted bounded indices |
+| `obligations` | `instantiate` | Instantiate a registered property template, its violation dual, quantified inputs, assumptions, and concrete-input mapping requirements |
+| `translation` | `lower` | Convert the supported Clang/LLVM subset into the typed formal IR and emit source-to-IR-to-Lean traceability |
+| `proof` | `check` | Generate Lean modules from validated IR, run the pinned Lean checker, audit axioms/imports, and parse theorem/witness status |
+| `contracts` | `publish` | Publish reusable contracts only when statement, source/build identity, dependencies, correspondence, and use conditions are complete |
+| `acceptance` | `publish_index` | Validate records, create `formal` index shards, and declare all protected/artifact-only outputs |
+| `acceptance` | `publish_handoff` | Publish the accepted handoff and coverage/gap accounting through the ordinary runner |
+
+Candidate parallelism is bounded by typed task worker settings. Candidate IDs and processing order
+are deterministic. A candidate timeout or unsupported construct produces a terminal typed attempt,
+not an omitted row.
+
+### 4.3 `job_formal_fuzz_planning` step/task contract
+
+| Step | Stable task | Behavior |
+| --- | --- | --- |
+| `load` | `verify_inputs` | Resolve exact formal attempts/obligations and accepted build/sanitizer custody |
+| `triage` | `select_obligations` | Admit only `candidate_witness`, `observable_guard_question`, `input_boundary_question`, or `model_discrepancy_replay` |
+| `harness` | `generate` | Produce a declarative adapter around the original function and required actual caller/state setup |
+| `oracle` | `bind` | Bind one property/sanitizer/behavior oracle, negative control, boundary seeds, and expected observations |
+| `validate` | `policy` | Reject arbitrary commands, paths, network requests, unsupported calls, invalid object lifetimes, or widened function scope |
+| `validate` | `compile_check` | Compile/link-check without executing the target and record exact flags, libraries, symbol resolution, and gaps |
+| `acceptance` | `publish_handoff` | Publish protected harness material plus a sanitized experiment request and planning summary |
+
+The worker may propose a harness specification; deterministic code owns path selection, template
+rendering, AST checks, symbol checks, compiler invocation, and the final executable plan.
+
+### 4.4 `job_formal_fuzz_lab` step/task contract
+
+| Step | Stable task | Behavior |
+| --- | --- | --- |
+| `admission` | `verify` | Verify authorization record, request/target/function/image identity, allowed operations, expiry, and remaining aggregate quota |
+| `workspace` | `materialize` | Copy the admitted source/build subset to bounded scratch; keep source/evidence mounts read-only |
+| `build` | `compile_harness` | Invoke the fixed runner mode with validated compiler arguments; reject model-authored commands and unexpected outputs |
+| `campaign` | `fuzz` | Run bounded libFuzzer/ASan/UBSan against the admitted executable and corpus with network disabled |
+| `minimize` | `same_fault` | Reduce only while preserving the exact oracle or sanitizer signature |
+| `replay` | `clean_process` | Perform at least three fresh-process repeats with deterministic reset and record every outcome |
+| `observation` | `compare` | Compare actual branch/state/return behavior with the formal prediction and identify the challenged assumption |
+| `acceptance` | `publish_index` | Publish bounded sanitized formal/reproduction rows; keep corpus, logs, maps, and harness protected |
+| `acceptance` | `publish_handoff` | Publish immutable lab result and coverage/gap accounting |
+
+The runner exposes a closed operation enum such as `compile`, `fuzz`, `minimize`, and `replay`.
+There is no `argv`, `command`, `shell`, `working_directory`, `mount`, or destination-network field
+in a model-produced request.
+
+### 4.5 `job_formal_refinement` step/task contract
+
+| Step | Stable task | Behavior |
+| --- | --- | --- |
+| `load` | `verify_lineage` | Verify original attempt, lab observation, obligation, source/build, and admission lineage |
+| `compare` | `classify` | Classify corroboration, model discrepancy, invalid harness state, unstable behavior, or infrastructure failure |
+| `refine` | `update_model` | Expand only the dependency or assumption challenged by the observation; preserve unchanged identities |
+| `proof` | `recheck` | Generate and check a new Lean attempt with a new digest and full axiom audit |
+| `acceptance` | `publish_index` | Publish `formal-refinement-*` shards and relations to the prior attempt/observation |
+| `acceptance` | `publish_handoff` | Publish a new immutable accepted handoff |
+
+## 5. Artifact and file flow
+
+### 5.1 Accepted input flow
+
+| Input record | Origin | Consumer | Validation before use |
+| --- | --- | --- | --- |
+| Accepted SAST observation and SARIF path | Scanner/CodeQL shards in the accepted retrieval manifest | Formal verifier | Run, target, producer, rule, source range, shard hash, coverage, and lead identity |
+| Code graph facts | `job_code_graph_index` accepted `graph` shards | Slice builder | Exact subject identities, scope ID, producer coverage, bounds/truncation, and shard digest |
+| Source file and compilation unit | Target catalog, language build, C++ compiled analysis | Slice/frontend/harness | Target snapshot, file hash, compile command identity, ABI/toolchain, path custody |
+| Alias/symbol/layout facts | SVF, clangd, LLVM/CFG producers | Slice/frontend | Producer identity, applicable build unit, supported kind, and missing-coverage state |
+| Sanitized build output | `job_sanitizer_build` accepted handoff | Fuzz planner/lab | Output hash, instrumentation evidence, link/runtime compatibility, exact accepted build ancestry |
+| Formal attempt | `job_formal_verification` handoff and `formal` shard | Planner/refinement/review | Schema, attempt hash, obligation identity, source correspondence, proof audit, and gaps |
+| Lab admission | Operator CLI under `data/authorizations/formal-fuzz/` | Fuzz lab only | Canonical bytes, scope hash, creator/authentication context, expiry, image, operations, and budget |
+| Fuzz observation | `job_formal_fuzz_lab` handoff and formal shard | Refinement/review | Admission, testcase, target, harness, oracle, campaign, and replay identities |
+
+No consumer accepts an arbitrary source path, SARIF file, `.lean` file, harness, corpus directory,
+container tag, or command line as a privileged input.
+
+### 5.2 Run-owned directory layout
+
+The framework continues to own `claim.json` (including its pinned dataset contract), task
+status/result receipts, `outcomes.json`, `result.json`, `handoff.json`, rejected diagnostics, and
+`latest.json`. Job code adds only the files shown below. `<attempt>` is the framework attempt ID; `<formal-id>`,
+`<obligation-id>`, and `<experiment-id>` are content-derived logical IDs.
+
+```text
+runs/<run-id>/
+  data/
+    authorizations/
+      formal-fuzz/
+        <admission-sha256>.json
+    jobs/
+      job_formal_verification/
+        latest.json
+        attempts/<attempt>/
+          claim.json
+          steps/
+            scope/tasks/resolve_inputs/accepted-inputs.json
+            candidates/tasks/select/candidates.json
+            slicing/tasks/build/formal/<formal-id>/slice.json
+            obligations/tasks/instantiate/formal/<formal-id>/
+              request.json
+              obligation-<obligation-id>.json
+            translation/tasks/lower/formal/<formal-id>/
+              ir.json
+              traceability.json
+              generated-manifest.json
+              generated/Model.lean
+              generated/Obligations.lean
+              generated/Proof.lean
+            proof/tasks/check/formal/<formal-id>/
+              proof.json
+              axiom-audit.json
+              witness.json                 # only when produced
+              checker-receipt.json
+              stdout.ref.json              # protected shared-object reference
+              stderr.ref.json              # protected shared-object reference
+            contracts/tasks/publish/contracts/*.json
+            acceptance/tasks/publish_index/formal-summary.json
+            acceptance/tasks/publish_handoff/formal-handoff.json
+          outcomes.json
+          result.json
+          handoff.json
+      job_formal_fuzz_planning/
+        latest.json
+        attempts/<attempt>/steps/
+          load/tasks/verify_inputs/accepted-inputs.json
+          triage/tasks/select_obligations/experiment-requests.json
+          harness/tasks/generate/experiments/<experiment-id>/
+            experiment-request.json
+            harness-spec.json
+            harness.cc
+            input-encoding.json
+          oracle/tasks/bind/experiments/<experiment-id>/
+            oracle.json
+            seeds.json
+            negative-control.json
+          validate/tasks/policy/experiments/<experiment-id>/policy-receipt.json
+          validate/tasks/compile_check/experiments/<experiment-id>/compile-receipt.json
+          acceptance/tasks/publish_handoff/formal-fuzz-planning-handoff.json
+      job_formal_fuzz_lab/
+        latest.json
+        attempts/<attempt>/steps/
+          admission/tasks/verify/admission-receipt.json
+          workspace/tasks/materialize/workspace-manifest.json
+          build/tasks/compile_harness/experiments/<experiment-id>/build-receipt.json
+          campaign/tasks/fuzz/experiments/<experiment-id>/
+            campaign-receipt.json
+            corpus-manifest.json
+            coverage-summary.json
+            logs/*.ref.json
+          minimize/tasks/same_fault/experiments/<experiment-id>/minimization-receipt.json
+          replay/tasks/clean_process/experiments/<experiment-id>/replay-receipt.json
+          observation/tasks/compare/experiments/<experiment-id>/observation.json
+          acceptance/tasks/publish_index/formal-fuzz-summary.json
+          acceptance/tasks/publish_handoff/formal-fuzz-handoff.json
+      job_formal_refinement/
+        latest.json
+        attempts/<attempt>/steps/
+          load/tasks/verify_lineage/accepted-inputs.json
+          compare/tasks/classify/comparison.json
+          refine/tasks/update_model/formal/<formal-id>/
+            refinement.json
+            slice.json
+            ir.json
+            traceability.json
+            generated/*.lean
+          proof/tasks/recheck/formal/<formal-id>/
+            proof.json
+            axiom-audit.json
+            checker-receipt.json
+          acceptance/tasks/publish_index/formal-refinement-summary.json
+          acceptance/tasks/publish_handoff/formal-refinement-handoff.json
+    indices/
+      formal/
+        formal-verification-<scope-id>/<fingerprint>.sqlite
+        formal-fuzz-<scope-id>/<fingerprint>.sqlite
+        formal-refinement-<scope-id>/<fingerprint>.sqlite
+    shared/
+      objects/<sha256>                    # raw Lean, harness, corpus, logs, maps
+```
+
+Files shown under task directories are immutable attempt artifacts. Large or duplicate bytes are
+published through `data/shared/objects/<sha256>` and represented in task records by the standard
+`{path, sha256, size_bytes}` reference. The plan does not add mutable global proof or corpus
+caches.
+
+### 5.3 Generated-record schemas
+
+Add closed schemas under `docs/schemas/formal-verification/`:
+
+| Schema | Producer | Indexed? | Main consumers |
+| --- | --- | --- | --- |
+| `formal-candidate.schema.json` | Formal candidate selection | Yes, sanitized | Operator query, package assembly |
+| `formal-request.schema.json` | Formal verifier | Yes, sanitized | Slice/obligation stages |
+| `formal-slice.schema.json` | Slice builder | Summary only | Translator, operator query |
+| `formal-ir.schema.json` | Frontend | No; protected artifact | Lean generator/checker |
+| `formal-obligation.schema.json` | Property compiler | Yes, normalized statement and scope only | Proof, planning, package assembly |
+| `formal-translation.schema.json` | Translator | Summary only | Proof acceptance, review |
+| `formal-proof.schema.json` | Lean checker | Yes, sanitized | Review, contracts, MCP |
+| `formal-witness.schema.json` | Lean/solver integration | Summary only | Fuzz planner, review |
+| `formal-contract.schema.json` | Contract publisher | Yes | Contract lookup and caller obligations |
+| `formal-attempt.schema.json` | Formal verifier/refinement | Yes | All downstream consumers |
+| `formal-experiment-request.schema.json` | Fuzz planner | Summary only | Admission CLI/lab |
+| `formal-harness.schema.json` | Fuzz planner | No; protected artifact | Policy, compile check, lab |
+| `formal-lab-admission.schema.json` | Operator CLI | No; protected authorization | Lab admission validator |
+| `formal-fuzz-plan.schema.json` | Fuzz planner | Summary only | Lab |
+| `formal-fuzz-result.schema.json` | Lab | Yes, sanitized | Review/refinement/MCP |
+| `formal-observation.schema.json` | Lab | Yes, sanitized | Refinement/review |
+| `formal-refinement.schema.json` | Refinement | Yes | Review and audit |
+| `formal-fp-case.schema.json` | Evaluator-only benchmark | Never visible to workers | Offline evaluator only |
+
+Each schema rejects unknown keys, bounds arrays/strings/bytes, uses run-relative canonical refs,
+and separates logical result, source correspondence, and reproduction status. A record cannot
+encode `SOURCE_PROPERTY_PROVEN` unless the translation/coverage predicates required by the design
+are satisfied by deterministic validation.
+
+### 5.4 Dataset declarations
+
+Add `formal` to `src/appsec_review/runtime/datasets.py:FAMILIES`. Each job receives a local
+`datasets.py` with non-overlapping shard prefixes and protected artifact patterns.
+
+| Job/output kind | Disposition | Schema/family | Claimed paths or shards |
+| --- | --- | --- | --- |
+| `formal_results` | `indexed` | `formal-attempt/1`, family `formal` | Index `formal`, prefix `formal-verification-` |
+| `formal_models` | `protected` | Lean/IR/traceability artifacts | Verification attempt `translation/**` and `proof/**` raw files |
+| `formal_contracts` | `indexed` | `formal-contract/1`, family `formal` | Index `formal`, prefix `formal-contract-` |
+| `formal_plans` | `artifact_only` | `formal-experiment-request/1` | Planning summaries and policy/compile receipts |
+| `formal_harnesses` | `protected` | `formal-harness/1` | Harness source, exact input encodings, raw seed bytes |
+| `formal_fuzz_results` | `indexed` | `formal-fuzz-result/1`, family `formal` | Index `formal`, prefix `formal-fuzz-` |
+| `formal_fuzz_evidence` | `protected` | Corpus/log/map/reproducer bytes | Lab campaign/minimize/replay trees and shared objects |
+| `formal_refinements` | `indexed` | `formal-refinement/1`, family `formal` | Index `formal`, prefix `formal-refinement-` |
+
+The dataset inventory must report missing or partial formal outputs as unavailable/partial with a
+reason. A protected dataset exposes only sanitized identity, hash, status, and coverage through
+`query_dataset_inventory`.
+
+### 5.5 End-to-end artifact transformations
+
+| Stage | Reads | Generates | Next consumer |
+| --- | --- | --- | --- |
+| Candidate qualification | Accepted observation, build, graph coverage | Candidate/status record | Slice builder |
+| Semantic slicing | Candidate plus graph/IR/alias facts | Verification slice and closure gaps | Property compiler/frontend |
+| Property compilation | Registered template plus slice | Obligation and violation dual | Lean generator/planner |
+| Translation | Slice plus accepted compiler facts | Typed IR, traceability, generated Lean modules | Lean checker |
+| Lean checking | Generated modules plus pinned library | Proof/witness/axiom/checker receipts | Contract publisher, planner, review |
+| Fuzz planning | Eligible obligation/witness plus source/build custody | Experiment request, harness, oracle, seeds | Operator admission and lab |
+| Lab execution | Admitted plan plus exact target/build/image | Campaign, testcase, coverage, sanitizer, minimize, replay receipts | Refinement and review |
+| Refinement | Formal prediction plus observation | New model/proof attempt and relationship | Index/package/review |
+| Review projection | Accepted formal index rows | Package-scoped formal identities | Existing review roles and final evidence rules |
+
+## 6. New tooling and containers
+
+### 6.1 Tooling selection
+
+| Capability | Tooling | Decision |
+| --- | --- | --- |
+| C/C++ compilation facts | Existing pinned Clang/LLVM in `tool-native-cpp` | Reuse; do not add a second compiler frontend |
+| Graph/path facts | Existing CodeQL, Clang CFG/IR, SVF, clangd producers | Reuse accepted outputs only |
+| Formal semantics and proof | Lean 4, mathlib, `bv_decide`, repository-owned `AppSecVerify` library | New required tool image |
+| Bounded witness exploration | Lean evaluation first; optional CBMC in a later separate image | Candidate evidence only; never proof authority without a checked certificate path |
+| Function fuzzing | Clang, libFuzzer, SanitizerCoverage, ASan, UBSan | New required tool image |
+| Coverage processing | `llvm-profdata`, `llvm-cov`, `llvm-symbolizer` | Included in the fuzz image; only bounded summaries indexed |
+| Crash minimization | libFuzzer minimization plus property-oracle-aware reducer | Same-fault predicate required |
+| Protocol sessions | Later Python driver using exact structured codecs; evaluate boofuzz/Scapy only for the internal profile | Deferred; no raw-packet requirement in M2 |
+
+### 6.2 `tool-lean-verifier`
+
+Add:
+
+```text
+containers/tools/lean-verifier/
+  Dockerfile
+  README.md
+  tool.toml
+  assets.lock.json
+  lean-toolchain
+  lake-manifest.json
+  lakefile.toml
+  lean_runner.py
+  AppSecVerify/
+    Semantics/Values.lean
+    Semantics/Memory.lean
+    Semantics/ControlFlow.lean
+    Semantics/Transitions.lean
+    Security/Predicates.lean
+    Security/Reachability.lean
+    Abstraction/Soundness.lean
+    Contracts/Hoare.lean
+    Contracts/Composition.lean
+```
+
+The image must:
+
+- pin the base digest, Lean toolchain, mathlib commit/packages, and every downloaded asset;
+- build completely offline after the locked acquisition stage;
+- run as `10001:10001`, network `none`, dropped capabilities, no-new-privileges, read-only root,
+  read-only input mount, and bounded writable scratch;
+- expose only `/opt/appsec/lean_runner.py` with closed `version`, `check`, and `audit` modes;
+- reject arbitrary imports, `unsafe`, executable IO, unregistered macros/extensions, `sorryAx`,
+  unapproved axioms, theorem self-assumption, and output paths outside scratch;
+- emit canonical JSON containing tool/library identities, module digests, theorem name/statement,
+  axiom dependencies, status, elapsed/resource use, and protected stdout/stderr refs;
+- never read a target checkout directly; it receives only validated generated modules and a
+  manifest from the job workspace.
+
+Add a catalog entry `tool-lean-verifier` and an application image setting pinned by image ID/digest.
+The first implementation must not invent a host-specific `image_id`; the review-host image builder
+owns that value after build/smoke evidence exists.
+
+### 6.3 `tool-formal-fuzz`
+
+Add:
+
+```text
+containers/tools/formal-fuzz/
+  Dockerfile
+  README.md
+  tool.toml
+  assets.lock.json
+  formal_fuzz_runner.py
+  policy/
+    allowed-compiler-flags.json
+    allowed-sanitizers.json
+    seccomp-profile.json
+  templates/
+    function_harness.cc.j2
+    property_oracle.h
+```
+
+The image should derive from or share the exact pinned LLVM closure used by `tool-native-cpp`, not
+silently install a different compiler. It contains Clang/Clang++, libFuzzer, ASan/UBSan runtimes,
+SanitizerCoverage, llvm-cov/profdata/symbolizer, and the fixed runner.
+
+Runtime contract:
+
+| Control | Required behavior |
+| --- | --- |
+| User/root | Non-root `10001:10001`; read-only root; no-new-privileges; all capabilities dropped |
+| Network | `none` for `function_sanitized`; runner refuses network configuration |
+| Mounts | Accepted source/build inputs read-only; bounded executable scratch read-write; no Docker socket, host root, credentials, or arbitrary mounts |
+| Process | Fixed runner starts the compiler/fuzzer directly, creates a process group, kills the complete tree on timeout, and records exit/signal |
+| Resources | Admission-bound CPU, memory, PID, wall-clock, input, corpus, log, and output limits at or below central maxima |
+| Commands | Closed runner modes and validated structured fields; no shell and no model-supplied executable path |
+| Outputs | Canonical receipts plus protected raw logs/corpus/maps; unknown files cause publication failure |
+| Reproducibility | Exact image, compiler, flags, source, harness, corpus, seed, oracle, environment, and reset strategy recorded |
+
+The global offline runtime policy must not be weakened. Add a separate typed
+`formal_fuzz_function_sanitized` execution profile whose only material difference is permission to
+execute the validated binary from bounded scratch. The profile still has no network and never
+permits a generic command.
+
+### 6.4 Optional `tool-formal-protocol-driver`
+
+The later protocol profile adds a dedicated driver image, not protocol packages to the function
+fuzzer. It accepts a validated logical message grammar and fixed destination service alias on a
+lab-internal network. Raw sockets, `NET_RAW`, host networking, arbitrary IP/host/port fields,
+external DNS, and Internet egress remain denied. Captures and logical transcripts are protected;
+the indexed result includes only protocol-state outcomes, replay status, and evidence refs.
+
+## 7. Proposed repository source tree
+
+```text
+src/appsec_review/
+  formal_verification/
+    __init__.py
+    contracts.py
+    correspondence.py
+    custody.py
+    frontend.py
+    intake.py
+    lean_check.py
+    lean_generate.py
+    model.py
+    property_registry.py
+    schemas.py
+    semantics_ir.py
+    slice.py
+    witness.py
+  fuzz_lab/
+    __init__.py
+    admission.py
+    build.py
+    coverage.py
+    custody.py
+    execution.py
+    feedback.py
+    harness.py
+    minimize.py
+    obligations.py
+    oracle.py
+    planning.py
+    protocol.py                 # deferred profile only
+    replay.py
+  jobs/
+    job_formal_verification/
+      __init__.py
+      datasets.py
+      job.py
+      settings.py
+    job_formal_fuzz_planning/
+      __init__.py
+      datasets.py
+      job.py
+      settings.py
+    job_formal_fuzz_lab/
+      __init__.py
+      datasets.py
+      job.py
+      settings.py
+    job_formal_refinement/
+      __init__.py
+      datasets.py
+      job.py
+      settings.py
+  retrieval/
+    formal.py
+  mcp/
+    formal.py
+
+docs/
+  architecture/formal-verification.md
+  operations/formal-verification.md
+  operations/formal-fuzz-lab.md
+  schemas/formal-verification/*.schema.json
+
+pipeline/
+  guidance/tasks/formal-verification/*.md
+  prompt-fragments/roles/formal_property_analyst.md
+  prompt-fragments/roles/formal_harness_designer.md
+  skills/formal-obligation-analysis/SKILL.md
+  skills/proof-directed-harness-design/SKILL.md
+  skills/formal-evidence-interpretation/SKILL.md
+
+tests/
+  formal_verification/
+  fuzz_lab/
+  fixtures/formal_verification/
+```
+
+Also modify the existing central integration files: `appsec-review.toml`, typed config loaders,
+`containers/catalog.toml`, the container runtime profile parser, runtime registry/topology/dataset
+families, input-source matrix, review-data indexing, review-package schemas/assembly, retrieval
+manifest/core, MCP tool schema/adapters/capabilities, guidance registry/composition tests, and
+directly affected architecture/operations documentation.
+
+## 8. Typed configuration
+
+Add central job blocks with `settings.enabled = false` initially. Suggested names and bounds are
+part of the config contract, not prompt text:
+
+```toml
+[jobs.job_formal_verification]
+enabled = false
+
+[jobs.job_formal_verification.settings]
+property_registry_version = "1"
+max_candidates = 10
+max_slice_nodes = 2000
+max_slice_edges = 8000
+max_functions = 64
+max_expansion_rounds = 4
+max_generated_bytes = 1048576
+max_obligations_per_candidate = 8
+lean_image_id = "<review-host-owned-pin>"
+lean_timeout_seconds = 120
+lean_memory_bytes = 4294967296
+lean_cpus = 2
+
+[jobs.job_formal_fuzz_planning]
+enabled = false
+
+[jobs.job_formal_fuzz_planning.settings]
+max_experiments = 4
+max_harness_bytes = 262144
+max_seed_count = 64
+max_seed_bytes = 65536
+compile_check_timeout_seconds = 120
+
+[jobs.job_formal_fuzz_lab]
+enabled = false
+
+[jobs.job_formal_fuzz_lab.settings]
+profile = "function_sanitized"
+fuzz_image_id = "<review-host-owned-pin>"
+max_campaigns = 4
+max_campaign_seconds = 60
+max_total_seconds = 600
+max_input_bytes = 65536
+max_corpus_bytes = 67108864
+max_output_bytes = 16777216
+replay_attempts = 3
+memory_bytes = 4294967296
+cpus = 2
+pids_limit = 256
+network = "none"
+
+[jobs.job_formal_refinement]
+enabled = false
+
+[jobs.job_formal_refinement.settings]
+max_refinement_rounds = 2
+max_observations = 32
+```
+
+The final syntax must follow the existing config model and per-step/task worker declarations.
+Unknown settings, invalid combinations, placeholder image IDs in executable profiles, excessive
+job values, a lab enabled in ordinary topology, and a non-`none` function-fuzz network must fail
+configuration validation. Frozen runs retain their resolved configuration under
+`data/configuration/` and are not rewritten when the feature is added.
+
+## 9. MCP and retrieval design
+
+### 9.1 Boundary decision
+
+The MCP surface is read-only. It lets an operator or scoped review worker inspect already accepted
+formal records. It cannot plan a new attempt, invoke Lean, generate a harness, create an admission,
+build a target, fuzz, minimize, replay, rerun a job, or update a finding.
+
+Mutation and execution use existing authenticated operator/job-launch surfaces. The local admission
+CLI writes one immutable authorization record and logs the decision; the job launcher accepts its
+logical ID. If a remote control service is later required, it needs separate authenticated API and
+threat-model work. It must not be smuggled into the retrieval MCP.
+
+### 9.2 New read-only tools
+
+Add definitions to `docs/schemas/retrieval-mcp-tools.json`, dispatch in
+`src/appsec_review/mcp/adapter.py`, query logic in `src/appsec_review/retrieval/formal.py`, and
+formal-specific serialization helpers in `src/appsec_review/mcp/formal.py`.
+
+| Tool | Exact accepted inputs | Bounded output | Explicitly excluded |
+| --- | --- | --- | --- |
+| `query_formal_candidates` | Exact accepted run; optional exact observation, rule, family, status; limit/cursor | Candidate identities, qualification, source/build refs, coverage/gaps | Arbitrary paths, free-text search, new candidate generation |
+| `query_formal_slice` | Exact formal attempt/slice ID; optional node/edge kind; limit/cursor | Logical nodes/edges, source refs, closure state, omitted dependencies | Source bytes, unrestricted graph traversal, on-demand analysis |
+| `query_formal_proof` | Exact attempt/proof/obligation ID; limit/cursor | Normalized property, logical result, correspondence, theorem/axiom audit, proof digest, gaps | Raw Lean source/proof term, checker stdout/stderr, conclusion upgrading |
+| `query_formal_contracts` | Exact symbol and build/source identity; optional property family; limit/cursor | Applicable contract refs, requires/ensures/modifies, proof/correspondence level, staleness | Name-only lookup, silent precondition satisfaction, global unversioned cache |
+| `query_formal_reproduction` | Exact fuzz attempt/experiment/obligation ID; limit/cursor | Sanitized oracle, observed class, replay counts, coverage summary, evidence refs | Testcase bytes, harness source, logs, commands, target execution |
+
+All tools read the accepted `formal` SQLite shards from the session-pinned manifest. Responses
+carry run ID, accepted manifest hash, shard ID/hash/fingerprint, producer attempt, coverage rows,
+pagination, truncation, and gaps. Page sizes remain 1-100 and responses remain within the existing
+MCP byte limit.
+
+### 9.3 Scoped worker capabilities
+
+Extend review packages with:
+
+```json
+{
+  "retrieval": {
+    "indexes": ["formal"],
+    "formal_attempt_ids": ["asr:formal_attempt:<sha256>"],
+    "formal_obligation_ids": ["asr:formal_obligation:<sha256>"],
+    "formal_contract_ids": ["asr:formal_contract:<sha256>"],
+    "formal_experiment_ids": ["asr:formal_experiment:<sha256>"]
+  }
+}
+```
+
+The capability signature binds these exact arrays. Formal queries must reject cross-package IDs,
+ungranted slices, contracts for a different source/build, and cursor reuse across a changed grant.
+Suggested role grants:
+
+| Role | Formal tools |
+| --- | --- |
+| `formal_property_analyst` | `query_formal_slice`, `query_formal_contracts`, plus existing scoped graph/source tools |
+| `formal_harness_designer` | `query_formal_slice`, `query_formal_proof`, plus exact scoped source/build evidence |
+| `red_team_analyst` / `hypothesis_hunter` | `query_formal_proof`, `query_formal_reproduction` for package-granted IDs |
+| `blue_team_refuter` / `independent_verifier` / `adjudication_judge` | `query_formal_proof`, `query_formal_contracts`, `query_formal_reproduction` for package-granted IDs |
+| `completeness_reviewer` | Candidate/attempt coverage through package summaries and `query_dataset_inventory`; no raw slice |
+
+No role gains an execution tool. A formal result is evidence to cite, not authority to set claim
+state.
+
+### 9.4 Operator CLI
+
+Add narrowly scoped commands after their underlying job contracts exist:
+
+```text
+appsec-review formal list-candidates --run-id RUN [exact filters]
+appsec-review formal inspect --run-id RUN --attempt-id ATTEMPT
+appsec-review formal-fuzz admit --run-id RUN --experiment-id EXPERIMENT \
+  --profile function_sanitized --max-campaigns N --max-seconds N --expires-at TIME
+appsec-review formal-fuzz inspect-admission --run-id RUN --admission-id ADMISSION
+```
+
+`admit` resolves the accepted experiment and image before displaying/recording the exact envelope.
+It accepts no arbitrary command, path, destination, or mount. Running a job remains an explicit
+ordinary job launch with the admission ID in trusted job configuration/launch metadata. MCP never
+calls these commands.
+
+## 10. Roles, tasks, runtime skills, and personas
+
+### 10.1 New roles
+
+Add two model roles to `pipeline/guidance/registry.json` and matching role fragments:
+
+| Role | Responsibility | Output | Prohibited actions |
+| --- | --- | --- | --- |
+| `formal_property_analyst` | Instantiate one registered property against one accepted bounded slice; propose invariants, summaries, and proof strategy while naming unresolved semantics | `formal-property-proposal/1` | Change the template, declare proof success, invent source facts, execute code, request unlisted tools, widen scope, set claim state |
+| `formal_harness_designer` | Propose one declarative adapter/oracle/seed plan for one experimentally answerable accepted obligation | `formal-harness-proposal/1` | Supply shell/commands/mounts/network destinations, replace the target function, fabricate caller state, execute, admit, widen scope, set claim state |
+
+Deterministic validators select templates, generate final Lean definitions, render final harness
+code, run tools, and determine acceptance. The roles never become proof or execution authorities.
+Existing `independent_verifier` is reused for evidence review; a new proof-review persona/role is
+not required for the first vertical slice.
+
+### 10.2 Task prompts
+
+Add `pipeline/guidance/tasks/formal-verification/`:
+
+| Task file | Role | Bounded question |
+| --- | --- | --- |
+| `instantiate_property.md` | `formal_property_analyst` | Which registered property parameters and exact source facts apply to this obligation? |
+| `propose_invariants.md` | `formal_property_analyst` | Which invariants/summaries may discharge the obligation, and which premises remain open? |
+| `classify_experiment.md` | `formal_property_analyst` | Is the unresolved obligation experimentally answerable under the closed eligibility enum? |
+| `design_harness.md` | `formal_harness_designer` | How should validated input bytes establish legitimate state and call the exact function/caller? |
+| `design_oracle.md` | `formal_harness_designer` | What exact observable predicate, negative control, and same-fault signature answer the obligation? |
+| `interpret_observation.md` | `formal_property_analyst` | Which recorded model assumption is corroborated or challenged by this accepted observation? |
+
+Tasks contain the question and output contract only. Budgets, models, reasoning, retries, timeouts,
+worker pools, images, and tools remain in typed configuration and role capabilities.
+
+### 10.3 Runtime skills
+
+Three runtime skills are justified because they are reusable procedures across more than one task:
+
+| Skill | Registered jobs | Procedure scope |
+| --- | --- | --- |
+| `formal-obligation-analysis` | `job_formal_verification`, `job_formal_refinement` | Distinguish model/source claims, use registered templates, preserve exact semantics, name gaps, and avoid proof-authority claims |
+| `proof-directed-harness-design` | `job_formal_fuzz_planning` | Map an eligible obligation to legitimate caller state, controllable inputs, oracle, seeds, and negative controls without executable authority |
+| `formal-evidence-interpretation` | `job_inference_security_review` | Interpret logical result, correspondence, reproduction, and scope independently; cite exact records and never treat clean fuzzing as proof |
+
+Each skill lives only under `pipeline/skills/<name>/SKILL.md`, has
+`metadata.audience: runtime-worker`, is registered under `runtime_skills`, and is loaded only by
+`load_runtime_skill`. None references `.claude/skills/`; development skills do not reference these
+runtime files.
+
+No new repository-development skill is needed for the first buildout. Implementers use the
+existing `add-a-job-contract`, `add-runtime-guidance`, multi-session coordination, and docs-sync
+procedures. A formal development skill should be considered only after a repeated implementation
+procedure exists in code and tests.
+
+### 10.4 Persona decision
+
+Do **not** add a `formal_methods`, `lean_expert`, or `fuzzer` persona. Those labels describe a role
+or technique, not a security viewpoint. Reuse the lead's existing domain persona:
+
+- `memory_safety_native` for bounds, arithmetic, lifetime, and native memory properties;
+- `parsing_deserialization` for parser/decoder invariants;
+- `authorization_access_control` and `authentication_session` for principal/state properties;
+- `network_api_surface` only for the later protocol profile;
+- `generalist` when no narrower supported domain applies.
+
+If evaluation reveals a security viewpoint not represented by those personas, add it based on the
+missing domain lens, not because Lean or fuzzing is used.
+
+## 11. Security and trust boundaries
+
+| Boundary | Enforcement |
+| --- | --- |
+| Target text/model output is untrusted | Parsed only as data; no instructions, command interpolation, import selection, or path authority |
+| Proof authority | Pinned Lean kernel and audited dependencies; `sorryAx`/unapproved axiom/unsafe escape fails acceptance |
+| Source correspondence | Separate typed field and predicates; missing alias/caller/ABI/semantics prevents unconditional source claim |
+| Build custody | Exact accepted source/build/image/flags hashes; changed identity creates a new attempt |
+| Execution authority | Immutable operator admission plus deterministic validator and per-operation quota checks |
+| Container isolation | Non-root, no socket/credentials, read-only inputs/root, bounded scratch/resources, no network for function fuzzing |
+| Model/tool separation | Model emits schema-bound proposals; deterministic application generates files and invokes fixed tool modes |
+| Evidence privacy | Raw models/harnesses/corpora/logs protected; MCP and reports expose sanitized summaries only |
+| Review authority | Formal jobs publish evidence relations; existing adjudication and final gate remain authoritative |
+| Evaluation blinding | Answer keys and pair labels remain outside worker, target, retrieval, seed, and container mounts |
+
+## 12. Implementation sequence
+
+Each slice is independently reviewable and keeps target execution disabled until the lab slice.
+
+### B0 — Contract and fixture baseline
+
+- Freeze the first supported property family and real same-rule safe/vulnerable fixture pair.
+- Add the architecture/operations documents and closed schema skeletons.
+- Record accepted scanner/build/graph prerequisites and unsupported semantics.
+- No new job, image, model call, or execution.
+
+Completion evidence: schema validation units and an independently verified real scanner alert on
+both paired fixtures, or an honest decision to select a different existing rule.
+
+### B1 — Formal domain model and intake
+
+- Implement accepted observation/build/graph binding, property registry, IDs, schemas, and gap
+  enums under `formal_verification/`.
+- Add fast units for stale/cross-run/cross-target/tampered inputs and unsupported cases.
+- Do not register a job until its handler can produce a complete typed attempt.
+
+### B2 — Slice, IR, and traceability
+
+- Implement property-driven closure over accepted graph/compiler facts.
+- Implement the restricted typed IR and supported/unsupported semantic matrix.
+- Emit deterministic source-to-IR traceability and fail closed on truncation/open dependencies.
+
+### B3 — Lean image and checker
+
+- Build `tool-lean-verifier`, the `AppSecVerify` library, generator, checker, and axiom gate.
+- Demonstrate one safe model theorem and one model witness from compiler-grounded fixtures.
+- Reject omitted-branch, wrong-width, `sorry`, unapproved axiom/import, timeout, and tampered-module
+  cases.
+
+This slice changes a container image and therefore requires the repository's image build/smoke
+process, but it does not authorize a live review.
+
+### B4 — `job_formal_verification` vertical path
+
+- Add typed config, datasets, job handler/validators, registry, optional topology, index shards,
+  inventory, and operations docs.
+- Keep the job disabled by default.
+- Run focused offline units only unless the user separately authorizes a review/acceptance run.
+
+### B5 — Retrieval, MCP, packages, and guidance
+
+- Add `formal` retrieval, the five read-only MCP tools, package capability binding, roles/tasks,
+  the three runtime skills, and generated-prompt tests.
+- Add no execution capability.
+- Prove cross-package/cross-run/raw-artifact requests are denied.
+
+### B6 — Fuzz planning without execution
+
+- Implement obligation eligibility, harness/oracle/seed schemas, deterministic template rendering,
+  AST/symbol policy, compile-check, and `job_formal_fuzz_planning`.
+- Add `tool-formal-fuzz` build contents but keep the execution job absent or disabled.
+- Show that a missing lemma, unsupported translation, or unconcretizable witness produces a no-run
+  result.
+
+### B7 — Admission and standalone fuzz lab
+
+- Implement immutable admission records, closed runner modes, workspace custody, quotas, process
+  tree control, campaign/minimization/replay receipts, and `job_formal_fuzz_lab`.
+- Keep the job out of ordinary topology and disabled until an explicit launch.
+- Add denied-execution units before any manual container acceptance.
+
+### B8 — Refinement and review return path
+
+- Implement observation comparison, bounded model refinement, new Lean attempt checking,
+  `job_formal_refinement`, new index acceptance, and downstream package projection.
+- Confirm earlier attempts remain immutable and clean campaigns never produce source-safe status.
+
+### B9 — Blind evaluation and rollout decision
+
+- Run only under explicit user authorization against pinned known-vulnerable and safe-but-flagged
+  targets.
+- Freeze results before joining evaluator-only truth.
+- Measure eligibility, abstention, proof/correspondence, false-safe rate, reproduction, replay, and
+  resource use by class.
+- Enable ordinary formal verification only after the design's M1 gates pass; enable fuzz planning
+  separately; keep the lab manually admitted.
+
+### B10 — Optional protocol extension
+
+- Write and approve a separate network threat model, service/driver custody contract, logical
+  transcript/replay schema, internal-network policy, and acceptance suite.
+- Do not inherit function-lab admission as protocol authorization.
+
+## 13. Focused verification plan
+
+### 13.1 Offline unit files
+
+Add focused tests such as:
+
+```text
+tests/formal_verification/test_intake.py
+tests/formal_verification/test_property_registry.py
+tests/formal_verification/test_slice_closure.py
+tests/formal_verification/test_semantics_ir.py
+tests/formal_verification/test_traceability.py
+tests/formal_verification/test_lean_generate.py
+tests/formal_verification/test_lean_check.py
+tests/formal_verification/test_contracts.py
+tests/formal_verification/test_job_contract.py
+tests/formal_verification/test_index_and_retrieval.py
+tests/formal_verification/test_mcp_capability.py
+tests/formal_verification/test_guidance.py
+tests/fuzz_lab/test_obligation_triage.py
+tests/fuzz_lab/test_harness_policy.py
+tests/fuzz_lab/test_admission.py
+tests/fuzz_lab/test_quota.py
+tests/fuzz_lab/test_runner_protocol.py
+tests/fuzz_lab/test_same_fault_minimize.py
+tests/fuzz_lab/test_replay.py
+tests/fuzz_lab/test_feedback.py
+tests/fuzz_lab/test_job_contract.py
+```
+
+Also extend focused existing tests for registry/config/topology parity, dataset inventory,
+input-source matrix, accepted handoff integrity, default collection exclusions, skill separation,
+guidance composition, and package-scoped MCP capabilities.
+
+### 13.2 Mandatory negative cases
+
+- Fake, stale, foreign-run, or hash-changed accepted lead/build/graph input.
+- Scanner line/rule mismatch and missing scanner coverage.
+- Slice truncation, unresolved alias/caller/global/layout, or missing compile flags.
+- Signedness, promotion, narrowing, endianness, ABI, lifetime, or UB not supported by the model.
+- Omitted unsafe branch in the generated model.
+- `sorryAx`, unapproved axiom/import, self-assumed theorem, unsafe IO, timeout, or modified proof bytes.
+- Contract applied to a different source/build/ABI or without discharged preconditions/frame.
+- Proof failure caused only by a missing lemma incorrectly classified as fuzzable.
+- Harness calling a reimplementation instead of the admitted target function.
+- Harness manufacturing an invalid caller state or using an unapproved symbol/object.
+- Expired, wrong-target, wrong-function, wrong-image, over-budget, replay-only, or network-widened admission.
+- Child process surviving timeout; unexpected output file; missing sanitizer runtime; corrupt corpus.
+- Minimizer preserving a different crash instead of the admitted predicate.
+- Nondeterministic or fewer-than-required replays labeled reproduced.
+- Clean fuzz campaign labeled safe or used to upgrade source correspondence.
+- Cross-package formal MCP lookup or raw proof/harness/testcase/log retrieval.
+- Hidden evaluator labels visible to a model, seed generator, target mount, or retrieval shard.
+
+### 13.3 Manual validations
+
+Container functional tests, Dagster integration, acceptance runs, actual Lean image smoke, and live
+fuzz campaigns remain manual validations requiring explicit user authorization. Their future
+locations should be under `tests/integration/`, `tests/acceptance/`, or `tests/live/` so implicit
+pytest collection excludes them. Unit success does not establish container availability, review
+quality, source correspondence, or live isolation.
+
+## 14. Documentation deliverables
+
+Before each capability is called implemented, update:
+
+- `docs/architecture/formal-verification.md`: stable boundaries, schemas, assurance levels, and
+  topology;
+- `docs/operations/formal-verification.md`: configuration, prerequisites, sidecar/graph operation,
+  artifacts, gaps, and inspection;
+- `docs/operations/formal-fuzz-lab.md`: admission, isolation, quotas, launch, stop, evidence,
+  replay, and incident handling;
+- `containers/tools/lean-verifier/README.md` and `containers/tools/formal-fuzz/README.md`: exact
+  contents, provenance, build/smoke commands, security controls, and limitations;
+- `docs/operations/retrieval-mcp.md`: formal tool contracts and package scoping;
+- `docs/architecture/jobs-and-runtime.md`, `job-interchange.md`, and
+  `indexing-and-query-reuse.md`: new producers, datasets, and query routes;
+- the original design document: implemented/deferred status only after code and evidence exist.
+
+Documentation must distinguish proposed, implemented, built, deployed, enabled, and validated
+states. A configured tag is not a built image; a registered job is not a successful review; a
+checked model proof is not automatically a source proof.
+
+## 15. Definition of complete
+
+The buildout is complete only when all of the following are true:
+
+- One real accepted SAST lead reaches `job_formal_verification` through hash-verified upstream
+  handoffs and produces a schema-valid, indexed, auditable result.
+- The exact supported source/compiler semantics and every unresolved dependency are recorded.
+- Lean checks the generated theorem/witness using the pinned image, and the axiom/import audit
+  passes or the attempt remains non-proven.
+- A safe-but-flagged paired case can be source-certified only when correspondence is sufficient;
+  otherwise it remains model-only/conditional.
+- A vulnerable paired case yields a valid witness and, after explicit admission, a minimized
+  three-times replayable violation against the original admitted implementation.
+- The function lab is absent from ordinary topology, refuses unauthorized/widened execution, and
+  exposes no execution MCP tool.
+- Lab observations create a new immutable refinement attempt and can reach review only through a
+  new accepted index/package chain.
+- Formal MCP results are bounded, accepted-manifest-pinned, package-scoped, sanitized, and deny raw
+  protected data.
+- Roles/tasks/skills are hash-pinned and separation tests prove development guidance never reaches
+  runtime workers.
+- Existing SAST observations, PoC compile-only behavior, claim adjudication, and final publication
+  policy remain authoritative and unchanged unless a separately reviewed milestone changes them.
+- Focused units pass; authorized integration/acceptance/live results are reported separately with
+  exact commands, duration, revision, image identities, and gaps.
+
+## 16. Decisions requiring explicit ADRs during implementation
+
+The plan fixes the architecture but leaves a small number of evidence-dependent choices. Record
+each as an ADR before code silently commits to it:
+
+1. The first property family and the real scanner rule/paired fixtures that satisfy the same-alert
+   gate.
+2. The exact supported Clang AST/LLVM IR subset and the rule for choosing AST, IR, or both for a
+   construct.
+3. The pinned Lean/mathlib release and allowed trusted extension list.
+4. Whether CBMC adds enough candidate value to justify a separate image in M1; if added, its
+   bounded conclusions remain non-proof evidence.
+5. The exact source/build materialization mechanism that gives the lab only the admitted function
+   and required callers without breaking the accepted build.
+6. The operator identity/authentication mechanism for local versus remote admission creation.
+7. The source-correspondence predicates sufficient to emit `SOURCE_PROPERTY_PROVEN` for the first
+   property family.
+8. Whether the optional protocol driver is justified after core M2 results; it must not delay M1
+   or function-level M2.
+
+These ADRs may narrow support. They may not weaken evidence, custody, authorization, or gap
+reporting to make a demonstration pass.

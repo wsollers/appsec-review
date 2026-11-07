@@ -6,6 +6,10 @@
 **Document role:** Engineering specification and phased implementation plan, not a runtime skill or authorization to execute targets  
 **Prepared:** 2026-11-07
 
+The file-level implementation sequence, job contracts, run-owned paths, container definitions,
+MCP tools, and runtime-guidance changes are specified in the companion
+[buildout plan](buildout-plan.md).
+
 ## 1. Purpose and concrete outcomes
 
 The objective is to take **a real SAST finding already ingested by appsec-review**, formalize only the program behavior relevant to that finding, and use Lean 4 together with source-aware analysis and isolated dynamic execution to determine whether the alleged violation is feasible.
