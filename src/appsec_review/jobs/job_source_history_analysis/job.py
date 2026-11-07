@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -45,7 +45,7 @@ from .sources import GitSource, blob_id, history_identity
 from .discovery import discover_sources, read_pinned
 from .symbols import COMPLEXITY_IDENTITY, SYMBOL_IDENTITY, extract, tree_sitter_language
 from .window import WINDOW_IDENTITY
-from appsec_review.jobs.job_source_history_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_source_history_analysis.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/source-history-analysis/2"
@@ -1421,4 +1421,4 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                input_validators=(_validate,), schema_identity=SCHEMA,
                units=units, input_identity=history_identity,
                run_input_identity=_run_history_identity,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

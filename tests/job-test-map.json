@@ -2,13 +2,19 @@
   "schema": "appsec-review/job-test-map/2",
   "jobs": {
     "job_artifact_indexing": {
-      "unit": ["tests/test_artifact_indexing.py"],
+      "unit": [
+        "tests/test_artifact_indexing.py",
+        "tests/test_artifact_input_contracts.py"
+      ],
       "integration": ["tests/integration/test_artifact_indexing_scale.py"],
       "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_artifact_index_count_is_bounded_by_the_classified_catalog"],
       "live": []
     },
     "job_artifact_security_analysis": {
-      "unit": ["tests/test_artifact_security_analysis.py"],
+      "unit": [
+        "tests/test_artifact_security_analysis.py",
+        "tests/test_artifact_input_contracts.py"
+      ],
       "integration": ["tests/integration/test_installer_record_scans.py"],
       "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones"],
       "live": []
@@ -174,7 +180,8 @@
         "tests/review/test_prompt_competence.py",
         "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
         "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
-        "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema"
+        "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema",
+        "tests/test_inference_fixture_contracts.py"
       ],
       "integration": ["tests/integration/test_review_consumer_acceptance.py"],
       "acceptance": ["tests/acceptance/test_prompt_competence.py::test_live_prompt_competence"],
@@ -276,6 +283,7 @@
     "job_review_prioritization": {
       "unit": [
         "tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches",
+        "tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output",
         "tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion"
       ],
       "integration": [],
@@ -341,7 +349,10 @@
       "live": []
     },
     "job_target_catalog": {
-      "unit": ["tests/test_cataloging_languages.py"],
+      "unit": [
+        "tests/test_cataloging_languages.py",
+        "tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps"
+      ],
       "integration": ["tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent"],
       "acceptance": [],
       "live": []
@@ -386,6 +397,66 @@
       "unit": ["tests/test_inventory_publication.py"],
       "integration": ["tests/integration/test_inventory_publication.py"],
       "acceptance": ["tests/acceptance/test_inventory_publication.py"],
+      "live": []
+    },
+    "job-input-dispatch": {
+      "jobs": [
+        "job_artifact_indexing",
+        "job_artifact_security_analysis",
+        "job_binary_evidence_indexing",
+        "job_build_environment_analysis",
+        "job_build_iteration",
+        "job_change_context_analysis",
+        "job_ci_configuration_analysis",
+        "job_clang_static_analysis",
+        "job_code_graph_index",
+        "job_codeql_analysis",
+        "job_cpg_analysis",
+        "job_cpp_compiled_analysis",
+        "job_cpp_symbol_index",
+        "job_debug_symbol_indexing",
+        "job_dependency_intelligence",
+        "job_document_issue_analysis",
+        "job_dossier_publication",
+        "job_evidence_collection",
+        "job_final_publication_gate",
+        "job_final_report_publication",
+        "job_image_pin_verification",
+        "job_inference_security_review",
+        "job_language_build",
+        "job_model_connectivity",
+        "job_openvex_export",
+        "job_owasp_control_assessment",
+        "job_poc_generation",
+        "job_post_build_security_assessment",
+        "job_profile_data",
+        "job_project_build",
+        "job_remediation_planning",
+        "job_remediation_validation",
+        "job_review_data_indexing",
+        "job_review_intake",
+        "job_review_package_assembly",
+        "job_review_prioritization",
+        "job_sanitizer_build",
+        "job_security_tagging",
+        "job_source_history_analysis",
+        "job_svf_alias_analysis",
+        "job_target_acquisition",
+        "job_target_analysis_plan",
+        "job_target_catalog",
+        "job_test_coverage",
+        "job_third_party_data_sync",
+        "job_tree_sitter_ast"
+      ],
+      "unit": [
+        "tests/test_job_contracts.py",
+        "tests/test_input_contract_admission.py",
+        "tests/test_downstream_input_contracts.py",
+        "tests/test_standalone_input_contracts.py",
+        "tests/test_shard_ownership.py"
+      ],
+      "integration": ["tests/integration/test_job_input_contracts.py"],
+      "acceptance": ["tests/acceptance/test_job_input_contracts.py"],
       "live": []
     },
     "recovery-admission": {

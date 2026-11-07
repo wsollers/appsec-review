@@ -6,7 +6,7 @@ probability, and this producer never executes the target or invokes a profile co
 
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -27,7 +27,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .parsers import ProfileDocument, parse_profile
 
 
@@ -366,7 +366,7 @@ def build_job() -> Job:
     return Job("job_profile_data", "profile_data", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=PROFILE_DATA_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT)
 
 
 def load_accepted_profile_data(run_root: Path) -> Mapping[str, Any]:

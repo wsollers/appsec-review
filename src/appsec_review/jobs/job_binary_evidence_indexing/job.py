@@ -26,7 +26,7 @@ import re
 from typing import Any, Mapping
 
 from appsec_review.jobs.cpp_index_scopes import artifact, publish_scope_indexes
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint,
@@ -35,7 +35,7 @@ from appsec_review.retrieval.source_resolution import binary_source_path, publis
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
-from appsec_review.jobs.job_binary_evidence_indexing.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_binary_evidence_indexing.datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_binary_evidence_indexing"
@@ -422,4 +422,4 @@ def build_job() -> Job:
     )
     return Job(JOB_ID, "binary_evidence_indexing", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, implementation_identity=None, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

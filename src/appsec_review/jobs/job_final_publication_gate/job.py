@@ -25,7 +25,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
 
 from . import classify as classifier
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .settings import FinalPublicationGateSettings
 from appsec_review.jobs.accepted_review import load_accepted_review
 from .attachments import PRODUCERS, require, reverify_snapshot, verify_attachments
@@ -155,4 +155,4 @@ def build_job(*, repository_root: Path | None = None) -> Job:
     implementation = None
     return Job(JOB_ID, "final_publication_gate", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, implementation_identity=implementation,
-               validation_identity=implementation, units=units, datasets=DATASETS, consumes=CONSUMES)
+               validation_identity=implementation, units=units, datasets=DATASETS, contract=CONTRACT)

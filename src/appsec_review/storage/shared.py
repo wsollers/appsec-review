@@ -482,7 +482,7 @@ class SharedArtifacts:
                     "snapshot_id": Path(proof["manifest"]["path"]).parent.name,
                     "manifest_sha256": proof["manifest"]["sha256"],
                     "directory": str(root / Path(proof["manifest"]["path"]).parent),
-                    "provenance": source})
+                    "provenance": source}, observe=False)
             if consumed is None:
                 raise ValueError("claimed feed consumer did not record its use")
             return consumed
@@ -564,6 +564,8 @@ def verify_attempt_provenance(root: Path, attempt_path: str, artifacts: list[Map
 
 
 def consume_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
+    from appsec_review.runtime.inputs import observe_handoff
+    observe_handoff(root, handoff)
     owner = current()
     if owner is not None:
         if owner.run_root != root:
@@ -612,7 +614,9 @@ def publication_scope(context: JobContext):
     from appsec_review.runtime.resources import review_resource_scope
     from appsec_review.container_runtime.image_builder import image_builder_scope
     from appsec_review.container_runtime.native_client import native_engine_scope
-    with review_resource_scope(context.metadata_root, context.review_policy.resources, context.events), \
+    from appsec_review.runtime.inputs import input_read_scope
+    with input_read_scope(context), \
+            review_resource_scope(context.metadata_root, context.review_policy.resources, context.events), \
             image_builder_scope(context), \
             native_engine_scope(context), \
             review_scope(context.repository_root, context.run_root, context.target_root), validation_scope(

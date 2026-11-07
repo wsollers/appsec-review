@@ -290,6 +290,11 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
                         {"path": "build/libapp.a", "kind": "library", "sha256": file_sha256(archive),
                          "size_bytes": archive.stat().st_size}], "image_id": "sha256:" + "1" * 64,
         }}}}
+    from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS
+    from appsec_review.runtime.datasets import dataset_contract
+    fixture_config = worker_config or load_config(tmp_path / "appsec-review.toml")
+    JobRunner(fixture_config)._bind_configuration(run_root)
+    material = tuple(path for path in sorted(case_root.rglob("*")) if path.is_file())
     result = {"schema": "appsec-review/unit-execution/2", "status": "SUCCEEDED", "steps": {},
               "units": {}, "outputs": outputs, "failed_units": [], "skipped_units": []}
     attempt = run_root / "data" / "jobs" / "job_cpp_compiled_analysis" / "attempts" / "attempt_0001"
@@ -309,11 +314,17 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
         bind_release(worker_config, run_root)
     with (worker_scope(worker_config, run_root, preparing_job="job_cpp_compiled_analysis")
           if worker_config is not None else nullcontext()):
-        if worker_config is not None:
-            atomic_json(attempt / "claim.json", {"worker_protocol": WORKER_PROTOCOL})
+        atomic_json(attempt / "claim.json", {
+            "dataset_contract": dataset_contract(
+                "job_cpp_compiled_analysis",
+                sorted({item.step for item in DATASETS} | {unit.split(".")[0] for unit in outputs}), DATASETS),
+            **({"worker_protocol": WORKER_PROTOCOL} if worker_config is not None else {}),
+        })
         write_fixture_handoff(run_root, handoff_path, {"job_id": "job_cpp_compiled_analysis",
             "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
-            "source_fingerprint": "snapshot", "artifacts": [result_artifact, manifest_artifact],
+            "source_fingerprint": "snapshot", "artifacts": [result_artifact, manifest_artifact, *(
+                {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path)}
+                for path in material)],
             "resolving_paths": {"result": result_artifact["path"]},
             "outputs": outputs})
     handoff_sha = file_sha256(handoff_path)

@@ -29,7 +29,7 @@ from appsec_review.retrieval import (
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from . import seeded
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_clang_static_analysis"
@@ -442,4 +442,4 @@ def build_job(*, executor_factory: Any = None) -> Job:
     return Job(JOB_ID, "clang_static_analysis", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=CLANG_STATIC_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT)

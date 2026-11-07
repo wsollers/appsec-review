@@ -1,11 +1,9 @@
 """The one way a job reads another job's accepted handoff.
 
-A consumer binds to the producer attempt its own ``claim.json`` pinned (``upstream_handoffs``),
-never to whatever ``latest.json`` points at while it runs. The runner opens an :func:`upstream_scope`
-around every unit it executes; inside it, :func:`accepted_upstream` resolves the pinned digest and
-refuses a producer the claim did not pin. Outside any scope (operator tooling, acceptance scripts,
-unit tests that build a run tree by hand) it falls back to the hash-verified ``latest.json`` pointer
-and reports ``pinned=False``.
+A consumer needs both a typed handoff requirement and the exact digest admitted into its claim.
+Scheduling ancestry and available accepted producers grant no read permission. The runner opens an
+:func:`upstream_scope` around its work; reads resolve admitted pins and record typed observations.
+Outside any runtime scope, operator tooling may use the verified pointer and reports ``pinned=False``.
 
 Every path verifies the handoff bytes against their recorded SHA-256 and decodes them through
 ``decode_handoff``; nothing here trusts a pointer or a file name.
@@ -22,6 +20,8 @@ from types import MappingProxyType
 from typing import Any, Iterable, Iterator, Mapping
 
 from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.contracts import InputChannel, JobContract
+from appsec_review.runtime.inputs import _read_boundary, observe_handoff
 from appsec_review.storage import file_sha256
 
 _JOB = re.compile(r"[a-z][a-z0-9_]*")
@@ -40,6 +40,7 @@ class _Scope:
     run_root: Path
     consumer_job_id: str
     upstream_handoffs: Mapping[str, str]
+    contract: JobContract | None
 
 
 _ACTIVE: ContextVar[_Scope | None] = ContextVar("appsec_review_upstream_scope", default=None)
@@ -47,8 +48,9 @@ _ACTIVE: ContextVar[_Scope | None] = ContextVar("appsec_review_upstream_scope", 
 
 @contextmanager
 def upstream_scope(run_root: Path, consumer_job_id: str,
-                   upstream_handoffs: Mapping[str, str]) -> Iterator[None]:
-    """Bind the pinned producer digests of one attempt for the duration of its work."""
+                   upstream_handoffs: Mapping[str, str], *,
+                   contract: JobContract | None = None) -> Iterator[None]:
+    """Bind typed permission and admitted producer digests, never an availability expansion."""
     if not _JOB.fullmatch(consumer_job_id):
         raise ValueError("invalid consumer job identity")
     pins = {}
@@ -58,18 +60,23 @@ def upstream_scope(run_root: Path, consumer_job_id: str,
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise ValueError(f"pinned upstream digest for {job_id} is not a SHA-256")
         pins[job_id] = digest
-    token = _ACTIVE.set(_Scope(Path(run_root).resolve(), consumer_job_id, MappingProxyType(pins)))
+    if contract is not None:
+        contract.validate(consumer_job_id)
+    token = _ACTIVE.set(_Scope(Path(run_root).resolve(), consumer_job_id, MappingProxyType(pins), contract))
     try:
         yield
     finally:
         _ACTIVE.reset(token)
 
 
+@_read_boundary
 def current_pins(run_root: Path) -> Mapping[str, str] | None:
     """The active attempt's pinned upstream digests for ``run_root``, or ``None`` outside a scope."""
     scope = _ACTIVE.get()
-    if scope is None or scope.run_root != Path(run_root).resolve():
+    if scope is None:
         return None
+    if scope.run_root != Path(run_root).resolve():
+        raise UpstreamIntegrityError("consumed handoff belongs to a foreign run")
     return scope.upstream_handoffs
 
 
@@ -138,41 +145,53 @@ def _by_digest(run_root: Path, job_id: str, expected: str) -> AcceptedUpstream:
     return _verified(run_root, job_id, matches[0].relative_to(run_root).as_posix(), expected)
 
 
+@_read_boundary
 def accepted_upstream(run_root: Path, job_id: str, *, required: bool = True) -> AcceptedUpstream | None:
     """Return the accepted handoff of ``job_id`` the current attempt may use.
 
-    Inside an :func:`upstream_scope` the producer must be pinned by the consumer's claim; an unpinned
-    producer raises :class:`UpstreamNotPinnedError` when ``required`` and returns ``None`` otherwise,
-    which is how an optional producer that did not run in this graph (or is not an ancestor of the
-    consumer) is seen. Outside a scope the hash-verified ``latest.json`` pointer is used and the
-    result carries ``pinned=False``.
+    Runtime reads require a typed envelope declaration and an admitted pin. An optional declared
+    producer with no supply returns ``None``; an undeclared read always fails. Outside a scope the
+    verified pointer is an operator lookup, not a runtime grant.
     """
     if not _JOB.fullmatch(job_id):
         raise ValueError("invalid upstream job identity")
     run_root = Path(run_root).resolve()
     pins = current_pins(run_root)
     if pins is not None:
+        scope = _ACTIVE.get()
+        assert scope is not None
+        requirements = scope.contract.inputs if scope.contract is not None else ()
+        requirement = next((item for item in requirements
+                            if item.producer == job_id and item.output_kind == "handoff"
+                            and item.channel is InputChannel.HANDOFF), None)
+        if requirement is None:
+            raise UpstreamNotPinnedError(
+                f"undeclared consumption by {scope.consumer_job_id}: {job_id}/handoff")
         digest = pins.get(job_id)
         if digest is None:
             if not required:
                 return None
             if _pointer(run_root, job_id) is None:
                 raise UpstreamIntegrityError(f"accepted {job_id} handoff is required")
-            scope = _ACTIVE.get()
-            consumer = scope.consumer_job_id if scope is not None else "?"
             raise UpstreamNotPinnedError(
-                f"{consumer} reads {job_id}, which was accepted in this run but is not pinned by the "
-                "attempt claim; declare the dependency in the topology and the job's CONSUMES")
+                f"{scope.consumer_job_id} reads {job_id}, which is not supplied by the "
+                "attempt claim; provide the declared typed input")
         found = _by_digest(run_root, job_id, digest)
+        if found.handoff["schema"] != requirement.schema:
+            raise UpstreamIntegrityError(f"input envelope schema mismatch: {job_id}")
+        observe_handoff(run_root, found.handoff)
         return AcceptedUpstream(found.job_id, found.handoff, found.sha256, found.path, pinned=True)
     pointer = _pointer(run_root, job_id)
     if pointer is None:
         if required:
             raise UpstreamIntegrityError(f"accepted {job_id} handoff is required")
         return None
-    return _verified(run_root, job_id, pointer["handoff_path"], pointer["handoff_sha256"])
+    found = _verified(run_root, job_id, pointer["handoff_path"], pointer["handoff_sha256"])
+    observe_handoff(run_root, found.handoff)
+    return found
 
 
+@_read_boundary
 def accepted_latest(run_root: Path, job_id: str) -> AcceptedUpstream | None:
     """The job's own most recent accepted attempt, by hash-verified pointer, ignoring pins.
 
@@ -182,6 +201,11 @@ def accepted_latest(run_root: Path, job_id: str) -> AcceptedUpstream | None:
     if not _JOB.fullmatch(job_id):
         raise ValueError("invalid job identity")
     run_root = Path(run_root).resolve()
+    scope = _ACTIVE.get()
+    if scope is not None:
+        current_pins(run_root)
+        if scope.consumer_job_id != job_id:
+            raise UpstreamNotPinnedError("accepted_latest is restricted to the current job's own cache")
     pointer = _pointer(run_root, job_id)
     if pointer is None:
         return None
@@ -195,43 +219,19 @@ def has_accepted_upstream(run_root: Path, job_id: str) -> bool:
 
 def consumable_handoffs(run_root: Path, job_id: str, consumes: Iterable[str],
                         upstream_handoffs: Mapping[str, str]) -> dict[str, str]:
-    """Everything one attempt may read, fixed when its claim is written.
+    """Available declared producers for planning/diagnostics, not supplied-input authority.
 
-    The runner's projected ``upstream_handoffs`` (the producers that ran or were reused in this
-    graph) are always included unchanged. Producers the job declares in ``consumes``, and every
-    ancestor in the full ``wave1_review`` topology, are added when the run already holds an accepted
-    handoff for them: the digest recorded is the one accepted at claim time, so a producer accepted
-    later in the run can never be read by this attempt. Producers without an accepted handoff are
-    simply absent, which :func:`accepted_upstream` reports as unavailable.
+    The runner gives readers only its separately selected, typed-admitted ``upstream_handoffs``.
+    An accepted pointer here neither supplies an input nor establishes a read or citation.
     """
     run_root = Path(run_root).resolve()
     pins = dict(upstream_handoffs)
     candidates = set(consumes)
-    try:
-        from appsec_review.orchestration.topology import upstream_closure, wave1_dependencies
-        from appsec_review.runtime.registry import builtin_registry
-        full = wave1_dependencies(set(builtin_registry().job_ids()))
-    except Exception:  # noqa: BLE001 - the topology is a convenience here, never a gate
-        full = None
-    if full and job_id in full:
-        candidates |= set(upstream_closure(job_id, full, set(full)))
     for candidate in sorted(candidates - set(pins)):
         if not _JOB.fullmatch(candidate) or candidate == job_id:
             continue
-        # Pin the bytes the pointer names as they are now; nothing is decoded or judged here. A
-        # corrupt pointer or an invalid handoff is reported by the read that needs it, inside the
-        # attempt, where it fails that unit with the exact reason and leaves a receipt.
-        try:
-            pointer = _pointer(run_root, candidate)
-        except UpstreamIntegrityError:
-            continue
+        pointer = _pointer(run_root, candidate)
         if pointer is None:
             continue
-        try:
-            path = _safe(run_root, pointer["handoff_path"])
-        except ValueError:
-            continue
-        if not path.is_file() or path.is_symlink():
-            continue
-        pins[candidate] = file_sha256(path)
+        pins[candidate] = pointer["handoff_sha256"]
     return pins

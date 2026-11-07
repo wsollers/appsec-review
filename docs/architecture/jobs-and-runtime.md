@@ -21,13 +21,18 @@ modes, with managed authentication in addition. Repeated finalization reuses an 
 publication only after revalidating its immutable handoff bytes and binding.
 
 The generic resume planner walks jobs in graph order. Once a job cannot be reused, it schedules that
-job and invalidates the transitive downstream closure. It never treats time as proof of freshness.
+job and invalidates its semantic-input downstream closure, not unrelated scheduling-only branches.
+The [typed job input and dispatch contract](job-input-contracts.md) on each factory's `Job` is the
+authority for accepted producer/output/schema requirements, dispatch class and target access.
+It never treats time as proof of freshness.
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
 The direct CLI runs the same enabled jobs as Dagster's `wave1_review`, in a topological order derived
 from `orchestration.topology.wave1_dependencies`; Dagster executes independent branches concurrently
-and the CLI executes them linearly. Standalone `job_third_party_data_sync` remains outside reviews.
+and the CLI executes them linearly. The topology is projected from job contracts, with disabled
+vertices transparent to scheduling. Standalone `job_third_party_data_sync` and internal
+`job_build_iteration` remain outside the unconditional review graph.
 Both refuse to start when the registered and configured jobs differ. Both place enabled PoC,
 remediation and dossier jobs between inference review and the single final gate, followed by
 report publication and default-on standalone OpenVEX generation/validation. The report consumes only

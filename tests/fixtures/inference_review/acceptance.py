@@ -27,6 +27,11 @@ OVERRIDES = {
 
 
 UPSTREAM = "job_review_data_indexing"
+ORIGINAL_PRODUCERS = (
+    "job_target_catalog", "job_evidence_collection", "job_codeql_analysis",
+    "job_ci_configuration_analysis", "job_review_prioritization",
+    "job_source_history_analysis", "job_security_tagging",
+)
 
 
 def repository_job_tables(job_id: str) -> str:
@@ -71,6 +76,8 @@ inference_score = 1
 
 {job_tables(overrides)}
 {repository_job_tables(UPSTREAM)}
+{repository_job_tables("job_review_package_assembly")}
+{''.join(repository_job_tables(name) for name in ORIGINAL_PRODUCERS)}
 {extra}
 {build_capture_toml()}""", encoding="utf-8")
     return path
@@ -97,6 +104,10 @@ def build_registry():
     registry = JobRegistry()
     registry.register(JOB, lambda: build_job(infer=ScriptedInfer.from_env(), repository_root=ROOT))
     registry.register(UPSTREAM, build_upstream)
+    from appsec_review.runtime.registry import builtin_registry
+    builtin = builtin_registry()
+    for job_id in (*ORIGINAL_PRODUCERS, "job_review_package_assembly"):
+        registry.register(job_id, lambda name=job_id: builtin.build(name))
     return registry
 
 

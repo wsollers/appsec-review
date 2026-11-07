@@ -119,12 +119,13 @@ class ResumePlanner:
             "tool": (handoff.get("tool_identity"), {"python": os.sys.version.split()[0]}),
             "dataset contract": (handoff["dataset_contract_sha256"], dataset_contract(
                 job.job_id, sorted(set(self.config.job(job.job_id).steps)
-                                   | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets)["sha256"]),
+                                   | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets,
+                job_contract=job.contract.document() if job.contract is not None else None)["sha256"]),
         }
-        if job.input_identity is not None or job.run_input_identity is not None:
-            from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
-            target = None if job.job_id in TARGET_INDEPENDENT_JOBS else self.target_root
-            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(target, self.run_root))
+        if any(value is not None for value in (job.input_identity, job.run_input_identity, job.external_input_identity)):
+            target = None if self.job_fingerprint(job) == "none" else self.target_root
+            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(
+                target, self.run_root, repository_root=self.config.runtime.repository_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
         if job.job_id == "job_target_analysis_plan":
             from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
@@ -200,7 +201,10 @@ class ResumePlanner:
 
     def job_fingerprint(self, job: Job) -> str:
         from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
-        return "none" if job.job_id in TARGET_INDEPENDENT_JOBS else self.source_fingerprint
+        from appsec_review.runtime.contracts import TargetAccess
+        independent = (job.contract.target_access is not TargetAccess.CHECKOUT if job.contract is not None
+                       else job.job_id in TARGET_INDEPENDENT_JOBS)
+        return "none" if independent else self.source_fingerprint
 
     def plan(self, *, force_from: str | None = None, emit_event: bool = True,
              initial_upstream: Mapping[str, str] | None = None,
@@ -213,9 +217,11 @@ class ResumePlanner:
         upstream: dict[str, str] = dict(initial_upstream or {})
         decisions: list[ResumeDecision] = []
         dirty: set[str] = set()
+        from appsec_review.runtime.dependencies import semantic_dependencies
+        inputs = semantic_dependencies(self.jobs, self.dependencies)
         for job in self.jobs:
-            ancestors = set(upstream_closure(job.job_id, self.dependencies, set(self.dependencies)))
-            selected = input_projection(job.job_id, upstream, self.dependencies, self.propagating)
+            ancestors = set(upstream_closure(job.job_id, inputs, set(inputs)))
+            selected = input_projection(job, upstream, self.dependencies, self.propagating)
             if force_from == job.job_id:
                 dirty.add(job.job_id)
                 decision = ResumeDecision(job.job_id, "RUN", ("forced rerun from named job",))

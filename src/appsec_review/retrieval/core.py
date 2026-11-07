@@ -255,6 +255,15 @@ def materialize_attempt_input_manifest(
     for identity, path in roots.items():
         values, lineage = _flatten_manifest(run_root, path, identity[1], verified=verified, flattened=flattened)
         expanded.append((identity, values, lineage))
+    maximal = [item for item in expanded if not any(
+        item[0] in other[2] for other in expanded if other[0] != item[0])]
+    if len(maximal) == 1:
+        identity = maximal[0][0]
+        document, _ = load_verified_manifest(run_root, roots[identity], identity[1], verified=verified)
+        direct = {(str(item["name"]), str(item.get("shard_id", "default"))): item
+                  for item in document["indexes"]}
+        if direct == maximal[0][1]:
+            return roots[identity], identity[1]
     merged: dict[tuple[str, str], tuple[Mapping[str, Any], tuple[str, str]]] = {}
     for root_identity, values, lineage in sorted(expanded, key=lambda item: (len(item[2]), item[0])):
         for key, value in values.items():
@@ -288,7 +297,8 @@ class RetrievalCore:
     def __init__(self, runs_dir: Path, run_id: str, *, manifest_sha256: str | None = None,
                  manifest_path: Path | None = None,
                  limits: RetrievalLimits | None = None, clock: Callable[[], float] = time.monotonic,
-                 graph_settings: GraphSettings | None = None, log: PipelineLog | None = None):
+                 graph_settings: GraphSettings | None = None, log: PipelineLog | None = None,
+                 shard_filter: Callable[[Mapping[str, Any]], bool] | None = None):
         if not _RUN_ID.fullmatch(run_id):
             raise ValueError("invalid run id")
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
@@ -329,13 +339,20 @@ class RetrievalCore:
         self.clock = clock
         grouped: dict[str, list[Mapping[str, Any]]] = {}
         for item in self.manifest["indexes"]:
+            if shard_filter is not None and not shard_filter(item):
+                continue
             grouped.setdefault(str(item["name"]), []).append(item)
         self.indexes = {name: ShardGroup(sorted(items, key=lambda item: str(item.get("shard_id", "default"))))
                         for name, items in grouped.items()}
-        self._cursor_key = hashlib.sha256(f"{run_id}:{self.manifest_sha256}".encode()).digest()
+        view_identity = f"{run_id}:{self.manifest_sha256}"
+        if shard_filter is not None:
+            view_identity += ":" + hashlib.sha256(canonical_json([
+                (name, row.get("shard_id", "default"), row["sha256"])
+                for name, rows in sorted(self.indexes.items()) for row in rows])).hexdigest()
+        self._cursor_key = hashlib.sha256(view_identity.encode()).digest()
         self.log = log if log is not None else PipelineLog(self.run_root)
         self.mcp_session_id = hashlib.sha256(
-            f"{run_id}:{self.manifest_sha256}".encode()).hexdigest()
+            view_identity.encode()).hexdigest()
 
     def begin_mcp_invocation(self, tool: str, parameters: Mapping[str, Any]) -> tuple[object, Mapping[str, str]]:
         invocation = {"mcp_session_id": self.mcp_session_id,
@@ -363,6 +380,8 @@ class RetrievalCore:
         _ACTIVE_MCP.reset(token)
 
     def _database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
+        from appsec_review.runtime.inputs import observe_shard
+        observe_shard(self.run_root, identity)
         from appsec_review.storage.shared import safe_path
         from appsec_review.storage.validation import verified_digest
 

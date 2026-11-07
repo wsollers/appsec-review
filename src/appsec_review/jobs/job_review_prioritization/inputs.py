@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Iterator, Mapping
 import json

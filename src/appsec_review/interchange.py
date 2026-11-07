@@ -10,7 +10,7 @@ from enum import StrEnum
 import hashlib
 import json
 import re
-from typing import Any, Mapping, Sequence
+from typing import AbstractSet, Any, Mapping, Sequence
 
 
 HANDOFF_SCHEMA = "appsec-review/job-handoff/2"
@@ -150,14 +150,14 @@ def _boolean(value: Any, label: str) -> bool:
 
 
 def _path(value: Any) -> str:
-    value = _text(value, "artifact path")
-    if ("\\" in value or ":" in value or value.startswith("/")
-            or any(part in {"", ".", ".."} for part in value.split("/"))):
+    path = _text(value, "artifact path")
+    if ("\\" in path or ":" in path or path.startswith("/")
+            or any(part in {"", ".", ".."} for part in path.split("/"))):
         raise ValueError("artifact path must be canonical and run-relative")
-    return value
+    return path
 
 
-def _fields(value: Mapping[str, Any], required: set[str], optional: set[str] = frozenset()) -> None:
+def _fields(value: Mapping[str, Any], required: AbstractSet[str], optional: AbstractSet[str] = frozenset()) -> None:
     if not required <= value.keys() or value.keys() - required - optional:
         raise ValueError("wire record fields do not match its contract")
 
@@ -189,7 +189,10 @@ def _canonical(value: Any) -> bytes:
 class _Record:
     def as_dict(self) -> dict[str, Any]:
         # JSON round-tripping also rejects accidental non-wire values.
-        return json.loads(_canonical(self))
+        value = json.loads(_canonical(self))
+        if not isinstance(value, dict):
+            raise ValueError("wire record must serialize as an object")
+        return value
 
 
 @dataclass(frozen=True, slots=True)

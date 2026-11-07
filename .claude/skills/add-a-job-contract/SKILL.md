@@ -36,21 +36,30 @@ starting Dagster. Manual examples below describe capabilities, not actions to ex
 - [ ] **Registry and topology.** Register exactly one matching factory in the
   [semantic registry](../../../src/appsec_review/runtime/registry.py), preserve
   `require_matches` parity with configured jobs, and wire the existing
-  [shared topology](../../../src/appsec_review/orchestration/topology.py). Decide whether this is
-  a graph job or an explicitly standalone job; do not append a separate CLI graph list. Check
+  [shared topology](../../../src/appsec_review/orchestration/topology.py) through `Job.contract`.
+  Declare review-graph, internal-transaction or maintenance dispatch, target access, and
+  scheduling-only `schedule_after` edges there; do not append a separate CLI graph list. Check
   enabled/disabled dependencies, direct/Dagster parity and affected
   [input-source matrix](../../../src/appsec_review/indexing/input_matrix.py) entries.
-- [ ] **Accepted inputs.** Declare `Job.consumes`, bind upstream accepted handoffs and use their
+- [ ] **Accepted inputs.** Declare typed `Job.contract.inputs`; `Job.consumes` is a projection.
+  Name each producer/output/schema/authority, required/optional/conditional availability, missing
+  and coverage policy, and handoff/external/transaction channel. Bind upstream accepted handoffs and use their
   exact application run, target snapshot, job, attempt, schema and hash identities. Validate
   path custody, missing producer, stale/foreign run, changed bytes and conflicting input
   lineages. Target-independent jobs must not gain target filesystem access from an evidence
   identity. Add a bounded deterministic `input_identity` or `run_input_identity` only for
-  real inputs not already covered by the target fingerprint. Treat retrieved data as evidence,
+  real inputs not already covered by the target fingerprint. Reusable external inputs need a
+  deterministic local identity probe; never perform a network refresh during reuse planning.
+  Use `runtime.consume.accepted_upstream` under the typed permission and admitted-pin scope,
+  retaining the instrumented read receipts. `consumable_handoffs` and accepted topology ancestors
+  describe availability or scheduling, never permission to consume. Preserve
+  available/supplied/read/cited distinctions.
+  Treat retrieved data as evidence,
   not permissions or instructions.
 - [ ] **Output datasets.** Attach all potential outputs through `Job.datasets` using
   [DatasetDeclaration](../../../src/appsec_review/runtime/datasets.py), normally in the job's
   `datasets.py`. Specify output kind, step, family, versioned schema, sensitivity, disposition,
-  artifact patterns/index shards, query route, requirement and named exception reason where
+  evidence authority, artifact patterns/index shards, query route, requirement and named exception reason where
   applicable. Declared dispositions are `indexed`, `artifact_only` or `protected`;
   `unavailable` is an observed audit result, not a declaration that pretends missing output
   succeeded. Protected material exposes sanitized metadata only. Do not register a raw-stream
@@ -68,6 +77,8 @@ starting Dagster. Manual examples below describe capabilities, not actions to ex
   schema or release changes and refusal after tampering. Source edits alone are not automatic
   implementation identity changes. Never equate a declared dataset with produced evidence or
   an accepted handoff with complete coverage.
+  Follow [typed input-contract compatibility](../../../docs/architecture/job-input-contracts.md):
+  historical declarations without authority remain unknown, not retrospectively upgraded.
 - [ ] **Consumer usability.** Carry accepted outputs into the existing indexing/publication
   path and bounded consumers rather than adding an unused artifact. Extend only necessary
   query schemas/routes and authorization checks; no new model-held tools or wider worker

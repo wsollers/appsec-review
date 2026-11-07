@@ -21,14 +21,20 @@ def graph_dependencies(jobs: Sequence[Job],
         else:
             result = wave1_dependencies(ids)
         if result is None:
+            if any(job.contract is not None for job in jobs):
+                result = {
+                    job.job_id: tuple(dict.fromkeys(dep for dep in (
+                        *(job.contract.schedule_after if job.contract is not None else ()), *job.consumes)
+                        if dep in ids)) for job in jobs}
+            else:
             # Small public graphs historically used declaration order. Explicit consumes edges
             # take precedence; callers with an independent synthetic DAG can pass explicit edges.
-            declared = any(set(job.consumes) & ids for job in jobs)
-            result = {
-                job.job_id: tuple(dep for dep in job.consumes if dep in ids) if declared else
-                (() if index == 0 else (jobs[index - 1].job_id,))
-                for index, job in enumerate(jobs)
-            }
+                declared = any(set(job.consumes) & ids for job in jobs)
+                result = {
+                    job.job_id: tuple(dep for dep in job.consumes if dep in ids) if declared else
+                    (() if index == 0 else (jobs[index - 1].job_id,))
+                    for index, job in enumerate(jobs)
+                }
     if set(result) != ids:
         raise ValueError("dependency graph differs from enabled job selection")
     seen: set[str] = set()
@@ -39,15 +45,34 @@ def graph_dependencies(jobs: Sequence[Job],
     return result
 
 
-def input_projection(job_id: str, upstream: Mapping[str, str],
+def input_projection(job_id: str | Job, upstream: Mapping[str, str],
                      dependencies: Mapping[str, Sequence[str]],
                      propagating: set[str]) -> dict[str, str]:
+    if isinstance(job_id, Job):
+        if job_id.contract is not None:
+            return {key: upstream[key] for key in job_id.consumes if key in upstream}
+        job_id = job_id.job_id
+    else:
+        from appsec_review.runtime.registry import builtin_contracts
+        contract = builtin_contracts().get(job_id)
+        if contract is not None:
+            return {key: upstream[key] for key in contract.consumes if key in upstream}
     return {key: upstream[key] for key in upstream_closure(job_id, dependencies, propagating)
             if key in upstream}
+
+
+def semantic_dependencies(jobs: Sequence[Job], scheduling: Mapping[str, Sequence[str]]) -> dict[str, tuple[str, ...]]:
+    ids = {job.job_id for job in jobs}
+    return {job.job_id: tuple(dep for dep in job.consumes if dep in ids)
+            if job.contract is not None else tuple(scheduling[job.job_id]) for job in jobs}
 
 
 def force_selected(job_id: str, force_from: str | None, dependencies: Mapping[str, Sequence[str]]) -> bool:
     if force_from is not None and force_from not in dependencies:
         raise ValueError(f"cannot force a disabled or absent graph job: {force_from}")
+    from appsec_review.runtime.registry import builtin_contracts
+    contracts = builtin_contracts()
+    dependencies = {name: tuple(dep for dep in contracts[name].consumes if dep in dependencies)
+                    if name in contracts else tuple(parents) for name, parents in dependencies.items()}
     return force_from is not None and force_from in {
         job_id, *upstream_closure(job_id, dependencies, set(dependencies))}

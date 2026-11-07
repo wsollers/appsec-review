@@ -40,7 +40,9 @@ def _setup(tmp_path, *, managed=True):
                          f'\n[jobs.{job_id}.steps.work.tasks.only]\nworkers = 1\n')
         # Keep the real typed contracts while replacing only execution with fake units.
         prefixes = tuple(f"jobs.{job_id}.settings" for job_id in (
-            "job_image_pin_verification", "job_target_catalog", "job_inference_security_review"))
+            "job_image_pin_verification", "job_target_catalog", "job_inference_security_review",
+            "job_dossier_publication", "job_openvex_export",
+            "job_remediation_planning", "job_remediation_validation"))
         canonical = (Path(__file__).parents[1] / "appsec-review.toml").read_text(encoding="utf-8")
         selected = False
         for line in canonical.splitlines():
@@ -56,7 +58,10 @@ def _setup(tmp_path, *, managed=True):
             'custody = "application_private_v1"\n'
             f'target_root = {json.dumps(str(target))}\n'
             '\n[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n')
-    return load_config(path), target
+    config = load_config(path)
+    from tests.release_support import write_release
+    write_release(tmp_path, config.jobs)
+    return config, target
 
 
 def _job(job_id, handler):

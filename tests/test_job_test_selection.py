@@ -434,7 +434,10 @@ def test_shipped_metadata_covers_registered_jobs_and_resolves_every_category():
         assert result["pytest_argv"][4:] == expected
     document_gap = select_tests(ROOT, ["job_document_issue_analysis"])
     assert document_gap["handler_selectors"] == []
-    assert document_gap["selectors"] == document["common_contracts"]["recovery-admission"]["unit"]
+    assert document_gap["selectors"] == sorted({
+        selector for contract in document["common_contracts"].values()
+        if "job_document_issue_analysis" in contract["jobs"] for selector in contract["unit"]
+    })
     assert document_gap["gaps"][0]["job_id"] == "job_document_issue_analysis"
     assert document_gap["gaps"][0]["scope"] == "handler"
 

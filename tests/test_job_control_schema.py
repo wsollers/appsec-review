@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 import pytest
 
 from appsec_review.interchange import (
@@ -47,12 +47,33 @@ def test_runner_receipts_and_results_carry_schema_ids_and_validate(tmp_path: Pat
     assert result["schema"] == UNIT_EXECUTION_SCHEMA
     unit_result = json.loads((attempt / "steps/work/tasks/only/result.json").read_text(encoding="utf-8"))
     _validator("unitOutput").validate(unit_result)
+    root_validator = Draft202012Validator(SCHEMA)
+    for record in (receipt, status, unit_result):
+        root_validator.validate(record)
     _validator("producerGap").validate(unit_result["gaps"][0])
     # A declared producer-gap/1 record passes through publication unchanged.
     published = outcome["handoff"]["outputs"]["work.only"]["gaps"][0]
     assert published == unit_result["gaps"][0]
     outcomes = json.loads((root / outcome["handoff"]["outcomes"]["path"]).read_text(encoding="utf-8"))
     assert [gap["code"] for gap in outcomes["gaps"]] == ["truncated"]
+
+
+@pytest.mark.parametrize(("record_kind", "damage"), [
+    ("task", "missing"), ("task", "extra"), ("attempt", "missing"), ("attempt", "status"),
+])
+def test_root_schema_rejects_malformed_reserved_receipts(tmp_path: Path, record_kind: str, damage: str) -> None:
+    _, _, _, outcome, root = publish(tmp_path, lambda unit: {"value": 7})
+    attempt = root / "data/jobs/job_fixture/attempts" / outcome["status"]["attempt_id"]
+    path = attempt / ("steps/work/tasks/only/status.json" if record_kind == "task" else "status.json")
+    record = json.loads(path.read_bytes())
+    if damage == "missing":
+        del record["unit_id" if record_kind == "task" else "job_id"]
+    elif damage == "extra":
+        record["arbitrary_permission"] = True
+    else:
+        record["status"] = "NOT_A_STATUS"
+    with pytest.raises(ValidationError):
+        Draft202012Validator(SCHEMA).validate(record)
 
 
 def test_producer_gap_identity_matches_the_runtime_derivation() -> None:
@@ -95,3 +116,39 @@ def test_strict_gaps_job_rejects_publication_of_a_free_text_gap(tmp_path: Path) 
     with pytest.raises(ValueError, match="producer-gap/1"):
         runner.run(strict, source_fingerprint="snapshot")
     assert list(config.runtime.runs_dir.glob("*/data/jobs/job_fixture/attempts/*/rejected-handoff.json"))
+
+
+@pytest.mark.parametrize("fails", (False, True), ids=("success", "failure"))
+def test_typed_task_receipts_validate_observed_reads_without_open_fields(tmp_path: Path, fails: bool) -> None:
+    from appsec_review.runtime.consume import accepted_upstream
+    from tests.test_upstream_consumption import _job, _publish, _runner
+    config, runner = _runner(tmp_path, "job_fixture", "job_consumer")
+    first = _publish(runner, _job("job_fixture", lambda unit: {"value": 1}))
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+
+    def handler(unit):
+        assert accepted_upstream(root, "job_fixture").sha256 == first["handoff_sha256"]
+        if fails:
+            raise RuntimeError("after verified read")
+        return {"value": 2}
+
+    job = _job("job_consumer", handler, ("job_fixture",))
+    claim = runner.begin_attempt(job, run_id=root.name, source_fingerprint="snapshot")
+    if fails:
+        with pytest.raises(RuntimeError, match="after verified read"):
+            runner.execute_or_reuse_unit(job, claim, "work.only")
+    else:
+        runner.execute_or_reuse_unit(job, claim, "work.only")
+    receipt = json.loads((root / claim["attempt_path"] / "steps/work/tasks/only/status.json").read_bytes())
+    _validator("taskReceipt").validate(receipt)
+    Draft202012Validator(SCHEMA).validate(receipt)
+    reads = receipt["input_consumption"]
+    assert reads["citation_observation"] == "not_observed"
+    assert reads["reads"][0]["handoff_sha256"] == first["handoff_sha256"]
+    assert reads["reads"][0]["read"] is True and reads["reads"][0]["cited"] is None
+    with pytest.raises(ValidationError):
+        _validator("taskReceipt").validate({**receipt, "arbitrary_permission": True})
+    with pytest.raises(ValidationError):
+        _validator("inputConsumption").validate({**reads, "permission": "all"})
+    with pytest.raises(ValidationError):
+        _validator("inputRead").validate({**reads["reads"][0], "cited": True})

@@ -24,7 +24,7 @@ from appsec_review.tool_inputs import not_applicable_summary, partition_paths
 
 from .discovery import PROVIDERS, discover
 from .static_rules import RULESET_IDENTITY, hierarchy, scan_text
-from appsec_review.jobs.job_ci_configuration_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_ci_configuration_analysis.datasets import CONTRACT, DATASETS
 
 
 @dataclass(frozen=True, slots=True)
@@ -565,4 +565,4 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                implementation_identity=implementation,
                validation_identity=None,
                runtime_identity=None, units=tuple(units),
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

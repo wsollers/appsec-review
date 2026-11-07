@@ -14,7 +14,8 @@ from typing import Any, Iterator
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
 from appsec_review.indexing.store import AcceptedHandoff, accepted_handoff
-from appsec_review.interchange import HANDOFF_SCHEMA as JOB_HANDOFF_SCHEMA, decode_handoff
+from appsec_review.interchange import HANDOFF_SCHEMA as JOB_HANDOFF_SCHEMA
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.jobs.accepted_review import HANDOFF_SCHEMA, REVIEW_JOB, load_accepted_review, project_score
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,

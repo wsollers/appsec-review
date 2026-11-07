@@ -26,7 +26,7 @@ from appsec_review.codeql.runtime import (
 )
 from appsec_review.config import CodeQLAnalysisSettings, CodeQLExportSettings
 from appsec_review.config.assurance import ReviewPolicy
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.provenance import (
     artifact_reference, common_metadata, retain_native_output, select_native,
     validate_observation_provenance,
@@ -54,7 +54,7 @@ from .planning import (
 )
 from appsec_review import seeding
 from .sarif import NORMALIZER_IDENTITY, normalize_sarif
-from appsec_review.jobs.job_codeql_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_codeql_analysis.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/codeql-analysis-handoff/1"
@@ -1769,4 +1769,4 @@ def build_job() -> Job:
     return Job("job_codeql_analysis", "codeql_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=validation, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

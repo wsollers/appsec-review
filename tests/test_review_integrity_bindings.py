@@ -36,14 +36,18 @@ def test_gate_binds_both_lead_and_hunt_package_manifests_to_the_handoff(monkeypa
 
 
 def test_cli_graph_runs_every_registered_wave1_job() -> None:
-    registered = set(builtin_registry().job_ids()) - {"job_third_party_data_sync"}
+    from appsec_review.runtime.contracts import DispatchClass
+    registry = builtin_registry()
+    registered = {name for name, contract in registry.contracts().items()
+                  if contract.dispatch is DispatchClass.REVIEW_GRAPH}
     graph = cli.GRAPH_JOB_IDS + cli.POST_INDEX_JOB_IDS
     assert set(graph) == registered and len(graph) == len(registered)
     for job in ("job_ci_configuration_analysis", "job_post_build_security_assessment",
                 "job_owasp_control_assessment", "job_security_tagging"):
         assert job in cli.GRAPH_JOB_IDS
     assert cli.GRAPH_JOB_IDS[-1] == "job_review_data_indexing"
-    assert cli.POST_INDEX_JOB_IDS[-1] == "job_final_report_publication"
+    assert "job_final_report_publication" in cli.POST_INDEX_JOB_IDS
+    assert {"job_build_iteration", "job_third_party_data_sync"}.isdisjoint(graph)
 
 
 def test_registry_refuses_configured_and_registered_job_drift() -> None:

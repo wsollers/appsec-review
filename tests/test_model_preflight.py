@@ -195,6 +195,8 @@ def test_registry_wires_the_real_check_into_the_first_job_of_a_review(monkeypatc
 
 def test_connectivity_gate_runs_again_without_invalidating_reusable_downstream_work(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
+    from tests.release_support import write_release
+    write_release(tmp_path, ("job_model_connectivity", "job_review_intake"))
     check, calls = _serving("claude-haiku-5-5")
     jobs = [build_connectivity(check_models=check), build_intake()]
     first = GraphRunner(config, jobs).run(

@@ -9,7 +9,6 @@ mapping before a tool runs.
 
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
 
 from dataclasses import dataclass, field
 import hashlib

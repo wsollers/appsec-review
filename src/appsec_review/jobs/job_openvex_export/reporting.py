@@ -9,7 +9,8 @@ import stat
 from typing import Any, Mapping
 
 from appsec_review.indexing.store import accepted_handoff
-from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
+from appsec_review.interchange import HANDOFF_SCHEMA
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.runtime.handoff import verify_handoff_integrity
 
 from .contracts import (

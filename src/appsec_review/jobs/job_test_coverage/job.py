@@ -7,7 +7,7 @@ index and target catalog are independently verified before any candidate bytes a
 
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -30,7 +30,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .parsers import CoverageDocument, CoverageFile, CoverageTotals, parse_coverage
 
 
@@ -420,7 +420,7 @@ def build_job() -> Job:
     return Job("job_test_coverage", "test_coverage", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=TEST_COVERAGE_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT)
 
 
 def load_accepted_test_coverage(run_root: Path) -> Mapping[str, Any]:

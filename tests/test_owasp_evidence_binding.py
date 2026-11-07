@@ -29,25 +29,9 @@ COMPONENT = "component:0001"
 NATIVE = "component:0002"
 
 
-@pytest.fixture(scope="module")
-def seed_publication(tmp_path_factory):
-    return build_accepted_index_set(tmp_path_factory.mktemp("seed"), secrets=True, omit_feeds=FEEDS)
-
-
 @pytest.fixture
-def publication(seed_publication, tmp_path_factory):
-    base = tmp_path_factory.mktemp("pub")
-    shutil.copytree(seed_publication.target.parent, base, dirs_exist_ok=True)
-    fixture = replace(seed_publication, runs_dir=base / "runs",
-                      run_root=base / "runs" / seed_publication.run_id, target=base / "target")
-    manifest_path = fixture.run_root / "data" / "indices" / "manifests" / "fixture.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    write_manifest(
-        manifest_path, run_id=fixture.run_id, target_snapshot=fixture.snapshot, target_root=fixture.target,
-        indexes=[IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in manifest["indexes"]],
-    )
-    repin(fixture, manifest_path)
-    return fixture
+def publication(tmp_path):
+    return build_accepted_index_set(tmp_path, secrets=True, omit_feeds=FEEDS)
 
 
 def repin(publication, manifest_path):
@@ -55,22 +39,34 @@ def repin(publication, manifest_path):
     pointer_path = publication.run_root / "data" / "indices" / "accepted.json"
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     pointer["manifest_path"] = manifest_path.relative_to(publication.run_root).as_posix()
-    handoff_path = publication.run_root / pointer["handoff_path"]
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    previous_path = publication.run_root / pointer["handoff_path"]
+    handoff = json.loads(previous_path.read_text(encoding="utf-8"))
+    attempts = previous_path.parent.parent
+    serial = max(int(path.name.removeprefix("attempt_")) for path in attempts.iterdir()) + 1
+    attempt_id = f"attempt_{serial:04d}"
+    handoff_path = attempts / attempt_id / "handoff.json"
     manifest_ref = {"path": pointer["manifest_path"], "sha256": file_sha256(manifest_path),
                     "size_bytes": manifest_path.stat().st_size}
     outputs = deepcopy(handoff["outputs"])
-    outputs["publish.inventory_index"]["index_manifest"] = manifest_ref
-    # Rebuild the synthetic producer's result, outcomes and artifact inventory together. Updating
-    # only the pointer leaves a stale accepted result and correctly fails real admission.
+    for output in outputs.values():
+        if "index_manifest" in output:
+            output["index_manifest"] = manifest_ref
+    prior_claim = json.loads(previous_path.with_name("claim.json").read_bytes())
+    atomic_json(handoff_path.with_name("claim.json"), {"dataset_contract": prior_claim["dataset_contract"]})
+    # Publish a new synthetic generation; previously accepted producer histories stay byte-identical.
     atomic_json(handoff_path.parent / "result.json", {
         "status": handoff["completion_status"], "outputs": outputs})
     write_fixture_handoff(publication.run_root, handoff_path, {
-        "job_id": handoff["job_id"], "attempt_id": handoff["attempt_id"],
+        "job_id": handoff["job_id"], "attempt_id": attempt_id,
         "completion_status": handoff["completion_status"], "source_fingerprint": publication.snapshot,
-        "artifacts": [manifest_ref], "outputs": outputs})
-    pointer.update(manifest_sha256=file_sha256(manifest_path), handoff_sha256=file_sha256(handoff_path))
+        "upstream_handoff_sha256": handoff["upstream_handoff_sha256"],
+        "artifacts": [manifest_ref, *(item for item in handoff["artifacts"]
+                                   if item["path"].startswith("data/indices/"))], "outputs": outputs})
+    pointer.update(manifest_sha256=file_sha256(manifest_path), handoff_sha256=file_sha256(handoff_path),
+                   handoff_path=handoff_path.relative_to(publication.run_root).as_posix())
     atomic_json(pointer_path, pointer)
+    atomic_json(attempts.parent / "latest.json", {
+        "handoff_path": pointer["handoff_path"], "handoff_sha256": pointer["handoff_sha256"]})
 
 
 def resolver(publication, **kwargs):
@@ -96,7 +92,8 @@ def record(publication, kind, key, payload, loc=None):
 
 def publish(publication, name, shard_id, entities, *, job="job_evidence_collection", replacing=False):
     """Republish through the real index/manifest and accepted-handoff contracts."""
-    manifest_path = publication.run_root / "data" / "indices" / "manifests" / "fixture.json"
+    accepted = json.loads((publication.run_root / "data/indices/accepted.json").read_bytes())
+    manifest_path = publication.run_root / accepted["manifest_path"]
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     fingerprint = digest([name, shard_id, job, [asdict(item) for item in entities]])
     path = publication.run_root / "data" / "indices" / name / shard_id / f"{fingerprint}.sqlite"
@@ -114,6 +111,7 @@ def publish(publication, name, shard_id, entities, *, job="job_evidence_collecti
         for item in manifest["indexes"]
         if not (replacing and item["name"] == name and item["shard_id"] == shard_id)
     ]
+    manifest_path = manifest_path.with_name(f"fixture-binding-{fingerprint}.json")
     write_manifest(
         manifest_path, run_id=publication.run_id, target_snapshot=publication.snapshot,
         target_root=publication.target, indexes=[*previous, identity],
@@ -160,6 +158,24 @@ def test_original_source_and_scanner_references_reresolve(publication):
     assert scanner["category"] == "scanner_observation"
     assert scanner["reference"]["locator"]["lines"] == [3, 3]
     assert bound.resolve(scanner["reference"], component_id=COMPONENT) == scanner
+
+
+def test_fixture_republication_keeps_original_producer_histories(publication):
+    root = publication.run_root
+    before = {
+        path: path.read_bytes()
+        for path in sorted((root / "data/jobs").glob("*/attempts/**/*")) if path.is_file()
+    }
+    manifests = {path: path.read_bytes() for path in sorted((root / "data/indices/manifests").glob("*.json"))}
+    original_pointer = json.loads((root / "data/indices/accepted.json").read_bytes())
+    item = record(publication, EntityKind.TOOL_OBSERVATION, "new-worker-view",
+                  {"producer": "bounded_inference"}, location(publication))
+    publish(publication, "observations", "new-worker-view", [item], job="job_post_build_security_assessment")
+    current = json.loads((root / "data/indices/accepted.json").read_bytes())
+    assert current["handoff_sha256"] != original_pointer["handoff_sha256"]
+    assert current["handoff_path"] != original_pointer["handoff_path"]
+    assert all(path.read_bytes() == data for path, data in before.items())
+    assert all(path.read_bytes() == data for path, data in manifests.items())
 
 
 @pytest.mark.parametrize("field,value", [

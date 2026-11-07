@@ -281,6 +281,55 @@ def test_remediation_missing_accepted_review_blocks_dispatch(tmp_path):
     assert not (tmp_path / "experiment").exists()
 
 
+@pytest.mark.parametrize(("artifact", "change", "message"), (
+    ("claim", "missing", "shared artifact integrity mismatch"),
+    ("claim", "corrupt", "target evidence integrity mismatch"),
+    ("handoff", "missing", "accepted handoff is unavailable"),
+    ("handoff", "corrupt", "accepted handoff identity changed"),
+), ids=("claim-missing", "claim-corrupt", "handoff-missing", "handoff-corrupt"))
+def test_remediation_original_observation_producer_is_required(tmp_path, artifact, change, message):
+    from appsec_review.indexing.store import accepted_handoff
+    from appsec_review.jobs.job_evidence_collection.datasets import DATASETS
+    from appsec_review.jobs.job_remediation_planning.inputs import retrieval_core
+    from appsec_review.runtime.datasets import read_dataset_contract
+
+    fixture = remediation_corpus(tmp_path)
+    root = fixture.corpus.core.run_root
+    accepted = accepted_handoff(root, "job_evidence_collection")
+    assert accepted is not None, "original observations require their own accepted producer"
+    handoff = accepted.handoff
+    assert handoff["run_id"] == root.name
+    assert handoff["target_snapshot"] == fixture.corpus.core.manifest["target_snapshot"]
+    claim = root / handoff["resolving_paths"]["attempt"] / "claim.json"
+    assert read_dataset_contract(json.loads(claim.read_bytes())["dataset_contract"],
+                                 accepted.job_id)[1] == DATASETS
+    scoped = retrieval_core(root, fixture.review)
+    observation = scoped.indexes["observations"][0]
+    assert observation["producer"]["job"] == accepted.job_id
+    assert any(item["path"] == observation["relative_path"] and item["sha256"] == observation["sha256"]
+               for item in handoff["artifacts"])
+    assert scoped.find(kind="tool_observation", indexes=("observations",))["results"]
+    assert all("job" not in shard["producer"] for shard in scoped.indexes["source"])
+    path = claim if artifact == "claim" else root / accepted.path
+    if change == "missing":
+        path.unlink()
+    else:
+        path.write_bytes(path.read_bytes() + b" ")
+    calls = []
+
+    def forbidden_model(*args, **kwargs):
+        calls.append(True)
+        pytest.fail("invalid original producer reached model dispatch")
+
+    with pytest.raises(ValueError, match=message):
+        run_remediation_case(
+            ROOT, review=fixture.review, finding_id=fixture.finding["finding_package_id"],
+            core=fixture.corpus.core, settings=REMEDIATION_SETTINGS,
+            output=tmp_path / "experiment", transport=forbidden_model)
+    assert calls == []
+    assert not (tmp_path / "experiment").exists()
+
+
 @pytest.mark.parametrize("artifact", (
     "pointer", "job_handoff", "review_handoff", "projection", "claim_ledger", "finding", "scope",
     "package_manifest", "model_shard",

@@ -18,7 +18,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
 from .contracts import STATUSES, PlanAnswer, verify_patch_scope, verify_plan
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .inputs import (
     CoreFactory, SourceReader, binding, confirmed_findings, evidence_relations, load_review,
     retrieval_core, writer_task,
@@ -183,4 +183,4 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
     units = (Unit("load.verify_inputs", load), Unit("assess.propose", assess, ("load.verify_inputs",)),
              Unit("acceptance.publish_handoff", publish, ("load.verify_inputs", "assess.propose")))
     return Job(JOB_ID, "remediation_planning", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=REMEDIATION_PLANNING_HANDOFF_SCHEMA, units=units, datasets=DATASETS, consumes=CONSUMES)
+               schema_identity=REMEDIATION_PLANNING_HANDOFF_SCHEMA, units=units, datasets=DATASETS, contract=CONTRACT)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping
@@ -32,7 +32,7 @@ from appsec_review.retrieval.model import canonical_json, normalize_relative_pat
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, LockUnavailable, atomic_json, file_sha256
 from appsec_review.storage.shared import OBJECTS, verify_reference
-from appsec_review.jobs.job_artifact_indexing.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_artifact_indexing.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/artifact-indexing/1"
@@ -1047,4 +1047,4 @@ def build_job() -> Job:
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
                units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

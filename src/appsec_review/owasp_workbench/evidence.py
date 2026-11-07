@@ -15,14 +15,9 @@ from appsec_review.review.secret_redaction import REDACTION_RULE, placeholder
 from .standards import digest
 
 
-UPSTREAM_JOBS = (
-    "job_target_analysis_plan", "job_target_catalog", "job_language_build",
-    "job_project_build", "job_artifact_indexing", "job_artifact_security_analysis",
-    "job_evidence_collection", "job_cpp_compiled_analysis", "job_clang_static_analysis",
-    "job_cpp_symbol_index", "job_cpg_analysis", "job_svf_alias_analysis",
-    "job_post_build_security_assessment", "job_tree_sitter_ast", "job_codeql_analysis",
-    "job_security_tagging", "job_review_prioritization", "job_code_graph_index",
-)
+from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT
+
+UPSTREAM_JOBS = CONTRACT.consumes
 UPSTREAM_INDEXES = ("source", "components", "build", "artifacts", "build_security", "compiled",
                     "analysis", "evidence", "inventory", "observations", "documents", "tags",
                     "priority", "graph")

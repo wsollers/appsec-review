@@ -41,7 +41,7 @@ from .rules import RULES_IDENTITY
 from .semantic import CODEQL_LANGUAGES, codeql_paths, semgrep_signals
 from .streaming import FilesDocumentWriter, ShardRowIndex
 from .syntax import SourceFile, build_tree, code_lines
-from appsec_review.jobs.job_review_prioritization.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_review_prioritization.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/review-prioritization/1"
@@ -886,7 +886,8 @@ def build_job() -> Job:
                                  f"{len(selected_functions)} of {len(ranking['functions'])} functions")
             builder.build()
         identity = IndexIdentity("priority", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
-                                 _rel(unit.job.run_root, path), {"job": JOB_ID}, tuple(gaps[:200]), SHARD_ID)
+                                 _rel(unit.job.run_root, path), {"job": JOB_ID, "unit": unit.unit_id},
+                                 tuple(gaps[:200]), SHARD_ID)
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
@@ -962,7 +963,7 @@ def build_job() -> Job:
     return Job(JOB_ID, "review_prioritization", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA,
                units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)
 
 
 def load_accepted_prioritization(run_root: Path) -> Mapping[str, Any] | None:

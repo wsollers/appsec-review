@@ -4,6 +4,7 @@ Scanner observations, proposed model claims and finite verifier outcomes are syn
 Scope/package assembly, R5 adjudication, ledger projection, findings, accounting and acceptance
 are production code. No JobRunner, live model, target build or acceptance-tier test is executed.
 """
+from dataclasses import asdict
 import json
 from typing import Any
 
@@ -11,6 +12,7 @@ from appsec_review.config.remediation import RemediationBounds
 from appsec_review.indexing.store import as_identity
 from appsec_review.jobs.accepted_review import REVIEW_SCHEMA
 from appsec_review.jobs.bound_artifacts import artifact_ref
+from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as EVIDENCE_DATASETS
 from appsec_review.jobs.job_inference_security_review import stages
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.jobs.job_remediation_planning.inputs import load_review
@@ -28,6 +30,7 @@ from appsec_review.review.models import (
 from appsec_review.review.obligations import required_predicates_for
 from appsec_review.review.packages import PackageSettings, assemble_packages, publish_packages
 from appsec_review.review.scope import accept_manifest
+from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.storage import atomic_json, file_sha256
 from tests.handoff_fixture import write_fixture_handoff
 from tests.review.test_prompt_competence import Corpus, ROOT, SETTINGS
@@ -60,14 +63,29 @@ def _observation_manifest(corpus: Corpus) -> None:
     builder.add_relation(RelationRecord(IndexRelationKind.OBSERVED_AT, observation.value, source_file, True, 1.0))
     builder.add_coverage("source_sast", "complete")
     digest = builder.build()
+    shard = IndexIdentity(
+        "observations", "appsec-review/retrieval-index/2", digest, fingerprint,
+        path.relative_to(root).as_posix(),
+        {"job": "job_evidence_collection", "producer": "tool-semgrep"}, ())
     manifest = root / "data" / "indices" / "manifests" / "remediation-corpus.json"
     write_manifest(
         manifest, run_id=root.name, target_snapshot=snapshot, target_root=core.target_root,
-        indexes=[*(as_identity(row) for row in core.manifest["indexes"]),
-                 IndexIdentity("observations", "appsec-review/retrieval-index/2", digest, fingerprint,
-                               path.relative_to(root).as_posix(),
-                               {"job": "job_evidence_collection", "producer": "tool-semgrep"}, ())])
+        indexes=[*(as_identity(row) for row in core.manifest["indexes"]), shard])
     reference = artifact_ref(root, manifest)
+    producer_attempt = root / "data/jobs/job_evidence_collection/attempts/attempt_0001"
+    atomic_json(producer_attempt / "claim.json", {
+        "dataset_contract": dataset_contract(
+            "job_evidence_collection", sorted({item.step for item in EVIDENCE_DATASETS}), EVIDENCE_DATASETS)})
+    producer_handoff = producer_attempt / "handoff.json"
+    write_fixture_handoff(root, producer_handoff, {
+        "job_id": "job_evidence_collection",
+        "outputs": {"evidence_publication.assemble_manifest": {
+            "index_manifest": reference, "index_identity": asdict(shard)}},
+        "artifacts": [artifact_ref(root, path)],
+    }, target_snapshot=snapshot)
+    atomic_json(producer_attempt.parent.parent / "latest.json", {
+        "handoff_path": producer_handoff.relative_to(root).as_posix(),
+        "handoff_sha256": file_sha256(producer_handoff)})
     handoff = root / "data" / "jobs" / "fixture" / "attempts" / "attempt_0002" / "handoff.json"
     write_fixture_handoff(root, handoff, {"job_id": "fixture", "outputs": {
         "fixture.index": {"index_manifest": reference}}})

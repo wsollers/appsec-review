@@ -666,8 +666,9 @@ def test_runtime_intervals_are_typed_and_applied_by_the_runner(tmp_path: Path) -
     assert spans.operation_sampling() == spans.SamplingSettings(5.0, 0.5)
     for bad, message in (("-1", "finite and non-negative"), ('"1"', "number of seconds"),
                          ("true", "number of seconds")):
+        path_suffix = bad.strip('"')
         with pytest.raises(ValueError, match=message):
-            _variant(tmp_path / f"bad-{len(message)}-{bad.strip('\"')}", (
+            _variant(tmp_path / f"bad-{len(message)}-{path_suffix}", (
                 "[runtime]\n", f"[runtime]\noperation_progress_interval_seconds = {bad}\n"))
 
 
@@ -677,30 +678,30 @@ def _indexing_run(tmp_path: Path, monkeypatch, *, disable_spans: bool = False):
     import json
 
     from appsec_review.jobs.job_artifact_indexing import build_job
-    from appsec_review.runtime import GraphRunner
     from appsec_review.runtime import runner as runner_module
-    from appsec_review.runtime.repair import WORKER_PROTOCOL, stopped_reasons, worker_scope
+    from appsec_review.runtime.repair import stopped_reasons
     from appsec_review.storage import atomic_json
-    from tests.test_artifact_indexing import RUN_ID, _publish_changed_language_receipts, _seed
+    from tests.artifact_input_support import recorded_graph
+    from tests.test_artifact_indexing import RUN_ID, _identity, _seed
 
-    config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest = _seed(tmp_path)
+    config, target, snapshot, run_root, receipts, accepted_path, _handoff_path, _latest = _seed(
+        tmp_path, build_families=("native", "python"), publish=False)
     receipt = receipts[0]
     obj = receipt["artifacts"][0]
+    receipt["artifacts"] = [obj]
     receipt["tool_invocations"] = [{
         "tool": "cc", "tool_kind": "compiler", "parent_command_id": receipt["commands"][0]["command_id"],
         "origin": "execution-capture:command-001:event-7", "argv_sha256": "c" * 64,
         "mapping_confidence": 1.0, "inputs": [],
         "outputs": [{"workspace_path": obj["workspace_path"], "sha256": obj["sha256"]}],
     }]
-    # Publish the synthetic producer within the same worker lifecycle required for restart.
-    with worker_scope(config, run_root, preparing_job="job_language_build"):
-        claim_path = handoff_path.with_name("claim.json")
-        claim = json.loads(claim_path.read_text(encoding="utf-8"))
-        atomic_json(claim_path, {**claim, "worker_protocol": WORKER_PROTOCOL})
-        _publish_changed_language_receipts(run_root, receipts, accepted_path, handoff_path, latest)
-    assert stopped_reasons(config, run_root) == ()
+    document = json.loads(accepted_path.read_bytes())
+    document["receipts"] = receipts
+    manifest_path = run_root / "data/indices/manifests/language-build.json"
+    atomic_json(run_root / "data/inputs/artifact-fixture/job_language_build.json", {
+        "document": document, "manifest": _identity(run_root, manifest_path)})
     monkeypatch.setattr(runner_module, "configure_operation_sampling", lambda **_: None)
-    spans.configure_operation_sampling(progress_interval_seconds=0.01, sample_interval_seconds=0.005)
+    spans.configure_operation_sampling(progress_interval_seconds=0.1, sample_interval_seconds=0.05)
     original = spans.operation_span
 
     @contextmanager
@@ -713,8 +714,9 @@ def _indexing_run(tmp_path: Path, monkeypatch, *, disable_spans: bool = False):
                 if name.startswith("appsec_review.") and module is not None:
                     if getattr(module, "operation_span", None) is original:
                         patch.setattr(module, "operation_span", without_operation_measurement)
-        GraphRunner(config, [build_job()]).run(target_root=target, source_fingerprint=snapshot, run_id=RUN_ID)
-        rerun = GraphRunner(config, [build_job()]).run(
+        recorded_graph(config, [build_job()], RUN_ID).run(target_root=target, source_fingerprint=snapshot, run_id=RUN_ID)
+        assert stopped_reasons(config, run_root) == ()
+        rerun = recorded_graph(config, [build_job()], RUN_ID).run(
             target_root=target, source_fingerprint=snapshot, run_id=RUN_ID, force_from="job_artifact_indexing")
     return run_root, receipts, rerun
 

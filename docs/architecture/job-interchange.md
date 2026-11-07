@@ -100,13 +100,24 @@ with `Job.strict_gaps = True` is also rejected when a gap is not a `producer-gap
 accepted attempts remain verifiable as recorded; the vocabulary is enforced on new publications.
 
 Consumers read producers through one path, `runtime.consume.accepted_upstream(run_root, job_id)`.
-Inside an attempt it resolves the digest the consumer's claim pinned (`claim.consumable_handoffs`:
-the projected `upstream_handoffs` plus the accepted handoffs of declared `CONSUMES` and topology
-ancestors as they stood at claim time) and refuses a producer the claim did not pin, even when a
-`latest.json` exists; outside an attempt (operator tooling, tests) it follows the hash-verified
-pointer and reports `pinned=False`. A job reading its own earlier attempt for checkpoint reuse uses
-`accepted_latest`. No job reads `data/jobs/<job>/latest.json` directly. `tests/test_consumes_parity.py`
-requires every `CONSUMES` entry to be a registered job scheduled before the consumer.
+Inside an attempt it requires a typed `Job.contract` handoff declaration and resolves only the
+digest admitted in `claim.upstream_handoffs`. `claim.consumable_handoffs` is availability metadata,
+not authority; accepted topology ancestors grant no read permission. Explicit empty supply remains
+empty, while an unspecified standalone supply selects declared inputs through typed admission.
+The reader records actual access through `input_read_scope`; supplied-but-unread inputs stay unread,
+and observation never asserts citation. Foreign-run reads and caught permission errors fail closed.
+Outside any runtime scope, operator tooling follows the verified pointer and reports `pinned=False`.
+`accepted_latest` is restricted to the active job's own cache or unscoped operator tooling.
+No job reads another producer's `latest.json` directly. `CONSUMES` is derived from the typed
+contract; parity tests verify registered producers and graph scheduling without turning scheduling
+into evidence permission.
+
+The closed task-receipt schema includes `input_consumption` on both successful and failed typed
+units. Its closed `input-reads/1` document and read records preserve producer, output, schema,
+channel, authority and pinned identities with `read=true`, `cited=null` and
+`citation_observation=not_observed`. Failed receipts also retain their measured `duration_ms`.
+The root schema's `oneOf` reserves task-receipt and attempt-status schema IDs for their own
+branches. A malformed reserved receipt cannot fall through as a permissive unit-output payload.
 
 ## Validation and identity boundaries
 
@@ -143,6 +154,13 @@ The input-set projection contains `resolved_config_sha256`, `job_config_sha256`,
 canonical UTF-8 JSON with sorted keys, compact separators, non-ASCII preserved, and NaN forbidden,
 under `{"schema":"appsec-review/job-inputs/1","identity":<projection>}`.
 Use the shared helper rather than independently reimplementing this projection.
+
+New typed attempts embed `appsec-review/job-contract/1` in `appsec-review/attempt-datasets/3`.
+The existing dataset-contract identity therefore invalidates reuse after an input/dispatch contract
+change. Dataset `/1` and `/2` remain readable for historical accounting, without inventing their
+missing read provenance. `claim.json` records admitted availability/supply; existing hash-bound
+unit status receipts carry `appsec-review/input-reads/1`. These record reader access, not model
+citation or use in reasoning. See [job input contracts](job-input-contracts.md).
 
 ## Native result and common observation
 

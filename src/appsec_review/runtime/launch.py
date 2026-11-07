@@ -10,13 +10,15 @@ order. Only scheduling differs between the two drivers.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
 from typing import Any
 
 from appsec_review.runtime.job import Job
+from appsec_review.runtime.contracts import TargetAccess
+from appsec_review.runtime.registry import builtin_contracts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,34 +26,16 @@ LOGGER = logging.getLogger(__name__)
 # source fingerprint, so its identity does not depend on the target. The inference review, the gate, the PoC
 # job and the report are deliberately absent: they read accepted run state only (the PoC job copies the
 # run's hash-verified native build workspace, not the target).
-TARGET_JOBS = frozenset({
-    "job_build_environment_analysis",
-    "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-    "job_project_build", "job_language_build", "job_artifact_indexing",
-    "job_debug_symbol_indexing", "job_test_coverage",
-    "job_profile_data",
-    "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
-    "job_cpp_compiled_analysis",
-    "job_clang_static_analysis", "job_svf_alias_analysis", "job_sanitizer_build",
-    "job_cpp_symbol_index", "job_cpg_analysis", "job_binary_evidence_indexing", "job_codeql_analysis", "job_code_graph_index",
-    "job_post_build_security_assessment", "job_owasp_control_assessment",
-    "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
-    "job_change_context_analysis", "job_review_prioritization", "job_security_tagging",
-    "job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis",
-})
+TARGET_JOBS = frozenset(name for name, contract in builtin_contracts().items()
+                            if contract.target_access is TargetAccess.CHECKOUT)
 TARGET_ENVIRONMENT = "APPSEC_REVIEW_TARGET"
 # The configured ``[[target_acquisition.systems]]`` id that ``job_target_acquisition`` acquires before
 # intake. Unset means no acquisition is requested and the gate is a recorded no-op.
 SYSTEM_ENVIRONMENT = "APPSEC_REVIEW_SYSTEM"
-TARGET_INDEPENDENT_JOBS = frozenset({
-    "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_third_party_data_sync",
-    "job_inference_security_review", "job_final_publication_gate", "job_openvex_export", "job_poc_generation",
-    "job_final_report_publication",
-    "job_remediation_planning", "job_remediation_validation", "job_dossier_publication",
-})
-TARGET_INDEPENDENT_METADATA_JOBS = frozenset({
-    "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_third_party_data_sync",
-})
+TARGET_INDEPENDENT_JOBS = frozenset(name for name, contract in builtin_contracts().items()
+                            if contract.target_access is not TargetAccess.CHECKOUT)
+TARGET_INDEPENDENT_METADATA_JOBS = frozenset(name for name, contract in builtin_contracts().items()
+                            if contract.target_access is TargetAccess.NONE)
 
 
 @dataclass(frozen=True)
@@ -60,7 +44,7 @@ class LaunchInputs:
 
     target_root: Path | None
     source_fingerprint: str
-    upstream_handoffs: Mapping[str, str] = field(default_factory=dict)
+    upstream_handoffs: Mapping[str, str] | None = None
 
 
 def configured_target(repository_root: Path, targets_dir: str = "targets") -> Path:
@@ -84,13 +68,15 @@ def configured_target(repository_root: Path, targets_dir: str = "targets") -> Pa
     return Path(target or Path(repository_root) / "targets" / "appsec-multi-vuln").absolute()
 
 
-def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str]) -> LaunchInputs:
+def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str] | None) -> LaunchInputs:
     from appsec_review.jobs.cataloging import source_fingerprint
 
-    if job.job_id not in TARGET_JOBS:
-        return LaunchInputs(None, "none", dict(upstream_handoffs))
+    if (job.contract.target_access is not TargetAccess.CHECKOUT if job.contract is not None
+            else job.job_id not in TARGET_JOBS):
+        return LaunchInputs(None, "none", dict(upstream_handoffs) if upstream_handoffs is not None else None)
     target = Path(target).resolve()
-    return LaunchInputs(target, source_fingerprint(target), dict(upstream_handoffs))
+    return LaunchInputs(target, source_fingerprint(target),
+                        dict(upstream_handoffs) if upstream_handoffs is not None else None)
 
 
 def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, trigger: str,
@@ -110,7 +96,7 @@ def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, tr
     begin_method = runner.begin_attempt if force else getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
     return begin_method(job, run_id=run_id, trigger=trigger, orchestration=dict(orchestration),
                         target_root=inputs.target_root, source_fingerprint=inputs.source_fingerprint,
-                        upstream_handoffs=dict(inputs.upstream_handoffs))
+                        upstream_handoffs=dict(inputs.upstream_handoffs) if inputs.upstream_handoffs is not None else None)
 
 
 def unit_order(job: Job) -> tuple[str, ...]:

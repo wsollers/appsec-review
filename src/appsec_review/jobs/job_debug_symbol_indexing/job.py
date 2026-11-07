@@ -37,7 +37,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.shared import safe_path
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/debug-symbol-indexing/1"
@@ -687,7 +687,7 @@ def _validate_config(context, _result) -> None:
 
 
 def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
-    from appsec_review.interchange import decode_handoff
+    from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
     from appsec_review.runtime.consume import accepted_upstream
     accepted = accepted_upstream(run_root, JOB_ID)
@@ -752,4 +752,4 @@ def build_job(*, extractor=None, executor_factory=None) -> Job:
                    "reader": reader_identity,
                    "execution": execution_plan(application_root("containers/catalog.toml")),
                })) if extractor is None else None,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

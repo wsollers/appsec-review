@@ -498,6 +498,22 @@ def test_truncated_ast_is_a_named_gap_not_a_clean_file(tmp_path: Path) -> None:
     assert "java/src/main/java/com/example/web/UserController.java" not in names
 
 
+def test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output(tmp_path: Path) -> None:
+    config = configured(tmp_path)
+    target = tmp_path / "target"
+    for relative in ("ruby/lib/support.rb", "ruby/lib/processor.rb"):
+        (target / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(TARGET / relative, target / relative)
+    outcome = run_graph(config, target)
+    output = published(outcome)
+    run_root = config.runtime.runs_dir / outcome["run_id"]
+    manifest = json.loads((run_root / output["index_manifest"]["path"]).read_text(encoding="utf-8"))
+    shards = [item for item in manifest["indexes"] if item["name"] == "priority"]
+    assert [item["producer"] for item in shards] == [
+        {"job": "job_review_prioritization", "unit": "publish.index_priority"}]
+    assert load_accepted_prioritization(run_root) is not None
+
+
 def _publish_handoff(run_root: Path, job_id: str, outputs: dict[str, Any]) -> None:
     from tests.handoff_fixture import write_fixture_handoff
     attempt = run_root / "data" / "jobs" / job_id / "attempts" / "fixture"

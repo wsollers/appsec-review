@@ -17,7 +17,7 @@ from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, Ind
     LogicalIdentity, RelationKind, RelationRecord, index_fingerprint, write_manifest)
 from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.provenance import (
     consume_native_references, retain_native_output, validate_observation_provenance,
 )
@@ -37,7 +37,7 @@ from .formats import ArchiveLimits, builtin_observation, classify
 from .scanners import (ADAPTERS, INSTALLER_RECORD_PRESENTATION, ContainerScannerRunner, native_result_count,
                        scanner_input)
 from appsec_review.config.evidence_collection import memory_limit
-from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_artifact_security_analysis.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
@@ -822,4 +822,4 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
     return Job("job_artifact_security_analysis", "artifact_security_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

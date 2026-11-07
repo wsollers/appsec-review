@@ -62,6 +62,52 @@
         "reason": {"type": "string"}
       }
     },
+    "inputConsumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "reads", "citation_observation"],
+      "properties": {
+        "schema": {"const": "appsec-review/input-reads/1"},
+        "citation_observation": {"const": "not_observed"},
+        "reads": {"type": "array", "items": {"$ref": "#/$defs/inputRead"}}
+      }
+    },
+    "inputRead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer", "output_kind", "schema", "channel", "authority", "read", "cited"],
+      "properties": {
+        "producer": {"$ref": "#/$defs/text"},
+        "output_kind": {"$ref": "#/$defs/text"},
+        "schema": {"$ref": "#/$defs/text"},
+        "channel": {"enum": ["handoff", "external", "transaction"]},
+        "authority": {"enum": ["producer_evidence", "routing_context", "operational", "reference", "provisional"]},
+        "read": {"const": true},
+        "cited": {"type": "null"},
+        "path": {"$ref": "#/$defs/text"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "handoff_sha256": {"$ref": "#/$defs/sha256"},
+        "attempt_id": {"$ref": "#/$defs/text"},
+        "target_snapshot": {"$ref": "#/$defs/text"},
+        "run_id": {"$ref": "#/$defs/text"},
+        "feed_id": {"$ref": "#/$defs/text"},
+        "snapshot_id": {"$ref": "#/$defs/text"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "binary_id": {"$ref": "#/$defs/text"},
+        "binary_sha256": {"$ref": "#/$defs/sha256"},
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disposition", "gap_count", "retry_required"],
+          "properties": {
+            "disposition": {"enum": ["complete", "partial", "unavailable", "not_applicable", "skipped_policy"]},
+            "gap_count": {"type": "integer", "minimum": 0},
+            "retry_required": {"type": "boolean"}
+          }
+        }
+      }
+    },
     "taskReceipt": {
       "description": "steps/<step>/tasks/<task>/status.json, written by the runner before and after one unit.",
       "type": "object",
@@ -75,6 +121,8 @@
         "status": {"enum": ["RUNNING", "SUCCEEDED", "FAILED", "SKIPPED"]},
         "started_at": {"$ref": "#/$defs/timestamp"},
         "completed_at": {"$ref": "#/$defs/timestamp"},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "input_consumption": {"$ref": "#/$defs/inputConsumption"},
         "dependencies": {"type": "array", "items": {"$ref": "#/$defs/unitId"}},
         "blocked_by": {"type": "array", "items": {"$ref": "#/$defs/unitId"}},
         "dagster_run_id": {"type": ["string", "null"]},
@@ -113,7 +161,11 @@
       "description": "The control fields of one unit result (steps/<step>/tasks/<task>/result.json). interchange.UNIT_OUTPUT_KEYS is the subset the runner projects into handoff outputs; this schema validates those fields and ignores the job's payload fields.",
       "type": "object",
       "properties": {
-        "schema": {"type": "string", "pattern": "^appsec-review/[a-z0-9-]+(/[a-z0-9_-]+)*/[0-9]+$"},
+        "schema": {
+          "type": "string",
+          "pattern": "^appsec-review/[a-z0-9-]+(/[a-z0-9_-]+)*/[0-9]+$",
+          "not": {"enum": ["appsec-review/task-receipt/1", "appsec-review/attempt-status/1"]}
+        },
         "artifact": {"$ref": "#/$defs/artifactReference"},
         "graph_export_artifact": {"$ref": "#/$defs/artifactReference"},
         "identity": {},

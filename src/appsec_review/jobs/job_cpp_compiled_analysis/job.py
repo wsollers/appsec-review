@@ -25,7 +25,7 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, tool_input_json
-from appsec_review.jobs.job_cpp_compiled_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_cpp_compiled_analysis.datasets import CONTRACT, DATASETS
 from appsec_review.jobs.job_cpp_compiled_analysis import seeded
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
@@ -1294,4 +1294,4 @@ def build_job(*, executor_factory=None) -> Job:
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
                units=values,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

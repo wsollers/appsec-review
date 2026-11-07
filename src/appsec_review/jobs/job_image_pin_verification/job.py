@@ -22,7 +22,7 @@ from appsec_review.config.image_pin_verification import (
 )
 from appsec_review.container_runtime.build_executor import Runner
 from appsec_review.jobs.cataloging import write_json
-from appsec_review.jobs.job_image_pin_verification.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_image_pin_verification.datasets import CONTRACT, DATASETS
 from appsec_review.jobs.job_image_pin_verification.pins import (
     CATALOG, PASSING, configured_pins, describe, verify_pins,
 )
@@ -131,6 +131,6 @@ def build_job(*, runner: Runner | None = None) -> Job:
         JOB_ID, "image_pin_verification", UnitExecutor(units).execute,
         input_validators=(_validate,), schema_identity="appsec-review/image-pin-verification-job/1",
         implementation_identity=implementation, validation_identity=implementation,
-        units=units, datasets=DATASETS, consumes=CONSUMES,
+        units=units, datasets=DATASETS, contract=CONTRACT,
         always_execute=True, propagate_handoff=False, strict_gaps=True,
     )

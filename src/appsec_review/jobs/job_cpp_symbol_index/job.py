@@ -28,7 +28,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
 from .clangd_yaml import iter_tagged, parse_documents
-from appsec_review.jobs.job_cpp_symbol_index.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_cpp_symbol_index.datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_cpp_symbol_index"
@@ -323,4 +323,4 @@ def build_job(*, executor_factory=None) -> Job:
     implementation = None
     return Job(JOB_ID, "cpp_symbol_index", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, implementation_identity=implementation, units=units,
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT)

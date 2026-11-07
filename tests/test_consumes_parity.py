@@ -1,10 +1,11 @@
-"""A job's declared CONSUMES names registered producers that the wave1 topology schedules before it."""
+"""Consumption is derived from typed contracts; scheduling never grants evidence permission."""
 from __future__ import annotations
 
 import pytest
 
 from appsec_review.orchestration.topology import upstream_closure, wave1_dependencies
 from appsec_review.runtime.registry import builtin_registry
+from appsec_review.runtime.contracts import DispatchClass
 
 
 def _graph():
@@ -19,6 +20,7 @@ def _graph():
 def test_consumes_are_registered_producers(job_id: str) -> None:
     registry, ids, _ = _graph()
     job = registry.build(job_id)
+    assert job.contract is not None and job.consumes == job.contract.consumes
     unknown = sorted(set(job.consumes) - ids)
     assert not unknown, f"{job_id} consumes unregistered jobs: {unknown}"
 
@@ -26,9 +28,11 @@ def test_consumes_are_registered_producers(job_id: str) -> None:
 @pytest.mark.parametrize("job_id", sorted(builtin_registry().job_ids()))
 def test_consumes_are_scheduled_before_the_consumer(job_id: str) -> None:
     registry, _, dependencies = _graph()
-    if job_id not in dependencies:
-        pytest.skip(f"{job_id} is not a wave1_review vertex")
     job = registry.build(job_id)
+    if job_id not in dependencies:
+        assert job.contract.dispatch is not DispatchClass.REVIEW_GRAPH
+        return
+    assert job.contract.dispatch is DispatchClass.REVIEW_GRAPH
     closure = set(upstream_closure(job_id, dependencies, set(dependencies)))
     unscheduled = sorted(set(job.consumes) - closure)
     assert not unscheduled, (
@@ -45,5 +49,19 @@ def test_owasp_upstream_allowlist_names_only_registered_jobs() -> None:
 def test_security_tagging_declares_the_manifest_publishers_it_follows() -> None:
     registry, _, dependencies = _graph()
     job = registry.build("job_security_tagging")
-    assert set(job.consumes) == {"job_review_prioritization", "job_code_graph_index", "job_codeql_analysis"}
-    assert set(job.consumes) <= set(dependencies["job_security_tagging"])
+    assert job.consumes == job.contract.consumes
+    assert {"job_review_prioritization", "job_code_graph_index", "job_codeql_analysis"} <= set(job.consumes)
+    assert set(job.consumes) <= set(upstream_closure(job.job_id, dependencies, set(dependencies)))
+
+
+def test_owasp_evidence_import_does_not_depend_on_registry_preload() -> None:
+    from pathlib import Path
+    import subprocess
+    import sys
+    result = subprocess.run([
+        sys.executable, "-c",
+        "from appsec_review.owasp_workbench.evidence import EvidenceResolver, UPSTREAM_JOBS; "
+        "from appsec_review.jobs.job_owasp_control_assessment import build_job; "
+        "assert UPSTREAM_JOBS == build_job().contract.consumes",
+    ], cwd=Path(__file__).resolve().parents[1], text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr

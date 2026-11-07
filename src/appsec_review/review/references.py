@@ -110,6 +110,8 @@ def accepted_feed_pins(run_root: Path) -> tuple[Mapping[str, Any] | None, str | 
         return None, f"{INDEXING_JOB} {INPUTS_UNIT} artifact identity mismatch"
     if file_sha256(path) != reference.get("sha256"):
         raise RetrievalIntegrityError(f"{INDEXING_JOB} {INPUTS_UNIT} artifact hash does not match its handoff")
+    from appsec_review.runtime.inputs import observe_output
+    observe_output(run_root, INDEXING_JOB, "accepted_input_summary", reference)
     document = json.loads(path.read_text(encoding="utf-8"))
     feeds = document.get("feeds")
     if not isinstance(feeds, Mapping):
@@ -118,7 +120,7 @@ def accepted_feed_pins(run_root: Path) -> tuple[Mapping[str, Any] | None, str | 
     try:
         for pin in feeds.values():
             if pin.get("status") == "pinned":
-                consume_pin(run_root, pin)
+                consume_pin(run_root, pin, observe=False)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return None, f"pinned reference feed provenance is unavailable ({type(exc).__name__}: {exc})"
     return feeds, None

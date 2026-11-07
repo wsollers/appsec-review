@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
+from functools import lru_cache
+from types import MappingProxyType
 
 from appsec_review.runtime.job import Job
+from appsec_review.runtime.contracts import JobContract
 
 JobFactory = Callable[[], Job]
 
@@ -40,6 +43,21 @@ class JobRegistry:
                 f"missing_config={sorted(registered - configured)}, "
                 f"missing_registration={sorted(configured - registered)}"
             )
+
+    def contracts(self) -> Mapping[str, JobContract]:
+        """Project typed metadata from the same factories used for execution."""
+        result: dict[str, JobContract] = {}
+        for job_id in self._factories:
+            contract = self.build(job_id).contract
+            if contract is None:
+                raise ValueError(f"registered job has no typed contract: {job_id}")
+            result[job_id] = contract
+        return MappingProxyType(result)
+
+
+@lru_cache(maxsize=1)
+def builtin_contracts() -> Mapping[str, JobContract]:
+    return builtin_registry().contracts()
 
 
 def builtin_registry() -> JobRegistry:

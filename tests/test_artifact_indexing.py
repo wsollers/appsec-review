@@ -50,7 +50,7 @@ def _identity(run_root: Path, path: Path) -> dict[str, object]:
 
 
 def _seed(tmp_path: Path, *, source_files: dict[str, str] | None = None,
-          build_families: tuple[str, ...] = ("native", "dotnet", "wasm", "python")):
+          build_families: tuple[str, ...] = ("native", "dotnet", "wasm", "python"), publish: bool = True):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if "[jobs.job_artifact_indexing]" not in config_text:
@@ -167,21 +167,25 @@ workers = 1
         normalizer_identity="fixture/1", mapping_identity="fixture/1",
     )
     build_path = run_root / "data" / "indices" / "build" / f"{fingerprint}.sqlite"
+    shard_id = "fixture-actions" if publish else "language-build-fixture"
     builder = IndexBuilder(build_path, name="build", fingerprint=fingerprint,
-                           target_snapshot=snapshot, shard_id="fixture-actions")
+                           target_snapshot=snapshot, shard_id=shard_id)
     for entity in action_entities:
         builder.add_entity(entity)
     builder.add_coverage("fixture-actions", "complete")
     build_identity = IndexIdentity("build", INDEX_SCHEMA, builder.build(), fingerprint,
-                                   build_path.relative_to(run_root).as_posix(), {"fixture": True},
-                                   (), "fixture-actions")
+                                   build_path.relative_to(run_root).as_posix(),
+                                   {"fixture": True} if publish else {
+                                       "job": "job_language_build", "unit": "acceptance.fixture"},
+                                   (), shard_id)
     manifest_path = run_root / "data" / "indices" / "manifests" / "language-build.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=snapshot,
                    target_root=target, indexes=[build_identity])
     manifest_identity = _identity(run_root, manifest_path)
 
     attempt = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "attempt_0001"
-    accepted_path = attempt / "artifacts" / "language-build" / "accepted-language-builds.json"
+    accepted_path = (attempt / "artifacts" / "language-build" / "accepted-language-builds.json" if publish else
+                     run_root / "data/inputs/artifact-fixture/source-language.json")
     accepted_path.parent.mkdir(parents=True)
     atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/1",
                                 "source_fingerprint": snapshot,
@@ -190,21 +194,22 @@ workers = 1
     accepted_identity = _identity(run_root, accepted_path)
     handoff_path = attempt / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
-    write_fixture_handoff(run_root, handoff_path, {"source_fingerprint": snapshot, "status": "ACCEPTED",
-        "job_id": "job_language_build", "attempt_id": "attempt_0001",
-        "outputs": {"acceptance.publish_handoff": {"artifact": accepted_identity,
-                                                     "index_manifest": manifest_identity}},
-        "artifacts": [accepted_identity, manifest_identity,
-                      *(receipt["workspace_manifest"] for receipt in receipts)]})
     latest = run_root / "data" / "jobs" / "job_language_build" / "latest.json"
-    atomic_json(latest, {"handoff_path": handoff_path.relative_to(run_root).as_posix(),
-                         "handoff_sha256": file_sha256(handoff_path)})
-    atomic_json(run_root / "data" / "indices" / "accepted.json", {
-        "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
-        "handoff_path": handoff_path.relative_to(run_root).as_posix(),
-        "handoff_sha256": file_sha256(handoff_path),
-        "manifest_path": manifest_identity["path"], "manifest_sha256": manifest_identity["sha256"],
-    })
+    if publish:
+        write_fixture_handoff(run_root, handoff_path, {"source_fingerprint": snapshot, "status": "ACCEPTED",
+            "job_id": "job_language_build", "attempt_id": "attempt_0001",
+            "outputs": {"acceptance.publish_handoff": {"artifact": accepted_identity,
+                                                         "index_manifest": manifest_identity}},
+            "artifacts": [accepted_identity, manifest_identity,
+                          *(receipt["workspace_manifest"] for receipt in receipts)]})
+        atomic_json(latest, {"handoff_path": handoff_path.relative_to(run_root).as_posix(),
+                             "handoff_sha256": file_sha256(handoff_path)})
+        atomic_json(run_root / "data" / "indices" / "accepted.json", {
+            "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
+            "handoff_path": handoff_path.relative_to(run_root).as_posix(),
+            "handoff_sha256": file_sha256(handoff_path),
+            "manifest_path": manifest_identity["path"], "manifest_sha256": manifest_identity["sha256"],
+        })
     return config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest
 
 

@@ -35,7 +35,7 @@ from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_language_build.job import _build_output_policy, _copy_source, _kind, _snapshot
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, protected_json
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .evidence import (
     CATALOGED_KINDS, LINKED_KINDS, any_referenced, referenced, runtime_evidence,
 )
@@ -452,4 +452,4 @@ def build_job(*, executor_factory: Callable[[UnitContext, BuildProfile], Any] | 
     return Job(JOB_ID, "sanitizer_build", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SANITIZER_BUILD_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT)

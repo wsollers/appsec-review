@@ -29,7 +29,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .planning import MODULE_LINK, PlannedModule, plan_modules
 
 
@@ -531,4 +531,4 @@ def build_job(*, executor_factory: Any = None) -> Job:
     return Job(JOB_ID, "svf_alias_analysis", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SVF_ALIAS_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units, datasets=DATASETS, consumes=CONSUMES)
+               units=units, datasets=DATASETS, contract=CONTRACT)

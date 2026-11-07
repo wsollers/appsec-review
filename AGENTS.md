@@ -78,7 +78,11 @@ agents that inspect or change the repository. It is not a prompt for review work
   layer beneath the envelope"): `terminal_status` only from `interchange.ProducerStatus`, gaps as
   `producer-gap/1` records via `interchange.producer_gap` (new jobs set `strict_gaps=True`), control
   records with `schema` ids validated at publication, and producers read only through
-  `runtime.consume.accepted_upstream` against the claim's pins. Never read another job's
+  `runtime.consume.accepted_upstream` against the typed `Job.contract` and the claim's admitted
+  `upstream_handoffs` pins, retaining actual read receipts. `CONSUMES` is derived from that
+  contract; `consumable_handoffs` and topology ancestry describe availability/scheduling, never
+  permission or evidence of consumption. Keep availability, supply, read and citation distinct.
+  Never read another job's
   `latest.json` directly, never add a word to `terminal_status`, and never add a job to the legacy
   free-text gap list in `tests/test_gap_contract.py`. Referenced payload files keep their own
   formats; the records that reference them do not.

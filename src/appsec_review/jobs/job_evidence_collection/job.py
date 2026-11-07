@@ -12,7 +12,7 @@ import time
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
-from appsec_review.interchange import decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff, feed_input_identity
 from appsec_review.provenance import (
     consume_native_references, retain_native_output, select_native, validate_observation_provenance,
 )
@@ -39,7 +39,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
-from appsec_review.jobs.job_evidence_collection.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_evidence_collection.datasets import CONTRACT, DATASETS
 from appsec_review.applicability import ReasonCode
 from appsec_review.config.evidence_collection import (
     EvidenceCollectionSettings, parse_evidence_collection_settings,
@@ -1357,4 +1357,4 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                implementation_identity=implementation,
                validation_identity=None,
                runtime_identity=None, units=tuple(units),
-               datasets=DATASETS, consumes=CONSUMES)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity)

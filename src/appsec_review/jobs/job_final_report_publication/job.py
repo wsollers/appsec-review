@@ -27,7 +27,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json
 
-from .datasets import CONSUMES, DATASETS
+from .datasets import CONTRACT, DATASETS
 from .render import render_markdown
 from .report import build_report
 from .settings import FinalReportSettings
@@ -163,4 +163,4 @@ def build_job(*, repository_root: Path | None = None) -> Job:
     implementation = None
     return Job(JOB_ID, "final_report_publication", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=FINAL_REPORT_HANDOFF_SCHEMA, implementation_identity=implementation,
-               validation_identity=implementation, units=units, datasets=DATASETS, consumes=CONSUMES)
+               validation_identity=implementation, units=units, datasets=DATASETS, contract=CONTRACT)
