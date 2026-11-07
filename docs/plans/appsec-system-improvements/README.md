@@ -1,12 +1,22 @@
 # Appsec implementation fleet
 
-**Plan version 1.4 - 6 November 2026**
+**Plan version 1.12 - 7 November 2026**
+
+**Current scope: unrelated feature-fleet work remains PAUSED.**
+The user's later instruction explicitly authorizes this bounded integration:
+preserve both histories in a merge commit, publish the policy documents, run the
+affected focused checks, fast-forward both local mains to the verified result,
+and push only through the gate below. No old candidate or feature-dispatch
+authorization is revived.
 
 Coordinator: `02825845-7ac6-4a31-b648-999b3823ecf5` (Appsec system review).
 Repository: `wsollers/appsec-review`.
 Approved design: `appsec-system-review.md`, including the revised Glasswing measurement
 contract. Review baseline: `967a1072bc19feeb320ce4b44d6c056616c94d7b`.
-Initial implementation baseline: `f9bb376e02aaef166bc71e736eaba7ee677ce97c`.
+Historical initial implementation baseline: `f9bb376e02aaef166bc71e736eaba7ee677ce97c`.
+User-selected new `initial_base_sha` / upstream integration target:
+`d7e12f20f6f515ee40d434301eb93ed981302fee`, recorded in event **212**.
+It supersedes `0298c4d2`; fresh current-head verification remains mandatory.
 The later baseline includes the new isolation/shuffle/parallel/timing test standards.
 Version 1.2 adds the narrowly scoped inherited test-harness repair X01 to the
 closeout ledger. The original 18 implementation packages are unchanged. Current
@@ -18,8 +28,49 @@ additional runtime experiments.
 Version 1.4 records incoming, separately user-directed native compiler-profile step X03
 and receipt of the APS deterministic subset. Neither supplies or authorizes the later
 native-admission rollout, fuzz campaigns or formal-comparison APIs.
+Version 1.5 records the verified F02 landing, second-wave ownership and preservation
+of an unrelated untracked Windows archive. The ledger, not this historical plan text,
+remains the current package-state authority.
+Version 1.6 records the blocked second-wave dispatch and the user-approved native
+WSL rehosting route. Registration approval does not override an existing worker's
+workspace boundary or establish a replacement's execution host.
+Version 1.7 tracks the post-landing F02 correction and supplemental unit repairs:
+held Group K is X04, priority shard publication identity is X05, and the structured
+catalog-gap fixture correction is X06. These are separately gated candidates, not
+proof that the broad unit suite is green or permission for a weekend/live run.
+Version 1.8 records the direct user-approved 30-second total-case exception for
+X05's exact publication regression, retained with its production fix. Other limits
+and exact-candidate integration gates remain unchanged.
+Version 1.9 records verified X05 landing after explicitly approved recovery of two
+Windows fixture working-copy files and their Git index stat records. The failed
+checks and unknown pre-fast-forward raw-byte history remain retained. Future
+landing gates compare any pinned fixture bytes on both primary checkouts before
+moving refs, rather than relying on tracked-clean status or candidate-only checks.
+Version 1.10 records the verified F02 corrective landing, the bounded X07 CPP-input
+follow-up, and the direct 60-second total-case exception for X04 after its retained
+setup time was recovered. These do not certify the remaining whole-chain tests.
+Version 1.11 adds the upstream design-review and merge-conflict feedback below.
+It preserves the user's stop and records recommendations, not new implementation
+or merge authorization. Earlier dispatch descriptions and candidate approvals are
+historical until explicitly revalidated against the user's new work.
+Version 1.12 records the user's binding decision that F02's typed consumption
+authority stands, the approved unified-reader reconciliation design, and the five
+resume criteria. Event **211** records the policy, event **212** pins `d7e12f20`,
+and event **213** records the later explicit merge-and-push authorization and exact
+push gate. This permits bounded reconciliation, not unrelated feature dispatch.
 
 ## User authorization
+
+The original authorization below was superseded by the user's later instruction:
+"PLease stop. I have made significant changes". All active fleet workers confirmed
+they stopped, with no commands or integration transactions left in flight.
+The 7 November 05:44 -05:00 policy message grants a narrow additional exception:
+record the decision and publish `README.md`, `ledger.json`, and `integration-log.md`
+under `docs/plans/appsec-system-improvements/` using the existing docs-only exception.
+The subsequent instruction pins `d7e12f20` and expressly authorizes an explicit
+integration merge, affected focused verification, paired-main fast-forwards and
+a gated plain push. It supersedes the earlier no-merge/no-test/no-push restriction
+only for that integration. Documentation publication alone is not a fleet restart.
 
 > Wow. THat was simply awesome. I agree with and approve of everything there. I think
 > the first step is to identify the chunks of independent work that we can spin off to
@@ -31,16 +82,273 @@ native-admission rollout, fuzz campaigns or formal-comparison APIs.
 > keep windows and wsl repos in lock step. so first step define and document a plan
 > with ledger to track. Then start the busy bees to implement
 
-This authorizes the approved implementation, isolated worktrees, tests, coordination
+This originally authorized the approved implementation, isolated worktrees, tests, coordination
 and serialized local integration. It does not turn the design's conditional choices
 into mandatory rewrites. In particular: no speculative Rust wrapper, unrestricted MCP,
 new stock security-agent swarm, or duplicate APS harness.
 
-Repository test-tier rules remain in force. Run focused unit tests now; write
+Repository test-tier rules remain in force. After explicit resumption, run focused unit tests; write
 integration/acceptance/live coverage but record those executions as manual/pending
 until explicitly authorized. Do not start customer review runs, fuzz campaigns,
 network discovery, cloud provisioning, host-tool installation, production deployment,
 remote pushes or PRs from this implementation instruction.
+
+## Feedback note - upstream review and merge assessment
+
+**Recorded:** 7 November 2026. **Status:** Accepted consumption policy and bounded
+integration authorization; unrelated feature work remains paused.
+
+The user requested review of the eight upstream documentation commits and then an
+assessment after pushing two additional code commits. These are separate evidence
+sets: the documentation review is not a full review of the subsequently pushed code,
+and a clean textual merge is not proof of behavioral compatibility.
+
+### Reviewed revisions and merge severity
+
+| Revision | Identity and scope |
+|---|---|
+| Shared ancestor | `0b6234dab242d79a34f5702d9e8fc1bdb83b1f55` |
+| Local Windows and WSL main at assessment | `54fd8231e324f9eed983452c27705727ede74617`; 18 local-only commits |
+| Documentation review target | [`42dee4d3`](https://github.com/wsollers/appsec-review/commit/42dee4d346b7605a43f6e33c0b9928498175796a); eight commits adding three formal-verification documents |
+| Historical upstream mechanically assessed | [`0298c4d2`](https://github.com/wsollers/appsec-review/commit/0298c4d2360253a29d85c18cf11ee711159e1530); ten upstream-only commits |
+| Additional upstream code | [`52434c6e`](https://github.com/wsollers/appsec-review/commit/52434c6e8babc1e7dd7436318fafb2a08f42bec7): tooling-only Dagster image and mounted sources; `0298c4d2`: standardized job control and unified accepted-upstream consumption |
+| User-selected current integration target | [`d7e12f20`](https://github.com/wsollers/appsec-review/commit/d7e12f20f6f515ee40d434301eb93ed981302fee), independently confirmed as `origin/main` when selected; adds the formal design review and job-interchange audit |
+
+The non-applying three-way assessment used those exact local/upstream heads and
+the verified sole merge base. It found **8 conflicted files containing 12 content
+conflict hunks**. Local work changes 159 files; upstream changes 69. Of the 30 paths
+edited on both sides, 22 merge textually cleanly. There are no rename, deletion,
+add/add, delete/modify, or file-mode conflicts.
+
+All paths in this table are relative to `src/appsec_review/`:
+
+| Conflicted path | Hunks | Reconciliation needed |
+|---|---:|---|
+| `runtime/runner.py` | 3 | Input probing/binding, claim fields, and execution/read scopes |
+| `jobs/cpp_index_scopes.py` | 3 | Accepted-handoff reader replacement, imports, and returned hash |
+| `jobs/job_build_iteration/job.py` | 1 | Typed contract/run-input identity versus consumption and strict-gap arguments |
+| `jobs/job_image_pin_verification/job.py` | 1 | Typed contract versus consumption/strict-gap constructor arguments |
+| `jobs/job_model_connectivity/job.py` | 1 | Typed contract versus consumption/strict-gap constructor arguments |
+| `jobs/job_third_party_data_sync/job.py` | 1 | Typed contract versus consumption/strict-gap constructor arguments |
+| `jobs/job_security_tagging/datasets.py` | 1 | Contract-derived versus manually maintained producer declarations |
+| `owasp_workbench/evidence.py` | 1 | Contract-derived upstream set versus explicit producer tuple |
+
+The deployment/source-mount changes and formal-verification documents are not
+textually conflicted. The assessment produced an unresolved tentative Git tree,
+not an applied merge; it changed no checked-out files, index, or main branch.
+Details are retained in Incoming merge assessment (`ghapp://sessions/4bd997df-d8d6-42be-9d8d-7c296f2e5fdd`).
+X04 and X07 unlanded candidates were excluded from the local-main comparison.
+Any further push or local change requires a fresh assessment rather than reuse of
+these counts or old candidate authorizations.
+In particular, the figures above describe `0298c4d2`, not the newly pinned
+`d7e12f20` assessment required for integration.
+
+The fresh integration preflight in event **214** subsequently confirmed local
+`54fd8231` and upstream `d7e12f20`, the same sole merge base, 18 local-only versus
+11 upstream-only commits, and 159 local versus 71 upstream changed paths. It
+reported the same eight content-conflicted files without applying a merge.
+The earlier twelve-hunk count remains attributed to the `0298c4d2` assessment.
+Heads must still be rechecked before integration and push.
+
+**Assessment:** Mechanically contained, but significant at the handoff-policy
+boundary. This is a focused integration task, not a whole-system rewrite.
+
+### Accepted policy decision: F02 consumption authority stands
+
+The incoming `runtime.consume.accepted_upstream` centralizes producer readers and
+uses the new claim-pinned `consumable_handoffs`. The local F02 work makes
+`Job.contract` authoritative for exact output kinds, schemas, evidence authority,
+requiredness, coverage, external-input selection, and actual-read receipts.
+
+**Decision:** Explicitly approved by the user on 7 November 2026 at 05:44 -05:00,
+recorded as ledger event **211**. **F02's policy stands.**
+
+Semantic input permission is separate from scheduling ancestry. Being an accepted
+topology ancestor does not, by itself, grant authority to consume that ancestor's
+evidence. The typed `Job.contract` is the sole consumption authority: exact producer,
+output kind, schema, evidence authority and requiredness, with matching actual-read
+receipts. Existing coverage and missing-input rules remain intact.
+
+**Rationale:** Conflating "ran before you" with "you may cite its output" permits
+findings backed by undeclared evidence and undermines actual-read accounting and
+undeclared/stale/tampered refusals. The broader `consumable_handoffs` set in
+`0298c4d2` was expedient during polyglot-monorepo recovery; it is not the intended
+consumption policy.
+
+**Approved reconciliation design:** the subsequent merge instruction authorizes
+implementing it only within the bounded integration, not as a broader fleet restart.
+
+1. Keep `runtime.consume.accepted_upstream` as the unified reader. Its permitted
+   producer/output set must come from F02's typed admission and read-accounting
+   machinery, never from accepted-ancestor topology.
+2. `consumable_handoffs` may remain a scheduling or availability view, but it is not
+   consumption authority. `CONSUMES` remains a derived compatibility projection,
+   not a second manually maintained authority.
+3. Preserve exact pinned producer hashes, complete producer contracts, frozen
+   external selections, and the availability / supply / actual-read / citation
+   distinction. A read receipt is required evidence of access, not an implicit
+   grant or proof that a model cited the result.
+4. Retain the incoming closed producer-status vocabulary, task/attempt receipt
+   schemas and strict-gap migration. Preserve undeclared/stale/tampered input
+   refusals and sticky read-contract violations.
+5. Do not broaden permissions while resolving conflict markers. No whole-file or
+   wholesale "ours"/"theirs" resolution is allowed.
+6. Preserve both sides' intended behavior, including the image/source separation.
+   Future authorized reconciliation must assess reload, repair and resume
+   identities; textual cleanliness alone is not a runtime guarantee.
+
+Do not resolve whole files or the branch wholesale with "ours" or "theirs". The 22
+shared paths that merge without markers still need focused semantic review.
+Before resuming the old roadmap, rebaseline **F02, F03, F04 and F13** against
+`origin/main`:
+in particular, F03 should not introduce a second reader abstraction that duplicates
+the newly supplied `accepted_upstream`.
+
+### Resume criteria and publication boundary
+
+These are the user's requirements for this integration. The later explicit
+merge-and-push instruction authorizes performing them subject to the gate below:
+
+1. **Record this policy.** Completed in plan 1.12 and ledger event 211; the
+   documentation checkpoint carries the same decision into the repository.
+2. **Perform a fresh three-way assessment on the heads current at that time.**
+   Recorded in event 214 for `54fd8231` / `d7e12f20`; any head movement requires
+   reassessment. The earlier `0298c4d2` assessment is historical.
+3. **Rebaseline F02/F03/F04 and F13 against `origin/main`.** Reconcile their scope,
+   dependencies, acceptance criteria and retained work with the upstream design;
+   previous ready candidates are not automatically eligible for landing. The
+   scope mapping below is recorded in event **215**, not a feature dispatch.
+4. **Record a new `initial_base_sha`.** The user selected
+   `d7e12f20f6f515ee40d434301eb93ed981302fee` in event 212. The previous `f9bb376e`
+   baseline remains historical. If upstream advances, stop and reassess the
+   selected baseline rather than silently integrating another head.
+5. **Perform integration as a merge onto `origin/main` in an isolated worktree,
+   yielding a pushable result.** Prefer an upstream-rooted integration branch;
+   the latest user instruction permits merging in either orientation, provided
+   an explicit merge commit retains both histories and all ledger-pinned SHAs.
+   Never rebase/reset or choose a whole side. Pushing is now authorized only after
+   both mains and the focused verification satisfy the following gate.
+
+The documentation exception remains limited to `README.md`, `ledger.json`, and
+`integration-log.md`. The separately authorized integration owner performs code
+reconciliation and gated primary updates. Neither exception authorizes new
+feature workers, parked X04/X07 candidate integration, live reviews, deployments,
+or a general test-suite run.
+
+### Integration and push gate - latest user authorization
+
+The user explicitly chose **merge commit, not rebase**: rewriting the 18 local
+commits would invalidate ledger receipts that pin their existing SHAs. A merge
+must preserve both the local history and the selected upstream ancestry.
+
+Push only after all of the following hold:
+
+1. A fresh assessment identifies the current heads and merge base; the selected
+   upstream is still `d7e12f20`. Any upstream movement means stop and reassess.
+2. The isolated merged candidate implements the approved consumption policy,
+   preserves both histories, and has a reviewed exact commit/tree.
+3. Affected focused units pass with no new failures. The only allowed baseline
+   exceptions are the exact existing causes below, not arbitrary failures in the
+   same test names. Skips are coverage gaps, not passes.
+4. Both Windows and WSL mains are fast-forwarded to that same merged commit/tree
+   under the existing preservation/locking checks; user changes, archive and feed
+   data are preserved.
+5. Recheck upstream before a plain `git push`. Never use `--force` or
+   `--force-with-lease`. If `origin/main` moved or the push is rejected for movement,
+   stop and reassess rather than retry, rebase or force it.
+
+| Allowed baseline exception | Exact existing cause |
+|---|---|
+| `tests/test_managed_target_independent.py::test_changed_persisted_claim_and_legacy_policy_are_rejected` | Existing authentication-regex expectation versus `attempt claim changed after preparation` |
+| `tests/test_managed_target_independent.py::test_mixed_authenticated_targets_leave_no_provisional_admission` | Existing empty-cache expectation despite legitimate validation records and no admitted targets |
+| `tests/test_managed_target_independent.py::test_strict_target_independent_launch_keeps_legacy_behavior` | Existing expectation of no snapshot versus a verified populated snapshot |
+| `F811` in `src/appsec_review/jobs/job_target_analysis_plan/job.py` | Existing duplicate `dataclasses.replace` import |
+
+A globally green suite is **not** required. The known-failure list must not absorb
+anything new: a different cause in an allowed node, another lint/type failure, or
+a newly surfaced failure is not automatically waived. Report additional failures
+and preserve their evidence; do not suppress them or weaken assertions. Earlier
+notes about other inherited gaps do not independently expand this push allowlist.
+
+### Rebaseline mapping against d7e12f20
+
+The new upstream inputs are
+[the formal-verification design review](https://github.com/wsollers/appsec-review/blob/d7e12f20f6f515ee40d434301eb93ed981302fee/docs/formal-verification/design-review-2026-11-07.md)
+and [the job-catalog/interchange audit](https://github.com/wsollers/appsec-review/blob/d7e12f20f6f515ee40d434301eb93ed981302fee/docs/plans/job-catalog-and-interchange-audit-2026-11-07.md).
+The audit examined `42dee4d3`, so several findings predate the incoming control-layer
+implementation and local F02 corrections; do not blindly implement its whole list.
+Its topology/consumption recommendation is superseded by the user's explicit
+typed-authority decision.
+
+| Package | Rebaselined scope and boundary |
+|---|---|
+| F02 | Reconcile typed admission, frozen external selections and actual-read receipts with the new unified consumer, closed producer statuses, receipt schemas and strict-gap migration. `CONSUMES` parity follows the typed semantic contract, not all topology ancestors. Preserve historical receipts and explicit compatibility rules. |
+| F03 | Extend `runtime.consume.accepted_upstream` and typed accepted-artifact/build APIs rather than create another reader. Preserve declared source/workspace custody; plan normalized cross-job payload and provenance improvements without treating legitimate accepted build material as an undeclared raw-file grant. Unrelated row-format/parser migrations remain future work. |
+| F04 | Use the tooling-only image/source-mount design as the deployment baseline: edit/reload/plan-repair/admit-repair/resume without unnecessary image rebuilds. Preserve separate source/image identities, active-run source freezes and immutable configuration. Safe artifact-bearing checkpoint reuse and explicit invalidation remain measured follow-up work, not permission to relax portability checks. |
+| F13 | Rebaseline planning against the upstream source/IR/Lean design and its new review: kernel-only checking, typed semantic authority and explicit frontend gaps, with model/source/reproduction separated. Inventory existing AST exports before proposing a typed-semantics producer. Existing APS trace projection is a bounded subtrack, not proof the broader formal program exists; formal implementation needs a separately scoped future plan. |
+
+This mapping records scope alignment for integration. It does not dispatch the
+future F03/F04/F13 feature work, implement a typed-semantics producer, or claim that
+the new formal-review recommendations have already been implemented. Its source
+and decisions are recorded in event 215.
+
+### Earlier formal-verification design feedback
+
+The design and buildout were reviewed at `42dee4d3`. The two later code commits did
+not change those three formal-verification documents, so these findings also apply
+to the assessed upstream `0298c4d2`. They concern a proposed design, not capabilities
+already implemented by those documentation commits.
+
+**Strengths to retain:** distinct model-proof/source-correspondence/reproduction
+outcomes; independent proof checking and non-vacuity requirements; producer-stage
+versus post-review requests; immutable evidence; a separately authorized execution
+lab; atomic execution quotas; and genuine same-rule safe/vulnerable benchmarks.
+Restart safety and authority boundaries are stronger. Efficient reuse of completed
+work still needs an explicit implementation contract.
+
+| Priority | Finding | Required design clarification |
+|---|---|---|
+| High | Artifact-bearing outputs are not portable under the existing checkpoint mechanism. The proposed standard `{path, sha256, size_bytes}` references are rejected by `runtime.checkpoints.portable()`, so immutable storage alone does not make completed proof work reusable after a failed attempt. | Specify per-obligation completion receipts, cache identities and validated artifact reuse. Do not broadly allow arbitrary paths, process state or budget receipts through `portable()`. |
+| High | The disabled-by-default TOML example puts `enabled = false` under the job table, while existing dispatch reads `settings.enabled` and defaults to enabled when that setting is absent. | Move each flag into its job's `.settings` table and add a configuration-to-dispatch regression proving the proposed defaults exclude ordinary execution. |
+| High | Adding formal jobs to an existing completed run lacks an explicit frozen-configuration transition. `JobRunner._bind_configuration` rejects a different resolved configuration; a pre-feature run cannot simply acquire new job settings. | Define historical-run eligibility or a new execution run with verified imports from the source run. Distinguish source-run and execution-run identity; preserve the frozen-config check. |
+| Medium | B7 is designated the G3 milestone, but G3 includes invalidation checks while B8 first implements challenge/revocation and reverse-dependency invalidation. | Move the minimal invalidation mechanism into B7, or place G3 acceptance after B8. Accepted contradictory observations must not wait for optional refinement to suspend affected reuse. |
+
+Source references for these findings:
+
+- Artifact layout and reuse: [buildout section 5.2](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/docs/formal-verification/buildout-plan.md#L313-L450)
+  and [existing checkpoint portability](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/src/appsec_review/runtime/checkpoints.py#L15-L36).
+- Default enablement: [buildout configuration](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/docs/formal-verification/buildout-plan.md#L748-L818)
+  and [dispatch selection](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/src/appsec_review/runtime/selection.py#L11-L22).
+- Historical runs: [completed-run entrypoints](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/docs/formal-verification/sast-to-lean-and-proof-directed-fuzzing.md#L108-L115)
+  and [immutable configuration binding](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/src/appsec_review/runtime/runner.py#L60-L89).
+- Invalidation sequencing: [B7/B8](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/docs/formal-verification/buildout-plan.md#L1179-L1196)
+  and [G3's acceptance contract](https://github.com/wsollers/appsec-review/blob/42dee4d346b7605a43f6e33c0b9928498175796a/docs/formal-verification/sast-to-lean-and-proof-directed-fuzzing.md#L1099-L1111).
+
+### Restart and handoff contract to add before implementation
+
+The next design revision should make efficient restart observable, not merely assert
+that artifacts are immutable or quotas survive a crash. Specify:
+
+- Source-run versus execution-run identity, configuration ownership, and the accepted
+  evidence-import path for historical runs.
+- Stable per-obligation work identities and exact input/tool/policy dependency keys.
+- Atomic completion receipts and a validated reuse path for immutable proof, slice,
+  harness and corpus artifacts; incomplete writes are not successful checkpoints.
+- The distinction between reusable results and non-reusable execution leases,
+  reservations, process state and authorization decisions.
+- Fault-injection acceptance cases: several obligations finish and the next fails;
+  restart performs expensive checks only for unfinished eligible work; a crash before
+  completion publication cannot masquerade as success; changed inputs or revoked
+  dependencies invalidate the appropriate reuse.
+- Invocation counts, reused/recomputed work, duplicate-execution prevention and
+  time-to-resume measurements, with safety failures reported separately from
+  efficiency shortfalls.
+
+For any later authorized integration, focus verification on pinned/undeclared/stale
+inputs, actual-read receipts, status/gap validation, repair/reuse and reload identity.
+Preserve the existing test tiers and exact-case limits. The latest explicit
+integration request authorizes its affected focused checks and gated merge/push;
+it does not authorize image builds, target execution or a broader fleet restart.
 
 ## Coordination and ledger
 
@@ -125,7 +433,85 @@ blocked external WSL/canonical-main access. It subsequently reported a user-gran
 documentation-only Windows exception. Code implementation and candidate testing remain
 WSL; the separate landing session performs only the authorized main Git operations.
 
+## Second-wave dispatch
+
+F02 landed on both mains at `8028fe45ec401da2f76ce2f8a5398ff432ddd68d`, tree
+`3f8617c025e2b04de270c66cc323d3f51d366a8a`. Its combined candidate has 344 focused
+passes and two separately approved bounded passes. A controlled same-environment
+managed-target comparison retains the same three baseline assertion failures on
+both sides; one unchanged planner F811 lint issue also remains explicit. This is
+neither a globally lint-clean/full-suite-green claim nor live commissioning.
+
+The following independent packages start from that exact landed base:
+
+| Package | Session | Exclusive scope for this wave |
+|---|---|---|
+| F03 | Fleet artifact and build APIs (`ghapp://sessions/afb69c59-0514-4609-903b-6df2d5abba82`) | Shared artifact/build readers and precise existing-caller migrations; duplicate mapping; no central registry/config or telemetry changes. |
+| F06 | Fleet deployment job wiring (`ghapp://sessions/1339fba6-2b3f-4777-9df9-802eca6fa34b`) | Deployment/exposure job/config/registry/index/retrieval wiring using F05/F02; static and imported observations, no live collectors. |
+| F10 | Fleet telemetry and dashboards (`ghapp://sessions/3a76c85b-ae64-4c5a-a863-81fddc578334`) | Operational metrics, queue-measurement seam, accepted-record experiment adapters, offline reporting/dashboard and bounded optional export; no central job-contract or deployment-domain changes. |
+
+Shared configuration, CLI or schema edits outside those seams require an ownership
+decision before editing. Central test-map additions remain integration-owner changes
+from exact worker proposals. Consumers use the landed API, not an unpublished sibling
+branch. Each package retains the isolated WSL/private-environment, test and exact-SHA
+handoff requirements.
+
+All three original second-wave workers stopped before implementation because their
+assigned app workspaces are Windows-only. They have released their implementation
+claims and remain paused; no replacement is yet admitted. F06's earlier base-only
+external checkout is preserved, not treated as an authorized execution surface.
+
+The user approved registering three isolated WSL checkout folders and reports
+Ubuntu-22.04 connected in the app. F00 is preparing separate Linux-filesystem
+checkouts from its owned candidate at the exact base above, using local Git bundle
+transfer without changing either primary checkout or its shared Git administration.
+Preparation is not implementation or a merge authorization.
+
+Use the app's native WSL environment registration: Settings > Environments >
+Ubuntu-22.04 > Repositories and folders > Add repository or folder, with the actual
+Linux path. Replacement sessions must select that WSL environment and Current
+checkout for their already isolated surface. Verify the actual host, assigned
+workspace, branch, HEAD and tree before kickoff. A readable UNC path, Windows-local
+folder registration or an invented remote host ID is not a substitute. Keep the
+original sessions and their histories; do not archive them to suppress notifications.
+
+Windows main now contains an unrelated untracked `aps-lean.zip`. Preserve it as
+user-owned state: no payload opening, hashing, extraction, deletion, ignoring, commit
+or transfer. Landing checks require tracked-clean state, the explicitly known
+untracked set, no candidate-path collision and unchanged file metadata/identity.
+Continue preserving WSL `data/feeds/`. Stop for resolution if either preserved path
+changes during the gate or conflicts with the candidate; never clean it to satisfy
+a fully-clean-checkout assertion.
+
 ## Work packages
+
+### Post-landing corrections and supplemental unit repairs
+
+F02's original landing remains attributed to its exact recorded gate. Subsequent
+source-traced contract metadata and fixture/launch migrations are a corrective
+follow-up owned by its existing worker. Preserve required-input enforcement,
+original producer lineage and graph/reuse assertions. Newly exposed telemetry,
+CPP, priority and topology failures remain explicit until individually resolved.
+Second-wave implementation admission is held pending corrective disposition as
+well as native WSL registration.
+
+The unit-suite owner `d963e6fd-4153-401f-842f-1f6c18def977` retains three separate
+supplemental candidates from the recorded base:
+
+| Package | Scope | Gate |
+|---|---|---|
+| X04 | Group K's four-line `tests/handoff_fixture.py` worker-protocol declaration; preserve explicit test overrides. | Exact rerun case has a direct 60-second total-case exception after retained setup+call+teardown proved 39.99 seconds. Current-main gate required; speed-up below 10 seconds remains tracked. |
+| X05 | Priority producer identity includes the actual publication unit; focused publication-identity regression retained with the fix. | Exact new regression has a user-approved 30-second setup+call+teardown limit. Known slow full prioritization selectors are not authorized by this exception. |
+| X06 | Structured catalog-gap test uses built-in `.hg` exclusion instead of configured `node_modules`. | Exact test-only change, preserved assertions and focused default-budget regression. |
+| X07 | Mandatory post-build CPP envelope and truthful local accepted-producer fixture; optional graph outputs remain gaps. | Depends on F02. Existing F02 owner uses a separate branch; preserve original assertions and prove real missing/supplied/accepted-tamper boundaries within 10 seconds per case. |
+
+F02 owns the summary/build-contract corrections and queued CPP/topology/semantic-path
+triage. X05 temporarily owns only the publication-identity portion of
+`tests/test_review_prioritization.py`; F02 must wait for release before editing its
+semantic-path fixture. Central test-map edits and all main landings remain serialized.
+Source-history evidence, not current-main failure alone, establishes pre-existing
+attribution. Existing F17 dependency declarations are not silently expanded by these
+incoming repairs.
 
 ### F00 - Integration, ledger and Windows/WSL parity
 
@@ -187,6 +573,8 @@ all-job declaration reconciliation, input-source/producer-consumer matrix and co
   (review graph/internal transaction/maintenance).
 - Keep scheduling-only edges separate from semantic data dependencies.
 - Bind actual admitted reads to exact producer/output/schema/authority and missing policy.
+- Reconcile the incoming unified reader and strict control-layer records through
+  that same typed authority; topology ancestry is not an evidence permission.
 - Reconcile all 46 existing jobs: tagging, OWASP, document source ownership, indexing,
   build/CodeQL cross-producers and downstream publication.
 - Generate or validate matrix/docs/test/release coverage from the authoritative contract;
@@ -203,6 +591,8 @@ Publish a small stable shared contract commit before dependent feature work.
 interfaces; .NET/Rust mapping helper; focused typing and documentation.
 
 - Unify equivalent reference/read logic without erasing sensitivity/custody differences.
+- Start from upstream `runtime.consume.accepted_upstream`; do not introduce a
+  competing accepted-reader API. Keep grants and actual-read accounting contract-derived.
 - Extract exact duplicate workspace mapping.
 - Replace cross-job private imports with stable accepted-build/replay interfaces.
 - Extend type checking at these boundaries.
@@ -221,6 +611,8 @@ path/size limits, cross-filesystem and platform cases covered. No speculative na
 - Precise invalidation and compatible predecessor reuse in successor runs.
 - Explicit cancellation/cleanup commissioning path for supported execution modes.
 - Maintain source/image identity and no implicit hot reload.
+- Reuse the upstream tooling-only image/source-mount repair loop; changes to active
+  source snapshots or frozen configuration are not silently admitted as cache reuse.
 - Add failure-injection coverage around publication boundaries and visible REUSE/RUN/
   INVALIDATE reasons/costs.
 
@@ -378,11 +770,17 @@ authorized acceptance milestone, not implied by fake engine results.
 
 ### F13 - Lean/formal evidence bridge
 
-**Dependencies:** F12, EXT-APS.
+**Dependencies:** F12, EXT-APS for the existing APS trace subtrack. The broader
+source-verification track has separately gated prerequisites in the upstream
+buildout; APS replay does not satisfy those prerequisites.
 **Own:** restricted observed-trace projection, pinned Lean execution/result contract,
 theorem-assumption applicability and model mismatch publication.
 
-- Use the existing Lean model, not a duplicate implementation.
+- Reuse the existing APS Lean model only for compatible trace/model work, not as a
+  substitute for the new source-to-IR correspondence program.
+- Use the `d7e12f20` formal design review as a planning input for kernel-only proof
+  checking and typed-frontend authority. No broader formal implementation is
+  authorized by the current integration.
 - Native allocator charges/results, time and Flush/lifecycle effects must be observable
   and supported; otherwise report unsupported/inconclusive.
 - Separate assumption escape, logical ACK candidate, retransmission coverage, sanitizer
@@ -577,15 +975,25 @@ helper to avoid coordination.
   public contract decisions, tests/results/timings, validation not run and blockers.
 - Ready means commit and notify; it does not mean merge or push.
 
-### User-approved F02 time exceptions
+### User-approved exact-case time exceptions
 
-The user explicitly approved these two existing offline unit-case exceptions after
-the worker measured minimal fixtures exercising real durable cross-producer admission:
+The user explicitly approved these offline unit-case exceptions after workers
+measured fixtures exercising real durable cross-producer admission or publication:
 
 | Exact node ID | Maximum total case duration |
 |---|---|
 | `tests/test_review_data_indexing.py::test_inventory_audit_matrices_links_and_fts_validation` | 45 seconds |
 | `tests/test_review_data_indexing.py::test_package_job_publishes_accepted_manifest_and_receipts` | 60 seconds |
+| `tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output` | 30 seconds |
+| `tests/test_review_data_indexing.py::test_rerun_reuses_unchanged_products_and_rebuilds_only_changed_rule` | 60 seconds |
+
+The X05 exception was approved directly in this coordinator conversation on
+7 November 2026 at 03:21:15 -05:00. It keeps the regression with its production fix;
+it does not extend to other prioritization cases or the separate Group K timing
+question. X04 subsequently received its own direct 60-second total-case approval
+after a read-only query of retained timing data showed 13.32 seconds of setup plus
+26.67 seconds of call time (39.99 seconds total). Its speed-up todo remains open.
+Current coordination holds remain explicit in the ledger.
 
 These bounds include setup, call and teardown, not only assertions. Record per-case
 declarations, the exception provenance and actual times; an overrun remains a failure
@@ -595,10 +1003,22 @@ full-suite runs, integration/acceptance/live execution, targets or model calls.
 
 ## Merge and parity transaction
 
+The plan 1.12 integration exception now authorizes reconciling the two histories,
+but only through the fresh-head, rebaseline and push gates above. Use an explicit
+merge commit, never rebase; preserve ledger-pinned ancestry. A documentation
+checkpoint alone is not that merge. Primary fast-forwards and the plain push are
+authorized only for the exact merged candidate that satisfies the stated gate;
+unrelated feature work remains paused.
+
 1. Coordinator reviews ready diff, ownership, dependencies and evidence.
 2. Coordinator authorizes **one package + exact ready SHA + expected main base**.
 3. F00 acquires the existing OS-backed integration lock; verifies both canonical roots,
-   clean state, active-run freeze and expected ancestry; rejects stale instructions.
+   tracked-clean state, the explicitly preserved untracked archive/feed paths,
+   active-run freeze and expected ancestry; rejects stale instructions.
+   Any static fixtures selected for byte custody must match their committed bytes
+   on both primary checkouts before either fast-forward. Check raw bytes, not
+   normalized hashes or status alone. Stop on existing mismatches; restoration is
+   a separate explicit decision, not an automatic checkout/normalization step.
 4. Prepare the candidate in an isolated WSL integration worktree. Resolve conflicts
    explicitly; return feature conflicts to the owning worker. Run affected unit checks.
 5. Transfer Git objects using the existing local method; advance each main safely.

@@ -632,3 +632,110 @@ Results on the exact checkpoint base plus these three docs: verifier PASS in
 line-ending inspection PASS in 0.081 s, with all four plan-directory files
 `i/lf`, `w/lf`, `eol=lf`. No source, tests, global checker, or approved-review edits
 were made; no code/manual tests, APS replay, live images, or runtime work were run.
+
+## 2026-11-07 - DOCS-ONLY consumption-policy checkpoint 215
+
+This is the explicitly requested documentation publication, not a resumption of
+feature work or the separately authorized code-integration merge. Only
+`README.md`, `ledger.json`, and this append-only log are changed. The source,
+configuration, pins, tests, and `approved-review.md` are unchanged relative to the
+publication base.
+
+### Publication base and historical evidence
+
+The user-selected publication base is
+`d7e12f20f6f515ee40d434301eb93ed981302fee`, tree
+`1b8b7444ee837ea08245c5ff90767d131131e5ba`. Read-only `git ls-remote` confirmed that
+exact `origin/main` before alignment. The object was already available, so no
+fetch was needed. This session's clean assigned branch,
+`william-sollers-xbox-fleet-integration-and-parity`, was advanced only by an ordinary
+fast-forward from `0b6234dab242d79a34f5702d9e8fc1bdb83b1f55` to that exact base.
+The coordinator explicitly replaced the earlier fresh-branch requirement with
+this narrow alignment permission. No branch switch, history rewrite, merge commit,
+primary-checkout access, configuration override, or main-ref update occurred.
+
+The frozen ledger's LOCAL landing history at
+`54fd8231e324f9eed983452c27705727ede74617`, tree
+`a85a09f27436713d5c6501a0c56619e2caf4a32b`, is separate from upstream `d7e12f20`.
+Its receipts and pinned SHAs remain historical evidence, not proof that the 18
+local-only commits are already in upstream or this documentation commit. Active
+`initial_base_sha` is now `d7e12f20`; historical initial base
+`f9bb376e02aaef166bc71e736eaba7ee677ce97c` is retained without rewriting history.
+No previously parked candidate authorization is revived.
+
+### Frozen decisions and authorization boundaries
+
+These are coordinator-recorded user decisions and attributed assessment results,
+not new code-validation or primary-inspection results from this docs worker:
+
+| Event | Decision or observation preserved |
+|---|---|
+| 211 - policy | F02's typed `Job.contract` is the sole consumption authority. Accepted topology ancestry grants none. Keep `runtime.consume.accepted_upstream`, bound to typed admission and actual-read accounting; `consumable_handoffs` is availability/scheduling only and `CONSUMES` is derived. |
+| 212 - target | The user pins `d7e12f20f6f515ee40d434301eb93ed981302fee`, not `0298c4d2` or local `54fd8231`, as the new active baseline. Stop and reassess if upstream moves. |
+| 213 - integration/push gate | Only the designated integration owner may perform the explicit history-preserving merge, affected focused checks, paired-main fast-forwards and gated plain push. No rebase/force push, expanded failure allowance, or unrelated feature dispatch. |
+| 214 - fresh preflight | The integration owner reported local `54fd8231` versus upstream `d7e12f20`, sole merge base `0b6234da`, 18 local-only/11 upstream-only commits, 159/71 changed paths and eight content-conflicted files. No merge was applied. Recheck before primary changes and push; the earlier 12-hunk count belongs to the historical `0298c4d2` assessment. |
+| 215 - scope rebaseline | F02 joins typed authority/read receipts to the unified reader and strict control contracts; F03 extends existing reader/artifact/build boundaries rather than duplicating them; F04 preserves source/image/config identities in the mounted-source repair loop; F13 distinguishes the broader source/IR/Lean design from the bounded APS subtrack. This is scope alignment, not feature dispatch. |
+
+Preserve closed producer statuses, task/attempt receipt schemas, strict gaps,
+pinned producer hashes, frozen external selections, and the distinction between
+availability, supply, actual read, and citation. Neither a read receipt nor topology
+ancestry creates a new permission. Do not broaden authority or resolve whole files
+or histories wholesale with "ours" or "theirs".
+
+The five resume criteria remain visible: record the policy, obtain a fresh
+current-head assessment, rebaseline F02/F03/F04/F13, record the new initial base,
+and produce the separately authorized isolated merge result. The first four are
+recorded in events 211/214/215/212; the final criterion is `authorized_pending`.
+Unrelated feature work remains `paused_except_explicit_integration`.
+
+The push gate requires a reviewed merged candidate, both mains at the same exact
+commit/tree, and affected focused results with no new failures. The only allowed
+baseline failures are these exact node/cause pairs:
+
+| Node or lint item | Existing cause only |
+|---|---|
+| `tests/test_managed_target_independent.py::test_changed_persisted_claim_and_legacy_policy_are_rejected` | Authentication-regex expectation versus `attempt claim changed after preparation`. |
+| `tests/test_managed_target_independent.py::test_mixed_authenticated_targets_leave_no_provisional_admission` | Empty-cache expectation despite legitimate validation records and no admitted targets. |
+| `tests/test_managed_target_independent.py::test_strict_target_independent_launch_keeps_legacy_behavior` | Expectation of no snapshot versus a verified populated snapshot. |
+| `F811` in `src/appsec_review/jobs/job_target_analysis_plan/job.py` | Duplicate `dataclasses.replace` import. |
+
+The same node with a different cause is not waived; the allowlist cannot expand.
+A globally green suite is not required, and skips remain coverage gaps. Recheck
+upstream before plain push; movement or movement-related rejection requires stopping
+and reassessment, not retry/rebase/force. This gate is recorded, not exercised here.
+
+Code reconciliation, the explicit integration merge, paired-main updates, and push
+have not been performed by this publication and remain pending in frozen snapshot
+215. Only landing owner `969abd85-9a4e-42a5-a323-34843205448e` handles that work.
+This ordinary single-parent documentation commit is not the integration merge and
+does not authorize its own import. The coordinator must review the exact docs SHA.
+
+### Exact frozen publication and basic checks
+
+Plan **1.12** and ledger **215** were captured without changing the source artifacts,
+under this session's `files/checkpoint215-sources`. The ledger contains 26 package
+records and 215 events. Future events are excluded and all JSON values, historical
+SHAs, decisions and pending states are preserved.
+
+| Source | Source bytes | Source SHA-256 | Published SHA-256 |
+|---|---:|---|---|
+| `fleet-plan.md` -> `README.md` | 69710 | `0372dbe276dd17e29b3f055ab2a5221a92ede615fdac25fec63b194b9781c5fc` | `4fc7b890d7e58d4a83f638c0523104cf02dc27e945c6781d5999a621f6677463` |
+| `fleet-ledger.json` -> `ledger.json` | 108011 | `8c50aafaf94d7fc44de155372bf95ab85a5395ebb12a4dfdbe0869b55f860f87` | `57acb1b5b3e1947978953be696a0ac0c4200b0731624d1b8572da7489caec5f3` |
+
+The only transforms are CRLF to LF and ten plan Markdown `ghapp` links rendered as
+unchanged labels followed by inline-code original URIs. The ledger receives LF
+normalization only. The published plan/ledger contain 68687/107524 bytes respectively.
+
+Verification is limited to basic document readback, JSON parsing and structural
+consistency, hash comparisons, local link-target existence, whitespace and LF
+checks. No application import, repository execution script, pytest/doctest, build,
+install, source change, archive/feed access, live validation, or worker dispatch
+is part of this publication.
+
+Basic readback using session artifact `files/check-docs215.py` passed in 0.607 s
+wall (0.3621 s internally): exact projections, 26 records/215 contiguous events,
+dependency consistency, frozen policy/push-gate fields, append-only log and
+unchanged approved review. No relative Markdown link targets required filesystem
+resolution. `git diff --check` passed in 0.163 s; EOL inspection passed in 0.077 s,
+with all four plan-directory files `i/lf`, `w/lf`, `eol=lf`. These checks are not
+application tests or evidence that the pending integration gate has passed.
