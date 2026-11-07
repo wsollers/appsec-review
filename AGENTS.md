@@ -84,13 +84,19 @@ agents that inspect or change the repository. It is not a prompt for review work
   completion-triggered, serialized local integration over periodic merge polling. Conflicts,
   dirty integration checkouts, and active-run source freezes require explicit resolution, not
   blind merges or automatic conflict resolution.
-- For job/task-script changes, reuse supported script mounts and reload only the affected
-  application processes. The intended mount holds job/task scripts, not the entire application
-  source/package; do not describe that deployment as implemented without verifying it. Rebuild
-  only images whose baked-in files, dependencies, or binaries changed; do not rebuild unrelated
-  tooling. Keep mounted scripts fixed for an active review and record their source identity
-  separately from the binary image identity. If the deployment still bakes in the changed scripts,
-  report that coupling rather than claiming a mount has updated the running code.
+- Container images are tooling only. The Dagster application image holds the interpreter, pinned
+  dependencies, the Docker client, provider CLIs and the signing verifier; the repository checkout
+  (`src`, configuration, schemas, guidance, rules, scripts, tool assets) is bind-mounted read-only
+  into the stack, and the code-location start measures its source identity
+  (`implementation-release.json`) from the mount
+  ([`docs/architecture/deployment-image-and-source-mount.md`](docs/architecture/deployment-image-and-source-mount.md)).
+  After an application-code change, deploy with `lifecycle.py reload` (which re-signs the mounted
+  sources and recreates the image services); never rebuild the image for a code change, and never
+  copy application code into an image. Rebuild an image only when its dependencies, tools, or the
+  verifier changed; do not rebuild unrelated tooling. Keep mounted code fixed for an active review:
+  the signed envelope fails closed on edited modules until the next reload, and attempts pin their
+  own copy of the measured source identity, recorded separately from the image identity. Do not
+  describe a deployment behaviour as implemented without verifying it against `deploy/`.
 - Other agent sessions work on this repository at the same time. Follow
   `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
   testing on a shared host, and when handing work to another session.

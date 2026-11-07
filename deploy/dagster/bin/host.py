@@ -57,6 +57,10 @@ IMAGE_SERVICES = ("code-location", "webserver", "daemon")
 # command starts with it and the service receives IMAGE_VARIABLE (unit tests and smoke.py check both).
 SELF_CHECK_SERVICE = "code-location"
 SELF_CHECK_COMMAND = ("python", "-m", "appsec_review.signing.container_self_check", "--")
+# The launch step that follows the gate: it verifies the mounted runtime assets, measures the
+# implementation-release manifest from the mounted checkout and execs the command that follows it
+# (docs/architecture/deployment-image-and-source-mount.md).
+LAUNCH_COMMAND = ("python", "-m", "appsec_review.runtime.release", "--root", "/opt/app", "--verify-assets", "--exec")
 # Fills the variable for Compose actions that never create containers (config, ps, logs, stop).
 UNVERIFIED_IMAGE = "sha256:" + "0" * 64
 # The webserver's loopback host port; compose.yaml publishes ${APPSEC_DAGSTER_WEB_PORT:-3000}.

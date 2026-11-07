@@ -185,22 +185,38 @@ example) in the Windows checkout's `deploy/dagster/.env` and open <http://localh
 
 ### Signed image
 
-The stack runs only a signed image whose Python package is signed too. `lifecycle.py build` runs, in
-order and on the host:
+The stack runs only a signed **tooling** image, and the Python package it serves is signed
+separately at every launch. The image contains the interpreter, pinned dependencies, the Docker
+client, provider CLIs and the signing verifier; it contains no application sources (the build fails
+if `appsec_review` is importable inside it). Compose mounts the checkout's release closure read-only
+at `/opt/app` (`src`, configuration, `profiles`, `docs/schemas`, `containers`, `pipeline`, `rules`,
+`scripts`, `tools/cve-bin-tool`, the declared requirement files) and the envelope directory
+`deploy/dagster/signing/` at `/opt/appsec-review/signing`. See
+[Deployment image and source mount](../../docs/architecture/deployment-image-and-source-mount.md).
 
-1. `appsec-review signing sign-modules` over `src/appsec_review` into the ignored build-context file
-   `deploy/dagster/signing/python-modules.json`, then `verify-modules` against the trust anchors;
-2. `docker build --target <stage>` of the profile's final stage (`runtime`, `runtime-copilot`, or
+`lifecycle.py build` runs, in order and on the host:
+
+1. `docker build --target <stage>` of the profile's final stage (`runtime`, `runtime-copilot`, or
    `runtime-windows`) with the local tag `appsec-review-dagster:<platform>[-copilot]`;
-3. `sign-image` of the resulting image ID with the operator key, then `verify-image` of that ID.
+2. `sign-image` of the resulting image ID with the operator key, then `verify-image` of that ID.
+
+It is needed only when a dependency, a tool or the signing verifier changes; editing application
+code never requires it.
 
 `lifecycle.py start` and `reload` verify the image (the tag, or an explicit
 `APPSEC_REVIEW_DAGSTER_IMAGE` in the process environment) against the host trust anchors before any
 Compose command. If verification fails they exit 3 without starting anything, and the operator
-scripts report `refused`. On success they record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `.env`
-and Compose launches exactly that ID (`pull_policy: never`, no `build:` section). `reload` recreates
-every service that runs the image (`code-location`, `webserver`, `daemon`; `host.IMAGE_SERVICES`) and
-leaves PostgreSQL and the result cache running, so no service keeps an older image. Plain
+scripts report `refused`. On success they record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `.env`,
+then run `appsec-review signing sign-modules` over the checkout's `src/appsec_review` into the
+ignored `deploy/dagster/signing/python-modules.json` and `verify-modules` against the trust anchors
+(a failure also exits 3), and Compose launches exactly that ID (`pull_policy: never`, no `build:`
+section) with the checkout and the fresh envelope mounted. A development host may set
+`APPSEC_UNSIGNED_MODULES=1` in `.env` to skip module signing and launch with
+`APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=0`; `lifecycle.py` prints a warning, the image is still
+verified, and the mounted sources run unverified until the next launch without the flag. `reload`
+recreates every service that runs the image (`code-location`, `webserver`, `daemon`;
+`host.IMAGE_SERVICES`) and leaves PostgreSQL and the result cache running, so no service keeps an
+older image or an older envelope; it is the whole deployment step after a code edit. Plain
 `docker compose ... exec` commands reuse the recorded ID. Read-only Compose actions (`config`, `status`,
 `logs`, `stop`) substitute an unlaunchable placeholder when no ID is recorded. The image variable has no
 default, so `docker compose up` without a recorded or exported ID fails. Do not run
@@ -208,8 +224,13 @@ default, so `docker compose up` without a recorded or exported ID fails. Do not 
 re-verify the ID it is given.
 
 The code location re-checks inside the container before it serves. Its Compose command is
-`python -m appsec_review.signing.container_self_check -- dagster code-server start ...`
-(`host.SELF_CHECK_COMMAND`), and it receives `APPSEC_REVIEW_DAGSTER_IMAGE`. The gate finds its own
+`python -m appsec_review.signing.container_self_check -- python -m appsec_review.runtime.release
+--root /opt/app --verify-assets --exec dagster code-server start ...` (`host.SELF_CHECK_COMMAND`
+followed by `host.LAUNCH_COMMAND`), and it receives `APPSEC_REVIEW_DAGSTER_IMAGE`. After the gate,
+the launch step verifies the mounted runtime assets and catalogs, measures
+`implementation-release.json` from the mounted checkout onto `/var/dagster/release/`
+(`APPSEC_REVIEW_RELEASE_MANIFEST`, read by every service and by `docker compose exec` CLI commands),
+and execs the code server. The gate finds its own
 full container ID from the Docker bind mounts of `/etc/hostname`, `/etc/hosts` and
 `/etc/resolv.conf` in `/proc/self/mountinfo`, and runs `docker container inspect` by that ID through
 the mounted socket. It requires the reported `.Id` to be that ID, `.Config.Hostname` to be the

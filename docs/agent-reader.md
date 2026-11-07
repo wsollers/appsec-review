@@ -65,6 +65,7 @@ Relevant bounded procedures and design references:
 - [`../.agents/skills/repository-development-skills/SKILL.md`](../.agents/skills/repository-development-skills/SKILL.md) — pointer that sends Codex, Gemini CLI, Copilot and Cursor to the canonical `.claude/skills/`.
 - [`reviews/inference-security-review-implementation.md`](reviews/inference-security-review-implementation.md) — slice 1 implementation record: readiness decisions, partition, merges, reconciliations, verification, and outstanding work.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
+- [`architecture/deployment-image-and-source-mount.md`](architecture/deployment-image-and-source-mount.md) — tooling-only Dagster image, mounted checkout, launch-time source identity, per-launch module signing, no-rebuild repair cycle.
 - [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md) — shared capture architecture, conditional-control design status, and the pinned fixture matrix.
 - [`architecture/engineering-security-signals.md`](architecture/engineering-security-signals.md) — canonical end-to-end design for Clang static analysis, coverage and profile ingestion, dependency identity, OpenSSF Scorecard context, and their review handoffs.
 - [`operations/language-build.md`](operations/language-build.md) — operator behavior for generic language builds and conditional applicability.

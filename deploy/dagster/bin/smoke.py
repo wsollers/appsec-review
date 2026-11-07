@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import (IMAGE_SERVICES, IMAGE_VARIABLE, SELF_CHECK_COMMAND, SELF_CHECK_SERVICE, actual_platform,
+from host import (IMAGE_SERVICES, IMAGE_VARIABLE, LAUNCH_COMMAND, SELF_CHECK_COMMAND, SELF_CHECK_SERVICE, actual_platform,
                   deployment_profile, non_launching_environment, project_name, provider_overlay,
                   reject_other_deployments, url_or_default, validate_deployment)
 
@@ -63,6 +63,9 @@ def check_signed_image(services: dict) -> None:
     command = list(gated.get("command") or [])
     if command[:len(SELF_CHECK_COMMAND)] != list(SELF_CHECK_COMMAND) or len(command) <= len(SELF_CHECK_COMMAND):
         raise RuntimeError(f"{SELF_CHECK_SERVICE} must start through the in-container image self-check")
+    launch = command[len(SELF_CHECK_COMMAND):]
+    if launch[:len(LAUNCH_COMMAND)] != list(LAUNCH_COMMAND) or len(launch) <= len(LAUNCH_COMMAND):
+        raise RuntimeError(f"{SELF_CHECK_SERVICE} must measure the mounted checkout before starting the code server")
     if (gated.get("environment") or {}).get(IMAGE_VARIABLE) != gated.get("image"):
         raise RuntimeError(f"{SELF_CHECK_SERVICE} must receive {IMAGE_VARIABLE} equal to its image")
 

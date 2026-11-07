@@ -256,11 +256,16 @@ under the configured policy.
 - **Dagster image.** `sitecustomize_shim.py` is installed as the interpreter's `sitecustomize.py`. It
   loads the root-owned bootstrap from `APPSEC_REVIEW_SIGNING_BOOTSTRAP_DIR`
   (`/opt/appsec-review/signing-bootstrap`). It calls `activate_from_environment` and, on any failure,
-  ends the process with exit code 78. The final stages (`runtime`, `runtime-copilot`,
-  `runtime-windows`) copy the envelope to `/opt/appsec-review/signing/python-modules.json` and set
-  `APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1`. Trust anchors are mounted read-only at run time, and the
-  image contains no keys. The `test` stage does not enforce. Details are in
-  [Signed image](../../deploy/dagster/README.md#signed-image).
+  ends the process with exit code 78. The image is tooling only: `APPSEC_REVIEW_MODULE_ROOT` is the
+  bind-mounted `/opt/app/src/appsec_review`, and the final stages (`runtime`, `runtime-copilot`,
+  `runtime-windows`) set `APPSEC_REVIEW_MODULE_SIGNATURE=/opt/appsec-review/signing/python-modules.json`
+  and `APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1`. The envelope is signed over the checkout by
+  `lifecycle.py start`/`reload` at every launch and mounted read-only beside the trust anchors; the
+  image contains neither sources, envelope nor keys. A development host may launch with
+  `APPSEC_UNSIGNED_MODULES=1`, which sets `APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=0` and an empty
+  signature for that launch and prints a warning; the image itself is still verified. The `test`
+  stage does not enforce. Details are in [Signed image](../../deploy/dagster/README.md#signed-image)
+  and [Deployment image and source mount](../architecture/deployment-image-and-source-mount.md).
 - **Native release.** `root_entrypoint.py` checks with `trusted_path` that `signing/`, the envelope,
   every trust anchor, the five verifier files and `/usr/bin/openssl` are root-owned and on a read-only
   release. It loads `signing/bootstrap/bootstrap.py`, verifies the third-party closure of `lib/`
@@ -374,14 +379,21 @@ Run these steps on the review host from the repository checkout, never during a 
    ```
 
 4. **Build and start Dagster only through the operator scripts or `lifecycle.py`.**
-   `lifecycle.py build` (`scripts/stack-rebuild.sh`) signs and verifies modules, builds the final stage,
-   and signs and verifies the image ID. `lifecycle.py start`/`reload` verify the image on the host,
-   record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `deploy/dagster/.env` and launch exactly that
-   ID. If verification fails they exit 3, and the scripts report `refused`. Inside the stack the code
-   location runs `python -m appsec_review.signing.container_self_check -- dagster code-server start ...`.
-   This gate inspects its own container through the mounted Docker socket, requires its `.Image` to
+   `lifecycle.py build` (`scripts/stack-rebuild.sh`) builds the tooling-only final stage and signs and
+   verifies the image ID; it signs no sources, because the image contains none. `lifecycle.py
+   start`/`reload` verify the image on the host, record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in
+   `deploy/dagster/.env`, sign and verify the checkout's `src/appsec_review` into
+   `deploy/dagster/signing/python-modules.json` (skipped, with a warning, when `.env` or the shell sets
+   `APPSEC_UNSIGNED_MODULES=1`), and launch exactly that ID with the checkout and the envelope
+   directory mounted read-only. If image verification or module signing fails they exit 3, and the
+   scripts report `refused`. Inside the stack the code location runs
+   `python -m appsec_review.signing.container_self_check -- python -m appsec_review.runtime.release
+   --root /opt/app --verify-assets --exec dagster code-server start ...`.
+   The gate inspects its own container through the mounted Docker socket, requires its `.Image` to
    equal `APPSEC_REVIEW_DAGSTER_IMAGE` exactly, and verifies that ID against the mounted trust anchors
-   before it execs the code server. Otherwise it exits 3, so the code location never becomes healthy
+   before it hands off to the launch step, which verifies the mounted runtime assets and measures the
+   implementation-release manifest onto `/var/dagster/release/` before it execs the code server.
+   Otherwise the gate exits 3, so the code location never becomes healthy
    and the webserver and daemon, which depend on it, do not start. With
    `image_enforcement = "disabled"` (the default) it logs status `disabled` and starts unchecked. The gate is a
    second check, not the authority: a malicious image can omit its own check (Docker socket access
@@ -391,11 +403,9 @@ Run these steps on the review host from the repository checkout, never during a 
 
    ```mermaid
    flowchart TD
-       subgraph build["lifecycle.py build (stack-rebuild, or stack-start with --build or a missing image)"]
+       subgraph build["lifecycle.py build (stack-rebuild, or stack-start with --build or a missing image): tooling image only"]
            settings["signing_settings: APPSEC_SIGNING_* from the environment over .env"]
-           signmods["signing sign-modules<br/>src/appsec_review to deploy/dagster/signing/python-modules.json"]
-           verifymods["signing verify-modules: status verified"]
-           dockerbuild["docker build --target runtime, runtime-copilot or runtime-windows<br/>tag appsec-review-dagster:PLATFORM[-copilot]"]
+           dockerbuild["docker build --target runtime, runtime-copilot or runtime-windows<br/>tag appsec-review-dagster:PLATFORM[-copilot]; no sources copied"]
            signimg["signing sign-image TAG<br/>envelope in image_signatures_dir"]
            verifyimg["signing verify-image: status verified, same image ID"]
        end
@@ -403,29 +413,32 @@ Run these steps on the review host from the repository checkout, never during a 
            reference["APPSEC_REVIEW_DAGSTER_IMAGE from the process environment, else the local tag"]
            verify["signing verify-image of that reference"]
            record["record_image: APPSEC_REVIEW_DAGSTER_IMAGE=sha256:ID<br/>in deploy/dagster/.env (atomic, 0600)"]
-           compose["docker compose up -d --wait with that exact ID<br/>reload: --no-deps --force-recreate code-location webserver daemon"]
+           signmods["signing sign-modules over the checkout<br/>src/appsec_review to deploy/dagster/signing/python-modules.json<br/>(skipped with a warning when APPSEC_UNSIGNED_MODULES=1)"]
+           verifymods["signing verify-modules: status verified"]
+           compose["docker compose up -d --wait with that exact ID, the checkout and the envelope mounted read-only<br/>reload: --no-deps --force-recreate code-location webserver daemon"]
        end
        subgraph gate["code-location container: signing.container_self_check before dagster code-server"]
            policy["default_image_verifier: [signing] of the image's appsec-review.toml"]
            ownid["own container ID: /proc/self/mountinfo bind mounts of /etc/hostname, /etc/hosts, /etc/resolv.conf"]
            inspectown["docker container inspect ID via /var/run/docker.sock<br/>.Id and .Config.Hostname match, .Image equals APPSEC_REVIEW_DAGSTER_IMAGE"]
            verifyown["EnvelopeImageVerifier.verify(.Image) against the mounted anchors and envelopes"]
+           measure["runtime.release --verify-assets: mounted assets and catalogs load,<br/>implementation-release.json measured onto /var/dagster/release"]
            serve["status verified: exec dagster code-server start, becomes healthy,<br/>then webserver and daemon start"]
            disabled["status disabled: exec unchecked"]
        end
        failed["FAILED, exit 1: lifecycle build failed"]
        refused["REFUSED, exit 3: refusing to start or reload<br/>Compose is not run, ops.py reports refused"]
        gaterefused["status refused, exit 3: code server never starts,<br/>code-location never healthy, webserver and daemon wait"]
-       settings --> signmods --> verifymods --> dockerbuild --> signimg --> verifyimg
+       settings --> dockerbuild --> signimg --> verifyimg
        verifyimg --> reference --> verify
-       verify -- verified --> record --> compose
+       verify -- verified --> record --> signmods --> verifymods --> compose
        compose --> policy
        direct["direct docker compose up<br/>with a recorded or hand-set ID"] --> policy
-       policy -- required --> ownid --> inspectown --> verifyown -- verified --> serve
-       policy -- "explicitly disabled" --> disabled
-       policy & ownid & inspectown & verifyown -- error --> gaterefused
-       signmods & verifymods & dockerbuild & signimg & verifyimg -- error --> failed
-       reference & verify -- SigningError --> refused
+       policy -- required --> ownid --> inspectown --> verifyown -- verified --> measure --> serve
+       policy -- "explicitly disabled" --> disabled --> measure
+       policy & ownid & inspectown & verifyown & measure -- error --> gaterefused
+       dockerbuild & signimg & verifyimg -- error --> failed
+       reference & verify & signmods & verifymods -- SigningError --> refused
    ```
 
 Every CLI command prints one JSON report, never key material, and exits nonzero on any failure.

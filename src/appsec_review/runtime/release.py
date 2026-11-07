@@ -1,4 +1,10 @@
-"""Build-time source identities. Review execution reads only the resulting bounded manifest."""
+"""Launch-time source identities. Review execution reads only the resulting bounded manifest.
+
+The manifest is measured from the mounted source checkout by the deployment's launch step (the
+code-location service start), never by a job handler or a resume planner. Its location is the
+repository root by default and ``APPSEC_REVIEW_RELEASE_MANIFEST`` in mounted deployments, where
+the source tree is read-only and the manifest lives on the deployment's own storage.
+"""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +13,7 @@ import fnmatch
 from glob import has_magic
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
@@ -16,6 +23,7 @@ from appsec_review.storage import atomic_bytes, canonical_json, file_sha256
 DEPENDENCIES_SCHEMA = "appsec-review/release-dependencies/1"
 RELEASE_SCHEMA = "appsec-review/implementation-release/1"
 MANIFEST_NAME = "implementation-release.json"
+MANIFEST_ENV = "APPSEC_REVIEW_RELEASE_MANIFEST"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 _SHA = re.compile(r"[0-9a-f]{64}")
 _JOB = re.compile(r"job_[a-z0-9_]+")
@@ -67,8 +75,26 @@ def validate_release(value: Mapping[str, Any]) -> dict[str, Any]:
     return dict(value)
 
 
+def manifest_path(repository_root: Path, environ: Mapping[str, str] | None = None) -> Path:
+    """Where the measured manifest lives: ``APPSEC_REVIEW_RELEASE_MANIFEST`` or the repository root.
+
+    A mounted deployment keeps its source read-only and points this variable at the manifest its
+    launch step wrote; a source checkout or a baked image reads ``implementation-release.json``
+    beside the sources. A relative value is rejected so the variable cannot resolve inside an
+    attempt's working directory.
+    """
+    environ = os.environ if environ is None else environ
+    configured = environ.get(MANIFEST_ENV, "")
+    if configured:
+        path = Path(configured)
+        if not path.is_absolute():
+            raise ValueError(f"{MANIFEST_ENV} must be an absolute path")
+        return path
+    return Path(repository_root) / MANIFEST_NAME
+
+
 def load_release(repository_root: Path) -> dict[str, Any] | None:
-    path = Path(repository_root) / MANIFEST_NAME
+    path = manifest_path(repository_root)
     if not path.exists():
         return None
     return validate_release(read_document(path))
@@ -198,17 +224,50 @@ def build_release(root: Path, manifest: Mapping[str, Any], job_ids: Sequence[str
     return validate_release({**value, "sha256": digest(value)})
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, execvp=os.execvp) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--manifest", type=Path, default=Path("release-dependencies.json"))
-    parser.add_argument("--output", type=Path, default=Path(MANIFEST_NAME))
+    parser.add_argument("--manifest", type=Path, default=None,
+                        help="dependency manifest; defaults to release-dependencies.json under --root")
+    parser.add_argument("--output", type=Path, default=None,
+                        help=f"manifest to write; defaults to ${MANIFEST_ENV} or {MANIFEST_NAME} under --root")
+    parser.add_argument("--verify-assets", action="store_true",
+                        help="also verify the mounted runtime assets and catalogs (the former image-build checks)")
+    parser.add_argument("--exec", dest="then", nargs=argparse.REMAINDER, default=None,
+                        help="after writing the manifest, replace this process with the given command")
     args = parser.parse_args(argv)
+    root = args.root.resolve()
+    manifest = args.manifest if args.manifest is not None else root / "release-dependencies.json"
+    output = args.output if args.output is not None else manifest_path(root)
+    if args.then is not None and not args.then:
+        parser.error("--exec requires a command")
+    if args.verify_assets:
+        verify_deployment_assets()
     from appsec_review.runtime.registry import builtin_registry
-    release = build_release(args.root, read_document(args.manifest), builtin_registry().job_ids())
-    atomic_bytes(args.output, canonical_json(release))
-    print(release["sha256"])
+    release = build_release(root, read_document(manifest), builtin_registry().job_ids())
+    output.parent.mkdir(parents=True, exist_ok=True)
+    atomic_bytes(output, canonical_json(release))
+    print(release["sha256"], flush=True)
+    if args.then is not None:
+        execvp(args.then[0], list(args.then))
     return 0
+
+
+def verify_deployment_assets() -> None:
+    """The checks the image build used to run while it still contained the sources.
+
+    A tooling-only image cannot run them at build time, so the launch step runs them against the
+    mounted checkout before the code server starts; a missing asset or a broken catalog refuses
+    the launch instead of surfacing as a failed job later.
+    """
+    from appsec_review.application_paths import application_root, verify_runtime_assets
+    verify_runtime_assets()
+    from appsec_review.container_runtime.catalog import load_catalog as load_container_catalog
+    load_container_catalog(application_root("containers/catalog.toml"))
+    from appsec_review.graph.catalog import load_catalog as load_graph_catalog
+    load_graph_catalog()
+    from appsec_review.orchestration.dagster.definitions import defs
+    defs.get_job_def("wave1_review")
 
 
 if __name__ == "__main__":

@@ -210,10 +210,12 @@ This adapter runs independently of review execution and never becomes evidence a
 
 ## Deployment boundary
 
-The changed observability modules are application Python code, not newly mounted job scripts.
-No script mount was added and no running application was reloaded or rebuilt. A later deployment
-must use the existing signed application-image lifecycle for these baked-in modules; changing
-the checkout alone does not update a running image. Unrelated tooling images need no rebuild.
+The changed observability modules are application Python code. The Dagster image is tooling only
+and the checkout is mounted read-only (see
+[Deployment image and source mount](../architecture/deployment-image-and-source-mount.md)), so a
+running stack picks these modules up through `lifecycle.py reload`, which re-signs the mounted
+sources and recreates the image services; no image rebuild is involved. No reload was run as part
+of this package. Unrelated tooling images need no rebuild.
 
 ## Manual integration and acceptance commands (NOT RUN for this package)
 

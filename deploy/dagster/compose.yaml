@@ -14,6 +14,17 @@ x-dagster-environment: &dagster-environment
   APPSEC_REVIEW_CONFIG_OVERLAY: ${APPSEC_REVIEW_CONFIG_OVERLAY:-}
   # Runtime profile: dev (default), prod, or copilot-dev (docs/operations/model-profiles.md).
   APPSEC_REVIEW_PROFILE: ${APPSEC_REVIEW_PROFILE:-dev}
+  # The implementation-release manifest the code-location start measures from the mounted checkout
+  # (docs/architecture/deployment-image-and-source-mount.md); every service reads this one copy.
+  APPSEC_REVIEW_RELEASE_MANIFEST: /var/dagster/release/implementation-release.json
+  # The tooling image's identity, recorded separately from the source identity in every attempt's
+  # deployment_identity (runtime/repair.py); it is the same verified ID the services launch.
+  APPSEC_REVIEW_IMAGE_ID: ${APPSEC_REVIEW_DAGSTER_IMAGE:?APPSEC_REVIEW_DAGSTER_IMAGE must be a host-verified sha256 image id; start through deploy/dagster/bin/ops.py}
+  # Signed-module enforcement over the mounted sources. lifecycle.py sets both for the launch: on
+  # (the default) after signing the checkout, or off when deploy/dagster/.env carries
+  # APPSEC_UNSIGNED_MODULES=1 on a development host. The `-` form passes an empty value through.
+  APPSEC_REVIEW_REQUIRE_SIGNED_MODULES: ${APPSEC_SIGNED_MODULES:-1}
+  APPSEC_REVIEW_MODULE_SIGNATURE: ${APPSEC_MODULE_SIGNATURE-/opt/appsec-review/signing/python-modules.json}
 
 x-dagster-service: &dagster-service
   # The exact image ID that lifecycle.py start/reload verified on this host against the trusted keys;
@@ -26,6 +37,26 @@ x-dagster-service: &dagster-service
   environment: *dagster-environment
   volumes:
     - dagster-storage:/var/dagster
+    # Application sources and assets: the image is tooling only, so the checkout's release closure
+    # (release-dependencies.json) is mounted read-only. Editing code on the host and running
+    # `lifecycle.py reload` is the whole deployment cycle; no image build is involved.
+    - ../../src:/opt/app/src:ro
+    - ../../pyproject.toml:/opt/app/pyproject.toml:ro
+    - ../../appsec-review.toml:/opt/app/appsec-review.toml:ro
+    - ../../release-dependencies.json:/opt/app/release-dependencies.json:ro
+    - ../../profiles:/opt/app/profiles:ro
+    - ../../docs/schemas:/opt/app/docs/schemas:ro
+    - ../../containers:/opt/app/containers:ro
+    - ../../pipeline:/opt/app/pipeline:ro
+    - ../../scripts:/opt/app/scripts:ro
+    - ../../tools/cve-bin-tool:/opt/app/tools/cve-bin-tool:ro
+    - ../../deploy/dagster/Dockerfile:/opt/app/deploy/dagster/Dockerfile:ro
+    - ../../deploy/dagster/requirements.txt:/opt/app/deploy/dagster/requirements.txt:ro
+    - ../../deploy/dagster/requirements.lock.txt:/opt/app/deploy/dagster/requirements.lock.txt:ro
+    - ../../deploy/dagster/requirements.copilot.txt:/opt/app/deploy/dagster/requirements.copilot.txt:ro
+    # Module envelope signed by lifecycle.py at launch (directory, so an unsigned development launch
+    # mounts an empty directory instead of failing on a missing file).
+    - ../../deploy/dagster/signing:/opt/appsec-review/signing:ro
     - ../../runs:/opt/app/runs
     - ../../data:/opt/app/data
     # Writable: acquisition creates checkouts here and builds write their outputs into the checkout.
@@ -127,13 +158,23 @@ services:
     group_add:
       - "${APPSEC_DOCKER_GID:-0}"
     # The in-container gate (appsec_review.signing.container_self_check) requires this container's own
-    # image to be exactly the launched ID and to verify against the mounted trust anchors, then execs
-    # the code server; on refusal the code location never becomes healthy (host.SELF_CHECK_COMMAND).
+    # image to be exactly the launched ID and to verify against the mounted trust anchors, then hands
+    # off to the launch step (appsec_review.runtime.release), which verifies the mounted runtime assets,
+    # measures the implementation-release manifest from the mounted checkout onto /var/dagster/release
+    # and only then execs the code server; on refusal the code location never becomes healthy
+    # (host.SELF_CHECK_COMMAND, host.LAUNCH_COMMAND).
     command:
       - python
       - -m
       - appsec_review.signing.container_self_check
       - --
+      - python
+      - -m
+      - appsec_review.runtime.release
+      - --root
+      - /opt/app
+      - --verify-assets
+      - --exec
       - dagster
       - code-server
       - start
@@ -162,14 +203,30 @@ services:
       result-cache:
         condition: service_started
         required: false
+    # YAML merge keys do not merge lists, so this service repeats the anchor's mounts and adds the
+    # Docker socket; keep the two lists aligned (tests/test_dagster_signing.py checks the closure).
     volumes:
       - dagster-storage:/var/dagster
+      - ../../src:/opt/app/src:ro
+      - ../../pyproject.toml:/opt/app/pyproject.toml:ro
+      - ../../appsec-review.toml:/opt/app/appsec-review.toml:ro
+      - ../../release-dependencies.json:/opt/app/release-dependencies.json:ro
+      - ../../profiles:/opt/app/profiles:ro
+      - ../../docs/schemas:/opt/app/docs/schemas:ro
+      - ../../containers:/opt/app/containers:ro
+      - ../../pipeline:/opt/app/pipeline:ro
+      - ../../scripts:/opt/app/scripts:ro
+      - ../../tools/cve-bin-tool:/opt/app/tools/cve-bin-tool:ro
+      - ../../deploy/dagster/Dockerfile:/opt/app/deploy/dagster/Dockerfile:ro
+      - ../../deploy/dagster/requirements.txt:/opt/app/deploy/dagster/requirements.txt:ro
+      - ../../deploy/dagster/requirements.lock.txt:/opt/app/deploy/dagster/requirements.lock.txt:ro
+      - ../../deploy/dagster/requirements.copilot.txt:/opt/app/deploy/dagster/requirements.copilot.txt:ro
+      - ../../deploy/dagster/signing:/opt/appsec-review/signing:ro
       - ../../runs:/opt/app/runs
       - ../../data:/opt/app/data
       - ../../targets:/opt/app/targets
       - ../../rules:/opt/app/rules:ro
       - ../../test/acceptance:/opt/app/test/acceptance:ro
-      - ../../containers/tools/codeql/codeql_runner.py:/opt/app/containers/tools/codeql/codeql_runner.py:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - type: bind
         source: ${APPSEC_SIGNING_TRUSTED_KEYS_DIR:-/etc/appsec-review/signing/trusted-keys}

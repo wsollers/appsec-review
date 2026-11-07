@@ -13,13 +13,16 @@ builder follows static cross-job helper imports as well. It rejects a release la
 code or validator coverage, or an absent explicitly named dependency. At build time:
 
 ```sh
-python -m appsec_review.runtime.release
+python -m appsec_review.runtime.release            # direct (non-Dagster) runs: beside the sources
+python -m appsec_review.runtime.release --root /opt/app --verify-assets --exec dagster code-server start ...
+                                                   # Dagster code-location start: onto /var/dagster/release
 ```
 
-This creates byte-deterministic `implementation-release.json`; it is generated, not source.
-The Dagster Dockerfile stages the declared recipe and dependency locks beside the source, then
-runs this builder after installation. Job handlers never scan or hash
-installed platform payloads as customer evidence. They read the bounded generated manifest.
+This creates byte-deterministic `implementation-release.json`; it is generated, not source. In the
+Dagster deployment the code-location's start command runs this builder against the mounted checkout
+and then execs the code server; the `test` image stage runs it at build time because it is the one
+stage that carries sources. Job handlers never scan or hash installed platform payloads as customer
+evidence. They read the bounded generated manifest at the configured location.
 Changing a source/helper/schema/script and rebuilding changes the appropriate identity even
 when operator release labels are unchanged. Labels can invalidate an identity, but cannot
 replace source provenance. Missing manifests disable reuse, including successful-unit reuse.
@@ -30,12 +33,19 @@ to record the actual immutable image identity. Source and image identities are s
 An omitted image identity is recorded as `null`, **not** proof of a verified image. Changing an
 image, script manifest, or Python runtime is a deployment change requiring repair admission.
 
-Application code is currently **baked into images**. This work does not introduce hot reload
-or a job-script mount. Rebuild only the affected application image; preserve active-run freezes,
-verify the deployed image pin through the existing image gate, and keep the release manifest
-paired with those bytes. Never regenerate a manifest over changed code serving an active run.
-Mounted-script identity is a separate manifest component for deployments that later add a
-supported script mount; no current mount is implied.
+Application code is **mounted, not baked**: the Dagster image holds tooling only, Compose mounts
+the checkout read-only at `/opt/app`, and the code-location start measures
+`implementation-release.json` from the mounted tree onto `/var/dagster/release/`
+(`APPSEC_REVIEW_RELEASE_MANIFEST`; see
+[Deployment image and source mount](../architecture/deployment-image-and-source-mount.md)). The
+repair cycle is therefore: stop, edit the checkout, `lifecycle.py reload` (re-signs the sources and
+recreates the image services in seconds), `plan-repair`, `admit-repair`, `resume`. No `docker build`
+occurs unless a dependency, tool or the signing verifier changed. Preserve active-run freezes: the
+signed envelope fails closed on edited modules until the next reload, and every attempt pins its
+own copy of the release manifest under `data/recovery/releases/`, so a reload never rewrites the
+identity an active attempt recorded. Source identity (`implementation-release.json`) and image
+identity (`APPSEC_REVIEW_IMAGE_ID`, the tooling image) are separate components of
+`deployment_identity`; a code edit changes the first only.
 
 ## Inspect, stop, and admit
 

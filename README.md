@@ -838,10 +838,21 @@ python deploy/dagster/bin/lifecycle.py status
 python deploy/dagster/bin/verify.py
 ```
 
-`lifecycle.py build` signs the `appsec_review` modules, builds the image and signs and verifies its
-ID with the operator key; `start` verifies that signature again, records the ID in
-`deploy/dagster/.env` and launches exactly that image, or refuses with exit code 3. Create the key
-and trust anchor first; see [Signed image](deploy/dagster/README.md#signed-image).
+The image is **tooling only** (interpreter, pinned dependencies, Docker client, provider CLIs,
+signing verifier); your checkout is bind-mounted read-only into the stack at `/opt/app`, so the
+Python you edit is the Python that runs. `lifecycle.py build` builds that image and signs and
+verifies its ID with the operator key; you need it once, and again only when `requirements*.txt`,
+a provider CLI pin or the signing verifier changes. `start` and `reload` verify the image, record
+its ID in `deploy/dagster/.env`, sign the mounted `appsec_review` sources for that launch and launch
+exactly that image, or refuse with exit code 3. After editing code, `lifecycle.py reload` is the
+whole deployment step (seconds); the code location measures the new source identity at start, so
+resuming a run that saw the old code goes through `plan-repair` and `admit-repair` as described in
+[Recovery and repair](docs/operations/recovery-repair.md). While iterating on a development host
+you may set `APPSEC_UNSIGNED_MODULES=1` in `deploy/dagster/.env` to skip per-launch module signing
+(the image is still verified; a warning is printed). Create the key and trust anchor first; see
+[Signed image](deploy/dagster/README.md#signed-image) and
+[Deployment image and source mount](docs/architecture/deployment-image-and-source-mount.md).
+The mounted checkout must be on WSL ext4 or native Linux, never under `/mnt/c` or `/mnt/f`.
 
 On native Windows, run the same commands in PowerShell, then sign in to the container CLI with
 `docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login`.

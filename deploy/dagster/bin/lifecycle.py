@@ -52,11 +52,21 @@ def signing_settings(environ: Mapping[str, str]) -> SigningSettings:
     return SigningSettings.load({**recorded, **environ})
 
 
+# Development hosts may launch with signed-module enforcement off (deploy/dagster/.env or the shell).
+# The image is still verified and launched by exact ID; only the mounted sources go unverified.
+UNSIGNED_VARIABLE = "APPSEC_UNSIGNED_MODULES"
+# The directory Compose mounts read-only at /opt/appsec-review/signing; it holds the module envelope
+# signed at launch, and it must exist even for an unsigned development launch.
+ENVELOPE_DIRECTORY = deployment / "signing"
+
+
 def build(platform: str, profile: str, environ: Mapping[str, str], *, runner: Runner = subprocess.run) -> str:
-    """Sign modules, build the final stage, sign the image and verify it; return the verified ID."""
+    """Build the tooling-only final stage, sign the image and verify it; return the verified ID.
+
+    The image contains no application sources, so nothing is signed into it here: the module
+    envelope over the mounted checkout is produced by ``start``/``reload`` instead.
+    """
     settings = signing_settings(environ)
-    envelope = sign_modules(settings, repository, runner=runner)
-    print(f"signed and verified the module envelope {envelope}", flush=True)
     tag, target = image_tag(platform, profile), image_target(platform, profile)
     command = ["docker", "build", "--file", str(deployment / "Dockerfile"), "--target", target,
                "--tag", tag, str(repository)]
@@ -73,6 +83,33 @@ def verified_image(platform: str, profile: str, environ: Mapping[str, str], *,
     """Verify ``APPSEC_REVIEW_DAGSTER_IMAGE`` from the process environment, else this host's build tag."""
     reference = environ.get(IMAGE_VARIABLE) or image_tag(platform, profile)
     return verify_image(signing_settings(environ), repository, reference, runner=runner)
+
+
+def unsigned_modules_requested(environ: Mapping[str, str]) -> bool:
+    recorded = read_environment(environment_file) if environment_file.is_file() else {}
+    value = {**recorded, **environ}.get(UNSIGNED_VARIABLE, "")
+    if value not in {"", "0", "1"}:
+        raise SigningError(f"{UNSIGNED_VARIABLE} must be 0 or 1, not {value!r}")
+    return value == "1"
+
+
+def module_environment(settings: SigningSettings, environ: Mapping[str, str], *,
+                       runner: Runner = subprocess.run) -> dict[str, str]:
+    """Sign the mounted checkout for this launch, or switch enforcement off for a development host.
+
+    Returns the Compose variables that set ``APPSEC_REVIEW_REQUIRE_SIGNED_MODULES`` and
+    ``APPSEC_REVIEW_MODULE_SIGNATURE`` inside the services. The envelope directory always exists so
+    the read-only mount succeeds either way.
+    """
+    ENVELOPE_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    if unsigned_modules_requested(environ):
+        print(f"WARNING: {UNSIGNED_VARIABLE}=1: launching with signed-module enforcement OFF; the mounted "
+              "sources are not verified. Development hosts only.", file=sys.stderr, flush=True)
+        return {"APPSEC_SIGNED_MODULES": "0", "APPSEC_MODULE_SIGNATURE": ""}
+    envelope = sign_modules(settings, repository, runner=runner)
+    print(f"signed and verified the module envelope {envelope}", flush=True)
+    return {"APPSEC_SIGNED_MODULES": "1",
+            "APPSEC_MODULE_SIGNATURE": "/opt/appsec-review/signing/" + envelope.name}
 
 
 def record_image(path: Path, image_id: str) -> None:
@@ -110,9 +147,16 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
             return REFUSED
         record_image(environment_file, image_id)
         print(f"verified {image_id}; Compose launches exactly this image", flush=True)
+        try:
+            modules = module_environment(settings, environ, runner=runner)
+        except SigningError as error:
+            print(f"refusing to {action}: the mounted sources could not be signed: {error}",
+                  file=sys.stderr, flush=True)
+            return REFUSED
         # Compose mounts exactly the trust anchors and envelopes the host verification used; only actions
         # that create containers fix the code-location's GITHUB_TOKEN.
-        environment = {**compose_environment(environ), **settings.compose_environment(), IMAGE_VARIABLE: image_id}
+        environment = {**compose_environment(environ), **settings.compose_environment(), **modules,
+                       IMAGE_VARIABLE: image_id}
     else:
         environment = non_launching_environment(environment_file, environ)
     return runner(compose_base(platform, profile) + commands[action], cwd=repository, env=environment,

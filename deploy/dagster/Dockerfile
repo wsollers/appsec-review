@@ -12,10 +12,18 @@ FROM docker/buildx-bin:0.37.0@sha256:1387e0aa2b756894e8b6ee10d0f80904cb0badc4356
 
 FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS runtime-base
 
+# Tooling-only image (docs/architecture/deployment-image-and-source-mount.md). The image holds the
+# interpreter, pinned third-party dependencies, the Docker client, provider CLIs and the signing
+# verifier. Application sources, configuration, schemas, guidance, rules, scripts and tool assets are
+# bind-mounted read-only at /opt/app by Compose from the host checkout; the launch step measures them
+# into the implementation-release manifest on the deployment's own storage. Changing application
+# code therefore never rebuilds this image; only dependency, tool or verifier changes do.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/opt/app/src \
     DAGSTER_HOME=/opt/dagster/home \
-    APPSEC_REVIEW_CONFIG=/opt/app/appsec-review.toml
+    APPSEC_REVIEW_CONFIG=/opt/app/appsec-review.toml \
+    APPSEC_REVIEW_RELEASE_MANIFEST=/var/dagster/release/implementation-release.json
 WORKDIR /opt/app
 
 RUN apt-get update \
@@ -28,48 +36,38 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==25.0.1" \
     && python -m pip install --no-cache-dir -r /tmp/dagster/requirements.txt -c /tmp/dagster/requirements.lock.txt \
     && python -m pip check
 
-COPY pyproject.toml appsec-review.toml ./
-COPY profiles ./profiles
-COPY docs/schemas/ ./docs/schemas/
-COPY src ./src
-COPY containers ./containers
-COPY data ./data
-COPY pipeline ./pipeline
-COPY rules ./rules
-COPY scripts ./scripts
-COPY release-dependencies.json ./
-COPY deploy/dagster/Dockerfile deploy/dagster/requirements*.txt ./deploy/dagster/
-COPY tools/cve-bin-tool ./tools/cve-bin-tool
-RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
-    && python -m appsec_review.runtime.release \
-    && mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /opt/app/runs /opt/app/data \
-    && chmod 1777 /opt/dagster/home /var/dagster /var/dagster/compute-logs /var/dagster/artifacts \
-    && python -c "from appsec_review.application_paths import verify_runtime_assets; verify_runtime_assets()" \
-    && python -c "from pathlib import Path; from appsec_review.container_runtime.catalog import load_catalog; load_catalog(Path.cwd())" \
-    && python -c "from appsec_review.graph.catalog import load_catalog; load_catalog()" \
-    && python -c "from appsec_review.orchestration.dagster.definitions import defs; defs.get_job_def('wave1_review')"
+# Mount points only. Nothing from the checkout is copied here except the signing verifier below;
+# compose.yaml mounts every source directory of the release closure (release-dependencies.json).
+RUN mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /var/dagster/release \
+        /opt/app/runs /opt/app/data /opt/app/targets /opt/app/src /opt/app/profiles /opt/app/docs/schemas \
+        /opt/app/containers /opt/app/pipeline /opt/app/rules /opt/app/scripts /opt/app/tools/cve-bin-tool \
+        /opt/app/deploy/dagster /opt/app/test/acceptance \
+    && chmod 1777 /opt/dagster/home /var/dagster /var/dagster/compute-logs /var/dagster/artifacts /var/dagster/release
 
 COPY deploy/dagster/dagster.yaml deploy/dagster/workspace.yaml /opt/dagster/home/
 
 # Signed-module enforcement: a root-owned verifier outside the package it verifies, run from the
-# interpreter's own sitecustomize in every Python process. These variables alone are inert; the
-# final stages add the module envelope and APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1 after every
-# build-time Python step, and the trust anchors are mounted read-only at run time.
+# interpreter's own sitecustomize in every Python process. The verifier is build-context tooling
+# and part of the image identity; the package it verifies is the mounted /opt/app/src tree, and the
+# module envelope the host signs at every launch is mounted read-only beside the trust anchors.
+# These variables alone are inert; the final stages switch enforcement on.
 COPY --chown=0:0 --chmod=0644 src/appsec_review/signing/bootstrap.py src/appsec_review/signing/core.py \
     src/appsec_review/signing/modules.py src/appsec_review/signing/import_hook.py \
     src/appsec_review/signing/sitecustomize_shim.py /opt/appsec-review/signing-bootstrap/
 COPY --chown=0:0 --chmod=0644 src/appsec_review/signing/sitecustomize_shim.py /usr/local/lib/python3.12/sitecustomize.py
 ENV APPSEC_REVIEW_SIGNING_BOOTSTRAP_DIR=/opt/appsec-review/signing-bootstrap \
-    APPSEC_REVIEW_MODULE_ROOT=/usr/local/lib/python3.12/site-packages/appsec_review \
+    APPSEC_REVIEW_MODULE_ROOT=/opt/app/src/appsec_review \
     APPSEC_REVIEW_TRUSTED_KEYS_DIR=/etc/appsec-review/signing/trusted-keys \
     APPSEC_REVIEW_OPENSSL=/usr/bin/openssl
-# COPY --chmod also applies to the parent directories it creates, so the final stages' envelope
-# directory must already exist as 0755 or the non-root services cannot traverse to the envelope.
+# The envelope directory is a read-only bind-mount target; it must exist as 0755 so the non-root
+# services can traverse to the mounted envelope.
 RUN chmod 0755 /opt/appsec-review /opt/appsec-review/signing-bootstrap \
     && install -d -o 0 -g 0 -m 0755 /opt/appsec-review/signing \
     && python -c "import os, sys; assert sys.modules['sitecustomize'].__file__ == '/usr/local/lib/python3.12/sitecustomize.py', 'site did not import the signing sitecustomize'" \
-    && python -c "import os, appsec_review; assert os.path.dirname(appsec_review.__file__) == os.environ['APPSEC_REVIEW_MODULE_ROOT'], 'APPSEC_REVIEW_MODULE_ROOT is not the installed package'" \
     && /usr/bin/openssl version
+# A tooling image contains no application package: with nothing mounted, the import must fail.
+RUN if PYTHONPATH= python -c "import appsec_review" 2>/dev/null; then \
+      echo "the tooling image must not contain appsec_review" >&2; exit 1; fi
 RUN status=0; APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1 python -c pass || status=$?; \
     test "$status" = 78 || { echo "signed-module enforcement does not fail closed (exit $status)" >&2; exit 1; }
 
@@ -104,30 +102,44 @@ RUN apt-get update \
     && ln -s /opt/claude/node_modules/.bin/claude /usr/local/bin/claude \
     && claude --version
 
-# Final stages: the host signs src/appsec_review into deploy/dagster/signing/python-modules.json
-# (lifecycle.py build) before the build; pip installed identical bytes at APPSEC_REVIEW_MODULE_ROOT.
-# No Python runs after enforcement is switched on, so the build never needs the trust anchors.
+# Final stages: enforcement on. The host signs the mounted src/appsec_review into
+# deploy/dagster/signing/python-modules.json at every start/reload (lifecycle.py) and Compose mounts
+# that directory read-only at /opt/appsec-review/signing; the image never contains the envelope or
+# the sources it covers. No Python runs after enforcement is switched on, so the build never needs
+# the trust anchors. A development host may launch these stages with enforcement off
+# (APPSEC_UNSIGNED_MODULES=1 in deploy/dagster/.env); Compose then overrides these two variables.
 FROM runtime-base AS runtime
-COPY --chown=0:0 --chmod=0644 deploy/dagster/signing/python-modules.json /opt/appsec-review/signing/python-modules.json
 ENV APPSEC_REVIEW_MODULE_SIGNATURE=/opt/appsec-review/signing/python-modules.json \
     APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1
 
 FROM runtime-copilot-base AS runtime-copilot
-COPY --chown=0:0 --chmod=0644 deploy/dagster/signing/python-modules.json /opt/appsec-review/signing/python-modules.json
 ENV APPSEC_REVIEW_MODULE_SIGNATURE=/opt/appsec-review/signing/python-modules.json \
     APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1
 
 FROM runtime-windows-base AS runtime-windows
-COPY --chown=0:0 --chmod=0644 deploy/dagster/signing/python-modules.json /opt/appsec-review/signing/python-modules.json
 ENV APPSEC_REVIEW_MODULE_SIGNATURE=/opt/appsec-review/signing/python-modules.json \
     APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=1
 
-# Unenforced: the deployment test image needs neither the module envelope nor trust anchors.
+# Unenforced: the deployment test image needs neither the module envelope nor trust anchors. It is
+# the one stage that copies sources, because it runs without the Compose mounts; it measures its own
+# manifest where the launch step would.
 FROM runtime-base AS test
 RUN python -m pip install --no-cache-dir "pytest==8.4.2"
+COPY pyproject.toml appsec-review.toml release-dependencies.json ./
+COPY profiles ./profiles
+COPY docs/schemas/ ./docs/schemas/
+COPY src ./src
+COPY containers ./containers
+COPY data ./data
+COPY pipeline ./pipeline
+COPY rules ./rules
+COPY scripts ./scripts
+COPY deploy/dagster/Dockerfile deploy/dagster/requirements*.txt ./deploy/dagster/
+COPY tools/cve-bin-tool ./tools/cve-bin-tool
 COPY tests/__init__.py tests/capture_fakes.py ./tests/
 COPY tests/fixtures/reference_feeds.py ./tests/fixtures/
 COPY tests/fixtures/inference_review ./tests/fixtures/inference_review
 COPY tests/orchestration/dagster ./tests/orchestration/dagster
-RUN mkdir -p /opt/app/test/tmp
+RUN mkdir -p /opt/app/test/tmp \
+    && python -m appsec_review.runtime.release --root /opt/app --verify-assets
 CMD ["python", "-m", "pytest", "tests/orchestration/dagster"]
