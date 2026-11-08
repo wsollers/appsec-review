@@ -709,13 +709,19 @@ def test_review_intake_publishes_the_acquisition_record(tmp_path: Path) -> None:
 
     outcome = GraphRunner(config, [build_intake(check_models=available)]).run(
         target_root=target, source_fingerprint=source_fingerprint(target))
-    assert outcome["status"] == "SUCCEEDED", outcome
+    # The acquisition's own gap is carried into the intake as a path-scoped record.
+    assert outcome["status"] == "COMPLETED_WITH_GAPS", outcome
     run_root = config.runtime.runs_dir / outcome["run_id"]
     intake = json.loads(next(run_root.rglob("review-intake.json")).read_text(encoding="utf-8"))
     acquisition = intake["fingerprint"]["acquisition"]
     assert acquisition["acquisition_id"] == "acquired@1" and acquisition["tree_matches"] is True
     assert (run_root / acquisition["manifest"]).is_file()
     assert [gap["reason"] for gap in acquisition["gaps"]] == ["perforce_digest_unverified"]
+    pointer = json.loads((run_root / "data/jobs/job_review_intake/latest.json").read_text(encoding="utf-8"))
+    handoff = json.loads((run_root / pointer["handoff_path"]).read_text(encoding="utf-8"))
+    [record] = handoff["outputs"]["publish_intake.publish_handoff"]["gaps"]
+    assert record["code"] == "producer_reported_gap" and record["scope_id"] == "a.h"
+    assert record["reason"] == "a.h: perforce_digest_unverified" and record["retryable"] is False
 
 
 def system_config(tmp_path: Path, components: str) -> Path:

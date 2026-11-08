@@ -24,7 +24,7 @@ import tomllib
 from typing import Any
 
 from appsec_review.config.target_acquisition import parse_target_acquisition
-from appsec_review.interchange import GapCode, producer_gap
+from appsec_review.interchange import path_gap_records
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.jobs.job_target_acquisition.datasets import CONTRACT, DATASETS
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -48,19 +48,6 @@ _RETRYABLE = frozenset({"component_acquisition_failed", "component_not_acquired"
 
 class TargetAcquisitionFailed(RuntimeError):
     """No component of the requested system is available; the review cannot start."""
-
-
-def _gap_records(unit_id: str, gaps: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """The acquisition library's ``{path, reason, detail}`` gaps as ``producer-gap/1`` records."""
-    records = []
-    for gap in gaps:
-        reason = str(gap.get("reason") or "acquisition_gap")
-        code = GapCode.PRODUCER_FAILED if reason == "component_acquisition_failed" else GapCode.PRODUCER_REPORTED_GAP
-        detail = str(gap.get("detail") or "").strip()
-        records.append(producer_gap(code, f"{gap.get('path', '.')}: {reason}" + (f": {detail}" if detail else ""),
-                                    unit_id=unit_id, scope_id=str(gap.get("path") or "."),
-                                    retryable=reason in _RETRYABLE))
-    return records
 
 
 def _validate(context, _result) -> None:
@@ -139,7 +126,8 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
         components = {component_id: {key: value.get(key) for key in (
             "status", "action", "acquisition_id", "target_path", "manifest", "manifest_sha256", "tree_sha256",
             "error", "failure_record")} for component_id, value in result.get("components", {}).items()}
-        gaps = _gap_records(unit.unit_id, list(result.get("gaps", [])))
+        gaps = path_gap_records(unit.unit_id, list(result.get("gaps", [])),
+                                failed_reasons=("component_acquisition_failed",), retryable_reasons=_RETRYABLE)
         document = {"schema": SCHEMA, "plan": plan["artifact"], "system_id": system.system_id,
                     "status": result["status"], "acquisition_id": result.get("acquisition_id"),
                     "target_path": result.get("target_path"), "manifest": result.get("manifest"),

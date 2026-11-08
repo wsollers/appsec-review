@@ -45,7 +45,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-050 | [Container catalog: deferred acceptance work](#t-050-container-catalog-deferred-acceptance-work) | images | open |
 | T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | open |
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
-| T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | open |
+| T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
+| T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -415,7 +416,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-053 — Decide whether review_intake keeps its own model gate
 
-- **State:** open
+- **State:** done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md)
 - **Area:** pipeline
 - **Why:** `job_review_intake.model_preflight` repeats `job_model_connectivity`'s live provider
   check two jobs later, with one difference: an unwired check returns `NOT_APPLICABLE` and the
@@ -427,7 +428,28 @@ until each is rewritten into the entry format when it is next touched.
   connectivity handoff (it is `propagate_handoff=False` today, so that means a contract input), or
   keep it as a deliberate second check and make its unwired behaviour refuse like the gate.
 - **Done when:** one of the two is implemented and `tests/test_model_preflight.py` asserts it.
+  Decided: keep it. Intake's handoff must be self-contained to be reusable (pinning the
+  always-execute gate would invalidate intake on every dispatch), downstream contracts declare
+  intake's `model_preflight` dataset as the cited evidence, and both checks share
+  `verify_configured_models`. The unwired behaviour stays `NOT_APPLICABLE`, explicit and tested
+  (`tests/test_review_intake.py::test_an_unwired_check_is_recorded_as_not_applicable_not_hidden`).
 - **Refs:** `src/appsec_review/jobs/job_review_intake/job.py`, `src/appsec_review/jobs/job_model_connectivity/job.py`.
+
+### T-054 — Declare the inputs binary_evidence_indexing and artifact_indexing actually read
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** since the fleet "typed job input contracts" merge, `job_binary_evidence_indexing` fails
+  at publication with `undeclared consumption by job_binary_evidence_indexing: job_target_catalog/handoff`
+  (6 tests in `tests/test_binary_evidence_indexing.py`) and `job_artifact_indexing` fails on the
+  prebuilt, buildless path with `undeclared consumption by job_artifact_indexing: job_review_intake/handoff`
+  (`tests/test_target_artifact_intake.py`, 2 tests). Both jobs read a producer their `JobContract`
+  does not declare. These are runtime regressions for the no-build path, not stale fixtures.
+- **Scope:** add the missing `InputRequirement`s to each job's `datasets.py` contract (and
+  `schedule_after` where ordering is implied), re-run the two files, and check the other
+  post-merge failures for the same signature when their jobs come up in the pass.
+- **Done when:** the eight tests pass without weakening the undeclared-consumption check.
+- **Refs:** T-047, `src/appsec_review/runtime/inputs.py`, `src/appsec_review/runtime/consume.py`.
 
 ## Legacy backlog
 

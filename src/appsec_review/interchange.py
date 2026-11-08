@@ -10,7 +10,7 @@ from enum import StrEnum
 import hashlib
 import json
 import re
-from typing import AbstractSet, Any, Mapping, Sequence
+from typing import AbstractSet, Any, Iterable, Mapping, Sequence
 
 
 HANDOFF_SCHEMA = "appsec-review/job-handoff/2"
@@ -572,3 +572,25 @@ def producer_gap(code: GapCode | str, reason: str, *, unit_id: str | None = None
     refs = tuple(artifact_reference_from_mapping(ref) for ref in evidence_refs)
     identity = {"unit_id": unit_id, "scope_id": scope_id, "code": str(code), "reason": reason}
     return ProducerGap(gap_id(identity), str(code), unit_id, scope_id, reason, bool(retryable), refs).as_dict()
+
+
+def path_gap_records(unit_id: str, gaps: Iterable[Mapping[str, Any]], *,
+                     failed_reasons: Iterable[str] = (), retryable_reasons: Iterable[str] = ()) -> list[dict[str, Any]]:
+    """``{path, reason[, detail]}`` gaps (inventory, acquisition) as ``producer-gap/1`` records.
+
+    A reason in ``failed_reasons`` is a ``producer_failed`` record, any other a
+    ``producer_reported_gap``; ``retryable_reasons`` marks the ones an operator action resolves. The
+    ``scope_id`` is the path, so a consumer can line records up with the files they concern.
+    """
+    failed, retryable = set(failed_reasons), set(retryable_reasons)
+    records = []
+    for gap in gaps:
+        if not isinstance(gap, Mapping):
+            raise ValueError("path gap must be a mapping with path and reason")
+        reason = str(gap.get("reason") or "gap")
+        path = str(gap.get("path") or ".")
+        detail = str(gap.get("detail") or "").strip()
+        code = GapCode.PRODUCER_FAILED if reason in failed else GapCode.PRODUCER_REPORTED_GAP
+        records.append(producer_gap(code, f"{path}: {reason}" + (f": {detail}" if detail else ""),
+                                    unit_id=unit_id, scope_id=path, retryable=reason in retryable))
+    return records

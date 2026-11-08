@@ -8,6 +8,7 @@ from typing import Any
 
 from appsec_review.config.loader import (
     OVERLAY_LAYER, PENDING_JOBS, PROFILE_LAYER, overlay_capacity_keys, profile_override_keys)
+from appsec_review.interchange import path_gap_records
 from appsec_review.storage import file_sha256
 from appsec_review.jobs.cataloging import Bounds, inventory, source_fingerprint, write_json
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -108,7 +109,24 @@ def _acquisition(unit: UnitContext, tree_sha256: str) -> Mapping[str, Any] | Non
     return record
 
 
-def _validate(context, result) -> None:
+class ModelPreflightBlocked(RuntimeError):
+    """A required model did not answer the intake preflight; the review cannot proceed."""
+
+
+class TargetIntakeError(ValueError):
+    """The review target cannot be taken in as it stands (empty, moved, or changed since planning)."""
+
+
+# Inventory reasons that are configured policy rather than lost coverage: recorded, never a gap.
+_POLICY_COVERAGE = frozenset({"excluded_directory"})
+
+
+def coverage_gap_records(unit_id: str, gaps: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Inventory gaps as records, leaving configured exclusions out (they are in the coverage document)."""
+    return path_gap_records(unit_id, [gap for gap in gaps if gap.get("reason") not in _POLICY_COVERAGE])
+
+
+def _validate_configuration(context) -> None:
     if tuple(context.config.steps) != tuple(TOPOLOGY):
         raise ValueError("review intake topology does not match configuration")
     for step, tasks in TOPOLOGY.items():
@@ -252,6 +270,9 @@ def external_input_identity(target: Path | None, run_root: Path, repository_root
 
 
 def build_job(*, check_models: ModelCheck | None = None) -> Job:
+    def validate(context, _result) -> None:
+        _validate_configuration(context)
+
     def resolve_models(unit: UnitContext) -> Mapping[str, Any]:
         # The resolved document, not the base file: the runtime profile changes the models.
         required, not_required = required_models(resolved_configuration(unit.job.run_root))
@@ -262,11 +283,11 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         resolved = unit.output("model_preflight.resolve_models")
         required, not_required = resolved["required"], resolved["not_required"]
         if check_models is None:
-            # Only a job built outside the registry reaches this; the registry always wires the check.
-            # (job_model_connectivity refuses the claim instead; the intake gate's own audit decides
-            # whether this second check stays at all.)
+            # The registry always wires the check (tests/test_model_preflight.py asserts it); a job
+            # built without one is a test fixture producing intake for downstream jobs, and the
+            # hard gate is job_model_connectivity, which refuses an unwired claim. Recorded, not silent.
             return {"schema": PREFLIGHT_SCHEMA, "required": required, "not_required": not_required,
-                    "providers": {}, "unavailable": [], "terminal_status": "NOT_APPLICABLE",
+                    "providers": {}, "unavailable": [], "verified": [], "terminal_status": "NOT_APPLICABLE",
                     "reason": "no model availability check is wired into this job instance"}
         timeout = int(unit.job.config.settings["model_preflight"]["timeout_seconds"])
         document = verify_configured_models(check_models, required, not_required,
@@ -277,9 +298,10 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         unit.job.events.write("MODEL_PREFLIGHT_COMPLETED", unit_id=unit.unit_id,
                               provider_count=len(document["providers"]),
                               model_count=sum(len(report.get("models", {})) for report in document["providers"].values()),
-                              unavailable_count=len(document["unavailable"]))
+                              unavailable_count=len(document["unavailable"]),
+                              unavailable_not_required_count=len(document["unavailable_not_required"]))
         if document["unavailable"]:
-            raise RuntimeError("model preflight blocked the review: " + "; ".join(
+            raise ModelPreflightBlocked("model preflight blocked the review: " + "; ".join(
                 f"{item['provider']}/{item['model']} ({item['detail']})" for item in document["unavailable"]))
         verified = sorted(f"{provider}/{name}" for provider, report in document["providers"].items()
                           for name in report.get("models", {}) if report["models"][name].get("available") is True)
@@ -288,7 +310,7 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
     def fetch_config(unit: UnitContext) -> Mapping[str, Any]:
-        manifest = __import__("json").loads((unit.job.run_root / "data/configuration/manifest.json").read_text())
+        manifest = json.loads((unit.job.run_root / "data/configuration/manifest.json").read_text(encoding="utf-8"))
         return manifest["sources"][0]
 
     def resolve_layers(unit: UnitContext) -> Mapping[str, Any]:
@@ -346,7 +368,7 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
     def freeze_config(unit: UnitContext) -> Mapping[str, Any]:
         path = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
         return {"path": path.relative_to(unit.job.run_root).as_posix(),
-                "sha256": __import__("appsec_review.storage", fromlist=["file_sha256"]).file_sha256(path),
+                "sha256": file_sha256(path),
                 "layers": unit.output("resolve_configuration.resolve_layers")["layers"],
                 "profile": unit.output("resolve_configuration.resolve_layers")["profile"]}
 
@@ -357,15 +379,16 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
     def validate_target(unit: UnitContext) -> Mapping[str, Any]:
         snapshot = inventory(_target(unit), Bounds(), exclusions=unit.job.config.exclusions)
         if not snapshot["files"]:
-            raise ValueError("target has no bounded text files")
+            raise TargetIntakeError("target has no bounded text files")
         return {"file_count": snapshot["file_count"], "total_bytes": snapshot["total_bytes"],
-                "gaps": snapshot["gaps"], "configured_exclusions": snapshot["configured_exclusions"],
+                "coverage_gaps": snapshot["gaps"], "gaps": coverage_gap_records(unit.unit_id, snapshot["gaps"]),
+                "configured_exclusions": snapshot["configured_exclusions"],
                 "file_discovery": snapshot["file_discovery"]}
 
     def fingerprint_target(unit: UnitContext) -> Mapping[str, Any]:
         actual = source_fingerprint(_target(unit))
         if actual != unit.job.source_fingerprint:
-            raise ValueError("target changed after resume planning")
+            raise TargetIntakeError("target changed after resume planning")
         return {"algorithm": "sha256-bounded-tree-v1", "sha256": actual,
                 "coverage": unit.output("prepare_target.validate_target"),
                 "acquisition": _acquisition(unit, actual)}
@@ -386,12 +409,18 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
                               configured=len(document["binaries"]),
                               resolved=sum(item["status"] == "resolved" for item in document["binaries"]),
                               unavailable=len(document["gaps"]))
+        from appsec_review.interchange import GapCode, producer_gap
+        gaps = [producer_gap(GapCode.INPUT_UNAVAILABLE,
+                             f"binary {gap['binary_id']} has no usable decompilation publication: {gap['reason']}",
+                             unit_id=unit.unit_id, scope_id=str(gap["binary_id"]), retryable=True)
+                for gap in document["gaps"]]
         return {"schema": BINARY_EVIDENCE_SCHEMA, "artifact": identity,
                 "binaries": [{key: item[key] for key in ("binary_id", "binary_sha256", "required", "status")
                               } | ({"identity": item["identity"], "manifest_sha256": item["manifest_sha256"]}
                                    if item["status"] == "resolved" else {})
                              for item in document["binaries"]],
-                "gaps": document["gaps"]}
+                "binary_gaps": document["gaps"], "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish_handoff(unit: UnitContext) -> Mapping[str, Any]:
         binary_evidence = dict(unit.output("binary_evidence.resolve_publications"))
@@ -405,9 +434,15 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         path = unit.unit_root / "review-intake.json"
         identity = write_json(path, document)
         identity["path"] = path.relative_to(unit.job.run_root).as_posix()
-        return {"schema": document["schema"], "artifact": identity,
-                "gaps": [*document["fingerprint"]["coverage"]["gaps"],
-                         *((document["fingerprint"].get("acquisition") or {}).get("gaps") or [])],
+        # Coverage gaps (symlinks, oversize files; configured exclusions are policy, not gaps) and
+        # acquisition gaps are path-scoped records; the raw lists stay in review-intake.json.
+        gaps = [*coverage_gap_records(unit.unit_id, document["fingerprint"]["coverage"]["coverage_gaps"]),
+                *path_gap_records(unit.unit_id, (document["fingerprint"].get("acquisition") or {}).get("gaps") or [],
+                                  failed_reasons=("component_acquisition_failed",),
+                                  retryable_reasons=("component_acquisition_failed", "component_not_acquired",
+                                                     "target_changed_since_acquisition"))]
+        return {"schema": document["schema"], "artifact": identity, "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED",
                 "binary_evidence": binary_evidence}
 
     units = (
@@ -427,6 +462,7 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
     implementation = None
     validation = None
     return Job("job_review_intake", "review_intake", UnitExecutor(units).execute,
-               input_validators=(_validate,), schema_identity="appsec-review/review-intake-job/1",
+               input_validators=(validate,), schema_identity="appsec-review/review-intake-job/2",
                implementation_identity=implementation, validation_identity=validation, units=units,
-               datasets=DATASETS, contract=CONTRACT, external_input_identity=external_input_identity)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=external_input_identity,
+               strict_gaps=True)

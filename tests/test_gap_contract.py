@@ -18,7 +18,7 @@ LEGACY_FREE_TEXT_GAPS = frozenset({
     "job_inference_security_review", "job_language_build", "job_openvex_export",
     "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment",
     "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation",
-    "job_review_data_indexing", "job_review_intake", "job_review_package_assembly",
+    "job_review_data_indexing", "job_review_package_assembly",
     "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis",
     "job_svf_alias_analysis", "job_target_analysis_plan", "job_target_catalog",
     "job_test_coverage", "job_tree_sitter_ast",
