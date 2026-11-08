@@ -1,0 +1,35 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "074-cmake-sibling-sources",
+  "matrix": "D1",
+  "polarity": "mixed",
+  "mirrors": "the 004 shape in CMake: add_executable names ../../common/src/util.c and the include directory ../../common/include, so the unit's materialization root is the common parent; a sibling source named only in a CMake comment is not referenced and is orphaned",
+  "units": [
+    {"root": "tools/packer", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["tools/packer/CMakeLists.txt"],
+     "build_points": [{"name": "packer", "kind": "executable", "evidence": "tools/packer/CMakeLists.txt:4"}],
+     "facts": {"materialization_root": "."}}
+  ],
+  "not_units": [
+    {"root": "common", "reason": "common/ has no descriptor; its sources belong to whoever names them"}
+  ],
+  "assignment": {
+    "tools/packer/CMakeLists.txt": "evidence_of:tools/packer|cmake",
+    "tools/packer/main.c": "evidence_of:tools/packer|cmake#packer",
+    "common/src/util.c": "evidence_of:tools/packer|cmake#packer",
+    "common/include/util.h": "evidence_of:tools/packer|cmake#packer",
+    "common/src/other.c": "orphaned:no_build_point"
+  },
+  "orphaned_sources": [
+    {"path": "common/src/other.c", "language": "c", "reason": "no_build_point", "nearest_unit": null}
+  ],
+  "pending": [
+    {"check": "unit:tools/packer|cmake.build_point:packer", "ref": "T-056.2"},
+    {"check": "unit:tools/packer|cmake.facts", "ref": "T-056.5", "note": "minimum materialization root from the ../../ source and include references"},
+    {"check": "assignment:tools/packer/main.c", "ref": "T-056.2"},
+    {"check": "assignment:common/src/util.c", "ref": "T-056.2", "note": "bound to the unit today, to the target once build points exist"},
+    {"check": "assignment:common/include/util.h", "ref": "T-056.2", "note": "headers reached through target_include_directories"},
+    {"check": "assignment:common/src/other.c", "ref": "T-056.5", "note": "a path in a CMake comment binds the source today; a comment is not a reference"},
+    {"check": "orphaned_sources", "ref": "T-056.5", "note": "the comment-only source is missing from the orphan list"}
+  ]
+}
