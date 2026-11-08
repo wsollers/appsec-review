@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "033-unity-project",
+  "matrix": "A11",
+  "polarity": "positive",
+  "mirrors": "a Unity project: ProjectSettings/ (editor version, player settings, build scenes), Packages/manifest.json with its lockfile, one assembly definition over Assets/Scripts and a scene; the project is the unit, the asmdef and the player platforms are its build points",
+  "units": [
+    {"root": "game", "build_system": "unity", "family": "dotnet", "profile": "unity",
+     "markers": ["game/Packages/manifest.json", "game/ProjectSettings/EditorBuildSettings.asset",
+                 "game/ProjectSettings/ProjectSettings.asset", "game/ProjectSettings/ProjectVersion.txt"],
+     "build_points": [
+       {"name": "Game.Runtime", "kind": "assembly", "evidence": "game/Assets/Scripts/Game.Runtime.asmdef:2"},
+       {"name": "Standalone", "kind": "player_target", "evidence": "game/ProjectSettings/ProjectSettings.asset:8"},
+       {"name": "Android", "kind": "player_target", "evidence": "game/ProjectSettings/ProjectSettings.asset:9"}
+     ],
+     "facts": {"descriptor_facts": {"root_state": "validated", "manifest_inspected": true, "lock_inspected": true}}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "game/ProjectSettings/ProjectVersion.txt": "evidence_of:game|unity",
+    "game/ProjectSettings/ProjectSettings.asset": "evidence_of:game|unity",
+    "game/ProjectSettings/EditorBuildSettings.asset": "evidence_of:game|unity",
+    "game/Packages/manifest.json": "evidence_of:game|unity",
+    "game/Packages/packages-lock.json": "context:game|unity",
+    "game/Assets/Scripts/Game.Runtime.asmdef": "evidence_of:game|unity#Game.Runtime",
+    "game/Assets/Scripts/Player.cs": "evidence_of:game|unity#Game.Runtime",
+    "game/Assets/Scripts/Player.cs.meta": "context:game|unity",
+    "game/Assets/Scenes/Main.unity": "evidence_of:game|unity",
+    "game/README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:game|unity.markers", "ref": "T-056.4", "note": "packages-lock.json is a lockfile: context, not a marker"},
+    {"check": "unit:game|unity.build_point:Game.Runtime", "ref": "T-056.2"},
+    {"check": "unit:game|unity.build_point:Standalone", "ref": "T-056.2", "note": "player targets per platform, from the platform keys of PlayerSettings"},
+    {"check": "unit:game|unity.build_point:Android", "ref": "T-056.2"},
+    {"check": "assignment:game/Packages/packages-lock.json", "ref": "T-056.4"},
+    {"check": "assignment:game/Assets/Scripts/Game.Runtime.asmdef", "ref": "T-056.2", "note": "the asmdef is the descriptor of its assembly build point"},
+    {"check": "assignment:game/Assets/Scripts/Player.cs", "ref": "T-056.2", "note": "scripts under an asmdef's folder compile into that assembly"},
+    {"check": "assignment:game/Assets/Scripts/Player.cs.meta", "ref": "T-056.4", "note": "the editor reads importer settings from .meta files: context, not inert"},
+    {"check": "assignment:game/Assets/Scenes/Main.unity", "ref": "T-056.2", "note": "a scene EditorBuildSettings lists is build input of the player, not an inert asset"},
+    {"check": "assignment:game/README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+  ]
+}

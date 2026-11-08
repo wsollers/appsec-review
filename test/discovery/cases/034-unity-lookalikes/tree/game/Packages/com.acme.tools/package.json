@@ -1,0 +1,7 @@
+{
+  "name": "com.acme.tools",
+  "version": "1.0.0",
+  "displayName": "Acme Tools",
+  "unity": "2022.3",
+  "dependencies": {}
+}

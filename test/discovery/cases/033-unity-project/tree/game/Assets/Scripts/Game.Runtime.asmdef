@@ -1,0 +1,9 @@
+{
+    "name": "Game.Runtime",
+    "rootNamespace": "Game",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true
+}

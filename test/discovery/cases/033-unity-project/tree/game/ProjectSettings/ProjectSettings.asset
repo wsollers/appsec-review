@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_ObjectHideFlags: 0
+  productName: Game
+  scriptingBackend:
+    Standalone: 1
+    Android: 1
+  scriptingDefineSymbols:
+    Standalone: FEATURE_GAME
+  apiCompatibilityLevelPerPlatform:
+    Standalone: 6
+  AndroidMinSdkVersion: 23
+  managedStrippingLevel:
+    Standalone: 1

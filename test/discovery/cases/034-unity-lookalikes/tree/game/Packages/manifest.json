@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "com.acme.tools": "file:com.acme.tools",
+    "com.unity.modules.ui": "1.0.0"
+  }
+}

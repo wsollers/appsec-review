@@ -1,0 +1,37 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "034-unity-lookalikes",
+  "matrix": "A11",
+  "polarity": "negative",
+  "mirrors": "Unity look-alikes: a static website whose folder is named Assets/ (no ProjectSettings, no Unity project), and an embedded Unity package under Packages/ whose package.json carries the unity key (a package of the project, never an npm unit)",
+  "units": [
+    {"root": "game", "build_system": "unity", "family": "dotnet", "profile": "unity",
+     "markers": ["game/Packages/manifest.json", "game/ProjectSettings/ProjectVersion.txt"],
+     "build_points": [
+       {"name": "Acme.Tools", "kind": "assembly", "evidence": "game/Packages/com.acme.tools/Runtime/Acme.Tools.asmdef:2"}
+     ],
+     "facts": {"descriptor_facts": {"root_state": "validated"}}}
+  ],
+  "not_units": [
+    {"root": "web", "reason": "a folder named Assets/ is not a Unity project without ProjectSettings/ProjectVersion.txt beside it"},
+    {"root": "game/Packages/com.acme.tools", "build_system": "node", "marker": "game/Packages/com.acme.tools/package.json", "role": "evidence_of:game|unity",
+     "reason": "a package.json with a unity key under a Unity project's Packages/ is an embedded Unity package manifest, not an npm package"}
+  ],
+  "assignment": {
+    "game/ProjectSettings/ProjectVersion.txt": "evidence_of:game|unity",
+    "game/Packages/manifest.json": "evidence_of:game|unity",
+    "game/Packages/com.acme.tools/package.json": "evidence_of:game|unity",
+    "game/Packages/com.acme.tools/Runtime/Acme.Tools.asmdef": "evidence_of:game|unity#Acme.Tools",
+    "game/Packages/com.acme.tools/Runtime/Tools.cs": "evidence_of:game|unity#Acme.Tools",
+    "game/Assets/Scripts/Boot.cs": "evidence_of:game|unity",
+    "web/index.html": "inert",
+    "web/Assets/styles.css": "inert",
+    "web/Assets/logo.svg": "inert"
+  },
+  "pending": [
+    {"check": "unit:game|unity.build_point:Acme.Tools", "ref": "T-056.2"},
+    {"check": "assignment:game/Packages/com.acme.tools/package.json", "ref": "T-056.4", "note": "the embedded package manifest is a descriptor the engine inventory reads as a package of the project"},
+    {"check": "assignment:game/Packages/com.acme.tools/Runtime/Acme.Tools.asmdef", "ref": "T-056.2"},
+    {"check": "assignment:game/Packages/com.acme.tools/Runtime/Tools.cs", "ref": "T-056.2"}
+  ]
+}
