@@ -1,0 +1,7 @@
+// !$*UTF8*$!
+// archived copy of an old project file, kept for reference
+{
+	archiveVersion = 1;
+	objects = {
+	};
+}

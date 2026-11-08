@@ -1,0 +1,46 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXFileReference section */
+		F00000000000000000000000 /* Target Support Files/Pods-App/Pods-App-dummy.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pods-App-dummy.m; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000000 /* Pods-App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000000000000000000000;
+			buildPhases = (
+				S00000000000000000000000 /* Sources */,
+			);
+			name = Pods-App;
+			productName = Pods-App;
+			productType = "com.apple.product-type.framework";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			compatibilityVersion = "Xcode 14.0";
+			targets = (
+				A00000000000000000000000 /* Pods-App */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		S00000000000000000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				F00000000000000000000000 /* Target Support Files/Pods-App/Pods-App-dummy.m in Sources */,
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+	};
+	rootObject = B000000000000000000000001 /* Project object */;
+}

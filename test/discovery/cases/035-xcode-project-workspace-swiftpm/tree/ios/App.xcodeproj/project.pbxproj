@@ -1,0 +1,64 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXFileReference section */
+		F00000000000000000000000 /* App/AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		F00000000000000000000001 /* AppTests/AppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000000 /* App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000000000000000000000;
+			buildPhases = (
+				S00000000000000000000000 /* Sources */,
+			);
+			name = App;
+			productName = App;
+			productType = "com.apple.product-type.application";
+		};
+		A00000000000000000000001 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000000000000000000001;
+			buildPhases = (
+				S00000000000000000000001 /* Sources */,
+			);
+			name = AppTests;
+			productName = AppTests;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			compatibilityVersion = "Xcode 14.0";
+			targets = (
+				A00000000000000000000000 /* App */,
+				A00000000000000000000001 /* AppTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		S00000000000000000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				F00000000000000000000000 /* App/AppDelegate.swift in Sources */,
+			);
+		};
+		S00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				F00000000000000000000001 /* AppTests/AppTests.swift in Sources */,
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+	};
+	rootObject = B000000000000000000000001 /* Project object */;
+}
