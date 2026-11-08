@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(meter CXX)
+add_library(meter SHARED meter.cpp)
+find_library(log-lib log)
+target_link_libraries(meter ${log-lib})

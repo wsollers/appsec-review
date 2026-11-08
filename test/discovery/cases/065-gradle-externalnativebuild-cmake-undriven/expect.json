@@ -1,0 +1,42 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "065-gradle-externalnativebuild-cmake-undriven",
+  "matrix": "B3",
+  "polarity": "negative",
+  "mirrors": "the 064 tree without the externalNativeBuild block: the CMake tree under the module's source set is positionally inside the Gradle build but nothing names it, so it is an independent native root and the Gradle unit drives nothing",
+  "units": [
+    {"root": ".", "build_system": "gradle", "family": "java", "profile": "android",
+     "markers": ["build.gradle", "settings.gradle"],
+     "build_points": [{"name": ":app", "kind": "module", "evidence": "settings.gradle:9"}],
+     "facts": {"drives": [],
+               "descriptor_facts": {"kind": "android-gradle-application", "plugin_id": "com.android.application"}}},
+    {"root": "app/src/main/cpp", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["app/src/main/cpp/CMakeLists.txt"],
+     "build_points": [{"name": "meter", "kind": "shared_library", "evidence": "app/src/main/cpp/CMakeLists.txt:3"}]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "README.md": "inert",
+    "settings.gradle": "evidence_of:.|gradle",
+    "build.gradle": "evidence_of:.|gradle",
+    "gradle.properties": "context:.|gradle",
+    "gradle/wrapper/gradle-wrapper.properties": "context:.|gradle",
+    "app/build.gradle": "evidence_of:.|gradle",
+    "app/src/main/AndroidManifest.xml": "context:.|gradle",
+    "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#:app",
+    "app/src/main/cpp/CMakeLists.txt": "evidence_of:app/src/main/cpp|cmake",
+    "app/src/main/cpp/meter.cpp": "evidence_of:app/src/main/cpp|cmake#meter"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:.|gradle.profile", "ref": "T-056.4"},
+    {"check": "unit:.|gradle.build_point::app", "ref": "T-056.2"},
+    {"check": "unit:.|gradle.facts", "ref": "T-056.5", "note": "no externalNativeBuild: the Gradle unit states that it drives nothing, although a CMakeLists.txt sits under its module"},
+    {"check": "unit:app/src/main/cpp|cmake.build_point:meter", "ref": "T-056.2"},
+    {"check": "assignment:README.md", "ref": "T-056.2"},
+    {"check": "assignment:app/build.gradle", "ref": "T-056.2"},
+    {"check": "assignment:app/src/main/AndroidManifest.xml", "ref": "T-056.4"},
+    {"check": "assignment:app/src/main/java/com/example/meter/MainActivity.java", "ref": "T-056.2"},
+    {"check": "assignment:app/src/main/cpp/meter.cpp", "ref": "T-056.2"}
+  ]
+}
