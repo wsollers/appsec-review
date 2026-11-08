@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(app C)
+add_subdirectory(../libs/sibling sibling-build)
+add_executable(app_main main.c)
+target_link_libraries(app_main PRIVATE sibling)
