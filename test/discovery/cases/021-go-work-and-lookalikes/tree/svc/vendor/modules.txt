@@ -1,0 +1,7 @@
+# example.test/dep v0.1.0
+## explicit; go 1.22
+example.test/dep
+# example.test/lib v0.0.0 => ../lib
+## explicit; go 1.22
+example.test/lib
+# example.test/lib => ../lib

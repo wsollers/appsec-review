@@ -1,0 +1,38 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "020-go-module-main-packages",
+  "matrix": "A6",
+  "polarity": "positive",
+  "mirrors": "one Go module at the tree root with two main packages under cmd/ and a library package under internal/; go.sum is context; build points are the module and its packages, named by directory",
+  "units": [
+    {"root": ".", "build_system": "go", "family": "go", "profile": "go",
+     "markers": ["go.mod"],
+     "build_points": [
+       {"name": "example.test/svc", "kind": "module", "evidence": "go.mod:1"},
+       {"name": "cmd/server", "kind": "main_package", "evidence": "cmd/server/main.go:1"},
+       {"name": "cmd/cli", "kind": "main_package", "evidence": "cmd/cli/main.go:1"},
+       {"name": "internal/util", "kind": "package", "evidence": "internal/util/util.go:1"}
+     ]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "go.mod": "evidence_of:.|go",
+    "go.sum": "context:.|go",
+    "cmd/server/main.go": "evidence_of:.|go#cmd/server",
+    "cmd/cli/main.go": "evidence_of:.|go#cmd/cli",
+    "internal/util/util.go": "evidence_of:.|go#internal/util",
+    "internal/util/util_test.go": "evidence_of:.|go#internal/util",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:.|go.build_point:example.test/svc", "ref": "T-056.2"},
+    {"check": "unit:.|go.build_point:cmd/server", "ref": "T-056.2", "note": "a directory whose files declare package main is a main package"},
+    {"check": "unit:.|go.build_point:cmd/cli", "ref": "T-056.2"},
+    {"check": "unit:.|go.build_point:internal/util", "ref": "T-056.2"},
+    {"check": "assignment:cmd/server/main.go", "ref": "T-056.2"},
+    {"check": "assignment:cmd/cli/main.go", "ref": "T-056.2"},
+    {"check": "assignment:internal/util/util.go", "ref": "T-056.2"},
+    {"check": "assignment:internal/util/util_test.go", "ref": "T-056.2", "note": "a _test.go file belongs to its package's build point"},
+    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+  ]
+}
