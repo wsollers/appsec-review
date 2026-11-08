@@ -1,0 +1,55 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "062-cmake-externalproject-fetchcontent",
+  "matrix": "B2",
+  "polarity": "positive",
+  "mirrors": "a CMake project that drives two in-tree CMake trees itself: ExternalProject_Add(SOURCE_DIR external/tinylib) runs the inner configure and build from the host build; FetchContent_MakeAvailable(SOURCE_DIR external/fmtlite) adds the inner tree to the host configure. Same-system nesting: one unit, the inner CMakeLists are its evidence",
+  "units": [
+    {"root": "host", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["host/CMakeLists.txt"],
+     "build_points": [
+       {"name": "tinylib", "kind": "external_project", "evidence": "host/CMakeLists.txt:5"},
+       {"name": "host_main", "kind": "executable", "evidence": "host/CMakeLists.txt:10"},
+       {"name": "tiny", "kind": "static_library", "evidence": "host/external/tinylib/CMakeLists.txt:3"},
+       {"name": "fmtlite", "kind": "static_library", "evidence": "host/external/fmtlite/CMakeLists.txt:3"}
+     ],
+     "facts": {"subdirectories": ["host/external/fmtlite"], "external_projects": ["host/external/tinylib"]}}
+  ],
+  "not_units": [
+    {"root": "host/external/tinylib", "build_system": "cmake", "marker": "host/external/tinylib/CMakeLists.txt",
+     "role": "evidence_of:host|cmake",
+     "reason": "named by the host's ExternalProject_Add SOURCE_DIR: the host build configures and builds it, so its targets are the host unit's build points"},
+    {"root": "host/external/fmtlite", "build_system": "cmake", "marker": "host/external/fmtlite/CMakeLists.txt",
+     "role": "evidence_of:host|cmake",
+     "reason": "named by the host's FetchContent_Declare SOURCE_DIR and added by FetchContent_MakeAvailable: an add_subdirectory of the host configure"}
+  ],
+  "assignment": {
+    "docs/README.md": "inert",
+    "host/CMakeLists.txt": "evidence_of:host|cmake",
+    "host/CMakePresets.json": "context:host|cmake",
+    "host/src/main.c": "evidence_of:host|cmake#host_main",
+    "host/external/tinylib/CMakeLists.txt": "evidence_of:host|cmake",
+    "host/external/tinylib/src/tiny.c": "evidence_of:host|cmake#tiny",
+    "host/external/fmtlite/CMakeLists.txt": "evidence_of:host|cmake",
+    "host/external/fmtlite/include/fmtlite.h": "evidence_of:host|cmake#fmtlite",
+    "host/external/fmtlite/src/fmtlite.c": "evidence_of:host|cmake#fmtlite"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:host|cmake.markers", "ref": "T-056.2", "note": "CMakePresets.json is listed as a marker; it is context"},
+    {"check": "unit:host|cmake.build_point:tinylib", "ref": "T-056.2"},
+    {"check": "unit:host|cmake.build_point:host_main", "ref": "T-056.2"},
+    {"check": "unit:host|cmake.build_point:tiny", "ref": "T-056.5", "note": "targets of a driven in-tree ExternalProject belong to the driving unit"},
+    {"check": "unit:host|cmake.build_point:fmtlite", "ref": "T-056.5", "note": "targets of a FetchContent subdirectory belong to the including unit"},
+    {"check": "unit:host|cmake.facts", "ref": "T-056.5", "note": "SOURCE_DIR arguments are literal in-tree references"},
+    {"check": "not_unit:host/external/tinylib|cmake", "ref": "T-056.5"},
+    {"check": "not_unit:host/external/fmtlite|cmake", "ref": "T-056.5"},
+    {"check": "assignment:host/CMakePresets.json", "ref": "T-056.2"},
+    {"check": "assignment:host/src/main.c", "ref": "T-056.2"},
+    {"check": "assignment:host/external/tinylib/CMakeLists.txt", "ref": "T-056.5"},
+    {"check": "assignment:host/external/tinylib/src/tiny.c", "ref": "T-056.5"},
+    {"check": "assignment:host/external/fmtlite/CMakeLists.txt", "ref": "T-056.5"},
+    {"check": "assignment:host/external/fmtlite/include/fmtlite.h", "ref": "T-056.5"},
+    {"check": "assignment:host/external/fmtlite/src/fmtlite.c", "ref": "T-056.5"}
+  ]
+}
