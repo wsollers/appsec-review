@@ -14,6 +14,11 @@ record for each). The pass has three parts and a job is not done until all three
 - A job that cannot do its work for a wiring reason (no runner, no check) is refused at claim time
   by an input validator, never discovered inside a unit.
 - `schema_identity` is bumped when the job's outputs change shape.
+- **No backward compatibility during the pass** (decision 2026-11-08). A reader accepts the current
+  schema only; a changed record replaces the old one, never sits beside it; no dual-read, no
+  migration layer, no fallback to a previous shape. Runs started before a change are not resumed
+  across it — a fresh review is started after the pass. Compatibility is reconsidered only once
+  the jobs are vetted.
 
 ## 2. Audit the tests
 
