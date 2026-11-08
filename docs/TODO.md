@@ -27,6 +27,7 @@ until each is rewritten into the entry format when it is next touched.
 
 | Id | Title | Area | State |
 | --- | --- | --- | --- |
+| T-057 | [First end-to-end review run and the break/fix loop](#t-057-first-end-to-end-review-run-and-the-breakfix-loop) | pipeline | in-progress |
 | T-035 | [Component layer between catalog and plan](#t-035-component-layer-between-catalog-and-plan) | topology | open |
 | T-036 | [Build-mode disposition per component at plan time](#t-036-build-mode-disposition-per-component-at-plan-time) | topology | open |
 | T-037 | [Recipe provenance: declared, canonical, inferred](#t-037-recipe-provenance-declared-canonical-inferred) | build | open |
@@ -86,11 +87,59 @@ until each is rewritten into the entry format when it is next touched.
 
 ## Active entries
 
+### T-057 — First end-to-end review run and the break/fix loop
+
+- **State:** in-progress (Phase 0 operator-run, Phase 1 agent-run, in parallel; 2026-11-08)
+- **Area:** pipeline
+- **Blocks:** T-035, T-036, T-037 (demoted to after the first scored run), T-045
+- **Why:** nothing has run end to end since the runtime's typed input contract, strict gap
+  records and the mounted-source deployment landed. The job-by-job pass (task docs
+  `docs/tasks/2026-11-08-job-pass-NN-*.md`, order and rules in
+  `docs/processes/job-pass-checklist.md`) found a run-stopping defect in a job roughly every other
+  pass (undeclared intake reads in `job_ci_configuration_analysis` and `job_artifact_indexing`,
+  `OPTIONAL_PRIOR` consumption in `job_target_analysis_plan`), and 7 of 46 jobs are done: finishing
+  the pass linearly before running would take the better part of a week and still miss what only a
+  run shows. The goal is a running system that breaks, is fixed with a focused unit test, and is
+  resumed re-running only what the fix invalidates — the loop `recovery-repair.md` designs but
+  nobody has driven on a real break.
+- **Scope:** four phases.
+  0. **Run readiness** (operator, HAL5000, `docs/operations/run-readiness.md`): WSL host on the
+     `default` Docker context, ext4 checkout, key + committed anchor
+     (`deploy/dagster/trusted-keys/`), build + smoke every enabled image, re-pin (own commit) and
+     sign, compile the CodeQL packs, stack up on `targets/appsec-multi-vuln`, gate run through
+     `job_model_connectivity` and `job_image_pin_verification`. Image enforcement stays disabled for
+     the first runs. An image that fails for a reason unrelated to the run is disabled in
+     configuration and recorded, not fixed (T-050).
+  1. **Critical-path passes** (agent, in parallel with 0): `job_target_analysis_plan` (the 12
+     `OPTIONAL_PRIOR` failures block any graph run; T-035/036/037 context), `job_source_history_analysis`
+     (its typed inputs feed the plan), T-054 (`job_artifact_indexing` fails every run under the typed
+     input contract today). Each under the checklist, one commit per job.
+  2. **First run**: `stepwise.py init/next/accept` on `appsec-multi-vuln`, job by job, until a break.
+  3. **The loop**, repeated until `stepwise.py system --tag cpp-multivuln-v1` scores: for each break
+     `failure-replay` → reproduce in a unit test under the pass checklist for that job (a break *is*
+     that job's pass, done when the run needs it, not in catalog order) → fix → `lifecycle.py
+     reload` → `plan-repair` / `admit-repair` / `resume` → confirm the plan's REUSE/RUN decisions
+     reran only what the fix invalidated. A wrong reuse decision is itself a break with its own fix
+     and test. Pass order from here is "whatever the run breaks on next".
+  Standing rule: nothing in the loop rebuilds an image (`run-readiness.md`, "What triggers a
+  rebuild"); if a step seems to need one, the step is wrong or the change is an image change and
+  gets its own commit. Out of scope: Windows build containers (T-041, T-042, T-043, T-049) — the
+  first runs are Linux-only and the Windows family follows a working Linux loop; catalog work
+  (T-050); unit-suite speed (T-048, measured in job pass 07: `storage.shared.safe_path` dominates
+  runner-driven tests) and the baseline triage (T-047) stay the differential baseline, not blockers.
+- **Done when:** (a) Phase 0's gate run accepts on HAL5000; (b) `stepwise.py system --tag
+  cpp-multivuln-v1` produces a score; (c) the edit → resumed-run turnaround of the loop is measured
+  on at least three real breaks and recorded here with the REUSE/RUN decision each produced; (d)
+  every job the run exercised has its task doc.
+- **Refs:** `docs/operations/run-readiness.md`, `docs/operations/recovery-repair.md`,
+  `docs/architecture/deployment-image-and-source-mount.md`, `docs/processes/job-pass-checklist.md`,
+  `docs/operations/acceptance-funnel.md`, `docs/operations/signing.md`.
+
 ### T-035 — Component layer between catalog and plan
 
-- **State:** open
+- **State:** open (after T-057's first scored run; design work that does not block a first run)
 - **Area:** topology
-- **Blocked by:** T-056
+- **Blocked by:** T-056, T-057
 - **Blocks:** T-036, T-037, T-040, T-045
 - **Why:** `job_target_catalog` emits one build unit per marker and one "component" per manifest,
   flat. `compile_build_topology` folds a unit into an owner only on literal CMake/Make evidence, so
@@ -457,7 +506,10 @@ until each is rewritten into the entry format when it is next touched.
   does not declare. These are runtime regressions for the no-build path, not stale fixtures.
 - **Scope:** add the missing `InputRequirement`s to each job's `datasets.py` contract (and
   `schedule_after` where ordering is implied), re-run the two files, and check the other
-  post-merge failures for the same signature when their jobs come up in the pass.
+  post-merge failures for the same signature when their jobs come up in the pass. For
+  `job_artifact_indexing` the intake read comes through `load_target_catalog`, which job pass 07 gave
+  an `intake_target_root` keyword: a job that does not use `ScanCatalog.target_root` passes `False`
+  rather than declaring an input it never reads. Part of T-057 Phase 1.
 - **Done when:** the eight tests pass without weakening the undeclared-consumption check.
 - **Refs:** T-047, `src/appsec_review/runtime/inputs.py`, `src/appsec_review/runtime/consume.py`.
 

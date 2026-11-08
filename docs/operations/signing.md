@@ -59,12 +59,17 @@ the gaps listed under [Named gaps](#named-gaps).
   `~/.config/appsec-review/signing/private/operator.pem`, created by `appsec-review signing keygen`.
   The directory is `0700` and owned by the operator, and the key is `0600`. Keys are never
   overwritten or printed. They never enter the repository, an image, a build context, `runs/` or a
-  test fixture. Tests generate ephemeral keys under `test/tmp/` at run time. On POSIX `keygen`
+  test fixture. Back one up only to a store with real secrecy (an encrypted volume, a password
+  manager); losing it costs one re-sign of the images and the module manifest under a new key, which
+  is the intended outcome, not a disaster. Tests generate ephemeral keys under `test/tmp/` at run time. On POSIX `keygen`
   checks the directory's owner and mode; signing does not re-check them. On Windows the NTFS ACLs of
   the key directory and the key are checked at `keygen` and again before every signing use (see
   [Windows hosts](#windows-hosts)).
 - **Trust anchors** are public-key PEM files named `<key_id hex>.pem` (without `sha256:`) in
-  `trusted_keys_dir`, default `/etc/appsec-review/signing/trusted-keys`. They must be root-owned and
+  `trusted_keys_dir`, default `/etc/appsec-review/signing/trusted-keys`. The repository carries
+  the operators' public anchors under `deploy/dagster/trusted-keys/` (`signing export-trust-anchor`
+  writes one, `signing install-trust-anchors` installs them); that directory is a distribution
+  point, never a trust directory, and a checkout would fail the custody checks if configured as one. They must be root-owned and
   not writable by group or others. The native release checks this with `trusted_path`. Elsewhere on
   POSIX it is an installation duty, because `TrustedKeys.load` checks names and key types but not
   ownership; on Windows `TrustedKeys.load` checks the NTFS ACLs (see [Windows hosts](#windows-hosts)).
@@ -335,12 +340,23 @@ A native release also signs the third-party closure of its `lib/` directory, whi
 
 Run these steps on the review host from the repository checkout, never during a running review.
 
-1. **Create the key and trust anchor once.** Installing the anchor into a root-owned directory needs
-   root, for example a separate `install -o root -g root -m 0644` of the printed public key.
+1. **Create the key once; publish its anchor through the repository; install it on every host.**
+   The private key is created where it will stay. Its public half goes into the committed anchor
+   directory `deploy/dagster/trusted-keys/` (public keys only; see its README), which is how a second
+   host — or this one after a reinstall — learns whom to trust. Installing into the root-owned trust
+   directory needs root.
 
    ```bash
-   appsec-review signing keygen --trusted-keys-dir /etc/appsec-review/signing/trusted-keys
+   appsec-review signing keygen
+   appsec-review signing export-trust-anchor --into deploy/dagster/trusted-keys   # commit the .pem
+   sudo appsec-review signing install-trust-anchors                                 # each review host
    ```
+
+   `install-trust-anchors` copies every `<key id hex>.pem` under the committed directory into
+   `[signing] trusted_keys_dir`, checks that each name matches its key ID and is Ed25519, never
+   replaces a differing file of the same name, and finally loads the directory exactly as the
+   verifiers will. `keygen --trusted-keys-dir DIR` still installs directly for a single host.
+   Removing a committed anchor revokes nothing by itself: delete the installed copy on each host.
 
 2. **Sign pinned images after building and pinning them.** Follow the
    [image-pin procedure](image-pin-verification.md#host-procedure-rebuild-re-pin-reload) first.
@@ -502,6 +518,10 @@ Run these from PowerShell in the Windows checkout, with Docker Desktop running:
 
 1. **Key and anchor.** Name Git's OpenSSL explicitly if it is not at the default path:
    `appsec-review signing keygen --openssl "C:\Program Files\Git\mingw64\bin\openssl.exe" --trusted-keys-dir "$env:ProgramData\appsec-review\signing\trusted-keys"`.
+   To trust a key generated elsewhere (the WSL review host, say), run
+   `appsec-review signing install-trust-anchors --openssl "C:\Program Files\Git\mingw64\bin\openssl.exe"`
+   from an elevated shell against the committed `deploy/dagster/trusted-keys/`; it applies the anchor
+   ACL to a directory it creates.
    `keygen` restricts the private-key directory, the key and a trusted-keys directory it creates
    (see Custody above). For a trusted-keys directory that already existed, restrict it from an
    elevated shell before verifying, or every verification is refused:

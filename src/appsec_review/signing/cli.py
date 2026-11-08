@@ -26,6 +26,8 @@ from .release_lib import sign_release_lib, verify_release_lib
 
 
 DEFAULT_PRIVATE_KEY = Path("~/.config/appsec-review/signing/private/operator.pem")
+# Public trust anchors committed in the repository (public keys only; the private key never enters it).
+COMMITTED_TRUST_ANCHORS = "deploy/dagster/trusted-keys"
 BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py", "release_lib.py",
                    "sitecustomize_shim.py")
 PINNED_ID_SUFFIX = "image_id"
@@ -49,6 +51,26 @@ def add_parser(commands: argparse._SubParsersAction) -> argparse.ArgumentParser:
                         help=f"new private key path (default: {DEFAULT_PRIVATE_KEY}); never overwritten")
     keygen.add_argument("--trusted-keys-dir", type=Path,
                         help="also install the public key there as <key id hex>.pem")
+
+    export_anchor = sub.add_parser(
+        "export-trust-anchor", parents=[common],
+        help="write an existing key's public trust anchor (<key id hex>.pem) into a directory, "
+             "for example the repository's committed anchor directory")
+    export_anchor.add_argument("--private-key", type=Path, default=DEFAULT_PRIVATE_KEY,
+                               help=f"the operator key (default: {DEFAULT_PRIVATE_KEY}); only its public half is written")
+    export_anchor.add_argument("--into", type=Path, required=True, metavar="DIR",
+                               help="destination directory (created if missing); an identical anchor is kept, "
+                                    "a differing file of the same name is refused")
+
+    install_anchors = sub.add_parser(
+        "install-trust-anchors", parents=[common],
+        help="copy committed <key id hex>.pem anchors into the host's trusted-keys directory")
+    install_anchors.add_argument("--source", type=Path, default=None, metavar="DIR",
+                                 help="anchor directory to install from (default: "
+                                      f"<repository root>/{COMMITTED_TRUST_ANCHORS})")
+    install_anchors.add_argument("--trusted-keys-dir", type=Path,
+                                 help="destination (default: [signing].trusted_keys_dir); on POSIX the "
+                                      "verifiers expect it root-owned, so run under sudo for the system path")
 
     sign = sub.add_parser("sign-image", parents=[common], help="sign local container image IDs")
     sign.add_argument("references", nargs="*", metavar="REFERENCE")
@@ -185,6 +207,75 @@ def _keygen(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, 
         _write_new_file(trusted, public_key_pem, 0o644)
         report["trusted_key"] = str(trusted)
     return report, True
+
+
+def _anchor_file(openssl: OpenSSL, pem: bytes) -> tuple[str, bytes]:
+    """``(key id, normalized PEM)`` of one public key; refuses anything but an Ed25519 SPKI."""
+    der = openssl.public_key_der(pem)
+    return key_id(der), _core._der_to_pem(der)
+
+
+def _place_anchor(directory: Path, identity: str, pem: bytes) -> tuple[Path, str]:
+    """Write ``<hex>.pem`` into ``directory`` (created like keygen does). Returns the path and
+    ``written`` / ``unchanged``; a differing existing file is refused rather than replaced."""
+    if not os.path.lexists(directory):
+        directory.mkdir(mode=0o755, parents=True)
+        os.chmod(directory, 0o755)
+        if _core.windows_host():
+            _core.apply_windows_acl(directory, "anchor", directory=True)
+    elif _core.is_link_or_reparse_point(os.lstat(directory)) or not directory.is_dir():
+        raise ValueError(f"trust anchor directory must be a real directory: {directory}")
+    path = directory / f"{identity.removeprefix('sha256:')}.pem"
+    if os.path.lexists(path):
+        if _core.is_link_or_reparse_point(os.lstat(path)) or not path.is_file():
+            raise ValueError(f"trust anchor path is not a regular file: {path}")
+        if _core._read_regular_file(path, _core.MAX_PUBLIC_KEY_BYTES, "trust anchor") != pem:
+            raise FileExistsError(f"a different trust anchor already has this key ID; refusing to replace it: {path}")
+        return path, "unchanged"
+    _write_new_file(path, pem, 0o644)
+    return path, "written"
+
+
+def _export_trust_anchor(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, bool]:
+    private_key = Path(os.path.abspath(args.private_key.expanduser()))
+    if not private_key.is_file():
+        raise FileNotFoundError(f"private key not found: {private_key}")
+    openssl = _openssl(args, config)
+    identity, pem = _anchor_file(openssl, openssl.public_key_pem(private_key))
+    path, state = _place_anchor(Path(os.path.abspath(args.into.expanduser())), identity, pem)
+    return {"key_id": identity, "trust_anchor": str(path), "state": state}, True
+
+
+def _install_trust_anchors(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[dict, bool]:
+    openssl = _openssl(args, config)
+    source = (Path(os.path.abspath(args.source.expanduser())) if args.source is not None
+              else Path(config().runtime.repository_root) / COMMITTED_TRUST_ANCHORS)
+    destination = Path(os.path.abspath((args.trusted_keys_dir if args.trusted_keys_dir is not None
+                                        else Path(config().signing.trusted_keys_dir)).expanduser()))
+    if not source.is_dir() or _core.is_link_or_reparse_point(os.lstat(source)):
+        raise FileNotFoundError(f"trust anchor source is not a directory: {source}")
+    with os.scandir(source) as entries:
+        names = sorted(entry.name for entry in entries if entry.name.endswith(".pem"))
+    if not names:
+        raise FileNotFoundError(f"no <key id hex>.pem anchors to install under {source}")
+    installed = []
+    for name in names:
+        path = source / name
+        match = _core._KEY_FILE.fullmatch(name)
+        if match is None:
+            raise ValueError(f"trust anchor file name is not <sha256-hex>.pem: {path}")
+        identity, pem = _anchor_file(openssl, _core._read_regular_file(path, _core.MAX_PUBLIC_KEY_BYTES, "trust anchor"))
+        if identity != "sha256:" + match.group(1):
+            raise ValueError(f"trust anchor file name does not match its key ID {identity}: {path}")
+        target, state = _place_anchor(destination, identity, pem)
+        installed.append({"key_id": identity, "source": str(path), "installed": str(target), "state": state})
+    # The verifiers read the destination through TrustedKeys.load, so prove now that they will accept it
+    # (name/key-ID agreement, Ed25519 only; NTFS custody on Windows).
+    loaded = _core.TrustedKeys.load(destination, openssl)
+    missing = [item["key_id"] for item in installed if item["key_id"] not in loaded]
+    if missing:
+        raise SignatureVerificationError(f"installed anchors are not loadable as trust anchors: {missing}")
+    return {"trusted_keys_dir": str(destination), "anchors": installed}, True
 
 
 def _inspect(reference: str) -> str:
@@ -455,6 +546,8 @@ def _export_bootstrap(args: argparse.Namespace, config: Callable[[], Any]) -> tu
 
 _HANDLERS: dict[str, Callable[[argparse.Namespace, Callable[[], Any]], tuple[dict, bool]]] = {
     "keygen": _keygen,
+    "export-trust-anchor": _export_trust_anchor,
+    "install-trust-anchors": _install_trust_anchors,
     "sign-image": _sign_image,
     "verify-image": _verify_image,
     "sign-modules": _sign_modules,
@@ -465,5 +558,5 @@ _HANDLERS: dict[str, Callable[[argparse.Namespace, Callable[[], Any]], tuple[dic
 }
 
 
-__all__ = ["BOOTSTRAP_FILES", "DEFAULT_PRIVATE_KEY", "add_parser", "builder_service_image_pins",
+__all__ = ["BOOTSTRAP_FILES", "COMMITTED_TRUST_ANCHORS", "DEFAULT_PRIVATE_KEY", "add_parser", "builder_service_image_pins",
            "configured_image_pins", "pinned_images", "run"]

@@ -266,6 +266,11 @@ The host-side steps use `APPSEC_SIGNING_PRIVATE_KEY` (default
 that runs the lifecycle, which needs this checkout's dependencies). Set them in the environment or in
 `.env`.
 
+The operators' public anchors are committed under [`trusted-keys/`](trusted-keys/README.md)
+(`appsec-review signing export-trust-anchor --into deploy/dagster/trusted-keys` after `keygen`);
+`sudo appsec-review signing install-trust-anchors` installs them into the host trust directory. The
+checkout is a distribution point for anchors, never the trust directory itself.
+
 The signing design, key custody, operator runbook and named gaps are in
 [`docs/operations/signing.md`](../../docs/operations/signing.md).
 

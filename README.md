@@ -677,7 +677,10 @@ tag resolves to on the local daemon after a host rebuild; see
 [`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)) and the
 `appsec-review signing` group: `keygen` (an Ed25519 operator key, by default
 `~/.config/appsec-review/signing/private/operator.pem`, optionally installing its public key as a
-`<key id>.pem` trust anchor), `sign-image REFERENCE... | --all-pinned [--builder-service-config FILE]`
+`<key id>.pem` trust anchor), `export-trust-anchor --into DIR` (an existing key's public anchor, for
+the committed `deploy/dagster/trusted-keys/`), `install-trust-anchors [--source DIR]` (committed anchors
+into the host trust directory, name/key-ID checked, never replacing a differing file),
+`sign-image REFERENCE... | --all-pinned [--builder-service-config FILE]`
 (signs local image IDs; `--all-pinned` signs only pinned images whose local ID equals the pin, plus
 the named bounded builder service configuration's pins), `verify-image`,
 `sign-modules`/`verify-modules` (signed `appsec_review` package manifests) and `export-bootstrap DIR`
@@ -853,6 +856,9 @@ you may set `APPSEC_UNSIGNED_MODULES=1` in `deploy/dagster/.env` to skip per-lau
 [Signed image](deploy/dagster/README.md#signed-image) and
 [Deployment image and source mount](docs/architecture/deployment-image-and-source-mount.md).
 The mounted checkout must be on WSL ext4 or native Linux, never under `/mnt/c` or `/mnt/f`.
+The one-time preparation of a host — daemon context, key and committed anchor, image build, pin and
+sign, CodeQL cache, stack, gate run — is [Run readiness](docs/operations/run-readiness.md); after it,
+no step of the fix–test–restart loop rebuilds an image.
 
 On native Windows, run the same commands in PowerShell, then sign in to the container CLI with
 `docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login`.

@@ -531,3 +531,78 @@ def test_export_bootstrap_refuses_symbolic_link_targets(tmp_path, capsys) -> Non
     code, report = _main(capsys, "export-bootstrap", str(linked))
     assert code == 1 and "symbolic link" in report["error"]
     assert not any((tmp_path / "real").iterdir())
+
+
+def test_export_trust_anchor_writes_only_the_public_key_and_is_idempotent(tmp_path, key, capsys) -> None:
+    into = tmp_path / "repo" / "deploy" / "dagster" / "trusted-keys"
+    code, report = _main(capsys, "export-trust-anchor", "--openssl", OPENSSL_BINARY,
+                         "--private-key", str(key.private), "--into", str(into))
+    assert code == 0 and report["key_id"] == key.key_id and report["state"] == "written"
+    anchor = into / f"{key.key_id.removeprefix('sha256:')}.pem"
+    assert report["trust_anchor"] == str(anchor)
+    text = anchor.read_bytes()
+    assert text.startswith(b"-----BEGIN PUBLIC KEY-----") and b"PRIVATE" not in text
+    code, report = _main(capsys, "export-trust-anchor", "--openssl", OPENSSL_BINARY,
+                         "--private-key", str(key.private), "--into", str(into))
+    assert code == 0 and report["state"] == "unchanged"
+    # A differing file under the same key ID is never replaced.
+    anchor.write_bytes(b"-----BEGIN PUBLIC KEY-----\nnot the same\n-----END PUBLIC KEY-----\n")
+    code, report = _main(capsys, "export-trust-anchor", "--openssl", OPENSSL_BINARY,
+                         "--private-key", str(key.private), "--into", str(into))
+    assert code == 1 and "refusing to replace" in report["error"]
+
+
+def test_export_trust_anchor_needs_an_existing_private_key(tmp_path, capsys) -> None:
+    code, report = _main(capsys, "export-trust-anchor", "--openssl", OPENSSL_BINARY,
+                         "--private-key", str(tmp_path / "missing.pem"), "--into", str(tmp_path / "anchors"))
+    assert code == 1 and "private key not found" in report["error"]
+    assert not (tmp_path / "anchors").exists()
+
+
+def test_install_trust_anchors_copies_committed_anchors_into_a_loadable_trust_directory(tmp_path, key, capsys) -> None:
+    source = tmp_path / "committed"
+    source.mkdir()
+    name = f"{key.key_id.removeprefix('sha256:')}.pem"
+    (source / name).write_bytes((key.trusted / name).read_bytes())
+    (source / "notes.txt").write_text("ignored: not a .pem\n", encoding="utf-8")
+    destination = tmp_path / "etc" / "trusted-keys"
+    code, report = _main(capsys, "install-trust-anchors", "--openssl", OPENSSL_BINARY,
+                         "--source", str(source), "--trusted-keys-dir", str(destination))
+    assert code == 0 and report["trusted_keys_dir"] == str(destination)
+    [item] = report["anchors"]
+    assert item["key_id"] == key.key_id and item["state"] == "written" and item["installed"] == str(destination / name)
+    if os.name != "nt":
+        assert _mode(destination) == 0o755 and _mode(destination / name) == 0o644
+    openssl = OpenSSL(OPENSSL_BINARY)
+    from appsec_review.signing.core import TrustedKeys
+    assert key.key_id in TrustedKeys.load(destination, openssl)
+    code, report = _main(capsys, "install-trust-anchors", "--openssl", OPENSSL_BINARY,
+                         "--source", str(source), "--trusted-keys-dir", str(destination))
+    assert code == 0 and report["anchors"][0]["state"] == "unchanged"
+
+
+def test_install_trust_anchors_refuses_a_misnamed_anchor_and_installs_nothing(tmp_path, key, capsys) -> None:
+    source = tmp_path / "committed"
+    source.mkdir()
+    name = f"{key.key_id.removeprefix('sha256:')}.pem"
+    (source / ("0" * 64 + ".pem")).write_bytes((key.trusted / name).read_bytes())
+    destination = tmp_path / "etc" / "trusted-keys"
+    code, report = _main(capsys, "install-trust-anchors", "--openssl", OPENSSL_BINARY,
+                         "--source", str(source), "--trusted-keys-dir", str(destination))
+    assert code == 1 and "does not match its key ID" in report["error"]
+    assert not destination.exists() or not list(destination.iterdir())
+
+
+def test_install_trust_anchors_defaults_to_the_repository_directory_and_configured_trust_dir(tmp_path, key, config, capsys) -> None:
+    committed = Path(config.runtime.repository_root) / signing_cli.COMMITTED_TRUST_ANCHORS
+    committed.mkdir(parents=True)
+    name = f"{key.key_id.removeprefix('sha256:')}.pem"
+    (committed / name).write_bytes((key.trusted / name).read_bytes())
+    # The configured trust directory already holds this anchor (the key fixture put it there).
+    code, report = _main(capsys, "install-trust-anchors")
+    assert code == 0 and report["trusted_keys_dir"] == str(key.trusted)
+    assert report["anchors"][0]["state"] == "unchanged"
+    # An empty committed directory is an error, not a silent no-op.
+    (committed / name).unlink()
+    code, report = _main(capsys, "install-trust-anchors")
+    assert code == 1 and "no <key id hex>.pem anchors" in report["error"]
