@@ -20,6 +20,7 @@ from appsec_review.jobs.job_image_pin_verification.pins import configured_pins
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.runtime import GraphRunner, active_job_ids
 from appsec_review.runtime.registry import builtin_registry
+from tests.telemetry_support import assert_job_lifecycle, job_events
 
 
 ROOT = Path(__file__).parents[1]
@@ -197,8 +198,12 @@ def test_all_pins_matching_succeeds_and_records_every_pin(tmp_path: Path) -> Non
     plan = json.loads((_unit_root(config, outcome["run_id"], "selection", "resolve_pins") /
                        "image-pin-plan.json").read_text())
     assert plan["catalog"]["path"] == "containers/catalog.toml" and len(plan["catalog"]["sha256"]) == 64
-    events = config.runtime.runs_dir / outcome["run_id"] / f"data/jobs/{JOB_ID}/attempts"
-    assert "IMAGE_PIN_VERIFICATION_COMPLETED" in "".join(path.read_text() for path in events.rglob("*.jsonl"))
+    run_root = config.runtime.runs_dir / outcome["run_id"]
+    assert_job_lifecycle(run_root, JOB_ID, terminal="SUCCEEDED")
+    [started] = job_events(run_root, JOB_ID, "IMAGE_PIN_VERIFICATION_STARTED")
+    [completed] = job_events(run_root, JOB_ID, "IMAGE_PIN_VERIFICATION_COMPLETED")
+    assert started["pin_count"] == completed["pin_count"] == len(expected)
+    assert job_events(run_root, JOB_ID, "IMAGE_PIN_VERIFICATION_FAILED") == []
 
 
 def test_the_gate_never_needs_the_builder_or_dockerfiles(tmp_path: Path) -> None:
@@ -260,6 +265,9 @@ def test_missing_image_moved_tag_and_codeql_source_mismatch_fail_naming_every_mi
     assert failure["level"] == "ERROR" and failure["job_id"] == JOB_ID
     assert len(failure["details"]["failures"]) == 3
     assert not any("WITH_GAPS" in event["event_type"] for event in events)
+    summary = assert_job_lifecycle(config.runtime.runs_dir / run_id, JOB_ID, terminal="FAILED")
+    assert summary["event_counts"]["IMAGE_PIN_VERIFICATION_FAILED"] == 1
+    assert "IMAGE_PIN_VERIFICATION_COMPLETED" not in summary["event_counts"]
 
 
 def test_a_missing_build_profile_image_fails_the_run(tmp_path: Path) -> None:
@@ -359,6 +367,9 @@ def test_the_gate_passes_on_resume_after_the_operator_re_pins_the_moved_tag(tmp_
     attempts = sorted((config.runtime.runs_dir / run_id / f"data/jobs/{JOB_ID}/attempts").iterdir())
     assert len(attempts) == 2
     assert (config.runtime.runs_dir / run_id / f"data/jobs/{JOB_ID}/latest.json").is_file()
+    summary = assert_job_lifecycle(config.runtime.runs_dir / run_id, JOB_ID, terminal="SUCCEEDED", attempts=2)
+    assert summary["event_counts"]["IMAGE_PIN_VERIFICATION_FAILED"] == 1
+    assert summary["event_counts"]["IMAGE_PIN_VERIFICATION_COMPLETED"] == 1
 
 
 # ---------------------------------------------------------------- settings

@@ -18,6 +18,7 @@ from appsec_review.jobs.job_model_connectivity import build_job
 from appsec_review.jobs.job_model_connectivity.job import JOB_ID, ModelConnectivityBlocked, TOPOLOGY
 from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA, configured_models, required_models
 from appsec_review.runtime import GraphRunner
+from tests.telemetry_support import assert_job_lifecycle, job_events
 
 ROOT = Path(__file__).resolve().parents[1]
 DISABLED_ONLY = "claude-disabled-only"
@@ -112,6 +113,10 @@ def test_gate_checks_every_configured_model_and_publishes_the_required_split(tmp
     assert handoff["verified"] == [f"claude-cli/{DISABLED_ONLY}", "claude-cli/claude-haiku-5-5"]
     assert handoff["not_required"] == [f"claude-cli/{DISABLED_ONLY}"]
     assert (run_root / "data/jobs" / JOB_ID / "latest.json").is_file()
+    assert_job_lifecycle(run_root, JOB_ID, terminal="SUCCEEDED")
+    [completed] = job_events(run_root, JOB_ID, "MODEL_CONNECTIVITY_COMPLETED")
+    assert completed == {"unit_id": "connectivity.verify_models", "provider_count": 1, "model_count": 2,
+                         "unavailable_count": 0, "unavailable_not_required_count": 0}
 
 
 def test_a_missing_model_that_only_a_disabled_setting_names_is_a_gap_not_a_block(tmp_path: Path) -> None:
@@ -139,6 +144,9 @@ def test_a_missing_model_that_only_a_disabled_setting_names_is_a_gap_not_a_block
     assert handoff["outputs"]["connectivity.verify_models"]["terminal_status"] == "COMPLETED_WITH_GAPS"
     outcomes = json.loads((run_root / handoff["outcomes"]["path"]).read_text(encoding="utf-8"))
     assert [gap["code"] for gap in outcomes["gaps"]] == ["producer_blocked"]
+    assert_job_lifecycle(run_root, JOB_ID, terminal="COMPLETED_WITH_GAPS")
+    [completed] = job_events(run_root, JOB_ID, "MODEL_CONNECTIVITY_COMPLETED")
+    assert completed["unavailable_count"] == 0 and completed["unavailable_not_required_count"] == 1
 
 
 def test_an_unavailable_required_model_fails_the_gate_with_a_named_gap_record(tmp_path: Path) -> None:
@@ -160,6 +168,10 @@ def test_an_unavailable_required_model_fails_the_gate_with_a_named_gap_record(tm
     assert "claude-cli/claude-haiku-5-5 (model not listed)" in receipt["error"]["message"]
     publish = attempt / "steps/publication/tasks/publish_handoff/status.json"
     assert not publish.exists() or json.loads(publish.read_text(encoding="utf-8"))["status"] != "SUCCEEDED"
+    summary = assert_job_lifecycle(run_root, JOB_ID, terminal="FAILED")
+    assert summary["event_counts"]["TASK_FAILED"] == 1 and summary["event_counts"].get("HANDOFF_REJECTED", 0) == 1
+    [completed] = job_events(run_root, JOB_ID, "MODEL_CONNECTIVITY_COMPLETED")
+    assert completed["unavailable_count"] == 1 and completed["model_count"] == 1
 
 
 def test_a_provider_transport_error_is_reported_per_model_from_the_report_error(tmp_path: Path) -> None:
@@ -189,6 +201,8 @@ def test_the_gate_succeeds_again_on_resume_when_the_provider_recovers(tmp_path: 
     assert len(attempts) == 2
     pointer = json.loads((run_root / "data/jobs" / JOB_ID / "latest.json").read_text(encoding="utf-8"))
     assert attempts[1].name in pointer["handoff_path"]
+    summary = assert_job_lifecycle(run_root, JOB_ID, terminal="SUCCEEDED", attempts=2)
+    assert summary["event_counts"]["JOB_FAILED"] == 1 and summary["event_counts"]["JOB_SUCCEEDED"] == 1
 
 
 # ------------------------------------------------------------------ claim-time refusals

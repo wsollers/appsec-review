@@ -15,6 +15,9 @@ to. Where this page and `AGENTS.md` differ, `AGENTS.md` wins and this page is co
 
 Per-job correctness, parity and system acceptance (SAT/SIT) are described in
 [`../processes/acceptance-and-regression-testing.md`](../processes/acceptance-and-regression-testing.md).
+What a job's unit tests must cover — including every failure path, the lifecycle telemetry and
+the run metrics, asserted through `tests/telemetry_support.py` — is the
+[job-pass checklist](../processes/job-pass-checklist.md).
 
 `tests/conftest.py` enforces the collection boundary: `pytest_ignore_collect` drops
 `tests/integration`, `tests/acceptance`, `tests/live` and `tests/test_live_*.py` unless one of

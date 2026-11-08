@@ -952,7 +952,9 @@ class JobRunner:
         status = {"schema": ATTEMPT_STATUS_SCHEMA, "job_id": job.job_id, "run_id": context.run_id,
                   "attempt_id": context.attempt_id,
                   "trigger": context.trigger, "orchestration": dict(context.orchestration),
-                  "status": completion_status, "started_at": claim["started_at"], "completed_at": completed}
+                  "status": completion_status, "started_at": claim["started_at"], "completed_at": completed,
+                  "duration_ms": max(0, int((datetime.fromisoformat(completed) -
+                      datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000))}
         root = context.run_root
         with operation_span(context.events, "publication.outcomes"):
             outcomes = build_outcomes(
