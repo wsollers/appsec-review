@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "027-maven-parent-modules",
+  "matrix": "A8",
+  "polarity": "positive",
+  "mirrors": "a Maven parent POM (packaging pom) with two modules and the Maven wrapper: the parent is the unit, the modules are its build points, the wrapper properties and mvnw are context",
+  "units": [
+    {"root": ".", "build_system": "maven", "family": "java", "profile": "java",
+     "markers": ["pom.xml"],
+     "build_points": [
+       {"name": "core", "kind": "module", "evidence": "pom.xml:9"},
+       {"name": "app", "kind": "module", "evidence": "pom.xml:10"}
+     ]}
+  ],
+  "not_units": [
+    {"root": "core", "build_system": "maven", "marker": "core/pom.xml", "role": "evidence_of:.|maven#core",
+     "reason": "listed in the parent's <modules>; built by the reactor from the parent"},
+    {"root": "app", "build_system": "maven", "marker": "app/pom.xml", "role": "evidence_of:.|maven#app",
+     "reason": "listed in the parent's <modules>"}
+  ],
+  "assignment": {
+    "pom.xml": "evidence_of:.|maven",
+    ".mvn/wrapper/maven-wrapper.properties": "context:.|maven",
+    "mvnw": "context:.|maven",
+    "core/pom.xml": "evidence_of:.|maven#core",
+    "core/src/main/java/shop/core/Price.java": "evidence_of:.|maven#core",
+    "app/pom.xml": "evidence_of:.|maven#app",
+    "app/src/main/java/shop/app/Main.java": "evidence_of:.|maven#app",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:.|maven.build_point:core", "ref": "T-056.2"},
+    {"check": "unit:.|maven.build_point:app", "ref": "T-056.2"},
+    {"check": "not_unit:core|maven", "ref": "T-056.4", "note": "a module POM under a parent that lists it is a build point of the parent"},
+    {"check": "not_unit:app|maven", "ref": "T-056.4"},
+    {"check": "assignment:mvnw", "ref": "T-056.4", "note": "the Maven wrapper script is context like gradlew"},
+    {"check": "assignment:core/pom.xml", "ref": "T-056.4"},
+    {"check": "assignment:core/src/main/java/shop/core/Price.java", "ref": "T-056.2"},
+    {"check": "assignment:app/pom.xml", "ref": "T-056.4"},
+    {"check": "assignment:app/src/main/java/shop/app/Main.java", "ref": "T-056.2"},
+    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+  ]
+}

@@ -1,0 +1,3 @@
+# shop
+
+./gradlew assemble

@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "025-gradle-root-build-file",
+  "matrix": "A8",
+  "polarity": "positive",
+  "mirrors": "a Gradle multi-project build whose root has both settings.gradle and build.gradle: one unit, the included projects are its build points, the wrapper and gradle.properties are context",
+  "units": [
+    {"root": ".", "build_system": "gradle", "family": "java", "profile": "java",
+     "markers": ["build.gradle", "settings.gradle"],
+     "build_points": [
+       {"name": "core", "kind": "project", "evidence": "settings.gradle:2"},
+       {"name": "app", "kind": "project", "evidence": "settings.gradle:3"}
+     ]}
+  ],
+  "not_units": [
+    {"root": "core", "build_system": "gradle", "marker": "core/build.gradle", "role": "evidence_of:.|gradle#core",
+     "reason": "included by settings.gradle; a project of the root build"},
+    {"root": "app", "build_system": "gradle", "marker": "app/build.gradle", "role": "evidence_of:.|gradle#app",
+     "reason": "included by settings.gradle"},
+    {"root": "gradle/wrapper", "reason": "the wrapper properties pin a distribution; they are context, never a build"}
+  ],
+  "assignment": {
+    "settings.gradle": "evidence_of:.|gradle",
+    "build.gradle": "evidence_of:.|gradle",
+    "gradle.properties": "context:.|gradle",
+    "gradlew": "context:.|gradle",
+    "gradle/wrapper/gradle-wrapper.properties": "context:.|gradle",
+    "core/build.gradle": "evidence_of:.|gradle#core",
+    "core/src/main/java/shop/core/Price.java": "evidence_of:.|gradle#core",
+    "app/build.gradle": "evidence_of:.|gradle#app",
+    "app/src/main/java/shop/app/Main.java": "evidence_of:.|gradle#app",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:.|gradle.build_point:core", "ref": "T-056.2"},
+    {"check": "unit:.|gradle.build_point:app", "ref": "T-056.2"},
+    {"check": "assignment:core/build.gradle", "ref": "T-056.2", "note": "a project's build file is the descriptor of that build point, not context of the root"},
+    {"check": "assignment:core/src/main/java/shop/core/Price.java", "ref": "T-056.2", "note": "src/main/java under a project binds to that project"},
+    {"check": "assignment:app/build.gradle", "ref": "T-056.2"},
+    {"check": "assignment:app/src/main/java/shop/app/Main.java", "ref": "T-056.2"},
+    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+  ]
+}

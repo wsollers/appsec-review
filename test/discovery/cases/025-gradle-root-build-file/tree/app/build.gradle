@@ -1,0 +1,3 @@
+plugins { id 'application' }
+dependencies { implementation project(':core') }
+application { mainClass = 'shop.app.Main' }

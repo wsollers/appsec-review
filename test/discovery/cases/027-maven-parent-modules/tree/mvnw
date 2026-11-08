@@ -1,0 +1,3 @@
+#!/bin/sh
+# Maven wrapper stand-in: downloads the pinned distribution and runs mvn.
+exec mvn "$@"
