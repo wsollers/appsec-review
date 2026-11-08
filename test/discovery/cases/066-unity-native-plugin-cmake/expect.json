@@ -1,0 +1,37 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "066-unity-native-plugin-cmake",
+  "matrix": "B4",
+  "polarity": "positive",
+  "mirrors": "a Unity project with a native plugin built from a CMake tree under Assets/Plugins/<native>: the PluginImporter .meta for the plugin's product and the DllImport in a script are the Unity side's literal evidence; the CMake tree is a unit of its own hosted by the project, and the .meta is the project's import setting, not the CMake unit's context",
+  "units": [
+    {"root": ".", "build_system": "unity", "family": "dotnet", "profile": "unity",
+     "markers": ["Packages/manifest.json", "ProjectSettings/ProjectVersion.txt"],
+     "facts": {"native_plugins": ["Assets/Plugins/NativePlugin"]}},
+    {"root": "Assets/Plugins/NativePlugin", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["Assets/Plugins/NativePlugin/CMakeLists.txt"],
+     "build_points": [{"name": "nativeplugin", "kind": "shared_library", "evidence": "Assets/Plugins/NativePlugin/CMakeLists.txt:3"}],
+     "facts": {"hosted_by": {"unit": ".|unity", "evidence": "Assets/Plugins/NativePlugin/x86_64/libnativeplugin.so.meta:3"}}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "README.md": "inert",
+    "ProjectSettings/ProjectVersion.txt": "evidence_of:.|unity",
+    "Packages/manifest.json": "evidence_of:.|unity",
+    "Assets/Scripts/Bridge.cs": "evidence_of:.|unity",
+    "Assets/Plugins/NativePlugin/x86_64/libnativeplugin.so.meta": "context:.|unity",
+    "Assets/Plugins/NativePlugin/CMakeLists.txt": "evidence_of:Assets/Plugins/NativePlugin|cmake",
+    "Assets/Plugins/NativePlugin/include/plugin.h": "evidence_of:Assets/Plugins/NativePlugin|cmake#nativeplugin",
+    "Assets/Plugins/NativePlugin/src/plugin.c": "evidence_of:Assets/Plugins/NativePlugin|cmake#nativeplugin"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:.|unity.facts", "ref": "T-056.5", "note": "the PluginImporter .meta under Assets/Plugins names the plugin the project imports"},
+    {"check": "unit:Assets/Plugins/NativePlugin|cmake.build_point:nativeplugin", "ref": "T-056.2"},
+    {"check": "unit:Assets/Plugins/NativePlugin|cmake.facts", "ref": "T-056.5", "note": "hosted by the Unity project: the product lands in the project's plugin folder; Unity does not run CMake"},
+    {"check": "assignment:README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"},
+    {"check": "assignment:Assets/Plugins/NativePlugin/x86_64/libnativeplugin.so.meta", "ref": "T-056.5", "note": "a Unity import setting is the Unity unit's context even when it sits under a nested native root"},
+    {"check": "assignment:Assets/Plugins/NativePlugin/include/plugin.h", "ref": "T-056.2"},
+    {"check": "assignment:Assets/Plugins/NativePlugin/src/plugin.c", "ref": "T-056.2"}
+  ]
+}

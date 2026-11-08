@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(nativeplugin C)
+add_library(nativeplugin SHARED src/plugin.c)
+target_include_directories(nativeplugin PRIVATE include)
+install(TARGETS nativeplugin LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/x86_64)
