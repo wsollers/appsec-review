@@ -1,0 +1,339 @@
+{
+  "schema": "appsec-review/topology-fixture-expectations/1",
+  "fixture": {
+    "root": "test/topology/monorepo",
+    "manifest": "MANIFEST.json",
+    "live_target": "targets/topology-monorepo"
+  },
+  "reason_codes": {
+    "ownership-vendored": "A Make or CMake tree nested under a parent driver that builds it (a vendored library and its test tree) folds into its owner only on literal add_subdirectory or $(MAKE) -C evidence. A nested Makefile whose default goal compiles becomes an independent root and is dispatched standalone, where its ../ sources are absent.",
+    "ownership-nested-conditional": "An add_subdirectory guarded by an option() defaulting OFF leaves the child unresolved. The child has no project() and exactly one possible owner, so the contract records it as contained with the condition; it is never scheduled by default and never independent.",
+    "ownership-workspace": "Cargo, Go and npm workspace members are independent roots. The workspace root is not recognized as their owner even where the descriptor package already records membership (npm workspace inventory).",
+    "ownership-gradle-settings": "settings.gradle is build context, not a marker. A Gradle project whose root directory has no build.gradle yields one independent root per included module and no unit at the settings root, so a multi-module Android tree becomes two roots with two image profiles (android, java).",
+    "ownership-sibling-source": "The direct-native fallback invents a unit for C sources under a conventional src/ directory that a sibling Makefile compiles. The contract makes those sources part of the consuming unit (or leaves them unowned), never an independent compile root.",
+    "workspace-materialization": "A unit's build workspace is its own root plus named dependency_files. A driver that references ../ paths needs the common ancestor of every referenced path materialized, and validate_build_recipe cannot accept dependency paths outside the unit's descriptor package, so the requirement cannot even be expressed.",
+    "deterministic-recipe": "Recipes are entirely model-inferred. Canonical build systems (CMake with project(), Make default goal, a Cargo workspace, go.work, an npm build script, composer) have no deterministic recipe path, so accepted plans carry null recipes and recipe_missing refinements.",
+    "build-mode-disposition": "The plan records no per-component build mode. Components that cannot or must not be built (Unity with unity.enabled=false, an Xcode project without xcodebuild, Gradle without an offline plugin cache or SDK image, a PHP tree without composer) surface as per-unit BLOCKED gaps mid-build instead of a plan-time disposition.",
+    "discovery-marker": "An Xcode project (App.xcodeproj/project.pbxproj) is not a build marker, so an iOS client is invisible to discovery and can receive no unsupported_platform disposition at all.",
+    "relation-workspace-member": "Path dependencies between workspace members (Cargo path =, Go use/replace, an npm workspace dependency) are not recorded as relations in the graph, so member build order inside the workspace is unknown to the plan.",
+    "relation-gradle-module": "Gradle project(':lib') references use colon module notation; the path resolver rejects a colon, so the relation stays unresolved instead of binding the sibling module declared by settings.gradle."
+  },
+  "shapes": [
+    {
+      "id": "A",
+      "name": "parent-cmake-vendored",
+      "paths": ["server"],
+      "summary": "A CMake application that vendors a library with its own CMakeLists.txt, a legacy standalone Makefile and a test/ Makefile whose sources are ../src/*.c. The parent is the only build driver.",
+      "components": [
+        {
+          "root": "server",
+          "family": "native",
+          "build_system": "cmake",
+          "build_mode": "compiled",
+          "required_image_profile": "native",
+          "materialization_root": "server",
+          "recipe": {
+            "cwd": ".",
+            "configure": [["cmake", "-S", ".", "-B", "build"]],
+            "build": [["cmake", "--build", "build"]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe"}
+        }
+      ],
+      "units": [
+        {"root": "server", "build_system": "cmake", "disposition": "independent", "owner_root": "server", "dispatch_standalone": true},
+        {"root": "server/third_party/tinylib", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false},
+        {"root": "server/third_party/tinylib/test", "build_system": "make", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-vendored", "standalone": "ownership-vendored"}}
+      ],
+      "absorbed_markers": [
+        {"path": "server/third_party/tinylib/Makefile", "reason": "a legacy standalone Makefile at a CMake root; discovery keeps the CMake unit for that root"}
+      ],
+      "relationships": []
+    },
+    {
+      "id": "B",
+      "name": "sibling-include",
+      "paths": ["tools/packer", "common"],
+      "summary": "A Makefile under tools/packer that compiles main.c together with ../../common/src/util.c and includes ../../common/include/util.h. A workspace holding only tools/packer cannot build it; one holding the repository root can.",
+      "components": [
+        {
+          "root": "tools/packer",
+          "family": "native",
+          "build_system": "make",
+          "build_mode": "compiled",
+          "required_image_profile": "native",
+          "materialization_root": ".",
+          "recipe": {
+            "cwd": "tools/packer",
+            "configure": [],
+            "build": [["make"]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe", "materialization_root": "workspace-materialization"}
+        }
+      ],
+      "units": [
+        {"root": "tools/packer", "build_system": "make", "disposition": "independent", "owner_root": "tools/packer", "dispatch_standalone": true},
+        {"root": "common", "build_system": "direct-native", "disposition": "contained", "owner_root": "tools/packer", "dispatch_standalone": false, "may_be_absent": true,
+         "gaps": {"ownership": "ownership-sibling-source", "standalone": "ownership-sibling-source"}}
+      ],
+      "relationships": []
+    },
+    {
+      "id": "C-cargo",
+      "name": "cargo-workspace",
+      "paths": ["rust"],
+      "summary": "A Cargo workspace with two crates; cli depends on core by path. The workspace root is the only build root and the recipe runs there.",
+      "components": [
+        {
+          "root": "rust",
+          "family": "rust",
+          "build_system": "cargo",
+          "build_mode": "compiled",
+          "required_image_profile": "rust",
+          "materialization_root": "rust",
+          "recipe": {
+            "cwd": ".",
+            "configure": [],
+            "build": [["cargo", "build", "--workspace", "--offline"]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe"}
+        }
+      ],
+      "units": [
+        {"root": "rust", "build_system": "cargo", "disposition": "independent", "owner_root": "rust", "dispatch_standalone": true},
+        {"root": "rust/core", "build_system": "cargo", "disposition": "contained", "owner_root": "rust", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}},
+        {"root": "rust/cli", "build_system": "cargo", "disposition": "contained", "owner_root": "rust", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}}
+      ],
+      "relationships": [
+        {"consumer_root": "rust/cli", "producer_root": "rust/core", "kind": "requires_product", "scope": "intra-component", "interface": "topo-core",
+         "gaps": {"relationship": "relation-workspace-member"}}
+      ]
+    },
+    {
+      "id": "C-go",
+      "name": "go-workspace",
+      "paths": ["go"],
+      "summary": "A go.work workspace with two modules; svc imports shared through the workspace (and a replace directive for standalone builds). The workspace root is the only build root.",
+      "components": [
+        {
+          "root": "go",
+          "family": "go",
+          "build_system": "go",
+          "build_mode": "compiled",
+          "required_image_profile": "go",
+          "materialization_root": "go",
+          "recipe": {
+            "cwd": ".",
+            "configure": [],
+            "build": [["go", "build", "./shared/...", "./svc/..."]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe"}
+        }
+      ],
+      "units": [
+        {"root": "go", "build_system": "go", "disposition": "independent", "owner_root": "go", "dispatch_standalone": true},
+        {"root": "go/shared", "build_system": "go", "disposition": "contained", "owner_root": "go", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}},
+        {"root": "go/svc", "build_system": "go", "disposition": "contained", "owner_root": "go", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}}
+      ],
+      "relationships": [
+        {"consumer_root": "go/svc", "producer_root": "go/shared", "kind": "requires_product", "scope": "intra-component", "interface": "example.com/topology/shared",
+         "gaps": {"relationship": "relation-workspace-member"}}
+      ]
+    },
+    {
+      "id": "C-npm",
+      "name": "npm-workspace",
+      "paths": ["web"],
+      "summary": "An npm workspace with two packages and no external dependencies; the root build script runs node build.js. The workspace root is the only build root.",
+      "components": [
+        {
+          "root": "web",
+          "family": "node",
+          "build_system": "node",
+          "build_mode": "package-only",
+          "required_image_profile": "node",
+          "materialization_root": "web",
+          "recipe": {
+            "cwd": ".",
+            "configure": [],
+            "build": [["npm", "run", "build"]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe"}
+        }
+      ],
+      "units": [
+        {"root": "web", "build_system": "node", "disposition": "independent", "owner_root": "web", "dispatch_standalone": true},
+        {"root": "web/packages/api", "build_system": "node", "disposition": "contained", "owner_root": "web", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}},
+        {"root": "web/packages/ui", "build_system": "node", "disposition": "contained", "owner_root": "web", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}}
+      ],
+      "relationships": [
+        {"consumer_root": "web/packages/api", "producer_root": "web/packages/ui", "kind": "requires_product", "scope": "intra-component", "interface": "@topology/ui",
+         "gaps": {"relationship": "relation-workspace-member"}}
+      ]
+    },
+    {
+      "id": "D",
+      "name": "unity-client",
+      "paths": ["client-unity"],
+      "summary": "A Unity project (ProjectSettings/ProjectVersion.txt, Packages/manifest.json, one script). Discovered as an engine project; not built while unity.enabled is false; source analysis still applies.",
+      "components": [
+        {
+          "root": "client-unity",
+          "family": "dotnet",
+          "build_system": "unity",
+          "build_mode": "skipped_policy",
+          "build_mode_reason": "[jobs.job_project_build.settings.unity] enabled = false",
+          "required_image_profile": "unity",
+          "materialization_root": "client-unity",
+          "recipe": null,
+          "dispatchable": false,
+          "gaps": {"build_mode": "build-mode-disposition"}
+        }
+      ],
+      "units": [
+        {"root": "client-unity", "build_system": "unity", "disposition": "independent", "owner_root": "client-unity", "dispatch_standalone": true}
+      ],
+      "relationships": []
+    },
+    {
+      "id": "E",
+      "name": "ios-xcode",
+      "paths": ["client-ios"],
+      "summary": "An Xcode project with one Swift source. No Linux image can build it; it is a source-only, unsupported-platform component and must never be dispatched.",
+      "components": [
+        {
+          "root": "client-ios",
+          "family": "swift",
+          "build_system": "xcodebuild",
+          "build_mode": "unsupported_platform",
+          "build_mode_reason": "xcodebuild and the iOS SDK are not available in any pinned Linux build image",
+          "required_image_profile": null,
+          "materialization_root": "client-ios",
+          "recipe": null,
+          "dispatchable": false,
+          "gaps": {"discovered": "discovery-marker", "build_mode": "build-mode-disposition"}
+        }
+      ],
+      "units": [
+        {"root": "client-ios", "build_system": "xcodebuild", "disposition": "independent", "owner_root": "client-ios", "dispatch_standalone": true,
+         "gaps": {"discovered": "discovery-marker"}}
+      ],
+      "relationships": []
+    },
+    {
+      "id": "F",
+      "name": "android-gradle",
+      "paths": ["client-android"],
+      "summary": "A multi-module Gradle project: settings.gradle includes :app (com.android.application) and :lib (com.android.library); no root build.gradle and no wrapper jar. One component rooted at the settings file.",
+      "components": [
+        {
+          "root": "client-android",
+          "family": "java",
+          "build_system": "gradle",
+          "build_mode": "skipped_policy",
+          "build_mode_reason": "no Gradle wrapper, no offline plugin cache and no SDK image declared for the Android Gradle plugin; a networked Gradle build is not a permitted recipe",
+          "required_image_profile": "android",
+          "materialization_root": "client-android",
+          "recipe": null,
+          "dispatchable": false,
+          "gaps": {"discovered": "ownership-gradle-settings", "build_mode": "build-mode-disposition"}
+        }
+      ],
+      "units": [
+        {"root": "client-android", "build_system": "gradle", "disposition": "independent", "owner_root": "client-android", "dispatch_standalone": true,
+         "gaps": {"discovered": "ownership-gradle-settings"}},
+        {"root": "client-android/app", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-gradle-settings", "standalone": "ownership-gradle-settings"}},
+        {"root": "client-android/lib", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false,
+         "gaps": {"ownership": "ownership-gradle-settings", "standalone": "ownership-gradle-settings"}}
+      ],
+      "relationships": [
+        {"consumer_root": "client-android/app", "producer_root": "client-android/lib", "kind": "requires_product", "scope": "intra-component", "interface": ":lib",
+         "gaps": {"relationship": "relation-gradle-module"}}
+      ]
+    },
+    {
+      "id": "G",
+      "name": "php-site",
+      "paths": ["website"],
+      "summary": "A PHP tree with two parts: public/ has no composer.json and is a source-only scope with no build unit; lib/ has composer.json and is a package-only unit.",
+      "components": [
+        {
+          "root": "website/public",
+          "family": "php",
+          "build_system": "source-only",
+          "build_mode": "source-only",
+          "build_mode_reason": "no composer.json or other build descriptor; interpreted sources are analyzed without a build",
+          "required_image_profile": null,
+          "materialization_root": "website/public",
+          "recipe": null,
+          "dispatchable": false
+        },
+        {
+          "root": "website/lib",
+          "family": "php",
+          "build_system": "composer",
+          "build_mode": "package-only",
+          "required_image_profile": "php",
+          "materialization_root": "website/lib",
+          "recipe": {
+            "cwd": ".",
+            "configure": [],
+            "build": [["composer", "dump-autoload", "--no-interaction"]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe"}
+        }
+      ],
+      "units": [
+        {"root": "website/lib", "build_system": "composer", "disposition": "independent", "owner_root": "website/lib", "dispatch_standalone": true}
+      ],
+      "relationships": []
+    },
+    {
+      "id": "H",
+      "name": "nested-conditional-root",
+      "paths": ["server/examples/hello"],
+      "summary": "A CMakeLists.txt without project() that the parent includes only under option(SERVER_BUILD_EXAMPLES) defaulting OFF. It has exactly one possible owner and is never an independent root; contained (conditional) rather than unresolved, because unresolved invites standalone recipe inference for a tree that cannot build alone.",
+      "components": [],
+      "units": [
+        {"root": "server/examples/hello", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false,
+         "condition": "SERVER_BUILD_EXAMPLES",
+         "gaps": {"ownership": "ownership-nested-conditional"}}
+      ],
+      "relationships": []
+    },
+    {
+      "id": "I",
+      "name": "second-native-root",
+      "paths": ["tools/sign"],
+      "summary": "A self-contained CMake project nothing else references: the control proving the fixture is not one component.",
+      "components": [
+        {
+          "root": "tools/sign",
+          "family": "native",
+          "build_system": "cmake",
+          "build_mode": "compiled",
+          "required_image_profile": "native",
+          "materialization_root": "tools/sign",
+          "recipe": {
+            "cwd": ".",
+            "configure": [["cmake", "-S", ".", "-B", "build"]],
+            "build": [["cmake", "--build", "build"]]
+          },
+          "gaps": {"build_mode": "build-mode-disposition", "recipe": "deterministic-recipe"}
+        }
+      ],
+      "units": [
+        {"root": "tools/sign", "build_system": "cmake", "disposition": "independent", "owner_root": "tools/sign", "dispatch_standalone": true}
+      ],
+      "relationships": []
+    }
+  ]
+}

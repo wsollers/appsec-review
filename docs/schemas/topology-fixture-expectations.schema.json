@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.invalid/schemas/topology-fixture-expectations.schema.json",
+  "title": "appsec-review/topology-fixture-expectations/1",
+  "description": "The target contract of the build-discovery -> topology -> plan layer over test/topology/monorepo. Each shape lists the components, build units, relationships and dispositions the plan must produce. A `gaps` object names, per checked field, the reason code under which the current runtime is not expected to meet that field yet; tests/test_topology_fixture.py turns those into strict expected failures.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "fixture", "reason_codes", "shapes"],
+  "properties": {
+    "schema": {"const": "appsec-review/topology-fixture-expectations/1"},
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "manifest", "live_target"],
+      "properties": {
+        "root": {"type": "string", "pattern": "^test/topology/[A-Za-z0-9._-]+$"},
+        "manifest": {"const": "MANIFEST.json"},
+        "live_target": {"type": "string", "pattern": "^targets/[A-Za-z0-9._-]+$",
+                        "description": "Where `prepare --into` puts the copy for a live review."}
+      }
+    },
+    "reason_codes": {
+      "type": "object",
+      "description": "Every reason code a gap may name, each with the one-paragraph description of the missing behaviour.",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+      "additionalProperties": {"type": "string", "minLength": 20}
+    },
+    "shapes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/shape"}
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(\\.|[A-Za-z0-9._@-]+(/[A-Za-z0-9._@-]+)*)$",
+      "description": "A normalized POSIX path relative to the fixture root; `.` is the root."
+    },
+    "reasonCode": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+    "gaps": {
+      "type": "object",
+      "description": "Checked field -> reason code for fields the current runtime does not satisfy. A `discovered` gap also covers every dependent field whose expected value is not null.",
+      "propertyNames": {"enum": ["discovered", "ownership", "standalone", "build_mode", "recipe", "materialization_root", "required_image_profile", "dispatch", "relationship"]},
+      "additionalProperties": {"$ref": "#/$defs/reasonCode"}
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "recipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cwd", "configure", "build"],
+      "properties": {
+        "cwd": {"$ref": "#/$defs/relativePath", "description": "Relative to the component's materialization_root."},
+        "configure": {"type": "array", "items": {"$ref": "#/$defs/argv"}},
+        "build": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/argv"}}
+      }
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "paths", "summary", "components", "units", "relationships"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][A-Za-z0-9-]*$"},
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "paths": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/relativePath"}},
+        "summary": {"type": "string", "minLength": 20},
+        "components": {"type": "array", "items": {"$ref": "#/$defs/component"}},
+        "units": {"type": "array", "items": {"$ref": "#/$defs/unit"}},
+        "relationships": {"type": "array", "items": {"$ref": "#/$defs/relationship"}},
+        "absorbed_markers": {
+          "type": "array",
+          "description": "Marker files discovery deliberately folds into a unit at the same root instead of emitting a unit for.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "reason"],
+            "properties": {"path": {"$ref": "#/$defs/relativePath"}, "reason": {"type": "string", "minLength": 10}}
+          }
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "description": "One build component: the root whose recipe (if any) builds everything the component owns.",
+      "additionalProperties": false,
+      "required": ["root", "family", "build_system", "build_mode", "materialization_root", "recipe"],
+      "properties": {
+        "root": {"$ref": "#/$defs/relativePath"},
+        "family": {"type": "string", "minLength": 1},
+        "build_system": {"type": "string", "minLength": 1},
+        "build_mode": {"enum": ["compiled", "package-only", "source-only", "skipped_policy", "unsupported_platform"]},
+        "build_mode_reason": {"type": "string", "minLength": 10,
+                              "description": "Why a non-compiled mode applies (the policy or capability that decides it)."},
+        "required_image_profile": {"type": ["string", "null"],
+                                   "description": "The image profile the component is dispatched to, or null when it must never be dispatched to a Linux image."},
+        "materialization_root": {"$ref": "#/$defs/relativePath",
+                                 "description": "The minimum directory that must be present in the build workspace for the recipe to succeed."},
+        "recipe": {"oneOf": [{"$ref": "#/$defs/recipe"}, {"type": "null"}]},
+        "dispatchable": {"type": "boolean", "default": true,
+                         "description": "false: no unit under the root may carry a recipe; the component is handled at plan time."},
+        "gaps": {"$ref": "#/$defs/gaps"}
+      },
+      "allOf": [
+        {"if": {"properties": {"build_mode": {"const": "compiled"}}},
+         "then": {"properties": {"recipe": {"$ref": "#/$defs/recipe"}}}},
+        {"if": {"properties": {"build_mode": {"enum": ["skipped_policy", "unsupported_platform", "source-only"]}}},
+         "then": {"required": ["build_mode_reason"], "properties": {"recipe": {"type": "null"}}}}
+      ]
+    },
+    "unit": {
+      "type": "object",
+      "description": "One build unit (marker root) and who owns it in the executable graph.",
+      "additionalProperties": false,
+      "required": ["root", "build_system", "disposition", "owner_root", "dispatch_standalone"],
+      "properties": {
+        "root": {"$ref": "#/$defs/relativePath"},
+        "build_system": {"type": "string", "minLength": 1},
+        "disposition": {"enum": ["independent", "contained", "unsupported", "unresolved"]},
+        "owner_root": {"oneOf": [{"$ref": "#/$defs/relativePath"}, {"type": "null"}]},
+        "dispatch_standalone": {"type": "boolean",
+                                "description": "Whether this unit may ever be built on its own (true only for independent roots)."},
+        "may_be_absent": {"type": "boolean", "default": false,
+                          "description": "true: the contract is satisfied when discovery emits no unit here at all; if one exists it must have the stated ownership."},
+        "condition": {"type": "string", "minLength": 3,
+                      "description": "The declaration condition under which the owner includes this unit, when ownership is conditional."},
+        "gaps": {"$ref": "#/$defs/gaps"}
+      },
+      "allOf": [
+        {"if": {"properties": {"disposition": {"const": "independent"}}},
+         "then": {"properties": {"dispatch_standalone": {"const": true}}},
+         "else": {"properties": {"dispatch_standalone": {"const": false}}}},
+        {"if": {"properties": {"disposition": {"enum": ["unsupported", "unresolved"]}}},
+         "then": {"properties": {"owner_root": {"type": "null"}}}}
+      ]
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consumer_root", "producer_root", "kind", "scope", "interface"],
+      "properties": {
+        "consumer_root": {"$ref": "#/$defs/relativePath"},
+        "producer_root": {"$ref": "#/$defs/relativePath"},
+        "kind": {"enum": ["requires_product", "order_only"]},
+        "scope": {"enum": ["cross-component", "intra-component"],
+                  "description": "cross-component relationships are scheduling edges between independent owners; intra-component ones are recorded relations that never become edges."},
+        "interface": {"type": "string", "minLength": 1},
+        "gaps": {"$ref": "#/$defs/gaps"}
+      }
+    }
+  }
+}

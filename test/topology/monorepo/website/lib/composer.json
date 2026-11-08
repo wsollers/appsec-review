@@ -1,0 +1,10 @@
+{
+  "name": "topology/lib",
+  "description": "Helper library for the website.",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "Topology\\Lib\\": "src/"
+    }
+  }
+}

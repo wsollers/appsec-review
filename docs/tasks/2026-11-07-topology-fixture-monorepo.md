@@ -1,0 +1,114 @@
+# TASK - BUILD-TOPOLOGY FIXTURE MONOREPO AND ITS TARGET CONTRACT
+
+Real monorepo targets (a C++ game server, a Unity client, iOS/Android clients, a PHP website) fail in
+the intake-through-build front end for four conceptual reasons, and no committed test target exercises
+any of them: ownership of vendored trees, workspace materialization of sibling paths, the absence of a
+deterministic recipe path for canonical build systems, and the absence of a plan-time build-mode
+disposition for components that policy or platform forbids building. Testing a fix against the real
+target costs an eight-hour review. This task adds a committed fixture whose shapes reproduce each
+failure, a machine-readable target contract, and a harness that turns every unmet expectation into a
+strict expected failure. It changes no runtime behaviour.
+
+## What was added
+
+| Path | Role |
+| --- | --- |
+| `test/topology/monorepo/` | 46 files, about 22 KB in all (half of it README.md and MANIFEST.json), no binaries, no network dependencies. One directory per shape (table below). `README.md` describes the shapes; `MANIFEST.json` pins every file's SHA-256. |
+| `test/topology/monorepo.expectations.json` | Schema `appsec-review/topology-fixture-expectations/1`: per shape the expected components (root, family, build system, build mode, image profile, minimum materialization root, deterministic recipe), the ownership of every build unit, intra/cross-component relationships, and a `gaps` map naming the reason code under which the current runtime does not meet a field. |
+| `docs/schemas/topology-fixture-expectations.schema.json` | JSON Schema (draft 2020-12) the expectations validate against. |
+| `src/appsec_review/acceptance/topology.py` | `prepare`, `evaluate`, `score`, `manifest`; shared in-process catalog -> plan path and the comparison the test and the CLI both use. |
+| `tests/test_topology_fixture.py` | The fast harness (about 150 cases, a few seconds, no Docker, no model). |
+
+| Shape | Directory | Reproduces |
+| --- | --- | --- |
+| A | `server/` + `third_party/tinylib/{CMakeLists.txt,Makefile,test/Makefile}` | a vendored library's test Makefile referencing `../src/*.c` becomes an independent root |
+| B | `tools/packer/` with `../../common/...` | a workspace materialized from the unit root alone cannot build |
+| C | `rust/` (Cargo workspace), `go/` (go.work), `web/` (npm workspace) | workspace members are independent roots |
+| D | `client-unity/` | engine project; build is a policy decision (`unity.enabled = false`) |
+| E | `client-ios/App.xcodeproj` | unsupported platform; never dispatched to a Linux image |
+| F | `client-android/` (`settings.gradle`, `:app`, `:lib`, no root `build.gradle`) | one project, never two roots |
+| G | `website/public` (no composer) and `website/lib` (composer) | source-only scope beside a package-only unit |
+| H | `server/examples/hello/` under `option(... OFF)` | conditional nested root: contained, never independent |
+| I | `tools/sign/` | the control: a genuine second native root |
+
+## Running it
+
+Fast harness (unit tier, no Docker, no model):
+
+```text
+PYTHONPATH=src python -m pytest tests/test_topology_fixture.py tests/test_blind_target_isolation.py -q
+```
+
+The same comparison from the command line, over the committed tree or a prepared copy (exit 0 when every
+expectation is met or is a declared gap; exit 1 on an undeclared failure, a declared gap that is now met,
+or a unit the expectations do not describe):
+
+```text
+PYTHONPATH=src python -m appsec_review.acceptance.topology evaluate [--target DIR] [--json]
+PYTHONPATH=src python -m appsec_review.acceptance.topology manifest [--write]
+```
+
+Live review against the fixture (user-owned; `targets/` is gitignored so the copy never enters Git):
+
+```text
+PYTHONPATH=src python -m appsec_review.acceptance.topology prepare --into targets/topology-monorepo
+appsec-review start --target targets/topology-monorepo
+PYTHONPATH=src python -m appsec_review.acceptance.topology score --run <run-id-or-dir> [--expectations PATH]
+```
+
+`score` reads the run's accepted `job_target_analysis_plan` handoff through the normal verified reader
+and prints the same per-shape diff (ownership, build mode, recipe presence, materialization root). It
+never raises: a missing or unreadable plan prints one line and exits 2.
+
+## Gap report: expectations the current runtime does not meet
+
+These are the strict `xfail` cases of `tests/test_topology_fixture.py`, grouped by reason code. Each
+flips to a hard failure when the behaviour lands; the fix then removes the gap from the expectations
+(and, when a code has no gap left, the code itself). Counts are per checked field.
+
+| Reason code | Cases | What is missing |
+| --- | --- | --- |
+| `ownership-vendored` | 2 | `server/third_party/tinylib/test` (Make, default goal `$(CC) ... ../src/tinylib.c`) is `independent` and would be dispatched standalone. Expected: `contained` by `server`. |
+| `ownership-nested-conditional` | 1 | `server/examples/hello` (no `project()`, included only under `option(SERVER_BUILD_EXAMPLES OFF)`) is `unresolved`. Expected: `contained` by `server` with the condition recorded. It is already never `independent` (hard check). |
+| `ownership-workspace` | 12 | `rust/core`, `rust/cli`, `go/shared`, `go/svc`, `web/packages/api`, `web/packages/ui` are `independent`. Expected: `contained` by their workspace root. The npm descriptor package already records the membership; the topology compiler ignores it. |
+| `ownership-gradle-settings` | 10 | `client-android` has no unit (`settings.gradle` is context, not a marker) and `:app`/`:lib` are two independent roots with two image profiles (`android`, `java`). Expected: one `gradle` component at `client-android` (profile `android`) owning both modules. |
+| `ownership-sibling-source` | 2 | `common` (only `src/util.c`, compiled by `tools/packer/Makefile`) is an `independent` `direct-native` unit. Expected: part of the consuming unit, or no unit at all. |
+| `workspace-materialization` | 1 | `tools/packer` would be materialized from `tools/packer` alone. Expected minimum root: `.` (the common ancestor of every `../` reference). A recipe cannot even express this: `validate_build_recipe` rejects `dependency_files` outside the unit's descriptor package. |
+| `deterministic-recipe` | 7 | `server`, `tools/packer`, `rust`, `go`, `web`, `website/lib`, `tools/sign` have null recipes. Expected: the canonical recipe at the component root (`cmake -S . -B build` / `cmake --build build`; `make`; `cargo build --workspace --offline`; `go build ./shared/... ./svc/...`; `npm run build`; `composer dump-autoload --no-interaction`). |
+| `build-mode-disposition` | 10 | No build action carries a build mode. Expected per component: `compiled` (A, B, C-cargo, C-go, I), `package-only` (C-npm, `website/lib`), `skipped_policy` (D, F), `unsupported_platform` (E). `website/public` already meets `source-only` through `source_only_scopes`. |
+| `discovery-marker` | 5 | `client-ios/App.xcodeproj/project.pbxproj` is not a marker; the iOS client has no unit and cannot be classified. Expected: a `swift`/`xcodebuild` unit at `client-ios`, non-dispatchable. |
+| `relation-workspace-member` | 3 | `rust/cli -> rust/core` (`path =`), `go/svc -> go/shared` (`use`/`replace`), `web/packages/api -> web/packages/ui` are not recorded as relations. |
+| `relation-gradle-module` | 1 | `client-android/app`'s `project(':lib')` stays an `unresolved` relation because the path resolver rejects the colon notation. |
+
+Already met by the current runtime (hard checks): every marker discovered and claimed once (the legacy
+`tinylib/Makefile` is deliberately absorbed by the CMake unit at the same root); every unit accounted
+for exactly once in a valid graph; stable `topology_id`/`bundle_identity`; `tinylib`'s `CMakeLists.txt`
+`contained` by `server`; `server`, `tools/packer`, `tools/sign`, `rust`, `go`, `web`, `website/lib`
+independent at the right roots with the right image profiles; Unity discovered as an engine project
+with profile `unity` and no inference; `website/public` a `php` source-only scope with no unit; no unit
+under `client-ios`; the npm workspace inventory (root, two members, lockfile); no cross-component
+scheduling edges anywhere (none are expected); no unit the expectations do not describe.
+
+## Decisions
+
+- **H is `contained`, not `unresolved`.** The directory has no `project()` and exactly one possible
+  owner, so `unresolved` says less than the declarations do and invites standalone recipe inference for a
+  tree that cannot build alone. The condition is recorded on the unit (`SERVER_BUILD_EXAMPLES`); a contained
+  conditional unit is not scheduled by default. The hard check is only that it is never `independent`.
+- **F is `skipped_policy`.** The fixture declares no wrapper, no offline plugin cache and nothing that an
+  SDK image could resolve without the network; a networked Gradle build is not a permitted recipe. If an
+  Android image with a provisioned AGP cache is ever pinned, the expected mode becomes `package-only` and
+  the expectation changes with it.
+- **B's `common` may be absent.** The contract is "never a standalone compile root"; discovery emitting
+  no unit for `common` satisfies it, and if one exists it must be `contained` by `tools/packer`.
+- **No cross-component edges by design.** Each shape is its own component; the `requires_product`
+  relationships in the contract are intra-component (workspace member and Gradle module dependencies) and
+  must become recorded relations, never scheduling edges.
+- `test/topology/**` is byte-pinned in `.gitattributes` like the acceptance keys, so `MANIFEST.json`
+  holds on every platform.
+
+## Verification record
+
+Focused unit tests and the local compile of every compiled shape are recorded in the commit that adds
+this task. The live review path (`prepare` -> `appsec-review start` -> `score`) has not been run; it is
+user-owned manual validation.

@@ -12,6 +12,7 @@ rules/** -text
 data/** -text
 tests/fixtures/** -text
 test/acceptance/** -text
+test/topology/** -text
 
 # CodeQL packs are hashed over their LF bytes and compiled inside Linux containers.
 rules/codeql-graph-export/** text eol=lf

@@ -1,0 +1,11 @@
+{
+  "name": "topology-web",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "node build.js"
+  }
+}
