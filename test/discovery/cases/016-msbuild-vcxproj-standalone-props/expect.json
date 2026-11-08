@@ -1,0 +1,38 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "016-msbuild-vcxproj-standalone-props",
+  "matrix": "A4",
+  "polarity": "positive",
+  "mirrors": "a .vcxproj with no solution, importing a .props and a .targets from a sibling props/ directory: the project is the unit, the imports are its context and widen its materialization root to the tree root; the .filters file is IDE layout, not build input",
+  "units": [
+    {"root": "native", "build_system": "msbuild", "family": "native", "profile": "native",
+     "markers": ["native/renderer.vcxproj"],
+     "build_points": [
+       {"name": "renderer", "kind": "project", "evidence": "native/renderer.vcxproj:15"}
+     ],
+     "facts": {"materialization_root": "."}}
+  ],
+  "not_units": [
+    {"root": "props", "reason": ".props and .targets files are imported by a project; they are never a root of their own"}
+  ],
+  "assignment": {
+    "native/renderer.vcxproj": "evidence_of:native|msbuild",
+    "native/renderer.vcxproj.filters": "inert",
+    "native/include/shader.h": "evidence_of:native|msbuild#renderer",
+    "native/src/main.cpp": "evidence_of:native|msbuild#renderer",
+    "native/src/shader.cpp": "evidence_of:native|msbuild#renderer",
+    "props/warnings.props": "context:native|msbuild",
+    "props/package.targets": "context:native|msbuild",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:native|msbuild.build_point:renderer", "ref": "T-056.2"},
+    {"check": "unit:native|msbuild.facts", "ref": "T-056.5", "note": "Import Project=\"..\\props\\...\" reaches outside the project directory; the minimum materialization root is the tree root"},
+    {"check": "assignment:native/renderer.vcxproj.filters", "ref": "T-056.4", "note": "MSBuild never reads .filters; it is Visual Studio's folder view"},
+    {"check": "assignment:native/include/shader.h", "ref": "T-056.2"},
+    {"check": "assignment:native/src/main.cpp", "ref": "T-056.2"},
+    {"check": "assignment:native/src/shader.cpp", "ref": "T-056.2"},
+    {"check": "assignment:props/warnings.props", "ref": "T-056.5", "note": "an imported property sheet outside the unit root is that unit's context, not inert"},
+    {"check": "assignment:props/package.targets", "ref": "T-056.5"}
+  ]
+}

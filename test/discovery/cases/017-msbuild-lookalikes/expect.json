@@ -1,0 +1,44 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "017-msbuild-lookalikes",
+  "matrix": "A4",
+  "polarity": "negative",
+  "mirrors": "MSBuild files that are not build points: a .vcxproj.filters (IDE folder view) and a .vcxproj.user (per-user settings MSBuild imports when present) beside a listed project, and a solution entry for a project file that no longer exists, whose directory still holds a source",
+  "units": [
+    {"root": ".", "build_system": "msbuild", "family": "native", "profile": "native",
+     "markers": ["app.sln"],
+     "build_points": [
+       {"name": "app", "kind": "project", "evidence": "app.sln:6"}
+     ],
+     "facts": {"unresolved_projects": ["legacy/legacy.vcxproj"]}}
+  ],
+  "not_units": [
+    {"root": ".", "build_system": "dotnet",
+     "reason": "a solution of .vcxproj projects is an MSBuild native build, not a .NET one"},
+    {"root": "app", "build_system": "msbuild", "marker": "app/app.vcxproj", "role": "evidence_of:.|msbuild#app",
+     "reason": "listed by app.sln; a build point of the solution"},
+    {"root": "legacy", "reason": "app.sln lists legacy/legacy.vcxproj but the file is absent; a missing project is an unresolved reference of the solution, never a unit, and the source left behind is orphaned"}
+  ],
+  "assignment": {
+    "app.sln": "evidence_of:.|msbuild",
+    "app/app.vcxproj": "evidence_of:.|msbuild#app",
+    "app/app.vcxproj.filters": "inert",
+    "app/app.vcxproj.user": "context:.|msbuild",
+    "app/main.cpp": "evidence_of:.|msbuild#app",
+    "legacy/old.cpp": "orphaned:no_build_point",
+    "legacy/NOTES.md": "inert"
+  },
+  "orphaned_sources": [
+    {"path": "legacy/old.cpp", "language": "c++", "reason": "no_build_point", "nearest_unit": "."}
+  ],
+  "pending": [
+    {"check": "unit:.|msbuild", "ref": "T-056.4"},
+    {"check": "not_unit:.|dotnet", "ref": "T-056.4"},
+    {"check": "not_unit:app|msbuild", "ref": "T-056.2"},
+    {"check": "assignment:app.sln", "ref": "T-056.4"},
+    {"check": "assignment:app/app.vcxproj", "ref": "T-056.2"},
+    {"check": "assignment:app/app.vcxproj.filters", "ref": "T-056.4", "note": "a .filters file is not read by MSBuild"},
+    {"check": "assignment:app/app.vcxproj.user", "ref": "T-056.4", "note": "Microsoft.Cpp targets import the .user file when present: context of the solution unit, not of a phantom project unit"},
+    {"check": "assignment:app/main.cpp", "ref": "T-056.2"}
+  ]
+}

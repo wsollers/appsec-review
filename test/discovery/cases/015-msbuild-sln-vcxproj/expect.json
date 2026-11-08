@@ -1,0 +1,47 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "015-msbuild-sln-vcxproj",
+  "matrix": "A4",
+  "polarity": "positive",
+  "mirrors": "a Visual Studio solution of two C++ projects (a static library and an application) that import a shared .props; the solution is the unit, the projects are its build points",
+  "units": [
+    {"root": ".", "build_system": "msbuild", "family": "native", "profile": "native",
+     "markers": ["engine.sln"],
+     "build_points": [
+       {"name": "engine", "kind": "project", "evidence": "engine.sln:6"},
+       {"name": "packer", "kind": "project", "evidence": "engine.sln:8"}
+     ]}
+  ],
+  "not_units": [
+    {"root": ".", "build_system": "dotnet",
+     "reason": "a solution whose projects are all .vcxproj is an MSBuild native build; the .NET family applies to .csproj/.vbproj/.fsproj solutions"},
+    {"root": "engine", "build_system": "msbuild", "marker": "engine/engine.vcxproj", "role": "evidence_of:.|msbuild#engine",
+     "reason": "the project is listed by engine.sln; it is a build point of the solution, not a root"},
+    {"root": "tools/packer", "build_system": "msbuild", "marker": "tools/packer/packer.vcxproj", "role": "evidence_of:.|msbuild#packer",
+     "reason": "listed by engine.sln"}
+  ],
+  "assignment": {
+    "engine.sln": "evidence_of:.|msbuild",
+    "engine/engine.vcxproj": "evidence_of:.|msbuild#engine",
+    "engine/include/engine.h": "evidence_of:.|msbuild#engine",
+    "engine/src/engine.cpp": "evidence_of:.|msbuild#engine",
+    "tools/packer/packer.vcxproj": "evidence_of:.|msbuild#packer",
+    "tools/packer/main.cpp": "evidence_of:.|msbuild#packer",
+    "build/common.props": "context:.|msbuild",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:.|msbuild", "ref": "T-056.4", "note": "the .sln is typed by the projects it lists (all .vcxproj: msbuild/native), not by its suffix"},
+    {"check": "not_unit:.|dotnet", "ref": "T-056.4"},
+    {"check": "not_unit:engine|msbuild", "ref": "T-056.2", "note": "a .vcxproj a solution lists is a build point of the solution"},
+    {"check": "not_unit:tools/packer|msbuild", "ref": "T-056.2"},
+    {"check": "assignment:engine.sln", "ref": "T-056.4"},
+    {"check": "assignment:engine/engine.vcxproj", "ref": "T-056.2"},
+    {"check": "assignment:engine/include/engine.h", "ref": "T-056.2", "note": "ClInclude items bind to the project"},
+    {"check": "assignment:engine/src/engine.cpp", "ref": "T-056.2", "note": "ClCompile items bind to the project"},
+    {"check": "assignment:tools/packer/packer.vcxproj", "ref": "T-056.2"},
+    {"check": "assignment:tools/packer/main.cpp", "ref": "T-056.2"},
+    {"check": "assignment:build/common.props", "ref": "T-056.4"},
+    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README is prose, never build context, even under a unit root"}
+  ]
+}
