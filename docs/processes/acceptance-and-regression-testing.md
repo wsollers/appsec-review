@@ -179,8 +179,10 @@ least one rule set.
    is accepted individually, in graph order, once its inputs are accepted, and becomes that job's
    expectation. A job is not accepted while it carries an unexplained gap (see Non-goals).
 4. **Baselines and expectations live under `test/acceptance/`,** committed and reviewed. The
-   corpus is pinned to an `appsec-multi-vuln` tag (to be named; the earlier pin `2994384` is not
-   in the local target history), and every expectation records that tag and its commit.
+   corpus is pinned to a tag of its repository, and every expectation records that tag and its
+   commit. `cpp-multivuln-v1` pinned the separate local `targets/cpp-multivuln` corpus
+   (`9acaa340…`, never published); the T-057 first run pins `appsec-multi-vuln` at
+   `appsec-multi-vuln-c094-v1` (`bd69bfe8…`, on `main`) — see `docs/operations/test-targets.md`.
 
 ## Decisions (2026-10-18)
 

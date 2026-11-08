@@ -1,6 +1,7 @@
 # Reading the per-defect funnel
 
-After a model-backed run, `stepwise.py system --tag cpp-multivuln-v1 [--app-run ID]` prints the answer-key
+After a model-backed run, `stepwise.py system --tag appsec-multi-vuln-c094-v1 [--app-run ID]` (or
+`--tag cpp-multivuln-v1` for the historical local corpus) prints the answer-key
 lines and then the funnel: one line per seeded defect with the furthest stage it reached and why it stopped,
 then four aggregate lines (stage conversion, `stopped_because` counts, model quality, retrieval). The same
 data is the `funnel` section of `runs/metadata/stepwise/system/<run>-<tag>.json`. The funnel is reported,

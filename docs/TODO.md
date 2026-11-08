@@ -107,13 +107,14 @@ until each is rewritten into the entry format when it is next touched.
   0. **Run readiness** (operator, HAL5000, `docs/operations/run-readiness.md`): WSL host on the
      `default` Docker context, ext4 checkout, key + committed anchor
      (`deploy/dagster/trusted-keys/`), build + smoke every enabled image, re-pin (own commit) and
-     sign, compile the CodeQL packs, stack up on `targets/appsec-multi-vuln`, gate run through
+     sign, compile the CodeQL packs, stack up on `targets/appsec-multi-vuln-c094`, gate run through
      `job_model_connectivity` and `job_image_pin_verification`. Image enforcement stays disabled for
      the first runs. An image that fails for a reason unrelated to the run is disabled in
-     configuration and recorded, not fixed (T-050). **Target identity is a Phase 0 gate**
-     (`run-readiness.md` step 6): the acceptance tag `cpp-multivuln-v1` did not exist on the target
-     remote on 2026-11-08 and the key, the runbook and the evaluator lock name two different commits;
-     `stepwise.py accept` refuses until tag, checkout and key agree.
+     configuration and recorded, not fixed (T-050). **Target identity (resolved 2026-11-08):** the first-run target is
+     `targets/appsec-multi-vuln-c094` at tag `appsec-multi-vuln-c094-v1` (`bd69bfe83fec…`, on `main`'s
+     ancestry; key verified at the tag and at `main`'s tip). `cpp-multivuln-v1` was a separate local
+     corpus (`targets/cpp-multivuln`, `9acaa340…`) that never reached GitHub; its acceptance records
+     are historical (`run-readiness.md` step 6, `test-targets.md`).
   1. **Critical-path passes** (agent, in parallel with 0), in dependency order:
      `job_source_history_analysis` first (the plan's contract consumes its handoff, so its typed
      outputs are fixed before the plan's tests pin them), then `job_target_analysis_plan` (the 12
@@ -121,8 +122,9 @@ until each is rewritten into the entry format when it is next touched.
      `job_artifact_indexing` (fails every run under the typed input contract today; the
      `intake_target_root=False` seam exists) and `job_binary_evidence_indexing` (undeclared
      `job_target_catalog/handoff`). Each under the checklist, one commit per job.
-  2. **First run**: `stepwise.py init/next/accept` on `appsec-multi-vuln`, job by job, until a break.
-  3. **The loop**, repeated until `stepwise.py system --tag cpp-multivuln-v1` scores: for each break
+  2. **First run**: `stepwise.py init/next/accept` on `targets/appsec-multi-vuln-c094` at tag
+     `appsec-multi-vuln-c094-v1`, job by job, until a break.
+  3. **The loop**, repeated until `stepwise.py system --tag appsec-multi-vuln-c094-v1` scores: for each break
      `failure-replay` → reproduce in a unit test under the pass checklist for that job (a break *is*
      that job's pass, done when the run needs it, not in catalog order) → fix → `lifecycle.py
      reload` → `plan-repair` / `admit-repair` / `resume` → confirm the plan's REUSE/RUN decisions
@@ -150,7 +152,7 @@ until each is rewritten into the entry format when it is next touched.
   (T-050); unit-suite speed (T-048, measured in job pass 07: `storage.shared.safe_path` dominates
   runner-driven tests) and the baseline triage (T-047) stay the differential baseline, not blockers.
 - **Done when:** (a) Phase 0's gate run accepts on HAL5000; (b) `stepwise.py system --tag
-  cpp-multivuln-v1` produces a score; (c) the edit → resumed-run turnaround of the loop is measured
+  appsec-multi-vuln-c094-v1` produces a score; (c) the edit → resumed-run turnaround of the loop is measured
   on at least three real breaks and recorded here with the REUSE/RUN decision each produced; (d)
   every job the run exercised has its task doc.
 - **Refs:** `docs/operations/run-readiness.md`, `docs/operations/recovery-repair.md`,
