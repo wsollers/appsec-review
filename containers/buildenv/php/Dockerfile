@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # PHP/Composer build environment on the shared native toolchain. php8.3-dev supplies phpize
-# and php-config; autoconf/automake/libtool are what phpize-generated configure scripts need.
+# and php-config; the autoconf/automake/libtool that phpize-generated configure scripts need come
+# from the shared toolchain base (T-058).
 # PHP extensions therefore compile with the same gcc as every other family.
 FROM appsec-review/buildenv-native-toolchain:noble-gcc13.3-clang18.1
 LABEL org.opencontainers.image.title="audit-buildenv-php" \
@@ -8,7 +9,7 @@ LABEL org.opencontainers.image.title="audit-buildenv-php" \
 USER 0:0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      autoconf=2.71-3 automake=1:1.16.5-1.3ubuntu1 composer=2.7.1-2 libtool=2.4.7-7build1 \
+      composer=2.7.1-2 \
       php8.3-cli=8.3.6-0ubuntu0.24.04.11 php8.3-dev=8.3.6-0ubuntu0.24.04.11 \
       php8.3-mbstring=8.3.6-0ubuntu0.24.04.11 php8.3-xml=8.3.6-0ubuntu0.24.04.11 \
       unzip=6.0-28ubuntu4.1 \

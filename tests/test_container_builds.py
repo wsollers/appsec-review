@@ -400,3 +400,31 @@ def test_execute_build_writes_schema_2_summary_with_metrics_and_prints_the_repor
     (tmp_path / "old.json").write_text(json.dumps(old), encoding="utf-8")
     assert container_build.main(["report", str(tmp_path / "old.json")]) == 0
     assert "critical path 2.0s: base-ubuntu" in capsys.readouterr().out
+
+
+BUILD_DRIVERS = {"autoconf": "2.71", "automake": "1.16.5", "cmake": "3.28.3", "libtool": "2.4.7",
+                 "meson": "1.3.2", "ninja-build": "1.11.1", "pkg-config": "1.8.1"}
+
+
+def test_build_drivers_live_in_the_shared_toolchain_and_nowhere_else() -> None:
+    """T-058: one pinned set of build drivers for every family that builds FROM the toolchain."""
+    toolchain = ROOT / "containers" / "buildenv" / "native-toolchain"
+    pins = dict(line.split("=", 1) for line in (toolchain / "packages.lock").read_text(encoding="utf-8").splitlines()
+                if line and not line.startswith("#"))
+    for package, version in BUILD_DRIVERS.items():
+        assert package in pins, package
+        upstream = pins[package].split(":", 1)[-1] if ":" in pins[package] else pins[package]  # drop the epoch
+        assert upstream.startswith(version), (package, pins[package])
+    probes = (toolchain / "check-toolchain.sh").read_text(encoding="utf-8")
+    for probe in ("cmake --version", "ninja --version", "meson --version", "autoconf --version",
+                  "automake --version", "libtool --version"):
+        assert probe in probes
+    assert "Bazel" in (toolchain / "packages.lock").read_text(encoding="utf-8"), "the lock records why Bazel is absent"
+    for family in ("cpp", "go", "php", "python", "rust-wasm", "typescript"):
+        dockerfile = (toolchain.parent / family / "Dockerfile").read_text(encoding="utf-8")
+        installs = " ".join(line for line in dockerfile.splitlines() if not line.lstrip().startswith("#"))
+        for package in BUILD_DRIVERS:
+            assert f" {package}=" not in installs, f"{family} re-installs {package}, which the toolchain carries"
+    catalog = container_build.load_catalog()["by_id"]
+    assert "cmake version 3.28.3" in catalog["buildenv-native-toolchain"]["probe_expect"]
+    assert "1.3.2" in catalog["buildenv-native-toolchain"]["probe_expect"]

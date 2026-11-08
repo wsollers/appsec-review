@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 # Shared C/C++ toolchain base for every language build environment. Family images build FROM
 # this image so node-gyp, phpize, setuptools, cgo, wasm32 clang, and direct native builds all
-# compile with one pinned gcc/clang identity. LLVM DWARF/PDB readers ship with the toolchain;
-# language-specific runtimes and analysis frameworks stay separate.
+# compile with one pinned gcc/clang identity and drive their builds with one pinned set of build
+# drivers (Autotools, libtool, CMake, Ninja, Meson, pkg-config; T-058). LLVM DWARF/PDB readers ship
+# with the toolchain; language-specific runtimes and analysis frameworks stay separate.
 FROM appsec-review/base-ubuntu:24.04
 LABEL org.opencontainers.image.title="buildenv-native-toolchain" \
       org.opencontainers.image.version="noble-gcc13.3-clang18.1"

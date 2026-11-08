@@ -112,9 +112,9 @@ license = "mixed Ubuntu distribution packages plus each toolchain's upstream lic
 license_source = "Ubuntu package metadata and pinned upstream release metadata"
 provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
 signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
-purpose = "Shared pinned C/C++ toolchain (gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace) that every language build environment builds FROM."
+purpose = "Shared pinned C/C++ toolchain (gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace) and build drivers (Autotools 2.71, libtool 2.4.7, CMake 3.28, Ninja 1.11, Meson 1.3; T-058) that every language build environment builds FROM."
 probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && id -u"]
-probe_expect = ["13.3.0", "18.1.3", "10001"]
+probe_expect = ["13.3.0", "18.1.3", "cmake version 3.28.3", "1.11.1", "1.3.2", "10001"]
 
 [[images]]
 id = "audit-buildenv-rust-wasm"
@@ -163,7 +163,7 @@ license = "mixed Ubuntu distribution packages plus each toolchain's upstream lic
 license_source = "Ubuntu package metadata and pinned upstream release metadata"
 provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
 signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
-purpose = "Non-root C/C++ build and capture environment (CMake, Make, Ninja, Autotools) on the shared native toolchain; analysis tooling lives in separate images."
+purpose = "Non-root C/C++ build and capture environment on the shared native toolchain (which carries CMake, Make, Ninja, Meson and Autotools) with clang as the default compiler; analysis tooling lives in separate images."
 probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && cmake --version && id -u"]
 probe_expect = ["13.3.0", "cmake version 3.28.3", "10001"]
 [[images]]

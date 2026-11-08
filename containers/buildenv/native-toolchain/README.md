@@ -3,6 +3,14 @@
 Every language build environment compiles C and C++ with one toolchain: node-gyp addons, phpize
 extensions, setuptools C extensions, cgo, clang `--target=wasm32` and direct native builds.
 
+It also carries the build drivers every family may meet (T-058): Autotools 2.71, libtool 2.4.7,
+CMake 3.28, Ninja 1.11, Meson 1.3 and pkg-config. A Go module with cgo + CMake, a Python package
+built with scikit-build or meson-python, a Rust crate using the `cc`/`cmake` crates or a node-gyp
+addon finds its driver in whichever family image it lands in, and the plan reads one capability set
+for the whole family. Bazel is deliberately absent — a JVM binary that fetches rules at build time
+and needs a vendored repository cache to run offline is a per-target provision (T-050), not a base
+ingredient. Gradle and Maven live in the JVM environments.
+
 ## Interface
 
 There are two forms. Consumers use whichever fits; both pin the same packages.

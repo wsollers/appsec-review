@@ -11,11 +11,11 @@ change adds no image/profile asset pins, acquisition, provisioning or host probe
 
 | Catalog id | Directory | Toolchain | Build profiles |
 | --- | --- | --- | --- |
-| `buildenv-native-toolchain` | `native-toolchain/` | gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace | base of every family image |
-| `audit-buildenv-cpp` | `cpp/` | + CMake 3.28, Ninja, Autotools | `native` |
+| `buildenv-native-toolchain` | `native-toolchain/` | gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace; build drivers CMake 3.28, Ninja 1.11, Meson 1.3, Autotools 2.71, libtool 2.4.7 (T-058) | base of every family image |
+| `audit-buildenv-cpp` | `cpp/` | nothing more; clang is the default `CC`/`CXX` | `native` |
 | `audit-buildenv-go` | `go/` | + Go 1.23.1, `GOTOOLCHAIN=local` | `go` |
 | `audit-buildenv-python` | `python/` | + Python 3.12.3 headers, pip 24.0, venv | `python` |
-| `audit-buildenv-php` | `php/` | + PHP 8.3.6 CLI/dev (phpize, php-config), Composer 2.7.1, Autotools | `php` |
+| `audit-buildenv-php` | `php/` | + PHP 8.3.6 CLI/dev (phpize, php-config), Composer 2.7.1 | `php` |
 | `audit-buildenv-rust-wasm` | `rust-wasm/` | + hash-locked Rust 1.90.0 with wasm32-unknown-unknown and wasm32-wasip1 | `rust`, `wasm` |
 | `audit-buildenv-typescript` | `typescript/` | + hash-locked Node 22.23.3 (npm 10.9.9), pnpm 9.15.9, Yarn 1.22.22; node-gyp uses the shared compiler | `node` |
 | `audit-buildenv-java` | `java/` | OpenJDK 21, hash-locked Maven 3.9.9, Gradle 8.9, Kotlin 2.0.21; strace, python3 | `java` |

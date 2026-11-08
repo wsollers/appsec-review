@@ -28,7 +28,7 @@ until each is rewritten into the entry format when it is next touched.
 | Id | Title | Area | State |
 | --- | --- | --- | --- |
 | T-057 | [First end-to-end review run and the break/fix loop](#t-057-first-end-to-end-review-run-and-the-breakfix-loop) | pipeline | in-progress |
-| T-058 | [Build drivers live in the shared toolchain base](#t-058-build-drivers-live-in-the-shared-toolchain-base) | containers | open |
+| T-058 | [Build drivers live in the shared toolchain base](#t-058-build-drivers-live-in-the-shared-toolchain-base) | containers | done (2026-11-08; measure on the next full build) |
 | T-035 | [Component layer between catalog and plan](#t-035-component-layer-between-catalog-and-plan) | topology | open |
 | T-036 | [Build-mode disposition per component at plan time](#t-036-build-mode-disposition-per-component-at-plan-time) | topology | open |
 | T-037 | [Recipe provenance: declared, canonical, inferred](#t-037-recipe-provenance-declared-canonical-inferred) | build | open |
@@ -138,8 +138,8 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-058 — Build drivers live in the shared toolchain base
 
-- **State:** open (decide before T-057 Phase 0's first `build --all`, or accept one extra rebuild of
-  the toolchain chain)
+- **State:** done 2026-11-08 (before T-057 Phase 0's first `build --all`); the "done when" build
+  measurement is still owed by that build's `build.py report`
 - **Area:** containers
 - **Why:** `buildenv-native-toolchain` (gcc 13.3, clang 18.1, make, pkg-config) is the base of six
   language build environments, but the build *drivers* are installed per language: `audit-buildenv-cpp`
@@ -149,12 +149,17 @@ until each is rewritten into the entry format when it is next touched.
   using the `cc`/`cmake` crates, or a node-gyp addon lands in a build environment without the driver
   it needs, and the plan has no single capability table to consult. The same apt layer is also built
   and stored several times.
-- **Scope:** move the drivers into `buildenv-native-toolchain` — autoconf, automake, libtool, cmake,
-  ninja-build, meson (needs the python3 already there), pkg-config — pinned in its `packages.lock`,
-  with version probes in `probe_argv`/`probe_expect`; drop them from `cpp` and `php`; have
-  `tool-native-cpp` build `FROM` the toolchain instead of carrying its own cmake. One image, not a
-  third tier: a separate "build-tools" layer between compilers and languages buys only the ability to
-  rebuild compilers without drivers, which never happens. **Not** in the shared base: Bazel (a JVM
+- **Scope (done):** the drivers moved into `buildenv-native-toolchain` — autoconf 2.71, automake
+  1.16.5, libtool 2.4.7, cmake 3.28.3, ninja-build 1.11.1, meson 1.3.2 (python3 was already there),
+  pkg-config — pinned in its `packages.lock`, probed in `check-toolchain.sh` (which every family
+  re-runs) and in the catalog `probe_expect`; `cpp` installs nothing of its own any more and `php`
+  only PHP and Composer. One image, not a third tier: a separate "build-tools" layer between
+  compilers and languages buys only the ability to rebuild compilers without drivers, which never
+  happens. **Left alone on inspection:** `tool-native-cpp` keeps its own cmake. It is not a build
+  environment but the offline compile-capture tool, built network-free from a locked 263-package
+  `.deb` closure (`assets.lock.json`, 316 MB) that also carries bear and the PHP/Python development
+  headers; rebasing it on the snapshot-built toolchain would trade that locked closure for
+  snapshot-pinned apt — a provenance downgrade for no build-time gain (the closure is a tar extract). **Not** in the shared base: Bazel (a JVM
   binary with a 200 MB+ footprint that fetches rules at build time and needs a vendored repository
   cache to work offline — a per-target decision when a target needs it, T-050), Gradle/Maven
   (already in the JVM environments), language package managers. Separate question, not here:
