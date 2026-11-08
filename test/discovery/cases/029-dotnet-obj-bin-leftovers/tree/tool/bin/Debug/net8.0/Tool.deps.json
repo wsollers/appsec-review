@@ -1,0 +1,5 @@
+{
+  "runtimeTarget": {"name": ".NETCoreApp,Version=v8.0", "signature": ""},
+  "targets": {".NETCoreApp,Version=v8.0": {"Tool/1.0.0": {"runtime": {"Tool.dll": {}}}}},
+  "libraries": {"Tool/1.0.0": {"type": "project", "serviceable": false, "sha512": ""}}
+}

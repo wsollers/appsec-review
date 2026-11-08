@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "targets": {"net8.0": {}},
+  "libraries": {},
+  "projectFileDependencyGroups": {"net8.0": []},
+  "project": {"version": "1.0.0", "restore": {"projectPath": "Tool.csproj"}}
+}
