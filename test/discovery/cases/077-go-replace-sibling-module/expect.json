@@ -1,0 +1,35 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "077-go-replace-sibling-module",
+  "matrix": "D2",
+  "polarity": "mixed",
+  "mirrors": "a Go module whose go.mod replaces a required module with the sibling directory ../x: the replacement is a cross-tree reference that widens the materialization root to the common parent; a replace directive inside a // comment is not a reference, and the replaced module stays a unit of its own",
+  "units": [
+    {"root": "go/svc", "build_system": "go", "family": "go", "profile": "go",
+     "markers": ["go/svc/go.mod"],
+     "build_points": [{"name": "example.com/svc", "kind": "main_package", "evidence": "go/svc/main.go:1"}],
+     "facts": {"replacements": [{"module": "example.com/x", "path": "go/x", "evidence": "go/svc/go.mod:8"}],
+               "materialization_root": "go"}},
+    {"root": "go/x", "build_system": "go", "family": "go", "profile": "go",
+     "markers": ["go/x/go.mod"],
+     "build_points": [{"name": "example.com/x", "kind": "module", "evidence": "go/x/go.mod:1"}],
+     "facts": {"materialization_root": "go/x"}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "README.md": "inert",
+    "go/svc/go.mod": "evidence_of:go/svc|go",
+    "go/svc/main.go": "evidence_of:go/svc|go#example.com/svc",
+    "go/x/go.mod": "evidence_of:go/x|go",
+    "go/x/x.go": "evidence_of:go/x|go#example.com/x"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:go/svc|go.build_point:example.com/svc", "ref": "T-056.2", "note": "main packages are build points"},
+    {"check": "unit:go/svc|go.facts", "ref": "T-056.5", "note": "one replacement (not the commented one) and the materialization root it implies"},
+    {"check": "unit:go/x|go.build_point:example.com/x", "ref": "T-056.2"},
+    {"check": "unit:go/x|go.facts", "ref": "T-056.5"},
+    {"check": "assignment:go/svc/main.go", "ref": "T-056.2"},
+    {"check": "assignment:go/x/x.go", "ref": "T-056.2"}
+  ]
+}
