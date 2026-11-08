@@ -48,6 +48,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | open |
 | T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
+| T-056 | [Build discovery test program: build points, total assignment, case matrix](#t-056-build-discovery-test-program-build-points-total-assignment-case-matrix) | topology | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -89,6 +90,7 @@ until each is rewritten into the entry format when it is next touched.
 
 - **State:** open
 - **Area:** topology
+- **Blocked by:** T-056
 - **Blocks:** T-036, T-037, T-040, T-045
 - **Why:** `job_target_catalog` emits one build unit per marker and one "component" per manifest,
   flat. `compile_build_topology` folds a unit into an owner only on literal CMake/Make evidence, so
@@ -472,6 +474,31 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** `tests/test_target_catalog_job.py::test_configured_topology_matches_the_job`
   asserts `strict_gaps` and the legacy list shrinks by one.
 - **Refs:** T-035, `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/indexing/`.
+
+### T-056 — Build discovery test program: build points, total assignment, case matrix
+
+- **State:** open
+- **Area:** topology
+- **Blocks:** T-035, T-036, T-039
+- **Why:** discovery's atom is a marker file and its fallback atom is a source file; neither is a
+  build point (a CMake target, a Make rule, a `.sln` project, a Cargo package, a Gradle module…),
+  and a source is never a unit. Build systems nest, run in parallel over the same sources, reach
+  across trees and are conditional, across languages; the code has pairwise rules for a few of
+  these and no systematic positive/negative tests. Discovery decides what the buildable things are,
+  so it must be the most tested piece of the review.
+- **Scope:** `docs/plans/build-discovery-test-program-2026-11-08.md`: the discovery contract (a
+  total, explainable assignment of every path to a unit's evidence, a source-only scope, context or
+  a policy exclusion; named non-units; evidence with file and line; determinism), the
+  `test/discovery/cases/<NNN>-<slug>/{tree,expect.json}` fixture layout with strict `pending`
+  entries, the case matrix (A single systems and look-alikes, B nesting, C parallel systems, D
+  cross-tree, E conditional, F multi-language, G scale/hostile) and the sub-items T-056.1–.7
+  (harness; build points; loose sources become source-only scopes; the matrix in three tranches).
+  `native_components` from job pass 05 is interim and retired by T-056.2.
+- **Done when:** every case in the matrix has no `pending` entry and `build-systems.json` carries
+  build points with evidence for every unit; the composite monorepo's xfails are re-expressed as
+  `pending` entries or closed.
+- **Refs:** `docs/plans/build-discovery-test-program-2026-11-08.md`, `src/appsec_review/jobs/build_discovery.py`,
+  `docs/tasks/2026-11-08-job-pass-05-target-catalog.md`, T-045.
 
 ## Legacy backlog
 
