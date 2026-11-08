@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "018-cargo-package-bins-build-script",
+  "matrix": "A5",
+  "polarity": "positive",
+  "mirrors": "a Cargo package at the tree root with a library, two binaries, a build script and an integration test; Cargo.lock and rust-toolchain.toml are its context",
+  "units": [
+    {"root": ".", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["Cargo.toml"],
+     "build_points": [
+       {"name": "imgtool", "kind": "package", "evidence": "Cargo.toml:2"},
+       {"name": "imgcore", "kind": "lib", "evidence": "Cargo.toml:7"},
+       {"name": "imgcli", "kind": "bin", "evidence": "Cargo.toml:11"},
+       {"name": "imginfo", "kind": "bin", "evidence": "Cargo.toml:15"},
+       {"name": "build-script-build", "kind": "build_script", "evidence": "Cargo.toml:5"},
+       {"name": "roundtrip", "kind": "test", "evidence": "tests/roundtrip.rs"}
+     ]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "Cargo.toml": "evidence_of:.|cargo",
+    "Cargo.lock": "context:.|cargo",
+    "rust-toolchain.toml": "context:.|cargo",
+    "build.rs": "evidence_of:.|cargo#build-script-build",
+    "src/lib.rs": "evidence_of:.|cargo#imgcore",
+    "src/main.rs": "evidence_of:.|cargo#imgcli",
+    "src/bin/imginfo.rs": "evidence_of:.|cargo#imginfo",
+    "tests/roundtrip.rs": "evidence_of:.|cargo#roundtrip",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:.|cargo.build_point:imgtool", "ref": "T-056.2"},
+    {"check": "unit:.|cargo.build_point:imgcore", "ref": "T-056.2"},
+    {"check": "unit:.|cargo.build_point:imgcli", "ref": "T-056.2"},
+    {"check": "unit:.|cargo.build_point:imginfo", "ref": "T-056.2"},
+    {"check": "unit:.|cargo.build_point:build-script-build", "ref": "T-056.2", "note": "build.rs is compiled and run by cargo; cargo's own name for the target"},
+    {"check": "unit:.|cargo.build_point:roundtrip", "ref": "T-056.2", "note": "tests/*.rs are auto-discovered test targets"},
+    {"check": "assignment:build.rs", "ref": "T-056.2"},
+    {"check": "assignment:src/lib.rs", "ref": "T-056.2"},
+    {"check": "assignment:src/main.rs", "ref": "T-056.2"},
+    {"check": "assignment:src/bin/imginfo.rs", "ref": "T-056.2"},
+    {"check": "assignment:tests/roundtrip.rs", "ref": "T-056.2"},
+    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+  ]
+}

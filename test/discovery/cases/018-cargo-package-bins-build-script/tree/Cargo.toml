@@ -1,0 +1,19 @@
+[package]
+name = "imgtool"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+name = "imgcore"
+path = "src/lib.rs"
+
+[[bin]]
+name = "imgcli"
+path = "src/main.rs"
+
+[[bin]]
+name = "imginfo"
+path = "src/bin/imginfo.rs"
+
+[dependencies]

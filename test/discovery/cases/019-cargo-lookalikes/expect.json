@@ -1,0 +1,38 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "019-cargo-lookalikes",
+  "matrix": "A5",
+  "polarity": "negative",
+  "mirrors": "Cargo files that are not roots: a vendored dependency crate under vendor/ that .cargo/config.toml routes crates-io to (the application's build consumes it; it is dependency inventory, not a unit), and a stale Cargo.lock in a directory whose Cargo.toml is gone",
+  "units": [
+    {"root": "app", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["app/Cargo.toml"],
+     "build_points": [
+       {"name": "app", "kind": "package", "evidence": "app/Cargo.toml:2"}
+     ]}
+  ],
+  "not_units": [
+    {"root": "app/vendor/tiny", "build_system": "cargo", "marker": "app/vendor/tiny/Cargo.toml", "role": "context:app|cargo",
+     "reason": "a crate under vendor/ with a .cargo-checksum.json is a vendored dependency the application's cargo build reads through the vendored-sources replacement; it is never dispatched on its own"},
+    {"root": "legacy", "reason": "a Cargo.lock without a Cargo.toml is a leftover lockfile; there is nothing to build"}
+  ],
+  "assignment": {
+    "app/Cargo.toml": "evidence_of:app|cargo",
+    "app/Cargo.lock": "context:app|cargo",
+    "app/.cargo/config.toml": "context:app|cargo",
+    "app/src/main.rs": "evidence_of:app|cargo#app",
+    "app/vendor/tiny/Cargo.toml": "context:app|cargo",
+    "app/vendor/tiny/.cargo-checksum.json": "context:app|cargo",
+    "app/vendor/tiny/src/lib.rs": "context:app|cargo",
+    "legacy/Cargo.lock": "inert",
+    "legacy/README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:app|cargo.build_point:app", "ref": "T-056.2"},
+    {"check": "not_unit:app/vendor/tiny|cargo", "ref": "T-056.4", "note": "a Cargo.toml under vendor/ beside a .cargo-checksum.json is dependency inventory of the consuming package"},
+    {"check": "assignment:app/src/main.rs", "ref": "T-056.2", "note": "src/main.rs is the package's default bin target; with one package and one bin the source binds to the package build point"},
+    {"check": "assignment:app/vendor/tiny/Cargo.toml", "ref": "T-056.4"},
+    {"check": "assignment:app/vendor/tiny/.cargo-checksum.json", "ref": "T-056.4"},
+    {"check": "assignment:app/vendor/tiny/src/lib.rs", "ref": "T-056.4", "note": "vendored dependency sources are read by the consuming build, not evidence of a unit of their own"}
+  ]
+}
