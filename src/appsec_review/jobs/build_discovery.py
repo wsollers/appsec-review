@@ -18,7 +18,6 @@ BUILD_RECIPE_SCHEMA = "appsec-review/build-recipe/1"
 
 _MARKERS: dict[str, tuple[str, str]] = {
     "CMakeLists.txt": ("native", "cmake"),
-    "CMakePresets.json": ("native", "cmake"),
     "configure.ac": ("native", "autotools"),
     "configure.in": ("native", "autotools"),
     "Makefile.am": ("native", "autotools"),
@@ -249,6 +248,8 @@ def _descriptor_source_references(root: str, text: str) -> list[str]:
     are dropped.
     """
     import posixpath
+    # A path in a comment is a mention, not a reference.
+    text = re.sub(r"#[^\n]*", "", text)
     values = []
     for token in _NATIVE_SOURCE_REFERENCE.findall(text):
         joined = posixpath.normpath(posixpath.join(root, token)) if root != "." else posixpath.normpath(token)
@@ -373,8 +374,76 @@ def _relative_to(path: str, root: str) -> str | None:
 
 
 
-_ORPHAN_LANGUAGE = {".c": "c", ".cc": "c++", ".cpp": "c++", ".cxx": "c++", ".java": "java", ".kt": "kotlin",
-                    ".kts": "kotlin", ".rs": "rust", ".go": "go", ".wat": "wat"}
+_ORPHAN_LANGUAGE = {".c": "c", ".cc": "c++", ".cpp": "c++", ".cxx": "c++", ".m": "objective-c", ".mm": "objective-c++",
+                    ".java": "java", ".kt": "kotlin", ".kts": "kotlin", ".rs": "rust", ".go": "go", ".wat": "wat",
+                    ".cs": "c#", ".swift": "swift", ".cu": "cuda"}
+# Compiled-language suffixes discovery decides orphan-hood for, with the build family that compiles them.
+_ORPHAN_FAMILY = {**{suffix: family for suffix, (family, _system) in _SOURCE_MARKERS.items()},
+                  ".m": "native", ".mm": "native", ".cu": "native", ".cs": "dotnet", ".swift": "swift"}
+
+
+# Build systems whose descriptors are read for build points; a unit of these with no build point,
+# nothing driven and nothing unresolved is not a unit (an include-only CMakeLists.txt, a Makefile of
+# variables). Manifest-driven systems (cargo, npm, go, ...) are units by their manifest.
+_DEMOTABLE_SYSTEMS = frozenset({"cmake", "make", "meson", "autotools"})
+
+
+def _family_of_system(system: str) -> str:
+    return next((family for family, candidate in (*_MARKERS.values(), *_SUFFIX_MARKERS.values()) if candidate == system), "native")
+_DESCRIPTOR_READ_LIMIT = 48
+
+
+def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[str],
+                         read_text: Callable[[str], str | None] | None) -> list[dict[str, Any]]:
+    """Read each unit's descriptors for build points; return the units demoted to non-units."""
+    from appsec_review.jobs.build_points import EXTRACTORS, extract_build_points
+    demoted: list[dict[str, Any]] = []
+    roots = {str(unit["root"]) for unit in units}
+    for unit in units:
+        if unit["build_system"] not in EXTRACTORS:
+            unit["source_resolution"] = "containment"
+            continue
+        if read_text is None:
+            unit["source_resolution"] = "containment"
+            continue
+        root = str(unit["root"])
+        descriptors: dict[str, str] = {}
+        candidates = [str(m["path"]) for m in unit.get("markers", ())]
+        for path in inventory_paths:
+            if path in candidates or not (root == "." or path.startswith(root + "/")):
+                continue
+            # A nested unit's descriptors belong to it.
+            parent = PurePosixPath(path).parent.as_posix()
+            if any(other != root and (parent == other or parent.startswith(other + "/")) for other in roots):
+                continue
+            posix = PurePosixPath(path)
+            if is_build_descriptor(posix) or _is_context_name(posix.name) or posix.suffix.lower() in {".cmake", ".mk", ".am", ".ac", ".sln", ".vcxproj", ".csproj"} \
+                    or (unit["build_system"] == "go" and posix.suffix == ".go"):
+                candidates.append(path)
+        for path in sorted(set(candidates))[:_DESCRIPTOR_READ_LIMIT]:
+            text = read_text(path)
+            if text is not None:
+                descriptors[path] = text
+        extracted = extract_build_points(unit, descriptors, inventory_paths)
+        unit["build_points"] = extracted["build_points"]
+        if extracted["drives"]:
+            unit["drives"] = extracted["drives"]
+        if extracted["includes"]:
+            unit["includes"] = extracted["includes"]
+        if extracted["unresolved"]:
+            unit["unresolved"] = extracted["unresolved"]
+        # Complete: every construct of a descriptor-driven native system was read, so the sources its
+        # build points name are all it compiles (a delegating-only descriptor names none, completely).
+        unit["source_resolution"] = ("complete" if not extracted["unresolved"]
+                                     and unit["build_system"] in {"cmake", "make", "meson", "autotools", "msbuild", "dotnet", "vcbuild"}
+                                     else "containment")
+        if (unit["build_system"] in _DEMOTABLE_SYSTEMS and not extracted["build_points"] and not extracted["drives"]
+                and not extracted["unresolved"] and not unit.get("native_components")):
+            demoted.append({"build_unit_id": unit["build_unit_id"], "root": root, "build_system": unit["build_system"],
+                            "markers": [str(m["path"]) for m in unit.get("markers", ())],
+                            "reason": "no build point, nothing driven: the descriptor declares no build"})
+    return demoted
+
 
 
 def discover_build_units(files: Sequence[Mapping[str, Any]], *,
@@ -397,6 +466,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
     from appsec_review.jobs.engine_discovery import discover_unity
 
     orphans: list[dict[str, Any]] = []
+    loose: list[tuple[Mapping[str, Any], str, str]] = []
 
     engines = (engine_discovery if engine_discovery is not None else
                discover_unity(files, read_text=lambda descriptor, _limit:
@@ -467,9 +537,10 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                 native_references.append((key, names))
     for item in files:
         path = PurePosixPath(str(item["path"]))
-        fallback = _SOURCE_MARKERS.get(path.suffix.lower())
-        if fallback is None:
+        orphan_family = _ORPHAN_FAMILY.get(path.suffix.lower())
+        if orphan_family is None:
             continue
+        fallback = (orphan_family, _SOURCE_MARKERS.get(path.suffix.lower(), (orphan_family, "none"))[1])
         if ".teamcity" in path.parts:
             # TeamCity Kotlin DSL is CI configuration, not an independently compilable JVM
             # source tree. It is cataloged and analyzed by the CI lanes instead.
@@ -497,21 +568,9 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
             if referenced is not None:
                 components[referenced].append(item)
                 continue
-        # No build script, descriptor or compiler line names this compiled-language source: it is
-        # orphaned. That is a finding (dead code, build drift, an abandoned port, or a build we did
-        # not understand), reported with the nearest unit considered; it is never built and never
-        # silently attached to a neighbour (decision 2026-11-08, T-056.3).
-        nearest = max((key for key in groups if key[0] == "." or PurePosixPath(key[0]) in path.parents),
-                      key=lambda key: (len(PurePosixPath(key[0]).parts), key), default=None)
-        orphans.append({
-            "path": str(item["path"]), "sha256": item["sha256"], "size_bytes": item["size_bytes"],
-            "family": family, "language": _ORPHAN_LANGUAGE.get(path.suffix.lower(), family),
-            "reason": "no_build_point",
-            "nearest_unit": None if nearest is None else {
-                "root": nearest[0], "family": nearest[1], "build_system": nearest[2],
-                "why_not": ("different family" if nearest[1] != family else
-                            "no descriptor of that unit names this source")},
-        })
+        # No descriptor root of this family above it and nothing names it: a candidate orphan.
+        # The decision is made after build points are read (a build point may still name it).
+        loose.append((item, family, "no_build_point"))
     # A preset is context for the CMake project at the same root, never a second unit.
     values = []
     for (root, family, system), markers in sorted(groups.items()):
@@ -558,8 +617,75 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
             "provenance": "deterministic-engine-descriptors",
         })
     values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
+    inventory_paths = [str(item["path"]) for item in files]
+    by_path = {str(item["path"]): item for item in files}
+    demoted = _attach_build_points(values, inventory_paths, read_text)
+    values = [unit for unit in values if unit["build_unit_id"] not in {d["build_unit_id"] for d in demoted}]
+    # Orphan decision: a compiled-language source is claimed when a build point names it (source or
+    # header through an include directory), or when it sits under a unit of its family whose build
+    # points could not be read completely (unresolved constructs, no extractor). Otherwise it is
+    # orphaned: a finding (dead code, build drift, an abandoned port, or a build we did not
+    # understand), reported with the nearest unit considered and why it did not claim it; never built,
+    # never attached to a neighbour (decision 2026-11-08, T-056.3).
+    claimed: set[str] = set()
+    containment_units: list[dict[str, Any]] = []
+    for unit in values:
+        for point in unit.get("build_points", ()):
+            claimed.update(point.get("sources", ()))
+            claimed.update(point.get("headers", ()))
+        for component in unit.get("native_components", ()):
+            claimed.add(str(component["path"]))
+        if unit.get("source_resolution") != "complete":
+            containment_units.append(unit)
+    candidates = list(loose)
+    for item in demoted:
+        # Sources that sat under a descriptor that turned out to declare no build: nothing claims them.
+        root = str(item["root"])
+        for path in inventory_paths:
+            if not (root == "." or path.startswith(root + "/")):
+                continue
+            orphan_family = _ORPHAN_FAMILY.get(PurePosixPath(path).suffix.lower())
+            if orphan_family is None or orphan_family != _family_of_system(item["build_system"]):
+                continue
+            if any((str(u["root"]) == "." or path.startswith(str(u["root"]) + "/")) and u["family"] == orphan_family
+                   for u in values):
+                continue  # a surviving unit of the family covers it; decided below
+            candidates.append((by_path[path], orphan_family, "no_build_point"))
+    for unit in values:
+        if unit.get("source_resolution") != "complete" or unit["build_system"] == UNITY_BUILD_SYSTEM:
+            continue
+        # Complete resolution: compiled sources under this root that no build point names are orphans.
+        root = str(unit["root"])
+        for path in inventory_paths:
+            if not (root == "." or path.startswith(root + "/")):
+                continue
+            suffix = PurePosixPath(path).suffix.lower()
+            orphan_family = _ORPHAN_FAMILY.get(suffix)
+            if orphan_family is None or orphan_family != unit["family"] or path in claimed:
+                continue
+            if any(path.startswith(str(other["root"]) + "/") and len(str(other["root"])) > len(root) for other in values):
+                continue  # a nested unit owns the directory
+            candidates.append((by_path[path], orphan_family, "not_named_by_build_point"))
+    seen: set[str] = set()
+    for item, family, reason in candidates:
+        path = PurePosixPath(str(item["path"]))
+        if str(path) in claimed or str(path) in seen:
+            continue
+        seen.add(str(path))
+        nearest = max((unit for unit in values if str(unit["root"]) == "." or PurePosixPath(str(unit["root"])) in path.parents),
+                      key=lambda unit: (len(PurePosixPath(str(unit["root"])).parts), str(unit["root"])), default=None)
+        if nearest is not None and nearest in containment_units and nearest["family"] == family:
+            continue  # containment claims it: the unit's descriptors could not be read completely
+        orphans.append({
+            "path": str(path), "sha256": item["sha256"], "size_bytes": item["size_bytes"],
+            "family": family, "language": _ORPHAN_LANGUAGE.get(path.suffix.lower(), family), "reason": reason,
+            "nearest_unit": None if nearest is None else {
+                "root": str(nearest["root"]), "family": nearest["family"], "build_system": nearest["build_system"],
+                "why_not": ("different family" if nearest["family"] != family else
+                            "no build point of that unit names this source")},
+        })
     orphans.sort(key=lambda value: value["path"])
-    return {"units": values, "orphaned_sources": orphans}
+    return {"units": values, "orphaned_sources": orphans, "demoted_markers": demoted}
 
 
 _INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}

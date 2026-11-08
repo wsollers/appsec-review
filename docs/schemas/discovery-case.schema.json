@@ -33,11 +33,16 @@
               "properties": {
                 "name": {"type": "string"},
                 "kind": {"type": "string"},
-                "evidence": {"type": "string", "description": "path[:line] that establishes it"}
+                "evidence": {"type": "string", "description": "path[:line] that establishes it"},
+                "condition": {"type": "string", "description": "The condition the point is defined under, as discovery records it (selects among same-named points)."},
+                "language": {"type": "string", "description": "The language the point compiles, when asserted."},
+                "sources": {"type": "array", "items": {"type": "string"}, "description": "Exact source list of the point, when asserted."}
               }
             }
           },
-          "facts": {"type": "object", "description": "Subset of the unit's facts that must be present with these values (workspace, descriptor_facts, language, ...)."}
+          "build_points_exact": {"type": "boolean", "description": "When true, build_points is the complete (name, kind) list: a unit with none has an empty list and this flag."},
+          "facts": {"type": "object", "description": "Subset of the unit's facts that must be present with these values (workspace, descriptor_facts, language, ...)."},
+          "facts_absent": {"type": "array", "items": {"type": "string"}, "description": "Fact keys that must be absent or empty on the unit (a negative twin asserts the relation is not stated)."}
         }
       }
     },
@@ -86,6 +91,11 @@
     },
     "source_only_scopes": {"type": "array", "items": {"type": "object", "required": ["root", "language"],
       "properties": {"root": {"type": "string"}, "language": {"type": "string"}}}},
+    "exclusions": {
+      "type": "object",
+      "description": "policy name -> globs excluded before discovery; excluded paths take the role excluded:<policy>.",
+      "additionalProperties": {"type": "array", "items": {"type": "string"}}
+    },
     "pending": {
       "type": "array",
       "description": "Checks the runtime does not meet yet. check is a check id the runner prints; ref is a registry id or sub-item.",

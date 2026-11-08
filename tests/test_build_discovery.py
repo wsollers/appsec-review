@@ -35,9 +35,8 @@ def test_discovery_groups_descriptors_without_repository_specific_names() -> Non
         ("native", "native", "cmake"), ("rust/member", "rust", "cargo"),
     ]
     native = next(item for item in units if item["family"] == "native")
-    assert {item["path"] for item in native["markers"]} == {
-        "native/CMakeLists.txt", "native/CMakePresets.json",
-    }
+    # A preset is context the project reads, never a marker (job pass 05 / T-056.2).
+    assert {item["path"] for item in native["markers"]} == {"native/CMakeLists.txt"}
 
 
 def test_compiled_sources_without_a_build_point_are_orphaned_findings_not_units() -> None:
@@ -946,13 +945,17 @@ def test_a_source_a_sibling_descriptor_names_is_that_units_component_not_a_new_r
 
 def test_a_wildcard_reference_in_a_vendored_test_makefile_binds_the_sources_it_globs() -> None:
     makefile = "SRCS := $(wildcard ../src/*.c)\ncheck: check.c $(SRCS)\n\t$(CC) -I../include check.c $(SRCS) -o check\n"
-    files = [_file("lib/CMakeLists.txt", "project(lib C)\n"), _file("lib/src/lib.c"), _file("lib/include/lib.h"),
+    cmake = "project(lib C)\nadd_library(lib STATIC src/lib.c)\n"
+    files = [_file("lib/CMakeLists.txt", cmake), _file("lib/src/lib.c"), _file("lib/include/lib.h"),
              _file("lib/test/Makefile", makefile), _file("lib/test/check.c")]
     units = {unit["root"]: unit for unit in discover_build_units(
-        files, read_text=_reader({"lib/test/Makefile": makefile, "lib/CMakeLists.txt": "project(lib C)\n"}))}
+        files, read_text=_reader({"lib/test/Makefile": makefile, "lib/CMakeLists.txt": cmake}))}
     # lib/src/lib.c is under the CMake root, so it stays with that unit (matching root wins first).
     assert set(units) == {"lib", "lib/test"}
     assert "native_components" not in units["lib/test"]
+    [check] = units["lib/test"]["build_points"]
+    assert check["sources"] == ["lib/src/lib.c", "lib/test/check.c"], "the wildcard binds the sibling sources to the rule"
+    assert check["headers"] == ["lib/include/lib.h"]
 
 
 def test_cargo_and_go_workspace_facts_are_recorded_without_deciding_ownership() -> None:

@@ -431,7 +431,9 @@ def test_real_planner_requests_and_publishes_exact_additive_evidence(tmp_path):
     from appsec_review.runtime import GraphRunner
     target = tmp_path / "target"
     (target / "native").mkdir(parents=True)
-    (target / "native/CMakeLists.txt").write_bytes(b"project(control)\n")
+    # A CMakeLists.txt with only project() declares no build point and is not a unit (T-056.2);
+    # the control project needs a target to be discovered.
+    (target / "native/CMakeLists.txt").write_bytes(b"project(control)\nadd_executable(control main.c)\n")
     (target / "native/main.c").write_bytes(b"int main(void) { return 0; }\n")
     (target / "native/note.txt").write_bytes(b"explicitly synthetic additive evidence\r\n")
     config_path = tmp_path / "appsec-review.toml"

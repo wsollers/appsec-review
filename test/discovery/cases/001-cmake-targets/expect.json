@@ -5,12 +5,27 @@
   "polarity": "positive",
   "mirrors": "a single CMake project with a static library and an executable",
   "units": [
-    {"root": "app", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["app/CMakeLists.txt"],
-     "build_points": [
-       {"name": "core", "kind": "static_library", "evidence": "app/CMakeLists.txt:4"},
-       {"name": "app_main", "kind": "executable", "evidence": "app/CMakeLists.txt:6"}
-     ]}
+    {
+      "root": "app",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "app/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "core",
+          "kind": "static_library",
+          "evidence": "app/CMakeLists.txt:4"
+        },
+        {
+          "name": "app_main",
+          "kind": "executable",
+          "evidence": "app/CMakeLists.txt:6"
+        }
+      ]
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -23,13 +38,5 @@
     "README.md": "inert",
     "docs/README.md": "inert"
   },
-  "pending": [
-    {"check": "unit:app|cmake.markers", "ref": "T-056.2", "note": "CMakePresets.json is listed as a marker; it is context"},
-    {"check": "unit:app|cmake.build_point:core", "ref": "T-056.2"},
-    {"check": "unit:app|cmake.build_point:app_main", "ref": "T-056.2"},
-    {"check": "assignment:app/CMakePresets.json", "ref": "T-056.2"},
-    {"check": "assignment:app/src/core.c", "ref": "T-056.2", "note": "sources bind to build points, not just the unit"},
-    {"check": "assignment:app/src/main.c", "ref": "T-056.2"},
-    {"check": "assignment:app/include/core.h", "ref": "T-056.2"}
-  ]
+  "pending": []
 }

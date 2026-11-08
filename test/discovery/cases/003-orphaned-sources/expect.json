@@ -5,25 +5,63 @@
   "polarity": "mixed",
   "mirrors": "a built server beside an abandoned C port, loose Go and Rust tool sources, and a PHP page: orphans are findings, PHP is source-only",
   "units": [
-    {"root": "server", "build_system": "cmake", "family": "native", "profile": "native"}
+    {
+      "root": "server",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "build_points": [
+        {
+          "name": "server",
+          "kind": "executable",
+          "evidence": "server/CMakeLists.txt:3"
+        }
+      ]
+    }
   ],
   "not_units": [
-    {"root": "legacy/port", "reason": "no build script, descriptor or compiler line names main.c: orphaned, never a manufactured direct-native unit"},
-    {"root": "tools", "reason": "loose .go and .rs files with no go.mod or Cargo.toml are orphaned, not units"}
+    {
+      "root": "legacy/port",
+      "reason": "no build script, descriptor or compiler line names main.c: orphaned, never a manufactured direct-native unit"
+    },
+    {
+      "root": "tools",
+      "reason": "loose .go and .rs files with no go.mod or Cargo.toml are orphaned, not units"
+    }
   ],
   "assignment": {
     "server/CMakeLists.txt": "evidence_of:server|cmake",
-    "server/src/main.c": "evidence_of:server|cmake",
+    "server/src/main.c": "evidence_of:server|cmake#server",
     "legacy/port/main.c": "orphaned:no_build_point",
     "tools/gen.go": "orphaned:no_build_point",
     "tools/gen.rs": "orphaned:no_build_point",
     "index.php": "source_only:php"
   },
   "orphaned_sources": [
-    {"path": "legacy/port/main.c", "language": "c", "reason": "no_build_point", "nearest_unit": null},
-    {"path": "tools/gen.go", "language": "go", "reason": "no_build_point", "nearest_unit": null},
-    {"path": "tools/gen.rs", "language": "rust", "reason": "no_build_point", "nearest_unit": null}
+    {
+      "path": "legacy/port/main.c",
+      "language": "c",
+      "reason": "no_build_point",
+      "nearest_unit": null
+    },
+    {
+      "path": "tools/gen.go",
+      "language": "go",
+      "reason": "no_build_point",
+      "nearest_unit": null
+    },
+    {
+      "path": "tools/gen.rs",
+      "language": "rust",
+      "reason": "no_build_point",
+      "nearest_unit": null
+    }
   ],
-  "source_only_scopes": [{"root": ".", "language": "php"}],
+  "source_only_scopes": [
+    {
+      "root": ".",
+      "language": "php"
+    }
+  ],
   "pending": []
 }

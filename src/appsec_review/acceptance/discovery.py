@@ -14,7 +14,7 @@ import fnmatch
 import json
 from pathlib import Path
 import sys
-from typing import Any
+from typing import Any, Mapping
 
 CASE_SCHEMA = "appsec-review/discovery-case/1"
 
@@ -26,8 +26,12 @@ class Check:
     detail: str = ""
 
 
-def run_discovery(folder: Path) -> dict[str, Any]:
-    """Inventory + discovery + source-only scopes + assignment for one folder, deterministically."""
+def run_discovery(folder: Path, exclusions: Mapping[str, list[str]] | None = None) -> dict[str, Any]:
+    """Inventory + discovery + source-only scopes + assignment for one folder, deterministically.
+
+    ``exclusions`` maps a policy name to the globs it excludes (the case's ``exclusions`` field);
+    excluded paths are removed before discovery and assigned ``excluded:<policy>``.
+    """
     from appsec_review.jobs.build_discovery import discover_build_inventory, source_only_scopes
     from appsec_review.jobs.cataloging import Bounds, inventory
     from appsec_review.jobs.discovery_assignment import assign_paths, summarize
@@ -46,9 +50,21 @@ def run_discovery(folder: Path) -> dict[str, Any]:
         except (OSError, UnicodeError):
             return None
 
+    excluded: dict[str, str] = {}
+    if exclusions:
+        kept = []
+        for item in files:
+            policy = next((name for name, globs in exclusions.items()
+                           if any(fnmatch.fnmatchcase(str(item["path"]), glob) for glob in globs)), None)
+            if policy is None:
+                kept.append(item)
+            else:
+                excluded[str(item["path"])] = policy
+        files = kept
     discovered = discover_build_inventory(files, read_text=read_text)
     scopes = source_only_scopes(files, discovered["units"])
-    assignment = assign_paths(files, discovered, source_only_scopes=scopes)
+    assignment = assign_paths(files, discovered, source_only_scopes=scopes, excluded=excluded)
+    files = files + [{"path": path} for path in sorted(excluded)]
     return {"files": [str(item["path"]) for item in files], "units": discovered["units"],
             "orphaned_sources": discovered["orphaned_sources"], "source_only_scopes": scopes,
             "assignment": assignment, "summary": summarize(assignment)}
@@ -62,7 +78,9 @@ def _subset(expected: Any, actual: Any) -> bool:
     if isinstance(expected, dict):
         return isinstance(actual, dict) and all(key in actual and _subset(value, actual[key]) for key, value in expected.items())
     if isinstance(expected, list):
-        return isinstance(actual, list) and expected == actual
+        if not isinstance(actual, list) or len(expected) != len(actual):
+            return False
+        return all(_subset(e, a) for e, a in zip(expected, actual))
     return expected == actual
 
 
@@ -74,8 +92,8 @@ def evaluate_case(case_dir: Path) -> tuple[dict[str, Any], list[Check]]:
     expect = json.loads((case_dir / "expect.json").read_text(encoding="utf-8"))
     if expect.get("schema") != CASE_SCHEMA:
         raise ValueError(f"{case_dir}: expect.json schema is not {CASE_SCHEMA}")
-    result = run_discovery(case_dir / "tree")
-    second = run_discovery(case_dir / "tree")
+    result = run_discovery(case_dir / "tree", expect.get("exclusions"))
+    second = run_discovery(case_dir / "tree", expect.get("exclusions"))
     checks: list[Check] = []
     units = {_label(unit): unit for unit in result["units"]}
     expected_labels = set()
@@ -85,11 +103,13 @@ def evaluate_case(case_dir: Path) -> tuple[dict[str, Any], list[Check]]:
         unit = units.get(label)
         checks.append(Check(f"unit:{label}", unit is not None, "unit not discovered" if unit is None else ""))
         if unit is None:
-            continue
+            # The sub-checks are emitted as failures too, so a case can list them as pending now and
+            # they do not surface as surprises the moment the unit lands.
+            unit = {"family": None, "markers": [], "build_points": []}
         checks.append(Check(f"unit:{label}.family", unit["family"] == spec["family"],
                             f"family {unit['family']!r} != {spec['family']!r}"))
         if "profile" in spec:
-            profile = required_image_profile(unit)
+            profile = required_image_profile(unit) if unit["family"] is not None else None
             checks.append(Check(f"unit:{label}.profile", profile == spec["profile"], f"profile {profile!r} != {spec['profile']!r}"))
         if "markers" in spec:
             markers = sorted(str(m["path"]) for m in unit.get("markers", ()))
@@ -97,12 +117,24 @@ def evaluate_case(case_dir: Path) -> tuple[dict[str, Any], list[Check]]:
         if "facts" in spec:
             checks.append(Check(f"unit:{label}.facts", _subset(spec["facts"], unit), "facts differ: " + json.dumps(
                 {key: unit.get(key) for key in spec["facts"]}, sort_keys=True, default=str)[:400]))
+        for absent in spec.get("facts_absent", ()):
+            checks.append(Check(f"unit:{label}.facts_absent:{absent}", absent not in unit or not unit.get(absent),
+                                f"fact {absent!r} is present: {json.dumps(unit.get(absent), default=str)[:200]}"))
+        actual_points = list(unit.get("build_points", ()))
         for point in spec.get("build_points", ()):
-            actual = next((bp for bp in unit.get("build_points", ()) if bp.get("name") == point["name"]), None)
-            ok = actual is not None and actual.get("kind") == point["kind"] and (
-                "evidence" not in point or actual.get("evidence") == point["evidence"])
-            checks.append(Check(f"unit:{label}.build_point:{point['name']}", ok,
+            # Keyed by (name, kind): a Cargo package and its default bin share a name.
+            candidates = [bp for bp in actual_points if bp.get("name") == point["name"] and bp.get("kind") == point["kind"]]
+            if "condition" in point:
+                candidates = [bp for bp in candidates if bp.get("condition") == point["condition"]]
+            actual = candidates[0] if candidates else None
+            ok = actual is not None and all(
+                key not in point or actual.get(key) == point[key] for key in ("evidence", "language", "sources"))
+            checks.append(Check(f"unit:{label}.build_point:{point['name']}|{point['kind']}", ok,
                                 "build point missing" if actual is None else f"build point {actual}"))
+        if spec.get("build_points_exact"):
+            wanted = sorted((p["name"], p["kind"]) for p in spec.get("build_points", ()))
+            got = sorted((str(p.get("name")), str(p.get("kind"))) for p in actual_points)
+            checks.append(Check(f"unit:{label}.build_points_exact", wanted == got, f"build points {got}"))
     declared_absent = {f"{spec['root']}|{spec['build_system']}" for spec in expect["not_units"] if "build_system" in spec}
     declared_absent |= {label for label in units if any(
         "build_system" not in spec and units[label]["root"] == spec["root"] for spec in expect["not_units"])}

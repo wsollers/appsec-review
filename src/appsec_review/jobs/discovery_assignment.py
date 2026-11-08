@@ -27,7 +27,7 @@ ROLES = ("evidence_of", "context", "source_only", "orphaned", "inert", "excluded
 
 # Sources each build family compiles when they sit under one of its unit roots.
 FAMILY_SOURCE_SUFFIXES: dict[str, frozenset[str]] = {
-    "native": frozenset({".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".m", ".mm", ".s", ".asm"}),
+    "native": frozenset({".c", ".cc", ".cpp", ".cxx", ".cu", ".cuh", ".h", ".hh", ".hpp", ".hxx", ".inl", ".m", ".mm", ".s", ".asm"}),
     "rust": frozenset({".rs"}),
     "go": frozenset({".go"}),
     "java": frozenset({".java", ".kt", ".kts", ".scala", ".groovy"}),
@@ -41,7 +41,7 @@ FAMILY_SOURCE_SUFFIXES: dict[str, frozenset[str]] = {
 }
 
 # Compiled-language suffixes: a file with one of these and no claiming unit is orphaned.
-COMPILED_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".java", ".kt", ".kts", ".rs", ".go", ".wat", ".cs", ".swift", ".m", ".mm"})
+COMPILED_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".cu", ".java", ".kt", ".kts", ".rs", ".go", ".wat", ".cs", ".swift", ".m", ".mm"})
 
 SOURCE_ONLY_LANGUAGE_SUFFIXES = {
     ".php": "php", ".py": "python", ".rb": "ruby", ".pl": "perl", ".sh": "shell", ".bash": "shell", ".ps1": "powershell",
@@ -71,12 +71,19 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
         by_root.setdefault(str(unit["root"]), []).append(unit)
     marker_owner: dict[str, str] = {}
     component_owner: dict[str, str] = {}
+    included: dict[str, str] = {}
     for unit in units:
         label = _unit_label(unit)
         for marker in unit.get("markers", ()):
             marker_owner.setdefault(str(marker["path"]), label)
+        for point in unit.get("build_points", ()):
+            for path in (*point.get("sources", ()), *point.get("headers", ())):
+                component_owner.setdefault(str(path), f"{label}#{point['name']}")
         for component in unit.get("native_components", ()):
             component_owner.setdefault(str(component["path"]), label)
+        for path in unit.get("includes", ()):
+            included.setdefault(str(path), label)
+    demoted = {str(path) for item in discovery.get("demoted_markers") or [] for path in item.get("markers", ())}
     scopes = [(str(scope["root"]), str(scope.get("language") or "source")) for scope in source_only_scopes]
     assignment: dict[str, str] = {}
     for path, policy in sorted((excluded or {}).items()):
@@ -87,21 +94,38 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
             continue
         posix = PurePosixPath(path)
         suffix = posix.suffix.lower()
+        if path in demoted:
+            assignment[path] = "inert"
+            continue
         if path in marker_owner:
             assignment[path] = f"evidence_of:{marker_owner[path]}"
             continue
         if path in component_owner:
             assignment[path] = f"evidence_of:{component_owner[path]}"
             continue
+        if path in included:
+            assignment[path] = f"context:{included[path]}"
+            continue
         if path in orphans:
             assignment[path] = f"orphaned:{orphans[path].get('reason', 'no_build_point')}"
             continue
         root = _nearest(posix, by_root)
+        if posix.name.lower().startswith("readme") or posix.name.lower() in {"license", "license.md", "license.txt", "changelog.md", "notice"}:
+            assignment[path] = "inert"
+            continue
         if root is not None:
             owners = by_root[root]
+            if posix.name.lower() in _CONTEXT_FILE_NAMES:
+                # Lockfiles, wrapper properties, presets: context the unit reads, never a source.
+                assignment[path] = f"context:{_unit_label(owners[0])}"
+                continue
             compiled_by = [unit for unit in owners if suffix in FAMILY_SOURCE_SUFFIXES.get(str(unit["family"]), frozenset())]
             if compiled_by:
                 assignment[path] = f"evidence_of:{_unit_label(compiled_by[0])}"
+                continue
+            if suffix in _INCLUDED_ONLY_SUFFIXES:
+                # A module nothing includes is inert, not context of whatever unit happens to be above it.
+                assignment[path] = "inert"
                 continue
             if is_build_descriptor(posix) or posix.name.lower() in _CONTEXT_FILE_NAMES or suffix in _CONTEXT_SUFFIXES:
                 assignment[path] = f"context:{_unit_label(owners[0])}"
@@ -133,7 +157,9 @@ _CONTEXT_FILE_NAMES = frozenset({
     ".npmrc", ".yarnrc", ".yarnrc.yml", "tsconfig.json", "babel.config.js", ".babelrc", "rust-toolchain.toml",
     "rust-toolchain", "requirements.txt", "setup.cfg", "tox.ini", "manifest.json", "packages-lock.json",
 })
-_CONTEXT_SUFFIXES = frozenset({".props", ".targets", ".filters", ".user", ".cmake", ".mk", ".in", ".am", ".ac", ".m4",
+# Modules that are context only when a descriptor includes them (CMake modules, Make fragments).
+_INCLUDED_ONLY_SUFFIXES = frozenset({".cmake", ".mk"})
+_CONTEXT_SUFFIXES = frozenset({".props", ".targets", ".filters", ".user", ".in", ".am", ".ac", ".m4",
                                ".lock", ".sln.docstates", ".xcscheme", ".xcworkspacedata", ".pbxproj", ".plist",
                                ".gradle", ".kts", ".toml", ".yaml", ".yml", ".json", ".ninja"})
 

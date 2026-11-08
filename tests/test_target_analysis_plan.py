@@ -158,7 +158,7 @@ def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: P
         "web/package.json": "{}", "web/package-lock.json": '{"lockfileVersion":3}',
         "web/tsconfig.json": "{}", "web/src/app.ts": "export const x=1;\n",
         "api/go.mod": "module fixture\n", "api/main.go": "package main\n",
-        "native/CMakeLists.txt": "project(fixture)\n", "native/main.cpp": "int main(){}\n",
+        "native/CMakeLists.txt": "project(fixture)\nadd_executable(fixture main.cpp)\n", "native/main.cpp": "int main(){}\n",
         "jvm/pom.xml": "<project/>", "jvm/Main.java": "class Main {}\n",
         "ops/tool.sh": "echo ok\n",
     }
@@ -342,7 +342,7 @@ def test_native_nonbuild_recipes_are_gaps_without_erasing_real_make_and_cmake_bu
         files[f"{root}/Makefile"] = "all:\n\t$(CC) entry.cpp -o entry\n"
     files["wrapper/Makefile"] = "all: native\nnative:\n\tif not exist bin mkdir bin\n\tpowershell build.ps1\n\t$(MSBUILD) native.sln\n"
     files["migrator/Makefile"] = "db-docker:\n\tdocker build -f Dockerfile .\n"
-    files["compiled/CMakeLists.txt"] = "project(fixture)\n"
+    files["compiled/CMakeLists.txt"] = "project(fixture)\nadd_executable(fixture main.cpp)\n"
     for root, project_type, extension in (
             ("native-solution", "8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942", "vcxproj"),
             ("managed-solution", "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC", "csproj")):
@@ -379,7 +379,10 @@ def test_native_nonbuild_recipes_are_gaps_without_erasing_real_make_and_cmake_bu
     _outcome, plan = _run(config, target, build_job(infer=model.complete))
     actions = {action["root"]: action for action in plan["build_topology"]["build_actions"]}
     assert plan["model"]["status"] == "PARTIAL"
-    assert len(actions) == 45
+    # 27 header-only Makefile.am fragments declare no program or library: not units since T-056.2
+    # (they are demoted markers in the catalog), so 45 descriptor roots are 18 build actions.
+    assert len(actions) == 18
+    assert not any(root.startswith("vendor/fragment-") for root in actions)
     assert {root for root, action in actions.items() if action["recipe"] is not None} == portable | {"compiled", "managed-solution"}
     for root, action in actions.items():
         if root in portable:
@@ -393,7 +396,6 @@ def test_native_nonbuild_recipes_are_gaps_without_erasing_real_make_and_cmake_bu
             assert any(action["build_unit_id"] in gap and action["markers"][0]["sha256"] in gap
                        for gap in plan["coverage_gaps"])
     gaps = "\n".join(plan["coverage_gaps"])
-    assert "nonstandalone_autotools_fragment" in gaps
     assert "no compilation or build step" in gaps
     assert "unavailable_native_windows_toolchain" in gaps
     assert "unsupported_native_orchestration" in gaps
@@ -405,7 +407,7 @@ def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path
         "a/package.json": "{}", "a/tsconfig.json": "{}", "a/index.ts": "export {}\n",
         "b/go.mod": "module b\n", "b/main.go": "package main\n",
         "c/pom.xml": "<project/>", "c/Main.java": "class Main{}\n",
-        "d/CMakeLists.txt": "project(d)\n", "d/main.cpp": "int main(){}\n",
+        "d/CMakeLists.txt": "project(d)\nadd_executable(d main.cpp)\n", "d/main.cpp": "int main(){}\n",
     }, model_enabled=True)
     model = _Model(lambda request: _proposal(request, [{
         "component_id": "component:0001", "scanner_ids": ["tool-arbitrary-shell"],
@@ -427,7 +429,7 @@ def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path
 
 def test_build_topology_recognizes_native_jvm_and_package_manager_markers(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path, {
-        "c/CMakeLists.txt": "project(c)\n", "m/Makefile": "all:\n\ttrue\n",
+        "c/CMakeLists.txt": "project(c)\nadd_executable(c main.cpp)\n", "m/Makefile": "all:\n\ttrue\n",
         "c/compile_commands.json": "[]", "j/pom.xml": "<project/>",
         "g/build.gradle": "", "n/package.json": "{}", "r/Cargo.toml": "[package]\nname='r'\nversion='0.1.0'\n",
     })
@@ -520,7 +522,7 @@ def test_model_unavailable_is_named_gap_for_ambiguous_target(tmp_path: Path) -> 
         "a/package.json": "{}", "a/tsconfig.json": "{}", "a/index.ts": "export {}\n",
         "b/go.mod": "module b\n", "b/main.go": "package main\n",
         "c/pom.xml": "<project/>", "c/Main.java": "class Main{}\n",
-        "d/CMakeLists.txt": "project(d)\n", "d/main.cpp": "int main(){}\n",
+        "d/CMakeLists.txt": "project(d)\nadd_executable(d main.cpp)\n", "d/main.cpp": "int main(){}\n",
     }, model_enabled=True)
     _, plan = _run(config, target)
     assert plan["model"]["status"] == "UNAVAILABLE"
@@ -532,7 +534,7 @@ def test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path: Path) ->
         "a/package.json": "{}", "a/index.ts": "export {}\n",
         "b/go.mod": "module b\n", "b/main.go": "package main\n",
         "c/pom.xml": "<project/>", "c/Main.java": "class Main{}\n",
-        "d/CMakeLists.txt": "project(d)\n", "d/main.cpp": "int main(){}\n",
+        "d/CMakeLists.txt": "project(d)\nadd_executable(d main.cpp)\n", "d/main.cpp": "int main(){}\n",
     }, model_enabled=True)
 
     class FailingModel:
@@ -589,7 +591,7 @@ def test_accepted_plan_publishes_source_bound_executable_graph(tmp_path: Path) -
 def test_graph_reuse_declares_releases_and_missing_release_still_refuses_reuse(tmp_path: Path) -> None:
     from appsec_review.config.assurance import ComponentReleases
 
-    config, target = _fixture(tmp_path, {"CMakeLists.txt": "project(app)\n"})
+    config, target = _fixture(tmp_path, {"CMakeLists.txt": "project(app)\nadd_executable(app main.cpp)\n"})
     config = replace(config, review_policy=replace(config.review_policy, releases=ComponentReleases({
         "platform": "topology-fixture/1", "validation": "topology-fixture/1",
     })))
