@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "070-sln-sibling-vcxproj",
+  "matrix": "B6",
+  "polarity": "positive",
+  "mirrors": "a Visual Studio solution under build/ whose projects live in sibling trees (..\\engine\\engine.vcxproj, ..\\game\\game.vcxproj): the solution is the unit, the listed projects are its build points and their directories are not roots; a solution of C++ projects is a native MSBuild build, and its materialization root is the common parent",
+  "units": [
+    {"root": "build", "build_system": "msbuild", "family": "native", "profile": "native",
+     "markers": ["build/game.sln"],
+     "build_points": [
+       {"name": "engine", "kind": "project", "evidence": "build/game.sln:5"},
+       {"name": "game", "kind": "project", "evidence": "build/game.sln:7"}
+     ],
+     "facts": {"materialization_root": "."}}
+  ],
+  "not_units": [
+    {"root": "build", "build_system": "dotnet", "marker": "build/game.sln",
+     "reason": "every project the solution lists is a .vcxproj: this is a native MSBuild solution, not a .NET one"},
+    {"root": "engine", "build_system": "msbuild", "marker": "engine/engine.vcxproj", "role": "evidence_of:build|msbuild",
+     "reason": "listed by build/game.sln; a .vcxproj a solution elsewhere lists is that solution's build point"},
+    {"root": "game", "build_system": "msbuild", "marker": "game/game.vcxproj", "role": "evidence_of:build|msbuild",
+     "reason": "listed by build/game.sln"}
+  ],
+  "assignment": {
+    "README.md": "inert",
+    "build/game.sln": "evidence_of:build|msbuild",
+    "engine/engine.vcxproj": "evidence_of:build|msbuild",
+    "engine/include/engine.h": "evidence_of:build|msbuild#engine",
+    "engine/src/engine.cpp": "evidence_of:build|msbuild#engine",
+    "game/game.vcxproj": "evidence_of:build|msbuild",
+    "game/src/main.cpp": "evidence_of:build|msbuild#game"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:build|msbuild", "ref": "T-056.4", "note": "a .sln is always concluded as a dotnet unit today; the family and system follow the projects it lists"},
+    {"check": "not_unit:build|dotnet", "ref": "T-056.4"},
+    {"check": "not_unit:engine|msbuild", "ref": "T-056.5", "note": "a .vcxproj listed by a solution in another directory is not a root"},
+    {"check": "not_unit:game|msbuild", "ref": "T-056.5"},
+    {"check": "assignment:build/game.sln", "ref": "T-056.4"},
+    {"check": "assignment:engine/engine.vcxproj", "ref": "T-056.5"},
+    {"check": "assignment:engine/include/engine.h", "ref": "T-056.5"},
+    {"check": "assignment:engine/src/engine.cpp", "ref": "T-056.5"},
+    {"check": "assignment:game/game.vcxproj", "ref": "T-056.5"},
+    {"check": "assignment:game/src/main.cpp", "ref": "T-056.5"}
+  ]
+}
