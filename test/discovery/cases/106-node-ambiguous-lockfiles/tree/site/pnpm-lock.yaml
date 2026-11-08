@@ -1,0 +1,12 @@
+lockfileVersion: '6.0'
+
+dependencies:
+  left-pad-shim:
+    specifier: 1.0.0
+    version: 1.0.0
+
+packages:
+
+  /left-pad-shim@1.0.0:
+    resolution: {integrity: sha512-stand-in}
+    dev: false

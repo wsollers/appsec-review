@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "105-node-npm-and-pnpm-lockfiles",
+  "matrix": "C3",
+  "polarity": "positive",
+  "mirrors": "a TypeScript package that switched from npm to pnpm and kept both lockfiles; package.json declares packageManager pnpm, so pnpm is the recorded restore authority and the npm lockfile is stale context",
+  "units": [
+    {"root": "web", "build_system": "node", "family": "node", "profile": "node",
+     "markers": ["web/package.json"],
+     "build_points": [{"name": "build", "kind": "script", "evidence": "web/package.json:7"}],
+     "facts": {"package_manager": {"authority": "pnpm", "declared_by": "web/package.json:packageManager",
+                                   "lockfiles": ["web/package-lock.json", "web/pnpm-lock.yaml"]}}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "web/package.json": "evidence_of:web|node",
+    "web/pnpm-lock.yaml": "context:web|node",
+    "web/package-lock.json": "context:web|node",
+    "web/tsconfig.json": "context:web|node",
+    "web/.npmrc": "context:web|node",
+    "web/src/index.ts": "evidence_of:web|node#build",
+    "web/README.md": "inert"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:web|node.build_point:build", "ref": "T-056.2", "note": "npm scripts are the node build points"},
+    {"check": "unit:web|node.facts", "ref": "T-056.6", "note": "one unit, two package managers: the authority comes from packageManager, never from which lockfile sorts first"},
+    {"check": "assignment:web/package-lock.json", "ref": "T-056.2", "note": "a lockfile is context; the node family's .json source suffix claims it as evidence today"},
+    {"check": "assignment:web/tsconfig.json", "ref": "T-056.2", "note": "tsconfig.json is context the build script reads"},
+    {"check": "assignment:web/src/index.ts", "ref": "T-056.2"},
+    {"check": "assignment:web/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"}
+  ]
+}
