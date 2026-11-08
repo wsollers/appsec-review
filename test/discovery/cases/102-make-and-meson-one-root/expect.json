@@ -1,0 +1,48 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "102-make-and-meson-one-root",
+  "matrix": "C2",
+  "polarity": "positive",
+  "mirrors": "a small compression library kept buildable with both a hand-written Makefile and a meson.build in one root; both compile the same three sources; meson is the recorded capture authority",
+  "units": [
+    {"root": "zlibish", "build_system": "meson", "family": "native", "profile": "native",
+     "markers": ["zlibish/meson.build"],
+     "build_points": [
+       {"name": "zlibish", "kind": "static_library", "evidence": "zlibish/meson.build:3"},
+       {"name": "zpipe", "kind": "executable", "evidence": "zlibish/meson.build:4"}
+     ],
+     "facts": {"parallel_with": ["zlibish|make"], "capture_authority": "primary"}},
+    {"root": "zlibish", "build_system": "make", "family": "native", "profile": "native",
+     "markers": ["zlibish/Makefile"],
+     "build_points": [
+       {"name": "libzlibish.a", "kind": "rule", "evidence": "zlibish/Makefile:6"},
+       {"name": "zpipe", "kind": "rule", "evidence": "zlibish/Makefile:11"}
+     ],
+     "facts": {"parallel_with": ["zlibish|meson"], "capture_authority": "secondary"}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "zlibish/meson.build": "evidence_of:zlibish|meson",
+    "zlibish/meson_options.txt": "context:zlibish|meson",
+    "zlibish/Makefile": "evidence_of:zlibish|make",
+    "zlibish/include/zlibish.h": "evidence_of:zlibish|meson#zlibish",
+    "zlibish/src/inflate.c": "evidence_of:zlibish|meson#zlibish",
+    "zlibish/src/deflate.c": "evidence_of:zlibish|meson#zlibish",
+    "zlibish/src/zpipe.c": "evidence_of:zlibish|meson#zpipe",
+    "zlibish/README": "inert"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:zlibish|meson.build_point:zlibish", "ref": "T-056.2"},
+    {"check": "unit:zlibish|meson.build_point:zpipe", "ref": "T-056.2"},
+    {"check": "unit:zlibish|meson.facts", "ref": "T-056.6"},
+    {"check": "unit:zlibish|make", "ref": "T-056.6", "note": "a Makefile with its own compile rules beside a meson.build is a parallel unit; today the make group is dropped whenever cmake, autotools or meson shares the root"},
+    {"check": "assignment:zlibish/Makefile", "ref": "T-056.6", "note": "evidence of the make unit, not context of the meson unit"},
+    {"check": "assignment:zlibish/meson_options.txt", "ref": "T-056.2", "note": "meson reads meson_options.txt: context, not inert"},
+    {"check": "assignment:zlibish/README", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"},
+    {"check": "assignment:zlibish/include/zlibish.h", "ref": "T-056.2"},
+    {"check": "assignment:zlibish/src/inflate.c", "ref": "T-056.2"},
+    {"check": "assignment:zlibish/src/deflate.c", "ref": "T-056.2"},
+    {"check": "assignment:zlibish/src/zpipe.c", "ref": "T-056.2"}
+  ]
+}

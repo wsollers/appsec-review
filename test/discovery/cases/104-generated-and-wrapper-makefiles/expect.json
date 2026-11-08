@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "104-generated-and-wrapper-makefiles",
+  "matrix": "C2",
+  "polarity": "negative",
+  "mirrors": "two Makefiles beside another build system that are not parallel builds: gen/Makefile is CMake generator output from an in-source build (with CMakeCache.txt and CMakeFiles/), wrap/Makefile only runs meson setup and meson compile",
+  "units": [
+    {"root": "gen", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["gen/CMakeLists.txt"],
+     "build_points": [{"name": "gen", "kind": "executable", "evidence": "gen/CMakeLists.txt:3"}],
+     "facts": {"parallel_with": []}},
+    {"root": "wrap", "build_system": "meson", "family": "native", "profile": "native",
+     "markers": ["wrap/meson.build"],
+     "build_points": [{"name": "wraptool", "kind": "executable", "evidence": "wrap/meson.build:2"}],
+     "facts": {"parallel_with": []}}
+  ],
+  "not_units": [
+    {"root": "gen", "build_system": "make", "marker": "gen/Makefile", "role": "inert",
+     "reason": "a CMake-generated Makefile (DO NOT EDIT header, cmake_check_build_system, CMakeFiles/Makefile2) is generator output of the cmake unit, not a second build system"},
+    {"root": "wrap", "build_system": "make", "marker": "wrap/Makefile", "role": "context:wrap|meson",
+     "reason": "every recipe runs meson; a wrapper compiles nothing and is kept as context of the meson unit it drives"}
+  ],
+  "assignment": {
+    "gen/CMakeLists.txt": "evidence_of:gen|cmake",
+    "gen/Makefile": "inert",
+    "gen/CMakeCache.txt": "inert",
+    "gen/CMakeFiles/Makefile.cmake": "inert",
+    "gen/src/main.c": "evidence_of:gen|cmake#gen",
+    "wrap/meson.build": "evidence_of:wrap|meson",
+    "wrap/Makefile": "context:wrap|meson",
+    "wrap/src/main.c": "evidence_of:wrap|meson#wraptool",
+    "wrap/README.md": "inert"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:gen|cmake.build_point:gen", "ref": "T-056.2"},
+    {"check": "unit:gen|cmake.facts", "ref": "T-056.6", "note": "a unit states its parallels, empty when it has none"},
+    {"check": "unit:wrap|meson.build_point:wraptool", "ref": "T-056.2"},
+    {"check": "unit:wrap|meson.facts", "ref": "T-056.6"},
+    {"check": "assignment:gen/Makefile", "ref": "T-056.6", "note": "generator output is inert, not context the cmake unit reads"},
+    {"check": "assignment:gen/CMakeFiles/Makefile.cmake", "ref": "T-056.2", "note": "a generated .cmake file is inert, not context"},
+    {"check": "assignment:gen/src/main.c", "ref": "T-056.2"},
+    {"check": "assignment:wrap/src/main.c", "ref": "T-056.2"},
+    {"check": "assignment:wrap/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"}
+  ]
+}

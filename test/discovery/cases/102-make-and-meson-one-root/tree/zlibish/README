@@ -1,0 +1,1 @@
+zlibish: build with "make" or with "meson setup build && meson compile -C build".

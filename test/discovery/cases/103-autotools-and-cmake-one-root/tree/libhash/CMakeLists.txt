@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(libhash VERSION 1.2.0 LANGUAGES C)
+add_library(hash STATIC src/hash.c)
+target_include_directories(hash PUBLIC src)
+add_executable(hashsum src/hashsum.c)
+target_link_libraries(hashsum PRIVATE hash)

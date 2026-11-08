@@ -1,0 +1,47 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "103-autotools-and-cmake-one-root",
+  "matrix": "C2",
+  "polarity": "positive",
+  "mirrors": "a library that kept its autotools build (configure.ac, Makefile.am, a checked-in Makefile.in, an m4/ macro) when a CMake build was added in the same root; both build the same sources; CMake is the recorded capture authority",
+  "units": [
+    {"root": "libhash", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["libhash/CMakeLists.txt"],
+     "build_points": [
+       {"name": "hash", "kind": "static_library", "evidence": "libhash/CMakeLists.txt:3"},
+       {"name": "hashsum", "kind": "executable", "evidence": "libhash/CMakeLists.txt:5"}
+     ],
+     "facts": {"parallel_with": ["libhash|autotools"], "capture_authority": "primary"}},
+    {"root": "libhash", "build_system": "autotools", "family": "native", "profile": "native",
+     "markers": ["libhash/Makefile.am", "libhash/configure.ac"],
+     "build_points": [
+       {"name": "libhash.a", "kind": "library", "evidence": "libhash/Makefile.am:2"},
+       {"name": "hashsum", "kind": "program", "evidence": "libhash/Makefile.am:4"}
+     ],
+     "facts": {"parallel_with": ["libhash|cmake"], "capture_authority": "secondary"}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "libhash/CMakeLists.txt": "evidence_of:libhash|cmake",
+    "libhash/configure.ac": "evidence_of:libhash|autotools",
+    "libhash/Makefile.am": "evidence_of:libhash|autotools",
+    "libhash/Makefile.in": "context:libhash|autotools",
+    "libhash/m4/ax_check_flag.m4": "context:libhash|autotools",
+    "libhash/src/hash.c": "evidence_of:libhash|cmake#hash",
+    "libhash/src/hash.h": "evidence_of:libhash|cmake#hash",
+    "libhash/src/hashsum.c": "evidence_of:libhash|cmake#hashsum",
+    "libhash/NEWS": "inert"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:libhash|cmake.build_point:hash", "ref": "T-056.2"},
+    {"check": "unit:libhash|cmake.build_point:hashsum", "ref": "T-056.2"},
+    {"check": "unit:libhash|cmake.facts", "ref": "T-056.6"},
+    {"check": "unit:libhash|autotools.build_point:libhash.a", "ref": "T-056.2", "note": "automake primaries (lib_LIBRARIES, bin_PROGRAMS) are the autotools build points"},
+    {"check": "unit:libhash|autotools.build_point:hashsum", "ref": "T-056.2"},
+    {"check": "unit:libhash|autotools.facts", "ref": "T-056.6"},
+    {"check": "assignment:libhash/src/hash.c", "ref": "T-056.6", "note": "shared sources bind to the capture authority's build point; today the alphabetically first unit at the root claims them"},
+    {"check": "assignment:libhash/src/hash.h", "ref": "T-056.6"},
+    {"check": "assignment:libhash/src/hashsum.c", "ref": "T-056.6"}
+  ]
+}

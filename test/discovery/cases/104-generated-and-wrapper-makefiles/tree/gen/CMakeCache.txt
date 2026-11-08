@@ -1,0 +1,5 @@
+# This is the CMakeCache file.
+# For build in directory: /home/dev/gen
+CMAKE_BUILD_TYPE:STRING=
+CMAKE_GENERATOR:INTERNAL=Unix Makefiles
+gen_SOURCE_DIR:STATIC=/home/dev/gen
