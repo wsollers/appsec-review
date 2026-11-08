@@ -5,12 +5,27 @@
   "polarity": "positive",
   "mirrors": "a Composer project with a PSR-4 autoload map over src/, a build script, a public entry point and composer.lock: the package is the unit; its PHP is evidence of the package (composer install is its build step), not source-only",
   "units": [
-    {"root": "api", "build_system": "composer", "family": "php", "profile": "php",
-     "markers": ["api/composer.json"],
-     "build_points": [
-       {"name": "acme/api", "kind": "package", "evidence": "api/composer.json:2"},
-       {"name": "build", "kind": "script", "evidence": "api/composer.json:12"}
-     ]}
+    {
+      "root": "api",
+      "build_system": "composer",
+      "family": "php",
+      "profile": "php",
+      "markers": [
+        "api/composer.json"
+      ],
+      "build_points": [
+        {
+          "name": "acme/api",
+          "kind": "package",
+          "evidence": "api/composer.json:2"
+        },
+        {
+          "name": "build",
+          "kind": "script",
+          "evidence": "api/composer.json:12"
+        }
+      ]
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -23,10 +38,24 @@
   },
   "source_only_scopes": [],
   "pending": [
-    {"check": "unit:api|composer.build_point:acme/api", "ref": "T-056.2"},
-    {"check": "unit:api|composer.build_point:build", "ref": "T-056.2", "note": "composer scripts are build points like npm scripts"},
-    {"check": "assignment:api/src/Kernel.php", "ref": "T-056.2", "note": "the psr-4 map names src/ for the package"},
-    {"check": "assignment:api/bin/warm-cache.php", "ref": "T-056.2", "note": "the file the build script runs binds to that script"},
-    {"check": "assignment:api/README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+    {
+      "check": "unit:api|composer.build_point:acme/api|package",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:api|composer.build_point:build|script",
+      "ref": "T-056.2",
+      "note": "composer scripts are build points like npm scripts"
+    },
+    {
+      "check": "assignment:api/src/Kernel.php",
+      "ref": "T-056.2",
+      "note": "the psr-4 map names src/ for the package"
+    },
+    {
+      "check": "assignment:api/bin/warm-cache.php",
+      "ref": "T-056.2",
+      "note": "the file the build script runs binds to that script"
+    }
   ]
 }

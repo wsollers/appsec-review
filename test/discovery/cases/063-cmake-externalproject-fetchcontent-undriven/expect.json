@@ -5,16 +5,58 @@
   "polarity": "negative",
   "mirrors": "the 062 tree with the ExternalProject_Add and FetchContent lines removed: the two trees under host/external/ are CMake roots of their own, and the host states that it includes and drives nothing",
   "units": [
-    {"root": "host", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["host/CMakeLists.txt"],
-     "build_points": [{"name": "host_main", "kind": "executable", "evidence": "host/CMakeLists.txt:3"}],
-     "facts": {"subdirectories": [], "external_projects": []}},
-    {"root": "host/external/tinylib", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["host/external/tinylib/CMakeLists.txt"],
-     "build_points": [{"name": "tiny", "kind": "static_library", "evidence": "host/external/tinylib/CMakeLists.txt:3"}]},
-    {"root": "host/external/fmtlite", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["host/external/fmtlite/CMakeLists.txt"],
-     "build_points": [{"name": "fmtlite", "kind": "static_library", "evidence": "host/external/fmtlite/CMakeLists.txt:3"}]}
+    {
+      "root": "host",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "host/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "host_main",
+          "kind": "executable",
+          "evidence": "host/CMakeLists.txt:3"
+        }
+      ],
+      "facts": {
+        "subdirectories": [],
+        "external_projects": []
+      }
+    },
+    {
+      "root": "host/external/tinylib",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "host/external/tinylib/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "tiny",
+          "kind": "static_library",
+          "evidence": "host/external/tinylib/CMakeLists.txt:3"
+        }
+      ]
+    },
+    {
+      "root": "host/external/fmtlite",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "host/external/fmtlite/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "fmtlite",
+          "kind": "static_library",
+          "evidence": "host/external/fmtlite/CMakeLists.txt:3"
+        }
+      ]
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -30,15 +72,10 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:host|cmake.markers", "ref": "T-056.2", "note": "CMakePresets.json is listed as a marker; it is context"},
-    {"check": "unit:host|cmake.build_point:host_main", "ref": "T-056.2"},
-    {"check": "unit:host|cmake.facts", "ref": "T-056.5", "note": "the inclusion facts are stated empty: directories below the root are not its subdirectories unless a line says so"},
-    {"check": "unit:host/external/tinylib|cmake.build_point:tiny", "ref": "T-056.2"},
-    {"check": "unit:host/external/fmtlite|cmake.build_point:fmtlite", "ref": "T-056.2"},
-    {"check": "assignment:host/CMakePresets.json", "ref": "T-056.2"},
-    {"check": "assignment:host/src/main.c", "ref": "T-056.2"},
-    {"check": "assignment:host/external/tinylib/src/tiny.c", "ref": "T-056.2"},
-    {"check": "assignment:host/external/fmtlite/include/fmtlite.h", "ref": "T-056.2"},
-    {"check": "assignment:host/external/fmtlite/src/fmtlite.c", "ref": "T-056.2"}
+    {
+      "check": "unit:host|cmake.facts",
+      "ref": "T-056.5",
+      "note": "the inclusion facts are stated empty: directories below the root are not its subdirectories unless a line says so"
+    }
   ]
 }

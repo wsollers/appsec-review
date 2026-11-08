@@ -5,18 +5,43 @@
   "polarity": "positive",
   "mirrors": "a .NET solution of two SDK-style C# projects with Directory.Build.props, global.json and NuGet.Config at the root: the solution is the unit, the projects are its build points, the three root files are context",
   "units": [
-    {"root": ".", "build_system": "dotnet", "family": "dotnet", "profile": "dotnet",
-     "markers": ["Shop.sln"],
-     "build_points": [
-       {"name": "Shop.Core", "kind": "project", "evidence": "Shop.sln:6"},
-       {"name": "Shop.Cli", "kind": "project", "evidence": "Shop.sln:8"}
-     ]}
+    {
+      "root": ".",
+      "build_system": "dotnet",
+      "family": "dotnet",
+      "profile": "dotnet",
+      "markers": [
+        "Shop.sln"
+      ],
+      "build_points": [
+        {
+          "name": "Shop.Core",
+          "kind": "project",
+          "evidence": "Shop.sln:6"
+        },
+        {
+          "name": "Shop.Cli",
+          "kind": "project",
+          "evidence": "Shop.sln:8"
+        }
+      ]
+    }
   ],
   "not_units": [
-    {"root": "src/Shop.Core", "build_system": "dotnet", "marker": "src/Shop.Core/Shop.Core.csproj", "role": "evidence_of:.|dotnet#Shop.Core",
-     "reason": "listed by Shop.sln; a build point of the solution, not a root"},
-    {"root": "src/Shop.Cli", "build_system": "dotnet", "marker": "src/Shop.Cli/Shop.Cli.csproj", "role": "evidence_of:.|dotnet#Shop.Cli",
-     "reason": "listed by Shop.sln"}
+    {
+      "root": "src/Shop.Core",
+      "build_system": "dotnet",
+      "marker": "src/Shop.Core/Shop.Core.csproj",
+      "role": "evidence_of:.|dotnet#Shop.Core",
+      "reason": "listed by Shop.sln; a build point of the solution, not a root"
+    },
+    {
+      "root": "src/Shop.Cli",
+      "build_system": "dotnet",
+      "marker": "src/Shop.Cli/Shop.Cli.csproj",
+      "role": "evidence_of:.|dotnet#Shop.Cli",
+      "reason": "listed by Shop.sln"
+    }
   ],
   "assignment": {
     "Shop.sln": "evidence_of:.|dotnet",
@@ -30,14 +55,39 @@
     "README.md": "inert"
   },
   "pending": [
-    {"check": "unit:.|dotnet.build_point:Shop.Core", "ref": "T-056.2"},
-    {"check": "unit:.|dotnet.build_point:Shop.Cli", "ref": "T-056.2"},
-    {"check": "not_unit:src/Shop.Core|dotnet", "ref": "T-056.2", "note": "a .csproj a solution lists is a build point of the solution"},
-    {"check": "not_unit:src/Shop.Cli|dotnet", "ref": "T-056.2"},
-    {"check": "assignment:src/Shop.Core/Shop.Core.csproj", "ref": "T-056.2"},
-    {"check": "assignment:src/Shop.Core/Price.cs", "ref": "T-056.2", "note": "SDK-style projects compile every .cs under their directory"},
-    {"check": "assignment:src/Shop.Cli/Shop.Cli.csproj", "ref": "T-056.2"},
-    {"check": "assignment:src/Shop.Cli/Program.cs", "ref": "T-056.2"},
-    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+    {
+      "check": "unit:.|dotnet.build_point:Shop.Core|project",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:.|dotnet.build_point:Shop.Cli|project",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "not_unit:src/Shop.Core|dotnet",
+      "ref": "T-056.2",
+      "note": "a .csproj a solution lists is a build point of the solution"
+    },
+    {
+      "check": "not_unit:src/Shop.Cli|dotnet",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:src/Shop.Core/Shop.Core.csproj",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:src/Shop.Core/Price.cs",
+      "ref": "T-056.2",
+      "note": "SDK-style projects compile every .cs under their directory"
+    },
+    {
+      "check": "assignment:src/Shop.Cli/Shop.Cli.csproj",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:src/Shop.Cli/Program.cs",
+      "ref": "T-056.2"
+    }
   ]
 }

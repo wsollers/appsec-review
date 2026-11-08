@@ -5,25 +5,71 @@
   "polarity": "mixed",
   "mirrors": "a solution under build/vs2022/ whose projects are two directories up (..\\..\\engine, ..\\..\\game): the solution's materialization root is the repository root; a third project that a README beside the solution mentions but the solution does not list is an MSBuild root of its own",
   "units": [
-    {"root": "build/vs2022", "build_system": "msbuild", "family": "native", "profile": "native",
-     "markers": ["build/vs2022/all.sln"],
-     "build_points": [
-       {"name": "engine", "kind": "project", "evidence": "build/vs2022/all.sln:5"},
-       {"name": "game", "kind": "project", "evidence": "build/vs2022/all.sln:7"}
-     ],
-     "facts": {"materialization_root": "."}},
-    {"root": "tools", "build_system": "msbuild", "family": "native", "profile": "native",
-     "markers": ["tools/tools.vcxproj"],
-     "build_points": [{"name": "tools", "kind": "project", "evidence": "tools/tools.vcxproj"}],
-     "facts": {"materialization_root": "tools"}}
+    {
+      "root": "build/vs2022",
+      "build_system": "msbuild",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "build/vs2022/all.sln"
+      ],
+      "build_points": [
+        {
+          "name": "engine",
+          "kind": "project",
+          "evidence": "build/vs2022/all.sln:5"
+        },
+        {
+          "name": "game",
+          "kind": "project",
+          "evidence": "build/vs2022/all.sln:7"
+        }
+      ],
+      "facts": {
+        "materialization_root": "."
+      }
+    },
+    {
+      "root": "tools",
+      "build_system": "msbuild",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "tools/tools.vcxproj"
+      ],
+      "build_points": [
+        {
+          "name": "tools",
+          "kind": "project",
+          "evidence": "tools/tools.vcxproj"
+        }
+      ],
+      "facts": {
+        "materialization_root": "tools"
+      }
+    }
   ],
   "not_units": [
-    {"root": "build/vs2022", "build_system": "dotnet", "marker": "build/vs2022/all.sln",
-     "reason": "the solution lists .vcxproj projects only: native MSBuild, not .NET"},
-    {"root": "engine", "build_system": "msbuild", "marker": "engine/engine.vcxproj", "role": "evidence_of:build/vs2022|msbuild",
-     "reason": "listed by build/vs2022/all.sln two directories up"},
-    {"root": "game", "build_system": "msbuild", "marker": "game/game.vcxproj", "role": "evidence_of:build/vs2022|msbuild",
-     "reason": "listed by build/vs2022/all.sln two directories up"}
+    {
+      "root": "build/vs2022",
+      "build_system": "dotnet",
+      "marker": "build/vs2022/all.sln",
+      "reason": "the solution lists .vcxproj projects only: native MSBuild, not .NET"
+    },
+    {
+      "root": "engine",
+      "build_system": "msbuild",
+      "marker": "engine/engine.vcxproj",
+      "role": "evidence_of:build/vs2022|msbuild",
+      "reason": "listed by build/vs2022/all.sln two directories up"
+    },
+    {
+      "root": "game",
+      "build_system": "msbuild",
+      "marker": "game/game.vcxproj",
+      "role": "evidence_of:build/vs2022|msbuild",
+      "reason": "listed by build/vs2022/all.sln two directories up"
+    }
   ],
   "assignment": {
     "build/vs2022/README.md": "inert",
@@ -38,19 +84,85 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:build/vs2022|msbuild", "ref": "T-056.4", "note": "a .sln is always concluded as a dotnet unit today"},
-    {"check": "unit:tools|msbuild.build_point:tools", "ref": "T-056.2"},
-    {"check": "unit:tools|msbuild.facts", "ref": "T-056.5", "note": "a README's mention of ..\\..\\tools\\tools.vcxproj is prose, not a listing: the tool project's root is its own directory"},
-    {"check": "not_unit:build/vs2022|dotnet", "ref": "T-056.4"},
-    {"check": "not_unit:engine|msbuild", "ref": "T-056.5"},
-    {"check": "not_unit:game|msbuild", "ref": "T-056.5"},
-    {"check": "assignment:build/vs2022/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"},
-    {"check": "assignment:build/vs2022/all.sln", "ref": "T-056.4"},
-    {"check": "assignment:engine/engine.vcxproj", "ref": "T-056.5"},
-    {"check": "assignment:engine/include/engine.h", "ref": "T-056.5"},
-    {"check": "assignment:engine/src/engine.cpp", "ref": "T-056.5"},
-    {"check": "assignment:game/game.vcxproj", "ref": "T-056.5"},
-    {"check": "assignment:game/src/main.cpp", "ref": "T-056.5"},
-    {"check": "assignment:tools/src/tool.cpp", "ref": "T-056.2"}
+    {
+      "check": "unit:build/vs2022|msbuild",
+      "ref": "T-056.4",
+      "note": "a .sln is always concluded as a dotnet unit today"
+    },
+    {
+      "check": "unit:tools|msbuild.build_point:tools|project",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:tools|msbuild.facts",
+      "ref": "T-056.5",
+      "note": "a README's mention of ..\\..\\tools\\tools.vcxproj is prose, not a listing: the tool project's root is its own directory"
+    },
+    {
+      "check": "not_unit:build/vs2022|dotnet",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "not_unit:engine|msbuild",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "not_unit:game|msbuild",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:build/vs2022/all.sln",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:engine/engine.vcxproj",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:engine/include/engine.h",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:engine/src/engine.cpp",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:game/game.vcxproj",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:game/src/main.cpp",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "unit:build/vs2022|msbuild.family",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build/vs2022|msbuild.profile",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build/vs2022|msbuild.markers",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build/vs2022|msbuild.facts",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build/vs2022|msbuild.build_point:engine|project",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build/vs2022|msbuild.build_point:game|project",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    }
   ]
 }

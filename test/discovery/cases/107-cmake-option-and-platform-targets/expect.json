@@ -5,23 +5,59 @@
   "polarity": "positive",
   "mirrors": "a CMake project with an unconditional executable, an if(WIN32) executable, an if(APPLE) library and an option() defaulting OFF that gates add_subdirectory(tools); every conditional build point is kept and carries its condition, and a preset turns the option on",
   "units": [
-    {"root": "app", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["app/CMakeLists.txt"],
-     "build_points": [
-       {"name": "app", "kind": "executable", "evidence": "app/CMakeLists.txt:4"},
-       {"name": "app_tray", "kind": "executable", "evidence": "app/CMakeLists.txt:6"},
-       {"name": "app_mac", "kind": "static_library", "evidence": "app/CMakeLists.txt:9"},
-       {"name": "app_gen", "kind": "executable", "evidence": "app/tools/CMakeLists.txt:1"}
-     ],
-     "facts": {
-       "subdirectories": ["tools"],
-       "options": {"APP_BUILD_TOOLS": "OFF"},
-       "conditions": {"app_tray": "WIN32", "app_mac": "APPLE", "app_gen": "APP_BUILD_TOOLS"}
-     }}
+    {
+      "root": "app",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "app/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "app",
+          "kind": "executable",
+          "evidence": "app/CMakeLists.txt:4"
+        },
+        {
+          "name": "app_tray",
+          "kind": "executable",
+          "evidence": "app/CMakeLists.txt:6"
+        },
+        {
+          "name": "app_mac",
+          "kind": "static_library",
+          "evidence": "app/CMakeLists.txt:9"
+        },
+        {
+          "name": "app_gen",
+          "kind": "executable",
+          "evidence": "app/tools/CMakeLists.txt:1"
+        }
+      ],
+      "facts": {
+        "subdirectories": [
+          "tools"
+        ],
+        "options": {
+          "APP_BUILD_TOOLS": "OFF"
+        },
+        "conditions": {
+          "app_tray": "WIN32",
+          "app_mac": "APPLE",
+          "app_gen": "APP_BUILD_TOOLS"
+        }
+      }
+    }
   ],
   "not_units": [
-    {"root": "app/tools", "build_system": "cmake", "marker": "app/tools/CMakeLists.txt", "role": "evidence_of:app|cmake",
-     "reason": "reached only through the parent's add_subdirectory(tools), itself inside if(APP_BUILD_TOOLS): its target is a conditional build point of the parent unit"}
+    {
+      "root": "app/tools",
+      "build_system": "cmake",
+      "marker": "app/tools/CMakeLists.txt",
+      "role": "evidence_of:app|cmake",
+      "reason": "reached only through the parent's add_subdirectory(tools), itself inside if(APP_BUILD_TOOLS): its target is a conditional build point of the parent unit"
+    }
   ],
   "assignment": {
     "app/CMakeLists.txt": "evidence_of:app|cmake",
@@ -34,18 +70,27 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:app|cmake.markers", "ref": "T-056.2", "note": "CMakePresets.json is listed as a marker; it is context"},
-    {"check": "unit:app|cmake.build_point:app", "ref": "T-056.2"},
-    {"check": "unit:app|cmake.build_point:app_tray", "ref": "T-056.6", "note": "a target inside if(WIN32) is a build point with a condition, never dropped and never unconditional"},
-    {"check": "unit:app|cmake.build_point:app_mac", "ref": "T-056.6"},
-    {"check": "unit:app|cmake.build_point:app_gen", "ref": "T-056.5", "note": "a target of a conditionally added subdirectory belongs to the adding unit"},
-    {"check": "unit:app|cmake.facts", "ref": "T-056.6", "note": "options with defaults and the condition of each conditional build point"},
-    {"check": "not_unit:app/tools|cmake", "ref": "T-056.5"},
-    {"check": "assignment:app/CMakePresets.json", "ref": "T-056.2"},
-    {"check": "assignment:app/src/main.cpp", "ref": "T-056.2"},
-    {"check": "assignment:app/src/tray_win.cpp", "ref": "T-056.6", "note": "a source of a conditional build point is claimed by it, not orphaned and not unconditional"},
-    {"check": "assignment:app/src/mac_bridge.mm", "ref": "T-056.6"},
-    {"check": "assignment:app/tools/CMakeLists.txt", "ref": "T-056.5"},
-    {"check": "assignment:app/tools/gen.cpp", "ref": "T-056.5"}
+    {
+      "check": "unit:app|cmake.build_point:app_gen|executable",
+      "ref": "T-056.5",
+      "note": "a target of a conditionally added subdirectory belongs to the adding unit"
+    },
+    {
+      "check": "unit:app|cmake.facts",
+      "ref": "T-056.6",
+      "note": "options with defaults and the condition of each conditional build point"
+    },
+    {
+      "check": "not_unit:app/tools|cmake",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:app/tools/CMakeLists.txt",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:app/tools/gen.cpp",
+      "ref": "T-056.5"
+    }
   ]
 }

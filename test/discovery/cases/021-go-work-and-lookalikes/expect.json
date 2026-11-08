@@ -5,23 +5,71 @@
   "polarity": "mixed",
   "mirrors": "a go.work workspace of two modules: the workspace root is the unit and the modules are its build points; svc/ vendors a dependency (vendor/modules.txt and the vendored package are the build's context), and lib/testdata/ holds a go.mod the go tool ignores by rule",
   "units": [
-    {"root": ".", "build_system": "go", "family": "go", "profile": "go",
-     "markers": ["go.work"],
-     "build_points": [
-       {"name": "example.test/svc", "kind": "module", "evidence": "svc/go.mod:1"},
-       {"name": "example.test/lib", "kind": "module", "evidence": "lib/go.mod:1"},
-       {"name": "svc", "kind": "main_package", "evidence": "svc/main.go:1"},
-       {"name": "lib", "kind": "package", "evidence": "lib/lib.go:1"}
-     ],
-     "facts": {"workspace": {"manager": "go", "role": "root", "root": ".", "members": ["lib", "svc"]}}}
+    {
+      "root": ".",
+      "build_system": "go",
+      "family": "go",
+      "profile": "go",
+      "markers": [
+        "go.work"
+      ],
+      "build_points": [
+        {
+          "name": "example.test/svc",
+          "kind": "module",
+          "evidence": "svc/go.mod:1"
+        },
+        {
+          "name": "example.test/lib",
+          "kind": "module",
+          "evidence": "lib/go.mod:1"
+        },
+        {
+          "name": "svc",
+          "kind": "main_package",
+          "evidence": "svc/main.go:1"
+        },
+        {
+          "name": "lib",
+          "kind": "package",
+          "evidence": "lib/lib.go:1"
+        }
+      ],
+      "facts": {
+        "workspace": {
+          "manager": "go",
+          "role": "root",
+          "root": ".",
+          "members": [
+            "lib",
+            "svc"
+          ]
+        }
+      }
+    }
   ],
   "not_units": [
-    {"root": "svc", "build_system": "go", "marker": "svc/go.mod", "role": "evidence_of:.|go#example.test/svc",
-     "reason": "a module go.work uses is a build point of the workspace, not a root of its own"},
-    {"root": "lib", "build_system": "go", "marker": "lib/go.mod", "role": "evidence_of:.|go#example.test/lib",
-     "reason": "used by go.work"},
-    {"root": "lib/testdata/mod", "build_system": "go", "marker": "lib/testdata/mod/go.mod", "role": "inert",
-     "reason": "the go tool ignores directories named testdata; a go.mod there is fixture data for lib's tests"}
+    {
+      "root": "svc",
+      "build_system": "go",
+      "marker": "svc/go.mod",
+      "role": "evidence_of:.|go#example.test/svc",
+      "reason": "a module go.work uses is a build point of the workspace, not a root of its own"
+    },
+    {
+      "root": "lib",
+      "build_system": "go",
+      "marker": "lib/go.mod",
+      "role": "evidence_of:.|go#example.test/lib",
+      "reason": "used by go.work"
+    },
+    {
+      "root": "lib/testdata/mod",
+      "build_system": "go",
+      "marker": "lib/testdata/mod/go.mod",
+      "role": "inert",
+      "reason": "the go tool ignores directories named testdata; a go.mod there is fixture data for lib's tests"
+    }
   ],
   "assignment": {
     "go.work": "evidence_of:.|go",
@@ -38,21 +86,62 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:.|go.build_point:example.test/svc", "ref": "T-056.2"},
-    {"check": "unit:.|go.build_point:example.test/lib", "ref": "T-056.2"},
-    {"check": "unit:.|go.build_point:svc", "ref": "T-056.2"},
-    {"check": "unit:.|go.build_point:lib", "ref": "T-056.2"},
-    {"check": "not_unit:svc|go", "ref": "T-056.4", "note": "workspace members are build points of the go.work root (plan section 2.1: a root that drives a set of build points is the unit)"},
-    {"check": "not_unit:lib|go", "ref": "T-056.4"},
-    {"check": "not_unit:lib/testdata/mod|go", "ref": "T-056.4", "note": "testdata is excluded from package resolution by the go tool"},
-    {"check": "assignment:svc/go.mod", "ref": "T-056.4"},
-    {"check": "assignment:svc/go.sum", "ref": "T-056.4"},
-    {"check": "assignment:svc/main.go", "ref": "T-056.2"},
-    {"check": "assignment:svc/vendor/modules.txt", "ref": "T-056.4", "note": "go build -mod=vendor reads vendor/modules.txt; it is context, not inert"},
-    {"check": "assignment:svc/vendor/example.test/dep/dep.go", "ref": "T-056.4", "note": "a vendored dependency package is read by the build, never evidence of a target build point"},
-    {"check": "assignment:lib/go.mod", "ref": "T-056.4"},
-    {"check": "assignment:lib/lib.go", "ref": "T-056.2"},
-    {"check": "assignment:lib/testdata/mod/go.mod", "ref": "T-056.4"},
-    {"check": "assignment:lib/testdata/mod/x.go", "ref": "T-056.4", "note": "fixture data under testdata, not an orphan and not evidence"}
+    {
+      "check": "unit:.|go.build_point:example.test/svc|module",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:.|go.build_point:example.test/lib|module",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:.|go.build_point:svc|main_package",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "not_unit:svc|go",
+      "ref": "T-056.4",
+      "note": "workspace members are build points of the go.work root (plan section 2.1: a root that drives a set of build points is the unit)"
+    },
+    {
+      "check": "not_unit:lib|go",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "not_unit:lib/testdata/mod|go",
+      "ref": "T-056.4",
+      "note": "testdata is excluded from package resolution by the go tool"
+    },
+    {
+      "check": "assignment:svc/go.mod",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:svc/go.sum",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:svc/vendor/modules.txt",
+      "ref": "T-056.4",
+      "note": "go build -mod=vendor reads vendor/modules.txt; it is context, not inert"
+    },
+    {
+      "check": "assignment:svc/vendor/example.test/dep/dep.go",
+      "ref": "T-056.4",
+      "note": "a vendored dependency package is read by the build, never evidence of a target build point"
+    },
+    {
+      "check": "assignment:lib/go.mod",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:lib/testdata/mod/go.mod",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:lib/testdata/mod/x.go",
+      "ref": "T-056.4",
+      "note": "fixture data under testdata, not an orphan and not evidence"
+    }
   ]
 }

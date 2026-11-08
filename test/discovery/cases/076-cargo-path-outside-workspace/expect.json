@@ -5,20 +5,68 @@
   "polarity": "mixed",
   "mirrors": "a Cargo workspace whose member depends by path on a crate outside the workspace: the workspace is the unit, its member is a build point, the path dependency is a cross-tree reference that widens the materialization root to the common parent; a commented-out path dependency is not a reference",
   "units": [
-    {"root": "rust/ws", "build_system": "cargo", "family": "rust", "profile": "rust",
-     "markers": ["rust/ws/Cargo.toml"],
-     "build_points": [{"name": "app", "kind": "package", "evidence": "rust/ws/app/Cargo.toml:2"}],
-     "facts": {"workspace": {"manager": "cargo", "role": "root", "root": "rust/ws", "members": ["rust/ws/app"]},
-               "path_dependencies": [{"name": "shared", "path": "rust/shared", "evidence": "rust/ws/app/Cargo.toml:8"}],
-               "materialization_root": "rust"}},
-    {"root": "rust/shared", "build_system": "cargo", "family": "rust", "profile": "rust",
-     "markers": ["rust/shared/Cargo.toml"],
-     "build_points": [{"name": "shared", "kind": "package", "evidence": "rust/shared/Cargo.toml:2"}],
-     "facts": {"materialization_root": "rust/shared"}}
+    {
+      "root": "rust/ws",
+      "build_system": "cargo",
+      "family": "rust",
+      "profile": "rust",
+      "markers": [
+        "rust/ws/Cargo.toml"
+      ],
+      "build_points": [
+        {
+          "name": "app",
+          "kind": "package",
+          "evidence": "rust/ws/app/Cargo.toml:2"
+        }
+      ],
+      "facts": {
+        "workspace": {
+          "manager": "cargo",
+          "role": "root",
+          "root": "rust/ws",
+          "members": [
+            "rust/ws/app"
+          ]
+        },
+        "path_dependencies": [
+          {
+            "name": "shared",
+            "path": "rust/shared",
+            "evidence": "rust/ws/app/Cargo.toml:8"
+          }
+        ],
+        "materialization_root": "rust"
+      }
+    },
+    {
+      "root": "rust/shared",
+      "build_system": "cargo",
+      "family": "rust",
+      "profile": "rust",
+      "markers": [
+        "rust/shared/Cargo.toml"
+      ],
+      "build_points": [
+        {
+          "name": "shared",
+          "kind": "package",
+          "evidence": "rust/shared/Cargo.toml:2"
+        }
+      ],
+      "facts": {
+        "materialization_root": "rust/shared"
+      }
+    }
   ],
   "not_units": [
-    {"root": "rust/ws/app", "build_system": "cargo", "marker": "rust/ws/app/Cargo.toml", "role": "evidence_of:rust/ws|cargo",
-     "reason": "a workspace member: cargo builds it from the workspace root, so it is the root unit's build point, not a unit"}
+    {
+      "root": "rust/ws/app",
+      "build_system": "cargo",
+      "marker": "rust/ws/app/Cargo.toml",
+      "role": "evidence_of:rust/ws|cargo",
+      "reason": "a workspace member: cargo builds it from the workspace root, so it is the root unit's build point, not a unit"
+    }
   ],
   "assignment": {
     "README.md": "inert",
@@ -31,13 +79,36 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:rust/ws|cargo.build_point:app", "ref": "T-056.2", "note": "workspace members are the root's build points"},
-    {"check": "unit:rust/ws|cargo.facts", "ref": "T-056.5", "note": "the workspace fact is stated today; the path dependency (one, not the commented one) and the materialization root are not"},
-    {"check": "unit:rust/shared|cargo.build_point:shared", "ref": "T-056.2"},
-    {"check": "unit:rust/shared|cargo.facts", "ref": "T-056.5"},
-    {"check": "not_unit:rust/ws/app|cargo", "ref": "T-056.4", "note": "members are units with a workspace fact today; the contract folds them into the root"},
-    {"check": "assignment:rust/ws/app/Cargo.toml", "ref": "T-056.4"},
-    {"check": "assignment:rust/ws/app/src/main.rs", "ref": "T-056.4"},
-    {"check": "assignment:rust/shared/src/lib.rs", "ref": "T-056.2"}
+    {
+      "check": "unit:rust/ws|cargo.build_point:app|package",
+      "ref": "T-056.2",
+      "note": "workspace members are the root's build points"
+    },
+    {
+      "check": "unit:rust/ws|cargo.facts",
+      "ref": "T-056.5",
+      "note": "the workspace fact is stated today; the path dependency (one, not the commented one) and the materialization root are not"
+    },
+    {
+      "check": "unit:rust/shared|cargo.build_point:shared|package",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:rust/shared|cargo.facts",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "not_unit:rust/ws/app|cargo",
+      "ref": "T-056.4",
+      "note": "members are units with a workspace fact today; the contract folds them into the root"
+    },
+    {
+      "check": "assignment:rust/ws/app/Cargo.toml",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:rust/ws/app/src/main.rs",
+      "ref": "T-056.4"
+    }
   ]
 }

@@ -5,33 +5,98 @@
   "polarity": "positive",
   "mirrors": "Barracuda shape: a CMake project whose custom target runs the vendored library's Makefile; that library's test Makefile configures a vendored CMake test framework; the test directory is a sub-make of the library",
   "units": [
-    {"root": "server", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["server/CMakeLists.txt"],
-     "build_points": [
-       {"name": "tinylib", "kind": "custom_target", "evidence": "server/CMakeLists.txt:3"},
-       {"name": "server_main", "kind": "executable", "evidence": "server/CMakeLists.txt:6"}
-     ],
-     "facts": {"drives": ["server/third_party/tinylib"]}},
-    {"root": "server/third_party/tinylib", "build_system": "make", "family": "native", "profile": "native",
-     "markers": ["server/third_party/tinylib/Makefile"],
-     "build_points": [
-       {"name": "libtiny.a", "kind": "rule", "evidence": "server/third_party/tinylib/Makefile:4"},
-       {"name": "check", "kind": "rule", "evidence": "server/third_party/tinylib/Makefile:8"},
-       {"name": "tiny_test", "kind": "rule", "evidence": "server/third_party/tinylib/test/Makefile:6"}
-     ],
-     "facts": {"driven_by": {"unit": "server|cmake", "evidence": "server/CMakeLists.txt:4"},
-               "drives": ["server/third_party/tinylib/gtest"]}},
-    {"root": "server/third_party/tinylib/gtest", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["server/third_party/tinylib/gtest/CMakeLists.txt"],
-     "build_points": [
-       {"name": "gtest", "kind": "static_library", "evidence": "server/third_party/tinylib/gtest/CMakeLists.txt:3"}
-     ],
-     "facts": {"driven_by": {"unit": "server/third_party/tinylib|make", "evidence": "server/third_party/tinylib/test/Makefile:4"}}}
+    {
+      "root": "server",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "server/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "tinylib",
+          "kind": "custom_target",
+          "evidence": "server/CMakeLists.txt:3"
+        },
+        {
+          "name": "server_main",
+          "kind": "executable",
+          "evidence": "server/CMakeLists.txt:6"
+        }
+      ],
+      "facts": {
+        "drives": [
+          "server/third_party/tinylib"
+        ]
+      }
+    },
+    {
+      "root": "server/third_party/tinylib",
+      "build_system": "make",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "server/third_party/tinylib/Makefile"
+      ],
+      "build_points": [
+        {
+          "name": "libtiny.a",
+          "kind": "rule",
+          "evidence": "server/third_party/tinylib/Makefile:4"
+        },
+        {
+          "name": "check",
+          "kind": "rule",
+          "evidence": "server/third_party/tinylib/Makefile:8"
+        },
+        {
+          "name": "tiny_test",
+          "kind": "rule",
+          "evidence": "server/third_party/tinylib/test/Makefile:6"
+        }
+      ],
+      "facts": {
+        "driven_by": {
+          "unit": "server|cmake",
+          "evidence": "server/CMakeLists.txt:4"
+        },
+        "drives": [
+          "server/third_party/tinylib/gtest"
+        ]
+      }
+    },
+    {
+      "root": "server/third_party/tinylib/gtest",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "server/third_party/tinylib/gtest/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "gtest",
+          "kind": "static_library",
+          "evidence": "server/third_party/tinylib/gtest/CMakeLists.txt:3"
+        }
+      ],
+      "facts": {
+        "driven_by": {
+          "unit": "server/third_party/tinylib|make",
+          "evidence": "server/third_party/tinylib/test/Makefile:4"
+        }
+      }
+    }
   ],
   "not_units": [
-    {"root": "server/third_party/tinylib/test", "build_system": "make", "marker": "server/third_party/tinylib/test/Makefile",
-     "role": "evidence_of:server/third_party/tinylib|make",
-     "reason": "reached only by the library Makefile's $(MAKE) -C test: a sub-make is the same build, and its rules are the library unit's build points"}
+    {
+      "root": "server/third_party/tinylib/test",
+      "build_system": "make",
+      "marker": "server/third_party/tinylib/test/Makefile",
+      "role": "evidence_of:server/third_party/tinylib|make",
+      "reason": "reached only by the library Makefile's $(MAKE) -C test: a sub-make is the same build, and its rules are the library unit's build points"
+    }
   ],
   "assignment": {
     "README.md": "inert",
@@ -48,22 +113,46 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:server|cmake.build_point:tinylib", "ref": "T-056.2"},
-    {"check": "unit:server|cmake.build_point:server_main", "ref": "T-056.2"},
-    {"check": "unit:server|cmake.facts", "ref": "T-056.5", "note": "the custom target's $(MAKE) -C is the literal driving evidence"},
-    {"check": "unit:server/third_party/tinylib|make.build_point:libtiny.a", "ref": "T-056.2"},
-    {"check": "unit:server/third_party/tinylib|make.build_point:check", "ref": "T-056.2"},
-    {"check": "unit:server/third_party/tinylib|make.build_point:tiny_test", "ref": "T-056.5", "note": "a sub-make's rules are the parent's build points"},
-    {"check": "unit:server/third_party/tinylib|make.facts", "ref": "T-056.5", "note": "driven by the CMake custom target; drives the gtest CMake tree from its test Makefile"},
-    {"check": "unit:server/third_party/tinylib/gtest|cmake.build_point:gtest", "ref": "T-056.2"},
-    {"check": "unit:server/third_party/tinylib/gtest|cmake.facts", "ref": "T-056.5", "note": "the cmake -S ../gtest line in the test Makefile is the driving evidence"},
-    {"check": "not_unit:server/third_party/tinylib/test|make", "ref": "T-056.5", "note": "a Makefile reached by $(MAKE) -C from a parent Makefile is folded into the parent"},
-    {"check": "assignment:server/src/main.c", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/include/tiny.h", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/src/tiny.c", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/test/Makefile", "ref": "T-056.5"},
-    {"check": "assignment:server/third_party/tinylib/test/tiny_test.cc", "ref": "T-056.5"},
-    {"check": "assignment:server/third_party/tinylib/gtest/include/gtest/gtest.h", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/gtest/src/gtest-all.cc", "ref": "T-056.2"}
+    {
+      "check": "unit:server|cmake.facts",
+      "ref": "T-056.5",
+      "note": "the custom target's $(MAKE) -C is the literal driving evidence"
+    },
+    {
+      "check": "unit:server/third_party/tinylib|make.build_point:check|rule",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:server/third_party/tinylib|make.build_point:tiny_test|rule",
+      "ref": "T-056.5",
+      "note": "a sub-make's rules are the parent's build points"
+    },
+    {
+      "check": "unit:server/third_party/tinylib|make.facts",
+      "ref": "T-056.5",
+      "note": "driven by the CMake custom target; drives the gtest CMake tree from its test Makefile"
+    },
+    {
+      "check": "unit:server/third_party/tinylib/gtest|cmake.facts",
+      "ref": "T-056.5",
+      "note": "the cmake -S ../gtest line in the test Makefile is the driving evidence"
+    },
+    {
+      "check": "not_unit:server/third_party/tinylib/test|make",
+      "ref": "T-056.5",
+      "note": "a Makefile reached by $(MAKE) -C from a parent Makefile is folded into the parent"
+    },
+    {
+      "check": "assignment:server/third_party/tinylib/include/tiny.h",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:server/third_party/tinylib/test/Makefile",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:server/third_party/tinylib/test/tiny_test.cc",
+      "ref": "T-056.5"
+    }
   ]
 }

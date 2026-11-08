@@ -5,16 +5,41 @@
   "polarity": "negative",
   "mirrors": "a package with both an npm and a pnpm lockfile and no packageManager declaration: the restore authority is a named gap, never a silent pick; a stray package-lock.json under scripts/ with no package.json is not a unit",
   "units": [
-    {"root": "site", "build_system": "node", "family": "node", "profile": "node",
-     "markers": ["site/package.json"],
-     "build_points": [{"name": "build", "kind": "script", "evidence": "site/package.json:6"}],
-     "facts": {"package_manager": {"authority": null, "declared_by": null,
-                                   "lockfiles": ["site/package-lock.json", "site/pnpm-lock.yaml"],
-                                   "gap": "ambiguous_lockfiles"}}}
+    {
+      "root": "site",
+      "build_system": "node",
+      "family": "node",
+      "profile": "node",
+      "markers": [
+        "site/package.json"
+      ],
+      "build_points": [
+        {
+          "name": "build",
+          "kind": "script",
+          "evidence": "site/package.json:6"
+        }
+      ],
+      "facts": {
+        "package_manager": {
+          "authority": null,
+          "declared_by": null,
+          "lockfiles": [
+            "site/package-lock.json",
+            "site/pnpm-lock.yaml"
+          ],
+          "gap": "ambiguous_lockfiles"
+        }
+      }
+    }
   ],
   "not_units": [
-    {"root": "scripts", "marker": "scripts/package-lock.json", "role": "inert",
-     "reason": "a lockfile without a package.json describes no package; nothing restores or builds here"}
+    {
+      "root": "scripts",
+      "marker": "scripts/package-lock.json",
+      "role": "inert",
+      "reason": "a lockfile without a package.json describes no package; nothing restores or builds here"
+    }
   ],
   "assignment": {
     "site/package.json": "evidence_of:site|node",
@@ -27,9 +52,15 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:site|node.build_point:build", "ref": "T-056.2"},
-    {"check": "unit:site|node.facts", "ref": "T-056.6", "note": "two lockfiles and no declaration: the authority is a recorded gap, not the first lockfile in listing order"},
-    {"check": "assignment:site/package-lock.json", "ref": "T-056.2", "note": "a lockfile is context; the node family's .json source suffix claims it as evidence today"},
-    {"check": "assignment:site/build.js", "ref": "T-056.2", "note": "the script the build point runs is its evidence"}
+    {
+      "check": "unit:site|node.facts",
+      "ref": "T-056.6",
+      "note": "two lockfiles and no declaration: the authority is a recorded gap, not the first lockfile in listing order"
+    },
+    {
+      "check": "assignment:site/build.js",
+      "ref": "T-056.2",
+      "note": "the script the build point runs is its evidence"
+    }
   ]
 }

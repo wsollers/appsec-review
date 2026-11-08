@@ -5,15 +5,54 @@
   "polarity": "positive",
   "mirrors": "an Android application module whose build.gradle externalNativeBuild { cmake { path } } runs CMake on the module's JNI tree: the Gradle root drives the CMake unit, and the CMake unit is built by the Gradle build's NDK toolchain, not by a plain native image",
   "units": [
-    {"root": ".", "build_system": "gradle", "family": "java", "profile": "android",
-     "markers": ["build.gradle", "settings.gradle"],
-     "build_points": [{"name": ":app", "kind": "module", "evidence": "settings.gradle:9"}],
-     "facts": {"drives": ["app/src/main/cpp"],
-               "descriptor_facts": {"kind": "android-gradle-application", "plugin_id": "com.android.application"}}},
-    {"root": "app/src/main/cpp", "build_system": "cmake", "family": "native", "profile": "android",
-     "markers": ["app/src/main/cpp/CMakeLists.txt"],
-     "build_points": [{"name": "meter", "kind": "shared_library", "evidence": "app/src/main/cpp/CMakeLists.txt:3"}],
-     "facts": {"driven_by": {"unit": ".|gradle", "evidence": "app/build.gradle:17"}}}
+    {
+      "root": ".",
+      "build_system": "gradle",
+      "family": "java",
+      "profile": "android",
+      "markers": [
+        "build.gradle",
+        "settings.gradle"
+      ],
+      "build_points": [
+        {
+          "name": ":app",
+          "kind": "module",
+          "evidence": "settings.gradle:9"
+        }
+      ],
+      "facts": {
+        "drives": [
+          "app/src/main/cpp"
+        ],
+        "descriptor_facts": {
+          "kind": "android-gradle-application",
+          "plugin_id": "com.android.application"
+        }
+      }
+    },
+    {
+      "root": "app/src/main/cpp",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "android",
+      "markers": [
+        "app/src/main/cpp/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "meter",
+          "kind": "shared_library",
+          "evidence": "app/src/main/cpp/CMakeLists.txt:3"
+        }
+      ],
+      "facts": {
+        "driven_by": {
+          "unit": ".|gradle",
+          "evidence": "app/build.gradle:17"
+        }
+      }
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -30,16 +69,38 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:.|gradle.profile", "ref": "T-056.4", "note": "the module applies com.android.application: the required image is android, read from the module build file at discovery"},
-    {"check": "unit:.|gradle.build_point::app", "ref": "T-056.2", "note": "Gradle build points are the modules settings.gradle includes"},
-    {"check": "unit:.|gradle.facts", "ref": "T-056.5", "note": "externalNativeBuild.cmake.path is the literal driving evidence; the Android facts come from the module build file"},
-    {"check": "unit:app/src/main/cpp|cmake.profile", "ref": "T-056.5", "note": "a CMake tree driven by externalNativeBuild is built with the driver's NDK toolchain; its image demand is the driver's"},
-    {"check": "unit:app/src/main/cpp|cmake.build_point:meter", "ref": "T-056.2"},
-    {"check": "unit:app/src/main/cpp|cmake.facts", "ref": "T-056.5"},
-    {"check": "assignment:README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"},
-    {"check": "assignment:app/build.gradle", "ref": "T-056.2", "note": "a module build file is a descriptor of the Gradle build, not context"},
-    {"check": "assignment:app/src/main/AndroidManifest.xml", "ref": "T-056.4", "note": "the manifest is an input the Android build reads"},
-    {"check": "assignment:app/src/main/java/com/example/meter/MainActivity.java", "ref": "T-056.2"},
-    {"check": "assignment:app/src/main/cpp/meter.cpp", "ref": "T-056.2"}
+    {
+      "check": "unit:.|gradle.profile",
+      "ref": "T-056.4",
+      "note": "the module applies com.android.application: the required image is android, read from the module build file at discovery"
+    },
+    {
+      "check": "unit:.|gradle.facts",
+      "ref": "T-056.5",
+      "note": "externalNativeBuild.cmake.path is the literal driving evidence; the Android facts come from the module build file"
+    },
+    {
+      "check": "unit:app/src/main/cpp|cmake.profile",
+      "ref": "T-056.5",
+      "note": "a CMake tree driven by externalNativeBuild is built with the driver's NDK toolchain; its image demand is the driver's"
+    },
+    {
+      "check": "unit:app/src/main/cpp|cmake.facts",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:app/build.gradle",
+      "ref": "T-056.2",
+      "note": "a module build file is a descriptor of the Gradle build, not context"
+    },
+    {
+      "check": "assignment:app/src/main/AndroidManifest.xml",
+      "ref": "T-056.4",
+      "note": "the manifest is an input the Android build reads"
+    },
+    {
+      "check": "assignment:app/src/main/java/com/example/meter/MainActivity.java",
+      "ref": "T-056.2"
+    }
   ]
 }

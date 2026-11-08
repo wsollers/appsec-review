@@ -5,16 +5,45 @@
   "polarity": "negative",
   "mirrors": "project() declares C CXX CUDA OBJC but only the C and C++ targets exist; a .cu and a .m under experimental/ are named by no target and are orphaned findings, not CUDA or Objective-C build points, and the profile has no gap",
   "units": [
-    {"root": "sim", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["sim/CMakeLists.txt"],
-     "build_points": [
-       {"name": "sim_core", "kind": "static_library", "evidence": "sim/CMakeLists.txt:3"},
-       {"name": "sim", "kind": "executable", "evidence": "sim/CMakeLists.txt:4"}
-     ],
-     "facts": {"languages": {"sim_core": ["c"], "sim": ["c++"]}, "conditions": {}, "profile_gaps": {}}}
+    {
+      "root": "sim",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "sim/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "sim_core",
+          "kind": "static_library",
+          "evidence": "sim/CMakeLists.txt:3"
+        },
+        {
+          "name": "sim",
+          "kind": "executable",
+          "evidence": "sim/CMakeLists.txt:4"
+        }
+      ],
+      "facts": {
+        "languages": {
+          "sim_core": [
+            "c"
+          ],
+          "sim": [
+            "c++"
+          ]
+        },
+        "conditions": {},
+        "profile_gaps": {}
+      }
+    }
   ],
   "not_units": [
-    {"root": "sim/experimental", "reason": "loose .cu and .m sources with no descriptor: orphaned, never a manufactured unit"}
+    {
+      "root": "sim/experimental",
+      "reason": "loose .cu and .m sources with no descriptor: orphaned, never a manufactured unit"
+    }
   ],
   "assignment": {
     "sim/CMakeLists.txt": "evidence_of:sim|cmake",
@@ -25,17 +54,39 @@
     "sim/experimental/NOTES.txt": "inert"
   },
   "orphaned_sources": [
-    {"path": "sim/experimental/kernels.cu", "language": "cuda", "reason": "no_build_point", "nearest_unit": "sim"},
-    {"path": "sim/experimental/bridge.m", "language": "objc", "reason": "no_build_point", "nearest_unit": "sim"}
+    {
+      "path": "sim/experimental/kernels.cu",
+      "language": "cuda",
+      "reason": "no_build_point",
+      "nearest_unit": "sim"
+    },
+    {
+      "path": "sim/experimental/bridge.m",
+      "language": "objc",
+      "reason": "no_build_point",
+      "nearest_unit": "sim"
+    }
   ],
   "pending": [
-    {"check": "unit:sim|cmake.build_point:sim_core", "ref": "T-056.2"},
-    {"check": "unit:sim|cmake.build_point:sim", "ref": "T-056.2"},
-    {"check": "unit:sim|cmake.facts", "ref": "T-056.6", "note": "languages come from targets, not from project(); no CUDA target means no profile gap"},
-    {"check": "assignment:sim/src/core.c", "ref": "T-056.2"},
-    {"check": "assignment:sim/src/main.cpp", "ref": "T-056.2"},
-    {"check": "assignment:sim/experimental/kernels.cu", "ref": "T-056.3", "note": ".cu is not in the compiled-language tables: a loose CUDA source reads as inert instead of orphaned"},
-    {"check": "assignment:sim/experimental/bridge.m", "ref": "T-056.2", "note": "a .m under a native unit root is claimed by position today; nothing names it, so it is orphaned"},
-    {"check": "orphaned_sources", "ref": "T-056.3", "note": ".cu and .m are missing from the orphan language table"}
+    {
+      "check": "unit:sim|cmake.facts",
+      "ref": "T-056.6",
+      "note": "languages come from targets, not from project(); no CUDA target means no profile gap"
+    },
+    {
+      "check": "assignment:sim/experimental/kernels.cu",
+      "ref": "T-056.3",
+      "note": ".cu is not in the compiled-language tables: a loose CUDA source reads as inert instead of orphaned"
+    },
+    {
+      "check": "assignment:sim/experimental/bridge.m",
+      "ref": "T-056.2",
+      "note": "a .m under a native unit root is claimed by position today; nothing names it, so it is orphaned"
+    },
+    {
+      "check": "orphaned_sources",
+      "ref": "T-056.3",
+      "note": ".cu and .m are missing from the orphan language table"
+    }
   ]
 }

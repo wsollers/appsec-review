@@ -5,21 +5,57 @@
   "polarity": "positive",
   "mirrors": "a solution with Debug|x64, Release|x64 and Release|ARM64 mapping onto one C++ project in a subdirectory; the project has a source compiled only for ARM64 (ExcludedFromBuild otherwise); the unit is the solution root, the project its build point, configurations and the per-source platform condition are facts",
   "units": [
-    {"root": "win", "build_system": "msbuild", "family": "native", "profile": "native",
-     "markers": ["win/app/app.vcxproj", "win/win.sln"],
-     "build_points": [{"name": "app", "kind": "project", "evidence": "win/win.sln:3"}],
-     "facts": {
-       "configurations": ["Debug|x64", "Release|ARM64", "Release|x64"],
-       "configuration_mapping": {"app": {"Debug|x64": "Debug|x64", "Release|ARM64": "Release|ARM64", "Release|x64": "Release|x64"}},
-       "conditions": {},
-       "source_conditions": {"win/app/src/neon_path.cpp": "$(Platform) == ARM64"}
-     }}
+    {
+      "root": "win",
+      "build_system": "msbuild",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "win/app/app.vcxproj",
+        "win/win.sln"
+      ],
+      "build_points": [
+        {
+          "name": "app",
+          "kind": "project",
+          "evidence": "win/win.sln:3"
+        }
+      ],
+      "facts": {
+        "configurations": [
+          "Debug|x64",
+          "Release|ARM64",
+          "Release|x64"
+        ],
+        "configuration_mapping": {
+          "app": {
+            "Debug|x64": "Debug|x64",
+            "Release|ARM64": "Release|ARM64",
+            "Release|x64": "Release|x64"
+          }
+        },
+        "conditions": {},
+        "source_conditions": {
+          "win/app/src/neon_path.cpp": "$(Platform) == ARM64"
+        }
+      }
+    }
   ],
   "not_units": [
-    {"root": "win", "build_system": "dotnet", "marker": "win/win.sln", "role": "evidence_of:win|msbuild",
-     "reason": "the solution lists only a C++ project: it is the MSBuild unit's solution file, not a .NET build"},
-    {"root": "win/app", "build_system": "msbuild", "marker": "win/app/app.vcxproj", "role": "evidence_of:win|msbuild#app",
-     "reason": "listed by the solution one directory up: a project of that unit, not a root of its own"}
+    {
+      "root": "win",
+      "build_system": "dotnet",
+      "marker": "win/win.sln",
+      "role": "evidence_of:win|msbuild",
+      "reason": "the solution lists only a C++ project: it is the MSBuild unit's solution file, not a .NET build"
+    },
+    {
+      "root": "win/app",
+      "build_system": "msbuild",
+      "marker": "win/app/app.vcxproj",
+      "role": "evidence_of:win|msbuild#app",
+      "reason": "listed by the solution one directory up: a project of that unit, not a root of its own"
+    }
   ],
   "assignment": {
     "win/win.sln": "evidence_of:win|msbuild",
@@ -32,15 +68,68 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:win|msbuild", "ref": "T-056.4", "note": "the unit is rooted at the solution that lists the projects; today the .sln is a dotnet unit and each .vcxproj a unit of its own"},
-    {"check": "not_unit:win|dotnet", "ref": "T-056.4"},
-    {"check": "not_unit:win/app|msbuild", "ref": "T-056.4"},
-    {"check": "assignment:win/win.sln", "ref": "T-056.4"},
-    {"check": "assignment:win/Directory.Build.props", "ref": "T-056.4"},
-    {"check": "assignment:win/app/app.vcxproj", "ref": "T-056.4"},
-    {"check": "assignment:win/app/app.vcxproj.filters", "ref": "T-056.4"},
-    {"check": "assignment:win/app/src/main.cpp", "ref": "T-056.4"},
-    {"check": "assignment:win/app/src/neon_path.cpp", "ref": "T-056.6", "note": "a source excluded from every configuration but one is still claimed by the project, with its platform condition recorded"},
-    {"check": "assignment:win/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"}
+    {
+      "check": "unit:win|msbuild",
+      "ref": "T-056.4",
+      "note": "the unit is rooted at the solution that lists the projects; today the .sln is a dotnet unit and each .vcxproj a unit of its own"
+    },
+    {
+      "check": "not_unit:win|dotnet",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "not_unit:win/app|msbuild",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:win/win.sln",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:win/Directory.Build.props",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:win/app/app.vcxproj",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:win/app/app.vcxproj.filters",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:win/app/src/main.cpp",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:win/app/src/neon_path.cpp",
+      "ref": "T-056.6",
+      "note": "a source excluded from every configuration but one is still claimed by the project, with its platform condition recorded"
+    },
+    {
+      "check": "unit:win|msbuild.family",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:win|msbuild.profile",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:win|msbuild.markers",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:win|msbuild.facts",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:win|msbuild.build_point:app|project",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    }
   ]
 }

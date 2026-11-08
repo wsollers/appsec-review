@@ -5,29 +5,82 @@
   "polarity": "negative",
   "mirrors": "the 060 tree with both driving references removed: the CMake project no longer runs the library Makefile and the test Makefile no longer configures the gtest tree, so the three roots are independent and no unit drives another; the sub-make stays folded",
   "units": [
-    {"root": "server", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["server/CMakeLists.txt"],
-     "build_points": [{"name": "server_main", "kind": "executable", "evidence": "server/CMakeLists.txt:3"}],
-     "facts": {"drives": []}},
-    {"root": "server/third_party/tinylib", "build_system": "make", "family": "native", "profile": "native",
-     "markers": ["server/third_party/tinylib/Makefile"],
-     "build_points": [
-       {"name": "libtiny.a", "kind": "rule", "evidence": "server/third_party/tinylib/Makefile:4"},
-       {"name": "check", "kind": "rule", "evidence": "server/third_party/tinylib/Makefile:8"},
-       {"name": "tiny_test", "kind": "rule", "evidence": "server/third_party/tinylib/test/Makefile:3"}
-     ],
-     "facts": {"drives": []}},
-    {"root": "server/third_party/tinylib/gtest", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["server/third_party/tinylib/gtest/CMakeLists.txt"],
-     "build_points": [
-       {"name": "gtest", "kind": "static_library", "evidence": "server/third_party/tinylib/gtest/CMakeLists.txt:3"}
-     ],
-     "facts": {"drives": []}}
+    {
+      "root": "server",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "server/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "server_main",
+          "kind": "executable",
+          "evidence": "server/CMakeLists.txt:3"
+        }
+      ],
+      "facts": {
+        "drives": []
+      }
+    },
+    {
+      "root": "server/third_party/tinylib",
+      "build_system": "make",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "server/third_party/tinylib/Makefile"
+      ],
+      "build_points": [
+        {
+          "name": "libtiny.a",
+          "kind": "rule",
+          "evidence": "server/third_party/tinylib/Makefile:4"
+        },
+        {
+          "name": "check",
+          "kind": "rule",
+          "evidence": "server/third_party/tinylib/Makefile:8"
+        },
+        {
+          "name": "tiny_test",
+          "kind": "rule",
+          "evidence": "server/third_party/tinylib/test/Makefile:3"
+        }
+      ],
+      "facts": {
+        "drives": []
+      }
+    },
+    {
+      "root": "server/third_party/tinylib/gtest",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "server/third_party/tinylib/gtest/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "gtest",
+          "kind": "static_library",
+          "evidence": "server/third_party/tinylib/gtest/CMakeLists.txt:3"
+        }
+      ],
+      "facts": {
+        "drives": []
+      }
+    }
   ],
   "not_units": [
-    {"root": "server/third_party/tinylib/test", "build_system": "make", "marker": "server/third_party/tinylib/test/Makefile",
-     "role": "evidence_of:server/third_party/tinylib|make",
-     "reason": "still reached by the library Makefile's $(MAKE) -C test: same-system recursion is folded whether or not anything drives the library"}
+    {
+      "root": "server/third_party/tinylib/test",
+      "build_system": "make",
+      "marker": "server/third_party/tinylib/test/Makefile",
+      "role": "evidence_of:server/third_party/tinylib|make",
+      "reason": "still reached by the library Makefile's $(MAKE) -C test: same-system recursion is folded whether or not anything drives the library"
+    }
   ],
   "assignment": {
     "README.md": "inert",
@@ -44,21 +97,39 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:server|cmake.build_point:server_main", "ref": "T-056.2"},
-    {"check": "unit:server|cmake.facts", "ref": "T-056.5", "note": "an independent root states that it drives nothing; the vendored library sits below it positionally only"},
-    {"check": "unit:server/third_party/tinylib|make.build_point:libtiny.a", "ref": "T-056.2"},
-    {"check": "unit:server/third_party/tinylib|make.build_point:check", "ref": "T-056.2"},
-    {"check": "unit:server/third_party/tinylib|make.build_point:tiny_test", "ref": "T-056.5"},
-    {"check": "unit:server/third_party/tinylib|make.facts", "ref": "T-056.5", "note": "no cmake line in the test Makefile: the gtest tree is not driven"},
-    {"check": "unit:server/third_party/tinylib/gtest|cmake.build_point:gtest", "ref": "T-056.2"},
-    {"check": "unit:server/third_party/tinylib/gtest|cmake.facts", "ref": "T-056.5"},
-    {"check": "not_unit:server/third_party/tinylib/test|make", "ref": "T-056.5"},
-    {"check": "assignment:server/src/main.c", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/include/tiny.h", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/src/tiny.c", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/test/Makefile", "ref": "T-056.5"},
-    {"check": "assignment:server/third_party/tinylib/test/tiny_test.cc", "ref": "T-056.5"},
-    {"check": "assignment:server/third_party/tinylib/gtest/include/gtest/gtest.h", "ref": "T-056.2"},
-    {"check": "assignment:server/third_party/tinylib/gtest/src/gtest-all.cc", "ref": "T-056.2"}
+    {
+      "check": "unit:server|cmake.facts",
+      "ref": "T-056.5",
+      "note": "an independent root states that it drives nothing; the vendored library sits below it positionally only"
+    },
+    {
+      "check": "unit:server/third_party/tinylib|make.build_point:check|rule",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:server/third_party/tinylib|make.build_point:tiny_test|rule",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "unit:server/third_party/tinylib|make.facts",
+      "ref": "T-056.5",
+      "note": "no cmake line in the test Makefile: the gtest tree is not driven"
+    },
+    {
+      "check": "unit:server/third_party/tinylib/gtest|cmake.facts",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "not_unit:server/third_party/tinylib/test|make",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:server/third_party/tinylib/test/Makefile",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:server/third_party/tinylib/test/tiny_test.cc",
+      "ref": "T-056.5"
+    }
   ]
 }

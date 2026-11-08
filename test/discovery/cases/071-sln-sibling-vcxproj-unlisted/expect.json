@@ -5,20 +5,59 @@
   "polarity": "negative",
   "mirrors": "the 070 tree with the engine project removed from the solution and from the game project's references: engine/engine.vcxproj sits beside the listed project but nothing lists it, so it is an MSBuild root of its own; the solution still reaches the game project in a sibling directory",
   "units": [
-    {"root": "build", "build_system": "msbuild", "family": "native", "profile": "native",
-     "markers": ["build/game.sln"],
-     "build_points": [{"name": "game", "kind": "project", "evidence": "build/game.sln:5"}],
-     "facts": {"materialization_root": "."}},
-    {"root": "engine", "build_system": "msbuild", "family": "native", "profile": "native",
-     "markers": ["engine/engine.vcxproj"],
-     "build_points": [{"name": "engine", "kind": "project", "evidence": "engine/engine.vcxproj"}],
-     "facts": {"materialization_root": "engine"}}
+    {
+      "root": "build",
+      "build_system": "msbuild",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "build/game.sln"
+      ],
+      "build_points": [
+        {
+          "name": "game",
+          "kind": "project",
+          "evidence": "build/game.sln:5"
+        }
+      ],
+      "facts": {
+        "materialization_root": "."
+      }
+    },
+    {
+      "root": "engine",
+      "build_system": "msbuild",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "engine/engine.vcxproj"
+      ],
+      "build_points": [
+        {
+          "name": "engine",
+          "kind": "project",
+          "evidence": "engine/engine.vcxproj"
+        }
+      ],
+      "facts": {
+        "materialization_root": "engine"
+      }
+    }
   ],
   "not_units": [
-    {"root": "build", "build_system": "dotnet", "marker": "build/game.sln",
-     "reason": "the solution lists a .vcxproj only: native MSBuild, not .NET"},
-    {"root": "game", "build_system": "msbuild", "marker": "game/game.vcxproj", "role": "evidence_of:build|msbuild",
-     "reason": "listed by build/game.sln"}
+    {
+      "root": "build",
+      "build_system": "dotnet",
+      "marker": "build/game.sln",
+      "reason": "the solution lists a .vcxproj only: native MSBuild, not .NET"
+    },
+    {
+      "root": "game",
+      "build_system": "msbuild",
+      "marker": "game/game.vcxproj",
+      "role": "evidence_of:build|msbuild",
+      "reason": "listed by build/game.sln"
+    }
   ],
   "assignment": {
     "README.md": "inert",
@@ -31,15 +70,64 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:build|msbuild", "ref": "T-056.4"},
-    {"check": "unit:engine|msbuild.build_point:engine", "ref": "T-056.2", "note": "a lone .vcxproj is one project build point"},
-    {"check": "unit:engine|msbuild.facts", "ref": "T-056.5", "note": "no reference leaves its own directory"},
-    {"check": "not_unit:build|dotnet", "ref": "T-056.4"},
-    {"check": "not_unit:game|msbuild", "ref": "T-056.5"},
-    {"check": "assignment:build/game.sln", "ref": "T-056.4"},
-    {"check": "assignment:engine/include/engine.h", "ref": "T-056.2"},
-    {"check": "assignment:engine/src/engine.cpp", "ref": "T-056.2"},
-    {"check": "assignment:game/game.vcxproj", "ref": "T-056.5"},
-    {"check": "assignment:game/src/main.cpp", "ref": "T-056.5"}
+    {
+      "check": "unit:build|msbuild",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "unit:engine|msbuild.build_point:engine|project",
+      "ref": "T-056.2",
+      "note": "a lone .vcxproj is one project build point"
+    },
+    {
+      "check": "unit:engine|msbuild.facts",
+      "ref": "T-056.5",
+      "note": "no reference leaves its own directory"
+    },
+    {
+      "check": "not_unit:build|dotnet",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "not_unit:game|msbuild",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:build/game.sln",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:game/game.vcxproj",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:game/src/main.cpp",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "unit:build|msbuild.family",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build|msbuild.profile",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build|msbuild.markers",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build|msbuild.facts",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:build|msbuild.build_point:game|project",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    }
   ]
 }

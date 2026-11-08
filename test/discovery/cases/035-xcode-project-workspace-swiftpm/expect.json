@@ -5,19 +5,57 @@
   "polarity": "positive",
   "mirrors": "an iOS app: App.xcworkspace wrapping App.xcodeproj (two native targets, a shared scheme) rooted at ios/, and an independent Swift package (Package.swift with a target and a test target) rooted at Kit/",
   "units": [
-    {"root": "ios", "build_system": "xcodebuild", "family": "swift", "profile": "swift",
-     "markers": ["ios/App.xcodeproj/project.pbxproj"],
-     "build_points": [
-       {"name": "App", "kind": "target", "evidence": "ios/App.xcodeproj/project.pbxproj:21"},
-       {"name": "AppTests", "kind": "test_target", "evidence": "ios/App.xcodeproj/project.pbxproj:31"}
-     ],
-     "facts": {"descriptor_facts": {"kind": "xcode-project", "platform": "apple", "bundles": ["App.xcodeproj"]}}},
-    {"root": "Kit", "build_system": "swiftpm", "family": "swift", "profile": "swift",
-     "markers": ["Kit/Package.swift"],
-     "build_points": [
-       {"name": "Kit", "kind": "target", "evidence": "Kit/Package.swift:8"},
-       {"name": "KitTests", "kind": "test_target", "evidence": "Kit/Package.swift:9"}
-     ]}
+    {
+      "root": "ios",
+      "build_system": "xcodebuild",
+      "family": "swift",
+      "profile": "swift",
+      "markers": [
+        "ios/App.xcodeproj/project.pbxproj"
+      ],
+      "build_points": [
+        {
+          "name": "App",
+          "kind": "target",
+          "evidence": "ios/App.xcodeproj/project.pbxproj:21"
+        },
+        {
+          "name": "AppTests",
+          "kind": "test_target",
+          "evidence": "ios/App.xcodeproj/project.pbxproj:31"
+        }
+      ],
+      "facts": {
+        "descriptor_facts": {
+          "kind": "xcode-project",
+          "platform": "apple",
+          "bundles": [
+            "App.xcodeproj"
+          ]
+        }
+      }
+    },
+    {
+      "root": "Kit",
+      "build_system": "swiftpm",
+      "family": "swift",
+      "profile": "swift",
+      "markers": [
+        "Kit/Package.swift"
+      ],
+      "build_points": [
+        {
+          "name": "Kit",
+          "kind": "target",
+          "evidence": "Kit/Package.swift:8"
+        },
+        {
+          "name": "KitTests",
+          "kind": "test_target",
+          "evidence": "Kit/Package.swift:9"
+        }
+      ]
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -33,16 +71,75 @@
     "README.md": "inert"
   },
   "pending": [
-    {"check": "unit:ios|xcodebuild.build_point:App", "ref": "T-056.2", "note": "PBXNativeTarget names"},
-    {"check": "unit:ios|xcodebuild.build_point:AppTests", "ref": "T-056.2"},
-    {"check": "unit:Kit|swiftpm", "ref": "T-056.4", "note": "Package.swift is not a marker today; a Swift package is a unit of the swift family (plan section 4, A12)"},
-    {"check": "assignment:ios/App.xcworkspace/contents.xcworkspacedata", "ref": "T-056.4", "note": "the workspace that wraps the project at the same root is its descriptor, not mere context"},
-    {"check": "assignment:ios/App/AppDelegate.swift", "ref": "T-056.2", "note": "PBXSourcesBuildPhase files bind to their target"},
-    {"check": "assignment:ios/App/Info.plist", "ref": "T-056.2"},
-    {"check": "assignment:ios/AppTests/AppTests.swift", "ref": "T-056.2"},
-    {"check": "assignment:Kit/Package.swift", "ref": "T-056.4"},
-    {"check": "assignment:Kit/Sources/Kit/Kit.swift", "ref": "T-056.4", "note": "Sources/<target>/ binds to the target by SwiftPM convention"},
-    {"check": "assignment:Kit/Tests/KitTests/KitTests.swift", "ref": "T-056.4"},
-    {"check": "no_unclaimed", "ref": "T-056.4", "note": "the Swift package's files are unclaimed until Package.swift is a marker"}
+    {
+      "check": "unit:ios|xcodebuild.build_point:App|target",
+      "ref": "T-056.2",
+      "note": "PBXNativeTarget names"
+    },
+    {
+      "check": "unit:ios|xcodebuild.build_point:AppTests|test_target",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:Kit|swiftpm",
+      "ref": "T-056.4",
+      "note": "Package.swift is not a marker today; a Swift package is a unit of the swift family (plan section 4, A12)"
+    },
+    {
+      "check": "assignment:ios/App.xcworkspace/contents.xcworkspacedata",
+      "ref": "T-056.4",
+      "note": "the workspace that wraps the project at the same root is its descriptor, not mere context"
+    },
+    {
+      "check": "assignment:ios/App/AppDelegate.swift",
+      "ref": "T-056.2",
+      "note": "PBXSourcesBuildPhase files bind to their target"
+    },
+    {
+      "check": "assignment:ios/App/Info.plist",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:ios/AppTests/AppTests.swift",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:Kit/Package.swift",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:Kit/Sources/Kit/Kit.swift",
+      "ref": "T-056.4",
+      "note": "Sources/<target>/ binds to the target by SwiftPM convention"
+    },
+    {
+      "check": "assignment:Kit/Tests/KitTests/KitTests.swift",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "unit:Kit|swiftpm.family",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:Kit|swiftpm.profile",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:Kit|swiftpm.markers",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:Kit|swiftpm.build_point:Kit|target",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:Kit|swiftpm.build_point:KitTests|test_target",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    }
   ]
 }

@@ -5,18 +5,49 @@
   "polarity": "positive",
   "mirrors": "two independent native roots: an autotools library plus tool (configure.ac + Makefile.am, m4/ macros) and a meson project (meson.build + meson_options.txt)",
   "units": [
-    {"root": "codec", "build_system": "autotools", "family": "native", "profile": "native",
-     "markers": ["codec/Makefile.am", "codec/configure.ac"],
-     "build_points": [
-       {"name": "libcodec.a", "kind": "static_library", "evidence": "codec/Makefile.am:1"},
-       {"name": "codec_tool", "kind": "executable", "evidence": "codec/Makefile.am:3"}
-     ]},
-    {"root": "viewer", "build_system": "meson", "family": "native", "profile": "native",
-     "markers": ["viewer/meson.build"],
-     "build_points": [
-       {"name": "viewercore", "kind": "static_library", "evidence": "viewer/meson.build:2"},
-       {"name": "viewer", "kind": "executable", "evidence": "viewer/meson.build:3"}
-     ]}
+    {
+      "root": "codec",
+      "build_system": "autotools",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "codec/Makefile.am",
+        "codec/configure.ac"
+      ],
+      "build_points": [
+        {
+          "name": "libcodec.a",
+          "kind": "static_library",
+          "evidence": "codec/Makefile.am:1"
+        },
+        {
+          "name": "codec_tool",
+          "kind": "executable",
+          "evidence": "codec/Makefile.am:3"
+        }
+      ]
+    },
+    {
+      "root": "viewer",
+      "build_system": "meson",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "viewer/meson.build"
+      ],
+      "build_points": [
+        {
+          "name": "viewercore",
+          "kind": "static_library",
+          "evidence": "viewer/meson.build:2"
+        },
+        {
+          "name": "viewer",
+          "kind": "executable",
+          "evidence": "viewer/meson.build:3"
+        }
+      ]
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -33,15 +64,14 @@
     "README.md": "inert"
   },
   "pending": [
-    {"check": "unit:codec|autotools.build_point:libcodec.a", "ref": "T-056.2", "note": "lib_LIBRARIES names the archive; *_SOURCES names its files"},
-    {"check": "unit:codec|autotools.build_point:codec_tool", "ref": "T-056.2"},
-    {"check": "unit:viewer|meson.build_point:viewercore", "ref": "T-056.2"},
-    {"check": "unit:viewer|meson.build_point:viewer", "ref": "T-056.2"},
-    {"check": "assignment:codec/src/codec.c", "ref": "T-056.2"},
-    {"check": "assignment:codec/src/codec.h", "ref": "T-056.2"},
-    {"check": "assignment:codec/tools/codec_tool.c", "ref": "T-056.2"},
-    {"check": "assignment:viewer/meson_options.txt", "ref": "T-056.4", "note": "meson reads meson_options.txt at configure time; it is context, not an inert text file"},
-    {"check": "assignment:viewer/src/core.c", "ref": "T-056.2"},
-    {"check": "assignment:viewer/src/main.c", "ref": "T-056.2"}
+    {
+      "check": "unit:codec|autotools.build_point:codec_tool|executable",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:viewer/meson_options.txt",
+      "ref": "T-056.4",
+      "note": "meson reads meson_options.txt at configure time; it is context, not an inert text file"
+    }
   ]
 }

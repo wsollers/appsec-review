@@ -5,17 +5,42 @@
   "polarity": "positive",
   "mirrors": "a CMake project that adds a sibling directory with add_subdirectory(../libs/sibling sibling-build): the sibling CMakeLists.txt (no project() of its own) is reached only through the parent, so it is evidence of the parent unit and its target is the parent's build point; the materialization root widens to the common parent",
   "units": [
-    {"root": "app", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["app/CMakeLists.txt"],
-     "build_points": [
-       {"name": "app_main", "kind": "executable", "evidence": "app/CMakeLists.txt:4"},
-       {"name": "sibling", "kind": "static_library", "evidence": "libs/sibling/CMakeLists.txt:1"}
-     ],
-     "facts": {"subdirectories": ["libs/sibling"], "materialization_root": "."}}
+    {
+      "root": "app",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "app/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "app_main",
+          "kind": "executable",
+          "evidence": "app/CMakeLists.txt:4"
+        },
+        {
+          "name": "sibling",
+          "kind": "static_library",
+          "evidence": "libs/sibling/CMakeLists.txt:1"
+        }
+      ],
+      "facts": {
+        "subdirectories": [
+          "libs/sibling"
+        ],
+        "materialization_root": "."
+      }
+    }
   ],
   "not_units": [
-    {"root": "libs/sibling", "build_system": "cmake", "marker": "libs/sibling/CMakeLists.txt", "role": "evidence_of:app|cmake",
-     "reason": "reached only by app/CMakeLists.txt add_subdirectory(../libs/sibling sibling-build); it has no project() and no configure of its own"}
+    {
+      "root": "libs/sibling",
+      "build_system": "cmake",
+      "marker": "libs/sibling/CMakeLists.txt",
+      "role": "evidence_of:app|cmake",
+      "reason": "reached only by app/CMakeLists.txt add_subdirectory(../libs/sibling sibling-build); it has no project() and no configure of its own"
+    }
   ],
   "assignment": {
     "README.md": "inert",
@@ -27,13 +52,31 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:app|cmake.build_point:app_main", "ref": "T-056.2"},
-    {"check": "unit:app|cmake.build_point:sibling", "ref": "T-056.5", "note": "targets of an added sibling directory belong to the adding unit"},
-    {"check": "unit:app|cmake.facts", "ref": "T-056.5", "note": "add_subdirectory with a ../ source directory is the cross-tree reference; the minimum materialization root follows from it"},
-    {"check": "not_unit:libs/sibling|cmake", "ref": "T-056.5"},
-    {"check": "assignment:app/main.c", "ref": "T-056.2"},
-    {"check": "assignment:libs/sibling/CMakeLists.txt", "ref": "T-056.5"},
-    {"check": "assignment:libs/sibling/sibling.c", "ref": "T-056.5"},
-    {"check": "assignment:libs/sibling/sibling.h", "ref": "T-056.5"}
+    {
+      "check": "unit:app|cmake.build_point:sibling|static_library",
+      "ref": "T-056.5",
+      "note": "targets of an added sibling directory belong to the adding unit"
+    },
+    {
+      "check": "unit:app|cmake.facts",
+      "ref": "T-056.5",
+      "note": "add_subdirectory with a ../ source directory is the cross-tree reference; the minimum materialization root follows from it"
+    },
+    {
+      "check": "not_unit:libs/sibling|cmake",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:libs/sibling/CMakeLists.txt",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:libs/sibling/sibling.c",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:libs/sibling/sibling.h",
+      "ref": "T-056.5"
+    }
   ]
 }

@@ -5,17 +5,45 @@
   "polarity": "negative",
   "mirrors": "the words of E1 without the gating: if(WIN32) and if(APPLE) appear only in a comment and a message(), an option() defaulting OFF is declared but add_subdirectory(tools) is unconditional, and the only if() block around the option contains no target; every build point is unconditional",
   "units": [
-    {"root": "lib", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["lib/CMakeLists.txt"],
-     "build_points": [
-       {"name": "lib", "kind": "static_library", "evidence": "lib/CMakeLists.txt:5"},
-       {"name": "lib_gen", "kind": "executable", "evidence": "lib/tools/CMakeLists.txt:1"}
-     ],
-     "facts": {"subdirectories": ["tools"], "options": {"LIB_BUILD_TOOLS": "OFF"}, "conditions": {}}}
+    {
+      "root": "lib",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "lib/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "lib",
+          "kind": "static_library",
+          "evidence": "lib/CMakeLists.txt:5"
+        },
+        {
+          "name": "lib_gen",
+          "kind": "executable",
+          "evidence": "lib/tools/CMakeLists.txt:1"
+        }
+      ],
+      "facts": {
+        "subdirectories": [
+          "tools"
+        ],
+        "options": {
+          "LIB_BUILD_TOOLS": "OFF"
+        },
+        "conditions": {}
+      }
+    }
   ],
   "not_units": [
-    {"root": "lib/tools", "build_system": "cmake", "marker": "lib/tools/CMakeLists.txt", "role": "evidence_of:lib|cmake",
-     "reason": "reached only through the parent's unconditional add_subdirectory(tools)"}
+    {
+      "root": "lib/tools",
+      "build_system": "cmake",
+      "marker": "lib/tools/CMakeLists.txt",
+      "role": "evidence_of:lib|cmake",
+      "reason": "reached only through the parent's unconditional add_subdirectory(tools)"
+    }
   ],
   "assignment": {
     "lib/CMakeLists.txt": "evidence_of:lib|cmake",
@@ -26,12 +54,26 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:lib|cmake.build_point:lib", "ref": "T-056.2"},
-    {"check": "unit:lib|cmake.build_point:lib_gen", "ref": "T-056.5"},
-    {"check": "unit:lib|cmake.facts", "ref": "T-056.6", "note": "an option that gates nothing and if() blocks without targets yield an empty conditions map; the unconditional subdirectory is recorded"},
-    {"check": "not_unit:lib/tools|cmake", "ref": "T-056.5"},
-    {"check": "assignment:lib/src/lib.cpp", "ref": "T-056.2"},
-    {"check": "assignment:lib/tools/CMakeLists.txt", "ref": "T-056.5"},
-    {"check": "assignment:lib/tools/gen.cpp", "ref": "T-056.5"}
+    {
+      "check": "unit:lib|cmake.build_point:lib_gen|executable",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "unit:lib|cmake.facts",
+      "ref": "T-056.6",
+      "note": "an option that gates nothing and if() blocks without targets yield an empty conditions map; the unconditional subdirectory is recorded"
+    },
+    {
+      "check": "not_unit:lib/tools|cmake",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:lib/tools/CMakeLists.txt",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:lib/tools/gen.cpp",
+      "ref": "T-056.5"
+    }
   ]
 }

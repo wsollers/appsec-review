@@ -5,18 +5,49 @@
   "polarity": "positive",
   "mirrors": "a Makefile whose link rule differs under ifeq ($(OS),Windows_NT) and that includes $(PLATFORM).mk; both branches' rules are build points with their condition, the three platform fragments are context the include can resolve to",
   "units": [
-    {"root": "tool", "build_system": "make", "family": "native", "profile": "native",
-     "markers": ["tool/Makefile"],
-     "build_points": [
-       {"name": "main.o", "kind": "rule", "evidence": "tool/Makefile:4"},
-       {"name": "tool.exe", "kind": "rule", "evidence": "tool/Makefile:8"},
-       {"name": "tool", "kind": "rule", "evidence": "tool/Makefile:11"}
-     ],
-     "facts": {
-       "conditions": {"tool.exe": "$(OS) == Windows_NT", "tool": "$(OS) != Windows_NT"},
-       "includes": [{"directive": "include $(PLATFORM).mk", "evidence": "tool/Makefile:2",
-                     "candidates": ["tool/darwin.mk", "tool/linux.mk", "tool/windows.mk"]}]
-     }}
+    {
+      "root": "tool",
+      "build_system": "make",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "tool/Makefile"
+      ],
+      "build_points": [
+        {
+          "name": "main.o",
+          "kind": "rule",
+          "evidence": "tool/Makefile:4"
+        },
+        {
+          "name": "tool.exe",
+          "kind": "rule",
+          "evidence": "tool/Makefile:8"
+        },
+        {
+          "name": "tool",
+          "kind": "rule",
+          "evidence": "tool/Makefile:11"
+        }
+      ],
+      "facts": {
+        "conditions": {
+          "tool.exe": "$(OS) == Windows_NT",
+          "tool": "$(OS) != Windows_NT"
+        },
+        "includes": [
+          {
+            "directive": "include $(PLATFORM).mk",
+            "evidence": "tool/Makefile:2",
+            "candidates": [
+              "tool/darwin.mk",
+              "tool/linux.mk",
+              "tool/windows.mk"
+            ]
+          }
+        ]
+      }
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -32,14 +63,14 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:tool|make.build_point:main.o", "ref": "T-056.2"},
-    {"check": "unit:tool|make.build_point:tool.exe", "ref": "T-056.6", "note": "a rule inside ifeq is a build point with a condition, never dropped"},
-    {"check": "unit:tool|make.build_point:tool", "ref": "T-056.6", "note": "the else branch is the negated condition, not unconditional"},
-    {"check": "unit:tool|make.facts", "ref": "T-056.6", "note": "conditions per rule; a variable include lists the fragments it can resolve to"},
-    {"check": "assignment:tool/tool.h", "ref": "T-056.2"},
-    {"check": "assignment:tool/main.c", "ref": "T-056.2"},
-    {"check": "assignment:tool/os_win.c", "ref": "T-056.6", "note": "a source only the Windows branch names is claimed by that build point, not orphaned"},
-    {"check": "assignment:tool/os_posix.c", "ref": "T-056.6"},
-    {"check": "assignment:tool/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"}
+    {
+      "check": "unit:tool|make.facts",
+      "ref": "T-056.6",
+      "note": "conditions per rule; a variable include lists the fragments it can resolve to"
+    },
+    {
+      "check": "assignment:tool/tool.h",
+      "ref": "T-056.2"
+    }
   ]
 }

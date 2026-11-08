@@ -5,13 +5,29 @@
   "polarity": "negative",
   "mirrors": "the 066 plugin tree and script without the Unity project around them: Assets/Plugins/ is a folder name, not a host. The CMake tree is an independent root, and the C# file that would have been the project's script is a compiled-language source nothing builds",
   "units": [
-    {"root": "Assets/Plugins/NativePlugin", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["Assets/Plugins/NativePlugin/CMakeLists.txt"],
-     "build_points": [{"name": "nativeplugin", "kind": "shared_library", "evidence": "Assets/Plugins/NativePlugin/CMakeLists.txt:3"}]}
+    {
+      "root": "Assets/Plugins/NativePlugin",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "Assets/Plugins/NativePlugin/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "nativeplugin",
+          "kind": "shared_library",
+          "evidence": "Assets/Plugins/NativePlugin/CMakeLists.txt:3"
+        }
+      ]
+    }
   ],
   "not_units": [
-    {"root": ".", "build_system": "unity",
-     "reason": "Assets/ and Assets/Plugins/ are directory names; without ProjectSettings/ProjectVersion.txt and a Packages manifest there is no Unity project to host the plugin"}
+    {
+      "root": ".",
+      "build_system": "unity",
+      "reason": "Assets/ and Assets/Plugins/ are directory names; without ProjectSettings/ProjectVersion.txt and a Packages manifest there is no Unity project to host the plugin"
+    }
   ],
   "assignment": {
     "README.md": "inert",
@@ -21,14 +37,10 @@
     "Assets/Plugins/NativePlugin/src/plugin.c": "evidence_of:Assets/Plugins/NativePlugin|cmake#nativeplugin"
   },
   "orphaned_sources": [
-    {"path": "Assets/Scripts/Bridge.cs", "reason": "no_build_point", "nearest_unit": null}
-  ],
-  "pending": [
-    {"check": "unit:Assets/Plugins/NativePlugin|cmake.build_point:nativeplugin", "ref": "T-056.2"},
-    {"check": "assignment:Assets/Scripts/Bridge.cs", "ref": "T-056.3", "note": "a .cs outside every unit is unclaimed today: orphan detection covers C/C++, Java, Kotlin, Rust, Go and wat, not C#"},
-    {"check": "assignment:Assets/Plugins/NativePlugin/include/plugin.h", "ref": "T-056.2"},
-    {"check": "assignment:Assets/Plugins/NativePlugin/src/plugin.c", "ref": "T-056.2"},
-    {"check": "orphaned_sources", "ref": "T-056.3", "note": "the orphan list omits the C# source"},
-    {"check": "no_unclaimed", "ref": "T-056.3"}
+    {
+      "path": "Assets/Scripts/Bridge.cs",
+      "reason": "no_build_point",
+      "nearest_unit": null
+    }
   ]
 }

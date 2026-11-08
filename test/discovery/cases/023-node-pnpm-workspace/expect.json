@@ -5,21 +5,64 @@
   "polarity": "positive",
   "mirrors": "a pnpm workspace: the root package.json plus pnpm-workspace.yaml declare the workspace, pnpm-lock.yaml is its one lockfile, and the two packages under packages/ are members, which are build points of the workspace root rather than roots of their own",
   "units": [
-    {"root": ".", "build_system": "node", "family": "node", "profile": "node",
-     "markers": ["package.json"],
-     "build_points": [
-       {"name": "mono", "kind": "package", "evidence": "package.json:2"},
-       {"name": "build", "kind": "script", "evidence": "package.json:5"},
-       {"name": "@mono/core", "kind": "workspace_member", "evidence": "packages/core/package.json:2"},
-       {"name": "@mono/ui", "kind": "workspace_member", "evidence": "packages/ui/package.json:2"}
-     ],
-     "facts": {"workspace": {"manager": "pnpm", "role": "root", "root": ".", "members": ["packages/core", "packages/ui"]}}}
+    {
+      "root": ".",
+      "build_system": "node",
+      "family": "node",
+      "profile": "node",
+      "markers": [
+        "package.json"
+      ],
+      "build_points": [
+        {
+          "name": "mono",
+          "kind": "package",
+          "evidence": "package.json:2"
+        },
+        {
+          "name": "build",
+          "kind": "script",
+          "evidence": "package.json:5"
+        },
+        {
+          "name": "@mono/core",
+          "kind": "workspace_member",
+          "evidence": "packages/core/package.json:2"
+        },
+        {
+          "name": "@mono/ui",
+          "kind": "workspace_member",
+          "evidence": "packages/ui/package.json:2"
+        }
+      ],
+      "facts": {
+        "workspace": {
+          "manager": "pnpm",
+          "role": "root",
+          "root": ".",
+          "members": [
+            "packages/core",
+            "packages/ui"
+          ]
+        }
+      }
+    }
   ],
   "not_units": [
-    {"root": "packages/core", "build_system": "node", "marker": "packages/core/package.json", "role": "evidence_of:.|node#@mono/core",
-     "reason": "a workspace member installs and builds as part of the workspace root; it is a build point of the root, not a unit"},
-    {"root": "packages/ui", "build_system": "node", "marker": "packages/ui/package.json", "role": "evidence_of:.|node#@mono/ui",
-     "reason": "workspace member"}
+    {
+      "root": "packages/core",
+      "build_system": "node",
+      "marker": "packages/core/package.json",
+      "role": "evidence_of:.|node#@mono/core",
+      "reason": "a workspace member installs and builds as part of the workspace root; it is a build point of the root, not a unit"
+    },
+    {
+      "root": "packages/ui",
+      "build_system": "node",
+      "marker": "packages/ui/package.json",
+      "role": "evidence_of:.|node#@mono/ui",
+      "reason": "workspace member"
+    }
   ],
   "assignment": {
     "package.json": "evidence_of:.|node",
@@ -35,20 +78,60 @@
     "README.md": "inert"
   },
   "pending": [
-    {"check": "unit:.|node.facts", "ref": "T-056.4", "note": "discovery states the npm/pnpm workspace fact on the unit (node_workspace computes it only for the descriptor package today)"},
-    {"check": "unit:.|node.build_point:mono", "ref": "T-056.2"},
-    {"check": "unit:.|node.build_point:build", "ref": "T-056.2"},
-    {"check": "unit:.|node.build_point:@mono/core", "ref": "T-056.2"},
-    {"check": "unit:.|node.build_point:@mono/ui", "ref": "T-056.2"},
-    {"check": "not_unit:packages/core|node", "ref": "T-056.4", "note": "plan section 3: a package.json that is a workspace member is not a root"},
-    {"check": "not_unit:packages/ui|node", "ref": "T-056.4"},
-    {"check": "assignment:pnpm-workspace.yaml", "ref": "T-056.4", "note": "the workspace declaration is a descriptor of the unit, not a settings file it merely reads"},
-    {"check": "assignment:packages/core/package.json", "ref": "T-056.4"},
-    {"check": "assignment:packages/core/tsconfig.json", "ref": "T-056.4"},
-    {"check": "assignment:packages/core/src/index.ts", "ref": "T-056.2"},
-    {"check": "assignment:packages/ui/package.json", "ref": "T-056.4"},
-    {"check": "assignment:packages/ui/tsconfig.json", "ref": "T-056.4"},
-    {"check": "assignment:packages/ui/src/index.ts", "ref": "T-056.2"},
-    {"check": "assignment:README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+    {
+      "check": "unit:.|node.facts",
+      "ref": "T-056.4",
+      "note": "discovery states the npm/pnpm workspace fact on the unit (node_workspace computes it only for the descriptor package today)"
+    },
+    {
+      "check": "unit:.|node.build_point:mono|package",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:.|node.build_point:@mono/core|workspace_member",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:.|node.build_point:@mono/ui|workspace_member",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "not_unit:packages/core|node",
+      "ref": "T-056.4",
+      "note": "plan section 3: a package.json that is a workspace member is not a root"
+    },
+    {
+      "check": "not_unit:packages/ui|node",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:pnpm-workspace.yaml",
+      "ref": "T-056.4",
+      "note": "the workspace declaration is a descriptor of the unit, not a settings file it merely reads"
+    },
+    {
+      "check": "assignment:packages/core/package.json",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:packages/core/tsconfig.json",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:packages/core/src/index.ts",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:packages/ui/package.json",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:packages/ui/tsconfig.json",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:packages/ui/src/index.ts",
+      "ref": "T-056.2"
+    }
   ]
 }

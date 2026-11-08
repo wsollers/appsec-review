@@ -5,14 +5,46 @@
   "polarity": "negative",
   "mirrors": "the 079 layout with the add_subdirectory line surviving only in a comment and the sibling given its own project(): two independent CMake roots, no subdirectory relation, and each unit's materialization root is its own directory",
   "units": [
-    {"root": "app", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["app/CMakeLists.txt"],
-     "build_points": [{"name": "app_main", "kind": "executable", "evidence": "app/CMakeLists.txt:6"}],
-     "facts": {"subdirectories": [], "materialization_root": "app"}},
-    {"root": "libs/sibling", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["libs/sibling/CMakeLists.txt"],
-     "build_points": [{"name": "sibling", "kind": "static_library", "evidence": "libs/sibling/CMakeLists.txt:3"}],
-     "facts": {"subdirectories": [], "materialization_root": "libs/sibling"}}
+    {
+      "root": "app",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "app/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "app_main",
+          "kind": "executable",
+          "evidence": "app/CMakeLists.txt:6"
+        }
+      ],
+      "facts": {
+        "subdirectories": [],
+        "materialization_root": "app"
+      }
+    },
+    {
+      "root": "libs/sibling",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "libs/sibling/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "sibling",
+          "kind": "static_library",
+          "evidence": "libs/sibling/CMakeLists.txt:3"
+        }
+      ],
+      "facts": {
+        "subdirectories": [],
+        "materialization_root": "libs/sibling"
+      }
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -25,12 +57,18 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:app|cmake.build_point:app_main", "ref": "T-056.2"},
-    {"check": "unit:app|cmake.facts", "ref": "T-056.5", "note": "an add_subdirectory inside a comment is not a reference: no subdirectory, and the materialization root stays the unit root"},
-    {"check": "unit:libs/sibling|cmake.build_point:sibling", "ref": "T-056.2"},
-    {"check": "unit:libs/sibling|cmake.facts", "ref": "T-056.5"},
-    {"check": "assignment:app/main.c", "ref": "T-056.2"},
-    {"check": "assignment:libs/sibling/sibling.c", "ref": "T-056.2"},
-    {"check": "assignment:libs/sibling/sibling.h", "ref": "T-056.2"}
+    {
+      "check": "unit:app|cmake.facts",
+      "ref": "T-056.5",
+      "note": "an add_subdirectory inside a comment is not a reference: no subdirectory, and the materialization root stays the unit root"
+    },
+    {
+      "check": "unit:libs/sibling|cmake.facts",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:libs/sibling/sibling.h",
+      "ref": "T-056.2"
+    }
   ]
 }

@@ -5,19 +5,60 @@
   "polarity": "positive",
   "mirrors": "one CMake project with a C library, a C++ executable, a CUDA kernel library behind check_language(CUDA) and an Objective-C bridge behind if(APPLE); one unit, build points typed by language, the native profile with CUDA named as a gap",
   "units": [
-    {"root": "sim", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["sim/CMakeLists.txt"],
-     "build_points": [
-       {"name": "sim_core", "kind": "static_library", "evidence": "sim/CMakeLists.txt:4"},
-       {"name": "sim", "kind": "executable", "evidence": "sim/CMakeLists.txt:6"},
-       {"name": "sim_kernels", "kind": "static_library", "evidence": "sim/CMakeLists.txt:11"},
-       {"name": "sim_mac", "kind": "static_library", "evidence": "sim/CMakeLists.txt:16"}
-     ],
-     "facts": {
-       "languages": {"sim_core": ["c"], "sim": ["c++"], "sim_kernels": ["cuda"], "sim_mac": ["objc"]},
-       "conditions": {"sim_kernels": "CMAKE_CUDA_COMPILER", "sim_mac": "APPLE"},
-       "profile_gaps": {"sim_kernels": "cuda"}
-     }}
+    {
+      "root": "sim",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "sim/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "sim_core",
+          "kind": "static_library",
+          "evidence": "sim/CMakeLists.txt:4"
+        },
+        {
+          "name": "sim",
+          "kind": "executable",
+          "evidence": "sim/CMakeLists.txt:6"
+        },
+        {
+          "name": "sim_kernels",
+          "kind": "static_library",
+          "evidence": "sim/CMakeLists.txt:11"
+        },
+        {
+          "name": "sim_mac",
+          "kind": "static_library",
+          "evidence": "sim/CMakeLists.txt:16"
+        }
+      ],
+      "facts": {
+        "languages": {
+          "sim_core": [
+            "c"
+          ],
+          "sim": [
+            "c++"
+          ],
+          "sim_kernels": [
+            "cuda"
+          ],
+          "sim_mac": [
+            "objc"
+          ]
+        },
+        "conditions": {
+          "sim_kernels": "CMAKE_CUDA_COMPILER",
+          "sim_mac": "APPLE"
+        },
+        "profile_gaps": {
+          "sim_kernels": "cuda"
+        }
+      }
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -31,16 +72,10 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:sim|cmake.build_point:sim_core", "ref": "T-056.2"},
-    {"check": "unit:sim|cmake.build_point:sim", "ref": "T-056.2"},
-    {"check": "unit:sim|cmake.build_point:sim_kernels", "ref": "T-056.6", "note": "a CUDA target behind check_language is a conditional build point typed cuda"},
-    {"check": "unit:sim|cmake.build_point:sim_mac", "ref": "T-056.6"},
-    {"check": "unit:sim|cmake.facts", "ref": "T-056.6", "note": "languages per build point; the native profile has no CUDA toolchain, so sim_kernels is a named gap rather than a silent omission"},
-    {"check": "assignment:sim/include/sim.h", "ref": "T-056.2"},
-    {"check": "assignment:sim/src/core.c", "ref": "T-056.2"},
-    {"check": "assignment:sim/src/main.cpp", "ref": "T-056.2"},
-    {"check": "assignment:sim/src/kernels.cu", "ref": "T-056.6", "note": "a .cu source a target names is evidence of that build point; today .cu is not a known compiled suffix and reads as inert"},
-    {"check": "assignment:sim/src/bridge.m", "ref": "T-056.6"},
-    {"check": "assignment:sim/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"}
+    {
+      "check": "unit:sim|cmake.facts",
+      "ref": "T-056.6",
+      "note": "languages per build point; the native profile has no CUDA toolchain, so sim_kernels is a named gap rather than a silent omission"
+    }
   ]
 }

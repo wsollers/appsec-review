@@ -5,17 +5,55 @@
   "polarity": "negative",
   "mirrors": "a Kotlin-DSL Gradle build with a Java + Kotlin module, a buildSrc/ (Kotlin that builds the build, not a module or a language of the product) and a native/ directory that settings does not include and no plugin compiles: its C++ is an orphaned finding, not a third language of the unit",
   "units": [
-    {"root": "mobile", "build_system": "gradle", "family": "java", "profile": "java",
-     "markers": ["mobile/build.gradle.kts", "mobile/settings.gradle.kts"],
-     "build_points": [{"name": "core", "kind": "module", "evidence": "mobile/settings.gradle.kts:2"}],
-     "facts": {"modules": ["core"], "languages": {"core": ["java", "kotlin"]}, "profile_gaps": {}}}
+    {
+      "root": "mobile",
+      "build_system": "gradle",
+      "family": "java",
+      "profile": "java",
+      "markers": [
+        "mobile/build.gradle.kts",
+        "mobile/settings.gradle.kts"
+      ],
+      "build_points": [
+        {
+          "name": "core",
+          "kind": "module",
+          "evidence": "mobile/settings.gradle.kts:2"
+        }
+      ],
+      "facts": {
+        "modules": [
+          "core"
+        ],
+        "languages": {
+          "core": [
+            "java",
+            "kotlin"
+          ]
+        },
+        "profile_gaps": {}
+      }
+    }
   ],
   "not_units": [
-    {"root": "mobile/core", "build_system": "gradle", "marker": "mobile/core/build.gradle.kts", "role": "evidence_of:mobile|gradle#core",
-     "reason": "a module of the Gradle build rooted at mobile/"},
-    {"root": "mobile/buildSrc", "build_system": "gradle", "marker": "mobile/buildSrc/build.gradle.kts", "role": "context:mobile|gradle",
-     "reason": "buildSrc is compiled by Gradle before the build it configures: build logic, context of the unit, not a module and not a product language"},
-    {"root": "mobile/native", "reason": "no settings include and no native plugin: its source is orphaned, never a manufactured unit"}
+    {
+      "root": "mobile/core",
+      "build_system": "gradle",
+      "marker": "mobile/core/build.gradle.kts",
+      "role": "evidence_of:mobile|gradle#core",
+      "reason": "a module of the Gradle build rooted at mobile/"
+    },
+    {
+      "root": "mobile/buildSrc",
+      "build_system": "gradle",
+      "marker": "mobile/buildSrc/build.gradle.kts",
+      "role": "context:mobile|gradle",
+      "reason": "buildSrc is compiled by Gradle before the build it configures: build logic, context of the unit, not a module and not a product language"
+    },
+    {
+      "root": "mobile/native",
+      "reason": "no settings include and no native plugin: its source is orphaned, never a manufactured unit"
+    }
   ],
   "assignment": {
     "mobile/settings.gradle.kts": "evidence_of:mobile|gradle",
@@ -30,17 +68,46 @@
     "mobile/native/README.md": "inert"
   },
   "orphaned_sources": [
-    {"path": "mobile/native/src/fast.cpp", "language": "c++", "reason": "no_build_point", "nearest_unit": "mobile"}
+    {
+      "path": "mobile/native/src/fast.cpp",
+      "language": "c++",
+      "reason": "no_build_point",
+      "nearest_unit": "mobile"
+    }
   ],
   "pending": [
-    {"check": "unit:mobile|gradle.build_point:core", "ref": "T-056.2"},
-    {"check": "unit:mobile|gradle.facts", "ref": "T-056.6"},
-    {"check": "assignment:mobile/core/build.gradle.kts", "ref": "T-056.2"},
-    {"check": "assignment:mobile/core/src/main/java/core/Core.java", "ref": "T-056.2"},
-    {"check": "assignment:mobile/core/src/main/kotlin/core/Ext.kt", "ref": "T-056.2"},
-    {"check": "assignment:mobile/buildSrc/build.gradle.kts", "ref": "T-056.4", "note": "buildSrc is build logic (matrix A8); .kts is read as a compiled java-family source today"},
-    {"check": "assignment:mobile/buildSrc/src/main/kotlin/demo.conventions.gradle.kts", "ref": "T-056.4"},
-    {"check": "assignment:mobile/buildSrc/src/main/kotlin/Versions.kt", "ref": "T-056.4"},
-    {"check": "assignment:mobile/native/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"}
+    {
+      "check": "unit:mobile|gradle.build_point:core|module",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:mobile|gradle.facts",
+      "ref": "T-056.6"
+    },
+    {
+      "check": "assignment:mobile/core/build.gradle.kts",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:mobile/core/src/main/java/core/Core.java",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:mobile/core/src/main/kotlin/core/Ext.kt",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:mobile/buildSrc/build.gradle.kts",
+      "ref": "T-056.4",
+      "note": "buildSrc is build logic (matrix A8); .kts is read as a compiled java-family source today"
+    },
+    {
+      "check": "assignment:mobile/buildSrc/src/main/kotlin/demo.conventions.gradle.kts",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:mobile/buildSrc/src/main/kotlin/Versions.kt",
+      "ref": "T-056.4"
+    }
   ]
 }

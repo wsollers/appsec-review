@@ -5,17 +5,54 @@
   "polarity": "negative",
   "mirrors": "the 072 tree with the all-local cmake rule removed: the autotools build still includes src/ through SUBDIRS and links a prebuilt archive path, but no rule runs the vendored CMake project, which is therefore an independent root the autotools unit does not drive",
   "units": [
-    {"root": ".", "build_system": "autotools", "family": "native", "profile": "native",
-     "markers": ["Makefile.am", "configure.ac"],
-     "build_points": [{"name": "packer", "kind": "program", "evidence": "src/Makefile.am:1"}],
-     "facts": {"subdirectories": ["src"], "drives": []}},
-    {"root": "third_party/zlite", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["third_party/zlite/CMakeLists.txt"],
-     "build_points": [{"name": "zlite", "kind": "static_library", "evidence": "third_party/zlite/CMakeLists.txt:3"}]}
+    {
+      "root": ".",
+      "build_system": "autotools",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "Makefile.am",
+        "configure.ac"
+      ],
+      "build_points": [
+        {
+          "name": "packer",
+          "kind": "program",
+          "evidence": "src/Makefile.am:1"
+        }
+      ],
+      "facts": {
+        "subdirectories": [
+          "src"
+        ],
+        "drives": []
+      }
+    },
+    {
+      "root": "third_party/zlite",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "third_party/zlite/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "zlite",
+          "kind": "static_library",
+          "evidence": "third_party/zlite/CMakeLists.txt:3"
+        }
+      ]
+    }
   ],
   "not_units": [
-    {"root": "src", "build_system": "autotools", "marker": "src/Makefile.am", "role": "evidence_of:.|autotools",
-     "reason": "still named by SUBDIRS and AC_CONFIG_FILES"}
+    {
+      "root": "src",
+      "build_system": "autotools",
+      "marker": "src/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "still named by SUBDIRS and AC_CONFIG_FILES"
+    }
   ],
   "assignment": {
     "docs/README.md": "inert",
@@ -29,14 +66,30 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:.|autotools.build_point:packer", "ref": "T-056.5"},
-    {"check": "unit:.|autotools.facts", "ref": "T-056.5", "note": "an -I and an LDADD path into third_party/zlite are not a drive; only a rule that runs its build is"},
-    {"check": "unit:third_party/zlite|cmake.build_point:zlite", "ref": "T-056.2"},
-    {"check": "not_unit:src|autotools", "ref": "T-056.5"},
-    {"check": "assignment:docs/README.md", "ref": "T-056.2"},
-    {"check": "assignment:src/Makefile.am", "ref": "T-056.5"},
-    {"check": "assignment:src/main.c", "ref": "T-056.5"},
-    {"check": "assignment:third_party/zlite/zlite.c", "ref": "T-056.2"},
-    {"check": "assignment:third_party/zlite/zlite.h", "ref": "T-056.2"}
+    {
+      "check": "unit:.|autotools.build_point:packer|program",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "unit:.|autotools.facts",
+      "ref": "T-056.5",
+      "note": "an -I and an LDADD path into third_party/zlite are not a drive; only a rule that runs its build is"
+    },
+    {
+      "check": "not_unit:src|autotools",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:src/Makefile.am",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:src/main.c",
+      "ref": "T-056.5"
+    },
+    {
+      "check": "assignment:third_party/zlite/zlite.h",
+      "ref": "T-056.2"
+    }
   ]
 }

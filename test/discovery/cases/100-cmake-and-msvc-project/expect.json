@@ -5,23 +5,65 @@
   "polarity": "positive",
   "mirrors": "a CMake project and a hand-maintained Visual Studio solution side by side, both building the same two sources; CMake is the recorded capture authority, the MSVC solution is its parallel",
   "units": [
-    {"root": "engine", "build_system": "cmake", "family": "native", "profile": "native",
-     "markers": ["engine/CMakeLists.txt"],
-     "build_points": [
-       {"name": "engine_core", "kind": "static_library", "evidence": "engine/CMakeLists.txt:3"},
-       {"name": "engine", "kind": "executable", "evidence": "engine/CMakeLists.txt:5"}
-     ],
-     "facts": {"parallel_with": ["engine|msbuild"], "capture_authority": "primary"}},
-    {"root": "engine", "build_system": "msbuild", "family": "native", "profile": "native",
-     "markers": ["engine/engine.sln", "engine/engine.vcxproj"],
-     "build_points": [
-       {"name": "engine", "kind": "project", "evidence": "engine/engine.sln:3"}
-     ],
-     "facts": {"parallel_with": ["engine|cmake"], "capture_authority": "secondary"}}
+    {
+      "root": "engine",
+      "build_system": "cmake",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "engine/CMakeLists.txt"
+      ],
+      "build_points": [
+        {
+          "name": "engine_core",
+          "kind": "static_library",
+          "evidence": "engine/CMakeLists.txt:3"
+        },
+        {
+          "name": "engine",
+          "kind": "executable",
+          "evidence": "engine/CMakeLists.txt:5"
+        }
+      ],
+      "facts": {
+        "parallel_with": [
+          "engine|msbuild"
+        ],
+        "capture_authority": "primary"
+      }
+    },
+    {
+      "root": "engine",
+      "build_system": "msbuild",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "engine/engine.sln",
+        "engine/engine.vcxproj"
+      ],
+      "build_points": [
+        {
+          "name": "engine",
+          "kind": "project",
+          "evidence": "engine/engine.sln:3"
+        }
+      ],
+      "facts": {
+        "parallel_with": [
+          "engine|cmake"
+        ],
+        "capture_authority": "secondary"
+      }
+    }
   ],
   "not_units": [
-    {"root": "engine", "build_system": "dotnet", "marker": "engine/engine.sln", "role": "evidence_of:engine|msbuild",
-     "reason": "the solution lists only a C++ project: it is the MSBuild unit's solution file, not a .NET build"}
+    {
+      "root": "engine",
+      "build_system": "dotnet",
+      "marker": "engine/engine.sln",
+      "role": "evidence_of:engine|msbuild",
+      "reason": "the solution lists only a C++ project: it is the MSBuild unit's solution file, not a .NET build"
+    }
   ],
   "assignment": {
     "engine/CMakeLists.txt": "evidence_of:engine|cmake",
@@ -37,20 +79,63 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:engine|cmake.build_point:engine_core", "ref": "T-056.2"},
-    {"check": "unit:engine|cmake.build_point:engine", "ref": "T-056.2"},
-    {"check": "unit:engine|cmake.facts", "ref": "T-056.6", "note": "parallel_with and the recorded capture authority (policy: the system the native lane runs; CMake over MSBuild)"},
-    {"check": "unit:engine|msbuild.markers", "ref": "T-056.4", "note": "the .sln belongs to the MSBuild unit it drives, not to a dotnet unit"},
-    {"check": "unit:engine|msbuild.build_point:engine", "ref": "T-056.2", "note": "MSBuild projects from the .sln"},
-    {"check": "unit:engine|msbuild.facts", "ref": "T-056.6"},
-    {"check": "not_unit:engine|dotnet", "ref": "T-056.4", "note": "a .sln is concluded as a dotnet unit regardless of the project types it lists"},
-    {"check": "assignment:engine/engine.sln", "ref": "T-056.4"},
-    {"check": "assignment:engine/engine.vcxproj", "ref": "T-056.2"},
-    {"check": "assignment:engine/engine.vcxproj.filters", "ref": "T-056.4", "note": "context of the MSBuild unit, not of the dotnet look-alike"},
-    {"check": "assignment:engine/engine.vcxproj.user", "ref": "T-056.4"},
-    {"check": "assignment:engine/Directory.Build.props", "ref": "T-056.4"},
-    {"check": "assignment:engine/include/core.h", "ref": "T-056.2", "note": "the primary authority's build point owns the shared sources"},
-    {"check": "assignment:engine/src/core.cpp", "ref": "T-056.2"},
-    {"check": "assignment:engine/src/main.cpp", "ref": "T-056.2"}
+    {
+      "check": "unit:engine|cmake.facts",
+      "ref": "T-056.6",
+      "note": "parallel_with and the recorded capture authority (policy: the system the native lane runs; CMake over MSBuild)"
+    },
+    {
+      "check": "unit:engine|msbuild.markers",
+      "ref": "T-056.4",
+      "note": "the .sln belongs to the MSBuild unit it drives, not to a dotnet unit"
+    },
+    {
+      "check": "unit:engine|msbuild.build_point:engine|project",
+      "ref": "T-056.2",
+      "note": "MSBuild projects from the .sln"
+    },
+    {
+      "check": "unit:engine|msbuild.facts",
+      "ref": "T-056.6"
+    },
+    {
+      "check": "not_unit:engine|dotnet",
+      "ref": "T-056.4",
+      "note": "a .sln is concluded as a dotnet unit regardless of the project types it lists"
+    },
+    {
+      "check": "assignment:engine/engine.sln",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:engine/engine.vcxproj",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:engine/engine.vcxproj.filters",
+      "ref": "T-056.4",
+      "note": "context of the MSBuild unit, not of the dotnet look-alike"
+    },
+    {
+      "check": "assignment:engine/engine.vcxproj.user",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:engine/Directory.Build.props",
+      "ref": "T-056.4"
+    },
+    {
+      "check": "assignment:engine/include/core.h",
+      "ref": "T-056.2",
+      "note": "the primary authority's build point owns the shared sources"
+    },
+    {
+      "check": "assignment:engine/src/core.cpp",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:engine/src/main.cpp",
+      "ref": "T-056.2"
+    }
   ]
 }

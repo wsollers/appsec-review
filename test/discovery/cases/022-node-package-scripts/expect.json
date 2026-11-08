@@ -5,12 +5,27 @@
   "polarity": "positive",
   "mirrors": "an npm package with a main entry and a build script that runs tsc over src/; the lockfile, tsconfig.json and .npmrc are context the install and the compiler read",
   "units": [
-    {"root": "web", "build_system": "node", "family": "node", "profile": "node",
-     "markers": ["web/package.json"],
-     "build_points": [
-       {"name": "web-app", "kind": "package", "evidence": "web/package.json:2"},
-       {"name": "build", "kind": "script", "evidence": "web/package.json:7"}
-     ]}
+    {
+      "root": "web",
+      "build_system": "node",
+      "family": "node",
+      "profile": "node",
+      "markers": [
+        "web/package.json"
+      ],
+      "build_points": [
+        {
+          "name": "web-app",
+          "kind": "package",
+          "evidence": "web/package.json:2"
+        },
+        {
+          "name": "build",
+          "kind": "script",
+          "evidence": "web/package.json:7"
+        }
+      ]
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -23,12 +38,18 @@
     "web/README.md": "inert"
   },
   "pending": [
-    {"check": "unit:web|node.build_point:web-app", "ref": "T-056.2"},
-    {"check": "unit:web|node.build_point:build", "ref": "T-056.2", "note": "npm scripts are build points; build is the one the lane runs"},
-    {"check": "assignment:web/package-lock.json", "ref": "T-056.4", "note": "a lockfile is context, never a source the node family compiles (.json is matched as a node source today)"},
-    {"check": "assignment:web/tsconfig.json", "ref": "T-056.4", "note": "tsc reads tsconfig.json; it is context, not evidence"},
-    {"check": "assignment:web/src/index.ts", "ref": "T-056.2", "note": "tsconfig include: [src] binds the sources to the build script"},
-    {"check": "assignment:web/src/util.ts", "ref": "T-056.2"},
-    {"check": "assignment:web/README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"}
+    {
+      "check": "unit:web|node.build_point:web-app|package",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "assignment:web/src/index.ts",
+      "ref": "T-056.2",
+      "note": "tsconfig include: [src] binds the sources to the build script"
+    },
+    {
+      "check": "assignment:web/src/util.ts",
+      "ref": "T-056.2"
+    }
   ]
 }

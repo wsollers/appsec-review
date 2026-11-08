@@ -5,14 +5,49 @@
   "polarity": "positive",
   "mirrors": "an npm package whose build script runs wasm-pack on a sibling Rust crate before bundling: the script line is the literal driving evidence; both are units with their own image demand, and the crate records what drives it",
   "units": [
-    {"root": "web", "build_system": "node", "family": "node", "profile": "node",
-     "markers": ["web/package.json"],
-     "build_points": [{"name": "build", "kind": "script", "evidence": "web/package.json:6"}],
-     "facts": {"drives": ["wasm-core"]}},
-    {"root": "wasm-core", "build_system": "cargo", "family": "rust", "profile": "rust",
-     "markers": ["wasm-core/Cargo.toml"],
-     "build_points": [{"name": "wasm-core", "kind": "package", "evidence": "wasm-core/Cargo.toml:2"}],
-     "facts": {"driven_by": {"unit": "web|node", "evidence": "web/package.json:6"}}}
+    {
+      "root": "web",
+      "build_system": "node",
+      "family": "node",
+      "profile": "node",
+      "markers": [
+        "web/package.json"
+      ],
+      "build_points": [
+        {
+          "name": "build",
+          "kind": "script",
+          "evidence": "web/package.json:6"
+        }
+      ],
+      "facts": {
+        "drives": [
+          "wasm-core"
+        ]
+      }
+    },
+    {
+      "root": "wasm-core",
+      "build_system": "cargo",
+      "family": "rust",
+      "profile": "rust",
+      "markers": [
+        "wasm-core/Cargo.toml"
+      ],
+      "build_points": [
+        {
+          "name": "wasm-core",
+          "kind": "package",
+          "evidence": "wasm-core/Cargo.toml:2"
+        }
+      ],
+      "facts": {
+        "driven_by": {
+          "unit": "web|node",
+          "evidence": "web/package.json:6"
+        }
+      }
+    }
   ],
   "not_units": [],
   "assignment": {
@@ -26,11 +61,18 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {"check": "unit:web|node.build_point:build", "ref": "T-056.2", "note": "npm scripts are build points"},
-    {"check": "unit:web|node.facts", "ref": "T-056.5", "note": "wasm-pack build ../wasm-core in the build script drives the sibling crate"},
-    {"check": "unit:wasm-core|cargo.build_point:wasm-core", "ref": "T-056.2"},
-    {"check": "unit:wasm-core|cargo.facts", "ref": "T-056.5"},
-    {"check": "assignment:web/package-lock.json", "ref": "T-056.4", "note": "a lockfile is context; today every .json under a node root is taken for a node source"},
-    {"check": "assignment:wasm-core/src/lib.rs", "ref": "T-056.2"}
+    {
+      "check": "unit:web|node.facts",
+      "ref": "T-056.5",
+      "note": "wasm-pack build ../wasm-core in the build script drives the sibling crate"
+    },
+    {
+      "check": "unit:wasm-core|cargo.build_point:wasm-core|package",
+      "ref": "T-056.2"
+    },
+    {
+      "check": "unit:wasm-core|cargo.facts",
+      "ref": "T-056.5"
+    }
   ]
 }
