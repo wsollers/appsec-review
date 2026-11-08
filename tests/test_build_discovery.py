@@ -9,7 +9,7 @@ import pytest
 
 from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, android_descriptor_facts, build_recipe_inference_policy,
-    descriptor_inventory_paths, descriptor_package, discover_build_units, is_build_descriptor,
+    descriptor_inventory_paths, descriptor_package, discover_build_inventory, discover_build_units, is_build_descriptor,
     make_default_build_commands, native_build_capability_gap, node_manifest_declares_dependencies,
     node_workspace, normalize_build_recipe, required_image_profile,
     recipe_execution_cwd, unsupported_build_gaps, validate_build_recipe,
@@ -40,18 +40,28 @@ def test_discovery_groups_descriptors_without_repository_specific_names() -> Non
     }
 
 
-def test_source_only_compiled_tree_becomes_one_direct_build_unit() -> None:
-    units = discover_build_units([
+def test_compiled_sources_without_a_build_point_are_orphaned_findings_not_units() -> None:
+    """A tree of .java files with no build descriptor is reported, never guessed into a javac unit
+    (decision 2026-11-08: orphaned sources are knowledge — dead code, build drift, an abandoned port,
+    or a build we did not understand)."""
+    inventory = discover_build_inventory([
         _file("service/src/com/example/Main.java"),
         _file("service/src/com/example/Helper.java"),
         _file("native/CMakeLists.txt"), _file("native/src/main.cpp"),
+        _file("native/tools/gen.rs"),
     ])
-    assert [(item["root"], item["family"], item["build_system"]) for item in units] == [
-        ("native", "native", "cmake"), ("service", "java", "javac"),
-    ]
-    assert {item["path"] for item in units[1]["markers"]} == {
-        "service/src/com/example/Main.java", "service/src/com/example/Helper.java",
-    }
+    assert [(item["root"], item["family"], item["build_system"]) for item in inventory["units"]] == [
+        ("native", "native", "cmake")]
+    orphans = {item["path"]: item for item in inventory["orphaned_sources"]}
+    assert set(orphans) == {"service/src/com/example/Main.java", "service/src/com/example/Helper.java",
+                            "native/tools/gen.rs"}
+    assert orphans["service/src/com/example/Main.java"]["language"] == "java"
+    assert orphans["service/src/com/example/Main.java"]["reason"] == "no_build_point"
+    assert orphans["service/src/com/example/Main.java"]["nearest_unit"] is None
+    # A Rust file under a CMake root is still orphaned: the nearest unit is named, and why it did not claim it.
+    assert orphans["native/tools/gen.rs"]["nearest_unit"] == {
+        "root": "native", "family": "native", "build_system": "cmake", "why_not": "different family"}
+    assert discover_build_units([_file("x/src/a.c")]) == []
 
 
 def test_dotnet_project_suffixes_cover_csharp_visual_basic_and_fsharp() -> None:
@@ -586,13 +596,14 @@ def test_java_recipe_normalization_removes_host_specific_java_home() -> None:
     assert normalized["environment"] == {"MAVEN_OPTS": "-Xmx1g"}
 
 
-def test_teamcity_kotlin_dsl_is_not_a_java_build_unit() -> None:
-    units = discover_build_units([
+def test_teamcity_kotlin_dsl_is_neither_a_java_build_unit_nor_an_orphan() -> None:
+    inventory = discover_build_inventory([
         _file(".teamcity/settings.kts"),
         _file("projects/java/sample/src/Main.java"),
     ])
-    assert [(unit["root"], unit["family"]) for unit in units] == [
-        ("projects/java/sample", "java")]
+    assert inventory["units"] == []
+    # CI configuration is cataloged by the CI lanes; the loose Java source is the orphan.
+    assert [item["path"] for item in inventory["orphaned_sources"]] == ["projects/java/sample/src/Main.java"]
 
 
 def test_dotnet_recipe_normalization_regenerates_workspace_restore_outputs() -> None:
@@ -919,13 +930,18 @@ def test_a_source_a_sibling_descriptor_names_is_that_units_component_not_a_new_r
     files = [_file("tools/packer/Makefile", makefile), _file("tools/packer/main.c"),
              _file("common/src/util.c"), _file("common/include/util.h"),
              _file("lonely/src/alone.c")]
-    units = {unit["root"]: unit for unit in discover_build_units(files, read_text=_reader({"tools/packer/Makefile": makefile}))}
-    assert "common" not in units, "no manufactured direct-native root for a referenced sibling source"
+    inventory = discover_build_inventory(files, read_text=_reader({"tools/packer/Makefile": makefile}))
+    units = {unit["root"]: unit for unit in inventory["units"]}
+    assert "common" not in units, "no manufactured root for a referenced sibling source"
     assert [c["path"] for c in units["tools/packer"]["native_components"]] == ["common/src/util.c"]
-    # A source nothing references still gets the conventional fallback root.
-    assert units["lonely"]["build_system"] == "direct-native"
-    # Without descriptor text there is no evidence, so the fallback root is manufactured as before.
-    assert "common" in {unit["root"] for unit in discover_build_units(files)}
+    # A source nothing references is orphaned, with the nearest unit it was not claimed by.
+    [orphan] = inventory["orphaned_sources"]
+    assert orphan["path"] == "lonely/src/alone.c" and orphan["nearest_unit"] is None
+    # Without descriptor text there is no evidence of the reference, so util.c is orphaned too —
+    # reported against the packer unit, never attached to it on proximity.
+    blind = discover_build_inventory(files)
+    assert "common" not in {unit["root"] for unit in blind["units"]}
+    assert [o["path"] for o in blind["orphaned_sources"]] == ["common/src/util.c", "lonely/src/alone.c"]
 
 
 def test_a_wildcard_reference_in_a_vendored_test_makefile_binds_the_sources_it_globs() -> None:

@@ -373,15 +373,30 @@ def _relative_to(path: str, root: str) -> str | None:
 
 
 
+_ORPHAN_LANGUAGE = {".c": "c", ".cc": "c++", ".cpp": "c++", ".cxx": "c++", ".java": "java", ".kt": "kotlin",
+                    ".kts": "kotlin", ".rs": "rust", ".go": "go", ".wat": "wat"}
+
+
 def discover_build_units(files: Sequence[Mapping[str, Any]], *,
                          read_text: Callable[[str], str | None] | None = None,
                          engine_discovery: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Group accepted build descriptors into stable, repository-independent build units.
+    """The build units of an inventory; :func:`discover_build_inventory` also returns the orphans."""
+    return discover_build_inventory(files, read_text=read_text, engine_discovery=engine_discovery)["units"]
 
-    ``read_text`` returns the bounded text of a cataloged file. It lets a build script that
-    targets wasm32 route its C sources to the wasm family instead of a direct-native unit.
+
+def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
+                             read_text: Callable[[str], str | None] | None = None,
+                             engine_discovery: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Group accepted build descriptors into stable, repository-independent build units, and name
+    the compiled-language sources no build point claims.
+
+    Returns ``{"units": [...], "orphaned_sources": [...]}``. ``read_text`` returns the bounded text
+    of a cataloged file; it lets a build script that targets wasm32 route its C sources to the wasm
+    family, and lets a native descriptor claim the sibling sources it names.
     """
     from appsec_review.jobs.engine_discovery import discover_unity
+
+    orphans: list[dict[str, Any]] = []
 
     engines = (engine_discovery if engine_discovery is not None else
                discover_unity(files, read_text=lambda descriptor, _limit:
@@ -482,11 +497,21 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
             if referenced is not None:
                 components[referenced].append(item)
                 continue
-        parts = path.parts
-        conventional = next((index for index, part in enumerate(parts[:-1])
-                             if part in {"src", "source"}), None)
-        root = PurePosixPath(*parts[:conventional]).as_posix() if conventional else path.parent.as_posix()
-        groups[(root or ".", family, system)].append(item)
+        # No build script, descriptor or compiler line names this compiled-language source: it is
+        # orphaned. That is a finding (dead code, build drift, an abandoned port, or a build we did
+        # not understand), reported with the nearest unit considered; it is never built and never
+        # silently attached to a neighbour (decision 2026-11-08, T-056.3).
+        nearest = max((key for key in groups if key[0] == "." or PurePosixPath(key[0]) in path.parents),
+                      key=lambda key: (len(PurePosixPath(key[0]).parts), key), default=None)
+        orphans.append({
+            "path": str(item["path"]), "sha256": item["sha256"], "size_bytes": item["size_bytes"],
+            "family": family, "language": _ORPHAN_LANGUAGE.get(path.suffix.lower(), family),
+            "reason": "no_build_point",
+            "nearest_unit": None if nearest is None else {
+                "root": nearest[0], "family": nearest[1], "build_system": nearest[2],
+                "why_not": ("different family" if nearest[1] != family else
+                            "no descriptor of that unit names this source")},
+        })
     # A preset is context for the CMake project at the same root, never a second unit.
     values = []
     for (root, family, system), markers in sorted(groups.items()):
@@ -533,7 +558,8 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
             "provenance": "deterministic-engine-descriptors",
         })
     values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
-    return values
+    orphans.sort(key=lambda value: value["path"])
+    return {"units": values, "orphaned_sources": orphans}
 
 
 _INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}

@@ -51,11 +51,19 @@ folder's content:
 1. **Units.** The set of units, each with: root, build system, family, the build points it drives
    (names, kinds), the markers and descriptors that are its evidence, its `required_image_profile`,
    and the facts the plan needs (workspace/solution membership, platform declarations, conditions).
-2. **Assignment.** Every path under the folder has exactly one role: `evidence_of(<unit>)` (a
-   marker, descriptor, or source a build point names), `source_only(<scope>)` (interpreted or
-   unbuilt code no build point claims, with the reason), `context` (lockfiles, props, settings the
-   unit reads but does not build), `excluded(<policy>)`, or `unclaimed` — and `unclaimed` is a
-   discovery defect, never an accepted output.
+2. **Assignment.** Every path under the folder has exactly one role:
+   - `evidence_of:<unit>[#<build point>]` — a marker, a descriptor, or a source a build point names;
+   - `context:<unit>` — lockfiles, props, settings, presets the unit reads but does not build;
+   - `source_only:<language>` — interpreted code with no build step (PHP, Python, JavaScript
+     without a package build, shell): reviewable as source, nothing to build;
+   - `orphaned:<reason>` — a **compiled-language source that no build script, build descriptor or
+     compiler line references**. This is a finding, not a fallback: it means dead code, build
+     drift, an abandoned port, or a build we failed to understand, and every one of those is
+     knowledge the review must report. Orphaned sources are never built and never silently
+     attached to a nearby unit (decision 2026-11-08, replacing the `direct-native` fallback);
+   - `inert` — not code and not build input (documentation, assets, data), still inventoried;
+   - `excluded:<policy>` — a configured exclusion (`.git`, vendored binaries by policy);
+   - `unclaimed` — a discovery defect, never an accepted output.
 3. **Non-units.** Everything that looks like a root but is not one is named with the reason: a
    `project.pbxproj` outside a bundle, a `Makefile` that only delegates (`$(MAKE) -C`), a
    `CMakeLists.txt` reached only by a parent's `add_subdirectory` (that is ownership, T-035, but
@@ -195,10 +203,13 @@ single-purpose; the composite monorepo is the only large one.
    npm scripts, Unity player targets, Xcode targets (from `PBXNativeTarget` names). Sources that a
    build point names become `evidence_of:<unit>#<point>`; `native_components` is retired in favour
    of that assignment.
-3. **T-056.3 Loose sources are not units.** The `direct-native` fallback becomes a
-   `source_only` scope with reason `no_build_point`, unless a configuration policy opts a root in
-   (the existing `confirmed-user-intent` selection row). Existing fixtures that depended on
-   `direct-native` compile attempts move to explicit declared builds (T-038) or to the opt-in.
+3. **T-056.3 Orphaned sources are reported, never built.** The `direct-native` fallback is
+   removed: a compiled-language source no build point names is `orphaned:<reason>` in the
+   assignment, listed in `build-systems.json` as `orphaned_sources` (path, language, reason, the
+   nearest unit considered and why it did not claim it), counted in the catalog's coverage, and
+   surfaced to the review as a finding class of its own. A root the operator wants compiled anyway
+   is a declared build (T-038), not a guess. Existing fixtures that depended on `direct-native`
+   compile attempts move to declared builds.
 4. **T-056.4 Matrix A** (one build system, positives and look-alike negatives).
 5. **T-056.5 Matrix B and D** (nesting, cross-tree; evidence-literal ownership facts and
    materialization roots).
@@ -222,11 +233,17 @@ pointing at these sub-items or at T-035/T-036/T-037/T-039.
 
 ## 7. Status
 
+Seed cases prove the harness and record the first contract disagreements: `CMakePresets.json` is
+listed as a marker (it is context); an include-only `CMakeLists.txt` and a `.cmake` module nothing
+includes are concluded as unit/context (they are inert); a delegating-only Makefile does not record
+what it drives; headers reached through `-I` are not bound; sources bind to units, not yet to build
+points. All are `pending` on T-056.2/T-056.5.
+
 | Sub-item | State | Notes |
 | --- | --- | --- |
-| T-056.1 harness | open | |
-| T-056.2 build points | open | the fix for "a source is not a component" |
-| T-056.3 loose sources | open | policy decision recorded in §5.3 |
+| T-056.1 harness | done (2026-11-08) | `test/discovery/`, `discovery-case/1` schema, `tests/test_discovery_cases.py`, `acceptance.discovery assign/check/new`, `jobs/discovery_assignment.py`; seed cases 001–004 (A1 positive, A1 negative, orphans, D1) |
+| T-056.2 build points | open | the fix for "a source is not a component"; 14 pending checks in cases 001, 002, 004 name it |
+| T-056.3 orphaned sources | done in discovery and catalog (2026-11-08); review surfacing open | `discover_build_inventory` returns `orphaned_sources`; `direct-native`/`javac`/`rustc`/`go` source fallbacks removed; `build-systems/3` lists orphans and the catalog counts them (`BUILD_SYSTEMS_DISCOVERED`); still to do: the finding class downstream (prioritization/report) |
 | T-056.4 matrix A | open | 12 build systems × (positive, negative) |
 | T-056.5 matrix B, D | open | |
 | T-056.6 matrix C, E, F | open | |

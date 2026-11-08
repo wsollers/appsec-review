@@ -177,6 +177,7 @@ def test_intake_catalog_and_metrics_share_verified_full_tree_discovery(tmp_path:
     run_root = tmp_path / "run"
     outputs = {}
     job = SimpleNamespace(target_root=target, config=SimpleNamespace(exclusions=None),
+                          events=SimpleNamespace(write=lambda *args, **kwargs: None),
                           source_fingerprint=raw_snapshot(target)["sha256"], run_root=run_root,
                           attempt_root=run_root / "data" / "jobs" / "job_target_catalog" / "attempts" / "attempt_0001")
 

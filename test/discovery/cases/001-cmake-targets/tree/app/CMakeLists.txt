@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+project(app C)
+include(cmake/warnings.cmake)
+add_library(core STATIC src/core.c)
+target_include_directories(core PUBLIC include)
+add_executable(app_main src/main.c)
+target_link_libraries(app_main PRIVATE core)

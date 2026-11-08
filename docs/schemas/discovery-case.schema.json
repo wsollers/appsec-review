@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/discovery-case.schema.json",
+  "title": "Build discovery case: the contract for one fixture folder",
+  "$comment": "docs/plans/build-discovery-test-program-2026-11-08.md section 2 and 3. A case is a folder (tree/) and this expectation. Every path in the tree has exactly one role; units and non-units are named with evidence and reasons; pending names the checks the runtime does not meet yet by registry sub-item and the runner treats them as strict xfails.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "case", "units", "not_units", "assignment"],
+  "properties": {
+    "schema": {"const": "appsec-review/discovery-case/1"},
+    "case": {"type": "string", "pattern": "^[0-9]{3}-[a-z0-9][a-z0-9-]*$"},
+    "matrix": {"type": "string", "pattern": "^[A-G][0-9]{1,2}$", "description": "The matrix cell this case exercises (plan section 4)."},
+    "mirrors": {"type": "string", "description": "The real-world target or shape this case mirrors."},
+    "polarity": {"enum": ["positive", "negative", "mixed"]},
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "build_system", "family"],
+        "properties": {
+          "root": {"type": "string"},
+          "build_system": {"type": "string"},
+          "family": {"type": "string"},
+          "profile": {"type": "string", "description": "required_image_profile"},
+          "markers": {"type": "array", "items": {"type": "string"}, "description": "Exact marker paths when asserted."},
+          "build_points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "kind"],
+              "properties": {
+                "name": {"type": "string"},
+                "kind": {"type": "string"},
+                "evidence": {"type": "string", "description": "path[:line] that establishes it"}
+              }
+            }
+          },
+          "facts": {"type": "object", "description": "Subset of the unit's facts that must be present with these values (workspace, descriptor_facts, language, ...)."}
+        }
+      }
+    },
+    "not_units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "reason"],
+        "properties": {
+          "root": {"type": "string"},
+          "build_system": {"type": "string", "description": "When given, no unit with this root and system may exist; otherwise no unit at this root at all."},
+          "marker": {"type": "string", "description": "The look-alike file; its assignment is asserted through assignment or role."},
+          "role": {"type": "string", "pattern": "^(evidence_of:|context:|source_only:|orphaned:|inert$|excluded:|unclaimed$)", "description": "The role the look-alike must have instead."},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "assignment": {
+      "type": "object",
+      "description": "path -> role for paths asserted individually.",
+      "additionalProperties": {"type": "string", "pattern": "^(evidence_of:[^|]+\\|[a-z0-9-]+(#[^ ]+)?|context:[^|]+\\|[a-z0-9-]+|source_only:[a-z0-9+-]+|orphaned:[a-z_]+|inert|excluded:[a-z0-9_-]+|unclaimed)$"}
+    },
+    "assignment_defaults": {
+      "type": "array",
+      "description": "glob -> role for paths not listed individually; first match wins. Together with assignment they must cover every path in the tree.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["glob", "role"],
+        "properties": {"glob": {"type": "string"}, "role": {"type": "string"}}
+      }
+    },
+    "orphaned_sources": {
+      "type": "array",
+      "description": "Exact orphan list when asserted: path, language, reason, nearest unit root (or null).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason"],
+        "properties": {
+          "path": {"type": "string"}, "language": {"type": "string"}, "reason": {"type": "string"},
+          "nearest_unit": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "source_only_scopes": {"type": "array", "items": {"type": "object", "required": ["root", "language"],
+      "properties": {"root": {"type": "string"}, "language": {"type": "string"}}}},
+    "pending": {
+      "type": "array",
+      "description": "Checks the runtime does not meet yet. check is a check id the runner prints; ref is a registry id or sub-item.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check", "ref"],
+        "properties": {"check": {"type": "string"}, "ref": {"type": "string", "pattern": "^T-[0-9]{3}(\\.[0-9]+)?$"}, "note": {"type": "string"}}
+      }
+    },
+    "notes": {"type": "string"}
+  }
+}

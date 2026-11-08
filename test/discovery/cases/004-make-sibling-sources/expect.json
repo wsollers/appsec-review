@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "004-make-sibling-sources",
+  "matrix": "D1",
+  "polarity": "mixed",
+  "mirrors": "Barracuda-style: a Makefile compiling ../../common/src/util.c with -I../../common/include; a sibling source nothing names is orphaned; a path mentioned only in a comment is not a reference",
+  "units": [
+    {"root": "tools/packer", "build_system": "make", "family": "native", "profile": "native",
+     "build_points": [{"name": "packer", "kind": "rule", "evidence": "tools/packer/Makefile:1"}],
+     "facts": {"materialization_root": "."}}
+  ],
+  "not_units": [
+    {"root": "common", "reason": "common/ has no descriptor; its sources belong to whoever names them"}
+  ],
+  "assignment": {
+    "tools/packer/Makefile": "evidence_of:tools/packer|make",
+    "tools/packer/main.c": "evidence_of:tools/packer|make#packer",
+    "common/src/util.c": "evidence_of:tools/packer|make#packer",
+    "common/include/util.h": "evidence_of:tools/packer|make#packer",
+    "common/src/other.c": "orphaned:no_build_point"
+  },
+  "orphaned_sources": [
+    {"path": "common/src/other.c", "language": "c", "reason": "no_build_point", "nearest_unit": null}
+  ],
+  "pending": [
+    {"check": "unit:tools/packer|make.build_point:packer", "ref": "T-056.2"},
+    {"check": "unit:tools/packer|make.facts", "ref": "T-056.5", "note": "minimum materialization root from ../ references (T-039 consumes it)"},
+    {"check": "assignment:tools/packer/main.c", "ref": "T-056.2"},
+    {"check": "assignment:common/src/util.c", "ref": "T-056.2", "note": "bound to the unit today, to the rule once build points exist"},
+    {"check": "assignment:common/include/util.h", "ref": "T-056.2", "note": "headers reached through -I include directories"}
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "002-cmake-lookalikes",
+  "matrix": "A1",
+  "polarity": "negative",
+  "mirrors": "CMake files that are not projects: an include-only CMakeLists under docs/, a helper module nothing includes; a root Makefile that only delegates to a vendored CMake project",
+  "units": [
+    {"root": ".", "build_system": "make", "family": "native", "profile": "native",
+     "facts": {"drives": ["vendor/lib"]}},
+    {"root": "vendor/lib", "build_system": "cmake", "family": "native", "profile": "native",
+     "build_points": [{"name": "lib", "kind": "static_library", "evidence": "vendor/lib/CMakeLists.txt:3"}]}
+  ],
+  "not_units": [
+    {"root": "docs", "build_system": "cmake", "marker": "docs/CMakeLists.txt", "role": "inert",
+     "reason": "no project(), no target: an include-only CMakeLists.txt is not a build point and nothing adds this directory"}
+  ],
+  "assignment": {
+    "Makefile": "evidence_of:.|make",
+    "docs/CMakeLists.txt": "inert",
+    "scripts/Helpers.cmake": "inert",
+    "vendor/lib/CMakeLists.txt": "evidence_of:vendor/lib|cmake",
+    "vendor/lib/src/lib.c": "evidence_of:vendor/lib|cmake#lib"
+  },
+  "pending": [
+    {"check": "unit:.|make.facts", "ref": "T-056.2", "note": "a delegating-only Makefile records what it drives"},
+    {"check": "unit:vendor/lib|cmake.build_point:lib", "ref": "T-056.2"},
+    {"check": "not_unit:docs|cmake", "ref": "T-056.2", "note": "unit-ness requires a build point or a driver relation"},
+    {"check": "assignment:docs/CMakeLists.txt", "ref": "T-056.2"},
+    {"check": "assignment:scripts/Helpers.cmake", "ref": "T-056.2", "note": "a .cmake module nothing includes is inert, not context of the nearest unit"},
+    {"check": "assignment:vendor/lib/src/lib.c", "ref": "T-056.2"}
+  ]
+}

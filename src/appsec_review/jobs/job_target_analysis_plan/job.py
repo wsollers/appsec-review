@@ -113,11 +113,14 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
     compile_databases = _read_artifact(run_root, artifacts["build_discovery.discover_compile_commands"])
     targets = _read_artifact(run_root, artifacts["build_discovery.catalog_build_targets"])
     expected_schemas = (
-        (partition, "repository-partition/1"), (projects, "project-catalog/1"),
-        (components, "component-catalog/1"), (builds, "build-systems/2"),
-        (compile_databases, "compile-commands/1"), (targets, "build-targets/2"),
+        (partition, ("repository-partition/1",)), (projects, ("project-catalog/1",)),
+        (components, ("component-catalog/1",)),
+        # build-systems/3 adds orphaned_sources (job pass 05 / T-056.3); the plan reads both.
+        (builds, ("build-systems/2", "build-systems/3")),
+        (compile_databases, ("compile-commands/1",)), (targets, ("build-targets/2",)),
     )
-    if any(value.get("schema") != "appsec-review/" + schema for value, schema in expected_schemas):
+    if any(value.get("schema") not in {"appsec-review/" + schema for schema in schemas}
+           for value, schemas in expected_schemas):
         raise ValueError("accepted catalog child artifact schema is unsupported")
     if partition.get("source_fingerprint") != catalog["source_fingerprint"]:
         raise ValueError("accepted catalog partition source identity differs")

@@ -12,6 +12,7 @@ from typing import Any
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, PROJECT_FILE_SUFFIXES, inventory, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
 from appsec_review.jobs.build_discovery import (
+    discover_build_inventory,
     android_descriptor_facts, descriptor_package, discover_build_units, required_image_profile,
     source_only_scopes, unsupported_build_gaps,
 )
@@ -197,12 +198,22 @@ def build_job(*, fail_task: str | None = None) -> Job:
         if changed_descriptors:
             raise ValueError("engine/build descriptor differs from the accepted catalog: " +
                              ", ".join(sorted(set(changed_descriptors))))
-        units = discover_build_units(files, read_text=read_text, engine_discovery=engines)
+        inventory = discover_build_inventory(files, read_text=read_text, engine_discovery=engines)
+        units = inventory["units"]
+        orphans = inventory["orphaned_sources"]
         gaps = [*unsupported_build_gaps(files, units), *engines["gaps"]]
-        doc = {"schema": "appsec-review/build-systems/2", "systems": systems, "build_units": units,
-               "engine_discovery": engines,
+        # Orphaned sources are knowledge the review reports (dead code, build drift, an abandoned
+        # port, or a build we did not understand); they are a coverage fact here, never a build.
+        if orphans:
+            by_language = Counter(item["language"] for item in orphans)
+            gaps.append("orphaned sources: " + ", ".join(f"{count} {language}" for language, count in sorted(by_language.items())))
+        doc = {"schema": "appsec-review/build-systems/3", "systems": systems, "build_units": units,
+               "orphaned_sources": orphans, "engine_discovery": engines,
                "source_only_scopes": source_only_scopes(files, units),
                "gaps": gaps or ([] if units else ["no recognized build system"])}
+        unit.job.events.write("BUILD_SYSTEMS_DISCOVERED", unit_id=unit.unit_id, unit_count=len(units),
+                              orphaned_source_count=len(orphans), source_only_scope_count=len(doc["source_only_scopes"]),
+                              gap_count=len(doc["gaps"]))
         return {"artifact": _artifact(unit, "build-systems.json", doc), **doc}
 
     def compile_commands(unit: UnitContext) -> Mapping[str, Any]:

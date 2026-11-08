@@ -80,6 +80,11 @@ def test_the_catalog_of_a_monorepo_names_every_build_shape_once(tmp_path: Path) 
     assert units[("client-unity", "unity")]["engine"]
     assert any(scope["root"] == "website/public" and scope["language"] == "php" for scope in systems["source_only_scopes"])
     assert ("website/public", "composer") not in units and ("website/lib", "composer") in units
+    # No compiled source in the fixture is orphaned (common/src/util.c is named by the packer Makefile);
+    # the orphan list is present and empty, and the discovery event carries the counts.
+    assert systems["schema"] == "appsec-review/build-systems/3" and systems["orphaned_sources"] == []
+    [discovered] = job_events(run_root, JOB_ID, "BUILD_SYSTEMS_DISCOVERED")
+    assert discovered["orphaned_source_count"] == 0 and discovered["unit_count"] == len(units)
     # Every unit carries the profile it needs.
     targets = {(t["root"], t["build_system"]): t for t in _artifact(run_root, "build-targets.json")["targets"]}
     assert targets[("client-android", "gradle")]["required_image_profile"] == "android"
