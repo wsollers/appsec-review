@@ -37,6 +37,18 @@ mode, reason and exact reference in its signed claim and accepted availability o
 | Expected current producer missing, unaccepted or wrong-source | Blocking error | No fallback to optional/absent evidence |
 | Changed hashes/schema/paths, unexpected bugs, killed/timed-out orchestration or failed publication | Blocking error | Never relabeled as bounded success |
 
+The producer's unit result carries the artifact's bounded gap strings as `producer-gap/1` records
+(`producer_reported_gap`, `scope_id` the script path when the gap names one, never retryable: the
+analysis is advisory and bounded by design) and the job is strict (`strict_gaps`); the artifact keeps
+its own gap strings. A failure of the job's own — the accepted catalog or custody not matching the
+claim, an accepted script missing or its bytes changed since the catalog, the reader breaking its byte
+contract, the publication over the reader bound — is `BuildEnvironmentAnalysisFailed` in the task
+receipt (`error.type`); the attempt fails, no handoff is published, and a resume after the cause is
+removed publishes a second attempt. Events: `BUILD_ENVIRONMENT_ANALYSIS_STARTED` (inventory files,
+selected scripts, `max_scripts`), `BUILD_ENVIRONMENT_ANALYZED` (availability, coverage, inspected
+scripts, declaration and gap counts) and `BUILD_ENVIRONMENT_PUBLISHED` (artifact identity, gap count);
+the pipeline never carries script values, redacted or not (job pass 06, 2026-11-08).
+
 Optional prior evidence must pass integrity validation before staleness is considered. An expected
 current publication must bind the current accepted catalog. Accepted-plan readers and planner
 reuse admission compare these identities again. Disabling this producer does not disable native

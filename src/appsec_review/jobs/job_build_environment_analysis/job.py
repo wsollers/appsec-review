@@ -9,6 +9,7 @@ import re
 import time
 
 from appsec_review.config.loader import BuildEnvironmentSettings, parse_bounded_settings
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.storage import atomic_bytes, canonical_json
@@ -24,6 +25,32 @@ URL_CREDENTIAL = re.compile(r"(?i)([a-z][a-z0-9+.-]*://)[^/\s@]+@")
 ASSIGNMENT = re.compile(r"(?i)^(?:export\s+|set\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 SUPPORTED = {".sh", ".bash", ".bat", ".cmd"}
 WORKFLOWS = {"wave1_review", "project_build_review"}
+
+
+class BuildEnvironmentAnalysisFailed(RuntimeError):
+    """The job could not read or publish the accepted environment scripts.
+
+    Raised by the units (never by the claim-time validator): the catalog or the target custody does not
+    match the claim, an accepted script is missing or its bytes changed, the reader broke its byte
+    contract, or the publication exceeds the reader bound. The attempt fails and names it as
+    ``error.type``; the next attempt after the cause is removed publishes.
+    """
+
+
+def gap_records(gaps, unit_id):
+    """The artifact's bounded gap strings as ``producer-gap/1`` records for the unit result.
+
+    ``<path>: <reason>`` gaps carry the script path as ``scope_id``; the global bounds
+    (``script_count_exhausted``, ``assignment_count_exhausted``, ``internal_environment_deadline``,
+    the PowerShell statement) have none. Every gap is ``producer_reported_gap``: the analysis is
+    advisory and bounded by design, so none is retryable by an operator action.
+    """
+    records = []
+    for gap in gaps:
+        path, separator, reason = gap.partition(": ")
+        scope = path if separator and "/" in path or separator and path.endswith(tuple(SUPPORTED)) else None
+        records.append(producer_gap(GapCode.PRODUCER_REPORTED_GAP, gap, unit_id=unit_id, scope_id=scope))
+    return records
 
 
 def _assignment(line: str):
@@ -312,7 +339,10 @@ def analyze_environment(catalog, read_document, settings, *, clock=time.monotoni
     })
 
 
-def build_job():
+def build_job(*, before_reading=None):
+    """The job. ``before_reading`` is a test seam: a callable run once after the accepted catalog is
+    loaded and before any script is read, so a test can change the target under the accepted inventory
+    (the external condition the bytes-changed and missing-script failures guard against)."""
     def validate_config(context, _result):
         if (tuple(context.config.steps) != ("environment_analysis",)
                 or tuple(context.config.step("environment_analysis").tasks) != (
@@ -324,39 +354,58 @@ def build_job():
         from appsec_review.jobs.job_target_analysis_plan.job import _accepted_catalog
         catalog = _accepted_catalog(unit.job.run_root)
         if catalog["source_fingerprint"] != unit.job.source_fingerprint:
-            raise ValueError("environment catalog source mismatch")
+            raise BuildEnvironmentAnalysisFailed("environment catalog source mismatch")
         settings = parse_bounded_settings(unit.job.config.settings, BuildEnvironmentSettings)
+        if unit.job.target_root is None:
+            raise BuildEnvironmentAnalysisFailed("environment source custody is missing")
+        selected = sum(1 for item in catalog["files"] if PurePosixPath(item["path"]).suffix.lower() in SUPPORTED
+                       and re.search(r"(?i)(?:env|setup|setvars|bootstrap)", PurePosixPath(item["path"]).stem))
+        unit.job.events.write("BUILD_ENVIRONMENT_ANALYSIS_STARTED", unit_id=unit.unit_id,
+                              inventory_files=len(catalog["files"]), selected_scripts=selected,
+                              max_scripts=settings.max_scripts)
+        if before_reading is not None:
+            before_reading(unit)
 
         def read_document(item, bound):
-            if unit.job.target_root is None:
-                raise ValueError("environment source custody is missing")
             path = safe_path(unit.job.target_root, item["path"])
             if not path.is_file():
-                raise ValueError("accepted environment script is missing")
+                raise BuildEnvironmentAnalysisFailed(f"accepted environment script is missing: {item['path']}")
             with path.open("rb") as stream:
                 return stream.read(bound + 1)
 
-        return analyze_environment(catalog, read_document, settings)
+        try:
+            value = analyze_environment(catalog, read_document, settings)
+        except ValueError as error:
+            # The analysis found the accepted inventory disagreeing with the target (bytes changed, the
+            # reader broke its contract): the attempt fails with the job's own failure class.
+            raise BuildEnvironmentAnalysisFailed(str(error)) from error
+        unit.job.events.write("BUILD_ENVIRONMENT_ANALYZED", unit_id=unit.unit_id,
+                              availability=value["availability"], coverage=value["coverage"],
+                              inspected_scripts=value["bounds"]["inspected_scripts"],
+                              declaration_count=len(value["declarations"]), gap_count=len(value["gaps"]))
+        # The analysis is the publish unit's payload; its bounded gap strings are the artifact's own
+        # format and become producer-gap/1 records only in the published unit result.
+        return {"schema": SCHEMA, "environment": value}
 
     def publish(unit):
-        value = validate_environment(unit.output("environment_analysis.analyze_scripts"))
+        value = validate_environment(unit.output("environment_analysis.analyze_scripts")["environment"])
         path = unit.unit_root / "build-environment.json"
         payload = canonical_json(value)
         if len(payload) > 16 * 1024 * 1024:
-            raise ValueError("environment publication exceeds its accepted reader bound")
+            raise BuildEnvironmentAnalysisFailed("environment publication exceeds its accepted reader bound")
         atomic_bytes(path, payload)
         data = path.read_bytes()
         identity = {"path": path.relative_to(unit.job.run_root).as_posix(),
                     "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
-        unit.job.events.write("BUILD_ENVIRONMENT_PUBLISHED", availability=value["availability"],
-                              coverage=value["coverage"], gap_count=len(value["gaps"]),
-                              artifact=identity)
-        return {"schema": SCHEMA, "artifact": identity, "gaps": value["gaps"],
-                "terminal_status": "COMPLETED_WITH_GAPS" if value["gaps"] else "SUCCEEDED"}
+        gaps = gap_records(value["gaps"], unit.unit_id)
+        unit.job.events.write("BUILD_ENVIRONMENT_PUBLISHED", unit_id=unit.unit_id, availability=value["availability"],
+                              coverage=value["coverage"], gap_count=len(gaps), artifact=identity)
+        return {"schema": SCHEMA, "artifact": identity, "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     units = (Unit("environment_analysis.analyze_scripts", analyze),
              Unit("environment_analysis.publish_handoff", publish,
                   ("environment_analysis.analyze_scripts",)))
     return Job(JOB_ID, "build_environment_analysis", UnitExecutor(units).execute,
                input_validators=(validate_config,), schema_identity=SCHEMA,
-               units=units, datasets=DATASETS, contract=CONTRACT)
+               units=units, datasets=DATASETS, contract=CONTRACT, strict_gaps=True)
