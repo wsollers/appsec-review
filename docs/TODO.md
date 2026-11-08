@@ -508,8 +508,10 @@ until each is rewritten into the entry format when it is next touched.
   read: generated → inert, wrapper → context, compiling → parallel unit; `parallel_with`,
   `capture_authority`, `generated_by`; pending → 294). Decision 3 landed 2026-11-08 (solution
   family from the listed projects, listed projects are never markers, `missing_project` unresolved
-  kind, CMake build trees inert; pending → 187). Next: decision 4 (generated/installed trees), then
-  the matrix-A look-alike rules and T-056.5/.6 facts.
+  kind, CMake build trees inert; pending → 187). Decision 4 landed 2026-11-08 (`installed_trees`:
+  node_modules, Cargo/Go/Composer vendor, Pods → context; buildSrc → context; Go testdata → inert;
+  pending → 164). Next: the §2.1 items 5–8 rules (context/inert names, roots that are not roots,
+  interpreted scopes), then T-056.5/.6 facts.
 - **Done when:** every case in the matrix has no `pending` entry and `build-systems.json` carries
   build points with evidence for every unit; the composite monorepo's xfails are re-expressed as
   `pending` entries or closed.

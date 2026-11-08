@@ -1023,3 +1023,41 @@ def test_cargo_and_go_workspace_members_are_build_points_of_the_workspace_root()
     assert assignment["rust/core/src/lib.rs"] == "evidence_of:rust|cargo#core"
     assert assignment["go/svc/go.mod"] == "evidence_of:go|go#example.com/svc"
     assert assignment["go/svc/main.go"] == "evidence_of:go|go#svc"
+
+
+def test_installed_build_logic_and_fixture_trees_are_never_units_and_take_their_owners_role() -> None:
+    """Plan §2.1 decision 4: node_modules, a Cargo/Go/Composer vendor/, CocoaPods Pods/ are installed
+    dependencies (context of the unit that installs them); buildSrc is Gradle build logic (context of the
+    root); Go testdata is fixture data (inert). A vendor/ under a Make root is none of these."""
+    texts = {"app/Cargo.toml": '[package]\nname = "app"\n', "svc/go.mod": "module example.com/svc\n",
+             "web/package.json": '{"name": "web", "scripts": {"build": "tsc"}}\n',
+             "tools/Makefile": "all: vendor/lib/lib.c\n\t$(CC) vendor/lib/lib.c -o tool\n",
+             "ios/App.xcodeproj/project.pbxproj": "// !$*UTF8*$!\n", "ios/Podfile": "pod 'X'\n",
+             "jvm/settings.gradle": "include ':core'\n", "jvm/core/build.gradle": "", "jvm/buildSrc/build.gradle": ""}
+    files = [_file(path, text) for path, text in texts.items()] + [
+        _file("app/vendor/tiny/Cargo.toml", '[package]\nname = "tiny"\n'), _file("app/vendor/tiny/.cargo-checksum.json"),
+        _file("app/vendor/tiny/src/lib.rs"), _file("svc/vendor/modules.txt"), _file("svc/vendor/dep/dep.go"),
+        _file("svc/testdata/mod/go.mod", "module fixture\n"), _file("svc/testdata/mod/x.go"), _file("svc/main.go", "package main\n"),
+        _file("web/node_modules/left-pad/package.json", '{"name": "left-pad"}'), _file("web/node_modules/left-pad/index.js"),
+        _file("tools/vendor/lib/lib.c"), _file("ios/Pods/Pods.xcodeproj/project.pbxproj"), _file("ios/Pods/dummy.m"),
+        _file("jvm/buildSrc/src/main/kotlin/Conventions.kt")]
+    inventory = discover_build_inventory(files, read_text=lambda path: texts.get(path, ""))
+    assert sorted((u["root"], u["build_system"]) for u in inventory["units"]) == [
+        ("app", "cargo"), ("ios", "xcodebuild"), ("jvm", "gradle"), ("svc", "go"), ("tools", "make"), ("web", "node")]
+    assert [(t["path"], t["kind"], t["manager"], t["role"], t.get("unit")) for t in inventory["installed_trees"]] == [
+        ("app/vendor", "installed", "cargo", "context", "app|cargo"),
+        ("ios/Pods", "installed", "cocoapods", "context", "ios|xcodebuild"),
+        ("jvm/buildSrc", "build_logic", "gradle", "context", "jvm|gradle"),
+        ("svc/testdata", "fixture", "go", "inert", None),
+        ("svc/vendor", "installed", "go", "context", "svc|go"),
+        ("web/node_modules", "installed", "node", "context", "web|node")]
+    assert inventory["orphaned_sources"] == [], "nothing under an installed or fixture tree is an orphan"
+    assignment = assign_paths(files, inventory)
+    assert assignment["app/vendor/tiny/src/lib.rs"] == "context:app|cargo"
+    assert assignment["svc/vendor/dep/dep.go"] == "context:svc|go"
+    assert assignment["svc/testdata/mod/go.mod"] == "inert" and assignment["svc/testdata/mod/x.go"] == "inert"
+    assert assignment["web/node_modules/left-pad/index.js"] == "context:web|node"
+    assert assignment["ios/Pods/dummy.m"] == "context:ios|xcodebuild"
+    assert assignment["jvm/buildSrc/src/main/kotlin/Conventions.kt"] == "context:jvm|gradle"
+    # A Make rule that compiles a vendored library's source: vendor/ here is source the rule names.
+    assert assignment["tools/vendor/lib/lib.c"] == "evidence_of:tools|make#all"

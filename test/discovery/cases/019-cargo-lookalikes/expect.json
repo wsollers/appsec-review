@@ -46,24 +46,5 @@
     "legacy/Cargo.lock": "inert",
     "legacy/README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "not_unit:app/vendor/tiny|cargo",
-      "ref": "T-056.4",
-      "note": "a Cargo.toml under vendor/ beside a .cargo-checksum.json is dependency inventory of the consuming package"
-    },
-    {
-      "check": "assignment:app/vendor/tiny/Cargo.toml",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app/vendor/tiny/.cargo-checksum.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app/vendor/tiny/src/lib.rs",
-      "ref": "T-056.4",
-      "note": "vendored dependency sources are read by the consuming build, not evidence of a unit of their own"
-    }
-  ]
+  "pending": []
 }

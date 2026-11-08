@@ -76,20 +76,5 @@
     "lib/build.gradle.kts": "evidence_of:.|gradle#lib",
     "lib/src/main/kotlin/tools/lib/Lib.kt": "evidence_of:.|gradle#lib"
   },
-  "pending": [
-    {
-      "check": "not_unit:buildSrc|gradle",
-      "ref": "T-056.4",
-      "note": "a build.gradle(.kts) under buildSrc is never a unit"
-    },
-    {
-      "check": "assignment:buildSrc/build.gradle.kts",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:buildSrc/src/main/kotlin/tools-conventions.gradle.kts",
-      "ref": "T-056.4",
-      "note": "a precompiled script plugin is build logic the root reads, not a compiled product of the review"
-    }
-  ]
+  "pending": []
 }

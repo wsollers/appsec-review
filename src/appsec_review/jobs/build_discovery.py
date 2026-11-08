@@ -319,6 +319,67 @@ def _under_generated_dir(path: str) -> bool:
                for index, part in enumerate(parts))
 
 
+# Plan §2.1 decision 4: generated and installed trees are never units. ``node_modules/``, a Cargo/Go/
+# Composer ``vendor/``, CocoaPods ``Pods/`` are installed dependencies (context of the unit that
+# installs them); Gradle ``buildSrc/`` is build logic (context of the Gradle root); Go ``testdata/`` is
+# fixture data (inert). Detection is literal: the tree's parent holds the manager's manifest, or the
+# tree holds the manager's own signature file.
+_INSTALLED_TREE_SIGNATURES = {
+    "node_modules": ("node", ("package.json",), (".package-lock.json",)),
+    "vendor": ("vendor", ("Cargo.toml", "go.mod", "go.work", "composer.json"), ("modules.txt", "autoload.php")),
+    "Pods": ("cocoapods", ("Podfile",), ("Manifest.lock", "Pods.xcodeproj/project.pbxproj")),
+}
+
+
+def installed_trees(inventory_paths: Sequence[str]) -> list[dict[str, Any]]:
+    """Installed, build-logic and fixture trees in an inventory: ``[{path, kind, manager}]``, sorted."""
+    paths = set(inventory_paths)
+    found: dict[str, dict[str, Any]] = {}
+
+    def present(directory: str, name: str) -> bool:
+        return ((directory + "/" + name) if directory != "." else name) in paths
+
+    def any_beneath(directory: str, name: str) -> bool:
+        prefix = "" if directory == "." else directory + "/"
+        return any(path.startswith(prefix) and (path.endswith("/" + name) or path[len(prefix):] == name) for path in paths)
+
+    def go_module_above(directory: str) -> bool:
+        current = PurePosixPath(directory)
+        for ancestor in (current, *current.parents):
+            if present(ancestor.as_posix(), "go.mod") or present(ancestor.as_posix(), "go.work"):
+                return True
+        return False
+
+    for path in inventory_paths:
+        parts = PurePosixPath(path).parts[:-1]
+        for index, part in enumerate(parts):
+            tree = "/".join(parts[: index + 1])
+            if tree in found:
+                break
+            parent = "/".join(parts[:index]) or "."
+            if part in _INSTALLED_TREE_SIGNATURES:
+                manager, manifests, signatures = _INSTALLED_TREE_SIGNATURES[part]
+                if any(present(parent, m) for m in manifests) or any(any_beneath(tree, sig) or present(tree, sig) for sig in signatures) \
+                        or (part == "vendor" and any_beneath(tree, ".cargo-checksum.json")):
+                    if manager == "vendor":
+                        manager = ("cargo" if present(parent, "Cargo.toml") or any_beneath(tree, ".cargo-checksum.json") else
+                                   "go" if present(parent, "go.mod") or present(parent, "go.work") or present(tree, "modules.txt") else "composer")
+                    found[tree] = {"path": tree, "kind": "installed", "manager": manager}
+                    break
+            if part == "buildSrc" and any(present(parent, m) for m in ("settings.gradle", "settings.gradle.kts", "build.gradle", "build.gradle.kts")):
+                found[tree] = {"path": tree, "kind": "build_logic", "manager": "gradle"}
+                break
+            if part == "testdata" and go_module_above(parent):
+                found[tree] = {"path": tree, "kind": "fixture", "manager": "go"}
+                break
+    return [found[key] for key in sorted(found)]
+
+
+def _under_installed_tree(path: str, trees: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    return next((tree for tree in trees if _is_under(path, str(tree["path"])) and path != tree["path"]), None)
+
+
+
 def _under_build_tree(path: str, build_trees: Sequence[str]) -> bool:
     return any(_is_under(path, tree) and path != tree for tree in build_trees)
 
@@ -345,13 +406,15 @@ def _is_under(path: str, root: str) -> bool:
 
 
 def _descriptor_candidates(unit: Mapping[str, Any], inventory_paths: Sequence[str], other_markers: set[str],
-                           nested_roots: Sequence[str], build_trees: Sequence[str] = ()) -> list[str]:
+                           nested_roots: Sequence[str], build_trees: Sequence[str] = (),
+                           trees: Sequence[Mapping[str, Any]] = ()) -> list[str]:
     """Paths under the unit's root (not under a nested unit, not another unit's marker, not generated
-    output) that describe its build."""
+    output, not an installed tree) that describe its build."""
     root = str(unit["root"])
     candidates = []
     for path in inventory_paths:
-        if not _is_under(path, root) or path in other_markers or _under_build_tree(path, build_trees) or _under_generated_dir(path):
+        if (not _is_under(path, root) or path in other_markers or _under_build_tree(path, build_trees)
+                or _under_generated_dir(path) or _under_installed_tree(path, trees) is not None):
             continue
         parent = PurePosixPath(path).parent.as_posix()
         if any(other != root and _is_under(parent, other) for other in nested_roots):
@@ -366,7 +429,7 @@ def _descriptor_candidates(unit: Mapping[str, Any], inventory_paths: Sequence[st
 
 def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[str],
                          read_text: Callable[[str], str | None] | None,
-                         build_trees: Sequence[str] = ()) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+                         build_trees: Sequence[str] = (), trees: Sequence[Mapping[str, Any]] = ()) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Read each unit's descriptors for build points; fold driven members; return (demoted, folded).
 
     Plan §2.1 decision 1: a root that drives members is the unit and the members are its build points.
@@ -409,7 +472,7 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
             nested_roots = [str(other["root"]) for other in units
                             if other is not unit and other["build_unit_id"] not in folded_ids and other not in members]
             other_markers = marker_paths - set(own_markers) - set(member_descriptors)
-            candidates = _descriptor_candidates(unit, inventory_paths, other_markers, nested_roots, build_trees)
+            candidates = _descriptor_candidates(unit, inventory_paths, other_markers, nested_roots, build_trees, trees)
             if unit["build_system"] in {"msbuild", "dotnet", "vcbuild"}:
                 # A solution's listed projects are its descriptors wherever they sit (a sibling directory,
                 # two directories up); a project file nothing lists stays another unit's marker.
@@ -618,16 +681,19 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
     listed_projects: set[str] = set()
     solution_types: dict[str, tuple[str, str]] = {}
     for path in inventory_paths:
-        if PurePosixPath(path).suffix.lower() == ".sln" and not _under_build_tree(path, build_trees):
+        if PurePosixPath(path).suffix.lower() == ".sln" and not _under_build_tree(path, build_trees) \
+                and _under_installed_tree(path, installed_trees(inventory_paths)) is None:
             text = read_text(path) if read_text is not None else None
             if text is not None:
                 listed_projects.update(solution_projects(path, text, inventory_paths))
             solution_types[path] = solution_marker(path, text, inventory_paths)
+    trees = installed_trees(inventory_paths)
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for item in files:
         path = PurePosixPath(str(item["path"]))
         marker = _marker(path)
-        if marker is None or str(path) in listed_projects or _under_build_tree(str(path), build_trees):
+        if (marker is None or str(path) in listed_projects or _under_build_tree(str(path), build_trees)
+                or _under_installed_tree(str(path), trees) is not None):
             continue
         owner = unity_owner(path)
         if owner is not None and (
@@ -674,7 +740,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
         })
     values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
     by_path = {str(item["path"]): item for item in files}
-    demoted, folded = _attach_build_points(values, inventory_paths, read_text, build_trees)
+    demoted, folded = _attach_build_points(values, inventory_paths, read_text, build_trees, trees)
     removed = {d["build_unit_id"] for d in demoted} | {f["build_unit_id"] for f in folded}
     values = [unit for unit in values if unit["build_unit_id"] not in removed]
     demoted.extend(_resolve_parallel_systems(values, folded, read_text))
@@ -697,7 +763,8 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
     for path in inventory_paths:
         posix = PurePosixPath(path)
         orphan_family = _ORPHAN_FAMILY.get(posix.suffix.lower())
-        if orphan_family is None or _under_generated_dir(path) or path in claimed or _under_build_tree(path, build_trees):
+        if (orphan_family is None or _under_generated_dir(path) or path in claimed or _under_build_tree(path, build_trees)
+                or _under_installed_tree(path, trees) is not None):
             continue
         if ".teamcity" in posix.parts:
             # TeamCity Kotlin DSL is CI configuration, not an independently compilable JVM
@@ -732,9 +799,20 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                             "no build point of that unit names this source")},
         })
     orphans.sort(key=lambda value: value["path"])
+    for tree in trees:
+        # Installed dependencies and build logic are context of the nearest standing unit above them
+        # (the one that installs or reads them); fixture data is inert.
+        parent = PurePosixPath(str(tree["path"])).parent.as_posix()
+        nearest = max((unit for unit in values if _is_under(parent, str(unit["root"]))),
+                      key=lambda unit: (len(PurePosixPath(str(unit["root"])).parts), str(unit["root"])), default=None)
+        if tree["kind"] == "fixture" or nearest is None:
+            tree["role"] = "inert"
+        else:
+            tree["role"], tree["unit"] = "context", unit_label(nearest)
     return {"units": values, "orphaned_sources": orphans, "demoted_markers": demoted, "folded_roots": folded,
             "generated_trees": [{"path": tree, "kind": "cmake_build_tree", "evidence": f"{tree}/CMakeCache.txt" if tree != "." else "CMakeCache.txt"}
-                                for tree in build_trees]}
+                                for tree in build_trees],
+            "installed_trees": trees}
 
 
 _INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}

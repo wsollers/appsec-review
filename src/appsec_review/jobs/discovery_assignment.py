@@ -107,6 +107,8 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
             demoted.setdefault(str(path), role)
     scopes = [(str(scope["root"]), str(scope.get("language") or "source")) for scope in source_only_scopes]
     generated_trees = [str(item["path"]) for item in discovery.get("generated_trees") or []]
+    installed = [(str(item["path"]), f"context:{item['unit']}" if item.get("role") == "context" else "inert")
+                 for item in discovery.get("installed_trees") or []]
     assignment: dict[str, str] = {}
     for path, policy in sorted((excluded or {}).items()):
         assignment[path] = f"excluded:{policy}"
@@ -116,6 +118,10 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
             continue
         posix = PurePosixPath(path)
         suffix = posix.suffix.lower()
+        tree_role = next((role for tree, role in installed if _under(posix, tree) and path != tree), None)
+        if tree_role is not None:
+            assignment[path] = tree_role  # an installed, build-logic or fixture tree (§2.1 decision 4)
+            continue
         if path in demoted:
             assignment[path] = demoted[path]
             continue

@@ -63,11 +63,6 @@
       "ref": "T-056.2"
     },
     {
-      "check": "not_unit:app/Pods|xcodebuild",
-      "ref": "T-056.4",
-      "note": "an .xcodeproj under Pods/ is CocoaPods output"
-    },
-    {
       "check": "assignment:app/App.xcworkspace/contents.xcworkspacedata",
       "ref": "T-056.4"
     },
@@ -79,15 +74,6 @@
       "check": "assignment:app/Podfile",
       "ref": "T-056.4",
       "note": "the Podfile is read by pod install for this app: context, not inert"
-    },
-    {
-      "check": "assignment:app/Pods/Pods.xcodeproj/project.pbxproj",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app/Pods/Target Support Files/Pods-App/Pods-App-dummy.m",
-      "ref": "T-056.4",
-      "note": "generated dependency glue compiled through the app's workspace, not evidence of a Pods unit"
     }
   ]
 }
