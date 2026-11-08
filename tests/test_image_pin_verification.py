@@ -296,11 +296,69 @@ def test_a_runner_that_raises_fails_with_the_tag_named(tmp_path: Path) -> None:
     assert "tag fixture/tool-x:1 pinned" in _failure_message(config)
 
 
-def test_an_unwired_job_refuses_to_claim_images_were_verified(tmp_path: Path) -> None:
+def test_an_unwired_job_is_refused_at_claim_time_before_any_unit_runs(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError, match="not wired"):
         GraphRunner(config, [build_job()]).run(target_root=target, source_fingerprint=source_fingerprint(target))
-    assert "not wired" in _failure_message(config)
+    assert list(config.runtime.runs_dir.glob(f"*/data/jobs/{JOB_ID}/attempts/*/steps")) == []
+
+
+def test_a_failed_pin_is_a_typed_failure_with_one_gap_record_per_pin(tmp_path: Path) -> None:
+    from appsec_review.interchange import GAP_SCHEMA
+    from appsec_review.jobs.job_image_pin_verification.job import ImagePinVerificationFailed
+    config, target = _fixture(tmp_path)
+    docker = _all_matching(tmp_path)
+    docker.images["fixture/tool-x:1"] = _id("moved")
+    docker.images["fixture/base-a:1"] = None
+    with pytest.raises(RuntimeError, match="2 of"):
+        _run(config, target, docker)
+    run_id = _only_run_id(config)
+    root = _unit_root(config, run_id, "verification", "inspect_images")
+    status = json.loads((root / "status.json").read_text())
+    assert status["status"] == "FAILED" and status["error"]["type"] == ImagePinVerificationFailed.__name__
+    record = json.loads((root / "image-pin-verification.json").read_text())
+    gaps = {gap["scope_id"]: gap for gap in record["gaps"]}
+    assert set(gaps) == {"containers/catalog.toml images.tool-x.image_id", "containers/catalog.toml images.base-a.image_id"}
+    for gap in gaps.values():
+        assert gap["schema"] == GAP_SCHEMA and gap["code"] == "producer_blocked" and gap["retryable"] is True
+        assert gap["unit_id"] == "verification.inspect_images" and gap["scope_id"] in gap["reason"]
+    assert "resolved missing" in gaps["containers/catalog.toml images.base-a.image_id"]["reason"]
+    assert f"resolved {_id('moved')}" in gaps["containers/catalog.toml images.tool-x.image_id"]["reason"]
+    # No handoff: nothing downstream can read a passed verification.
+    assert not (config.runtime.runs_dir / run_id / f"data/jobs/{JOB_ID}/latest.json").exists()
+
+
+def test_a_passing_record_carries_no_gaps_and_the_plan_hashes_what_it_read(tmp_path: Path) -> None:
+    import hashlib
+    config, target = _fixture(tmp_path)
+    outcome = _run(config, target, _all_matching(tmp_path))
+    assert outcome["status"] == "SUCCEEDED"
+    record = json.loads((_unit_root(config, outcome["run_id"], "verification", "inspect_images") /
+                         "image-pin-verification.json").read_text())
+    assert record["gaps"] == []
+    plan = json.loads((_unit_root(config, outcome["run_id"], "selection", "resolve_pins") /
+                       "image-pin-plan.json").read_text())
+    assert plan["catalog"]["sha256"] == hashlib.sha256((tmp_path / "containers" / "catalog.toml").read_bytes()).hexdigest()
+    frozen = config.runtime.runs_dir / outcome["run_id"] / plan["configuration"]["path"]
+    assert plan["configuration"]["sha256"] == hashlib.sha256(frozen.read_bytes()).hexdigest()
+
+
+def test_the_gate_passes_on_resume_after_the_operator_re_pins_the_moved_tag(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    docker = _all_matching(tmp_path)
+    docker.images["fixture/tool-x:1"] = _id("moved")
+    fingerprint = source_fingerprint(target)
+    with pytest.raises(RuntimeError, match="1 of"):
+        GraphRunner(config, [build_job(runner=docker)]).run(target_root=target, source_fingerprint=fingerprint)
+    run_id = _only_run_id(config)
+    # The operator rebuilt the image so the tag resolves to the pin again (or re-pinned; same effect here).
+    docker.images["fixture/tool-x:1"] = PIN_X
+    second = GraphRunner(config, [build_job(runner=docker)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert second["status"] == "SUCCEEDED", second
+    attempts = sorted((config.runtime.runs_dir / run_id / f"data/jobs/{JOB_ID}/attempts").iterdir())
+    assert len(attempts) == 2
+    assert (config.runtime.runs_dir / run_id / f"data/jobs/{JOB_ID}/latest.json").is_file()
 
 
 # ---------------------------------------------------------------- settings

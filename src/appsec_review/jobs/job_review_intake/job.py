@@ -145,16 +145,17 @@ def required_models(document: Mapping[str, Any]) -> tuple[list[dict[str, Any]], 
     """Split the configured provider/model pairs into those a run can use and those it cannot.
 
     A pair is required when the model setting is enabled and the owning job is enabled
-    (``jobs.<id>.settings.enabled`` is not ``false``). The rest are recorded with the reason they
+    (``runtime.selection.resolved_job_is_enabled``: ``jobs.<id>.settings.enabled`` is not ``false``). The rest are recorded with the reason they
     are not required, so a connectivity gate never blocks a review on a model only a disabled job
     or a disabled model setting names, and the handoff still shows every configured pair.
     """
+    from appsec_review.runtime.selection import resolved_job_is_enabled
     jobs = document.get("jobs", {})
     required: list[dict[str, Any]] = []
     not_required: list[dict[str, Any]] = []
     for item in configured_models(document):
-        settings = jobs.get(item["job_id"], {}).get("settings", {}) if isinstance(jobs, Mapping) else {}
-        job_enabled = not (isinstance(settings, Mapping) and settings.get("enabled") is False)
+        job = jobs.get(item["job_id"], {}) if isinstance(jobs, Mapping) else {}
+        job_enabled = resolved_job_is_enabled(item["job_id"], job if isinstance(job, Mapping) else {})
         if item["enabled"] and job_enabled:
             required.append(item)
         else:

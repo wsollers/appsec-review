@@ -21,6 +21,7 @@ from appsec_review.config.image_pin_verification import (
     ImagePinVerificationSettings, parse_image_pin_verification_settings,
 )
 from appsec_review.container_runtime.build_executor import Runner
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.jobs.job_image_pin_verification.datasets import CONTRACT, DATASETS
 from appsec_review.jobs.job_image_pin_verification.pins import (
@@ -42,17 +43,12 @@ TOPOLOGY = {
 }
 
 
+class ImagePinVerificationFailed(RuntimeError):
+    """At least one pinned image does not resolve on the local daemon; the review cannot start."""
+
+
 def settings_of(config) -> ImagePinVerificationSettings:
     return parse_image_pin_verification_settings(config.settings)
-
-
-def _validate(context, _result) -> None:
-    if tuple(context.config.steps) != tuple(TOPOLOGY):
-        raise ValueError("image pin verification topology does not match configuration")
-    for step, tasks in TOPOLOGY.items():
-        if tuple(context.config.step(step).tasks) != tasks:
-            raise ValueError(f"image pin verification task order mismatch: {step}")
-    settings_of(context.config)
 
 
 def _identity(unit: UnitContext, path: Path, document: Mapping[str, Any]) -> dict[str, Any]:
@@ -62,6 +58,17 @@ def _identity(unit: UnitContext, path: Path, document: Mapping[str, Any]) -> dic
 
 
 def build_job(*, runner: Runner | None = None) -> Job:
+    def validate(context, _result) -> None:
+        if tuple(context.config.steps) != tuple(TOPOLOGY):
+            raise ValueError("image pin verification topology does not match configuration")
+        for step, tasks in TOPOLOGY.items():
+            if tuple(context.config.step(step).tasks) != tasks:
+                raise ValueError(f"image pin verification task order mismatch: {step}")
+        settings_of(context.config)
+        if runner is None:
+            # Refused at claim time: a gate that cannot inspect images must not start a review.
+            raise ValueError("image inspection runner is not wired into this job instance")
+
     def resolve_pins(unit: UnitContext) -> Mapping[str, Any]:
         settings_of(unit.job.config)
         catalog_path = unit.job.repository_root / CATALOG
@@ -76,7 +83,7 @@ def build_job(*, runner: Runner | None = None) -> Job:
             raise ValueError("image pin verification found no enabled catalog image or configured pin")
         document = {
             "schema": PLAN_SCHEMA,
-            "catalog": {"path": CATALOG.as_posix(),
+            "catalog": {"path": CATALOG.as_posix(), "sha256": hashlib.sha256(catalog_bytes).hexdigest(),
                         "release_id": unit.job.review_policy.releases.values.get("platform")},
             "configuration": {"path": frozen.relative_to(unit.job.run_root).as_posix(),
                               "sha256": hashlib.sha256(frozen_bytes).hexdigest()},
@@ -86,15 +93,18 @@ def build_job(*, runner: Runner | None = None) -> Job:
         return {"schema": PLAN_SCHEMA, "artifact": identity, "pins": pins, "pin_count": len(pins)}
 
     def inspect_images(unit: UnitContext) -> Mapping[str, Any]:
-        if runner is None:
-            raise RuntimeError("image inspection runner is not wired into this job instance")
+        assert runner is not None  # validate() refused the claim otherwise
         plan = unit.output("selection.resolve_pins")
         pins = [dict(pin) for pin in plan["pins"]]
         unit.job.events.write("IMAGE_PIN_VERIFICATION_STARTED", unit_id=unit.unit_id, pin_count=len(pins))
         results = verify_pins(pins, runner)
         failures = [item for item in results if item["status"] not in PASSING]
+        # One producer-gap/1 record per failing pin: machine-readable beside the human lines, and
+        # retryable because the operator fixes it on the host (rebuild, re-pin) and resumes.
+        gaps = [producer_gap(GapCode.PRODUCER_BLOCKED, describe(item), unit_id=unit.unit_id,
+                             scope_id=str(item["source"]), retryable=True) for item in failures]
         document = {"schema": VERIFICATION_SCHEMA, "plan": plan["artifact"],
-                    "status": "FAILED" if failures else "PASSED", "pins": results}
+                    "status": "FAILED" if failures else "PASSED", "pins": results, "gaps": gaps}
         identity = _identity(unit, unit.unit_root / RECORD_NAME, document)
         if failures:
             lines = [describe(item) for item in failures]
@@ -106,7 +116,7 @@ def build_job(*, runner: Runner | None = None) -> Job:
                 "(docs/operations/image-pin-verification.md) before the review can continue",
                 *lines, f"verification record: {unit.unit_root / RECORD_NAME}"])
             LOGGER.error("%s", message)
-            raise RuntimeError(message)
+            raise ImagePinVerificationFailed(message)
         unit.job.events.write("IMAGE_PIN_VERIFICATION_COMPLETED", unit_id=unit.unit_id,
                               pin_count=len(results))
         return {"schema": VERIFICATION_SCHEMA, "artifact": identity, "pin_count": len(results),
@@ -119,7 +129,7 @@ def build_job(*, runner: Runner | None = None) -> Job:
                     "images": verified["images"]}
         identity = _identity(unit, unit.unit_root / HANDOFF_NAME, document)
         return {"schema": VERIFICATION_SCHEMA, "artifact": identity, "pin_count": verified["pin_count"],
-                "images": verified["images"], "gaps": []}
+                "images": verified["images"], "terminal_status": "SUCCEEDED", "gaps": []}
 
     units = (
         Unit("selection.resolve_pins", resolve_pins),
@@ -129,7 +139,7 @@ def build_job(*, runner: Runner | None = None) -> Job:
     implementation = None
     return Job(
         JOB_ID, "image_pin_verification", UnitExecutor(units).execute,
-        input_validators=(_validate,), schema_identity="appsec-review/image-pin-verification-job/1",
+        input_validators=(validate,), schema_identity="appsec-review/image-pin-verification-job/2",
         implementation_identity=implementation, validation_identity=implementation,
         units=units, datasets=DATASETS, contract=CONTRACT,
         always_execute=True, propagate_handoff=False, strict_gaps=True,

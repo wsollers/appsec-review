@@ -157,7 +157,7 @@ def test_cli_command_reports_and_exits_nonzero_when_a_pin_cannot_be_updated(
     class Config:
         runtime = Runtime()
 
-    monkeypatch.setattr(cli, "load_config", lambda _path: Config())
+    monkeypatch.setattr(cli, "load_config", lambda _path, **_kwargs: Config())
     monkeypatch.setattr(build_executor, "_run", _runner({**LOCAL, "fixture/node:local": None}))
     assert cli.main(["--config", str(config), "update-image-pins"]) == 1
     report = json.loads(capsys.readouterr().out)
