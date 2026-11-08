@@ -1,0 +1,1 @@
+Build with make; the archive is linked statically.

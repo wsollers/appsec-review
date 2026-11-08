@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "011-make-named-rules",
+  "matrix": "A2",
+  "polarity": "positive",
+  "mirrors": "a hand-written Makefile with named rules (an archive and a program), a config.mk it includes, and a pattern rule; phony aggregates (all, clean) are not build points",
+  "units": [
+    {"root": "tool", "build_system": "make", "family": "native", "profile": "native",
+     "markers": ["tool/Makefile"],
+     "build_points": [
+       {"name": "libpack.a", "kind": "rule", "evidence": "tool/Makefile:5"},
+       {"name": "packer", "kind": "rule", "evidence": "tool/Makefile:8"}
+     ]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "tool/Makefile": "evidence_of:tool|make",
+    "tool/config.mk": "context:tool|make",
+    "tool/pack.c": "evidence_of:tool|make#libpack.a",
+    "tool/pack.h": "evidence_of:tool|make#libpack.a",
+    "tool/main.c": "evidence_of:tool|make#packer",
+    "tool/NOTES.txt": "inert",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:tool|make.build_point:libpack.a", "ref": "T-056.2"},
+    {"check": "unit:tool|make.build_point:packer", "ref": "T-056.2"},
+    {"check": "assignment:tool/pack.c", "ref": "T-056.2", "note": "pack.o comes from the pattern rule; the archive rule names pack.o, so pack.c binds to libpack.a"},
+    {"check": "assignment:tool/pack.h", "ref": "T-056.2", "note": "a header only pack.c includes binds with it"},
+    {"check": "assignment:tool/main.c", "ref": "T-056.2"}
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "012-make-lookalikes",
+  "matrix": "A2",
+  "polarity": "negative",
+  "mirrors": "Makefiles that are not compile build points: a root Makefile that only runs $(MAKE) -C into core/ (it drives, it does not build), a docs/ Makefile whose only recipe converts a document, and an automake Makefile.am/Makefile.in pair whose configure.ac is gone",
+  "units": [
+    {"root": ".", "build_system": "make", "family": "native", "profile": "native",
+     "markers": ["Makefile"],
+     "facts": {"drives": ["core"]}},
+    {"root": "core", "build_system": "make", "family": "native", "profile": "native",
+     "markers": ["core/Makefile"],
+     "build_points": [{"name": "core", "kind": "rule", "evidence": "core/Makefile:1"}]}
+  ],
+  "not_units": [
+    {"root": "docs", "build_system": "make", "marker": "docs/Makefile", "role": "inert",
+     "reason": "the only rule runs a document converter; no compiled product, so no build point for the review"},
+    {"root": "legacy", "build_system": "autotools", "marker": "legacy/Makefile.am", "role": "inert",
+     "reason": "Makefile.am and Makefile.in without configure.ac cannot be configured; automake input with nothing to generate from is not a root"}
+  ],
+  "assignment": {
+    "Makefile": "evidence_of:.|make",
+    "core/Makefile": "evidence_of:core|make",
+    "core/core.c": "evidence_of:core|make#core",
+    "docs/Makefile": "inert",
+    "docs/manual.md": "inert",
+    "legacy/Makefile.am": "inert",
+    "legacy/Makefile.in": "inert",
+    "legacy/legacy.c": "orphaned:no_build_point"
+  },
+  "orphaned_sources": [
+    {"path": "legacy/legacy.c", "language": "c", "reason": "no_build_point", "nearest_unit": "."}
+  ],
+  "pending": [
+    {"check": "unit:.|make.facts", "ref": "T-056.2", "note": "a delegating-only Makefile records what it drives"},
+    {"check": "unit:core|make.build_point:core", "ref": "T-056.2"},
+    {"check": "assignment:core/core.c", "ref": "T-056.2"},
+    {"check": "not_unit:docs|make", "ref": "T-056.4", "note": "unit-ness needs a compile build point or a driver relation; a pandoc recipe is neither"},
+    {"check": "assignment:docs/Makefile", "ref": "T-056.4"},
+    {"check": "not_unit:legacy|autotools", "ref": "T-056.4", "note": "Makefile.am is an autotools marker only beside configure.ac/configure.in"},
+    {"check": "assignment:legacy/Makefile.am", "ref": "T-056.4"},
+    {"check": "assignment:legacy/Makefile.in", "ref": "T-056.4"},
+    {"check": "assignment:legacy/legacy.c", "ref": "T-056.4", "note": "with no configurable descriptor the source is orphaned, not evidence of a phantom autotools unit"},
+    {"check": "orphaned_sources", "ref": "T-056.4"}
+  ]
+}

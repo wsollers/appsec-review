@@ -1,0 +1,34 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "010-cmake-shared-interface-custom",
+  "matrix": "A1",
+  "polarity": "positive",
+  "mirrors": "a CMake project with a shared library, a header-only interface target and a custom target; helper modules under cmake/ that the project includes (by module path and by relative path) are its context",
+  "units": [
+    {"root": "lib", "build_system": "cmake", "family": "native", "profile": "native",
+     "markers": ["lib/CMakeLists.txt"],
+     "build_points": [
+       {"name": "geom", "kind": "shared_library", "evidence": "lib/CMakeLists.txt:6"},
+       {"name": "geom_api", "kind": "interface_library", "evidence": "lib/CMakeLists.txt:8"},
+       {"name": "geom_docs", "kind": "custom_target", "evidence": "lib/CMakeLists.txt:10"}
+     ]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "lib/CMakeLists.txt": "evidence_of:lib|cmake",
+    "lib/cmake/GeomOptions.cmake": "context:lib|cmake",
+    "lib/cmake/Install.cmake": "context:lib|cmake",
+    "lib/src/geom.c": "evidence_of:lib|cmake#geom",
+    "lib/include/geom.h": "evidence_of:lib|cmake#geom",
+    "lib/api/geom_api.h": "evidence_of:lib|cmake#geom_api",
+    "README.md": "inert"
+  },
+  "pending": [
+    {"check": "unit:lib|cmake.build_point:geom", "ref": "T-056.2"},
+    {"check": "unit:lib|cmake.build_point:geom_api", "ref": "T-056.2", "note": "an INTERFACE library is a build point with no compiled sources; its include directories bind headers"},
+    {"check": "unit:lib|cmake.build_point:geom_docs", "ref": "T-056.2", "note": "add_custom_target is a build point even without sources"},
+    {"check": "assignment:lib/src/geom.c", "ref": "T-056.2", "note": "sources bind to build points, not just the unit"},
+    {"check": "assignment:lib/include/geom.h", "ref": "T-056.2", "note": "headers reached through target_include_directories bind to that target"},
+    {"check": "assignment:lib/api/geom_api.h", "ref": "T-056.2"}
+  ]
+}
