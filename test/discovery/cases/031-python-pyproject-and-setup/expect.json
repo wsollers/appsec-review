@@ -1,0 +1,42 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "031-python-pyproject-and-setup",
+  "matrix": "A10",
+  "polarity": "positive",
+  "mirrors": "two Python packages: a poetry project (pyproject.toml + poetry.lock, src layout) and a setuptools project whose setup.py defers to setup.cfg; each is one unit whose package is the build point, with tests as evidence of the unit",
+  "units": [
+    {"root": "svc", "build_system": "python", "family": "python", "profile": "python",
+     "markers": ["svc/pyproject.toml"],
+     "build_points": [
+       {"name": "svc", "kind": "package", "evidence": "svc/pyproject.toml:2"}
+     ]},
+    {"root": "cli", "build_system": "python", "family": "python", "profile": "python",
+     "markers": ["cli/setup.cfg", "cli/setup.py"],
+     "build_points": [
+       {"name": "acme-cli", "kind": "package", "evidence": "cli/setup.cfg:2"}
+     ]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "svc/pyproject.toml": "evidence_of:svc|python",
+    "svc/poetry.lock": "context:svc|python",
+    "svc/src/svc/__init__.py": "evidence_of:svc|python#svc",
+    "svc/src/svc/app.py": "evidence_of:svc|python#svc",
+    "svc/tests/test_app.py": "evidence_of:svc|python",
+    "svc/README.md": "inert",
+    "cli/setup.py": "evidence_of:cli|python",
+    "cli/setup.cfg": "evidence_of:cli|python",
+    "cli/acme_cli/__init__.py": "evidence_of:cli|python#acme-cli",
+    "cli/acme_cli/main.py": "evidence_of:cli|python#acme-cli"
+  },
+  "source_only_scopes": [],
+  "pending": [
+    {"check": "unit:svc|python.build_point:svc", "ref": "T-056.2"},
+    {"check": "unit:cli|python.build_point:acme-cli", "ref": "T-056.2", "note": "setup.py defers to setup.cfg [metadata] name"},
+    {"check": "assignment:svc/src/svc/__init__.py", "ref": "T-056.2", "note": "packages = [{include = \"svc\", from = \"src\"}] names the package directory"},
+    {"check": "assignment:svc/src/svc/app.py", "ref": "T-056.2"},
+    {"check": "assignment:svc/README.md", "ref": "T-056.4", "note": "a README under a unit root is prose, not context"},
+    {"check": "assignment:cli/acme_cli/__init__.py", "ref": "T-056.2", "note": "[options] packages = acme_cli names the package directory"},
+    {"check": "assignment:cli/acme_cli/main.py", "ref": "T-056.2"}
+  ]
+}

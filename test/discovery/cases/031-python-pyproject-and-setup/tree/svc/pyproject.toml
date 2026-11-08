@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "svc"
+version = "0.3.0"
+description = "service"
+authors = []
+packages = [{include = "svc", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[build-system]
+requires = ["poetry-core>=1.9"]
+build-backend = "poetry.core.masonry.api"

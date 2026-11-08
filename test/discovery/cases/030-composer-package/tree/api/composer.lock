@@ -1,0 +1,8 @@
+{
+    "_readme": ["This file locks the dependencies of your project to a known state"],
+    "content-hash": "0000000000000000000000000000000a",
+    "packages": [],
+    "packages-dev": [],
+    "platform": {"php": ">=8.2"},
+    "plugin-api-version": "2.6.0"
+}

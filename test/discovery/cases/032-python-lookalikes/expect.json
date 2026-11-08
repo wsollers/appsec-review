@@ -1,0 +1,35 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "032-python-lookalikes",
+  "matrix": "A10",
+  "polarity": "negative",
+  "mirrors": "Python files that are not a package build: a repository-root setup.cfg that only configures linters (no setup.py, no pyproject.toml), a requirements.txt pinning what some scripts import, and the scripts themselves, which are source-only Python",
+  "units": [],
+  "not_units": [
+    {"root": ".", "build_system": "python", "marker": "setup.cfg", "role": "inert",
+     "reason": "setup.cfg is a build descriptor only beside setup.py or pyproject.toml; alone it is tool configuration"},
+    {"root": "scripts", "marker": "scripts/requirements.txt", "role": "inert",
+     "reason": "a requirements.txt pins an environment; it declares no package and nothing to build"}
+  ],
+  "assignment": {
+    "setup.cfg": "inert",
+    "scripts/requirements.txt": "inert",
+    "scripts/deploy.py": "source_only:python",
+    "tools/lint.py": "source_only:python",
+    "README.md": "inert"
+  },
+  "orphaned_sources": [],
+  "source_only_scopes": [
+    {"root": "scripts", "language": "python"},
+    {"root": "tools", "language": "python"}
+  ],
+  "pending": [
+    {"check": "not_unit:.|python", "ref": "T-056.4", "note": "setup.cfg alone manufactures a python unit over the whole tree today"},
+    {"check": "assignment:setup.cfg", "ref": "T-056.4"},
+    {"check": "assignment:scripts/requirements.txt", "ref": "T-056.4", "note": "context of nothing: there is no unit to be context of"},
+    {"check": "assignment:scripts/deploy.py", "ref": "T-056.4"},
+    {"check": "assignment:tools/lint.py", "ref": "T-056.4"},
+    {"check": "assignment:README.md", "ref": "T-056.4"},
+    {"check": "source_only_scopes", "ref": "T-056.4", "note": "the phantom unit owns the scripts, so no source-only scope is named"}
+  ]
+}

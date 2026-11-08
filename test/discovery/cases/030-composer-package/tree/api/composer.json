@@ -1,0 +1,14 @@
+{
+    "name": "acme/api",
+    "description": "HTTP API",
+    "type": "project",
+    "require": {
+        "php": ">=8.2"
+    },
+    "autoload": {
+        "psr-4": {"Acme\\Api\\": "src/"}
+    },
+    "scripts": {
+        "build": "php bin/warm-cache.php"
+    }
+}
