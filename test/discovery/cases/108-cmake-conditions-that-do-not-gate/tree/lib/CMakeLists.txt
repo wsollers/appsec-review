@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.20)
+project(lib CXX)
+# if(WIN32) used to wrap the tray helper; it is built on every platform now
+option(LIB_BUILD_TOOLS "Build helper tools (unused: tools are always added)" OFF)
+add_library(lib STATIC src/lib.cpp)
+add_subdirectory(tools)
+message(STATUS "if(APPLE) blocks were removed in 2.0")
+if(LIB_BUILD_TOOLS)
+  message(STATUS "LIB_BUILD_TOOLS no longer changes what is built")
+endif()
