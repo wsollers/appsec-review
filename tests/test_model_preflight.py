@@ -125,22 +125,47 @@ def test_intake_confirms_every_configured_model_before_publishing(tmp_path: Path
     assert calls == [("claude-cli", ("claude-haiku-5-5",), 120)]
     document = _preflight(config, outcome["run_id"])
     assert document["schema"] == PREFLIGHT_SCHEMA and document["unavailable"] == []
-    assert len(document["required"]) == _repository_required_count()
+    assert document["unavailable_not_required"] == [] and document["gaps"] == []
+    assert len(document["required"]) + len(document["not_required"]) == _repository_required_count()
+    # The one disabled model setting in the repository configuration is checked but cannot block.
+    assert [(item["job_id"], item["reason"]) for item in document["not_required"]] == [
+        ("job_post_build_security_assessment", "model setting disabled")]
     assert document["providers"]["claude-cli"]["models"]["claude-haiku-5-5"]["available"] is True
     assert document["providers"]["claude-cli"]["listed"] == ["claude-haiku-5-5"]
 
 
-@pytest.mark.parametrize("extra, expected", [
-    # A model only a disabled job names still has to exist.
-    ('\n[jobs.job_owasp_control_assessment.settings.models.deep]\nprovider = "claude-cli"\n'
-     'model = "claude-sonnet-9-9"\n', "claude-cli/claude-sonnet-9-9"),
-    # A second provider is asked separately, and its missing model blocks as well.
-    ('\n[jobs.job_owasp_control_assessment.settings.models.deep]\nprovider = "openai"\n'
-     'model = "gpt-missing"\n', "openai/gpt-missing"),
-], ids=["disabled-job-model", "second-provider"])
-def test_one_unavailable_model_blocks_the_review_and_keeps_the_evidence(
-        tmp_path: Path, extra: str, expected: str) -> None:
-    config, target = _fixture(tmp_path, extra=extra, owasp_enabled=False)
+DEEP = '\n[jobs.job_owasp_control_assessment.settings.models.deep]\nprovider = "{provider}"\nmodel = "{model}"\n'
+
+
+def test_a_missing_model_named_only_by_a_disabled_job_is_checked_and_recorded_but_never_blocks(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path, extra=DEEP.format(provider="claude-cli", model="claude-sonnet-9-9"),
+                              owasp_enabled=False)
+    check, calls = _serving("claude-haiku-5-5")
+    outcome = GraphRunner(config, [build_intake(check_models=check)]).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS", outcome
+    document = _preflight(config, outcome["run_id"])
+    # Every configured model was asked for, in one call per provider.
+    assert calls == [("claude-cli", ("claude-haiku-5-5", "claude-sonnet-9-9"), 120)]
+    assert document["unavailable"] == []
+    assert [f"{item['provider']}/{item['model']}" for item in document["unavailable_not_required"]] == [
+        "claude-cli/claude-sonnet-9-9"]
+    assert document["unavailable_not_required"][0]["jobs"] == ["job_owasp_control_assessment"]
+    [gap] = document["gaps"]
+    assert gap["code"] == "producer_blocked" and gap["retryable"] is True and "disabled job_owasp_control_assessment" in gap["reason"]
+    # The review starts: the intake handoff is published and carries the gap.
+    run_root = config.runtime.runs_dir / outcome["run_id"]
+    pointer = json.loads((run_root / "data" / "jobs" / "job_review_intake" / "latest.json").read_text(encoding="utf-8"))
+    handoff = json.loads((run_root / pointer["handoff_path"]).read_text(encoding="utf-8"))
+    assert [gap["code"] for gap in handoff["outputs"]["model_preflight.verify_models"]["gaps"]] == ["producer_blocked"]
+
+
+@pytest.mark.parametrize("provider, model", [("claude-cli", "claude-sonnet-9-9"), ("openai", "gpt-missing")],
+                         ids=["same-provider", "second-provider"])
+def test_one_unavailable_required_model_blocks_the_review_and_keeps_the_evidence(
+        tmp_path: Path, provider: str, model: str) -> None:
+    expected = f"{provider}/{model}"
+    config, target = _fixture(tmp_path, extra=DEEP.format(provider=provider, model=model))
     check, calls = _serving("claude-haiku-5-5")
     with pytest.raises(RuntimeError, match="job reported partial failure: model_preflight.verify_models"):
         GraphRunner(config, [build_intake(check_models=check)]).run(
@@ -149,6 +174,7 @@ def test_one_unavailable_model_blocks_the_review_and_keeps_the_evidence(
     document = _preflight(config, run_id)
     assert [f"{item['provider']}/{item['model']}" for item in document["unavailable"]] == [expected]
     assert document["unavailable"][0]["jobs"] == ["job_owasp_control_assessment"]
+    assert document["unavailable_not_required"] == [] and document["gaps"] == []
     assert {provider for provider, _names, _timeout in calls} == {item["provider"] for item in document["required"]}
     # Nothing downstream can start: the intake handoff was never published.
     assert not (config.runtime.runs_dir / run_id / "data" / "jobs" / "job_review_intake" / "latest.json").exists()
@@ -177,7 +203,8 @@ def test_an_unwired_intake_reports_that_no_check_ran(tmp_path: Path) -> None:
     result = json.loads(next((config.runtime.runs_dir / outcome["run_id"]).rglob(
         "attempts/*/result.json")).read_text(encoding="utf-8"))
     verify = result["outputs"]["model_preflight.verify_models"]
-    assert verify["terminal_status"] == "NOT_APPLICABLE" and len(verify["required"]) == _repository_required_count()
+    assert verify["terminal_status"] == "NOT_APPLICABLE"
+    assert len(verify["required"]) + len(verify["not_required"]) == _repository_required_count()
 
 
 def test_registry_wires_the_real_check_into_the_first_job_of_a_review(monkeypatch, tmp_path: Path) -> None:
@@ -224,7 +251,7 @@ def test_connectivity_failure_stops_before_review_intake(tmp_path: Path) -> None
 def test_check_models_reports_provider_failures_instead_of_raising(monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     report = check_models("anthropic-api", ["claude-haiku-5-5", "claude-haiku-5-5"], timeout_seconds=5)
-    assert report["error"].startswith("RuntimeError: ANTHROPIC_API_KEY is unavailable")
+    assert report["error"].startswith("ProviderError: Anthropic API authentication is unavailable")
     assert report["models"] == {"claude-haiku-5-5": {"available": False, "detail": report["error"]}}
     unknown = check_models("mystery", ["m"], timeout_seconds=5)
     assert unknown["transport"] is False and unknown["models"]["m"]["available"] is False

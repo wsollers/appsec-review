@@ -12,7 +12,7 @@ Entry format:
 ### T-NNN — Imperative title
 - **State:** open | in-progress | blocked | done (YYYY-MM-DD, commit or task doc)
 - **Area:** build | topology | images | windows | mobile | scanners | codeql | graph | native |
-            data | history | evidence | review | binary | testing
+            data | history | evidence | review | binary | testing | pipeline
 - **Blocked by:** T-… · **Blocks:** T-…        (either line omitted when empty)
 - **Why:** the observed problem, one to three lines
 - **Scope:** what changes, bounded
@@ -45,6 +45,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-050 | [Container catalog: deferred acceptance work](#t-050-container-catalog-deferred-acceptance-work) | images | open |
 | T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | open |
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
+| T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -411,6 +412,22 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** move them to an explicit integration path or replace the engine with a fake at the
   subprocess boundary. Not a merge or test gate.
 - **Done when:** the unit path has no test whose result depends on a running engine.
+
+### T-053 — Decide whether review_intake keeps its own model gate
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `job_review_intake.model_preflight` repeats `job_model_connectivity`'s live provider
+  check two jobs later, with one difference: an unwired check returns `NOT_APPLICABLE` and the
+  intake publishes, where the connectivity gate refuses the claim. Both now call
+  `verify_configured_models`, so they cannot drift again, but a review pays two provider
+  round-trips and has two places to fail for one question. Found in job pass 01
+  (`docs/tasks/2026-11-08-job-pass-01-model-connectivity.md`).
+- **Scope:** at the intake audit decide: drop the intake preflight and have intake consume the
+  connectivity handoff (it is `propagate_handoff=False` today, so that means a contract input), or
+  keep it as a deliberate second check and make its unwired behaviour refuse like the gate.
+- **Done when:** one of the two is implemented and `tests/test_model_preflight.py` asserts it.
+- **Refs:** `src/appsec_review/jobs/job_review_intake/job.py`, `src/appsec_review/jobs/job_model_connectivity/job.py`.
 
 ## Legacy backlog
 

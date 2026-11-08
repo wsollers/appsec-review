@@ -141,6 +141,70 @@ def configured_models(document: Mapping[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
+def required_models(document: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split the configured provider/model pairs into those a run can use and those it cannot.
+
+    A pair is required when the model setting is enabled and the owning job is enabled
+    (``jobs.<id>.settings.enabled`` is not ``false``). The rest are recorded with the reason they
+    are not required, so a connectivity gate never blocks a review on a model only a disabled job
+    or a disabled model setting names, and the handoff still shows every configured pair.
+    """
+    jobs = document.get("jobs", {})
+    required: list[dict[str, Any]] = []
+    not_required: list[dict[str, Any]] = []
+    for item in configured_models(document):
+        settings = jobs.get(item["job_id"], {}).get("settings", {}) if isinstance(jobs, Mapping) else {}
+        job_enabled = not (isinstance(settings, Mapping) and settings.get("enabled") is False)
+        if item["enabled"] and job_enabled:
+            required.append(item)
+        else:
+            reason = "job disabled" if not job_enabled else "model setting disabled"
+            not_required.append({**item, "reason": reason})
+    return required, not_required
+
+
+def _pairs(items: list[Mapping[str, Any]]) -> set[tuple[str, str]]:
+    return {(str(item["provider"]), str(item["model"])) for item in items}
+
+
+def verify_configured_models(check_models: Callable[..., Mapping[str, Any]], required: list[dict[str, Any]],
+                             not_required: list[dict[str, Any]], *, timeout_seconds: int,
+                             unit_id: str) -> dict[str, Any]:
+    """Ask every provider once for every configured model; sort the answers by what they block.
+
+    Every configured pair is checked, so an operator sees that a disabled job's model is missing.
+    Only a *required* pair that does not answer goes to ``unavailable`` (the caller fails the gate);
+    a not-required pair that does not answer goes to ``unavailable_not_required`` with a retryable
+    ``producer-gap/1`` record and never blocks the review.
+    """
+    from appsec_review.interchange import GapCode, producer_gap
+    everything = [*required, *not_required]
+    document: dict[str, Any] = {"schema": PREFLIGHT_SCHEMA, "required": required, "not_required": not_required,
+                                "providers": {}, "unavailable": [], "unavailable_not_required": [], "gaps": []}
+    gating = _pairs(required)
+    for provider in sorted({item["provider"] for item in everything}):
+        names = sorted({item["model"] for item in everything if item["provider"] == provider})
+        report = dict(check_models(provider, names, timeout_seconds=timeout_seconds))
+        document["providers"][provider] = report
+        for name in names:
+            entry = report.get("models", {}).get(name, {})
+            if entry.get("available") is True:
+                continue
+            detail = str(entry.get("detail") or report.get("error") or "not reported")
+            jobs = sorted({item["job_id"] for item in everything
+                           if (item["provider"], item["model"]) == (provider, name)})
+            record = {"provider": provider, "model": name, "detail": detail, "jobs": jobs}
+            if (provider, name) in gating:
+                document["unavailable"].append(record)
+            else:
+                document["unavailable_not_required"].append(record)
+                document["gaps"].append(producer_gap(
+                    GapCode.PRODUCER_BLOCKED,
+                    f"{provider}/{name} unavailable ({detail}); configured by disabled {', '.join(jobs)}",
+                    unit_id=unit_id, scope_id=f"{provider}/{name}", retryable=True))
+    return document
+
+
 def resolved_configuration(run_root: Path) -> Mapping[str, Any]:
     """The run-owned resolved configuration (profile and overlay applied), verified against its manifest."""
     configuration = run_root / "data" / "configuration"
@@ -189,30 +253,23 @@ def external_input_identity(target: Path | None, run_root: Path, repository_root
 def build_job(*, check_models: ModelCheck | None = None) -> Job:
     def resolve_models(unit: UnitContext) -> Mapping[str, Any]:
         # The resolved document, not the base file: the runtime profile changes the models.
-        required = configured_models(resolved_configuration(unit.job.run_root))
-        return {"required": required, "model_count": len({(item["provider"], item["model"]) for item in required})}
+        required, not_required = required_models(resolved_configuration(unit.job.run_root))
+        return {"required": required, "not_required": not_required,
+                "model_count": len({(item["provider"], item["model"]) for item in required})}
 
     def verify_models(unit: UnitContext) -> Mapping[str, Any]:
-        required = unit.output("model_preflight.resolve_models")["required"]
-        document: dict[str, Any] = {"schema": PREFLIGHT_SCHEMA, "required": required, "providers": {},
-                                    "unavailable": []}
+        resolved = unit.output("model_preflight.resolve_models")
+        required, not_required = resolved["required"], resolved["not_required"]
         if check_models is None:
             # Only a job built outside the registry reaches this; the registry always wires the check.
-            return {**document, "terminal_status": "NOT_APPLICABLE",
+            # (job_model_connectivity refuses the claim instead; the intake gate's own audit decides
+            # whether this second check stays at all.)
+            return {"schema": PREFLIGHT_SCHEMA, "required": required, "not_required": not_required,
+                    "providers": {}, "unavailable": [], "terminal_status": "NOT_APPLICABLE",
                     "reason": "no model availability check is wired into this job instance"}
         timeout = int(unit.job.config.settings["model_preflight"]["timeout_seconds"])
-        for provider in sorted({item["provider"] for item in required}):
-            names = sorted({item["model"] for item in required if item["provider"] == provider})
-            report = dict(check_models(provider, names, timeout_seconds=timeout))
-            document["providers"][provider] = report
-            for name in names:
-                entry = report.get("models", {}).get(name, {})
-                if entry.get("available") is not True:
-                    document["unavailable"].append({
-                        "provider": provider, "model": name,
-                        "detail": str(entry.get("detail") or report.get("error") or "not reported"),
-                        "jobs": sorted({item["job_id"] for item in required
-                                        if (item["provider"], item["model"]) == (provider, name)})})
+        document = verify_configured_models(check_models, required, not_required,
+                                            timeout_seconds=timeout, unit_id=unit.unit_id)
         path = unit.unit_root / "model-preflight.json"
         identity = write_json(path, document)
         identity["path"] = path.relative_to(unit.job.run_root).as_posix()
@@ -223,9 +280,11 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         if document["unavailable"]:
             raise RuntimeError("model preflight blocked the review: " + "; ".join(
                 f"{item['provider']}/{item['model']} ({item['detail']})" for item in document["unavailable"]))
+        verified = sorted(f"{provider}/{name}" for provider, report in document["providers"].items()
+                          for name in report.get("models", {}) if report["models"][name].get("available") is True)
         return {"schema": PREFLIGHT_SCHEMA, "artifact": identity, "providers": sorted(document["providers"]),
-                "verified": sorted(f"{provider}/{name}" for provider, report in document["providers"].items()
-                                   for name in report.get("models", {}))}
+                "verified": verified, "gaps": document["gaps"],
+                "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
     def fetch_config(unit: UnitContext) -> Mapping[str, Any]:
         manifest = __import__("json").loads((unit.job.run_root / "data/configuration/manifest.json").read_text())

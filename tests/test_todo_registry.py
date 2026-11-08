@@ -10,7 +10,7 @@ REGISTRY = ROOT / "docs/TODO.md"
 ENTRY = re.compile(r"^### (T-\d{3}) — (.+)$", re.M)
 INDEX_ROW = re.compile(r"^\| (T-\d{3}) \| \[(.+?)\]\(#([a-z0-9_-]+)\) \| ([a-z]+) \| (.+?) \|$", re.M)
 AREAS = {"build", "topology", "images", "windows", "mobile", "scanners", "codeql", "graph", "native",
-         "data", "history", "evidence", "review", "binary", "testing"}
+         "data", "history", "evidence", "review", "binary", "testing", "pipeline"}
 STATE = re.compile(r"^(open|in-progress|blocked|done \(\d{4}-\d{2}-\d{2}, .+\))$")
 FIELDS = ("State", "Area", "Why", "Scope", "Done when")
 
