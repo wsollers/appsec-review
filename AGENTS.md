@@ -180,21 +180,22 @@ agents that inspect or change the repository. It is not a prompt for review work
   enforcement; do not describe implemented verification as deferred or introduce new signing
   requirements through an unrelated change.
 
-## Deferred work
+## Deferred work and TODOs
 
-- TODO (deferred): decide what to do with unit-collected tests that invoke a real Docker engine,
-  which makes them close to integration tests and makes their outcome depend on host state
-  (engine running, images present). Those that run `docker` and skip when it or an image is
-  missing: `tests/test_banned_functions.py`, `tests/test_cpp_cert_rules.py`,
-  `tests/test_cpp_memory_safety_rules.py`, `tests/test_dossier_live.py`,
-  `tests/test_lua_game_rules.py`, `tests/test_native_sbom_image.py`,
-  `tests/test_poc_live_compile.py`, `tests/test_syntax_retrieval.py`,
-  `tests/test_tree_sitter_ast.py`, `tests/reporting/test_pdf_docker.py`, and
-  `tests/orchestration/dagster/test_definitions.py::test_wave1_dagster_path_runs_application_graph`
-  (whose `skipif` decorates the helper `_missing_catalog_images`, not the test). Options include
-  moving them to an explicit integration path or replacing the engine with a fake at the
-  subprocess boundary. Tests that only assert `docker` argv through fakes are unit tests and are
-  out of scope. This is not a merge or test gate.
+- `docs/TODO.md` is the only TODO file. Do not create another file named `TODO*`, a per-directory
+  backlog, or an "open items" section in another document; a reference elsewhere points at an id.
+- Every deferred item is an entry `### T-NNN — Imperative title` with the fields `State`, `Area`,
+  `Blocked by`/`Blocks` (when non-empty), `Why`, `Scope`, `Done when`, `Refs`, in that order, and a
+  row in the index table. The format and the allowed `Area` and `State` values are at the top of
+  the file. Ids are allocated sequentially, never reused or renumbered.
+- Closing an item sets `State: done (date, commit or task doc)`; the entry stays. Splitting an item
+  creates new ids that name the parent in `Refs`. An item that turns out to be wrong is marked
+  `done` with the reason, not deleted.
+- A task doc under `docs/tasks/` that works an item names the id in its first paragraph. A `TODO`
+  comment in code names an id or is not written. Agents that discover deferred work during a change
+  add the entry in the same change.
+- `tests/test_todo_registry.py` enforces the single file, unique sequential ids, required fields,
+  and index/entry agreement. It is a merge gate.
 
 ## Workspace hygiene
 

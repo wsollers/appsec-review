@@ -1,6 +1,422 @@
-# Architecture TODOs
+# TODO registry
 
-## Finish OWASP acceptance beyond bounded static assessment
+This is the only TODO file in the repository (`AGENTS.md`, "Deferred work and TODOs"). Every
+deferred item has a stable id `T-NNN`, a state, and an observable "done when". Ids are never
+reused or renumbered; closing an item changes its state, it does not delete the entry. A task doc
+under `docs/tasks/` that works an item names its id in its first paragraph; a `TODO` comment in
+code names an id or does not exist.
+
+Entry format:
+
+```
+### T-NNN — Imperative title
+- **State:** open | in-progress | blocked | done (YYYY-MM-DD, commit or task doc)
+- **Area:** build | topology | images | windows | mobile | scanners | codeql | graph | native |
+            data | history | evidence | review | binary | testing
+- **Blocked by:** T-… · **Blocks:** T-…        (either line omitted when empty)
+- **Why:** the observed problem, one to three lines
+- **Scope:** what changes, bounded
+- **Done when:** the test, run or document that proves it
+- **Refs:** files, task docs, architecture docs
+```
+
+Entries T-001–T-034 are the former prose backlog; they keep their text under "Legacy backlog"
+until each is rewritten into the entry format when it is next touched.
+
+## Index
+
+| Id | Title | Area | State |
+| --- | --- | --- | --- |
+| T-035 | [Component layer between catalog and plan](#t-035-component-layer-between-catalog-and-plan) | topology | open |
+| T-036 | [Build-mode disposition per component at plan time](#t-036-build-mode-disposition-per-component-at-plan-time) | topology | open |
+| T-037 | [Recipe provenance: declared, canonical, inferred](#t-037-recipe-provenance-declared-canonical-inferred) | build | open |
+| T-038 | [Declared builds: operator build plan file](#t-038-declared-builds-operator-build-plan-file) | build | open |
+| T-039 | [Component-root materialization](#t-039-component-root-materialization) | build | open |
+| T-040 | [Per-component dispatch and coverage reconciliation](#t-040-per-component-dispatch-and-coverage-reconciliation) | build | open |
+| T-041 | [Toolchain runner kinds behind one executor contract](#t-041-toolchain-runner-kinds-behind-one-executor-contract) | windows | open |
+| T-042 | [MSVC Windows container image](#t-042-msvc-windows-container-image) | windows | open |
+| T-043 | [MSVC compile capture tiers and CodeQL on Windows](#t-043-msvc-compile-capture-tiers-and-codeql-on-windows) | windows | open |
+| T-044 | [Unity editor image: operator provisioning runbook and settings](#t-044-unity-editor-image-operator-provisioning-runbook-and-settings) | mobile | open |
+| T-045 | [Topology fixture xfail burn-down](#t-045-topology-fixture-xfail-burn-down) | testing | open |
+| T-046 | [Barracuda slice target and declaration](#t-046-barracuda-slice-target-and-declaration) | build | open |
+| T-047 | [Post-merge unit-test failure triage](#t-047-post-merge-unit-test-failure-triage) | testing | open |
+| T-048 | [Rethink unit-test speed](#t-048-rethink-unit-test-speed) | testing | open |
+| T-049 | [Supersede the Windows native-analysis VM design for builds](#t-049-supersede-the-windows-native-analysis-vm-design-for-builds) | windows | open |
+| T-050 | [Container catalog: deferred acceptance work](#t-050-container-catalog-deferred-acceptance-work) | images | open |
+| T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | open |
+| T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
+| T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
+| T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
+| T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
+| T-004 | [Implement conditional build-capture controls](#t-004-implement-conditional-build-capture-controls) | build | open |
+| T-005 | [Scale native acceptance from fixtures to a game-sized build](#t-005-scale-native-acceptance-from-fixtures-to-a-game-sized-build) | build | open |
+| T-006 | [Add Windows and large native-build coverage after the Linux acceptance gate](#t-006-add-windows-and-large-native-build-coverage-after-the-linux-acceptance-gate) | windows | open |
+| T-007 | [Add Android, iOS, and Unity application coverage](#t-007-add-android-ios-and-unity-application-coverage) | mobile | open |
+| T-008 | [Close the SEI CERT rule-pack execution and coverage gaps](#t-008-close-the-sei-cert-rule-pack-execution-and-coverage-gaps) | scanners | open |
+| T-009 | [Add `grype_db_sync` to `job_third_party_data_sync`](#t-009-add-grype_db_sync-to-job_third_party_data_sync) | data | open |
+| T-010 | [Optimize produced-artifact Grype without reducing coverage](#t-010-optimize-produced-artifact-grype-without-reducing-coverage) | scanners | open |
+| T-011 | [Summarize installed dependencies for the remaining ecosystems](#t-011-summarize-installed-dependencies-for-the-remaining-ecosystems) | data | open |
+| T-012 | [Follow-ups from the scanner launch reduction](#t-012-follow-ups-from-the-scanner-launch-reduction) | scanners | open |
+| T-013 | [Match OSV advisories against the snapshot's own index](#t-013-match-osv-advisories-against-the-snapshots-own-index) | data | open |
+| T-014 | [Measure and extend seeded CodeQL neighborhoods](#t-014-measure-and-extend-seeded-codeql-neighborhoods) | codeql | open |
+| T-015 | [Validate and measure dataflow-bounded package slices](#t-015-validate-and-measure-dataflow-bounded-package-slices) | codeql | open |
+| T-016 | [Measure and extend seeded Clang neighborhoods](#t-016-measure-and-extend-seeded-clang-neighborhoods) | native | open |
+| T-017 | [Close the remaining CodeQL platform and accepted-build gaps](#t-017-close-the-remaining-codeql-platform-and-accepted-build-gaps) | codeql | open |
+| T-018 | [Make CodeQL database throughput tunable end to end](#t-018-make-codeql-database-throughput-tunable-end-to-end) | codeql | open |
+| T-019 | [Define and test the CodeQL checkpoint identity matrix](#t-019-define-and-test-the-codeql-checkpoint-identity-matrix) | codeql | open |
+| T-020 | [Graph modes: aliases, slices, type layouts, buffer bounds, sink CFG context](#t-020-graph-modes-aliases-slices-type-layouts-buffer-bounds-sink-cfg-context) | graph | open |
+| T-021 | [Joern bounded export and acceptance](#t-021-joern-bounded-export-and-acceptance) | graph | open |
+| T-022 | [Evaluate additional Joern language frontends](#t-022-evaluate-additional-joern-language-frontends) | graph | open |
+| T-023 | [Scale the clangd symbol index](#t-023-scale-the-clangd-symbol-index) | native | open |
+| T-024 | [Replace the Python build-capture tool wrapper with a static Go binary](#t-024-replace-the-python-build-capture-tool-wrapper-with-a-static-go-binary) | build | open |
+| T-025 | [Prove and extend the dataflow lane; build the contract and deployment lanes](#t-025-prove-and-extend-the-dataflow-lane-build-the-contract-and-deployment-lanes) | graph | open |
+| T-026 | [Acquire dynamic execution evidence](#t-026-acquire-dynamic-execution-evidence) | evidence | open |
+| T-027 | [Add Perforce history to source history analysis](#t-027-add-perforce-history-to-source-history-analysis) | history | open |
+| T-028 | [Consider following Git submodules in source history analysis](#t-028-consider-following-git-submodules-in-source-history-analysis) | history | open |
+| T-029 | [Finish deferred source history signals](#t-029-finish-deferred-source-history-signals) | history | open |
+| T-030 | [Extend change-context analysis](#t-030-extend-change-context-analysis) | history | open |
+| T-031 | [Narrow review-prioritization approximations](#t-031-narrow-review-prioritization-approximations) | review | open |
+| T-032 | [Wire binary decompilation publications into a review](#t-032-wire-binary-decompilation-publications-into-a-review) | binary | open |
+| T-033 | [Decide how to assert correctness for large query-set jobs](#t-033-decide-how-to-assert-correctness-for-large-query-set-jobs) | testing | open |
+| T-034 | [Host a dependency proxy so builds can run without external egress](#t-034-host-a-dependency-proxy-so-builds-can-run-without-external-egress) | images | open |
+
+## Active entries
+
+### T-035 — Component layer between catalog and plan
+
+- **State:** open
+- **Area:** topology
+- **Blocks:** T-036, T-037, T-040, T-045
+- **Why:** `job_target_catalog` emits one build unit per marker and one "component" per manifest,
+  flat. `compile_build_topology` folds a unit into an owner only on literal CMake/Make evidence, so
+  vendored libraries, Cargo/Go/npm workspace members, settings-only Gradle roots and sibling-source
+  directories become independent roots that are planned and built standalone (Barracuda: 295
+  units, 271 roots). A component — one buildable product with one driver and one materialization
+  root — does not exist as a concept.
+- **Scope:** introduce components in the plan (root, family, build system, owner reasons); default
+  nested units of a compatible family to `contained` unless they have their own configure authority
+  and no ancestor driver; parse Cargo `[workspace] members`, `go.work use`, npm `workspaces`
+  (`node_workspace()` already computes them) and Gradle `settings.gradle`/`project(':x')` into
+  ownership and `requires_product` relations; stop manufacturing `direct-native` roots from a
+  conventional `src/` that only a sibling Makefile compiles; make `_resolve()` accept Gradle
+  project paths containing `:`.
+- **Done when:** `tests/test_topology_fixture.py` xfails `ownership-*`, `relation-*` and
+  `ownership-gradle-settings` flip to passes with their marks removed; a Barracuda slice plan shows
+  tens of components, not hundreds of roots.
+- **Refs:** `docs/tasks/2026-11-07-topology-fixture-monorepo.md`,
+  `docs/architecture/build-topology-and-iterations.md`, `src/appsec_review/jobs/build_topology.py`.
+
+### T-036 — Build-mode disposition per component at plan time
+
+- **State:** open
+- **Area:** topology
+- **Blocked by:** T-035
+- **Blocks:** T-040
+- **Why:** components we cannot or must not build (Unity while `unity.enabled=false`, iOS with no
+  macOS executor, PHP sites without `composer.json`, Android without a routed SDK image) surface as
+  per-unit BLOCKED gaps inside `job_project_build` instead of a decision in the plan. Downstream
+  static and source-only analysis should run on them and the report should name the disposition.
+- **Scope:** `build_mode ∈ {compiled, package-only, source-only, skipped_policy, unsupported_platform}`
+  on every plan component; `.xcodeproj/project.pbxproj` becomes a discovery marker so iOS is a
+  component with a disposition rather than absent; selection-policy rows for `composer`,
+  `npm|pnpm|yarn`, `gradle` (by build system, not only `declared_platform`); `job_project_build`
+  never sends a non-`compiled` component to an image handler.
+- **Done when:** fixture xfails `build-mode-disposition` and `discovery-marker` flip; a plan on the
+  fixture publishes with zero BLOCKED image entries for shapes D–G.
+- **Refs:** T-035, `appsec-review.toml` `[jobs.job_project_build.settings.build_selection]`.
+
+### T-037 — Recipe provenance: declared, canonical, inferred
+
+- **State:** open
+- **Area:** build
+- **Blocked by:** T-035
+- **Blocks:** T-038, T-041
+- **Why:** every build recipe is model-inferred (`ambiguity_reasons` always adds "buildable units
+  require inference-derived build recipes"), partitioned 16 units per scope with up to 4 calls
+  each. Barracuda spent hours of inference and still had 101 null recipes. Canonical build systems
+  have known recipes; the model should be the exception path.
+- **Scope:** per component, resolve in order `declared` (T-038) › `canonical` (deterministic
+  per build system: cmake -S/-B + --build, make, cargo build --workspace, go build over `go.work`
+  use entries, npm run build, composer install/dump-autoload, gradle assemble) › `inferred`;
+  record `recipe_provenance` and the declaration hash in the plan; run inference only for
+  components still null or marked `infer`; all three pass `validate_build_recipe` and the same
+  command policy.
+- **Done when:** fixture xfail `deterministic-recipe` flips; a Barracuda slice plan has no null
+  recipes for cmake/make units and model calls fall by an order of magnitude (recorded in
+  `plan["feedback"]`).
+- **Refs:** `src/appsec_review/jobs/job_target_analysis_plan/{job,planning}.py`,
+  `src/appsec_review/jobs/build_discovery.py::build_recipe_inference_policy`.
+
+### T-038 — Declared builds: operator build plan file
+
+- **State:** open
+- **Area:** build
+- **Blocked by:** T-037
+- **Blocks:** T-046
+- **Why:** real targets ship their own build scripts. An operator must be able to say "root X,
+  run this script, in this image" and have the pipeline run and capture it without inference.
+- **Scope:** an operator-side TOML (never inside the target) passed as `start --build-plan`,
+  hashed into the intake handoff and the claim; entries carry `id`, `root` (materialization root),
+  `image` (a pinned profile) or `image_id`, `run` argv, `cwd`, optional `products`, allowlisted
+  `env`, or just a `mode` disposition; the same block is accepted on
+  `[[target_acquisition.systems]].components`. A declaration must name an image: the run never
+  builds images. The script runs inside the pinned image with no network under the normal output
+  policy. `.bat`/`.cmd`/MSBuild declarations route to the `msvc` profile (T-046) or are recorded
+  `unsupported_platform` until it exists. Declared-build failure is an operator fault: no model
+  repair; fix the declaration, `plan-repair`, `resume`.
+- **Done when:** a declaration for the fixture's `server` and `tools/packer` builds both from the
+  repository root with capture, discovery marks their units `covered_by: declared:<id>`, and the
+  refinement step reports which covered units compiled.
+- **Refs:** T-037, `docs/operations/target-acquisition.md`.
+
+### T-039 — Component-root materialization
+
+- **State:** open
+- **Area:** build
+- **Blocks:** T-040
+- **Why:** `job_language_build._copy_source` (and the probe copy in `job_project_build`) copy only
+  the unit's root plus named `dependency_files`. Both documented Barracuda GoogleTest failures are
+  `../samples/sample1.cc` missing from a partial workspace; every workspace member and sibling
+  include fails the same way, and the repair loop then "repairs" a correct recipe.
+  `validate_build_recipe` also requires `source_dir == unit root`, so a recipe cannot even express
+  "materialize the repository root".
+- **Scope:** materialize the component root (T-035) or, as the first step, the whole accepted
+  target, keeping `cwd` at the unit's directory; keep the symlink/escape checks; relax
+  `validate_build_recipe` to allow `source_dir` to be an ancestor of the unit root; record the
+  materialization root in the receipt.
+- **Done when:** fixture xfail `workspace-materialization` flips and
+  `test_topology_fixture.py`'s sibling-source compile checks run through the real lane; a Barracuda
+  slice builds the vendored gtest from the parent tree.
+- **Refs:** `src/appsec_review/jobs/job_language_build/job.py::_copy_source`,
+  `src/appsec_review/jobs/job_project_build/job.py::_copy_source`.
+
+### T-040 — Per-component dispatch and coverage reconciliation
+
+- **State:** open
+- **Area:** build
+- **Blocked by:** T-035, T-036, T-039
+- **Why:** `job_project_build` dispatches per unit, so contained units are built standalone and
+  the plan's defects are carried forward faithfully. The refinement step already reconciles
+  captured compiles back to units; it should be the source of per-unit coverage under a component.
+- **Scope:** one dispatch per `compiled` component (root, image, recipe, provenance); sub-units
+  never dispatch; after execution, mark each unit under the component `compiled | not-compiled |
+  not-applicable` from the capture; coverage and gaps are per component with the per-unit list
+  attached.
+- **Done when:** a fixture live run (`appsec-review start --target targets/topology-monorepo`)
+  dispatches exactly the expected components and `acceptance.topology score` reports no diff.
+- **Refs:** T-035, T-039, `docs/architecture/build-topology-and-iterations.md`.
+
+### T-041 — Toolchain runner kinds behind one executor contract
+
+- **State:** open
+- **Area:** windows
+- **Blocked by:** T-037
+- **Blocks:** T-042, T-043
+- **Why:** "image" means a Linux Docker image everywhere (`BuildProfile`, `BuildContainerExecutor`,
+  pin verification). Windows/MSVC builds need a second runner with the same contract.
+- **Scope:** `profiles.<name>.kind = "docker" | "windows-container"` (a `windows-host` PowerShell
+  runner only as a fallback where Hyper-V isolation is unavailable), `daemon` selection for the
+  Windows container engine (Docker Desktop `desktop-windows` context reached from the Dagster
+  container over the WSL-facing address), executor factory keyed on kind,
+  `job_image_pin_verification` and `update-image-pins` inspecting the right daemon,
+  `guard_action` unchanged.
+- **Done when:** pin verification passes against a Windows-daemon image and refuses a drifted one;
+  a `WindowsContainerExecutor` fake runs through the language-build lane in unit tests.
+- **Refs:** `src/appsec_review/container_runtime/build_executor.py`,
+  `src/appsec_review/jobs/job_image_pin_verification/`.
+
+### T-042 — MSVC Windows container image
+
+- **State:** open
+- **Area:** windows
+- **Blocked by:** T-041
+- **Blocks:** T-043
+- **Why:** MSVC/MSBuild targets (`.bat`, `.sln`, `.vcxproj`) are a real share of the game
+  codebase. Microsoft's Build Tools container pattern (`windowsservercore` + `vs_BuildTools.exe
+  --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended`) gives a pinned, disposable
+  image under the existing Visual Studio license (never published to a public registry).
+- **Scope:** `containers/buildenv/msvc/Dockerfile` built from an offline VS layout (`--layout`,
+  `--noWeb`) so component versions are pinned; `containers/catalog.toml` entry with
+  `platform = "windows"`; `containers/build.py` support for the Windows daemon and `-m 2GB`;
+  `--isolation=hyperv --network none`, `ContainerUser`, `VsDevCmd.bat -arch=x64` entrypoint;
+  workspace in/out as single tar streams (no `\wsl$` bind mounts, no per-file bridge copies);
+  `WindowsContainerExecutor` with Windows-appropriate flags. Operator prerequisites on the Windows
+  side (Docker Desktop in Windows-container mode, Hyper-V, exposed daemon on the WSL-facing
+  address, VS layout) go in an operations runbook.
+- **Done when:** `audit-buildenv-msvc:local` is pinned on HAL5000, the fixture gains a `.vcxproj`
+  shape that builds through the lane, and PDBs reach `job_debug_symbol_indexing` via
+  `--compiler-target msvc`.
+- **Refs:** T-006 (legacy Windows section; this supersedes its VM-only sequencing),
+  `docs/architecture/windows-native-analysis-vm.md` (gates to fold in; see T-049).
+
+### T-043 — MSVC compile capture tiers and CodeQL on Windows
+
+- **State:** open
+- **Area:** windows
+- **Blocked by:** T-042
+- **Why:** no `bear` on Windows; capture quality must be recorded, not assumed.
+- **Scope:** tier 1 CMake `-G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` under `cl.exe`; tier 2
+  `msbuild -bl` binlog → CL/Link invocations; tier 3 `_CL_=/sourceDependencies <dir>` per-TU JSON
+  plus a `cl.exe` PATH shim for arbitrary scripts; receipt field `capture_quality ∈ {complete,
+  partial, inventory-only}`; CodeQL Windows CLI in-image tracing the accepted build for
+  `job_cpp_compiled_analysis`.
+- **Done when:** each tier has a fixture and the refinement step consumes all three.
+- **Refs:** T-042, `docs/operations/codeql-analysis.md`.
+
+### T-044 — Unity editor image: operator provisioning runbook and settings
+
+- **State:** open
+- **Area:** mobile
+- **Why:** `config/unity.py` requires an already provisioned, licensed editor image; the pipeline
+  never installs or licenses Unity (correct). Nothing documents how the operator provides it, and
+  `[jobs.job_project_build.settings.unity]` holds only `enabled = false`.
+- **Scope:** `docs/operations/unity-editor-image.md`: match `m_EditorVersion` from the target's
+  `ProjectSettings/ProjectVersion.txt`, pull the GameCI `unityci/editor:ubuntu-<version>-android-3`
+  image, activate the operator's license inside it, verify `license_ready`, pin with
+  `update-image-pins --write`; a complete settings stanza ready to flip `enabled = true`. Unity stays
+  `skipped_policy` (T-036) until then.
+- **Done when:** the runbook exists and a Unity fixture (topology shape D) is dispositioned
+  `skipped_policy` with `enabled = false` and `compiled` with a declared image in a unit test.
+- **Refs:** `src/appsec_review/config/unity.py`, `src/appsec_review/jobs/unity_build.py`, T-007.
+
+### T-045 — Topology fixture xfail burn-down
+
+- **State:** open
+- **Area:** testing
+- **Blocked by:** T-035, T-036, T-037, T-039
+- **Why:** `tests/test_topology_fixture.py` carries 54 strict xfails, each tagged with a reason
+  code; they are the executable form of T-035–T-039. A strict xfail that starts passing fails the
+  suite, so marks must be removed as behavior lands.
+- **Scope:** when a T-item above closes, remove its reason code's marks and update the task doc's
+  gap table; add fixture shapes for `.vcxproj` (T-042) and a declared build (T-038).
+- **Done when:** zero xfails remain and the live `acceptance.topology score` run is clean.
+- **Refs:** `docs/tasks/2026-11-07-topology-fixture-monorepo.md`.
+
+### T-046 — Barracuda slice target and declaration
+
+- **State:** open
+- **Area:** build
+- **Blocked by:** T-038, T-039
+- **Why:** the full Barracuda run takes eight hours per iteration; polyglot-case targets exercise
+  lanes, not topology. A slice (`fsh-server/Server`, or the protobuf/gtest subtree plus its
+  consumers) reproduces the real failure shapes at a tenth of the size.
+- **Scope:** `targets/barracuda-slice` (gitignored, operator-prepared), a `targets/barracuda-slice.build.toml`
+  declaring the server build in the `native` image and the website/Unity/iOS dispositions; run with
+  `start --target … --build-plan …`.
+- **Done when:** the slice plan publishes with components and no sibling-source failures, and the
+  declared server build produces compile captures on the first run.
+- **Refs:** `docs/architecture/build-topology-and-iterations.md` (historical run 2026-11-04-0003).
+
+### T-047 — Post-merge unit-test failure triage
+
+- **State:** open
+- **Area:** testing
+- **Why:** the fleet "typed job input contracts" merge (`fe328d76`) introduced ~70 new unit-test
+  failures (native SBOM, language_build dotnet, tool_input_support, target_artifact_intake,
+  review/test_judge, project_build) with messages such as `required input unavailable:
+  job_artifact_indexing/handoff`. Most look like fixtures that build run trees by hand without the
+  now-mandatory producers; some may be runtime regressions for buildless components.
+- **Scope:** classify each failing test as stale fixture or runtime regression; fix fixtures
+  through `consume`/`inputs` helpers, not by relaxing contracts; file any runtime regression as its
+  own T-item.
+- **Done when:** the differential against `fe328d76`'s baseline shows no failures attributable to
+  the merge.
+- **Refs:** `docs/tasks/2026-11-07-job-control-schema-standardization.md` (differential method).
+
+### T-048 — Rethink unit-test speed
+
+- **State:** open
+- **Area:** testing
+- **Why:** the full unit suite is slow enough that live tests are being run instead of it, and it
+  carries ~900 environment-dependent failures outside the reference host. Deferred by the owner
+  until after the next live test cycle.
+- **Scope:** to be defined; candidates include splitting Docker-touching tests out of the unit
+  path (see T-052), session-scoped fixtures for run trees, and `pytest-xdist` by default.
+- **Done when:** a scoped decision is recorded here and the unit path runs in minutes on a
+  developer host.
+
+### T-049 — Supersede the Windows native-analysis VM design for builds
+
+- **State:** open
+- **Area:** windows
+- **Blocked by:** T-042
+- **Why:** `docs/architecture/windows-native-analysis-vm.md` designs an ephemeral Windows VM with
+  legal, provenance, isolation, tooling, capacity, mock-test and live-acceptance gates. The MSVC
+  Windows container (T-042) supersedes the VM for builds; the still-valid gates (licensing, no
+  target execution, immutable evidence export, verified teardown) must be carried into the new
+  design rather than silently dropped.
+- **Scope:** decide per gate: carried into T-042, kept for a VM-only capability (e.g. target
+  execution for dynamic evidence, T-026), or retired; mark the VM doc superseded for builds.
+  (Formerly `docs/windows-native-analysis-todo.md`.)
+- **Done when:** the VM doc states its remaining scope and `T-042`'s doc lists the inherited gates.
+
+### T-050 — Container catalog: deferred acceptance work
+
+- **State:** open
+- **Area:** images
+- **Why:** items carried from the former `containers/TODO.md`.
+- **Scope:**
+  - GCC counterpart to `audit-buildenv-cpp` (`CC=gcc CXX=g++`, sanitizer runtimes, `-fanalyzer`)
+    and a recorded retry on GCC when the clang build fails; needs a second native profile per
+    family in `job_project_build`.
+  - Decide whether archived `audit-native` capabilities (SVF, CodeChecker) earn a bounded image;
+    retire or replace the deferred `audit-native`, `audit-codeql`, `audit-lsp-vendor` entries.
+  - Share only explicit LSP payload layers; add language-server fixtures.
+  - Binary analysis: a specialized capability only when BLint/Syft/Grype/Trivy fail a job contract;
+    no curl-to-shell installers, no duplicated scanners.
+  - `tool-ghidra`: close `containers/tools/ghidra/LICENSE.md` open items, one reviewed `base-jdk`,
+    pin `image_id`, lint the Dockerfile, add a PE fixture.
+  - ScanCode: evaluate a fixed release; compare incremental value with Syft before enabling.
+  - Microsoft SBOM Tool / SBOM Assembly: stay replaced by Syft unless a contract proves a gap.
+  - Document conversion: complete hashed `.deb` closure for pandoc/poppler; PDF/DOCX fixtures.
+  - `tool-report-latex`: call it from a publication job, drop `manual = true`, pin `image_id`,
+    add a pdftoppm visual check.
+  - Dagster: orchestration is a deployment concern; do not restore its archived image.
+- **Done when:** each bullet is either closed or promoted to its own T-item.
+- **Refs:** `containers/README.md`, `containers/buildenv/README.md`.
+
+### T-051 — Host-local image pins: bind the observed image ID into the run
+
+- **State:** open
+- **Area:** images
+- **Why:** image-ID pins are host-local by decision (2026-10-15): the committed pins in
+  `appsec-review.toml`, `containers/catalog.toml` and `containers/tools/codeql/assets.lock.json`
+  name whichever host last re-pinned, so every other host fails pin checks until it re-pins. A
+  changed pin means rerunning, not a defect. (Exception on record: `buildenv-rust-wasm` pinned to
+  `sha256:ad6df7a2…`, built with `rust-src` for the CodeQL Rust extractor.)
+- **Scope:** resolve each pinned tag to the local host's image ID when a run starts and bind that
+  observed ID into the run's resolved configuration (a changed image invalidates reuse and forces a
+  rerun); drop cross-host equality assertions in `tests/integration/test_node_project_builds.py`,
+  `tests/test_live_android_build.py` and the `APPSEC_REVIEW_BUILDENV_PINS=local` opt-in in
+  `tests/integration/test_family_project_builds.py`. Asset locks stay enforced at build time and
+  record what a working build downloaded (see `containers/README.md`, "Moving forward, not
+  reproducing").
+- **Done when:** a fresh host runs `start` without re-pinning and the run records the IDs it used.
+
+### T-052 — Decide the home of Docker-engine-touching unit tests
+
+- **State:** open
+- **Area:** testing
+- **Blocks:** T-048
+- **Why:** several unit-collected tests invoke a real Docker engine and skip when it or an image
+  is missing, so their outcome depends on host state: `tests/test_banned_functions.py`,
+  `tests/test_cpp_cert_rules.py`, `tests/test_cpp_memory_safety_rules.py`,
+  `tests/test_dossier_live.py`, `tests/test_lua_game_rules.py`, `tests/test_native_sbom_image.py`,
+  `tests/test_poc_live_compile.py`, `tests/test_syntax_retrieval.py`,
+  `tests/test_tree_sitter_ast.py`, `tests/reporting/test_pdf_docker.py`, and
+  `tests/orchestration/dagster/test_definitions.py::test_wave1_dagster_path_runs_application_graph`
+  (whose `skipif` decorates the helper `_missing_catalog_images`, not the test). Tests that only
+  assert `docker` argv through fakes are unit tests and out of scope. (Formerly the "Deferred work"
+  section of `AGENTS.md`.)
+- **Scope:** move them to an explicit integration path or replace the engine with a fake at the
+  subprocess boundary. Not a merge or test gate.
+- **Done when:** the unit path has no test whose result depends on a running engine.
+
+## Legacy backlog
+
+Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
+
+### T-001 — Finish OWASP acceptance beyond bounded static assessment
 
 - Implemented: complete pinned ASVS/MASVS inventories and MASTG/Top 10 context catalogs,
   independently reviewed inventory/content/license pins; explicit qualification versus assessment;
@@ -28,7 +444,7 @@
 See [the current design](architecture/owasp-control-workbench.md) and
 [operating limits](operations/owasp-control-assessment.md).
 
-## Hook up Lua game-security rule scanning
+### T-002 — Hook up Lua game-security rule scanning
 
 - [ ] Integrate `rules/lua-game-security/game-security.yml` into
   `job_evidence_collection`'s existing `source_sast` step using the Semgrep/OpenGrep
@@ -45,7 +461,7 @@ See [the current design](architecture/owasp-control-workbench.md) and
 - [ ] Update the pack README and pipeline operations documentation once the hookup
   is implemented; do not describe standalone fixture coverage as pipeline acceptance.
 
-## Complete the Linux execution vertical before expanding platforms
+### T-003 — Complete the Linux execution vertical before expanding platforms
 
 Use `targets/appsec-multi-vuln` as the acceptance target until the generic execution path is
 solid, repeatable, and queryable. Do not make the later Windows or large-repository work a
@@ -145,7 +561,7 @@ Probe policy must be centrally configurable per build unit as `configure`, `sele
 `full-build`. This keeps the default test target rigorous without forcing future large repositories
 through an unnecessary full probe before every instrumented or traced build.
 
-## Implement conditional build-capture controls
+### T-004 — Implement conditional build-capture controls
 
 The agreed semantics and the 18-row `appsec-multi-vuln` fixture mapping are documented in
 [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md),
@@ -172,7 +588,7 @@ Conditional policy dispatch and dispositions are implemented. Do not describe sp
 toolchain acceptance as complete until the remaining gates above run. Executor-level CodeQL
 receipts continue to use `manual`/`none` after the canonical decision selects build/source.
 
-## Scale native acceptance from fixtures to a game-sized build
+### T-005 — Scale native acceptance from fixtures to a game-sized build
 
 Advance native testing through explicit gates rather than moving directly from the synthetic
 multi-language target to a full game project:
@@ -195,7 +611,7 @@ bounded derived evidence permitted by the index contract plus the source revisio
 provenance, applicable capability state, and accepted run-owned artifact identities needed to
 reproduce and verify a test.
 
-## Add Windows and large native-build coverage after the Linux acceptance gate
+### T-006 — Add Windows and large native-build coverage after the Linux acceptance gate
 
 Once the Linux vertical above passes against `appsec-multi-vuln`, add a first-class disposable
 Windows executor rather than extending Linux recipes with platform-specific exceptions.
@@ -222,7 +638,7 @@ The follow-on work should:
 - validate the executor with synthetic fixtures first, then representative larger native projects,
   while preserving gaps for unsupported platform or toolchain combinations.
 
-## Add Android, iOS, and Unity application coverage
+### T-007 — Add Android, iOS, and Unity application coverage
 
 After the Linux execution vertical is accepted, extend the same discovery, recipe, provenance,
 artifact, indexing, and gap contracts to mobile applications and Unity projects. Keep source-only
@@ -272,7 +688,7 @@ Acceptance requires synthetic Android, iOS, and Unity fixtures; failure/resume a
 platform tests; bounded MobSF/MobSFScan integration tests; and live Dagster runs on workers that
 actually provide each enabled platform capability.
 
-## Close the SEI CERT rule-pack execution and coverage gaps
+### T-008 — Close the SEI CERT rule-pack execution and coverage gaps
 
 The pack (`rules/sei-cert/`) validates and evaluates cleanly under Semgrep 1.178.0 and OpenGrep
 1.30.2 on fixtures and on `appsec-multi-vuln`, but these remain open:
@@ -288,7 +704,7 @@ The pack (`rules/sei-cert/`) validates and evaluates cleanly under Semgrep 1.178
 - add Kotlin and Android-manifest analysis only after an applicable official rule and a capable
   engine exist; both are currently explicit gaps.
 
-## Add `grype_db_sync` to `job_third_party_data_sync`
+### T-009 — Add `grype_db_sync` to `job_third_party_data_sync`
 
 The archived pre-refactor tree was inspected for a reusable Grype database. It contains a Grype
 executable archive and image/build records, but no database snapshot with a verifiable database
@@ -302,7 +718,7 @@ extraction bounds, hash every published file, validate the database with the pin
 publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
 The step must fail truthfully when provenance, validation, or freshness cannot be established.
 
-## Optimize produced-artifact Grype without reducing coverage
+### T-010 — Optimize produced-artifact Grype without reducing coverage
 
 Future artifact Grype work must deduplicate accepted artifacts by content hash and cache only by
 artifact hash plus exact Grype image, vulnerability-database digest, and policy identity. It should
@@ -311,7 +727,7 @@ concurrency with partitioned resumability. Telemetry must report artifact/byte t
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
 
-## Summarize installed dependencies for the remaining ecosystems
+### T-011 — Summarize installed dependencies for the remaining ecosystems
 
 Only npm installed trees are summarized from the package manager's own installer record (see
 [installed npm dependencies](operations/language-build.md)). In other ecosystems, a recipe-run
@@ -338,7 +754,7 @@ Until then, an operator can name such a tree in a `[[build_outputs.exclusions]]`
 walk then counts its files under `configured_exclusions` instead of listing them, so the tree gets
 no per-file review and no supply-chain rows.
 
-## Follow-ups from the scanner launch reduction
+### T-012 — Follow-ups from the scanner launch reduction
 
 The [scanner launch reduction](reviews/scanner-launch-reduction-design.md#6-resolved-decisions-and-open-questions)
 scans each npm installer record once with Syft, Grype and osv-scanner in place of per-package Syft
@@ -358,7 +774,7 @@ and Grype launches. Its open questions:
    [Summarize installed dependencies for the remaining ecosystems](#summarize-installed-dependencies-for-the-remaining-ecosystems).
 6. Run scanner launches in parallel.
 
-## Match OSV advisories against the snapshot's own index
+### T-013 — Match OSV advisories against the snapshot's own index
 
 Match OSV advisories against the snapshot's own index/osv.sqlite so memory scales with a project's
 dependencies, not the ecosystem database size. osv-scanner 1.9.2's `--experimental-offline` mode
@@ -370,7 +786,7 @@ which bounds the blast radius but still pays the full ecosystem cost per launch.
 versions with osv-scanner (or the catalog) and looking them up in the indexed snapshot would make
 the cost proportional to the dependencies actually present.
 
-## Measure and extend seeded CodeQL neighborhoods
+### T-014 — Measure and extend seeded CodeQL neighborhoods
 
 Design: `docs/architecture/seeded-codeql-neighborhoods.md`. Remaining after the first
 implementation:
@@ -387,7 +803,7 @@ implementation:
   (they use the same two external predicates, `exportScope` and `exportSeed`);
 - profile the slow `job_evidence_collection` tests.
 
-## Validate and measure dataflow-bounded package slices
+### T-015 — Validate and measure dataflow-bounded package slices
 
 Design: `docs/architecture/dataflow-bounded-slices.md`. Remaining work:
 
@@ -403,7 +819,7 @@ rules, with a named gap when none applies. The view and the manifest are validat
 against `docs/schemas/review-package-view.schema.json` and
 `docs/schemas/review-package-manifest.schema.json`.
 
-## Measure and extend seeded Clang neighborhoods
+### T-016 — Measure and extend seeded Clang neighborhoods
 
 Design: `docs/architecture/seeded-neighborhoods.md`. The Clang AST/LLVM IR, Clang-Tidy/Static
 Analyzer and (enabled-only) CPG producers run from the findings outward and publish through the
@@ -439,7 +855,7 @@ Analyzer and (enabled-only) CPG producers run from the findings outward and publ
   observation shard (now the seeded subset, with its gaps), and package assembly reads the `graph`
   families per scope.
 
-## Close the remaining CodeQL platform and accepted-build gaps
+### T-017 — Close the remaining CodeQL platform and accepted-build gaps
 
 Cross-language CodeQL uses operator-declared releases for supplied offline extractors and query packs, exact protected
 compiled-build replay, source/no-build analysis, bounded SARIF normalization, independent
@@ -455,7 +871,7 @@ Preserve the
 current selective invalidation boundary: query-pack changes must not rebuild Clang AST, LLVM IR,
 or an otherwise reusable CodeQL database.
 
-## Make CodeQL database throughput tunable end to end
+### T-018 — Make CodeQL database throughput tunable end to end
 
 Run `2026-10-16-0004` (WSL host, 24 CPUs, 16 GB shared WSL limit) built 13 of 55 database scopes in
 about 20 minutes. `concurrency = 2`, `threads = 2` and `ram_mb = 4096` are already configurable,
@@ -489,7 +905,7 @@ unestablished; later custody/native changes are unbenchmarked. Keep strict as th
 follow the [rollback contract](operations/performance-assurance.md#metrics-and-comparison)
 without restoring supplied-platform scans or rewriting frozen runs.
 
-## Define and test the CodeQL checkpoint identity matrix
+### T-019 — Define and test the CodeQL checkpoint identity matrix
 
 Maintain the matrix of identity inputs against the derived image, database, query, normalization,
 index, and publication checkpoints. It covers declared CodeQL and extractor releases, source
@@ -516,7 +932,7 @@ launches, then query reuse; mismatched material, source claims and optional hand
 fail. No prior queries, exports or guidance are imported. Retained real-run imports, performance
 gates and deployment remain separately blocked; the fixture result is not live commissioning.
 
-## Graph modes: aliases, slices, type layouts, buffer bounds, sink CFG context
+### T-020 — Graph modes: aliases, slices, type layouts, buffer bounds, sink CFG context
 
 Design: [`architecture/graph-alias-slice-layout-modes.md`](architecture/graph-alias-slice-layout-modes.md)
 (proposed, not implemented). Chunks G0 to G7 and GC there; G4 depends on the SVF producer chunks S0 to S4
@@ -541,7 +957,7 @@ Catalog and scanner follow-ups from
 GC (R-INT `integer_conversion` entries, R-TOCTOU `path_check` and the `toctou_candidate` join,
 R-CSA checker names on clang 18, R-CERT pack extraction, R-LIVE recording of the expanded upstream suite and Infer/CSA issue types).
 
-## Joern bounded export and acceptance
+### T-021 — Joern bounded export and acceptance
 
 **Deprecated (2026-10-12).** Joern is off by default (`jobs.job_cpg_analysis.settings.enabled =
 false`). CodeQL is the code-graph producer, with Clang/LLVM cross-checks; see "Why Joern is
@@ -570,7 +986,7 @@ Also resolve the per-tool resource profile
 (Joern needs far more than 1 GiB at scale) and license attribution for JARs without embedded
 metadata. Do not put the full CPG into MCP responses.
 
-## Evaluate additional Joern language frontends
+### T-022 — Evaluate additional Joern language frontends
 
 The pinned `v4.0.630` archive is verified whole, but `tool-joern` installs only the core and
 `c2cpg`. The other thirteen frontend directories are excluded until a job needs them: `javasrc2cpg`,
@@ -596,7 +1012,7 @@ Do not enable all frontends wholesale: that adds about 2 GB and six unreviewed n
 `ghidra2cpg` is binary analysis and belongs with the binary-analysis decomposition decision, not
 source CPG coverage.
 
-## Scale the clangd symbol index
+### T-023 — Scale the clangd symbol index
 
 Done: the pinned `tool-clangd-indexer` closure, and the independent `job_cpp_symbol_index`. Per
 accepted C/C++ scope it runs clangd-indexer over the exact accepted compile commands. It then
@@ -614,7 +1030,7 @@ run against the real image indexed the fixture completely. Remaining work:
 Resolve the open items in `containers/tools/clangd-indexer/LICENSE.md` first: confirming the LLVM
 source ref, and an advisory match for the LLVM binary.
 
-## Replace the Python build-capture tool wrapper with a static Go binary
+### T-024 — Replace the Python build-capture tool wrapper with a static Go binary
 
 `containers/build-capture/tool-wrapper.py` runs for every `PATH`-resolved build tool (cc, c++, ld,
 ar, ninja, cmake and others). Measured cost, inside the executor's container boundary with
@@ -642,7 +1058,8 @@ build. The wrapper also forces `python3` into every build image.
    captures invalidate build checkpoints.
 5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
    after.
-## Prove and extend the dataflow lane; build the contract and deployment lanes
+
+### T-025 — Prove and extend the dataflow lane; build the contract and deployment lanes
 
 The planned `query_dataflow` tool and `job_dataflow_summary`/`job_reachability_linking` jobs are
 superseded by `query_code_graph`, the `job_codeql_analysis` export step and `job_code_graph_index`
@@ -685,7 +1102,7 @@ C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact
 
 Unresolved indirect calls, unmodeled externals, and path/depth limits must be published as gaps.
 
-## Acquire dynamic execution evidence
+### T-026 — Acquire dynamic execution evidence
 
 Hash-verified import is now implemented for LCOV, Cobertura, JaCoCo, and LLVM coverage JSON, and
 for textual folded-stack, perf-script, Callgrind, and LLVM sample profiles. Those producers ingest
@@ -694,7 +1111,7 @@ coverage/profile generation, sanitizer logs, fuzz corpora, and IAST traces are n
 Define a separately authorized, isolated execution job before producing them. Positive traces may
 support reachability; zero coverage is a gap and never refutes a claim.
 
-## Add Perforce history to source history analysis
+### T-027 — Add Perforce history to source history analysis
 
 `job_source_history_analysis` implements local Git and optional GitHub enrichment only. Perforce is
 designed in [`architecture/source-history-analysis.md`](architecture/source-history-analysis.md)
@@ -713,14 +1130,14 @@ shard, and plan `history_priority` contract:
 - review the Helix Core CLI license before cataloging the image, and add the history identity probe
   inputs (server identity, depot scope, changelist, bundle hash) so resume reruns on any change.
 
-## Consider following Git submodules in source history analysis
+### T-028 — Consider following Git submodules in source history analysis
 
 Submodule gitlinks are currently a `submodule_history_not_followed` gap. Decide whether each
 submodule should become an independent history source bound to its gitlink commit, how its signals
 roll up into the parent's components, and how its own `.git` (often under the parent's
 `.git/modules/`, outside the submodule path) is resolved without leaving the target root.
 
-## Finish deferred source history signals
+### T-029 — Finish deferred source history signals
 
 - Exact security-fix classification needs an OSV index of `fixed` Git events keyed by commit id;
   extend the OSV sync index and match walked commits against it.
@@ -734,7 +1151,7 @@ roll up into the parent's components, and how its own `.git` (often under the pa
 - Add an exact-filter `query_history` MCP tool if consumers need more than `find(kind="hotspot")`.
   Blame-to-Tree-sitter function joins also exist in `job_change_context_analysis`.
 
-## Extend change-context analysis
+### T-030 — Extend change-context analysis
 
 `job_change_context_analysis` is implemented; see
 [`architecture/change-context-analysis.md`](architecture/change-context-analysis.md). Remaining work:
@@ -752,7 +1169,7 @@ roll up into the parent's components, and how its own `.git` (often under the pa
 - Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on
   Tree-sitter without delaying the build lane.
 
-## Narrow review-prioritization approximations
+### T-031 — Narrow review-prioritization approximations
 
 See [`architecture/review-prioritization.md`](architecture/review-prioritization.md).
 
@@ -766,7 +1183,7 @@ See [`architecture/review-prioritization.md`](architecture/review-prioritization
 - Add a Python mapping and any further languages the Tree-sitter producer gains.
 - Add Semgrep or CodeQL path queries for PHP, which has no CodeQL extractor today.
 
-## Wire binary decompilation publications into a review
+### T-032 — Wire binary decompilation publications into a review
 
 Done: the pinned `tool-ghidra` image, the `[binary_decompilation]` configuration, the pre-run
 `appsec-review binary-decompile` command, the verified publication store with its `current.json`
@@ -795,7 +1212,7 @@ Outstanding, in order:
 4. Add a managed-code decompiler lane (ILSpy for CIL, jadx or CFR for JVM and Dalvik); today
    managed binaries are routed to a named gap only.
 
-## Decide how to assert correctness for large query-set jobs
+### T-033 — Decide how to assert correctness for large query-set jobs
 
 `docs/processes/acceptance-and-regression-testing.md` makes each job assert that its output is the
 correct response to its inputs, through `Unit.output_validators`. Four contract classes carry most
@@ -837,7 +1254,7 @@ whether a job produced the declared number of correct outputs for its input. Que
 whether a single query returns the correct rows for a known database. Neither substitutes for the
 other, and conflating them is how a suite that runs but answers wrongly passes.
 
-## Host a dependency proxy so builds can run without external egress
+### T-034 — Host a dependency proxy so builds can run without external egress
 
 Project, language and CodeQL replay builds currently need external network egress (Docker bridge)
 so package managers can fetch dependencies the derived project image did not already restore:

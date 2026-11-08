@@ -53,9 +53,9 @@ fails because `main` has moved on. Noticing staleness is this procedure's job, n
    - `README.md`;
    - `docs/architecture/*` and `docs/operations/*`;
    - design and implementation records under `docs/reviews/`, where they state current behavior;
-   - `containers/README.md`, `containers/TODO.md`, `containers/buildenv/README.md` and each image's
-     own `README.md`;
-   - `docs/TODO.md` (done items, stale open questions, new remaining work);
+   - `containers/README.md`, `containers/buildenv/README.md` and each image's own `README.md`;
+   - `docs/TODO.md`, the single TODO registry: flip the state of entries the change completes, add
+     new remaining work as `T-NNN` entries in the registry format (never a new TODO file);
    - `docs/agent-reader.md` navigation (new pages or skills, renamed or removed ones).
 
    Many pages will already be correct because the pull request updated them. Verify them anyway;

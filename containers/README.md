@@ -123,7 +123,7 @@ a rebuilt image's id is not reproducible across hosts, results are never compare
 and a changed pin means rerunning, not a defect (asset locks stay exact). `job_image_pin_verification`
 fails a review whose local images do not match their pins, and `appsec-review update-image-pins`
 re-pins them on the host; see
-[`buildenv/README.md`](buildenv/README.md) and the last bullet of [`TODO.md`](TODO.md). Every enabled tool is
+[`buildenv/README.md`](buildenv/README.md) and T-051 in [`../docs/TODO.md`](../docs/TODO.md). Every enabled tool is
 expected to have a static evidence-collection adapter unless its `tool.toml` sets
 `static_adapter = false`; tools with that opt-out are run by their own jobs instead. `tool-ghidra`
 is the one tool run by a pre-run command, `appsec-review binary-decompile`, which raises memory,

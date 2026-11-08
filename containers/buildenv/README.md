@@ -72,8 +72,8 @@ and then sign it with `appsec-review signing sign-image --all-pinned` (see
 refuses an unsigned build image when `[signing] image_enforcement = "required"` (opt-in);
 the pipeline never builds images or rewrites pins on its own, and `job_image_pin_verification` fails
 a review whose local images no longer match their pins. When a Dockerfile here changes, rebuild the image and update
-the pin in the same change. The committed pins name whichever host last re-pinned (see the last
-bullet of [`../TODO.md`](../TODO.md)).
+the pin in the same change. The committed pins name whichever host last re-pinned (see T-051 in
+[`../../docs/TODO.md`](../../docs/TODO.md)).
 
 The Rust/WebAssembly image backs both the `rust` and `wasm` profiles; update both pins together.
 

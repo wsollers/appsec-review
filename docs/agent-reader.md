@@ -125,6 +125,6 @@ Records, task prompts, and schemas:
   [`tasks/review-graph-precomputation-prompt.md`](tasks/review-graph-precomputation-prompt.md).
 - JSON schemas for run artifacts and model proposals: [`schemas/`](schemas/).
 - Historical handoff: [`handoffs/2026-10-09-build-execution-capture-restart.md`](handoffs/2026-10-09-build-execution-capture-restart.md).
-- Open work: [`TODO.md`](TODO.md) and [`windows-native-analysis-todo.md`](windows-native-analysis-todo.md).
+- Open work: [`TODO.md`](TODO.md), the single TODO registry (entries `T-NNN`; format in `AGENTS.md`).
 
 This file is navigation only and introduces no additional instructions.
