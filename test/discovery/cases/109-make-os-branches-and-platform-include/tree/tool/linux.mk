@@ -1,0 +1,3 @@
+CC ?= gcc
+CFLAGS += -O2 -D_GNU_SOURCE
+LDLIBS +=

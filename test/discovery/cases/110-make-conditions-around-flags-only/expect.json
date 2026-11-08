@@ -1,0 +1,37 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "110-make-conditions-around-flags-only",
+  "matrix": "E2",
+  "polarity": "negative",
+  "mirrors": "the E2 trigger words without conditional build points: ifeq ($(OS),Windows_NT) wraps only variable assignments, the include is a plain file name, a recipe echoes Windows_NT, and a .mk under docs/ is included by nothing",
+  "units": [
+    {"root": "tool", "build_system": "make", "family": "native", "profile": "native",
+     "markers": ["tool/Makefile"],
+     "build_points": [
+       {"name": "all", "kind": "rule", "evidence": "tool/Makefile:11"},
+       {"name": "tool$(EXEEXT)", "kind": "rule", "evidence": "tool/Makefile:13"}
+     ],
+     "facts": {
+       "conditions": {},
+       "includes": [{"directive": "include common.mk", "evidence": "tool/Makefile:1", "candidates": ["tool/common.mk"]}]
+     }}
+  ],
+  "not_units": [],
+  "assignment": {
+    "tool/Makefile": "evidence_of:tool|make",
+    "tool/common.mk": "context:tool|make",
+    "tool/docs/example.mk": "inert",
+    "tool/docs/porting.md": "inert",
+    "tool/main.c": "evidence_of:tool|make#tool$(EXEEXT)",
+    "tool/util.c": "evidence_of:tool|make#tool$(EXEEXT)"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:tool|make.build_point:all", "ref": "T-056.2"},
+    {"check": "unit:tool|make.build_point:tool$(EXEEXT)", "ref": "T-056.2", "note": "a rule whose target name carries a variable is still one unconditional rule"},
+    {"check": "unit:tool|make.facts", "ref": "T-056.6", "note": "ifeq around assignments and a Windows_NT in a recipe echo produce no conditions; a literal include has one candidate"},
+    {"check": "assignment:tool/docs/example.mk", "ref": "T-056.2", "note": "a .mk fragment nothing includes is inert, not context of the nearest unit"},
+    {"check": "assignment:tool/main.c", "ref": "T-056.2"},
+    {"check": "assignment:tool/util.c", "ref": "T-056.2"}
+  ]
+}

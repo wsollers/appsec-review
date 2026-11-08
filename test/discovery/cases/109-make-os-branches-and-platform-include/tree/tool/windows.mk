@@ -1,0 +1,3 @@
+CC = x86_64-w64-mingw32-gcc
+CFLAGS += -O2 -DWIN32_LEAN_AND_MEAN
+LDLIBS += -lws2_32
