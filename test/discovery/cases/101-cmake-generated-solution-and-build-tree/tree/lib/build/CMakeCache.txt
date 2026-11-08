@@ -1,0 +1,5 @@
+# This is the CMakeCache file.
+# For build in directory: /home/dev/lib/build
+CMAKE_BUILD_TYPE:STRING=
+CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022
+lib_SOURCE_DIR:STATIC=/home/dev/lib

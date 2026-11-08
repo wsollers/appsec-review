@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(engine CXX)
+add_library(engine_core STATIC src/core.cpp)
+target_include_directories(engine_core PUBLIC include)
+add_executable(engine src/main.cpp)
+target_link_libraries(engine PRIVATE engine_core)
