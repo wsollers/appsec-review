@@ -1,0 +1,56 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "120-packages-beside-unreferenced-native-sources",
+  "matrix": "F3",
+  "polarity": "negative",
+  "mirrors": "the same three package shapes after their native parts were dropped: setup.py without ext_modules, a package.json without binding.gyp or gypfile, a Cargo.toml without a build script; the C/C++ files left behind are named by nothing and are orphaned findings, never attached to the package by position",
+  "units": [
+    {"root": "pyext", "build_system": "python", "family": "python", "profile": "python",
+     "markers": ["pyext/pyproject.toml", "pyext/setup.py"],
+     "build_points": [{"name": "puremod", "kind": "package", "evidence": "pyext/pyproject.toml:6"}],
+     "facts": {"languages": {"puremod": ["python"]}, "profile_gaps": {}}},
+    {"root": "addon", "build_system": "node", "family": "node", "profile": "node",
+     "markers": ["addon/package.json"],
+     "build_points": [{"name": "build", "kind": "script", "evidence": "addon/package.json:6"}],
+     "facts": {"languages": {"build": ["javascript"]}, "profile_gaps": {}}},
+    {"root": "crate", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["crate/Cargo.toml"],
+     "build_points": [{"name": "purehash", "kind": "lib", "evidence": "crate/Cargo.toml:2"}],
+     "facts": {"languages": {"purehash": ["rust"]}, "profile_gaps": {}}}
+  ],
+  "not_units": [
+    {"root": "pyext/csrc", "reason": "a loose C file under a python package: orphaned, not an extension and not a manufactured unit"},
+    {"root": "addon/src", "reason": "a loose C++ file under a node package with no binding.gyp: orphaned"},
+    {"root": "crate/csrc", "reason": "a loose C file under a crate with no build script: orphaned"}
+  ],
+  "assignment": {
+    "pyext/pyproject.toml": "evidence_of:pyext|python",
+    "pyext/setup.py": "evidence_of:pyext|python",
+    "pyext/puremod/__init__.py": "evidence_of:pyext|python#puremod",
+    "pyext/csrc/old_fastmod.c": "orphaned:no_build_point",
+    "addon/package.json": "evidence_of:addon|node",
+    "addon/index.js": "evidence_of:addon|node",
+    "addon/src/addon.cc": "orphaned:no_build_point",
+    "crate/Cargo.toml": "evidence_of:crate|cargo",
+    "crate/src/lib.rs": "evidence_of:crate|cargo#purehash",
+    "crate/csrc/hash.c": "orphaned:no_build_point"
+  },
+  "orphaned_sources": [
+    {"path": "pyext/csrc/old_fastmod.c", "language": "c", "reason": "no_build_point", "nearest_unit": "pyext"},
+    {"path": "addon/src/addon.cc", "language": "c++", "reason": "no_build_point", "nearest_unit": "addon"},
+    {"path": "crate/csrc/hash.c", "language": "c", "reason": "no_build_point", "nearest_unit": "crate"}
+  ],
+  "pending": [
+    {"check": "unit:pyext|python.build_point:puremod", "ref": "T-056.2"},
+    {"check": "unit:pyext|python.facts", "ref": "T-056.6"},
+    {"check": "unit:addon|node.build_point:build", "ref": "T-056.2"},
+    {"check": "unit:addon|node.facts", "ref": "T-056.6"},
+    {"check": "unit:crate|cargo.build_point:purehash", "ref": "T-056.2"},
+    {"check": "unit:crate|cargo.facts", "ref": "T-056.6"},
+    {"check": "assignment:pyext/puremod/__init__.py", "ref": "T-056.2"},
+    {"check": "assignment:pyext/csrc/old_fastmod.c", "ref": "T-056.2", "note": "attached by position as a native_component today; setup.py names no extension, so it is orphaned (native_components is interim, retired by T-056.2)"},
+    {"check": "assignment:addon/src/addon.cc", "ref": "T-056.2", "note": "attached by position today; no binding.gyp names it"},
+    {"check": "assignment:crate/src/lib.rs", "ref": "T-056.2"},
+    {"check": "orphaned_sources", "ref": "T-056.2", "note": "the python and node leftovers are missing from the orphan list; only the crate's is reported"}
+  ]
+}

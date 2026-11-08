@@ -1,0 +1,68 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "119-packaging-tools-driving-native-compiles",
+  "matrix": "F3",
+  "polarity": "positive",
+  "mirrors": "three packages whose own packaging tool compiles C/C++ inside the package build: a Python package with a setup.py ext_modules extension, a Node package with a binding.gyp addon, a Rust crate with a cc build script; one unit each, build points typed by language, the package profile is the demand and the C sources are evidence of the point that compiles them",
+  "units": [
+    {"root": "pyext", "build_system": "python", "family": "python", "profile": "python",
+     "markers": ["pyext/pyproject.toml", "pyext/setup.py"],
+     "build_points": [
+       {"name": "fastmod", "kind": "package", "evidence": "pyext/pyproject.toml:6"},
+       {"name": "fastmod._fastmod", "kind": "c_extension", "evidence": "pyext/setup.py:5"}
+     ],
+     "facts": {"languages": {"fastmod": ["python"], "fastmod._fastmod": ["c"]}, "profile_gaps": {}}},
+    {"root": "addon", "build_system": "node", "family": "node", "profile": "node",
+     "markers": ["addon/package.json"],
+     "build_points": [
+       {"name": "build", "kind": "script", "evidence": "addon/package.json:8"},
+       {"name": "addon_native", "kind": "gyp_target", "evidence": "addon/binding.gyp:4"}
+     ],
+     "facts": {"languages": {"build": ["javascript"], "addon_native": ["c++"]}, "profile_gaps": {}}},
+    {"root": "crate", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["crate/Cargo.toml"],
+     "build_points": [
+       {"name": "fasthash", "kind": "lib", "evidence": "crate/Cargo.toml:2"},
+       {"name": "build-script-build", "kind": "build_script", "evidence": "crate/Cargo.toml:5"}
+     ],
+     "facts": {"languages": {"fasthash": ["rust"], "build-script-build": ["rust", "c"]}, "profile_gaps": {}}}
+  ],
+  "not_units": [],
+  "assignment": {
+    "pyext/pyproject.toml": "evidence_of:pyext|python",
+    "pyext/setup.py": "evidence_of:pyext|python",
+    "pyext/fastmod/__init__.py": "evidence_of:pyext|python#fastmod",
+    "pyext/src/fastmod.c": "evidence_of:pyext|python#fastmod._fastmod",
+    "addon/package.json": "evidence_of:addon|node",
+    "addon/package-lock.json": "context:addon|node",
+    "addon/binding.gyp": "evidence_of:addon|node",
+    "addon/index.js": "evidence_of:addon|node",
+    "addon/src/addon.cc": "evidence_of:addon|node#addon_native",
+    "crate/Cargo.toml": "evidence_of:crate|cargo",
+    "crate/Cargo.lock": "context:crate|cargo",
+    "crate/build.rs": "evidence_of:crate|cargo#build-script-build",
+    "crate/csrc/hash.c": "evidence_of:crate|cargo#build-script-build",
+    "crate/src/lib.rs": "evidence_of:crate|cargo#fasthash"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:pyext|python.build_point:fastmod", "ref": "T-056.2"},
+    {"check": "unit:pyext|python.build_point:fastmod._fastmod", "ref": "T-056.6", "note": "an Extension in ext_modules is a C build point of the python unit"},
+    {"check": "unit:pyext|python.facts", "ref": "T-056.6"},
+    {"check": "unit:addon|node.build_point:build", "ref": "T-056.2"},
+    {"check": "unit:addon|node.build_point:addon_native", "ref": "T-056.6", "note": "a binding.gyp target is a C++ build point of the node unit"},
+    {"check": "unit:addon|node.facts", "ref": "T-056.6"},
+    {"check": "unit:crate|cargo.build_point:fasthash", "ref": "T-056.2"},
+    {"check": "unit:crate|cargo.build_point:build-script-build", "ref": "T-056.6", "note": "build = \"build.rs\" with a cc build-dependency is a build point that compiles C"},
+    {"check": "unit:crate|cargo.facts", "ref": "T-056.6"},
+    {"check": "assignment:pyext/fastmod/__init__.py", "ref": "T-056.2"},
+    {"check": "assignment:pyext/src/fastmod.c", "ref": "T-056.6", "note": "bound to the extension that names it, not to the unit by position (native_components is interim)"},
+    {"check": "assignment:addon/package-lock.json", "ref": "T-056.2", "note": "a lockfile is context; the node family's .json source suffix claims it as evidence today"},
+    {"check": "assignment:addon/binding.gyp", "ref": "T-056.6", "note": "a descriptor that names build points is evidence, not context"},
+    {"check": "assignment:addon/src/addon.cc", "ref": "T-056.6"},
+    {"check": "assignment:crate/build.rs", "ref": "T-056.6"},
+    {"check": "assignment:crate/csrc/hash.c", "ref": "T-056.6", "note": "a C file the build script compiles is reported as orphaned today (nearest unit 'different family')"},
+    {"check": "assignment:crate/src/lib.rs", "ref": "T-056.2"},
+    {"check": "orphaned_sources", "ref": "T-056.6", "note": "no orphan: build.rs names csrc/hash.c"}
+  ]
+}

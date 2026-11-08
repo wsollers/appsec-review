@@ -1,0 +1,9 @@
+[package]
+name = "fasthash"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+links = "fasthash"
+
+[build-dependencies]
+cc = "1.0"
