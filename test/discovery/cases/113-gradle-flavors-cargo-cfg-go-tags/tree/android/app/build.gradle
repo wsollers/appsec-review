@@ -1,0 +1,24 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'demo'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'demo.app'
+        minSdk 24
+        targetSdk 34
+    }
+    flavorDimensions += 'tier'
+    productFlavors {
+        free {
+            dimension 'tier'
+            applicationIdSuffix '.free'
+        }
+        paid {
+            dimension 'tier'
+            applicationIdSuffix '.paid'
+        }
+    }
+}

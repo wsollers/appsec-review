@@ -1,0 +1,90 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "113-gradle-flavors-cargo-cfg-go-tags",
+  "matrix": "E4",
+  "polarity": "positive",
+  "mirrors": "three roots with descriptor-level conditions: an Android Gradle module with free/paid product flavors and per-flavor source sets, a Cargo package whose path dependency is declared under [target.'cfg(windows)'], and a Go main package with //go:build tags and a _windows.go file",
+  "units": [
+    {"root": "android", "build_system": "gradle", "family": "java", "profile": "android",
+     "markers": ["android/build.gradle", "android/settings.gradle"],
+     "build_points": [{"name": "app", "kind": "module", "evidence": "android/settings.gradle:2"}],
+     "facts": {
+       "modules": ["app"],
+       "product_flavors": {"app": ["free", "paid"]},
+       "conditions": {},
+       "source_conditions": {
+         "android/app/src/free/java/demo/Flavor.java": "productFlavor == free",
+         "android/app/src/paid/java/demo/Flavor.java": "productFlavor == paid"
+       }
+     }},
+    {"root": "crate", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["crate/Cargo.toml"],
+     "build_points": [{"name": "tool", "kind": "bin", "evidence": "crate/Cargo.toml:6"}],
+     "facts": {
+       "conditions": {},
+       "path_dependencies": [{"name": "winshim", "path": "crate/winshim", "condition": "cfg(windows)", "evidence": "crate/Cargo.toml:10"}]
+     }},
+    {"root": "crate/winshim", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["crate/winshim/Cargo.toml"],
+     "build_points": [{"name": "winshim", "kind": "lib", "evidence": "crate/winshim/Cargo.toml:6"}]},
+    {"root": "gotool", "build_system": "go", "family": "go", "profile": "go",
+     "markers": ["gotool/go.mod"],
+     "build_points": [{"name": "example.local/gotool", "kind": "main_package", "evidence": "gotool/main.go:1"}],
+     "facts": {
+       "conditions": {},
+       "source_conditions": {
+         "gotool/exp.go": "experimental",
+         "gotool/exp_stub.go": "!experimental",
+         "gotool/sys_unix.go": "!windows",
+         "gotool/sys_windows.go": "GOOS == windows"
+       }
+     }}
+  ],
+  "not_units": [
+    {"root": "android/app", "build_system": "gradle", "marker": "android/app/build.gradle", "role": "evidence_of:android|gradle#app",
+     "reason": "a module of the Gradle build rooted at android/ (settings.gradle includes it; the root has a build file)"}
+  ],
+  "assignment": {
+    "android/settings.gradle": "evidence_of:android|gradle",
+    "android/build.gradle": "evidence_of:android|gradle",
+    "android/gradle.properties": "context:android|gradle",
+    "android/gradle/wrapper/gradle-wrapper.properties": "context:android|gradle",
+    "android/app/build.gradle": "evidence_of:android|gradle#app",
+    "android/app/src/main/java/demo/Main.java": "evidence_of:android|gradle#app",
+    "android/app/src/free/java/demo/Flavor.java": "evidence_of:android|gradle#app",
+    "android/app/src/paid/java/demo/Flavor.java": "evidence_of:android|gradle#app",
+    "crate/Cargo.toml": "evidence_of:crate|cargo",
+    "crate/Cargo.lock": "context:crate|cargo",
+    "crate/src/main.rs": "evidence_of:crate|cargo#tool",
+    "crate/winshim/Cargo.toml": "evidence_of:crate/winshim|cargo",
+    "crate/winshim/src/lib.rs": "evidence_of:crate/winshim|cargo#winshim",
+    "gotool/go.mod": "evidence_of:gotool|go",
+    "gotool/main.go": "evidence_of:gotool|go#example.local/gotool",
+    "gotool/sys_windows.go": "evidence_of:gotool|go#example.local/gotool",
+    "gotool/sys_unix.go": "evidence_of:gotool|go#example.local/gotool",
+    "gotool/exp.go": "evidence_of:gotool|go#example.local/gotool",
+    "gotool/exp_stub.go": "evidence_of:gotool|go#example.local/gotool"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:android|gradle.profile", "ref": "T-056.6", "note": "an Android application module demands the android profile; the android descriptor facts are attached by the catalog, not by discovery, so the unit alone reads as java"},
+    {"check": "unit:android|gradle.build_point:app", "ref": "T-056.2", "note": "Gradle modules from settings.gradle"},
+    {"check": "unit:android|gradle.facts", "ref": "T-056.6", "note": "product flavors and which source sets each flavor compiles"},
+    {"check": "unit:crate|cargo.build_point:tool", "ref": "T-056.2"},
+    {"check": "unit:crate|cargo.facts", "ref": "T-056.6", "note": "a path dependency under [target.'cfg(windows)'] is recorded with its cfg, never as unconditional"},
+    {"check": "unit:crate/winshim|cargo.build_point:winshim", "ref": "T-056.2"},
+    {"check": "unit:gotool|go.build_point:example.local/gotool", "ref": "T-056.2"},
+    {"check": "unit:gotool|go.facts", "ref": "T-056.6", "note": "//go:build lines and GOOS file-name suffixes are per-source conditions"},
+    {"check": "assignment:android/app/build.gradle", "ref": "T-056.2", "note": "the module's build file is evidence of the module build point, not context"},
+    {"check": "assignment:android/app/src/main/java/demo/Main.java", "ref": "T-056.2"},
+    {"check": "assignment:android/app/src/free/java/demo/Flavor.java", "ref": "T-056.6"},
+    {"check": "assignment:android/app/src/paid/java/demo/Flavor.java", "ref": "T-056.6"},
+    {"check": "assignment:crate/src/main.rs", "ref": "T-056.2"},
+    {"check": "assignment:crate/winshim/src/lib.rs", "ref": "T-056.2"},
+    {"check": "assignment:gotool/main.go", "ref": "T-056.2"},
+    {"check": "assignment:gotool/sys_windows.go", "ref": "T-056.6", "note": "a GOOS-suffixed file is claimed by the main package with its condition, not dropped"},
+    {"check": "assignment:gotool/sys_unix.go", "ref": "T-056.6"},
+    {"check": "assignment:gotool/exp.go", "ref": "T-056.6"},
+    {"check": "assignment:gotool/exp_stub.go", "ref": "T-056.6"}
+  ]
+}

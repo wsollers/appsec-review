@@ -1,0 +1,11 @@
+[package]
+name = "tool"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tool"
+path = "src/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+winshim = { path = "winshim" }

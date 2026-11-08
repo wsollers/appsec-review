@@ -1,0 +1,8 @@
+[package]
+name = "tool"
+version = "0.1.0"
+edition = "2021"
+
+# [target.'cfg(windows)'.dependencies] was dropped; shim is used on every platform
+[dependencies]
+shim = { path = "shim" }

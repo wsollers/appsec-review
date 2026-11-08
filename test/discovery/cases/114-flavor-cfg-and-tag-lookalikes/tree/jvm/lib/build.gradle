@@ -1,0 +1,11 @@
+// productFlavors { free {} paid {} } was removed when this stopped being an Android module
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+sourceSets {
+    main {
+        java.srcDirs = ['src/main/java']
+    }
+}
