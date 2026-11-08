@@ -244,14 +244,58 @@ def fetch_artifact(artifact: dict[str, Any], context: Path, log, opener=urllib.r
     return "fetched"
 
 
-def fetch_one(item: dict[str, Any], log) -> None:
+def fetch_one(item: dict[str, Any], log) -> dict[str, int]:
+    """Fetch the image's locked assets; returns ``{"current", "fetched", "bytes"}`` counts."""
+    counts = {"current": 0, "fetched": 0, "bytes": 0}
     lock_name = item.get("assets_lock")
     if not lock_name:
-        return
+        return counts
     context = safe_path(item["context"])
     lock = json.loads(safe_path(lock_name).read_text(encoding="utf-8"))
     for artifact in lock.get("artifacts", []):
-        fetch_artifact(artifact, context, log)
+        counts[fetch_artifact(artifact, context, log)] += 1
+        counts["bytes"] += int(artifact["bytes"])
+    return counts
+
+
+_BUILDKIT_STEP = re.compile(r"^#(?P<n>\d+) (?P<rest>.*)$")
+_BUILDKIT_DONE = re.compile(r"^DONE (?P<seconds>\d+(?:\.\d+)?)s$")
+
+
+def parse_buildkit_log(text: str) -> dict[str, Any]:
+    """Step telemetry from a ``--progress=plain`` BuildKit log.
+
+    Every step opens with ``#N [stage k/m] <instruction>`` (or ``#N <name>`` for internal steps) and
+    closes with ``#N CACHED``, ``#N DONE 1.2s`` or ``#N ERROR …``. Steps that never close (a timeout)
+    are counted as ``unfinished``. The counts never fail a build: a log this parser does not
+    understand yields zeros.
+    """
+    names: dict[str, str] = {}
+    cached: set[str] = set()
+    executed: dict[str, float] = {}
+    errored: set[str] = set()
+    for line in text.splitlines():
+        match = _BUILDKIT_STEP.match(line.rstrip())
+        if not match:
+            continue
+        number, rest = match.group("n"), match.group("rest")
+        if rest == "CACHED":
+            cached.add(number)
+        elif rest.startswith("ERROR"):
+            errored.add(number)
+        elif (done := _BUILDKIT_DONE.match(rest)):
+            executed[number] = max(executed.get(number, 0.0), float(done.group("seconds")))
+        elif number not in names and rest and not rest.startswith(("sha256:", "resolve ", "extracting", "transferring")):
+            names[number] = rest
+    finished = cached | set(executed) | errored
+    slowest = max(executed.items(), key=lambda kv: kv[1], default=None)
+    return {
+        "steps": len(names), "cached_steps": len(cached & set(names)), "executed_steps": len(set(executed) & set(names)),
+        "errored_steps": len(errored), "unfinished_steps": len(set(names) - finished),
+        "executed_seconds": round(sum(executed.values()), 3),
+        "slowest_step": ({"step": names.get(slowest[0], f"#{slowest[0]}"), "seconds": round(slowest[1], 3)}
+                         if slowest else None),
+    }
 
 
 def docker_binary() -> str:
@@ -286,9 +330,11 @@ def build_one(item: dict[str, Any], run_dir: Path, *,
     try:
         fetch_log.parent.mkdir(parents=True, exist_ok=True)
         with fetch_log.open("w", encoding="utf-8", newline="\n") as log:
-            fetch_one(item, log)
+            result["assets"] = fetch_one(item, log)
+        result["fetch_seconds"] = round(time.monotonic() - started, 3)
+        build_started = time.monotonic()
         argv = [docker_binary(), "build", f"--network={item.get('build_network', 'none')}",
-                "--pull=false", "--file",
+                "--pull=false", "--progress=plain", "--file",
                 str(context / item["dockerfile"]), "--tag", item["tag"]]
         for key, value in sorted(item.get("build_args", {}).items()):
             argv += ["--build-arg", f"{key}={value}"]
@@ -300,16 +346,22 @@ def build_one(item: dict[str, Any], run_dir: Path, *,
         except subprocess.TimeoutExpired:
             result["error"] = f"docker build timed out after {timeout_seconds} seconds"
             return result
+        finally:
+            result["build_seconds"] = round(time.monotonic() - build_started, 3)
+            if build_log.is_file():
+                result["steps"] = parse_buildkit_log(build_log.read_text(encoding="utf-8", errors="replace"))
         if completed.returncode != 0:
             result["error"] = f"docker build exited {completed.returncode}"
             return result
         inspect = subprocess.run([docker_binary(), "image", "inspect", item["tag"],
-                                  "--format", "{{.Id}}"], cwd=ROOT, capture_output=True,
+                                  "--format", "{{.Id}} {{.Size}}"], cwd=ROOT, capture_output=True,
                                  text=True, timeout=30, check=False)
-        if inspect.returncode != 0 or not inspect.stdout.strip().startswith("sha256:"):
+        fields = inspect.stdout.split()
+        if inspect.returncode != 0 or not fields or not fields[0].startswith("sha256:"):
             result["error"] = "built image digest could not be resolved"
             return result
-        result.update(status="passed", digest=inspect.stdout.strip())
+        result.update(status="passed", digest=fields[0],
+                      size_bytes=int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else None)
         return result
     except Exception as exc:  # explicit per-image failure in machine summary
         result["error"] = f"{type(exc).__name__}: {exc}"
@@ -324,6 +376,8 @@ def execute_build(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
     timeout_seconds = int(getattr(args, "timeout_seconds", BUILD_TIMEOUT_SECONDS))
     if not BUILD_TIMEOUT_RANGE[0] <= timeout_seconds <= BUILD_TIMEOUT_RANGE[1]:
         raise ValueError(f"build timeout must be within {BUILD_TIMEOUT_RANGE}: {timeout_seconds}")
+    started_at = datetime.now(UTC).isoformat(timespec="seconds")
+    wall_started = time.monotonic()
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + f"-{os.getpid()}"
     run_dir = RUN_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -367,19 +421,108 @@ def execute_build(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
                 failed = failed or results[image_id]["status"] != "passed"
                 print(f"{results[image_id]['status'].upper():7} {image_id}")
     summary = {
-        "schema": "appsec-review/container-build-summary/1", "run_id": run_id,
+        "schema": "appsec-review/container-build-summary/2", "run_id": run_id,
         "catalog": str(CATALOG.relative_to(ROOT)), "jobs": jobs, "timeout_seconds": timeout_seconds,
         "continue_on_error": bool(args.continue_on_error),
+        "started_at": started_at, "wall_seconds": round(time.monotonic() - wall_started, 3),
         "results": [results[image_id] for image_id in ordered],
     }
+    summary["metrics"] = build_metrics(summary, catalog)
     summary_path = run_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     try:
         display_summary = summary_path.relative_to(ROOT)
     except ValueError:
         display_summary = summary_path
+    print(render_build_report(summary))
     print(f"summary={display_summary}")
     return 1 if any(item["status"] != "passed" for item in summary["results"]) else 0
+
+
+def build_metrics(summary: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
+    """Totals, the slowest images and the dependency critical path of one build summary.
+
+    The critical path is the dependency chain whose measured durations add up to the most: the
+    lower bound on wall time however many jobs run, so it is what to shorten. Images whose
+    dependencies are outside the summary (a partial build) are treated as roots.
+    """
+    results = {item["id"]: item for item in summary["results"]}
+    by_id = catalog["by_id"]
+    by_status: dict[str, int] = {}
+    for item in results.values():
+        by_status[item["status"]] = by_status.get(item["status"], 0) + 1
+    duration = {image_id: float(item.get("duration_seconds") or 0.0) for image_id, item in results.items()}
+    longest: dict[str, tuple[float, list[str]]] = {}
+
+    def path(image_id: str) -> tuple[float, list[str]]:
+        if image_id not in longest:
+            deps = [d for d in by_id.get(image_id, {}).get("dependencies", []) if d in results]
+            best = max((path(d) for d in deps), key=lambda pair: pair[0], default=(0.0, []))
+            longest[image_id] = (best[0] + duration[image_id], best[1] + [image_id])
+        return longest[image_id]
+
+    critical = max((path(i) for i in results), key=lambda pair: pair[0], default=(0.0, []))
+    steps = [item.get("steps") or {} for item in results.values()]
+    passed = [item for item in results.values() if item["status"] == "passed"]
+    return {
+        "images": len(results), "by_status": dict(sorted(by_status.items())),
+        "build_seconds": round(sum(float(i.get("build_seconds") or 0.0) for i in results.values()), 3),
+        "fetch_seconds": round(sum(float(i.get("fetch_seconds") or 0.0) for i in results.values()), 3),
+        "assets_fetched": sum(int((i.get("assets") or {}).get("fetched", 0)) for i in results.values()),
+        "assets_current": sum(int((i.get("assets") or {}).get("current", 0)) for i in results.values()),
+        "steps": sum(int(s.get("steps", 0)) for s in steps),
+        "cached_steps": sum(int(s.get("cached_steps", 0)) for s in steps),
+        "executed_steps": sum(int(s.get("executed_steps", 0)) for s in steps),
+        "size_bytes": sum(int(i.get("size_bytes") or 0) for i in passed),
+        "slowest": [{"id": i["id"], "seconds": round(duration[i["id"]], 3), "status": i["status"]}
+                    for i in sorted(results.values(), key=lambda i: -duration[i["id"]])[:8]],
+        "critical_path": {"seconds": round(critical[0], 3), "images": critical[1]},
+    }
+
+
+def render_build_report(summary: dict[str, Any]) -> str:
+    """The fixed, human-readable build report: one line per image, then the metrics."""
+    lines = [f"{'STATUS':7} {'SECONDS':>8} {'FETCH':>6} {'STEPS':>11} {'SIZE':>8}  IMAGE"]
+    for item in summary["results"]:
+        steps = item.get("steps") or {}
+        step_text = (f"{steps.get('cached_steps', 0)}c/{steps.get('executed_steps', 0)}x" if steps else "-")
+        size = item.get("size_bytes")
+        size_text = f"{size / 1_000_000:.0f}MB" if size else "-"
+        lines.append(f"{item['status'].upper():7} {float(item.get('duration_seconds') or 0):8.1f} "
+                     f"{float(item.get('fetch_seconds') or 0):6.1f} {step_text:>11} {size_text:>8}  {item['id']}"
+                     + (f"  -- {item['error']}" if item.get("error") else ""))
+    metrics = summary.get("metrics")
+    if metrics:
+        statuses = " ".join(f"{k}={v}" for k, v in metrics["by_status"].items())
+        lines.append(f"images={metrics['images']} {statuses} wall={summary.get('wall_seconds', 0):.1f}s "
+                     f"build={metrics['build_seconds']:.1f}s fetch={metrics['fetch_seconds']:.1f}s "
+                     f"steps cached={metrics['cached_steps']} executed={metrics['executed_steps']} "
+                     f"assets fetched={metrics['assets_fetched']} current={metrics['assets_current']} "
+                     f"size={metrics['size_bytes'] / 1_000_000:.0f}MB")
+        critical = metrics["critical_path"]
+        lines.append(f"critical path {critical['seconds']:.1f}s: " + " -> ".join(critical["images"]))
+        lines.append("slowest: " + ", ".join(f"{s['id']} {s['seconds']:.1f}s" for s in metrics["slowest"]))
+    return "\n".join(lines)
+
+
+def latest_summary_path() -> Path:
+    candidates = sorted(RUN_ROOT.glob("*/summary.json"))
+    if not candidates:
+        raise FileNotFoundError(f"no build summary under {RUN_ROOT}")
+    return candidates[-1]
+
+
+def execute_report(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
+    path = Path(args.summary) if args.summary else latest_summary_path()
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    if "metrics" not in summary:  # a summary written before schema /2
+        summary["metrics"] = build_metrics(summary, catalog)
+    if args.json:
+        print(json.dumps(summary["metrics"], indent=2, sort_keys=True))
+    else:
+        print(render_build_report(summary))
+        print(f"summary={path}")
+    return 0
 
 
 REGISTRY = Path("rules") / "registry.toml"
@@ -948,6 +1091,9 @@ def parser() -> argparse.ArgumentParser:
     listing.add_argument("ids", nargs="*")
     listing.add_argument("--json", action="store_true")
     sub.add_parser("validate")
+    report = sub.add_parser("report", help="print the fixed build report and metrics of a build summary")
+    report.add_argument("summary", nargs="?", help="a runs/container-builds/<id>/summary.json (default: the latest)")
+    report.add_argument("--json", action="store_true", help="print the metrics object only")
     packs = sub.add_parser("query-packs")
     packs.add_argument("ids", nargs="*")
     packs.add_argument("--warm", action="store_true",
@@ -989,6 +1135,8 @@ def main(argv: list[str] | None = None) -> int:
     catalog = load_catalog()
     if args.command == "query-packs":
         return query_packs(args, catalog)
+    if args.command == "report":
+        return execute_report(args, catalog)
     if args.command == "list":
         items = catalog["images"]
         if args.ids:

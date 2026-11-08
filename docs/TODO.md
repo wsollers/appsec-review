@@ -28,6 +28,7 @@ until each is rewritten into the entry format when it is next touched.
 | Id | Title | Area | State |
 | --- | --- | --- | --- |
 | T-057 | [First end-to-end review run and the break/fix loop](#t-057-first-end-to-end-review-run-and-the-breakfix-loop) | pipeline | in-progress |
+| T-058 | [Build drivers live in the shared toolchain base](#t-058-build-drivers-live-in-the-shared-toolchain-base) | containers | open |
 | T-035 | [Component layer between catalog and plan](#t-035-component-layer-between-catalog-and-plan) | topology | open |
 | T-036 | [Build-mode disposition per component at plan time](#t-036-build-mode-disposition-per-component-at-plan-time) | topology | open |
 | T-037 | [Recipe provenance: declared, canonical, inferred](#t-037-recipe-provenance-declared-canonical-inferred) | build | open |
@@ -134,6 +135,38 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** `docs/operations/run-readiness.md`, `docs/operations/recovery-repair.md`,
   `docs/architecture/deployment-image-and-source-mount.md`, `docs/processes/job-pass-checklist.md`,
   `docs/operations/acceptance-funnel.md`, `docs/operations/signing.md`.
+
+### T-058 — Build drivers live in the shared toolchain base
+
+- **State:** open (decide before T-057 Phase 0's first `build --all`, or accept one extra rebuild of
+  the toolchain chain)
+- **Area:** containers
+- **Why:** `buildenv-native-toolchain` (gcc 13.3, clang 18.1, make, pkg-config) is the base of six
+  language build environments, but the build *drivers* are installed per language: `audit-buildenv-cpp`
+  adds autoconf/automake/libtool/cmake/ninja, `audit-buildenv-php` adds autoconf/automake/libtool,
+  `tool-native-cpp` carries its own cmake, and go/python/rust-wasm/typescript have none. A Go
+  module with cgo + CMake, a Python package built with scikit-build or meson-python, a Rust crate
+  using the `cc`/`cmake` crates, or a node-gyp addon lands in a build environment without the driver
+  it needs, and the plan has no single capability table to consult. The same apt layer is also built
+  and stored several times.
+- **Scope:** move the drivers into `buildenv-native-toolchain` — autoconf, automake, libtool, cmake,
+  ninja-build, meson (needs the python3 already there), pkg-config — pinned in its `packages.lock`,
+  with version probes in `probe_argv`/`probe_expect`; drop them from `cpp` and `php`; have
+  `tool-native-cpp` build `FROM` the toolchain instead of carrying its own cmake. One image, not a
+  third tier: a separate "build-tools" layer between compilers and languages buys only the ability to
+  rebuild compilers without drivers, which never happens. **Not** in the shared base: Bazel (a JVM
+  binary with a 200 MB+ footprint that fetches rules at build time and needs a vendored repository
+  cache to work offline — a per-target decision when a target needs it, T-050), Gradle/Maven
+  (already in the JVM environments), language package managers. Separate question, not here:
+  `audit-buildenv-java`, `-dotnet` and `-android` build `FROM` ubuntu/temurin directly rather than
+  from the toolchain; whether a JVM or .NET target ever needs the native compilers decides that.
+- **Done when:** every buildenv that builds `FROM` the toolchain can run `cmake`, `ninja`, `meson`,
+  `autoreconf` and `libtool` at the pinned versions; the `cpp`/`php` Dockerfiles install nothing
+  the base has; `containers/build.py report` of the next full build shows the critical path
+  (`base-ubuntu → buildenv-native-toolchain → slowest buildenv`) no longer than before, and the
+  plan's build-mode disposition (T-036) can read one capability set for the toolchain family.
+- **Refs:** `containers/buildenv/native-toolchain/`, `containers/catalog.toml`, T-036, T-050,
+  `docs/operations/run-readiness.md` ("What triggers a rebuild").
 
 ### T-035 — Component layer between catalog and plan
 

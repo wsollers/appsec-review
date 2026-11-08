@@ -58,7 +58,12 @@ The loop (`docs/operations/recovery-repair.md`) therefore contains no `docker bu
    containers/build-all.sh --validate-only
    containers/build-all.sh build --all --jobs 4 --continue-on-error
    containers/build-all.sh smoke --all
+   python3 containers/build.py report      # per-image timings, cached/executed steps, critical path
    ```
+
+   Keep the first build's `runs/container-builds/<run-id>/summary.json`: its `metrics.critical_path`
+   and `slowest` are the evidence for any later catalog change meant to shorten builds (shared
+   build-tool layers, cache export), and the second build's report is the measurement of it.
 
    An image that fails for a reason unrelated to the run (a moved asset URL, say) is **disabled in
    configuration for the first run and recorded in the task doc**, not fixed now; T-050 is where

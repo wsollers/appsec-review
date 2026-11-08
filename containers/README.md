@@ -65,10 +65,17 @@ security commands; the application runtime always invokes `docker`.
 
 Before each build, external artifacts are downloaded over HTTPS into an ignored `downloads/`
 directory and verified against the declared byte size and SHA-256 in `assets.lock.json`. Docker build
-steps run with networking disabled. Logs and the machine-readable summary are written under
-`runs/container-builds/<run-id>/`; each result records status, duration, image id, tag, digest, and
-log paths. Any failed, blocked, or skipped image makes the command fail, including with
-`--continue-on-error`. Images that install Python wheels offline with `--require-hashes` take them
+steps run with networking disabled. Logs and the machine-readable summary
+(`appsec-review/container-build-summary/2`) are written under `runs/container-builds/<run-id>/`.
+Each result records status, image id, tag, digest, log paths and the build's telemetry: `duration_seconds`
+split into `fetch_seconds` and `build_seconds`, `assets` (`current`/`fetched` counts and bytes),
+`size_bytes`, and `steps` parsed from the `--progress=plain` BuildKit log (`steps`, `cached_steps`,
+`executed_steps`, `errored_steps`, `unfinished_steps`, `executed_seconds`, `slowest_step`). The summary's
+`metrics` object totals these and names the `slowest` images and the dependency **critical path** — the
+chain of images whose durations add up to the most, which is the lower bound on wall time at any
+`--jobs` and therefore what to shorten first. The same report is printed at the end of every build
+and by `containers/build.py report [summary.json] [--json]` (default: the latest summary). Any failed,
+blocked, or skipped image makes the command fail, including with `--continue-on-error`. Images that install Python wheels offline with `--require-hashes` take them
 from their asset lock, so a requirements bump must update the lock too;
 `tests/test_container_requirements_lock.py` checks that every `requirements.txt` pin with a locked
 wheel names that wheel's version and SHA-256.

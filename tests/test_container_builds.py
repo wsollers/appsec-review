@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import threading
@@ -277,3 +278,125 @@ def test_tool_manifest_dependency_names_the_dockerfile_final_base() -> None:
         if _final_base(dockerfile) != dependency:
             mismatches[manifest.parent.name] = (dependency, _final_base(dockerfile))
     assert mismatches == {}
+
+
+BUILDKIT_LOG = """\
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.20kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
+#2 DONE 0.0s
+
+#3 [unpack 1/3] FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
+#3 CACHED
+
+#4 [unpack 2/3] COPY downloads/gitleaks.tar.gz /tmp/asset
+#4 DONE 0.3s
+
+#5 [unpack 3/3] RUN mkdir -p /opt/tool/bin && tar -xzf /tmp/asset -C /opt/tool/bin gitleaks
+#5 1.204 extracting
+#5 DONE 12.5s
+
+#6 [stage-1 2/3] COPY --from=unpack /opt/tool/bin/gitleaks /opt/tool/bin/gitleaks
+#6 CACHED
+
+#7 [stage-1 3/3] RUN /opt/tool/bin/gitleaks version 2>&1 | grep -F "8.21.2"
+#7 0.412 v8.21.2
+#7 DONE 0.6s
+
+#8 exporting to image
+#8 exporting layers done
+#8 DONE 0.4s
+"""
+
+
+def test_buildkit_log_telemetry_counts_cached_and_executed_steps() -> None:
+    steps = container_build.parse_buildkit_log(BUILDKIT_LOG)
+    assert steps["steps"] == 8 and steps["cached_steps"] == 2 and steps["executed_steps"] == 6
+    assert steps["errored_steps"] == 0 and steps["unfinished_steps"] == 0
+    assert steps["executed_seconds"] == 13.8
+    assert steps["slowest_step"] == {"step": "[unpack 3/3] RUN mkdir -p /opt/tool/bin && tar -xzf /tmp/asset -C /opt/tool/bin gitleaks",
+                                     "seconds": 12.5}
+    truncated = BUILDKIT_LOG.split("#7 DONE")[0]  # a build that timed out inside step 7
+    assert container_build.parse_buildkit_log(truncated)["unfinished_steps"] == 1  # #7 never closes
+    assert container_build.parse_buildkit_log("not a buildkit log\n") == {
+        "steps": 0, "cached_steps": 0, "executed_steps": 0, "errored_steps": 0, "unfinished_steps": 0,
+        "executed_seconds": 0.0, "slowest_step": None}
+
+
+def test_build_one_records_fetch_and_build_timings_steps_and_image_size(monkeypatch, tmp_path: Path) -> None:
+    item = container_build.load_catalog()["by_id"]["tool-gitleaks"]
+    monkeypatch.setattr(container_build, "fetch_one", lambda item, log: {"current": 1, "fetched": 0, "bytes": 1000})
+
+    def build(argv, log, timeout):
+        assert "--progress=plain" in argv
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(BUILDKIT_LOG, encoding="utf-8")
+        return subprocess.CompletedProcess(argv, 0)
+
+    def inspect(argv, **kwargs):
+        assert argv[-1] == "{{.Id}} {{.Size}}"
+        return subprocess.CompletedProcess(argv, 0, stdout="sha256:" + "ab" * 32 + " 123456789\n", stderr="")
+
+    monkeypatch.setattr(container_build, "run_logged", build)
+    monkeypatch.setattr(container_build.subprocess, "run", inspect)
+    result = container_build.build_one(item, tmp_path, timeout_seconds=60)
+    assert result["status"] == "passed" and result["digest"] == "sha256:" + "ab" * 32
+    assert result["size_bytes"] == 123456789 and result["assets"] == {"current": 1, "fetched": 0, "bytes": 1000}
+    assert result["steps"]["cached_steps"] == 2 and result["steps"]["executed_steps"] == 6
+    assert 0 <= result["fetch_seconds"] <= result["duration_seconds"]
+    assert 0 <= result["build_seconds"] <= result["duration_seconds"]
+
+
+def _fake_results(durations: dict[str, float], statuses: dict[str, str] | None = None) -> list[dict]:
+    statuses = statuses or {}
+    return [{"id": image_id, "tag": f"appsec-review/{image_id}", "status": statuses.get(image_id, "passed"),
+             "duration_seconds": seconds, "build_seconds": seconds * 0.9, "fetch_seconds": seconds * 0.1,
+             "digest": "sha256:fixture", "fetch_log": None, "build_log": None, "size_bytes": 1_000_000,
+             "assets": {"current": 1, "fetched": 1, "bytes": 10},
+             "steps": {"steps": 4, "cached_steps": 1, "executed_steps": 3, "errored_steps": 0,
+                       "unfinished_steps": 0, "executed_seconds": seconds, "slowest_step": None}}
+            for image_id, seconds in durations.items()]
+
+
+def test_build_metrics_find_the_dependency_critical_path_not_the_slowest_image() -> None:
+    catalog = container_build.load_catalog()
+    # base-ubuntu -> buildenv-native-toolchain -> audit-buildenv-cpp is a chain of 10 + 100 + 50 = 160 s;
+    # tool-svf alone takes 150 s but its chain (tool-native-cpp 5 s) is shorter.
+    summary = {"results": _fake_results({"base-ubuntu": 10, "buildenv-native-toolchain": 100,
+                                          "audit-buildenv-cpp": 50, "tool-native-cpp": 5, "tool-svf": 150,
+                                          "base-python": 3, "tool-zizmor": 2})}
+    metrics = container_build.build_metrics(summary, catalog)
+    assert metrics["critical_path"] == {"seconds": 160.0, "images": ["base-ubuntu", "buildenv-native-toolchain", "audit-buildenv-cpp"]}
+    assert metrics["slowest"][0] == {"id": "tool-svf", "seconds": 150.0, "status": "passed"}
+    assert metrics["images"] == 7 and metrics["by_status"] == {"passed": 7}
+    assert metrics["cached_steps"] == 7 and metrics["executed_steps"] == 21
+    assert metrics["assets_fetched"] == 7 and metrics["size_bytes"] == 7_000_000
+    assert metrics["build_seconds"] == round(320 * 0.9, 3)
+
+
+def test_execute_build_writes_schema_2_summary_with_metrics_and_prints_the_report(monkeypatch, tmp_path: Path, capsys) -> None:
+    catalog = container_build.load_catalog()
+    monkeypatch.setattr(container_build, "RUN_ROOT", tmp_path)
+
+    def fake_build(item, run_dir, **_options):
+        return _fake_results({item["id"]: 1.5})[0]
+
+    monkeypatch.setattr(container_build, "build_one", fake_build)
+    args = argparse.Namespace(ids=["tool-gitleaks"], all=False, jobs=2, continue_on_error=False)
+    assert container_build.execute_build(args, catalog) == 0
+    summary = json.loads(next(tmp_path.glob("*/summary.json")).read_text())
+    assert summary["schema"] == "appsec-review/container-build-summary/2"
+    assert summary["metrics"]["critical_path"]["images"] == ["base-ubuntu", "tool-gitleaks"]
+    assert summary["wall_seconds"] >= 0 and summary["started_at"].endswith("+00:00")
+    out = capsys.readouterr().out
+    assert "critical path 3.0s: base-ubuntu -> tool-gitleaks" in out
+    assert re.search(r"^PASSED\s+1\.5\s+0\.2\s+1c/3x\s+1MB\s+tool-gitleaks$", out, re.M)
+    # `report` re-reads the summary; a schema-1 summary gets metrics computed on the fly.
+    code = container_build.main(["report", str(next(tmp_path.glob("*/summary.json"))), "--json"])
+    assert code == 0 and json.loads(capsys.readouterr().out)["images"] == 2
+    old = {"schema": "appsec-review/container-build-summary/1", "results": _fake_results({"base-ubuntu": 2})}
+    (tmp_path / "old.json").write_text(json.dumps(old), encoding="utf-8")
+    assert container_build.main(["report", str(tmp_path / "old.json")]) == 0
+    assert "critical path 2.0s: base-ubuntu" in capsys.readouterr().out
