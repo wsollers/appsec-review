@@ -493,7 +493,14 @@ until each is rewritten into the entry format when it is next touched.
   entries, the case matrix (A single systems and look-alikes, B nesting, C parallel systems, D
   cross-tree, E conditional, F multi-language, G scale/hostile) and the sub-items T-056.1–.7
   (harness; build points; loose sources become source-only scopes; the matrix in three tranches).
-  `native_components` from job pass 05 is interim and retired by T-056.2.
+  `native_components` from job pass 05 is interim and retired by T-056.2. Progress: T-056.1 done,
+  T-056.2 extractors done (`jobs/build_points.py`, 2026-11-08), T-056.3 done in discovery/catalog;
+  cases 010–120 written (73 cases) with strict `pending` entries; plan §2.1 (2026-11-08) records
+  the contract decisions the first tranche raised — a root that drives members is the unit and the
+  members are its build points (`drives`), parallel systems at one root both exist with a
+  `capture_authority`, solution family follows the listed projects, generated trees are never
+  units, the context/evidence/inert name tables, the fact vocabulary — which T-056.4/.5/.6
+  implement next.
 - **Done when:** every case in the matrix has no `pending` entry and `build-systems.json` carries
   build points with evidence for every unit; the composite monorepo's xfails are re-expressed as
   `pending` entries or closed.
