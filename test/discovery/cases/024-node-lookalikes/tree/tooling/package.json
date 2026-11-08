@@ -1,0 +1,7 @@
+{
+  "name": "repo-tooling",
+  "private": true,
+  "devDependencies": {
+    "prettier": "^3.2.0"
+  }
+}

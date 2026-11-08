@@ -1,0 +1,13 @@
+{
+  "name": "web-app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

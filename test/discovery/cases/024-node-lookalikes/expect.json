@@ -1,0 +1,48 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "024-node-lookalikes",
+  "matrix": "A7",
+  "polarity": "negative",
+  "mirrors": "package.json files that are not roots: an installed dependency under node_modules/ (with npm's .package-lock.json install record), and a tooling-only manifest with no scripts and no main; a loose script outside any package is source-only JavaScript",
+  "units": [
+    {"root": "app", "build_system": "node", "family": "node", "profile": "node",
+     "markers": ["app/package.json"],
+     "build_points": [
+       {"name": "app", "kind": "package", "evidence": "app/package.json:2"},
+       {"name": "build", "kind": "script", "evidence": "app/package.json:6"}
+     ]}
+  ],
+  "not_units": [
+    {"root": "app/node_modules/left-pad", "build_system": "node", "marker": "app/node_modules/left-pad/package.json", "role": "context:app|node",
+     "reason": "an installed dependency under node_modules is the consuming package's installed tree, read by its build and never dispatched"},
+    {"root": "tooling", "build_system": "node", "marker": "tooling/package.json", "role": "inert",
+     "reason": "no scripts and no main: a manifest that only pins developer tooling has nothing to build"}
+  ],
+  "assignment": {
+    "app/package.json": "evidence_of:app|node",
+    "app/package-lock.json": "context:app|node",
+    "app/src/index.js": "evidence_of:app|node#app",
+    "app/scripts/bundle.js": "evidence_of:app|node#build",
+    "app/node_modules/.package-lock.json": "context:app|node",
+    "app/node_modules/left-pad/package.json": "context:app|node",
+    "app/node_modules/left-pad/index.js": "context:app|node",
+    "tooling/package.json": "inert",
+    "tooling/.prettierrc": "inert",
+    "scripts/release.js": "source_only:javascript"
+  },
+  "source_only_scopes": [{"root": "scripts", "language": "javascript"}],
+  "pending": [
+    {"check": "unit:app|node.build_point:app", "ref": "T-056.2"},
+    {"check": "unit:app|node.build_point:build", "ref": "T-056.2"},
+    {"check": "not_unit:app/node_modules/left-pad|node", "ref": "T-056.4", "note": "node_modules is an installed tree, not target source"},
+    {"check": "not_unit:tooling|node", "ref": "T-056.4", "note": "unit-ness needs a build point: a script or an entry point"},
+    {"check": "assignment:app/package-lock.json", "ref": "T-056.4", "note": "a lockfile is context, never a node source"},
+    {"check": "assignment:app/src/index.js", "ref": "T-056.2", "note": "the package main binds to the package build point"},
+    {"check": "assignment:app/scripts/bundle.js", "ref": "T-056.2", "note": "the file the build script runs binds to that script"},
+    {"check": "assignment:app/node_modules/.package-lock.json", "ref": "T-056.4"},
+    {"check": "assignment:app/node_modules/left-pad/package.json", "ref": "T-056.4"},
+    {"check": "assignment:app/node_modules/left-pad/index.js", "ref": "T-056.4"},
+    {"check": "assignment:tooling/package.json", "ref": "T-056.4"},
+    {"check": "source_only_scopes", "ref": "T-056.4", "note": "source-only scopes are computed for .py and .php only; JavaScript without a package build has a scope too (plan section 2.2)"}
+  ]
+}

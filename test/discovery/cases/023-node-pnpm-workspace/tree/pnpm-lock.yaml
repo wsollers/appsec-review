@@ -1,0 +1,27 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.4.5
+
+  packages/core: {}
+
+  packages/ui:
+    dependencies:
+      '@mono/core':
+        specifier: workspace:*
+        version: link:../core
+
+packages:
+
+  typescript@5.4.5:
+    resolution: {integrity: sha512-AAAA}
+    engines: {node: '>=14.17'}
+    hasBin: true
