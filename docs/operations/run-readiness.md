@@ -86,10 +86,21 @@ The loop (`docs/operations/recovery-repair.md`) therefore contains no `docker bu
    scripts/compile-codeql-queries.sh
    ```
 
-6. **Target.** `targets/appsec-multi-vuln` at its pinned revision (`docs/operations/test-targets.md`);
-   `APPSEC_REVIEW_TARGET=/opt/app/targets/appsec-multi-vuln` in `deploy/dagster/.env`. The first
-   runs use this target only — it is the smallest with an expectations key. CASTLE waits for a
-   working loop.
+6. **Target — and its identity, which is currently inconsistent.** `targets/appsec-multi-vuln`
+   (`docs/operations/test-targets.md`), `APPSEC_REVIEW_TARGET=/opt/app/targets/appsec-multi-vuln`
+   in `deploy/dagster/.env`. The first runs use this target only — it is the smallest with an
+   expectations key. CASTLE waits for a working loop.
+
+   Three records disagree about which commit that is, and `stepwise.py accept --tag` refuses unless
+   the target's `HEAD` equals the tag's commit: `test-targets.md` and the evaluator lock pin
+   `29943842cc0c…`; `test/acceptance/cpp-multivuln-v1/expectations.toml` says the corpus is at
+   `9acaa34035af…`; and on 2026-11-08 the remote carried **no tag `cpp-multivuln-v1` at all** (only
+   `appsec-multi-vuln-c094-v1`). Reconcile in the target repository before the stack starts, in this
+   order: confirm which commit holds the seven seeded defects the key describes
+   (`git -C targets/appsec-multi-vuln merge-base --is-ancestor 9acaa340 29943842`, and read the key's
+   paths at each); tag that commit `cpp-multivuln-v1` and push the tag; make `expectations.toml`
+   `commit`, `test-targets.md` and the lock agree with it in one commit here. Never substitute one
+   identity for another silently — the acceptance provenance records the tag and commit.
 7. **Stack** (`docs/operations/operator-scripts.md`). `scripts/stack-rebuild.sh` once (builds the
    tooling-only application image), then `scripts/stack-start.sh`, which checks health, the overlay
    and model connectivity. From here on, `scripts/stack-restart.sh --code-location-only` is the

@@ -110,11 +110,17 @@ until each is rewritten into the entry format when it is next touched.
      sign, compile the CodeQL packs, stack up on `targets/appsec-multi-vuln`, gate run through
      `job_model_connectivity` and `job_image_pin_verification`. Image enforcement stays disabled for
      the first runs. An image that fails for a reason unrelated to the run is disabled in
-     configuration and recorded, not fixed (T-050).
-  1. **Critical-path passes** (agent, in parallel with 0): `job_target_analysis_plan` (the 12
-     `OPTIONAL_PRIOR` failures block any graph run; T-035/036/037 context), `job_source_history_analysis`
-     (its typed inputs feed the plan), T-054 (`job_artifact_indexing` fails every run under the typed
-     input contract today). Each under the checklist, one commit per job.
+     configuration and recorded, not fixed (T-050). **Target identity is a Phase 0 gate**
+     (`run-readiness.md` step 6): the acceptance tag `cpp-multivuln-v1` did not exist on the target
+     remote on 2026-11-08 and the key, the runbook and the evaluator lock name two different commits;
+     `stepwise.py accept` refuses until tag, checkout and key agree.
+  1. **Critical-path passes** (agent, in parallel with 0), in dependency order:
+     `job_source_history_analysis` first (the plan's contract consumes its handoff, so its typed
+     outputs are fixed before the plan's tests pin them), then `job_target_analysis_plan` (the 12
+     `OPTIONAL_PRIOR` failures block any graph run; T-035/036/037 context), then T-054 — both
+     `job_artifact_indexing` (fails every run under the typed input contract today; the
+     `intake_target_root=False` seam exists) and `job_binary_evidence_indexing` (undeclared
+     `job_target_catalog/handoff`). Each under the checklist, one commit per job.
   2. **First run**: `stepwise.py init/next/accept` on `appsec-multi-vuln`, job by job, until a break.
   3. **The loop**, repeated until `stepwise.py system --tag cpp-multivuln-v1` scores: for each break
      `failure-replay` → reproduce in a unit test under the pass checklist for that job (a break *is*
@@ -124,7 +130,22 @@ until each is rewritten into the entry format when it is next touched.
      and test. Pass order from here is "whatever the run breaks on next".
   Standing rule: nothing in the loop rebuilds an image (`run-readiness.md`, "What triggers a
   rebuild"); if a step seems to need one, the step is wrong or the change is an image change and
-  gets its own commit. Out of scope: Windows build containers (T-041, T-042, T-043, T-049) — the
+  gets its own commit.
+  **Carry-forward from the retired fleet worktrees** (assessment of 2026-11-08; the fleet backlog
+  F00–F17 is not revived — anything kept lands through a job pass and this registry): X07's
+  production correction — `job_post_build_security_assessment` declares the CPP envelope optional
+  but `load_accepted_cpp` reads it unconditionally; make the envelope `REQUIRED`/`REJECT` without
+  making the per-scope graph outputs mandatory — goes into that job's pass with runner-produced
+  fixtures, not the historical synthetic-publication tests. The six language-build fixture
+  corrections on `ceb8ea57` (`tests/test_go_language_build.py`, `test_language_build_node.py`,
+  `test_language_build_python.py`, `test_php_language_build.py`, `test_rust_language_build.py`,
+  `test_wasm_build.py`; 57+/28−) are hints to read during `job_language_build`'s pass against the
+  T-047 baseline, never a diff to apply. X04 (four lines in `tests/handoff_fixture.py`, a handwritten
+  publication default) is dropped; its negative controls — legacy or unknown worker identity, active
+  workers and uncertain cleanup must refuse repair — are requirements of the repair-admission pass.
+  The combined candidate's test-map expansion (whole `tests/test_repair_admission.py` in a shared
+  mapping) is not inherited. Everything else in the fleet worktrees is already in `main`'s ancestry
+  or was never implemented. Out of scope: Windows build containers (T-041, T-042, T-043, T-049) — the
   first runs are Linux-only and the Windows family follows a working Linux loop; catalog work
   (T-050); unit-suite speed (T-048, measured in job pass 07: `storage.shared.safe_path` dominates
   runner-driven tests) and the baseline triage (T-047) stay the differential baseline, not blockers.
