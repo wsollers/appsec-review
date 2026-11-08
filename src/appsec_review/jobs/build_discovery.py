@@ -32,6 +32,14 @@ _MARKERS: dict[str, tuple[str, str]] = {
     "pom.xml": ("java", "maven"),
     "build.gradle": ("java", "gradle"),
     "build.gradle.kts": ("java", "gradle"),
+    # A Gradle build whose root holds only settings.gradle (modules carry the build files) is still
+    # one Gradle build, driven from that root; its modules are never independent units.
+    "settings.gradle": ("java", "gradle"),
+    "settings.gradle.kts": ("java", "gradle"),
+    # An Xcode project: the unit root is the directory holding the .xcodeproj bundle. Family
+    # ``swift`` places it under the Swift policy (tools.enable_swift): cataloged, kept out of every
+    # executable planning input while disabled, so no Linux image is ever asked to build it.
+    "project.pbxproj": ("swift", "xcodebuild"),
     "package.json": ("node", "node"),
     "pyproject.toml": ("python", "python"),
     "setup.py": ("python", "python"),
@@ -216,7 +224,50 @@ def jvm_build_command_errors(profile: str, argv: Sequence[str]) -> tuple[str, ..
 
 
 def _marker(path: PurePosixPath) -> tuple[str, str] | None:
-    return _MARKERS.get(path.name) or _SUFFIX_MARKERS.get(path.suffix.lower())
+    marker = _MARKERS.get(path.name) or _SUFFIX_MARKERS.get(path.suffix.lower())
+    if marker is not None and path.name == "project.pbxproj" and path.parent.suffix.lower() != ".xcodeproj":
+        return None
+    return marker
+
+
+def _marker_root(path: PurePosixPath) -> str:
+    """The build unit root a marker file belongs to (its directory, or the bundle's parent)."""
+    if path.name == "project.pbxproj" and path.parent.suffix.lower() == ".xcodeproj":
+        return path.parent.parent.as_posix()
+    return path.parent.as_posix()
+
+
+_NATIVE_DESCRIPTOR_SYSTEMS = frozenset({"make", "cmake", "autotools", "meson"})
+_NATIVE_SOURCE_REFERENCE = re.compile(r"(?<![\w/.-])((?:\.\./|\./)?[\w./*-]+\.(?:c|cc|cpp|cxx))(?![\w.-])")
+
+
+def _descriptor_source_references(root: str, text: str) -> list[str]:
+    """Target-relative paths of the C/C++ sources a native build descriptor names literally.
+
+    ``../src/x.c`` in ``third_party/lib/test/Makefile`` resolves to ``third_party/lib/src/x.c``; a
+    ``*`` keeps its glob so ``$(wildcard ../src/*.c)`` still binds. References that escape the target
+    are dropped.
+    """
+    import posixpath
+    values = []
+    for token in _NATIVE_SOURCE_REFERENCE.findall(text):
+        joined = posixpath.normpath(posixpath.join(root, token)) if root != "." else posixpath.normpath(token)
+        if joined.startswith("../") or joined == "..":
+            continue
+        values.append(joined)
+    return values
+
+
+def _referenced_by_native_descriptor(path: PurePosixPath,
+                                     references: Sequence[tuple[tuple[str, str, str], list[str]]]) -> tuple[str, str, str] | None:
+    """The native unit whose descriptor names ``path`` (literally or by glob), nearest root first."""
+    import fnmatch
+    target = path.as_posix()
+    owners = [key for key, names in references
+              if any(name == target or ("*" in name and fnmatch.fnmatchcase(target, name)) for name in names)]
+    if not owners:
+        return None
+    return max(owners, key=lambda key: (len(PurePosixPath(key[0]).parts), key))
 
 
 def is_build_descriptor(path: PurePosixPath) -> bool:
@@ -247,6 +298,79 @@ def _wasm_build_script(path: PurePosixPath, read_text: Callable[[str], str | Non
 
 def _component(item: Mapping[str, Any]) -> dict[str, Any]:
     return {"path": item["path"], "sha256": item["sha256"], "size_bytes": item["size_bytes"]}
+
+
+_GO_WORK_USE = re.compile(r"^\s*use\s*(?:\(\s*([^)]*)\)|(\S+))", re.M | re.S)
+
+
+def _attach_workspace_facts(units: list[dict[str, Any]], read_text: Callable[[str], str | None] | None) -> None:
+    """Record Cargo and Go workspace membership on the units involved.
+
+    Discovery states the fact (``workspace`` with ``manager``, ``role``, ``root`` and, on the root,
+    ``members``); ownership — folding members into the root as ``contained`` — is the topology
+    compiler's decision in the plan. Node workspaces are described by :func:`node_workspace`.
+    """
+    import fnmatch
+    import tomllib
+    by_key = {(unit["root"], unit["family"], unit["build_system"]): unit for unit in units}
+    for unit in list(units):
+        root = str(unit["root"])
+        if unit["family"] == "rust" and unit["build_system"] == "cargo" and read_text is not None:
+            manifest = next((m for m in unit["markers"] if PurePosixPath(str(m["path"])).name == "Cargo.toml"), None)
+            text = read_text(str(manifest["path"])) if manifest else None
+            try:
+                document = tomllib.loads(text) if text else {}
+            except tomllib.TOMLDecodeError:
+                continue
+            workspace = document.get("workspace")
+            if not isinstance(workspace, Mapping):
+                continue
+            patterns = [str(p) for p in workspace.get("members", ()) if isinstance(p, str)]
+            excluded = [str(p) for p in workspace.get("exclude", ()) if isinstance(p, str)]
+            members = []
+            for candidate in units:
+                if candidate is unit or candidate["family"] != "rust":
+                    continue
+                relative = _relative_to(str(candidate["root"]), root)
+                if relative is None:
+                    continue
+                if any(fnmatch.fnmatchcase(relative, p) for p in patterns) and \
+                        not any(fnmatch.fnmatchcase(relative, p) for p in excluded):
+                    members.append(candidate)
+            unit["workspace"] = {"manager": "cargo", "role": "root", "root": root,
+                                 "members": sorted(str(m["root"]) for m in members)}
+            for member in members:
+                member["workspace"] = {"manager": "cargo", "role": "member", "root": root}
+        elif unit["family"] == "go" and read_text is not None and any(
+                PurePosixPath(str(m["path"])).name == "go.work" for m in unit["markers"]):
+            text = read_text(next(str(m["path"]) for m in unit["markers"]
+                                  if PurePosixPath(str(m["path"])).name == "go.work")) or ""
+            uses: list[str] = []
+            for block, single in _GO_WORK_USE.findall(text):
+                for token in (block.split() if block else [single]):
+                    token = token.split("//", 1)[0].strip().strip('"')
+                    if token and not token.startswith("//"):
+                        uses.append(token)
+            members = []
+            for token in uses:
+                import posixpath
+                member_root = posixpath.normpath(posixpath.join(root, token)) if root != "." else posixpath.normpath(token)
+                member = by_key.get((member_root, "go", "go"))
+                if member is not None and member is not unit:
+                    members.append(member)
+            unit["workspace"] = {"manager": "go", "role": "root", "root": root,
+                                 "members": sorted(str(m["root"]) for m in members)}
+            for member in members:
+                member["workspace"] = {"manager": "go", "role": "member", "root": root}
+
+
+def _relative_to(path: str, root: str) -> str | None:
+    if root == ".":
+        return path if path != "." else None
+    if path == root or not path.startswith(root + "/"):
+        return None
+    return path[len(root) + 1:]
+
 
 
 def discover_build_units(files: Sequence[Mapping[str, Any]], *,
@@ -280,7 +404,7 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
                 or path.name == "package.json" and "Packages" in path.relative_to(owner).parts[:-1]):
             continue
         family, system = marker
-        root = path.parent.as_posix()
+        root = _marker_root(path)
         groups[(root, family, system)].append(item)
     for item in files:
         path = PurePosixPath(str(item["path"]))
@@ -291,16 +415,41 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
         key for key in tuple(groups) if key[2] in {"cmake", "autotools", "meson"}
     ]:
         groups.pop((root, family, "make"), None)
+    _SETTINGS = {"settings.gradle", "settings.gradle.kts"}
+    _BUILD_FILES = {"build.gradle", "build.gradle.kts"}
     gradle_roots = [PurePosixPath(root) for root, family, system in groups
                     if family == "java" and system == "gradle" and any(
                         PurePosixPath(str(item["path"])).parent == PurePosixPath(root) and
-                        PurePosixPath(str(item["path"])).name in {"settings.gradle", "settings.gradle.kts"}
-                        for item in files)]
+                        PurePosixPath(str(item["path"])).name in _SETTINGS for item in files)]
+    gradle_members: dict[str, list[str]] = defaultdict(list)
     for root, family, system in tuple(groups):
         path = PurePosixPath(root)
-        if family == "java" and system == "gradle" and any(parent != path and parent in path.parents for parent in gradle_roots):
+        owner = max((parent for parent in gradle_roots if parent != path and parent in path.parents),
+                    key=lambda value: len(value.parts), default=None)
+        if family != "java" or system != "gradle" or owner is None:
+            continue
+        if any(PurePosixPath(str(item["path"])).name in _BUILD_FILES for item in groups[(owner.as_posix(), "java", "gradle")]):
+            # The root build file drives the modules: one unit, as before.
             groups.pop((root, family, system), None)
+        else:
+            # A settings-only root: the modules stay units and the membership is stated, so the
+            # topology compiler can fold them (T-035) without discovery deciding ownership.
+            gradle_members[owner.as_posix()].append(root)
     descriptor_roots = [(PurePosixPath(root), family) for root, family, _system in groups]
+    # Sources a native descriptor names from another directory (``../src/x.c``) belong to that
+    # descriptor's build; they must never become a manufactured direct-native root of their own.
+    native_references: list[tuple[tuple[str, str, str], list[str]]] = []
+    if read_text is not None:
+        for key, markers in groups.items():
+            if key[1] != "native" or key[2] not in _NATIVE_DESCRIPTOR_SYSTEMS:
+                continue
+            names: list[str] = []
+            for marker in markers:
+                text = read_text(str(marker["path"]))
+                if text:
+                    names.extend(_descriptor_source_references(key[0], text))
+            if names:
+                native_references.append((key, names))
     for item in files:
         path = PurePosixPath(str(item["path"]))
         fallback = _SOURCE_MARKERS.get(path.suffix.lower())
@@ -329,6 +478,10 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
                 owner = max(owners, key=lambda key: (len(PurePosixPath(key[0]).parts), key))
                 components[owner].append(item)
                 continue
+            referenced = _referenced_by_native_descriptor(path, native_references)
+            if referenced is not None:
+                components[referenced].append(item)
+                continue
         parts = path.parts
         conventional = next((index for index, part in enumerate(parts[:-1])
                              if part in {"src", "source"}), None)
@@ -351,6 +504,21 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
         if native:
             values[-1]["native_components"] = [
                 _component(value) for value in sorted(native, key=lambda value: str(value["path"]))]
+        if system == "xcodebuild":
+            values[-1]["language"] = "swift"
+            values[-1]["descriptor_facts"] = {"kind": "xcode-project", "platform": "apple",
+                                              "bundles": sorted({PurePosixPath(str(item["path"])).parent.name
+                                                                 for item in ordered})}
+    _attach_workspace_facts(values, read_text)
+    for unit in values:
+        if unit["family"] == "java" and unit["build_system"] == "gradle":
+            if unit["root"] in gradle_members:
+                unit["workspace"] = {"manager": "gradle", "role": "root", "root": unit["root"],
+                                     "members": sorted(gradle_members[unit["root"]])}
+            else:
+                owner = next((root for root, members in gradle_members.items() if unit["root"] in members), None)
+                if owner is not None:
+                    unit["workspace"] = {"manager": "gradle", "role": "member", "root": owner}
     for project in engines["projects"]:
         root = str(project["root"])
         values.append({

@@ -47,6 +47,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | open |
+| T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -99,9 +100,12 @@ until each is rewritten into the entry format when it is next touched.
   nested units of a compatible family to `contained` unless they have their own configure authority
   and no ancestor driver; parse Cargo `[workspace] members`, `go.work use`, npm `workspaces`
   (`node_workspace()` already computes them) and Gradle `settings.gradle`/`project(':x')` into
-  ownership and `requires_product` relations; stop manufacturing `direct-native` roots from a
-  conventional `src/` that only a sibling Makefile compiles; make `_resolve()` accept Gradle
-  project paths containing `:`.
+  ownership and `requires_product` relations; make `_resolve()` accept Gradle project paths
+  containing `:`. *Job pass 05 (2026-11-08) landed the discovery side:* `workspace` facts
+  (`manager`, `role`, `root`, `members`) for Cargo, Go and settings-only Gradle roots, the Xcode
+  unit, and no manufactured `direct-native` root for a source a sibling descriptor names. The
+  compiler now has the facts to fold `role == member` units as `contained`; when it does, remove
+  the Gradle root-with-build-file absorption in `discover_build_units` so both Gradle shapes agree.
 - **Done when:** `tests/test_topology_fixture.py` xfails `ownership-*`, `relation-*` and
   `ownership-gradle-settings` flip to passes with their marks removed; a Barracuda slice plan shows
   tens of components, not hundreds of roots.
@@ -450,6 +454,24 @@ until each is rewritten into the entry format when it is next touched.
   post-merge failures for the same signature when their jobs come up in the pass.
 - **Done when:** the eight tests pass without weakening the undeclared-consumption check.
 - **Refs:** T-047, `src/appsec_review/runtime/inputs.py`, `src/appsec_review/runtime/consume.py`.
+
+### T-055 — Catalog gaps as records so job_target_catalog can be strict
+
+- **State:** open
+- **Area:** topology
+- **Why:** `job_target_catalog` emits free-text and `{path, reason}` gaps from the inventory,
+  engine discovery, unsupported-build detection and the four retrieval-index builders
+  (`IndexIdentity.gaps` are strings rendered by `_gap_text`), so it stays on the legacy free-text
+  list and its failures are untyped `RuntimeError`/`ValueError`s. Found in job pass 05
+  (`docs/tasks/2026-11-08-job-pass-05-target-catalog.md`).
+- **Scope:** `producer-gap/1` records at every catalog unit (path-scoped via
+  `interchange.path_gap_records`), index coverage rows carrying the record ids rather than joined
+  text, typed `CatalogError` classes, `strict_gaps=True`, and the job removed from
+  `tests/test_gap_contract.py`'s legacy list. The retrieval-index schema (`retrieval-index/2`)
+  must keep its shape or bump.
+- **Done when:** `tests/test_target_catalog_job.py::test_configured_topology_matches_the_job`
+  asserts `strict_gaps` and the legacy list shrinks by one.
+- **Refs:** T-035, `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/indexing/`.
 
 ## Legacy backlog
 

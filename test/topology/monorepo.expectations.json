@@ -10,13 +10,12 @@
     "ownership-nested-conditional": "An add_subdirectory guarded by an option() defaulting OFF leaves the child unresolved. The child has no project() and exactly one possible owner, so the contract records it as contained with the condition; it is never scheduled by default and never independent.",
     "ownership-workspace": "Cargo, Go and npm workspace members are independent roots. The workspace root is not recognized as their owner even where the descriptor package already records membership (npm workspace inventory).",
     "ownership-gradle-settings": "settings.gradle is build context, not a marker. A Gradle project whose root directory has no build.gradle yields one independent root per included module and no unit at the settings root, so a multi-module Android tree becomes two roots with two image profiles (android, java).",
-    "ownership-sibling-source": "The direct-native fallback invents a unit for C sources under a conventional src/ directory that a sibling Makefile compiles. The contract makes those sources part of the consuming unit (or leaves them unowned), never an independent compile root.",
     "workspace-materialization": "A unit's build workspace is its own root plus named dependency_files. A driver that references ../ paths needs the common ancestor of every referenced path materialized, and validate_build_recipe cannot accept dependency paths outside the unit's descriptor package, so the requirement cannot even be expressed.",
     "deterministic-recipe": "Recipes are entirely model-inferred. Canonical build systems (CMake with project(), Make default goal, a Cargo workspace, go.work, an npm build script, composer) have no deterministic recipe path, so accepted plans carry null recipes and recipe_missing refinements.",
     "build-mode-disposition": "The plan records no per-component build mode. Components that cannot or must not be built (Unity with unity.enabled=false, an Xcode project without xcodebuild, Gradle without an offline plugin cache or SDK image, a PHP tree without composer) surface as per-unit BLOCKED gaps mid-build instead of a plan-time disposition.",
-    "discovery-marker": "An Xcode project (App.xcodeproj/project.pbxproj) is not a build marker, so an iOS client is invisible to discovery and can receive no unsupported_platform disposition at all.",
     "relation-workspace-member": "Path dependencies between workspace members (Cargo path =, Go use/replace, an npm workspace dependency) are not recorded as relations in the graph, so member build order inside the workspace is unknown to the plan.",
-    "relation-gradle-module": "Gradle project(':lib') references use colon module notation; the path resolver rejects a colon, so the relation stays unresolved instead of binding the sibling module declared by settings.gradle."
+    "relation-gradle-module": "Gradle project(':lib') references use colon module notation; the path resolver rejects a colon, so the relation stays unresolved instead of binding the sibling module declared by settings.gradle.",
+    "swift-policy-disabled": "Discovery finds the Xcode project (swift/xcodebuild, language swift; job pass 05) but the plan's Swift policy (tools.enable_swift=false) removes Swift-derived units from every executable planning input, so the plan does not carry it. The unit reaches planning only when the policy is enabled; a build-mode disposition (unsupported_platform) is still owed for the source-only component."
   },
   "shapes": [
     {
@@ -74,8 +73,7 @@
       ],
       "units": [
         {"root": "tools/packer", "build_system": "make", "disposition": "independent", "owner_root": "tools/packer", "dispatch_standalone": true},
-        {"root": "common", "build_system": "direct-native", "disposition": "contained", "owner_root": "tools/packer", "dispatch_standalone": false, "may_be_absent": true,
-         "gaps": {"ownership": "ownership-sibling-source", "standalone": "ownership-sibling-source"}}
+        {"root": "common", "build_system": "direct-native", "disposition": "contained", "owner_root": "tools/packer", "dispatch_standalone": false, "may_be_absent": true}
       ],
       "relationships": []
     },
@@ -214,16 +212,20 @@
           "build_system": "xcodebuild",
           "build_mode": "unsupported_platform",
           "build_mode_reason": "xcodebuild and the iOS SDK are not available in any pinned Linux build image",
-          "required_image_profile": null,
+          "required_image_profile": "swift",
           "materialization_root": "client-ios",
           "recipe": null,
           "dispatchable": false,
-          "gaps": {"discovered": "discovery-marker", "build_mode": "build-mode-disposition"}
+          "gaps": {"discovered": "swift-policy-disabled", "build_mode": "build-mode-disposition"}
         }
+      ],
+      "absorbed_markers": [
+        {"path": "client-ios/App.xcodeproj/project.pbxproj",
+         "reason": "discovered as the swift/xcodebuild unit; the Swift policy removes it from planning while tools.enable_swift=false"}
       ],
       "units": [
         {"root": "client-ios", "build_system": "xcodebuild", "disposition": "independent", "owner_root": "client-ios", "dispatch_standalone": true,
-         "gaps": {"discovered": "discovery-marker"}}
+         "gaps": {"discovered": "swift-policy-disabled"}}
       ],
       "relationships": []
     },
@@ -243,12 +245,11 @@
           "materialization_root": "client-android",
           "recipe": null,
           "dispatchable": false,
-          "gaps": {"discovered": "ownership-gradle-settings", "build_mode": "build-mode-disposition"}
+          "gaps": {"build_mode": "build-mode-disposition"}
         }
       ],
       "units": [
-        {"root": "client-android", "build_system": "gradle", "disposition": "independent", "owner_root": "client-android", "dispatch_standalone": true,
-         "gaps": {"discovered": "ownership-gradle-settings"}},
+        {"root": "client-android", "build_system": "gradle", "disposition": "independent", "owner_root": "client-android", "dispatch_standalone": true},
         {"root": "client-android/app", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false,
          "gaps": {"ownership": "ownership-gradle-settings", "standalone": "ownership-gradle-settings"}},
         {"root": "client-android/lib", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false,

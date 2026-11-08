@@ -71,12 +71,12 @@ flips to a hard failure when the behaviour lands; the fix then removes the gap f
 | `ownership-vendored` | 2 | `server/third_party/tinylib/test` (Make, default goal `$(CC) ... ../src/tinylib.c`) is `independent` and would be dispatched standalone. Expected: `contained` by `server`. |
 | `ownership-nested-conditional` | 1 | `server/examples/hello` (no `project()`, included only under `option(SERVER_BUILD_EXAMPLES OFF)`) is `unresolved`. Expected: `contained` by `server` with the condition recorded. It is already never `independent` (hard check). |
 | `ownership-workspace` | 12 | `rust/core`, `rust/cli`, `go/shared`, `go/svc`, `web/packages/api`, `web/packages/ui` are `independent`. Expected: `contained` by their workspace root. The npm descriptor package already records the membership; the topology compiler ignores it. |
-| `ownership-gradle-settings` | 10 | `client-android` has no unit (`settings.gradle` is context, not a marker) and `:app`/`:lib` are two independent roots with two image profiles (`android`, `java`). Expected: one `gradle` component at `client-android` (profile `android`) owning both modules. |
-| `ownership-sibling-source` | 2 | `common` (only `src/util.c`, compiled by `tools/packer/Makefile`) is an `independent` `direct-native` unit. Expected: part of the consuming unit, or no unit at all. |
+| `ownership-gradle-settings` | 8 | `:app`/`:lib` are independent roots with two image profiles (`android`, `java`). Expected: `contained` by the `client-android` root. *Job pass 05 (2026-11-08):* `settings.gradle` is a marker, so the settings-only root is discovered as one `gradle` unit with profile `android` and records its modules as `workspace.members`; folding them is the topology compiler's (T-035). |
+| ~~`ownership-sibling-source`~~ | 0 | *Resolved in job pass 05:* a C/C++ source a native descriptor names from another directory (`../../common/src/util.c` in `tools/packer/Makefile`) is that unit's `native_components` entry, never a manufactured `direct-native` root; `common` has no unit, which the contract allows (`may_be_absent`). |
 | `workspace-materialization` | 1 | `tools/packer` would be materialized from `tools/packer` alone. Expected minimum root: `.` (the common ancestor of every `../` reference). A recipe cannot even express this: `validate_build_recipe` rejects `dependency_files` outside the unit's descriptor package. |
 | `deterministic-recipe` | 7 | `server`, `tools/packer`, `rust`, `go`, `web`, `website/lib`, `tools/sign` have null recipes. Expected: the canonical recipe at the component root (`cmake -S . -B build` / `cmake --build build`; `make`; `cargo build --workspace --offline`; `go build ./shared/... ./svc/...`; `npm run build`; `composer dump-autoload --no-interaction`). |
 | `build-mode-disposition` | 10 | No build action carries a build mode. Expected per component: `compiled` (A, B, C-cargo, C-go, I), `package-only` (C-npm, `website/lib`), `skipped_policy` (D, F), `unsupported_platform` (E). `website/public` already meets `source-only` through `source_only_scopes`. |
-| `discovery-marker` | 5 | `client-ios/App.xcodeproj/project.pbxproj` is not a marker; the iOS client has no unit and cannot be classified. Expected: a `swift`/`xcodebuild` unit at `client-ios`, non-dispatchable. |
+| `swift-policy-disabled` | 5 | *Replaces `discovery-marker` (job pass 05):* `project.pbxproj` under an `.xcodeproj` bundle is a marker and discovery emits a `swift`/`xcodebuild` unit (`language: swift`, profile `swift`) at `client-ios`. The plan's Swift policy (`tools.enable_swift=false`) removes Swift-derived units from executable planning, so the plan does not carry it and no Linux image is ever asked to build it; the marker is declared absorbed. The `unsupported_platform` disposition for the component is still owed (`build-mode-disposition`). |
 | `relation-workspace-member` | 3 | `rust/cli -> rust/core` (`path =`), `go/svc -> go/shared` (`use`/`replace`), `web/packages/api -> web/packages/ui` are not recorded as relations. |
 | `relation-gradle-module` | 1 | `client-android/app`'s `project(':lib')` stays an `unresolved` relation because the path resolver rejects the colon notation. |
 
@@ -85,8 +85,10 @@ Already met by the current runtime (hard checks): every marker discovered and cl
 for exactly once in a valid graph; stable `topology_id`/`bundle_identity`; `tinylib`'s `CMakeLists.txt`
 `contained` by `server`; `server`, `tools/packer`, `tools/sign`, `rust`, `go`, `web`, `website/lib`
 independent at the right roots with the right image profiles; Unity discovered as an engine project
-with profile `unity` and no inference; `website/public` a `php` source-only scope with no unit; no unit
-under `client-ios`; the npm workspace inventory (root, two members, lockfile); no cross-component
+with profile `unity` and no inference; `website/public` a `php` source-only scope with no unit; nothing
+under `client-ios` reaches the plan; the `client-android` settings-only root discovered with profile
+`android`; the npm workspace inventory (root, two members, lockfile); Cargo and Go workspace facts
+(`workspace.manager/role/root/members`) on the `rust` and `go` units; no cross-component
 scheduling edges anywhere (none are expected); no unit the expectations do not describe.
 
 ## Decisions

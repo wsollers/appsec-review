@@ -868,3 +868,91 @@ def test_native_build_capability_gap_names_each_unavailable_native_authority(uni
         assert gap is None
     else:
         assert gap is not None and gap.startswith(expected)
+
+# ---------------------------------------------------------------- job pass 05: monorepo shapes
+
+def _reader(texts: dict[str, str]):
+    return lambda path: texts.get(path)
+
+
+def test_a_settings_only_gradle_root_is_one_unit_that_names_its_modules() -> None:
+    files = [_file("client-android/settings.gradle", "include ':app', ':lib'\n"),
+             _file("client-android/app/build.gradle", "plugins { id 'com.android.application' }\n"),
+             _file("client-android/lib/build.gradle", "plugins { id 'com.android.library' }\n"),
+             _file("client-android/app/src/main/java/A.kt"), _file("client-android/lib/src/main/java/B.kt")]
+    units = {unit["root"]: unit for unit in discover_build_units(files)}
+    assert set(units) == {"client-android", "client-android/app", "client-android/lib"}
+    root = units["client-android"]
+    assert (root["family"], root["build_system"]) == ("java", "gradle")
+    assert [m["path"] for m in root["markers"]] == ["client-android/settings.gradle"]
+    assert root["workspace"] == {"manager": "gradle", "role": "root", "root": "client-android",
+                                 "members": ["client-android/app", "client-android/lib"]}
+    assert units["client-android/app"]["workspace"] == {"manager": "gradle", "role": "member", "root": "client-android"}
+    # The Kotlin sources belong to the module builds, never to a manufactured javac root.
+    assert all(unit["build_system"] != "javac" for unit in units.values())
+
+
+def test_a_gradle_root_with_its_own_build_file_still_absorbs_its_modules() -> None:
+    files = [_file("app/settings.gradle", "include ':core'\n"), _file("app/build.gradle"),
+             _file("app/core/build.gradle")]
+    units = discover_build_units(files)
+    assert [unit["root"] for unit in units] == ["app"]
+    assert "workspace" not in units[0]
+
+
+def test_an_xcode_project_is_a_swift_unit_rooted_at_the_bundles_parent_under_the_swift_policy() -> None:
+    files = [_file("client-ios/App.xcodeproj/project.pbxproj", "// !$*UTF8*$!\n"),
+             _file("client-ios/App/AppMain.swift"), _file("stray/project.pbxproj")]
+    units = discover_build_units(files)
+    [unit] = [unit for unit in units if unit["build_system"] == "xcodebuild"]
+    assert unit["root"] == "client-ios" and unit["family"] == "swift" and unit["language"] == "swift"
+    assert unit["descriptor_facts"] == {"kind": "xcode-project", "platform": "apple", "bundles": ["App.xcodeproj"]}
+    assert required_image_profile(unit) == "swift"
+    # A project.pbxproj outside an .xcodeproj bundle is not a marker.
+    assert not any(unit["root"] == "stray" for unit in units)
+    from appsec_review.swift_policy import contains_swift_derived
+    assert contains_swift_derived(unit)
+
+
+def test_a_source_a_sibling_descriptor_names_is_that_units_component_not_a_new_root() -> None:
+    makefile = "packer: main.c ../../common/src/util.c\n\t$(CC) -I../../common/include main.c ../../common/src/util.c -o packer\n"
+    files = [_file("tools/packer/Makefile", makefile), _file("tools/packer/main.c"),
+             _file("common/src/util.c"), _file("common/include/util.h"),
+             _file("lonely/src/alone.c")]
+    units = {unit["root"]: unit for unit in discover_build_units(files, read_text=_reader({"tools/packer/Makefile": makefile}))}
+    assert "common" not in units, "no manufactured direct-native root for a referenced sibling source"
+    assert [c["path"] for c in units["tools/packer"]["native_components"]] == ["common/src/util.c"]
+    # A source nothing references still gets the conventional fallback root.
+    assert units["lonely"]["build_system"] == "direct-native"
+    # Without descriptor text there is no evidence, so the fallback root is manufactured as before.
+    assert "common" in {unit["root"] for unit in discover_build_units(files)}
+
+
+def test_a_wildcard_reference_in_a_vendored_test_makefile_binds_the_sources_it_globs() -> None:
+    makefile = "SRCS := $(wildcard ../src/*.c)\ncheck: check.c $(SRCS)\n\t$(CC) -I../include check.c $(SRCS) -o check\n"
+    files = [_file("lib/CMakeLists.txt", "project(lib C)\n"), _file("lib/src/lib.c"), _file("lib/include/lib.h"),
+             _file("lib/test/Makefile", makefile), _file("lib/test/check.c")]
+    units = {unit["root"]: unit for unit in discover_build_units(
+        files, read_text=_reader({"lib/test/Makefile": makefile, "lib/CMakeLists.txt": "project(lib C)\n"}))}
+    # lib/src/lib.c is under the CMake root, so it stays with that unit (matching root wins first).
+    assert set(units) == {"lib", "lib/test"}
+    assert "native_components" not in units["lib/test"]
+
+
+def test_cargo_and_go_workspace_facts_are_recorded_without_deciding_ownership() -> None:
+    cargo = '[workspace]\nmembers = ["core", "cli", "tools/*"]\nexclude = ["tools/skip"]\n'
+    work = "go 1.24\n\nuse (\n\t./shared\n\t./svc // service\n)\n"
+    files = [_file("rust/Cargo.toml", cargo), _file("rust/core/Cargo.toml"), _file("rust/cli/Cargo.toml"),
+             _file("rust/tools/gen/Cargo.toml"), _file("rust/tools/skip/Cargo.toml"), _file("rust/other/Cargo.toml"),
+             _file("go/go.work", work), _file("go/shared/go.mod"), _file("go/svc/go.mod"), _file("go/extra/go.mod")]
+    units = {unit["root"]: unit for unit in discover_build_units(
+        files, read_text=_reader({"rust/Cargo.toml": cargo, "go/go.work": work}))}
+    assert units["rust"]["workspace"] == {"manager": "cargo", "role": "root", "root": "rust",
+                                          "members": ["rust/cli", "rust/core", "rust/tools/gen"]}
+    assert units["rust/core"]["workspace"] == {"manager": "cargo", "role": "member", "root": "rust"}
+    assert "workspace" not in units["rust/tools/skip"] and "workspace" not in units["rust/other"]
+    assert units["go"]["workspace"] == {"manager": "go", "role": "root", "root": "go", "members": ["go/shared", "go/svc"]}
+    assert units["go/svc"]["workspace"] == {"manager": "go", "role": "member", "root": "go"}
+    assert "workspace" not in units["go/extra"]
+    # Every member is still its own unit: discovery states membership, the plan decides ownership.
+    assert {"rust/core", "rust/cli", "go/shared", "go/svc"} <= set(units)
