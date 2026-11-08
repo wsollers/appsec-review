@@ -282,3 +282,33 @@ def test_build_point_evidence_is_closed_over_the_tree_and_deterministic() -> Non
     assert inventory == again, "input order never changes the result"
     [point] = _unit(inventory, ".", "cmake")["build_points"]
     assert point["sources"] == ["a.c", "b.c"], "sources are sorted so two runs compare equal"
+
+
+def test_cmake_include_resolves_through_cmake_module_path_and_builtin_modules_are_not_recorded() -> None:
+    cmake = ('project(x C)\nlist(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")\n'
+             "include(Options)\ninclude(CTest)\nadd_executable(x main.c)\n")
+    files, inventory = _inventory({"CMakeLists.txt": cmake}, "main.c", "cmake/Options.cmake", "cmake/Unused.cmake")
+    assert _unit(inventory, ".", "cmake")["includes"] == ["cmake/Options.cmake"]
+    assignment = assign_paths(files, inventory)
+    assert assignment["cmake/Options.cmake"] == "context:.|cmake" and assignment["cmake/Unused.cmake"] == "inert"
+
+
+def test_make_include_with_a_variable_makes_every_candidate_fragment_context() -> None:
+    makefile = "include $(PLATFORM).mk\napp: main.c\n\t$(CC) main.c -o app\n"
+    files, inventory = _inventory({"tool/Makefile": makefile}, "tool/main.c", "tool/linux.mk", "tool/darwin.mk", "docs/notes.mk")
+    assert _unit(inventory, "tool", "make")["includes"] == ["tool/darwin.mk", "tool/linux.mk"]
+    assignment = assign_paths(files, inventory)
+    assert assignment["tool/darwin.mk"] == "context:tool|make"
+    assert assignment["docs/notes.mk"] == "inert", "a fragment the pattern cannot name is inert"
+
+
+def test_build_outputs_under_a_unit_are_inert_never_orphans_or_roots() -> None:
+    csproj = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>\n'
+    files, inventory = _inventory({"tool/Tool.csproj": csproj}, "tool/Program.cs", "tool/obj/Debug/net8.0/Tool.AssemblyInfo.cs",
+                                  "tool/bin/Debug/net8.0/Tool.dll", "crate/src/bin/cli.rs")
+    assert inventory["orphaned_sources"] == [o for o in inventory["orphaned_sources"] if o["path"] == "crate/src/bin/cli.rs"], \
+        "generated C# is not an orphan; a plain src/bin/ is source"
+    assignment = assign_paths(files, inventory)
+    assert assignment["tool/obj/Debug/net8.0/Tool.AssemblyInfo.cs"] == "inert"
+    assert assignment["tool/bin/Debug/net8.0/Tool.dll"] == "inert"
+    assert assignment["crate/src/bin/cli.rs"] == "orphaned:no_build_point"

@@ -116,6 +116,7 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     unresolved: list[dict[str, Any]] = []
     variables: dict[str, list[str]] = {}
     by_name: dict[str, dict[str, Any]] = {}
+    module_dirs: list[str] = []
     lists = sorted(path for path in descriptors if posixpath.basename(path) == "CMakeLists.txt")
     for path in lists:
         base = posixpath.dirname(path) or "."
@@ -141,10 +142,24 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                 drives.append({"path": target or args[0], "via": "add_subdirectory", "evidence": evidence,
                                **({"condition": condition} if condition else {}), **({} if target else {"unresolved": True})})
                 continue
+            if name == "list" and len(args) >= 3 and args[0].upper() == "APPEND" and args[1] == "CMAKE_MODULE_PATH":
+                for value in args[2:]:
+                    directory = _norm(base, value.replace("${CMAKE_CURRENT_SOURCE_DIR}/", "").replace("${CMAKE_SOURCE_DIR}/", "")
+                                      .replace("${PROJECT_SOURCE_DIR}/", ""))
+                    if directory is not None:
+                        module_dirs.append(directory)
+                continue
             if name == "include" and args:
                 target = _norm(base, args[0])
                 if target is not None and target in inventory:
                     includes.append(target)
+                elif "/" not in args[0] and not args[0].startswith("$"):
+                    # include(Module) resolves through CMAKE_MODULE_PATH; a built-in module (CTest,
+                    # GNUInstallDirs) is not in the tree and is not recorded.
+                    for directory in module_dirs:
+                        candidate = f"{directory}/{args[0]}.cmake" if directory != "." else f"{args[0]}.cmake"
+                        if candidate in inventory:
+                            includes.append(candidate)
                 continue
             if name in {"add_executable", "add_library", "add_custom_target"} and args:
                 target_name = args[0]
@@ -277,8 +292,15 @@ def make_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequ
             return re.sub(r"\$\(([^()]*)\)", repl, value)
 
         for match in _MAKE_INCLUDE.finditer(text):
-            for token in expand(match.group(1)).split():
-                target = _norm(base, token)
+            for raw_token in match.group(1).split():
+                if "$(" in raw_token:
+                    # include $(PLATFORM).mk: the value is decided at build time; every file the
+                    # pattern could name is context (decision 2026-11-08, §2.1 item 9).
+                    pattern = _norm(base, re.sub(r"\$\([^()]*\)", "*", raw_token))
+                    if pattern is not None:
+                        includes.extend(_expand(pattern, inventory))
+                    continue
+                target = _norm(base, raw_token)
                 if target is not None and target in inventory:
                     includes.append(target)
         lines = text.split("\n")

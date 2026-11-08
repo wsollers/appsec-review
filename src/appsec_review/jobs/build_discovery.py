@@ -388,6 +388,20 @@ _ORPHAN_FAMILY = {**{suffix: family for suffix, (family, _system) in _SOURCE_MAR
 _DEMOTABLE_SYSTEMS = frozenset({"cmake", "make", "meson", "autotools"})
 
 
+# Build outputs under a unit root: never sources, never roots (§2.1 item 4). Installed dependency
+# trees (node_modules, vendor, Pods) are context or excluded by policy, not outputs, and are not here.
+_GENERATED_DIRS = frozenset({"obj", "CMakeFiles", "DerivedData", ".gradle"})
+
+
+def _under_generated_dir(path: str) -> bool:
+    parts = PurePosixPath(path).parts[:-1]
+    if any(part in _GENERATED_DIRS for part in parts):
+        return True
+    # MSBuild output layout bin/<Configuration>/...; a plain bin/ (src/bin/cli.rs) is source.
+    return any(part == "bin" and index + 1 < len(parts) and parts[index + 1] in {"Debug", "Release", "x64", "Win32", "ARM64"}
+               for index, part in enumerate(parts))
+
+
 def _family_of_system(system: str) -> str:
     return next((family for family, candidate in (*_MARKERS.values(), *_SUFFIX_MARKERS.values()) if candidate == system), "native")
 _DESCRIPTOR_READ_LIMIT = 48
@@ -538,7 +552,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
     for item in files:
         path = PurePosixPath(str(item["path"]))
         orphan_family = _ORPHAN_FAMILY.get(path.suffix.lower())
-        if orphan_family is None:
+        if orphan_family is None or _under_generated_dir(str(path)):
             continue
         fallback = (orphan_family, _SOURCE_MARKERS.get(path.suffix.lower(), (orphan_family, "none"))[1])
         if ".teamcity" in path.parts:
@@ -661,7 +675,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                 continue
             suffix = PurePosixPath(path).suffix.lower()
             orphan_family = _ORPHAN_FAMILY.get(suffix)
-            if orphan_family is None or orphan_family != unit["family"] or path in claimed:
+            if orphan_family is None or orphan_family != unit["family"] or path in claimed or _under_generated_dir(path):
                 continue
             if any(path.startswith(str(other["root"]) + "/") and len(str(other["root"])) > len(root) for other in values):
                 continue  # a nested unit owns the directory

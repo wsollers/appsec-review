@@ -62,7 +62,7 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
                  source_only_scopes: Iterable[Mapping[str, Any]] = (),
                  excluded: Mapping[str, str] | None = None) -> dict[str, str]:
     """Return ``{path: role}`` for every inventoried path (plus every explicitly excluded one)."""
-    from appsec_review.jobs.build_discovery import is_build_descriptor
+    from appsec_review.jobs.build_discovery import _under_generated_dir, is_build_descriptor
 
     units = list(discovery.get("units") or discovery.get("build_units") or [])
     orphans = {str(item["path"]): item for item in discovery.get("orphaned_sources") or []}
@@ -94,7 +94,7 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
             continue
         posix = PurePosixPath(path)
         suffix = posix.suffix.lower()
-        if path in demoted:
+        if path in demoted or _under_generated_dir(path):
             assignment[path] = "inert"
             continue
         if path in marker_owner:
