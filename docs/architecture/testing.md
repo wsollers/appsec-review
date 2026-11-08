@@ -125,7 +125,10 @@ These tiers are slower and depend on the host, but the same principles apply:
    `--collect-only -q` (no `tests/integration`, `tests/acceptance`, `tests/live` or
    `tests/test_live_*.py` ids).
 5. Group failures by their exception and message, not by file, and check each group against a
-   baseline commit in a separate worktree to separate pre-existing failures from regressions.
+   baseline commit in a separate worktree to separate pre-existing failures from regressions. The
+   mechanical part is the wrapper's: `scripts/run-tests.sh --write-baseline FILE` on the baseline
+   checkout, then `--baseline FILE` on yours, prints the new/fixed/unchanged differential and every
+   failing id with its `E` lines; the attribution is yours.
 6. Record each command, elapsed time and result, and name any integration, acceptance or live
    validation that is still needed.
 
@@ -139,7 +142,9 @@ substitute for fixing or reporting a failure.
 ## Operator wrapper
 
 `scripts/run-tests.sh` and `scripts/run-tests.ps1` wrap these commands for named suites and
-bounded acceptance profiles; see
+bounded acceptance profiles, and print a fixed report after every run (counts, elapsed, tests over
+10 s, every `FAILED`/`ERROR` id verbatim with its `E` lines, the log, junit and timings paths, and
+the baseline differential when asked); see
 [`../operations/operator-scripts.md#run-tests`](../operations/operator-scripts.md#run-tests).
 `--parallel` runs `--test-workers` xdist workers (default 8, never `auto`), and named suites other
 than `live` run shuffled with a printed `--shuffle-seed` (reproduce with `--shuffle-seed <n>`, opt

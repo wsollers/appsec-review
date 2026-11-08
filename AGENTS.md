@@ -166,6 +166,16 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Record each focused unit-test command, elapsed time, and result, including failures and coverage
   gaps. Identify any integration, acceptance, or live Dagster validation still needed; passing
   unit tests does not establish that those checks passed.
+- Long runs (over about a minute, multi-file sets, the full-suite differential sweep) go through
+  `scripts/run-tests.sh` (`.ps1`), which owns the base temp, the bounded worker count and the junit
+  file and prints the fixed report: counts, elapsed, tests over 10 s, every `FAILED`/`ERROR` node
+  id verbatim with its `E` lines, the log/junit/timings paths and, with `--baseline FILE`, the
+  new/fixed/unchanged differential that decides the exit code. The report classifies nothing.
+  Running and watching such a run is mechanical work: where the host offers model routing, delegate
+  it to the cheapest available model at low reasoning effort, hand it the exact `run-tests`
+  command, and have it return the report unchanged. Attribution (stale fixture, runtime regression,
+  environment), fixes and expectation changes stay with the agent that owns the change. Focused
+  single-file runs are run inline.
 
 ## Signing policy
 

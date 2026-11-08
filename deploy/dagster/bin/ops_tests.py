@@ -109,9 +109,29 @@ def has_xdist(python: str, environment: dict[str, str]) -> bool:
     return probe.returncode == 0
 
 
+def session_name(args: argparse.Namespace, stamp: str) -> str:
+    return f"tests-{'custom' if args.extra else args.suite}-{stamp}"
+
+
+# Arguments the wrapper owns. Passing them after -- would defeat the bounded base temp, the report or
+# the shared-host worker bound; they are refused rather than silently overridden.
+def reserved_extra_arguments(extra: list[str]) -> list[str]:
+    """The pass-through arguments run-tests refuses: its own base temp and report, and an unbounded worker count."""
+    refused = []
+    for index, item in enumerate(extra):
+        if item in {"-n", "--numprocesses"} and index + 1 < len(extra) and extra[index + 1] == "auto":
+            refused.append(f"{item} auto")
+        elif item in {"-nauto", "-n=auto", "--numprocesses=auto"}:
+            refused.append(item)
+        elif item.startswith(("--basetemp", "--junitxml", "--junit-xml")):
+            refused.append(item)
+    return refused
+
+
 def build_command(root: Path, args: argparse.Namespace, python: str, stamp: str, parallel: bool) -> list[str]:
-    name = "custom" if args.extra else args.suite
-    command = [python, "-m", "pytest", "-q", "-rfE", f"--basetemp=test/tmp/tests-{name}-{stamp}"]
+    name = session_name(args, stamp)
+    command = [python, "-m", "pytest", "-q", "-rfE", f"--basetemp=test/tmp/{name}",
+               f"--junitxml=test/tmp/{name}.junit.xml", "-o", "junit_family=legacy"]
     if parallel:
         command += ["-n", str(args.test_workers)]
     seed = shuffle_seed(args)
@@ -130,6 +150,114 @@ def shuffle_seed(args: argparse.Namespace) -> int | None:
     if args.extra or args.suite == "live":
         return None
     return random.SystemRandom().randrange(1, 2**31)
+
+
+# ------------------------------------------------------------------------------- the fixed report
+
+SLOW_SECONDS = 10.0
+
+
+def _junit_node_id(case) -> str:
+    """The pytest node id of a legacy-family junit testcase (file, classname, name)."""
+    file = case.get("file") or ""
+    classname = case.get("classname") or ""
+    name = case.get("name") or ""
+    if not file:
+        return f"{classname}::{name}" if classname else name
+    module = file[:-3].replace("/", ".") if file.endswith(".py") else file.replace("/", ".")
+    classes = classname[len(module) + 1:] if classname.startswith(module + ".") else ""
+    parts = [file, *(classes.split(".") if classes else []), name]
+    return "::".join(part for part in parts if part)
+
+
+def load_baseline(path: Path) -> set[str]:
+    """Node ids of a baseline file: one per line, an optional ``FAILED``/``ERROR`` prefix, ``| reason`` allowed."""
+    ids = set()
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.split("|", 1)[0].strip()
+        if not line or line.startswith("#"):
+            continue
+        for prefix in ("FAILED ", "ERROR "):
+            if line.startswith(prefix):
+                line = line[len(prefix):].strip()
+        line = line.split(" - ", 1)[0].strip()
+        if line:
+            ids.add(line)
+    return ids
+
+
+def junit_report(xml_path: Path, text: str, *, slow_seconds: float = SLOW_SECONDS) -> dict:
+    """The fixed report of one pytest run, from its junit file and its log.
+
+    Nothing here classifies a failure: the report carries the counts, the elapsed time, every test over
+    ``slow_seconds``, every FAILED/ERROR node id verbatim with the ``E`` lines of its report, and the
+    paths of the log, the junit file and the timings database. Attribution is the reader's job.
+    """
+    import xml.etree.ElementTree as ET
+    result = parse_output(text, {})
+    report: dict = {"counts": result.counts, "elapsed_s": None, "slow": [], "failures": [], "ran": [],
+                    "junit": str(xml_path), "junit_present": xml_path.is_file()}
+    summary = [line for line in text.splitlines() if re.search(r"\d+ (passed|failed|skipped|error)", line)]
+    match = re.search(r"in ([0-9.]+)s", summary[-1]) if summary else None
+    if match:
+        report["elapsed_s"] = float(match.group(1))
+    failures_by_id: dict[str, dict] = {}
+    for status, node in (m.groups() for m in map(FAILURE_LINE.match, text.splitlines()) if m):
+        failures_by_id.setdefault(node, {"node": node, "status": status, "lines": [], "duration_s": None})
+    if xml_path.is_file():
+        try:
+            tree = ET.parse(xml_path)
+        except ET.ParseError as error:
+            report["junit_error"] = str(error)
+            tree = None
+        if tree is not None:
+            for case in tree.getroot().iter("testcase"):
+                node = _junit_node_id(case)
+                duration = float(case.get("time") or 0.0)
+                report["ran"].append(node)
+                if duration >= slow_seconds:
+                    report["slow"].append({"node": node, "duration_s": round(duration, 2)})
+                failed = case.find("failure")
+                errored = case.find("error")
+                detail = failed if failed is not None else errored
+                if detail is not None:
+                    entry = failures_by_id.setdefault(node, {"node": node, "status": "FAILED" if failed is not None else "ERROR",
+                                                             "lines": [], "duration_s": None})
+                    entry["duration_s"] = round(duration, 2)
+                    body = detail.text or detail.get("message") or ""
+                    lines = [line.rstrip() for line in body.splitlines() if line.startswith("E ")]
+                    entry["lines"] = lines[:40] or [line.rstrip() for line in body.splitlines() if line.strip()][-3:]
+    report["slow"].sort(key=lambda item: (-item["duration_s"], item["node"]))
+    report["failures"] = [failures_by_id[node] for node in sorted(failures_by_id)]
+    report["ran"] = sorted(set(report["ran"]))
+    return report
+
+
+def differential(report: dict, baseline: set[str]) -> dict:
+    """New, fixed and unchanged failures against a baseline of node ids; fixed only when the test ran and passed."""
+    failing = {item["node"] for item in report["failures"]}
+    ran = set(report["ran"])
+    return {"new": sorted(failing - baseline), "unchanged": sorted(failing & baseline),
+            "fixed": sorted(node for node in baseline if node in ran and node not in failing),
+            "not_run": sorted(node for node in baseline if node not in ran and node not in failing)}
+
+
+def render_report(report: dict, *, log: Path, timings: Path, diff: dict | None, baseline: Path | None) -> str:
+    counts = ", ".join(f"{report['counts'].get(key, 0)} {key}" for key in ("passed", "failed", "error", "skipped", "xfailed", "xpassed")
+                       if report["counts"].get(key)) or "no summary line found"
+    lines = [f"counts: {counts}", f"elapsed: {report['elapsed_s']} s" if report["elapsed_s"] is not None else "elapsed: unknown",
+             f"log: {log}", f"junit: {report['junit']}" + ("" if report["junit_present"] else " (missing)"), f"timings: {timings}"]
+    lines.append(f"slower than {SLOW_SECONDS:g}s: " + (", ".join(f"{item['node']} ({item['duration_s']}s)" for item in report["slow"]) or "none"))
+    lines.append(f"failures: {len(report['failures'])}")
+    for item in report["failures"]:
+        lines.append(f"  {item['status']} {item['node']}")
+        lines.extend(f"    {line}" for line in item["lines"])
+    if diff is not None:
+        lines.append(f"baseline: {baseline} — {len(diff['new'])} new, {len(diff['fixed'])} fixed, "
+                     f"{len(diff['unchanged'])} unchanged, {len(diff['not_run'])} not run")
+        lines.extend(f"  NEW     {node}" for node in diff["new"])
+        lines.extend(f"  FIXED   {node}" for node in diff["fixed"])
+    return "\n".join(lines)
 
 
 def parse_output(text: str, known: dict[str, str]) -> Result:
@@ -155,6 +283,13 @@ def run(args: argparse.Namespace, root: Path) -> int:
     if args.extra and args.suite:
         print("error: give a suite name or arguments after --, not both", file=sys.stderr, flush=True)
         return 2
+    refused = reserved_extra_arguments(list(args.extra))
+    if refused:
+        print("error: run-tests owns these arguments; drop them: " + ", ".join(refused), file=sys.stderr, flush=True)
+        return 2
+    if getattr(args, "baseline", None) is not None and not Path(args.baseline).is_file():
+        print(f"error: baseline file not found: {args.baseline}", file=sys.stderr, flush=True)
+        return 2
     args.suite = args.suite or "fast"
     if not args.extra and args.suite not in SUITES:
         print(f"error: unknown suite {args.suite!r}; choose from {', '.join(SUITES)} or pass arguments after --", file=sys.stderr, flush=True)
@@ -167,8 +302,9 @@ def run(args: argparse.Namespace, root: Path) -> int:
             print("warning: pytest-xdist is not installed in that environment; running serially", flush=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     name = "custom" if args.extra else args.suite
+    session = session_name(args, stamp)
     command = build_command(root, args, python, stamp, parallel)
-    log = root / "test" / "tmp" / "logs" / f"tests-{name}-{stamp}.log"
+    log = root / "test" / "tmp" / "logs" / f"{session}.log"
     if args.suite == "live" and not args.extra:
         print(LIVE_WARNING, flush=True)
     print(f"run-tests: suite {name}; python {python}" + (f"; PYTHONPATH={environment['PYTHONPATH']}" if environment else ""), flush=True)
@@ -196,7 +332,28 @@ def run(args: argparse.Namespace, root: Path) -> int:
             sys.stdout.write(line)
             sys.stdout.flush()
         code = process.wait()
-    return report(log.read_text(encoding="utf-8", errors="replace"), load_known(root), code, args.strict)
+    text = log.read_text(encoding="utf-8", errors="replace")
+    fixed = junit_report(root / "test" / "tmp" / f"{session}.junit.xml", text)
+    baseline_path = Path(args.baseline).resolve() if getattr(args, "baseline", None) else None
+    diff = differential(fixed, load_baseline(baseline_path)) if baseline_path else None
+    timings = root / "test" / "tmp" / f"{session}.timings.sqlite"
+    rendered = render_report(fixed, log=log, timings=timings, diff=diff, baseline=baseline_path)
+    report_path = root / "test" / "tmp" / "reports" / f"{session}.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps({"command": command, "exit_code": code, "log": str(log), "timings": str(timings),
+                                       "report": fixed, "baseline": str(baseline_path) if baseline_path else None,
+                                       "differential": diff}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print("\n" + rendered, flush=True)
+    print(f"report: {report_path}", flush=True)
+    if getattr(args, "write_baseline", None):
+        target = Path(args.write_baseline)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("".join(f"{item['status']} {item['node']}\n" for item in fixed["failures"]), encoding="utf-8")
+        print(f"baseline written: {target} ({len(fixed['failures'])} ids)", flush=True)
+    if diff is not None:
+        # With a baseline the verdict is the differential, not pytest's exit code: new failures fail.
+        return 1 if diff["new"] else (0 if code in (0, 1) else code)
+    return report(text, load_known(root), code, args.strict)
 
 
 def report(text: str, known: dict[str, str], code: int, strict: bool) -> int:
@@ -229,6 +386,10 @@ def register(commands, add, root: Path) -> None:
                      help="reproduce a shuffled order (named suites except live are shuffled by default)")
     sub.add_argument("--no-shuffle", action="store_true", help="keep pytest's deterministic collection order")
     sub.add_argument("--strict", action="store_true", help="fail even when only known failures remain")
+    sub.add_argument("--baseline", metavar="FILE",
+                     help="node ids that fail without this change (one per line; FAILED/ERROR prefixes allowed); "
+                          "the verdict becomes the differential: new failures fail, unchanged ones do not")
+    sub.add_argument("--write-baseline", metavar="FILE", help="write this run's FAILED/ERROR node ids to FILE")
     sub.add_argument("--acceptance", metavar="PROFILE",
                      help="run an explicit acceptance inventory profile (quick); always strict and isolated")
     sub.add_argument("--workers", type=int, choices=(1, 2), help="acceptance workers (default 1; never -n auto)")

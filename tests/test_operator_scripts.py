@@ -1049,6 +1049,78 @@ def test_run_tests_background_returns_the_log_path_at_once(box: Sandbox) -> None
     assert "3 passed" in log.read_text(encoding="utf-8")
 
 
+def test_run_tests_refuses_the_arguments_it_owns(box: Sandbox) -> None:
+    for extra in (["-n", "auto"], ["-nauto"], ["--numprocesses=auto"], ["--basetemp=test/tmp/x"], ["--junitxml=x.xml"]):
+        result = box.run("run-tests", "--dry-run", "--", "tests/test_config.py", *extra)
+        assert result.returncode == 2 and "run-tests owns these arguments" in result.stderr, extra
+    assert ops_tests.reserved_extra_arguments(["tests", "-n", "4", "-k", "x"]) == []
+
+
+def test_run_tests_fixed_report_names_counts_slow_tests_and_every_failure_verbatim(tmp_path: Path) -> None:
+    junit = tmp_path / "run.junit.xml"
+    junit.write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" time="12.5">'
+        '<testcase classname="tests.test_a" name="test_ok" file="tests/test_a.py" line="1" time="0.1" />'
+        '<testcase classname="tests.test_a" name="test_slow" file="tests/test_a.py" line="5" time="11.2" />'
+        '<testcase classname="tests.test_a.TestGroup" name="test_method" file="tests/test_a.py" line="9" time="0.2">'
+        '<failure message="assert False">def test_method(self):\n&gt;       assert False\nE       assert False\n</failure></testcase>'
+        '<testcase classname="tests.test_b" name="test_param[2]" file="tests/test_b.py" line="3" time="0.0">'
+        '<error message="fixture error">E   RuntimeError: fixture error\n</error></testcase>'
+        '<testcase classname="tests.test_b" name="test_xfail" file="tests/test_b.py" line="7" time="0.0">'
+        '<skipped type="pytest.xfail" message="pending" /></testcase>'
+        '</testsuite></testsuites>', encoding="utf-8")
+    log = ("FAILED tests/test_a.py::TestGroup::test_method - assert False\n"
+           "ERROR tests/test_b.py::test_param[2] - RuntimeError\n"
+           "1 failed, 2 passed, 1 xfailed, 1 error in 12.50s\n")
+    report = ops_tests.junit_report(junit, log, slow_seconds=10.0)
+    assert report["counts"] == {"failed": 1, "passed": 2, "xfailed": 1, "error": 1}
+    assert report["elapsed_s"] == 12.5 and report["junit_present"]
+    assert report["slow"] == [{"node": "tests/test_a.py::test_slow", "duration_s": 11.2}]
+    assert [(f["status"], f["node"], f["lines"]) for f in report["failures"]] == [
+        ("FAILED", "tests/test_a.py::TestGroup::test_method", ["E       assert False"]),
+        ("ERROR", "tests/test_b.py::test_param[2]", ["E   RuntimeError: fixture error"])]
+    assert report["ran"] == ["tests/test_a.py::TestGroup::test_method", "tests/test_a.py::test_ok", "tests/test_a.py::test_slow",
+                             "tests/test_b.py::test_param[2]", "tests/test_b.py::test_xfail"]
+    baseline = tmp_path / "baseline.txt"
+    baseline.write_text("# ids that fail without this change\nFAILED tests/test_a.py::TestGroup::test_method - old reason\n"
+                        "tests/test_a.py::test_ok | fixed since\nERROR tests/test_c.py::test_absent\n", encoding="utf-8")
+    ids = ops_tests.load_baseline(baseline)
+    assert ids == {"tests/test_a.py::TestGroup::test_method", "tests/test_a.py::test_ok", "tests/test_c.py::test_absent"}
+    diff = ops_tests.differential(report, ids)
+    assert diff == {"new": ["tests/test_b.py::test_param[2]"], "unchanged": ["tests/test_a.py::TestGroup::test_method"],
+                    "fixed": ["tests/test_a.py::test_ok"], "not_run": ["tests/test_c.py::test_absent"]}
+    rendered = ops_tests.render_report(report, log=tmp_path / "run.log", timings=tmp_path / "run.timings.sqlite", diff=diff, baseline=baseline)
+    assert "counts: 2 passed, 1 failed, 1 error, 1 xfailed" in rendered and "slower than 10s: tests/test_a.py::test_slow (11.2s)" in rendered
+    assert "  FAILED tests/test_a.py::TestGroup::test_method\n    E       assert False" in rendered
+    assert "1 new, 1 fixed, 1 unchanged, 1 not run" in rendered and "  NEW     tests/test_b.py::test_param[2]" in rendered
+    # Without a junit file the log still yields the ids; nothing is invented about durations.
+    missing = ops_tests.junit_report(tmp_path / "absent.xml", log)
+    assert not missing["junit_present"] and [f["node"] for f in missing["failures"]] == [
+        "tests/test_a.py::TestGroup::test_method", "tests/test_b.py::test_param[2]"] and missing["slow"] == []
+
+
+def test_run_tests_baseline_differential_is_the_verdict_and_writes_a_report(box: Sandbox) -> None:
+    box.pytest_output.write_text("FAILED tests/a.py::test_old - assert 0\nFAILED tests/b.py::test_new - boom\n"
+                                 "2 failed, 5 passed in 1.20s\n", encoding="utf-8")
+    baseline = box.base / "baseline.txt"
+    baseline.write_text("tests/a.py::test_old\n", encoding="utf-8")
+    environment = {"APPSEC_PYTHON": box.install_fake_python(), "FAKE_PYTEST_RC": "1"}
+    result = box.run("run-tests", "--baseline", str(baseline), "--write-baseline", str(box.base / "next.txt"),
+                     "--", "tests", extra=environment)
+    assert result.returncode == 1, result.stdout
+    assert "1 new, 0 fixed, 1 unchanged, 0 not run" in result.stdout and "  NEW     tests/b.py::test_new" in result.stdout
+    assert "junit: " in result.stdout and "(missing)" in result.stdout, "the fake pytest writes no junit file; the report says so"
+    report_path = Path(next(line for line in result.stdout.splitlines() if line.startswith("report: ")).removeprefix("report: "))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["exit_code"] == 1 and report["differential"]["new"] == ["tests/b.py::test_new"]
+    assert "--junitxml=test/tmp/tests-custom-" in " ".join(report["command"]) and "junit_family=legacy" in report["command"]
+    assert (box.base / "next.txt").read_text(encoding="utf-8") == "FAILED tests/a.py::test_old\nFAILED tests/b.py::test_new\n"
+    # Only baseline failures left: the differential verdict is success even though pytest exited 1.
+    box.pytest_output.write_text("FAILED tests/a.py::test_old - assert 0\n1 failed, 6 passed in 1.00s\n", encoding="utf-8")
+    assert box.run("run-tests", "--baseline", str(baseline), "--", "tests", extra=environment).returncode == 0
+    assert box.run("run-tests", "--baseline", str(box.base / "missing.txt"), "--dry-run", "--", "tests").returncode == 2
+
+
 # -- python helpers -------------------------------------------------------------------------------
 @pytest.mark.parametrize("suite", sorted(ops_tests.SUITES))
 def test_every_suite_names_existing_paths(suite: str) -> None:

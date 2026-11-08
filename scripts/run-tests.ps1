@@ -15,6 +15,8 @@ param(
     [int]$ShuffleSeed,
     [switch]$NoShuffle,
     [switch]$Strict,
+    [string]$Baseline,
+    [string]$WriteBaseline,
     [string]$Acceptance,
     [ValidateRange(1, 2)][int]$Workers,
     [int]$Deadline,

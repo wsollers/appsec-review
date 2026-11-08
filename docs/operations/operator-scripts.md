@@ -431,15 +431,40 @@ pytest arguments after `--` instead of a suite name; that selection is shuffled 
 failure, and exits 0 when only known failures remain (unless `--strict`). Remove a line in the same
 commit that fixes the failure.
 
+#### The fixed report
+
+Every run also writes pytest's junit file (`test/tmp/tests-<suite>-<timestamp>.junit.xml`,
+`junit_family=legacy`) and prints a fixed report after pytest's own output, saved as JSON under
+`test/tmp/reports/tests-<suite>-<timestamp>.json`:
+
+- `counts` (passed, failed, error, skipped, xfailed, xpassed) and `elapsed` from pytest's summary line;
+- the `log`, `junit` and `timings` paths (the timings database `tests/conftest.py` writes beside the
+  base temp);
+- `slower than 10s`: every test over the unit limit with its duration;
+- `failures`: every `FAILED`/`ERROR` node id verbatim, each followed by the `E ` lines of its report;
+- with `--baseline FILE`: the differential against the node ids in `FILE` (one per line; a `FAILED`/
+  `ERROR` prefix, a ` - message` tail and a `| reason` are ignored) — `new` (failing, not in the
+  baseline), `fixed` (in the baseline, ran, passed), `unchanged` and `not run`. The verdict is then
+  the differential: the run exits 1 only when there are new failures. `--write-baseline FILE` saves
+  this run's failing ids as the next baseline.
+
+The report classifies nothing: it never says why a test failed or whether a failure matters. That
+attribution — stale fixture, runtime regression, environment — stays with whoever owns the change,
+and the report gives them the ids and lines to do it from. The wrapper owns `--basetemp`,
+`--junitxml` and the worker count: passing those (or `-n auto`) after `--` is refused with exit 2.
+
 ```bash
 scripts/run-tests.sh                        # fast suite
 scripts/run-tests.sh docs --background
 scripts/run-tests.sh -- tests/test_config.py -k overlay
+scripts/run-tests.sh --parallel --test-workers 2 --write-baseline test/tmp/sweep-base.txt   # record the baseline
+scripts/run-tests.sh --parallel --test-workers 2 --baseline test/tmp/sweep-base.txt         # differential against it
 ```
 
 ```powershell
 .\scripts\run-tests.ps1 -Suite docs
 .\scripts\run-tests.ps1 -Extra tests/test_config.py,-k,overlay
+.\scripts\run-tests.ps1 -Parallel -TestWorkers 2 -Baseline test\tmp\sweep-base.txt
 ```
 
 ## Testing the scripts
