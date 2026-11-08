@@ -86,55 +86,11 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:win|msbuild",
-      "ref": "T-056.4"
-    },
-    {
       "check": "unit:win/tools|msbuild.facts",
       "ref": "T-056.6"
     },
     {
-      "check": "not_unit:win|dotnet",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:win/win.sln",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:win/app/app.vcxproj",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:win/app/app.vcxproj.user",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:win/app/main.cpp",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "unit:win|msbuild.family",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:win|msbuild.profile",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:win|msbuild.markers",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
       "check": "unit:win|msbuild.facts",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:win|msbuild.build_point:app|project",
       "ref": "T-056.4",
       "note": "sub-check of a unit not discovered yet; lands with it"
     }

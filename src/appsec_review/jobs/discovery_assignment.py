@@ -106,6 +106,7 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
         for path in item.get("markers", ()):
             demoted.setdefault(str(path), role)
     scopes = [(str(scope["root"]), str(scope.get("language") or "source")) for scope in source_only_scopes]
+    generated_trees = [str(item["path"]) for item in discovery.get("generated_trees") or []]
     assignment: dict[str, str] = {}
     for path, policy in sorted((excluded or {}).items()):
         assignment[path] = f"excluded:{policy}"
@@ -118,8 +119,8 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
         if path in demoted:
             assignment[path] = demoted[path]
             continue
-        if _under_generated_dir(path):
-            assignment[path] = "inert"
+        if _under_generated_dir(path) or any(_under(posix, tree) and path != tree for tree in generated_trees):
+            assignment[path] = "inert"  # build output (§2.1 decisions 3 and 4)
             continue
         if path in marker_owner:
             assignment[path] = f"evidence_of:{marker_owner[path]}"

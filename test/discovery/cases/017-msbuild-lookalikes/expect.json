@@ -67,59 +67,9 @@
   ],
   "pending": [
     {
-      "check": "unit:.|msbuild",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:.|dotnet",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app.sln",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app/app.vcxproj",
-      "ref": "T-056.2"
-    },
-    {
       "check": "assignment:app/app.vcxproj.filters",
       "ref": "T-056.4",
       "note": "a .filters file is not read by MSBuild"
-    },
-    {
-      "check": "assignment:app/app.vcxproj.user",
-      "ref": "T-056.4",
-      "note": "Microsoft.Cpp targets import the .user file when present: context of the solution unit, not of a phantom project unit"
-    },
-    {
-      "check": "assignment:app/main.cpp",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|msbuild.family",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:.|msbuild.profile",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:.|msbuild.markers",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:.|msbuild.facts",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:.|msbuild.build_point:app|project",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
     }
   ]
 }

@@ -217,6 +217,44 @@ def _marker(path: PurePosixPath) -> tuple[str, str] | None:
     return marker
 
 
+_SLN_PROJECT_LINE = re.compile(r'^Project\("\{[0-9A-Fa-f-]+\}"\)\s*=\s*"[^"]+"\s*,\s*"([^"]+)"', re.M)
+_NATIVE_PROJECT_SUFFIXES = frozenset({".vcxproj", ".vcproj"})
+_MANAGED_PROJECT_SUFFIXES = frozenset({".csproj", ".vbproj", ".fsproj"})
+_PROJECT_SUFFIXES = _NATIVE_PROJECT_SUFFIXES | _MANAGED_PROJECT_SUFFIXES
+
+
+def solution_projects(sln_path: str, text: str, inventory: Sequence[str] | None = None) -> list[str]:
+    """Target-relative paths of the projects a ``.sln`` lists (those in the inventory, when given)."""
+    import posixpath
+    base = posixpath.dirname(sln_path) or "."
+    found = []
+    for match in _SLN_PROJECT_LINE.finditer(text):
+        relative = match.group(1).replace("\\", "/")
+        joined = posixpath.normpath(posixpath.join(base, relative)) if base != "." else posixpath.normpath(relative)
+        if joined.startswith("../") or joined == ".." or PurePosixPath(joined).suffix.lower() not in _PROJECT_SUFFIXES:
+            continue
+        if inventory is None or joined in inventory:
+            found.append(joined)
+    return found
+
+
+def solution_marker(sln_path: str, text: str | None, inventory: Sequence[str]) -> tuple[str, str]:
+    """The family and system of a solution, from the projects it lists (plan §2.1 decision 3).
+
+    All native projects (``.vcxproj``/``.vcproj``) → ``(native, msbuild)``; all managed
+    (``.csproj``/``.vbproj``/``.fsproj``) → ``(dotnet, dotnet)``; mixed → ``(native, msbuild)`` (the unit's
+    ``languages`` fact names both). Unreadable or project-less solutions keep the ``.NET`` default.
+    """
+    if text is None:
+        return _SUFFIX_MARKERS[".sln"]
+    suffixes = {PurePosixPath(path).suffix.lower() for path in solution_projects(sln_path, text)}
+    if suffixes and suffixes <= _MANAGED_PROJECT_SUFFIXES:
+        return ("dotnet", "dotnet")
+    if suffixes & _NATIVE_PROJECT_SUFFIXES:
+        return ("native", "msbuild")
+    return _SUFFIX_MARKERS[".sln"]
+
+
 def _marker_root(path: PurePosixPath) -> str:
     """The build unit root a marker file belongs to (its directory, or the bundle's parent)."""
     if path.name == "project.pbxproj" and path.parent.suffix.lower() == ".xcodeproj":
@@ -281,6 +319,10 @@ def _under_generated_dir(path: str) -> bool:
                for index, part in enumerate(parts))
 
 
+def _under_build_tree(path: str, build_trees: Sequence[str]) -> bool:
+    return any(_is_under(path, tree) and path != tree for tree in build_trees)
+
+
 def _family_of_system(system: str) -> str:
     return next((family for family, candidate in (*_MARKERS.values(), *_SUFFIX_MARKERS.values()) if candidate == system), "native")
 
@@ -303,12 +345,13 @@ def _is_under(path: str, root: str) -> bool:
 
 
 def _descriptor_candidates(unit: Mapping[str, Any], inventory_paths: Sequence[str], other_markers: set[str],
-                           nested_roots: Sequence[str]) -> list[str]:
-    """Paths under the unit's root (not under a nested unit, not another unit's marker) that describe its build."""
+                           nested_roots: Sequence[str], build_trees: Sequence[str] = ()) -> list[str]:
+    """Paths under the unit's root (not under a nested unit, not another unit's marker, not generated
+    output) that describe its build."""
     root = str(unit["root"])
     candidates = []
     for path in inventory_paths:
-        if not _is_under(path, root) or path in other_markers:
+        if not _is_under(path, root) or path in other_markers or _under_build_tree(path, build_trees) or _under_generated_dir(path):
             continue
         parent = PurePosixPath(path).parent.as_posix()
         if any(other != root and _is_under(parent, other) for other in nested_roots):
@@ -322,7 +365,8 @@ def _descriptor_candidates(unit: Mapping[str, Any], inventory_paths: Sequence[st
 
 
 def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[str],
-                         read_text: Callable[[str], str | None] | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+                         read_text: Callable[[str], str | None] | None,
+                         build_trees: Sequence[str] = ()) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Read each unit's descriptors for build points; fold driven members; return (demoted, folded).
 
     Plan §2.1 decision 1: a root that drives members is the unit and the members are its build points.
@@ -365,8 +409,14 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
             nested_roots = [str(other["root"]) for other in units
                             if other is not unit and other["build_unit_id"] not in folded_ids and other not in members]
             other_markers = marker_paths - set(own_markers) - set(member_descriptors)
-            candidates = _descriptor_candidates(unit, inventory_paths, other_markers, nested_roots)
-            # Member descriptors can sit outside the root (a solution's sibling project): add them explicitly.
+            candidates = _descriptor_candidates(unit, inventory_paths, other_markers, nested_roots, build_trees)
+            if unit["build_system"] in {"msbuild", "dotnet", "vcbuild"}:
+                # A solution's listed projects are its descriptors wherever they sit (a sibling directory,
+                # two directories up); a project file nothing lists stays another unit's marker.
+                for marker in own_markers:
+                    if marker.lower().endswith(".sln"):
+                        candidates.extend(solution_projects(marker, text_of(marker) or "", inventory_paths))
+                candidates = [c for c in candidates if not (c.lower().endswith(tuple(_PROJECT_SUFFIXES)) and c in other_markers)]
             extras = sorted(set(candidates) - set(own_markers) - set(member_descriptors))[:_DESCRIPTOR_READ_LIMIT]
             descriptors: dict[str, str] = {}
             for path in [*own_markers, *member_descriptors, *extras]:
@@ -403,6 +453,10 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
                            "markers": [str(m["path"]) for m in candidate.get("markers", ())],
                            "folded_into": unit_label(unit), "via": drive["via"], "evidence": drive["evidence"]})
         unit["build_points"] = extracted["build_points"]
+        if unit["build_system"] in {"msbuild", "dotnet", "vcbuild"}:
+            languages = {str(p["name"]): [p["language"]] for p in extracted["build_points"] if p.get("language")}
+            if languages:
+                unit["languages"] = languages  # a mixed solution names every project's language (§2.1 decision 3)
         if member_descriptors:
             unit["descriptors"] = sorted(dict.fromkeys(member_descriptors))
         if extracted["drives"]:
@@ -413,7 +467,10 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
             unit["unresolved"] = extracted["unresolved"]
         # Complete: every construct of a descriptor-driven native system was read, so the sources its
         # build points name are all it compiles (a delegating-only descriptor names none, completely).
-        unit["source_resolution"] = ("complete" if not extracted["unresolved"]
+        # A project a solution lists but the target lacks compiles nothing here: it is recorded, but
+        # it does not make the solution's resolution containment (§2.1 decision 3).
+        dynamic = [u for u in extracted["unresolved"] if u.get("kind") != "missing_project"]
+        unit["source_resolution"] = ("complete" if not dynamic
                                      and unit["build_system"] in {"cmake", "make", "meson", "autotools", "msbuild", "dotnet", "vcbuild"}
                                      else "containment")
         if (unit["build_system"] in _DEMOTABLE_SYSTEMS and not extracted["build_points"] and not extracted["drives"]
@@ -550,18 +607,34 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
         return max((root for root in unity_roots if root.as_posix() == "." or root in path.parents),
                    key=lambda root: len(root.parts), default=None)
 
+    inventory_paths = [str(item["path"]) for item in files]
+    # A CMake build tree (CMakeCache.txt) is generated output: nothing under it is a marker (§2.1
+    # decisions 3 and 4); the generated solution and projects there are inert.
+    build_trees = sorted(PurePosixPath(path).parent.as_posix() for path in inventory_paths
+                         if PurePosixPath(path).name == "CMakeCache.txt"
+                         and (PurePosixPath(path).parent / "CMakeLists.txt").as_posix() not in inventory_paths)  # in-source builds keep their sources
+    # A project a solution lists is the solution's build point, never a marker of its own (decision 1
+    # and 3); the solution itself is typed by the projects it lists.
+    listed_projects: set[str] = set()
+    solution_types: dict[str, tuple[str, str]] = {}
+    for path in inventory_paths:
+        if PurePosixPath(path).suffix.lower() == ".sln" and not _under_build_tree(path, build_trees):
+            text = read_text(path) if read_text is not None else None
+            if text is not None:
+                listed_projects.update(solution_projects(path, text, inventory_paths))
+            solution_types[path] = solution_marker(path, text, inventory_paths)
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for item in files:
         path = PurePosixPath(str(item["path"]))
         marker = _marker(path)
-        if marker is None:
+        if marker is None or str(path) in listed_projects or _under_build_tree(str(path), build_trees):
             continue
         owner = unity_owner(path)
         if owner is not None and (
                 path.suffix.lower() in {".csproj", ".vbproj", ".fsproj", ".sln", ".vcxproj", ".vcproj"}
                 or path.name == "package.json" and "Packages" in path.relative_to(owner).parts[:-1]):
             continue
-        family, system = marker
+        family, system = solution_types.get(str(path), marker)
         root = _marker_root(path)
         groups[(root, family, system)].append(item)
     for item in files:
@@ -600,9 +673,8 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
             "provenance": "deterministic-engine-descriptors",
         })
     values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
-    inventory_paths = [str(item["path"]) for item in files]
     by_path = {str(item["path"]): item for item in files}
-    demoted, folded = _attach_build_points(values, inventory_paths, read_text)
+    demoted, folded = _attach_build_points(values, inventory_paths, read_text, build_trees)
     removed = {d["build_unit_id"] for d in demoted} | {f["build_unit_id"] for f in folded}
     values = [unit for unit in values if unit["build_unit_id"] not in removed]
     demoted.extend(_resolve_parallel_systems(values, folded, read_text))
@@ -625,7 +697,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
     for path in inventory_paths:
         posix = PurePosixPath(path)
         orphan_family = _ORPHAN_FAMILY.get(posix.suffix.lower())
-        if orphan_family is None or _under_generated_dir(path) or path in claimed:
+        if orphan_family is None or _under_generated_dir(path) or path in claimed or _under_build_tree(path, build_trees):
             continue
         if ".teamcity" in posix.parts:
             # TeamCity Kotlin DSL is CI configuration, not an independently compilable JVM
@@ -660,7 +732,9 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                             "no build point of that unit names this source")},
         })
     orphans.sort(key=lambda value: value["path"])
-    return {"units": values, "orphaned_sources": orphans, "demoted_markers": demoted, "folded_roots": folded}
+    return {"units": values, "orphaned_sources": orphans, "demoted_markers": demoted, "folded_roots": folded,
+            "generated_trees": [{"path": tree, "kind": "cmake_build_tree", "evidence": f"{tree}/CMakeCache.txt" if tree != "." else "CMakeCache.txt"}
+                                for tree in build_trees]}
 
 
 _INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}
@@ -1374,9 +1448,17 @@ def native_build_capability_gap(unit: Mapping[str, Any]) -> str | None:
         return _make_default_capability_gap(unit)
     if unit.get("build_system") not in {"msbuild", "vcbuild"}:
         return None
+    # The unit's Visual C++ descriptors: a standalone project's marker, or the projects a solution
+    # lists (its build points' descriptors, plan §2.1 decisions 1 and 3).
     markers = {str(item["path"]): item for item in unit.get("markers", ())
                if PurePosixPath(str(item["path"])).suffix.lower() in {".vcxproj", ".vcproj"}}
-    if not markers:
+    solutions = {str(item["path"]): item for item in unit.get("markers", ())
+                 if PurePosixPath(str(item["path"])).suffix.lower() == ".sln"}
+    for point in unit.get("build_points", ()):
+        descriptor = str(point.get("descriptor") or "")
+        if PurePosixPath(descriptor).suffix.lower() in {".vcxproj", ".vcproj"}:
+            markers.setdefault(descriptor, {"path": descriptor, "sha256": None})
+    if not markers and not solutions:
         return None
     for document in unit.get("descriptor_package", {}).get("documents", ()):
         path = str(document.get("path", ""))
@@ -1399,9 +1481,14 @@ def native_build_capability_gap(unit: Mapping[str, Any]) -> str | None:
             elif tag == "WindowsTargetPlatformVersion" and value:
                 evidence.append("Windows SDK")
         if evidence:
-            return (f"unavailable_native_windows_toolchain: {path}@{markers[path].get('sha256')}: "
+            return (f"unavailable_native_windows_toolchain: {path}@{markers[path].get('sha256') or document.get('sha256')}: "
                     f"{', '.join(sorted(set(evidence)))} requires MSVC/Windows capability, "
                     "not a Linux native placeholder or toolchain probe")
+    if solutions and not markers:
+        [(path, marker)] = list(solutions.items())[:1]
+        return (f"unavailable_native_project_toolchain: {path}@{marker['sha256']}: "
+                "accepted solution declares Visual C++ members requiring native MSBuild/VCBuild "
+                "capability not supplied by the Linux native profile; Windows platform unproven")
     return ("unavailable_native_project_toolchain: accepted Visual C++ descriptor requires "
             "MSBuild/VCBuild capability not supplied by the Linux native profile; Windows platform unproven")
 

@@ -912,6 +912,9 @@ _SLN_PROJECT = re.compile(r'^Project\("\{[0-9A-Fa-f-]+\}"\)\s*=\s*"([^"]+)"\s*,\
 _MSBUILD_PROJECT_SUFFIXES = (".vcxproj", ".csproj", ".vbproj", ".fsproj", ".vcproj")
 
 
+_PROJECT_LANGUAGE = {".vcxproj": "c++", ".vcproj": "c++", ".csproj": "c#", ".vbproj": "vb", ".fsproj": "f#"}
+
+
 def _msbuild_project_items(path: str, text: str, inventory: Sequence[str]) -> tuple[list[str], list[str]]:
     base = posixpath.dirname(path) or "."
     sources: list[str] = []
@@ -943,14 +946,22 @@ def msbuild_build_points(root: str, descriptors: Mapping[str, str], inventory: S
                     if project_path in descriptors else ([], [])
                 points.append(_point(match.group(1), "project", f"{path}:{line}", sources=sources,
                                      path=posixpath.dirname(project_path) or ".", descriptor=project_path,
-                                     configurations=configurations or None))
+                                     configurations=configurations or None,
+                                     language=_PROJECT_LANGUAGE.get(posixpath.splitext(project_path)[1].lower())))
                 drives.append(_drive(posixpath.dirname(project_path) or ".", "solution_project", f"{path}:{line}", project=project_path))
             elif project_path and project_path.lower().endswith(_MSBUILD_PROJECT_SUFFIXES):
-                unresolved.append({"evidence": f"{path}:{line}", "reason": f"solution lists a project that is not in the target: {match.group(2)}"})
+                unresolved.append({"evidence": f"{path}:{line}", "kind": "missing_project",
+                                   "reason": f"solution lists a project that is not in the target: {match.group(2)}"})
     for path in sorted(p for p in descriptors if p.lower().endswith(_MSBUILD_PROJECT_SUFFIXES) and p not in listed):
-        sources, configurations = _msbuild_project_items(path, descriptors[path], inventory)
-        points.append(_point(posixpath.splitext(posixpath.basename(path))[0], "project", f"{path}:1", sources=sources,
-                             configurations=configurations or None))
+        # A project no solution lists: its own file is the unit's marker and its one point, named by
+        # <ProjectName> when present (that line is the evidence), else by the file stem at line 1.
+        text = descriptors[path]
+        sources, configurations = _msbuild_project_items(path, text, inventory)
+        named = re.search(r"<ProjectName>([^<]+)</ProjectName>", text)
+        name = named.group(1).strip() if named else posixpath.splitext(posixpath.basename(path))[0]
+        evidence = f"{path}:{_line_at(text, named.start())}" if named else f"{path}:1"
+        points.append(_point(name, "project", evidence, sources=sources, configurations=configurations or None,
+                             language=_PROJECT_LANGUAGE.get(posixpath.splitext(path)[1].lower())))
     return {"build_points": points, "drives": drives, "includes": [], "unresolved": unresolved}
 
 

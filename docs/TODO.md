@@ -506,8 +506,10 @@ until each is rewritten into the entry format when it is next touched.
   driven unit standing with `driven_by`; `build-systems/4`; vocabulary in plan §2.1 item 11;
   pending 542 → 313). Decision 2 landed 2026-11-08 (Makefiles beside cmake/meson/autotools are
   read: generated → inert, wrapper → context, compiling → parallel unit; `parallel_with`,
-  `capture_authority`, `generated_by`; pending → 294). Next: decisions 3 (solution family), 4
-  (generated/installed trees), then the matrix-A look-alike rules and T-056.5/.6 facts.
+  `capture_authority`, `generated_by`; pending → 294). Decision 3 landed 2026-11-08 (solution
+  family from the listed projects, listed projects are never markers, `missing_project` unresolved
+  kind, CMake build trees inert; pending → 187). Next: decision 4 (generated/installed trees), then
+  the matrix-A look-alike rules and T-056.5/.6 facts.
 - **Done when:** every case in the matrix has no `pending` entry and `build-systems.json` carries
   build points with evidence for every unit; the composite monorepo's xfails are re-expressed as
   `pending` entries or closed.

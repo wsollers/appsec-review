@@ -43,10 +43,6 @@
   },
   "pending": [
     {
-      "check": "unit:native|msbuild.build_point:renderer|project",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:native|msbuild.facts",
       "ref": "T-056.5",
       "note": "Import Project=\"..\\props\\...\" reaches outside the project directory; the minimum materialization root is the tree root"

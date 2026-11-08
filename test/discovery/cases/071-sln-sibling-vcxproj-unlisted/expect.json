@@ -71,52 +71,12 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:build|msbuild",
-      "ref": "T-056.4"
-    },
-    {
       "check": "unit:engine|msbuild.facts",
       "ref": "T-056.5",
       "note": "no reference leaves its own directory"
     },
     {
-      "check": "not_unit:build|dotnet",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:build/game.sln",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:game/game.vcxproj",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:game/src/main.cpp",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "unit:build|msbuild.family",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.profile",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.markers",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
       "check": "unit:build|msbuild.facts",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.build_point:game|project",
       "ref": "T-056.4",
       "note": "sub-check of a unit not discovered yet; lands with it"
     }

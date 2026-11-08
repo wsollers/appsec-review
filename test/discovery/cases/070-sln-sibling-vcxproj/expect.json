@@ -64,65 +64,7 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:build|msbuild",
-      "ref": "T-056.4",
-      "note": "a .sln is always concluded as a dotnet unit today; the family and system follow the projects it lists"
-    },
-    {
-      "check": "not_unit:build|dotnet",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:build/game.sln",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:engine/engine.vcxproj",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:engine/include/engine.h",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:engine/src/engine.cpp",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:game/game.vcxproj",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:game/src/main.cpp",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "unit:build|msbuild.family",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.profile",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.markers",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
       "check": "unit:build|msbuild.facts",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.build_point:engine|project",
-      "ref": "T-056.4",
-      "note": "sub-check of a unit not discovered yet; lands with it"
-    },
-    {
-      "check": "unit:build|msbuild.build_point:game|project",
       "ref": "T-056.4",
       "note": "sub-check of a unit not discovered yet; lands with it"
     }

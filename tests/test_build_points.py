@@ -244,19 +244,25 @@ def test_a_solution_lists_projects_as_build_points_and_a_vcxproj_names_its_sourc
            '  </ItemGroup>\n</Project>\n')
     files, inventory = _inventory({"win.sln": sln, "engine/engine.vcxproj": vcx}, "engine/src/engine.cpp", "engine/src/io.cpp",
                                   "engine/engine.vcxproj.filters")
-    # The solution is the unit; the listed project is its build point, not a unit (plan §2.1 decision 1).
-    [sln] = [u for u in inventory["units"] if u["build_system"] in {"msbuild", "dotnet"}]
+    # The solution is the unit, typed by the projects it lists (all .vcxproj: msbuild/native, plan §2.1
+    # decision 3); the listed project is its build point and never a marker of its own (decision 1).
+    [sln] = inventory["units"]
+    assert (sln["root"], sln["family"], sln["build_system"]) == (".", "native", "msbuild")
+    assert [m["path"] for m in sln["markers"]] == ["win.sln"]
     [engine] = sln["build_points"]
-    assert (engine["name"], engine["kind"], engine["evidence"]) == ("engine", "project", "win.sln:2")
+    assert (engine["name"], engine["kind"], engine["evidence"], engine["language"]) == ("engine", "project", "win.sln:2", "c++")
     assert engine["sources"] == ["engine/src/engine.cpp", "engine/src/io.cpp"], "ClCompile items are the project's sources"
     assert engine["descriptor"] == "engine/engine.vcxproj" and engine["path"] == "engine"
-    assert [u["reason"] for u in sln["unresolved"]] == ["solution lists a project that is not in the target: ghost\\ghost.vcxproj"]
-    assert sln["source_resolution"] == "containment", "a solution with a missing project is not read completely"
-    assert [(f["root"], f["via"]) for f in inventory["folded_roots"]] == [("engine", "solution_project")]
+    assert sln["languages"] == {"engine": ["c++"]}
+    # A listed project that is not in the target is recorded, and nothing in the target compiles for it:
+    # the solution's own resolution stays complete (its sources are the ones the present projects name).
+    assert [(u["reason"], u["kind"]) for u in sln["unresolved"]] == [
+        ("solution lists a project that is not in the target: ghost\\ghost.vcxproj", "missing_project")]
+    assert sln["source_resolution"] == "complete"
+    assert inventory["folded_roots"] == []
     assignment = assign_paths(files, inventory)
-    label = f"{sln['root']}|{sln['build_system']}"
-    assert assignment["engine/engine.vcxproj"] == f"evidence_of:{label}#engine"
-    assert assignment["engine/src/io.cpp"] == f"evidence_of:{label}#engine"
+    assert assignment["engine/engine.vcxproj"] == "evidence_of:.|msbuild#engine"
+    assert assignment["engine/src/io.cpp"] == "evidence_of:.|msbuild#engine"
     assert inventory["orphaned_sources"] == []
 
 
