@@ -7,8 +7,6 @@ import shutil
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.container_runtime import load_catalog
-from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_ci_configuration_analysis import build_job, discover_ci_definitions
 from appsec_review.jobs.job_ci_configuration_analysis.job import SPECS, correlation_key
@@ -17,36 +15,10 @@ from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
+from tests.ci_support import FakeExecutor
 
 
 ROOT = Path(__file__).parents[1]
-DIGEST = "sha256:" + "c" * 64
-
-
-class FakeExecutor:
-    def __init__(self, repository: Path, run_root: Path, calls: list[tuple[str, tuple[str, ...]]]):
-        self.catalog = load_catalog(repository)
-        self.run_root = run_root
-        self.calls = calls
-
-    def resolve_image(self, tool):
-        return DIGEST
-
-    def execute(self, request):
-        self.calls.append((request.tool_id, request.argv))
-        raw = request.scratch_root / "raw"
-        raw.mkdir(parents=True, exist_ok=True)
-        stdout, stderr = raw / "stdout.bin", raw / "stderr.bin"
-        stdout.write_bytes(b"{}")
-        stderr.write_bytes(b"")
-        receipt = request.scratch_root / "execution.json"
-        receipt.write_text("{}", encoding="utf-8")
-        relative = lambda path: path.relative_to(self.run_root).as_posix()
-        return ExecutionResult(
-            "appsec-review/container-execution/1", request.tool_id, "fixture:1", DIGEST, DIGEST,
-            "argv", (), {"network": "none", "target_mount": "read-only"}, "start", "end",
-            0, False, False, False, False, relative(stdout), relative(stderr), relative(receipt),
-        )
 
 
 def isolated_config(tmp_path: Path):

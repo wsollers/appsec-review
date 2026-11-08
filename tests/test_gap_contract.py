@@ -10,7 +10,7 @@ from appsec_review.runtime.registry import builtin_registry
 # its Job, then deleting it here. Adding a job to this list is not allowed.
 LEGACY_FREE_TEXT_GAPS = frozenset({
     "job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing",
-    "job_change_context_analysis", "job_ci_configuration_analysis",
+    "job_change_context_analysis",
     "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis",
     "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing",
     "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication",
@@ -35,6 +35,6 @@ def test_every_registered_job_is_strict_or_explicitly_listed_as_legacy() -> None
 
 @pytest.mark.parametrize("job_id", sorted({"job_image_pin_verification", "job_model_connectivity",
                                           "job_build_iteration", "job_third_party_data_sync",
-                                          "job_build_environment_analysis"}))
+                                          "job_build_environment_analysis", "job_ci_configuration_analysis"}))
 def test_converted_jobs_reject_free_text_gaps(job_id: str) -> None:
     assert builtin_registry().build(job_id).strict_gaps is True

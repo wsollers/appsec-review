@@ -11,6 +11,7 @@ import subprocess
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -78,6 +79,22 @@ TOPOLOGY: Mapping[str, tuple[str, ...]] = {
 }
 
 ExecutorFactory = Callable[[UnitContext], ContainerExecutor]
+JOB_ID = "job_ci_configuration_analysis"
+
+
+class CiConfigurationAnalysisFailed(RuntimeError):
+    """The job could not read its own artifacts or build a tool command: a run-tree integrity failure
+    (an artifact's identity changed since it was written) or a tool the specs name without an argv.
+    Linter failures, unreadable definitions and exhausted bounds are gaps, never this."""
+
+
+def _gap(code: GapCode, reason: str, unit_id: str, *, scope: str | None = None, retryable: bool = False) -> dict[str, Any]:
+    return producer_gap(code, reason, unit_id=unit_id, scope_id=scope, retryable=retryable)
+
+
+def _reasons(gaps: list[Mapping[str, Any]]) -> list[str]:
+    """The human lines of producer-gap/1 records, for the documents and index coverage notes."""
+    return list(dict.fromkeys(str(gap["reason"]) for gap in gaps))
 
 
 def _rel(run_root: Path, path: Path) -> str:
@@ -99,12 +116,12 @@ def _write(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, 
 def _read(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, Any]:
     path = (run_root / str(identity["path"])).resolve()
     if run_root.resolve() not in path.parents or not path.is_file() or file_sha256(path) != identity["sha256"]:
-        raise ValueError("CI artifact identity mismatch")
+        raise CiConfigurationAnalysisFailed(f"CI artifact identity mismatch: {identity.get('path')}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _bounds(unit: UnitContext) -> tuple[int, int, int]:
-    settings = unit.job.config.settings
+def analysis_bounds(settings: Mapping[str, Any]) -> tuple[int, int, int]:
+    """``(max_files, max_file_bytes, max_observations_per_tool)`` from the job settings, range-checked."""
     values = (int(settings.get("max_files", 128)), int(settings.get("max_file_bytes", 1_048_576)),
               int(settings.get("max_observations_per_tool", 5_000)))
     if values[0] < 1 or values[0] > 5_000 or values[1] < 1 or values[1] > 16 * 1024 * 1024:
@@ -112,6 +129,10 @@ def _bounds(unit: UnitContext) -> tuple[int, int, int]:
     if values[2] < 1 or values[2] > 100_000:
         raise ValueError("CI observation bound is outside the supported range")
     return values
+
+
+def _bounds(unit: UnitContext) -> tuple[int, int, int]:
+    return analysis_bounds(unit.job.config.settings)  # the claim-time validator already accepted them
 
 
 def discover_ci_definitions(files: tuple[Mapping[str, Any], ...], *, max_files: int = 128):
@@ -132,7 +153,11 @@ def _argv(spec: ToolSpec, executable: str, path: str) -> tuple[str, ...]:
     if spec.tool_id == "tool-checkov":
         return (executable, "--quiet", "--compact", "--output", "json", "--framework",
                 str(spec.framework), "--file", mounted)
-    raise ValueError(f"no external CI argv for {spec.tool_id}")
+    raise CiConfigurationAnalysisFailed(f"no external CI argv for {spec.tool_id}")
+
+
+_FINDING_FIELDS = frozenset({"check_id", "rule_id", "kind", "code", "message", "check_name", "description",
+                             "details", "line", "location", "file_line_range"})
 
 
 def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
@@ -159,7 +184,9 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
         else:
             candidates = [document]
         for item in candidates:
-            if not isinstance(item, Mapping):
+            # A record is an observation only when it names a rule, a message or a location. An
+            # empty document (``{}``: the linter ran and found nothing) is not one.
+            if not isinstance(item, Mapping) or not (_FINDING_FIELDS & set(item)):
                 continue
             location = item.get("location") if isinstance(item.get("location"), Mapping) else {}
             lines = item.get("file_line_range") if isinstance(item.get("file_line_range"), list) else []
@@ -182,18 +209,41 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
 
 def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
           fail_tool: str | None) -> Mapping[str, Any]:
+    """One tool over one provider's definitions.
+
+    The unit result's ``gaps`` are ``producer-gap/1`` records: an unavailable pinned image is
+    ``producer_blocked`` and retryable (the operator re-pins), a linter that fails or raises is
+    ``producer_failed``, an unreadable or over-bound definition and a provider with no linter are
+    ``producer_reported_gap`` scoped to the definition, a hit observation bound is ``truncated``. A
+    provider with no definitions is ``NOT_APPLICABLE`` and no gap. The raw artifact keeps the reasons.
+    """
     definitions = _selected(unit, spec.provider)
     _, max_bytes, max_observations = _bounds(unit)
-    gaps: list[str] = []
+    gaps: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     executions: list[dict[str, Any]] = []
-    if not definitions:
+
+    def finish(terminal: str, *, image_id=None, not_applicable=(), tool_name=True) -> Mapping[str, Any]:
         raw = {"schema": "appsec-review/ci-raw-observations/1", "provider": spec.provider,
-               "tool_id": spec.tool_id, "definitions": [], "records": [],
-               "gaps": [f"no {spec.provider} CI definitions discovered"], "terminal_status": "NOT_APPLICABLE"}
+               "tool_id": spec.tool_id, "tool_name": spec.name, "framework": spec.framework,
+               "definitions": definitions, "records": records, "gaps": _reasons(gaps),
+               "executions": executions, "image_id": image_id if spec.mode == "external" else None,
+               "ruleset_identity": RULESET_IDENTITY if spec.mode == "static" else None,
+               "not_applicable_inputs": not_applicable_summary(not_applicable),
+               "terminal_status": terminal}
         artifact = _write(unit, "raw-observations.json", raw)
-        return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": "NOT_APPLICABLE",
-                "raw_artifact": artifact, "record_count": 0, "gaps": raw["gaps"], "executions": []}
+        unit.job.events.write("CI_TOOL_SCANNED", unit_id=unit.unit_id, provider=spec.provider, tool_id=spec.tool_id,
+                              mode=spec.mode, terminal_status=terminal, definition_count=len(definitions),
+                              record_count=len(records), gap_count=len(gaps), execution_count=len(executions))
+        result = {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": terminal,
+                  "raw_artifact": artifact, "record_count": len(records), "gaps": gaps,
+                  "executions": executions, "not_applicable_inputs": raw["not_applicable_inputs"]}
+        if terminal == "NOT_APPLICABLE" and not_applicable:
+            result["coverage_disposition"] = "SKIPPED_NA"
+        return result
+
+    if not definitions:
+        return finish("NOT_APPLICABLE")
     not_applicable = ()
     if spec.input_support is not None:
         # Definitions outside the linter's declared input support are SKIPPED_NA and never launched.
@@ -202,30 +252,29 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
         supported = set(partition.supported)
         definitions = [item for item in definitions if item["path"] in supported]
         if not definitions:
-            summary = not_applicable_summary(not_applicable)
-            raw = {"schema": "appsec-review/ci-raw-observations/1", "provider": spec.provider,
-                   "tool_id": spec.tool_id, "definitions": [], "records": [], "gaps": [],
-                   "not_applicable_inputs": summary, "terminal_status": "NOT_APPLICABLE"}
-            artifact = _write(unit, "raw-observations.json", raw)
-            return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": "NOT_APPLICABLE",
-                    "coverage_disposition": "SKIPPED_NA", "raw_artifact": artifact, "record_count": 0,
-                    "gaps": [], "executions": [], "not_applicable_inputs": summary}
+            return finish("NOT_APPLICABLE", not_applicable=not_applicable)
     if spec.mode == "discovery":
-        gaps.append("supported_discovery_without_linter: definition cataloged but no provider linter is enabled")
+        for definition in definitions:
+            gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP,
+                             f"{definition['path']}: supported_discovery_without_linter: definition cataloged but no provider linter is enabled",
+                             unit.unit_id, scope=definition["path"]))
     elif spec.mode == "static":
         for definition in definitions:
             source = (unit.job.target_root or Path()) / definition["path"]
             try:
                 data = source.read_bytes()
                 if len(data) > max_bytes:
-                    gaps.append(f"{definition['path']}: configured max_file_bytes exceeded")
+                    gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: configured max_file_bytes exceeded",
+                                     unit.unit_id, scope=definition["path"]))
                     continue
                 text = data.decode("utf-8", "strict")
             except (OSError, UnicodeError) as exc:
-                gaps.append(f"{definition['path']}: static parse unavailable ({type(exc).__name__})")
+                gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: static parse unavailable ({type(exc).__name__})",
+                                 unit.unit_id, scope=definition["path"]))
                 continue
             records.extend(scan_text(spec.provider, definition["path"], text, tool_id=spec.tool_id))
-    else:
+    image_id = None
+    if spec.mode == "external":
         from appsec_review.runtime import execution_safety as safety
         try:
             executor = executor_factory(unit)
@@ -233,9 +282,10 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
             image_id = executor.resolve_image(tool)
         except (KeyError, RuntimeError, ValueError) as exc:
             safety.fail(f"{spec.tool_id} image resolution failed: {exc}", action="ci.image")
-            gaps.append(f"{spec.tool_id}: pinned offline image unavailable ({type(exc).__name__}: {exc})")
+            gaps.append(_gap(GapCode.PRODUCER_BLOCKED,
+                             f"{spec.tool_id}: pinned offline image unavailable ({type(exc).__name__}: {exc})",
+                             unit.unit_id, retryable=True))
             tool = None
-            image_id = None
         if tool is not None:
             for index, definition in enumerate(definitions, 1):
                 scratch = unit.unit_root / "scratch" / f"file_{index:04d}"
@@ -251,15 +301,19 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                     stdout = unit.job.run_root / result.stdout_path
                     if result.timed_out or result.oom_killed or result.exit_code not in {0, 1}:
                         safety.fail(f"{spec.tool_id} execution failed", action="ci.scan")
-                        gaps.append(f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}")
+                        gaps.append(_gap(GapCode.PRODUCER_FAILED,
+                                         f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}",
+                                         unit.unit_id, scope=definition["path"]))
                         continue
                     records.extend(_generic_external_records(spec, stdout.read_bytes(), definition["path"]))
                 except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
                     safety.fail(f"{spec.tool_id} failed: {exc}", action="ci.scan")
-                    gaps.append(f"{definition['path']}: {spec.tool_id} unavailable ({type(exc).__name__}: {exc})")
+                    gaps.append(_gap(GapCode.PRODUCER_FAILED,
+                                     f"{definition['path']}: {spec.tool_id} unavailable ({type(exc).__name__}: {exc})",
+                                     unit.unit_id, scope=definition["path"]))
     if len(records) > max_observations:
         records = records[:max_observations]
-        gaps.append(f"observation bound reached at {max_observations}")
+        gaps.append(_gap(GapCode.TRUNCATED, f"observation bound reached at {max_observations}", unit.unit_id))
     for record in records:
         message = str(record.get("message", ""))
         message = re.sub(r"\$\{\{\s*secrets\.[^}]+\}\}", "<redacted>", message, flags=re.I)
@@ -267,17 +321,7 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                          r"\1=<redacted>", message)
         record["message"] = message
     terminal = "FAILED" if gaps and not records and spec.mode == "external" else ("PARTIAL" if gaps else "SUCCEEDED")
-    raw = {"schema": "appsec-review/ci-raw-observations/1", "provider": spec.provider,
-           "tool_id": spec.tool_id, "tool_name": spec.name, "framework": spec.framework,
-           "definitions": definitions, "records": records, "gaps": list(dict.fromkeys(gaps)),
-           "executions": executions, "image_id": image_id if spec.mode == "external" else None,
-           "ruleset_identity": RULESET_IDENTITY if spec.mode == "static" else None,
-           "not_applicable_inputs": not_applicable_summary(not_applicable),
-           "terminal_status": terminal}
-    artifact = _write(unit, "raw-observations.json", raw)
-    return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": terminal,
-            "raw_artifact": artifact, "record_count": len(records), "gaps": raw["gaps"],
-            "executions": executions, "not_applicable_inputs": raw["not_applicable_inputs"]}
+    return finish(terminal, image_id=image_id, not_applicable=not_applicable)
 
 
 def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
@@ -299,10 +343,15 @@ def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
     unique = {record["observation_id"]: record for record in records}
     document = {"schema": "appsec-review/ci-normalized-observations/1", "provider": raw["provider"],
                 "tool_id": raw["tool_id"], "records": [unique[key] for key in sorted(unique)],
-                "gaps": raw["gaps"], "terminal_status": raw["terminal_status"],
+                "gaps": list(raw["gaps"]), "terminal_status": raw["terminal_status"],
                 "raw_artifact": output["raw_artifact"], "normalizer_identity": "ci-normalizer/1"}
     artifact = _write(unit, "normalized-observations.json", document)
-    return {**output, "normalized_artifact": artifact, "record_count": len(unique),
+    # Normalization succeeded on its own terms; the scan's status and declared gap records travel as
+    # payload facts (``scan_*``) so no downstream unit re-declares another unit's gaps.
+    carried = {key: value for key, value in output.items() if key not in {"gaps", "terminal_status"}}
+    return {**carried, "terminal_status": "SUCCEEDED", "gaps": [],
+            "scan_terminal_status": raw["terminal_status"], "scan_gap_records": list(output.get("gaps", [])),
+            "normalized_artifact": artifact, "record_count": len(unique),
             "raw_record_count": len(records), "duplicate_observation_count": len(records) - len(unique)}
 
 
@@ -310,20 +359,22 @@ def _hierarchy(unit: UnitContext) -> Mapping[str, Any]:
     definitions = unit.output("ci_discovery.classify_providers")["definitions"]
     _, max_bytes, _ = _bounds(unit)
     nodes: list[dict[str, Any]] = []
-    gaps: list[str] = []
+    gaps: list[dict[str, Any]] = []
     for definition in definitions:
         source = (unit.job.target_root or Path()) / definition["path"]
         try:
             data = source.read_bytes()
             if len(data) > max_bytes:
-                gaps.append(f"{definition['path']}: hierarchy max_file_bytes exceeded")
+                gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: hierarchy max_file_bytes exceeded",
+                                 unit.unit_id, scope=definition["path"]))
                 continue
             nodes.extend(hierarchy(definition["provider"], definition["path"], data.decode("utf-8", "strict")))
         except (OSError, UnicodeError) as exc:
-            gaps.append(f"{definition['path']}: hierarchy unavailable ({type(exc).__name__})")
+            gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: hierarchy unavailable ({type(exc).__name__})",
+                             unit.unit_id, scope=definition["path"]))
     document = {"schema": "appsec-review/ci-hierarchy/1", "nodes": nodes,
-                "gaps": list(dict.fromkeys(gaps)), "parser_identity": "ci-structural-hierarchy/1"}
-    return {"artifact": _write(unit, "hierarchy.json", document), "node_count": len(nodes), "gaps": document["gaps"]}
+                "gaps": _reasons(gaps), "parser_identity": "ci-structural-hierarchy/1"}
+    return {"artifact": _write(unit, "hierarchy.json", document), "node_count": len(nodes), "gaps": gaps}
 
 
 def _enrich(record: dict[str, Any], nodes: list[Mapping[str, Any]]) -> dict[str, Any]:
@@ -380,19 +431,24 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
                                          " ".join(str(record.get(key, "")) for key in
                                                   ("provider", "category", "message", "pipeline", "job", "step")),
                                          record, _source_location(unit, record)))
-    status = "complete" if output["terminal_status"] == "SUCCEEDED" else (
-        "unavailable" if output["terminal_status"] in {"FAILED", "NOT_APPLICABLE"} else "partial")
-    gap = "; ".join(output.get("gaps", [])[:10]) or None
+    scan_status = output["scan_terminal_status"]
+    status = "complete" if scan_status == "SUCCEEDED" else (
+        "unavailable" if scan_status in {"FAILED", "NOT_APPLICABLE"} else "partial")
+    reasons = _reasons(output["scan_gap_records"])
+    gap = "; ".join(reasons[:10]) or None
     builder.add_coverage(f"{spec.provider}:{spec.name}", status, gap)
     sha256 = builder.build()
     identity = IndexIdentity("observations", "appsec-review/retrieval-index/2", sha256, fingerprint,
                              _rel(unit.job.run_root, path), {"job": "job_ci_configuration_analysis",
                              "provider": spec.provider, "tool_id": spec.tool_id},
-                             tuple(output.get("gaps", ())), shard_id)
-    return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": output["terminal_status"],
+                             tuple(reasons), shard_id)
+    # A unit's ``gaps`` and ``terminal_status`` describe its own work. The scan unit already declared
+    # its gap records; here they are a payload fact, so the handoff counts each gap once.
+    return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": "SUCCEEDED",
+            "scan_terminal_status": scan_status, "scan_gap_records": list(output["scan_gap_records"]),
             "artifact": _artifact(unit.job.run_root, path), "index_identity": asdict(identity),
             "normalized_artifact": output["normalized_artifact"], "record_count": len(records),
-            "gaps": output.get("gaps", []), "records": records,
+            "gaps": [], "records": records,
             "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
 
 
@@ -450,21 +506,27 @@ def _coverage(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, Any
     by_provider = {provider: len([item for item in classified["definitions"] if item["provider"] == provider])
                    for provider in PROVIDERS}
     tools = []
-    gaps = list(classified["gaps"])
+    gaps: list[dict[str, Any]] = list(classified["gap_records"])
     skipped: list[Mapping[str, Any]] = []
     for unit_id in index_ids:
         output = unit.output(unit_id)
         not_applicable = output.get("not_applicable_inputs") or not_applicable_summary(())
-        tools.append({key: output[key] for key in ("provider", "tool_id", "terminal_status", "record_count")}
-                     | {"gaps": output.get("gaps", []),
+        tools.append({key: output[key] for key in ("provider", "tool_id", "record_count")}
+                     | {"terminal_status": output["scan_terminal_status"],
+                        "gaps": _reasons(output["scan_gap_records"]),
                         "not_applicable_input_count": int(not_applicable.get("count", 0))})
         skipped.extend(not_applicable.get("items", ()))
-        gaps.extend(output.get("gaps", []))
+        gaps.extend(output["scan_gap_records"])
+    gaps.extend(unit.output("ci_enrichment.build_hierarchy")["gaps"])
+    unique = {gap["gap_id"]: gap for gap in gaps}
+    gaps = [unique[key] for key in sorted(unique)]
     coverage = {"schema": "appsec-review/ci-coverage/1", "definitions_by_provider": by_provider,
-                "tools": tools, "gaps": list(dict.fromkeys(gaps)),
+                "tools": tools, "gaps": _reasons(gaps), "gap_records": gaps,
                 "not_applicable_inputs": not_applicable_summary(skipped),
                 "coverage_status": "complete" if not gaps else "partial"}
-    return {"artifact": _write(unit, "coverage.json", coverage), **coverage}
+    # The joined gap records belong to the units that found them (they declared them); this unit
+    # carries the join as payload and declares nothing of its own.
+    return {"artifact": _write(unit, "coverage.json", coverage), **coverage, "gaps": []}
 
 
 def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str | None = None) -> Job:
@@ -476,7 +538,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         for step, tasks in TOPOLOGY.items():
             if tuple(context.config.step(step).tasks) != tasks:
                 raise ValueError(f"CI configuration task order mismatch: {step}")
-        catalog = load_target_catalog(context.run_root)
+        analysis_bounds(context.config.settings)
+        catalog = load_target_catalog(context.run_root, intake_target_root=False)
         if catalog.source_fingerprint != context.source_fingerprint:
             raise ValueError("CI target fingerprint does not match the accepted target catalog")
 
@@ -485,20 +548,25 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
             load_catalog(unit.job.repository_root), unit.job.run_root)
 
     def discover_handler(unit: UnitContext) -> Mapping[str, Any]:
-        catalog = load_target_catalog(unit.job.run_root)
+        catalog = load_target_catalog(unit.job.run_root, intake_target_root=False)
         max_files, _, _ = _bounds(unit)
-        definitions, gaps = discover_ci_definitions(catalog.files, max_files=max_files)
+        definitions, reasons = discover_ci_definitions(catalog.files, max_files=max_files)
+        gaps = [_gap(GapCode.TRUNCATED, reason, unit.unit_id) for reason in reasons]
         document = {"schema": "appsec-review/ci-definition-catalog/1", "definitions": definitions,
-                    "gaps": gaps, "catalog_handoff_sha256": catalog.handoff_sha256}
-        return {"artifact": _write(unit, "ci-definitions.json", document), **document}
+                    "gaps": reasons, "catalog_handoff_sha256": catalog.handoff_sha256}
+        by_provider = {provider: sum(1 for item in definitions if item["provider"] == provider) for provider in PROVIDERS}
+        unit.job.events.write("CI_DEFINITIONS_DISCOVERED", unit_id=unit.unit_id, definition_count=len(definitions),
+                              by_provider=by_provider, max_files=max_files, gap_count=len(gaps))
+        return {"artifact": _write(unit, "ci-definitions.json", document), **document, "gaps": gaps}
 
     def classify_handler(unit: UnitContext) -> Mapping[str, Any]:
         source = unit.output("ci_discovery.discover_definitions")
         by_provider = {provider: [item["path"] for item in source["definitions"] if item["provider"] == provider]
                        for provider in PROVIDERS}
         document = {"schema": "appsec-review/ci-provider-classification/1",
-                    "definitions": source["definitions"], "by_provider": by_provider, "gaps": source["gaps"]}
-        return {"artifact": _write(unit, "provider-classification.json", document), **document}
+                    "definitions": source["definitions"], "by_provider": by_provider, "gaps": _reasons(source["gaps"])}
+        return {"artifact": _write(unit, "provider-classification.json", document), **document,
+                "gap_records": list(source["gaps"]), "gaps": []}
 
     units: list[Unit] = [
         Unit("ci_discovery.discover_definitions", discover_handler),
@@ -523,7 +591,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     units.append(Unit("ci_correlation.correlate_findings", lambda unit: _correlate(unit, tuple(index_ids)),
                       tuple(index_ids)))
     units.append(Unit("ci_coverage.join_coverage", lambda unit: _coverage(unit, tuple(index_ids)),
-                      ("ci_correlation.correlate_findings", *tuple(index_ids))))
+                      ("ci_correlation.correlate_findings", "ci_enrichment.build_hierarchy", *tuple(index_ids))))
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         manifest_path, manifest_sha = resolve_context_manifest(unit.job)
@@ -548,11 +616,16 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                     "target_fingerprint": unit.job.source_fingerprint,
                     "coverage": coverage["artifact"], "canonical_findings": correlation["artifact"],
                     "index_manifest": _artifact(unit.job.run_root, combined),
-                    "finding_count": correlation["finding_count"], "gaps": coverage["gaps"],
-                    "security_findings": []}
+                    "finding_count": correlation["finding_count"], "gaps": _reasons(coverage["gap_records"]),
+                    "gap_count": len(coverage["gap_records"]),
+                    "coverage_status": coverage["coverage_status"], "security_findings": []}
         artifact = _write(unit, "handoff.json", document)
-        return {**document, "artifact": artifact,
-                "terminal_status": "PARTIAL" if document["gaps"] else "SUCCEEDED"}
+        unit.job.events.write("CI_ANALYSIS_PUBLISHED", unit_id=unit.unit_id, finding_count=correlation["finding_count"],
+                              coverage_status=coverage["coverage_status"], gap_count=len(coverage["gap_records"]),
+                              definitions_by_provider=coverage["definitions_by_provider"], artifact=artifact)
+        # Publication itself succeeded; the job's coverage disposition comes from the gap records the
+        # scanning units declared, which the handoff joins without this unit re-declaring them.
+        return {**document, "artifact": artifact, "gaps": [], "terminal_status": "SUCCEEDED"}
 
     units.append(Unit("ci_coverage.publish_handoff", publish,
                       ("ci_coverage.join_coverage", "ci_correlation.correlate_findings", *tuple(index_ids))))
@@ -560,9 +633,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     implementation = None
 
 
-    return Job("job_ci_configuration_analysis", "ci_configuration_analysis", UnitExecutor(tuple(units)).execute,
+    return Job(JOB_ID, "ci_configuration_analysis", UnitExecutor(tuple(units)).execute,
                input_validators=(validate,), schema_identity="appsec-review/ci-configuration-analysis-job/1",
                implementation_identity=implementation,
                validation_identity=None,
                runtime_identity=None, units=tuple(units),
-               datasets=DATASETS, contract=CONTRACT)
+               datasets=DATASETS, contract=CONTRACT, strict_gaps=True)

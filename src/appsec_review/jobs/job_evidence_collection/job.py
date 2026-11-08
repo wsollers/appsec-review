@@ -163,7 +163,13 @@ def _read_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_target_catalog(run_root: Path) -> ScanCatalog:
+def load_target_catalog(run_root: Path, *, intake_target_root: bool = True) -> ScanCatalog:
+    """Read the accepted target catalog into a ``ScanCatalog``.
+
+    ``intake_target_root`` also reads the accepted intake handoff for the target path; a consumer
+    that does not declare ``job_review_intake`` inputs must pass ``False``, because every runtime
+    read is checked against the consumer's declared contract.
+    """
     from appsec_review.runtime.consume import accepted_upstream
     accepted = accepted_upstream(run_root, "job_target_catalog")
     handoff = accepted.handoff
@@ -179,7 +185,8 @@ def load_target_catalog(run_root: Path) -> ScanCatalog:
         run_root, catalog_doc["artifacts"]["build_discovery.discover_compile_commands"])
     artifacts = tuple(item for item in builds.get("targets", []) if item.get("artifact_kind") == "built")
     target_root = None
-    intake_accepted = accepted_upstream(run_root, "job_review_intake", required=False)
+    intake_accepted = (accepted_upstream(run_root, "job_review_intake", required=False)
+                       if intake_target_root else None)
     if intake_accepted is not None:
         intake_handoff = intake_accepted.handoff
         intake_artifact = intake_handoff.get("outputs", {}).get("publish_intake.publish_handoff", {}).get("artifact")

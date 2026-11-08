@@ -257,7 +257,7 @@ def test_ci_action_metadata_is_not_handed_to_workflow_only_linters(tmp_path: Pat
     assert actionlint["terminal_status"] == "SUCCEEDED" and actionlint["gaps"] == []
     assert actionlint["not_applicable_inputs"]["items"][0]["path"] == ".github/actions/setup/action.yml"
     coverage = outputs["ci_coverage.join_coverage"]
-    assert not any("action.yml" in gap for gap in coverage["gaps"])
+    assert coverage["gaps"] == [] and not any("action.yml" in gap["reason"] for gap in coverage["gap_records"])
     assert coverage["not_applicable_inputs"]["count"] == 2
 
 
@@ -275,8 +275,9 @@ def test_ci_supported_definition_failure_is_still_a_gap(tmp_path: Path) -> None:
                               fail_tool="github_actionlint")
     actionlint = outputs["ci_analysis.github_actionlint_scan"]
     assert actionlint["terminal_status"] == "FAILED"
-    assert any("ci.yml" in gap and "injected bounded failure" in gap for gap in actionlint["gaps"])
-    assert not any("action.yml" in gap for gap in actionlint["gaps"])
+    [gap] = actionlint["gaps"]
+    assert gap["code"] == "producer_failed" and gap["scope_id"] == ".github/workflows/ci.yml"
+    assert "ci.yml" in gap["reason"] and "injected bounded failure" in gap["reason"]
 
 
 # --- job_artifact_security_analysis -----------------------------------------------------------

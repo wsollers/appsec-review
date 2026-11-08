@@ -340,6 +340,10 @@ until each is rewritten into the entry format when it is next touched.
   until after the next live test cycle.
 - **Scope:** to be defined; candidates include splitting Docker-touching tests out of the unit
   path (see T-052), session-scoped fixtures for run trees, and `pytest-xdist` by default.
+- **Measured (job pass 07):** a runner-driven unit test (intake → catalog → one job on a tiny
+  synthetic target) costs ~7 s serially; a profile puts about half in `storage.shared.safe_path`
+  (≈14.7k calls per run, each a per-component symlink walk) and most of the rest in the handoff's
+  reference verification. Every job pass adds ~10 such tests, so this is the lever.
 - **Done when:** a scoped decision is recorded here and the unit path runs in minutes on a
   developer host.
 
