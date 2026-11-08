@@ -20,9 +20,10 @@
           "evidence": "gen/CMakeLists.txt:3"
         }
       ],
-      "facts": {
-        "parallel_with": []
-      }
+      "facts_absent": [
+        "parallel_with",
+        "capture_authority"
+      ]
     },
     {
       "root": "wrap",
@@ -39,9 +40,10 @@
           "evidence": "wrap/meson.build:2"
         }
       ],
-      "facts": {
-        "parallel_with": []
-      }
+      "facts_absent": [
+        "parallel_with",
+        "capture_authority"
+      ]
     }
   ],
   "not_units": [
@@ -72,20 +74,5 @@
     "wrap/README.md": "inert"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:gen|cmake.facts",
-      "ref": "T-056.6",
-      "note": "a unit states its parallels, empty when it has none"
-    },
-    {
-      "check": "unit:wrap|meson.facts",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:gen/Makefile",
-      "ref": "T-056.6",
-      "note": "generator output is inert, not context the cmake unit reads"
-    }
-  ]
+  "pending": []
 }

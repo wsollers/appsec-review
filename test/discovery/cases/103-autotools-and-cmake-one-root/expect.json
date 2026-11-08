@@ -76,30 +76,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:libhash|cmake.facts",
-      "ref": "T-056.6"
-    },
-    {
       "check": "unit:libhash|autotools.build_point:libhash.a|library",
       "ref": "T-056.2",
       "note": "automake primaries (lib_LIBRARIES, bin_PROGRAMS) are the autotools build points"
-    },
-    {
-      "check": "unit:libhash|autotools.facts",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:libhash/src/hash.c",
-      "ref": "T-056.6",
-      "note": "shared sources bind to the capture authority's build point; today the alphabetically first unit at the root claims them"
-    },
-    {
-      "check": "assignment:libhash/src/hash.h",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:libhash/src/hashsum.c",
-      "ref": "T-056.6"
     }
   ]
 }

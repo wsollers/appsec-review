@@ -129,3 +129,9 @@ drives (the parent adds `tinylib`, not `tinylib/test`) and so stays a root of it
 marker-claim test reads the catalog's units (markers, folded `descriptors`, member points' `descriptor`),
 so the Xcode project is claimed by its unit and is no longer listed as absorbed; the plan still
 excludes it under the Swift policy.
+
+Decision 2 (parallel systems, same day): the legacy `server/third_party/tinylib/Makefile` compiles the
+same sources as the vendored CMake tree, so it is no longer dropped by position; it is a parallel `make`
+unit with `capture_authority: secondary` and `parallel_with: ["server|cmake"]`, and it leaves the
+`absorbed_markers` list. The plan still treats it as an independent root, recorded as
+`capture-authority-secondary` until the plan reads `capture_authority` (T-035/T-036).

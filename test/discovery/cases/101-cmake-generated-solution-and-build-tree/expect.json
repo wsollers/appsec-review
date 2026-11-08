@@ -33,9 +33,7 @@
       "family": "native",
       "profile": "native",
       "markers": [
-        "lib/ALL_BUILD.vcxproj",
-        "lib/lib.sln",
-        "lib/lib.vcxproj"
+        "lib/lib.sln"
       ],
       "build_points": [
         {
@@ -129,10 +127,6 @@
     },
     {
       "check": "assignment:lib/ALL_BUILD.vcxproj",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:lib/src/lib.c",
       "ref": "T-056.2"
     },
     {

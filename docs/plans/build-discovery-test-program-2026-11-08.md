@@ -145,8 +145,11 @@ today's behaviour (the status table says what is implemented).
    `driven_by`), `includes` (modules a descriptor includes), `unresolved` (constructs discovery
    could not read, with evidence and reason; replaces `unresolved_projects`), `source_resolution`
    (`complete` | `containment`), `materialization_root` (the common ancestor a unit's build needs
-   checked out, when it references paths outside its root; T-056.5), `parallel_with`,
-   `capture_authority`, `conditions` (unit-level map of the conditions its points are under),
+   checked out, when it references paths outside its root; T-056.5), `parallel_with` (labels of
+   the other units at the root), `capture_authority` (`primary` on the unit whose build the native
+   lane runs, `secondary` on the others; order cmake, meson, autotools, make, msbuild),
+   `generated_by` (`cmake` on a checked-in solution CMake generated), `conditions` (unit-level map
+   of the conditions its points are under),
    `languages` (per unit; `build_points[].language` per point), `configurations` and
    `configuration_mapping` (MSBuild), `product_flavors` (Android), `package_manager` (node),
    `path_dependencies` and `replacements` (Cargo/Go path deps and replace directives, as
@@ -354,7 +357,7 @@ it drives, `-I` headers bind, sources bind to build points); 004 keeps one pendi
 (`materialization_root`, T-056.5). The first fixture tranche (cases 010–120) is in with its pending
 entries pointing at §2.1; the rules land sub-item by sub-item and each landing removes the pending
 entries it satisfies (a pending check that passes fails the suite). Decision 1 landed on 2026-11-08
-(313 pending entries remain, down from 542).
+(313 pending entries remain, down from 542); decision 2 the same day (294).
 
 | Sub-item | State | Notes |
 | --- | --- | --- |
@@ -362,7 +365,8 @@ entries it satisfies (a pending check that passes fails the suite). Decision 1 l
 | T-056.2 build points | done (2026-11-08) | `jobs/build_points.py`: CMake targets (`set`, `file(GLOB)`, `target_sources`, `target_include_directories` → headers, `add_subdirectory`/`FetchContent`/`ExternalProject_Add` → `drives`, custom target/command invocations → `drives`, `include`, `if/else` conditions, generator expressions → `unresolved`), Make rules (variables, substitution references, `$(wildcard)`, object → source, `-I` → headers, `$(MAKE) -C` and shell-loop sub-makes → `drives`, recipe invocations of other build tools → `invokes:<tool>` drives, `ifeq` conditions, `delegating`/`phony_or_aggregate` kinds), `.sln` → `project` points with the listed project's items, Cargo package/lib/bins/build script/tests (workspace members included), Go modules and packages (go.work members included), npm package/scripts/workspace members (npm `workspaces` and `pnpm-workspace.yaml`), Gradle `project` points from `settings` includes (+ `externalNativeBuild`), Maven `module` points, meson, automake (primaries, `SUBDIRS`, hand rules), Xcode, package descriptors. `source_resolution` complete/containment; descriptor-only cmake/make/meson/autotools units demoted; orphan decision after points; `native_components` retired. `tests/test_build_points.py`. |
 | decision 1 (members fold) | done (2026-11-08) | `build_discovery._attach_build_points` folds driven same-system units transitively (`FOLDING_VIAS`/`FOLDABLE_SYSTEMS`), records `descriptors`, `drives`, `driven_by`, returns `folded_roots`; `workspace` facts, the positional Gradle absorption and the make-drop-at-cmake-root rule's companions removed; `discovery_assignment` prefers the containing unit's point and maps member descriptors to `#<member>`; catalog emits `build-systems/4` with `folded_roots`/`demoted_markers`; the plan reader pins `/4`. Case vocabulary normalised (§2.1 item 11); 184 pending entries closed (542 → 313). Topology fixture: members `may_be_absent`, three reason codes retired. |
 | T-056.3 orphaned sources | done in discovery and catalog (2026-11-08); review surfacing open | `discover_build_inventory` returns `orphaned_sources`; `direct-native`/`javac`/`rustc`/`go` source fallbacks removed; `build-systems/3` lists orphans and the catalog counts them (`BUILD_SYSTEMS_DISCOVERED`); still to do: the finding class downstream (prioritization/report) |
-| T-056.4 matrix A | cases written (010–036); decision 1 landed, decisions 2–4 and the look-alike rules open | 27 cases; remaining pending entries name solution family (decision 3), generated/installed trees (decision 4), context names, roots that are not roots (item 8), package-manager authority (C3) |
+| decision 2 (parallel systems) | done (2026-11-08) | `build_discovery._resolve_parallel_systems`: the make-drop-at-cmake/meson/autotools-root rule is replaced by reading the Makefile — generator output (`# CMAKE generated file`, automake/configure headers) is inert, a wrapper whose rules compile nothing and invoke the co-located system's tool is `context:<authority>` (`demoted_markers[].role`), a Makefile with compile rules is a parallel unit. Units sharing a root carry `parallel_with: [labels]` and `capture_authority: primary|secondary` (`CAPTURE_AUTHORITY_ORDER`: cmake, meson, autotools, make, msbuild); a root whose descriptor was folded into a parent has that parent as the parallel. The authority's point wins shared sources in the assignment. A checked-in CMake-generated solution states `generated_by: cmake`. Without descriptor text both units stand with the authority recorded. 19 pending entries closed (313 → 294); the monorepo's tinylib Makefile is now a secondary parallel unit (`capture-authority-secondary`, plan-side T-035/T-036). |
+| T-056.4 matrix A | cases written (010–036); decisions 1–2 landed, decisions 3–4 and the look-alike rules open | 27 cases; remaining pending entries name solution family (decision 3), generated/installed trees (decision 4), context names, roots that are not roots (item 8), package-manager authority (C3) |
 | T-056.5 matrix B, D | cases written (060–080); nesting and workspace folds landed, cross-tree open | `materialization_root`, `path_dependencies`/`replacements`, Unity `plugin_importer` drives |
 | T-056.6 matrix C, E, F | cases written (100–120); member folds landed, rest open | parallel authority (decision 2), conditions, languages, `profile_gaps`, typed packaging points (`c_extension`, `gyp_target`, cc build scripts) |
 | T-056.7 matrix G | open | |

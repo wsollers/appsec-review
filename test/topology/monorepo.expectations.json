@@ -6,6 +6,7 @@
     "live_target": "targets/topology-monorepo"
   },
   "reason_codes": {
+    "capture-authority-secondary": "The legacy Makefile beside the vendored CMakeLists.txt compiles the same sources, so discovery keeps it as a parallel unit with capture_authority=secondary and parallel_with the CMake owner (plan §2.1 decision 2). The plan does not yet read capture_authority: it treats the secondary unit as an independent root and dispatches it standalone instead of containing it under the authority (T-035/T-036).",
     "ownership-vendored": "A nested Make tree whose rules compile another directory's sources (tinylib/test) stays a unit of its own until a literal drive names it: the parent CMake tree adds third_party/tinylib (folded into the parent, plan §2.1 decision 1), not tinylib/test, so the test Makefile is an independent root and is dispatched standalone, where its ../ sources are absent.",
     "workspace-materialization": "A unit's build workspace is its own root plus named dependency_files. A driver that references ../ paths needs the common ancestor of every referenced path materialized, and validate_build_recipe cannot accept dependency paths outside the unit's descriptor package, so the requirement cannot even be expressed.",
     "deterministic-recipe": "Recipes are entirely model-inferred. Canonical build systems (CMake with project(), Make default goal, a Cargo workspace, go.work, an npm build script, composer) have no deterministic recipe path, so accepted plans carry null recipes and recipe_missing refinements.",
@@ -39,12 +40,12 @@
       "units": [
         {"root": "server", "build_system": "cmake", "disposition": "independent", "owner_root": "server", "dispatch_standalone": true},
         {"root": "server/third_party/tinylib", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false, "may_be_absent": true},
+        {"root": "server/third_party/tinylib", "build_system": "make", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false,
+         "gaps": {"ownership": "capture-authority-secondary", "standalone": "capture-authority-secondary"}},
         {"root": "server/third_party/tinylib/test", "build_system": "make", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false,
          "gaps": {"ownership": "ownership-vendored", "standalone": "ownership-vendored"}}
       ],
-      "absorbed_markers": [
-        {"path": "server/third_party/tinylib/Makefile", "reason": "a legacy standalone Makefile at a CMake root; discovery keeps the CMake unit for that root"}
-      ],
+      "absorbed_markers": [],
       "relationships": []
     },
     {

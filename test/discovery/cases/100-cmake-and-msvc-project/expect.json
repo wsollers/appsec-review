@@ -38,8 +38,7 @@
       "family": "native",
       "profile": "native",
       "markers": [
-        "engine/engine.sln",
-        "engine/engine.vcxproj"
+        "engine/engine.sln"
       ],
       "build_points": [
         {
@@ -69,7 +68,7 @@
     "engine/CMakeLists.txt": "evidence_of:engine|cmake",
     "engine/engine.sln": "evidence_of:engine|msbuild",
     "engine/engine.vcxproj": "evidence_of:engine|msbuild#engine",
-    "engine/engine.vcxproj.filters": "context:engine|msbuild",
+    "engine/engine.vcxproj.filters": "inert",
     "engine/engine.vcxproj.user": "context:engine|msbuild",
     "engine/Directory.Build.props": "context:engine|msbuild",
     "engine/include/core.h": "evidence_of:engine|cmake#engine_core",
@@ -123,19 +122,6 @@
     {
       "check": "assignment:engine/Directory.Build.props",
       "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:engine/include/core.h",
-      "ref": "T-056.2",
-      "note": "the primary authority's build point owns the shared sources"
-    },
-    {
-      "check": "assignment:engine/src/core.cpp",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:engine/src/main.cpp",
-      "ref": "T-056.2"
     },
     {
       "check": "unit:engine|msbuild",

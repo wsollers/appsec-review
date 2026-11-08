@@ -30,7 +30,12 @@ def test_discovery_groups_descriptors_without_repository_specific_names() -> Non
         _file("rust/member/Cargo.toml"), _file("go/service/go.mod"),
         _file("java/app/pom.xml"), _file("unrelated/README.md"),
     ]
-    units = discover_build_units(files)
+    # The Makefile beside the CMake project only invokes cmake: it is that unit's context, not a unit
+    # (plan §2.1 decision 2 — read, never dropped by position).
+    texts = {"native/Makefile": "all:\n\tcmake -S . -B build && cmake --build build\n",
+             "native/CMakeLists.txt": "project(native CXX)\nadd_executable(native src/main.cpp)\n"}
+    inventory = discover_build_inventory(files, read_text=texts.get)
+    units = inventory["units"]
     assert [(item["root"], item["family"], item["build_system"]) for item in units] == [
         ("go/service", "go", "go"), ("java/app", "java", "maven"),
         ("native", "native", "cmake"), ("rust/member", "rust", "cargo"),
@@ -38,6 +43,15 @@ def test_discovery_groups_descriptors_without_repository_specific_names() -> Non
     native = next(item for item in units if item["family"] == "native")
     # A preset is context the project reads, never a marker (job pass 05 / T-056.2).
     assert {item["path"] for item in native["markers"]} == {"native/CMakeLists.txt"}
+    assert "parallel_with" not in native
+    assert [(d["markers"], d["role"], d.get("unit")) for d in inventory["demoted_markers"]] == [
+        (["native/Makefile"], "context", "native|cmake")]
+    assert assign_paths(files, inventory)["native/Makefile"] == "context:native|cmake"
+    # Without descriptor text the Makefile cannot be read: both units stand, CMake holding capture authority.
+    blind = {(u["root"], u["build_system"]): u for u in discover_build_units(files)}
+    assert blind[("native", "make")]["capture_authority"] == "secondary"
+    assert blind[("native", "make")]["parallel_with"] == ["native|cmake"]
+    assert blind[("native", "cmake")]["capture_authority"] == "primary"
 
 
 def test_compiled_sources_without_a_build_point_are_orphaned_findings_not_units() -> None:

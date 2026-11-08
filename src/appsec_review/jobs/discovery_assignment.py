@@ -88,15 +88,23 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
                 # innermost), then to the first point in descriptor order (§2.1 item 7): a header a
                 # consumer reaches through -I stays with the library that builds it.
                 depth = len(PurePosixPath(root).parts) if _under(PurePosixPath(str(path)), root) else -1
-                claims.setdefault(str(path), []).append((-depth, unit_index, point_index, f"{label}#{point['name']}"))
+                # Among parallel units at one root the capture authority's point wins (§2.1 decision 2).
+                secondary = 1 if unit.get("capture_authority") == "secondary" else 0
+                claims.setdefault(str(path), []).append((-depth, secondary, unit_index, point_index, f"{label}#{point['name']}"))
         for path in unit.get("descriptors", ()):
             # A folded member's descriptor that defines no member point of its own (a CMake
             # subdirectory's CMakeLists.txt, a sub-make's Makefile) is evidence of the unit.
             marker_owner.setdefault(str(path), label)
         for path in unit.get("includes", ()):
             included.setdefault(str(path), label)
-    component_owner = {path: min(options)[3] for path, options in claims.items()}
-    demoted = {str(path) for item in discovery.get("demoted_markers") or [] for path in item.get("markers", ())}
+    component_owner = {path: min(options)[-1] for path, options in claims.items()}
+    # A demoted marker is inert (a descriptor that declares no build, generator output) unless the
+    # demotion names the unit it is context of (a wrapper Makefile beside the build it invokes).
+    demoted: dict[str, str] = {}
+    for item in discovery.get("demoted_markers") or []:
+        role = f"context:{item['unit']}" if item.get("role") == "context" and item.get("unit") else "inert"
+        for path in item.get("markers", ()):
+            demoted.setdefault(str(path), role)
     scopes = [(str(scope["root"]), str(scope.get("language") or "source")) for scope in source_only_scopes]
     assignment: dict[str, str] = {}
     for path, policy in sorted((excluded or {}).items()):
@@ -107,7 +115,10 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
             continue
         posix = PurePosixPath(path)
         suffix = posix.suffix.lower()
-        if path in demoted or _under_generated_dir(path):
+        if path in demoted:
+            assignment[path] = demoted[path]
+            continue
+        if _under_generated_dir(path):
             assignment[path] = "inert"
             continue
         if path in marker_owner:
