@@ -24,13 +24,14 @@ import tomllib
 from typing import Any
 
 from appsec_review.config.target_acquisition import parse_target_acquisition
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.jobs.job_target_acquisition.datasets import CONTRACT, DATASETS
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 
 
 JOB_ID = "job_target_acquisition"
-SCHEMA = "appsec-review/target-acquisition-job/1"
+SCHEMA = "appsec-review/target-acquisition-job/2"
 PLAN_NAME = "target-acquisition-plan.json"
 RESULT_NAME = "target-acquisition-result.json"
 MANIFEST_NAME = "system-manifest.json"
@@ -41,6 +42,25 @@ TOPOLOGY = {
     "publication": ("publish_handoff",),
 }
 _SYSTEM_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+# Acquisition gap reasons that an operator action (fix the source, re-run) resolves.
+_RETRYABLE = frozenset({"component_acquisition_failed", "component_not_acquired"})
+
+
+class TargetAcquisitionFailed(RuntimeError):
+    """No component of the requested system is available; the review cannot start."""
+
+
+def _gap_records(unit_id: str, gaps: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The acquisition library's ``{path, reason, detail}`` gaps as ``producer-gap/1`` records."""
+    records = []
+    for gap in gaps:
+        reason = str(gap.get("reason") or "acquisition_gap")
+        code = GapCode.PRODUCER_FAILED if reason == "component_acquisition_failed" else GapCode.PRODUCER_REPORTED_GAP
+        detail = str(gap.get("detail") or "").strip()
+        records.append(producer_gap(code, f"{gap.get('path', '.')}: {reason}" + (f": {detail}" if detail else ""),
+                                    unit_id=unit_id, scope_id=str(gap.get("path") or "."),
+                                    retryable=reason in _RETRYABLE))
+    return records
 
 
 def _validate(context, _result) -> None:
@@ -107,7 +127,7 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
         plan = unit.output("selection.resolve_system")
         if not plan["requested"]:
             document = {"schema": SCHEMA, "status": "NOT_REQUESTED", "plan": plan["artifact"]}
-            return {"schema": SCHEMA, "status": "NOT_REQUESTED",
+            return {"schema": SCHEMA, "status": "NOT_REQUESTED", "terminal_status": "NOT_APPLICABLE",
                     "artifact": _identity(unit, unit.unit_root / RESULT_NAME, document), "gaps": []}
         from appsec_review.target_acquisition.acquire import acquire_system, system_paths
         settings, _configuration = _settings(unit)
@@ -119,11 +139,14 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
         components = {component_id: {key: value.get(key) for key in (
             "status", "action", "acquisition_id", "target_path", "manifest", "manifest_sha256", "tree_sha256",
             "error", "failure_record")} for component_id, value in result.get("components", {}).items()}
+        gaps = _gap_records(unit.unit_id, list(result.get("gaps", [])))
         document = {"schema": SCHEMA, "plan": plan["artifact"], "system_id": system.system_id,
                     "status": result["status"], "acquisition_id": result.get("acquisition_id"),
                     "target_path": result.get("target_path"), "manifest": result.get("manifest"),
                     "manifest_sha256": result.get("manifest_sha256"), "tree_sha256": result.get("tree_sha256"),
-                    "components": components, "gaps": result.get("gaps", []), "error": result.get("error")}
+                    "verification": result.get("verification"), "completed_at": result.get("completed_at"),
+                    "components": components, "acquisition_gaps": result.get("gaps", []), "gaps": gaps,
+                    "error": result.get("error")}
         identity = _identity(unit, unit.unit_root / RESULT_NAME, document)
         manifest_identity = None
         _system_root, records = system_paths(unit.job.repository_root, settings, system.system_id)
@@ -141,16 +164,20 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
                                   status=result["status"], record=identity["path"])
             failures = [f"{component_id}: {value.get('status')}: {value.get('error')}"
                         for component_id, value in components.items() if value.get("error")]
-            raise RuntimeError("\n".join([
+            raise TargetAcquisitionFailed("\n".join([
                 f"target acquisition of system {system.system_id} is {result['status']}: "
                 f"{result.get('error') or 'no component is available'}", *failures,
                 f"acquisition record: {unit.unit_root / RESULT_NAME}"]))
+        verified = sum(1 for value in result.get("components", {}).values() if value.get("action") == "verified")
         unit.job.events.write("TARGET_ACQUISITION_COMPLETED", unit_id=unit.unit_id, system_id=system.system_id,
-                              status=result["status"], gap_count=len(document["gaps"]))
+                              status=result["status"], gap_count=len(gaps),
+                              component_count=len(components), verified_count=verified,
+                              acquired_count=len(components) - verified)
         return {"schema": SCHEMA, "status": result["status"], "artifact": identity,
                 "manifest": manifest_identity, "system_id": system.system_id,
                 "acquisition_id": result.get("acquisition_id"), "tree_sha256": result.get("tree_sha256"),
-                "target_path": result.get("target_path"), "components": components, "gaps": document["gaps"]}
+                "target_path": result.get("target_path"), "components": components, "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish_handoff(unit: UnitContext) -> Mapping[str, Any]:
         acquired = unit.output("acquisition.acquire_components")
@@ -158,8 +185,9 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
             "schema", "status", "artifact", "manifest", "system_id", "acquisition_id", "tree_sha256",
             "target_path", "components", "gaps")}
         identity = _identity(unit, unit.unit_root / HANDOFF_NAME, document)
-        return {**document, "artifact": identity, "result": acquired["artifact"],
-                "gaps": list(acquired.get("gaps") or [])}
+        # Gap records stay on the unit that observed them; publication adds none.
+        return {**document, "artifact": identity, "result": acquired["artifact"], "gaps": [],
+                "terminal_status": "SUCCEEDED"}
 
     units = (
         Unit("selection.resolve_system", resolve_system),
@@ -169,5 +197,5 @@ def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None)
     return Job(
         JOB_ID, "target_acquisition", UnitExecutor(units).execute,
         input_validators=(_validate,), schema_identity=SCHEMA, units=units, datasets=DATASETS,
-        contract=CONTRACT, always_execute=True, propagate_handoff=False,
+        contract=CONTRACT, always_execute=True, propagate_handoff=False, strict_gaps=True,
     )
