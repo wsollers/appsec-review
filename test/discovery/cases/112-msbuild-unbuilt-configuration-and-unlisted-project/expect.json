@@ -1,0 +1,50 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "112-msbuild-unbuilt-configuration-and-unlisted-project",
+  "matrix": "E3",
+  "polarity": "negative",
+  "mirrors": "a solution configuration Release|ARM64 whose only project has an ActiveCfg but no Build.0 line (the configuration builds nothing), a .vcxproj.user with a configuration condition (debugger settings, not a build point), and a .vcxproj the solution does not list (an independent unit, by literal evidence)",
+  "units": [
+    {"root": "win", "build_system": "msbuild", "family": "native", "profile": "native",
+     "markers": ["win/app/app.vcxproj", "win/win.sln"],
+     "build_points": [{"name": "app", "kind": "project", "evidence": "win/win.sln:3"}],
+     "facts": {
+       "configurations": ["Debug|x64", "Release|ARM64", "Release|x64"],
+       "configuration_mapping": {"app": {"Debug|x64": "Debug|x64", "Release|x64": "Release|x64"}},
+       "conditions": {},
+       "source_conditions": {}
+     }},
+    {"root": "win/tools", "build_system": "msbuild", "family": "native", "profile": "native",
+     "markers": ["win/tools/gen.vcxproj"],
+     "build_points": [{"name": "gen", "kind": "project", "evidence": "win/tools/gen.vcxproj:1"}],
+     "facts": {"configurations": ["Release|x64"], "conditions": {}}}
+  ],
+  "not_units": [
+    {"root": "win", "build_system": "dotnet", "marker": "win/win.sln", "role": "evidence_of:win|msbuild",
+     "reason": "the solution lists only a C++ project: it is the MSBuild unit's solution file, not a .NET build"},
+    {"root": "win/app", "build_system": "msbuild", "marker": "win/app/app.vcxproj", "role": "evidence_of:win|msbuild#app",
+     "reason": "listed by the solution one directory up"}
+  ],
+  "assignment": {
+    "win/win.sln": "evidence_of:win|msbuild",
+    "win/app/app.vcxproj": "evidence_of:win|msbuild#app",
+    "win/app/app.vcxproj.user": "context:win|msbuild",
+    "win/app/main.cpp": "evidence_of:win|msbuild#app",
+    "win/tools/gen.vcxproj": "evidence_of:win/tools|msbuild#gen",
+    "win/tools/gen.cpp": "evidence_of:win/tools|msbuild#gen"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:win|msbuild", "ref": "T-056.4"},
+    {"check": "unit:win/tools|msbuild.build_point:gen", "ref": "T-056.2", "note": "a .vcxproj no solution lists is its own unit with the project as its build point"},
+    {"check": "unit:win/tools|msbuild.facts", "ref": "T-056.6"},
+    {"check": "not_unit:win|dotnet", "ref": "T-056.4"},
+    {"check": "not_unit:win/app|msbuild", "ref": "T-056.4"},
+    {"check": "assignment:win/win.sln", "ref": "T-056.4"},
+    {"check": "assignment:win/app/app.vcxproj", "ref": "T-056.4"},
+    {"check": "assignment:win/app/app.vcxproj.user", "ref": "T-056.4"},
+    {"check": "assignment:win/app/main.cpp", "ref": "T-056.4"},
+    {"check": "assignment:win/tools/gen.vcxproj", "ref": "T-056.2"},
+    {"check": "assignment:win/tools/gen.cpp", "ref": "T-056.2"}
+  ]
+}
