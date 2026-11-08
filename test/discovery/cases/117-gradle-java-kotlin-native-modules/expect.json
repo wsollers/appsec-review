@@ -1,0 +1,53 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "117-gradle-java-kotlin-native-modules",
+  "matrix": "F2",
+  "polarity": "positive",
+  "mirrors": "one Gradle build with a Java + Kotlin library module and a C++ shared library module built by the cpp-library plugin; one unit, module build points typed by language, the java profile with the C++ toolchain named as a gap; the C++ sources are evidence, never orphans",
+  "units": [
+    {"root": "mobile", "build_system": "gradle", "family": "java", "profile": "java",
+     "markers": ["mobile/build.gradle", "mobile/settings.gradle"],
+     "build_points": [
+       {"name": "core", "kind": "module", "evidence": "mobile/settings.gradle:2"},
+       {"name": "fast", "kind": "module", "evidence": "mobile/settings.gradle:3"}
+     ],
+     "facts": {
+       "modules": ["core", "fast"],
+       "languages": {"core": ["java", "kotlin"], "fast": ["c++"]},
+       "profile_gaps": {"fast": "c++"}
+     }}
+  ],
+  "not_units": [
+    {"root": "mobile/core", "build_system": "gradle", "marker": "mobile/core/build.gradle", "role": "evidence_of:mobile|gradle#core",
+     "reason": "a module of the Gradle build rooted at mobile/"},
+    {"root": "mobile/fast", "build_system": "gradle", "marker": "mobile/fast/build.gradle", "role": "evidence_of:mobile|gradle#fast",
+     "reason": "a module of the Gradle build rooted at mobile/; the cpp-library plugin compiles its sources inside that build"}
+  ],
+  "assignment": {
+    "mobile/settings.gradle": "evidence_of:mobile|gradle",
+    "mobile/build.gradle": "evidence_of:mobile|gradle",
+    "mobile/gradle.properties": "context:mobile|gradle",
+    "mobile/gradle/wrapper/gradle-wrapper.properties": "context:mobile|gradle",
+    "mobile/core/build.gradle": "evidence_of:mobile|gradle#core",
+    "mobile/core/src/main/java/core/Core.java": "evidence_of:mobile|gradle#core",
+    "mobile/core/src/main/kotlin/core/Ext.kt": "evidence_of:mobile|gradle#core",
+    "mobile/fast/build.gradle": "evidence_of:mobile|gradle#fast",
+    "mobile/fast/src/main/cpp/fast.cpp": "evidence_of:mobile|gradle#fast",
+    "mobile/fast/src/main/public/fast.h": "evidence_of:mobile|gradle#fast",
+    "mobile/README.md": "inert"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:mobile|gradle.build_point:core", "ref": "T-056.2"},
+    {"check": "unit:mobile|gradle.build_point:fast", "ref": "T-056.2"},
+    {"check": "unit:mobile|gradle.facts", "ref": "T-056.6", "note": "module languages from the applied plugins; the java profile carries no C++ toolchain, so the native module is a named gap"},
+    {"check": "assignment:mobile/core/build.gradle", "ref": "T-056.2"},
+    {"check": "assignment:mobile/core/src/main/java/core/Core.java", "ref": "T-056.2"},
+    {"check": "assignment:mobile/core/src/main/kotlin/core/Ext.kt", "ref": "T-056.2"},
+    {"check": "assignment:mobile/fast/build.gradle", "ref": "T-056.2"},
+    {"check": "assignment:mobile/fast/src/main/cpp/fast.cpp", "ref": "T-056.6", "note": "a cpp-library module's source is reported as orphaned today (nearest unit 'different family')"},
+    {"check": "assignment:mobile/fast/src/main/public/fast.h", "ref": "T-056.6"},
+    {"check": "assignment:mobile/README.md", "ref": "T-056.2", "note": "a README under a unit root is inert, not context"},
+    {"check": "orphaned_sources", "ref": "T-056.6", "note": "no orphan: the Gradle build compiles the C++ module"}
+  ]
+}

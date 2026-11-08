@@ -1,0 +1,8 @@
+plugins {
+    id 'cpp-library'
+}
+
+library {
+    linkage = [Linkage.SHARED]
+    targetMachines = [machines.linux.x86_64, machines.windows.x86_64]
+}

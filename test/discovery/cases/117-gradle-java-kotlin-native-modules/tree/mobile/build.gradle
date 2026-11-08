@@ -1,0 +1,8 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '1.9.24' apply false
+}
+
+allprojects {
+    group = 'demo.mobile'
+    version = '0.1.0'
+}
