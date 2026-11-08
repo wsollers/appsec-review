@@ -14,6 +14,7 @@ from appsec_review.jobs.build_discovery import (
     node_workspace, normalize_build_recipe, required_image_profile,
     recipe_execution_cwd, unsupported_build_gaps, validate_build_recipe,
 )
+from appsec_review.jobs.discovery_assignment import assign_paths
 from appsec_review.storage import canonical_json
 
 
@@ -662,10 +663,13 @@ android {
         path.write_text(content, encoding="utf-8")
         files.append(_file(relative, content))
 
-    units = discover_build_units(files)
+    # The settings file's include(":app") is the literal evidence that folds the module into the root
+    # (plan §2.1 decision 1); discovery reads it through read_text.
+    units = discover_build_units(files, read_text=documents.get)
     assert [(item["root"], item["family"], item["build_system"]) for item in units] == [
         (".", "java", "gradle")]
     unit = units[0]
+    assert [(p["name"], p["kind"], p["descriptor"]) for p in unit["build_points"]] == [("app", "project", "app/build.gradle.kts")]
     package = descriptor_package(target, unit, files)
     facts = android_descriptor_facts(package)
     application = next(document for document in package["documents"]
@@ -885,28 +889,40 @@ def _reader(texts: dict[str, str]):
     return lambda path: texts.get(path)
 
 
-def test_a_settings_only_gradle_root_is_one_unit_that_names_its_modules() -> None:
-    files = [_file("client-android/settings.gradle", "include ':app', ':lib'\n"),
+def test_a_settings_only_gradle_root_folds_the_projects_it_includes() -> None:
+    settings = "include ':app', ':lib'\n"
+    files = [_file("client-android/settings.gradle", settings),
              _file("client-android/app/build.gradle", "plugins { id 'com.android.application' }\n"),
              _file("client-android/lib/build.gradle", "plugins { id 'com.android.library' }\n"),
              _file("client-android/app/src/main/java/A.kt"), _file("client-android/lib/src/main/java/B.kt")]
-    units = {unit["root"]: unit for unit in discover_build_units(files)}
-    assert set(units) == {"client-android", "client-android/app", "client-android/lib"}
+    inventory = discover_build_inventory(files, read_text=_reader({"client-android/settings.gradle": settings}))
+    units = {unit["root"]: unit for unit in inventory["units"]}
+    # One unit: the settings root. The included projects are its build points (plan §2.1 decision 1).
+    assert set(units) == {"client-android"}
     root = units["client-android"]
     assert (root["family"], root["build_system"]) == ("java", "gradle")
     assert [m["path"] for m in root["markers"]] == ["client-android/settings.gradle"]
-    assert root["workspace"] == {"manager": "gradle", "role": "root", "root": "client-android",
-                                 "members": ["client-android/app", "client-android/lib"]}
-    assert units["client-android/app"]["workspace"] == {"manager": "gradle", "role": "member", "root": "client-android"}
-    # The Kotlin sources belong to the module builds, never to a manufactured javac root.
-    assert all(unit["build_system"] != "javac" for unit in units.values())
+    assert [(p["name"], p["kind"], p["evidence"], p["descriptor"]) for p in root["build_points"]] == [
+        ("app", "project", "client-android/settings.gradle:1", "client-android/app/build.gradle"),
+        ("lib", "project", "client-android/settings.gradle:1", "client-android/lib/build.gradle")]
+    assert [(d["path"], d["via"]) for d in root["drives"]] == [("client-android/app", "settings_include"),
+                                                               ("client-android/lib", "settings_include")]
+    assert [(f["root"], f["folded_into"]) for f in inventory["folded_roots"]] == [
+        ("client-android/app", "client-android|gradle"), ("client-android/lib", "client-android|gradle")]
+    assert "workspace" not in root
+    assignment = assign_paths(files, inventory)
+    assert assignment["client-android/app/build.gradle"] == "evidence_of:client-android|gradle#app"
+    assert assignment["client-android/app/src/main/java/A.kt"] == "evidence_of:client-android|gradle#app"
+    assert assignment["client-android/lib/src/main/java/B.kt"] == "evidence_of:client-android|gradle#lib"
+    assert inventory["orphaned_sources"] == []
 
 
-def test_a_gradle_root_with_its_own_build_file_still_absorbs_its_modules() -> None:
+def test_a_gradle_module_nothing_includes_stays_a_unit_of_its_own() -> None:
     files = [_file("app/settings.gradle", "include ':core'\n"), _file("app/build.gradle"),
-             _file("app/core/build.gradle")]
-    units = discover_build_units(files)
-    assert [unit["root"] for unit in units] == ["app"]
+             _file("app/core/build.gradle"), _file("app/extra/build.gradle")]
+    units = discover_build_units(files, read_text=_reader({"app/settings.gradle": "include ':core'\n"}))
+    # core is included (folded); extra is not named by any include and so is a root of its own.
+    assert [unit["root"] for unit in units] == ["app", "app/extra"]
     assert "workspace" not in units[0]
 
 
@@ -924,7 +940,7 @@ def test_an_xcode_project_is_a_swift_unit_rooted_at_the_bundles_parent_under_the
     assert contains_swift_derived(unit)
 
 
-def test_a_source_a_sibling_descriptor_names_is_that_units_component_not_a_new_root() -> None:
+def test_a_source_a_sibling_descriptor_names_is_evidence_of_that_units_rule_not_a_new_root() -> None:
     makefile = "packer: main.c ../../common/src/util.c\n\t$(CC) -I../../common/include main.c ../../common/src/util.c -o packer\n"
     files = [_file("tools/packer/Makefile", makefile), _file("tools/packer/main.c"),
              _file("common/src/util.c"), _file("common/include/util.h"),
@@ -932,7 +948,10 @@ def test_a_source_a_sibling_descriptor_names_is_that_units_component_not_a_new_r
     inventory = discover_build_inventory(files, read_text=_reader({"tools/packer/Makefile": makefile}))
     units = {unit["root"]: unit for unit in inventory["units"]}
     assert "common" not in units, "no manufactured root for a referenced sibling source"
-    assert [c["path"] for c in units["tools/packer"]["native_components"]] == ["common/src/util.c"]
+    [packer] = units["tools/packer"]["build_points"]
+    assert packer["sources"] == ["common/src/util.c", "tools/packer/main.c"] and packer["headers"] == ["common/include/util.h"]
+    assert "native_components" not in units["tools/packer"], "retired: the rule's sources are the evidence (T-056.2)"
+    assert assign_paths(files, inventory)["common/src/util.c"] == "evidence_of:tools/packer|make#packer"
     # A source nothing references is orphaned, with the nearest unit it was not claimed by.
     [orphan] = inventory["orphaned_sources"]
     assert orphan["path"] == "lonely/src/alone.c" and orphan["nearest_unit"] is None
@@ -958,20 +977,35 @@ def test_a_wildcard_reference_in_a_vendored_test_makefile_binds_the_sources_it_g
     assert check["headers"] == ["lib/include/lib.h"]
 
 
-def test_cargo_and_go_workspace_facts_are_recorded_without_deciding_ownership() -> None:
+def test_cargo_and_go_workspace_members_are_build_points_of_the_workspace_root() -> None:
     cargo = '[workspace]\nmembers = ["core", "cli", "tools/*"]\nexclude = ["tools/skip"]\n'
+    core = '[package]\nname = "core"\nversion = "0.1.0"\n'
+    cli = '[package]\nname = "cli"\nversion = "0.1.0"\n'
     work = "go 1.24\n\nuse (\n\t./shared\n\t./svc // service\n)\n"
-    files = [_file("rust/Cargo.toml", cargo), _file("rust/core/Cargo.toml"), _file("rust/cli/Cargo.toml"),
-             _file("rust/tools/gen/Cargo.toml"), _file("rust/tools/skip/Cargo.toml"), _file("rust/other/Cargo.toml"),
-             _file("go/go.work", work), _file("go/shared/go.mod"), _file("go/svc/go.mod"), _file("go/extra/go.mod")]
-    units = {unit["root"]: unit for unit in discover_build_units(
-        files, read_text=_reader({"rust/Cargo.toml": cargo, "go/go.work": work}))}
-    assert units["rust"]["workspace"] == {"manager": "cargo", "role": "root", "root": "rust",
-                                          "members": ["rust/cli", "rust/core", "rust/tools/gen"]}
-    assert units["rust/core"]["workspace"] == {"manager": "cargo", "role": "member", "root": "rust"}
-    assert "workspace" not in units["rust/tools/skip"] and "workspace" not in units["rust/other"]
-    assert units["go"]["workspace"] == {"manager": "go", "role": "root", "root": "go", "members": ["go/shared", "go/svc"]}
-    assert units["go/svc"]["workspace"] == {"manager": "go", "role": "member", "root": "go"}
-    assert "workspace" not in units["go/extra"]
-    # Every member is still its own unit: discovery states membership, the plan decides ownership.
-    assert {"rust/core", "rust/cli", "go/shared", "go/svc"} <= set(units)
+    texts = {"rust/Cargo.toml": cargo, "rust/core/Cargo.toml": core, "rust/cli/Cargo.toml": cli,
+             "rust/tools/gen/Cargo.toml": '[package]\nname = "gen"\n', "rust/tools/skip/Cargo.toml": '[package]\nname = "skip"\n',
+             "rust/other/Cargo.toml": '[package]\nname = "other"\n',
+             "go/go.work": work, "go/shared/go.mod": "module example.com/shared\n", "go/svc/go.mod": "module example.com/svc\n",
+             "go/extra/go.mod": "module example.com/extra\n", "go/svc/main.go": "package main\n"}
+    files = [_file(path, text) for path, text in texts.items()] + [_file("rust/core/src/lib.rs"), _file("rust/cli/src/main.rs")]
+    inventory = discover_build_inventory(files, read_text=_reader(texts))
+    units = {unit["root"]: unit for unit in inventory["units"]}
+    # Members are folded into the root (plan §2.1 decision 1); an excluded or unlisted crate stays a unit.
+    assert set(units) == {"rust", "rust/tools/skip", "rust/other", "go", "go/extra"}
+    rust = units["rust"]
+    assert [(d["path"], d["via"], d["evidence"]) for d in rust["drives"]] == [
+        ("rust/core", "workspace_member", "rust/Cargo.toml:1"), ("rust/cli", "workspace_member", "rust/Cargo.toml:1"),
+        ("rust/tools/gen", "workspace_member", "rust/Cargo.toml:1")]
+    assert [(p["name"], p["kind"]) for p in rust["build_points"]] == [
+        ("cli", "package"), ("cli", "bin"), ("core", "package"), ("core", "lib"), ("gen", "package")]
+    assert "workspace" not in rust and all("workspace" not in unit for unit in units.values())
+    go = units["go"]
+    assert [(d["path"], d["via"]) for d in go["drives"]] == [("go/shared", "go_work_use"), ("go/svc", "go_work_use")]
+    assert [(p["name"], p["kind"], p["evidence"]) for p in go["build_points"]] == [
+        ("example.com/shared", "module", "go/shared/go.mod:1"), ("example.com/svc", "module", "go/svc/go.mod:1"),
+        ("svc", "main_package", "go/svc/main.go:1")]
+    assignment = assign_paths(files, inventory)
+    assert assignment["rust/core/Cargo.toml"] == "evidence_of:rust|cargo#core"
+    assert assignment["rust/core/src/lib.rs"] == "evidence_of:rust|cargo#core"
+    assert assignment["go/svc/go.mod"] == "evidence_of:go|go#example.com/svc"
+    assert assignment["go/svc/main.go"] == "evidence_of:go|go#svc"

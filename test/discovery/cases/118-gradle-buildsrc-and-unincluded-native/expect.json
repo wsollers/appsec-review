@@ -17,21 +17,24 @@
       "build_points": [
         {
           "name": "core",
-          "kind": "module",
+          "kind": "project",
           "evidence": "mobile/settings.gradle.kts:2"
         }
       ],
       "facts": {
-        "modules": [
-          "core"
-        ],
         "languages": {
           "core": [
             "java",
             "kotlin"
           ]
         },
-        "profile_gaps": {}
+        "profile_gaps": {},
+        "drives": [
+          {
+            "path": "mobile/core",
+            "via": "settings_include"
+          }
+        ]
       }
     }
   ],
@@ -77,24 +80,8 @@
   ],
   "pending": [
     {
-      "check": "unit:mobile|gradle.build_point:core|module",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:mobile|gradle.facts",
       "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:mobile/core/build.gradle.kts",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:mobile/core/src/main/java/core/Core.java",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:mobile/core/src/main/kotlin/core/Ext.kt",
-      "ref": "T-056.2"
     },
     {
       "check": "assignment:mobile/buildSrc/build.gradle.kts",
@@ -108,6 +95,11 @@
     {
       "check": "assignment:mobile/buildSrc/src/main/kotlin/Versions.kt",
       "ref": "T-056.4"
+    },
+    {
+      "check": "not_unit:mobile/buildSrc|gradle",
+      "ref": "T-056.4",
+      "note": "buildSrc is no longer absorbed positionally; it becomes context of the Gradle root under plan §2.1 decision 4"
     }
   ]
 }

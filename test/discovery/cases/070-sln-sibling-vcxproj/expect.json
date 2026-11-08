@@ -41,24 +41,24 @@
       "root": "engine",
       "build_system": "msbuild",
       "marker": "engine/engine.vcxproj",
-      "role": "evidence_of:build|msbuild",
+      "role": "evidence_of:build|msbuild#engine",
       "reason": "listed by build/game.sln; a .vcxproj a solution elsewhere lists is that solution's build point"
     },
     {
       "root": "game",
       "build_system": "msbuild",
       "marker": "game/game.vcxproj",
-      "role": "evidence_of:build|msbuild",
+      "role": "evidence_of:build|msbuild#game",
       "reason": "listed by build/game.sln"
     }
   ],
   "assignment": {
     "README.md": "inert",
     "build/game.sln": "evidence_of:build|msbuild",
-    "engine/engine.vcxproj": "evidence_of:build|msbuild",
+    "engine/engine.vcxproj": "evidence_of:build|msbuild#engine",
     "engine/include/engine.h": "evidence_of:build|msbuild#engine",
     "engine/src/engine.cpp": "evidence_of:build|msbuild#engine",
-    "game/game.vcxproj": "evidence_of:build|msbuild",
+    "game/game.vcxproj": "evidence_of:build|msbuild#game",
     "game/src/main.cpp": "evidence_of:build|msbuild#game"
   },
   "orphaned_sources": [],
@@ -71,15 +71,6 @@
     {
       "check": "not_unit:build|dotnet",
       "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:engine|msbuild",
-      "ref": "T-056.5",
-      "note": "a .vcxproj listed by a solution in another directory is not a root"
-    },
-    {
-      "check": "not_unit:game|msbuild",
-      "ref": "T-056.5"
     },
     {
       "check": "assignment:build/game.sln",

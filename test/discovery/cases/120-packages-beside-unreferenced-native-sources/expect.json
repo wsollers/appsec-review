@@ -139,31 +139,12 @@
       "ref": "T-056.6"
     },
     {
-      "check": "unit:crate|cargo.build_point:purehash|lib",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:crate|cargo.facts",
       "ref": "T-056.6"
     },
     {
       "check": "assignment:pyext/puremod/__init__.py",
       "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:pyext/csrc/old_fastmod.c",
-      "ref": "T-056.2",
-      "note": "attached by position as a native_component today; setup.py names no extension, so it is orphaned (native_components is interim, retired by T-056.2)"
-    },
-    {
-      "check": "assignment:addon/src/addon.cc",
-      "ref": "T-056.2",
-      "note": "attached by position today; no binding.gyp names it"
-    },
-    {
-      "check": "orphaned_sources",
-      "ref": "T-056.2",
-      "note": "the python and node leftovers are missing from the orphan list; only the crate's is reported"
     }
   ]
 }

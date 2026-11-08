@@ -287,8 +287,10 @@ These make proofs explicit rather than default-dependent.
 
 ### 5. PHP native extensions
 
-- A `php` unit whose deterministic recipe is phpize is classified as `package` today. If it has
-  native components, it ends `unknown` with `native_component_requested_stage_unresolved`.
+- A `php` unit whose deterministic recipe is phpize is classified as `package` today. (The interim
+  `native_components` attachment and its `native_component_requested_stage_unresolved` reason were
+  retired on 2026-11-08 by T-056.2 / plan §2.1 decision 1: a phpize extension's C sources are
+  evidence of a typed build point, T-056.6, or orphans.)
 - `_selected_operations` will instead classify the phpize lifecycle
   (`phpize` → `./configure` → `make`, from the accepted `config.m4`) as
   `native_compile` + `native_link`, governed by `autotools-env-compiler/1`.

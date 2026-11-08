@@ -22,7 +22,11 @@
       ],
       "facts": {
         "drives": [
-          "wasm-core"
+          {
+            "path": "wasm-core",
+            "via": "invokes:wasm-pack",
+            "evidence": "web/package.json:6"
+          }
         ]
       }
     },
@@ -44,6 +48,7 @@
       "facts": {
         "driven_by": {
           "unit": "web|node",
+          "via": "invokes:wasm-pack",
           "evidence": "web/package.json:6"
         }
       }
@@ -60,19 +65,5 @@
     "wasm-core/src/lib.rs": "evidence_of:wasm-core|cargo#wasm-core"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:web|node.facts",
-      "ref": "T-056.5",
-      "note": "wasm-pack build ../wasm-core in the build script drives the sibling crate"
-    },
-    {
-      "check": "unit:wasm-core|cargo.build_point:wasm-core|package",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:wasm-core|cargo.facts",
-      "ref": "T-056.5"
-    }
-  ]
+  "pending": []
 }

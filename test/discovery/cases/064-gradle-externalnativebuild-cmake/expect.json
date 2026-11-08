@@ -16,14 +16,23 @@
       ],
       "build_points": [
         {
-          "name": ":app",
-          "kind": "module",
+          "name": "app",
+          "kind": "project",
           "evidence": "settings.gradle:9"
         }
       ],
       "facts": {
         "drives": [
-          "app/src/main/cpp"
+          {
+            "path": "app",
+            "via": "settings_include",
+            "evidence": "settings.gradle:9"
+          },
+          {
+            "path": "app/src/main/cpp",
+            "via": "externalNativeBuild",
+            "evidence": "app/build.gradle:17"
+          }
         ],
         "descriptor_facts": {
           "kind": "android-gradle-application",
@@ -49,6 +58,7 @@
       "facts": {
         "driven_by": {
           "unit": ".|gradle",
+          "via": "externalNativeBuild",
           "evidence": "app/build.gradle:17"
         }
       }
@@ -63,7 +73,7 @@
     "gradle/wrapper/gradle-wrapper.properties": "context:.|gradle",
     "app/build.gradle": "evidence_of:.|gradle",
     "app/src/main/AndroidManifest.xml": "context:.|gradle",
-    "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#:app",
+    "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#app",
     "app/src/main/cpp/CMakeLists.txt": "evidence_of:app/src/main/cpp|cmake",
     "app/src/main/cpp/meter.cpp": "evidence_of:app/src/main/cpp|cmake#meter"
   },
@@ -97,10 +107,6 @@
       "check": "assignment:app/src/main/AndroidManifest.xml",
       "ref": "T-056.4",
       "note": "the manifest is an input the Android build reads"
-    },
-    {
-      "check": "assignment:app/src/main/java/com/example/meter/MainActivity.java",
-      "ref": "T-056.2"
     }
   ]
 }

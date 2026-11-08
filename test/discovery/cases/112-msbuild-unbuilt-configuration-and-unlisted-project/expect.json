@@ -11,7 +11,6 @@
       "family": "native",
       "profile": "native",
       "markers": [
-        "win/app/app.vcxproj",
         "win/win.sln"
       ],
       "build_points": [
@@ -81,7 +80,7 @@
     "win/app/app.vcxproj": "evidence_of:win|msbuild#app",
     "win/app/app.vcxproj.user": "context:win|msbuild",
     "win/app/main.cpp": "evidence_of:win|msbuild#app",
-    "win/tools/gen.vcxproj": "evidence_of:win/tools|msbuild#gen",
+    "win/tools/gen.vcxproj": "evidence_of:win/tools|msbuild",
     "win/tools/gen.cpp": "evidence_of:win/tools|msbuild#gen"
   },
   "orphaned_sources": [],
@@ -91,20 +90,11 @@
       "ref": "T-056.4"
     },
     {
-      "check": "unit:win/tools|msbuild.build_point:gen|project",
-      "ref": "T-056.2",
-      "note": "a .vcxproj no solution lists is its own unit with the project as its build point"
-    },
-    {
       "check": "unit:win/tools|msbuild.facts",
       "ref": "T-056.6"
     },
     {
       "check": "not_unit:win|dotnet",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:win/app|msbuild",
       "ref": "T-056.4"
     },
     {
@@ -122,10 +112,6 @@
     {
       "check": "assignment:win/app/main.cpp",
       "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:win/tools/gen.vcxproj",
-      "ref": "T-056.2"
     },
     {
       "check": "unit:win|msbuild.family",

@@ -26,10 +26,13 @@
         }
       ],
       "facts": {
-        "subdirectories": [
-          "libs/sibling"
-        ],
-        "materialization_root": "."
+        "materialization_root": ".",
+        "drives": [
+          {
+            "path": "libs/sibling",
+            "via": "add_subdirectory"
+          }
+        ]
       }
     }
   ],
@@ -53,26 +56,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:app|cmake.build_point:sibling|static_library",
-      "ref": "T-056.5",
-      "note": "targets of an added sibling directory belong to the adding unit"
-    },
-    {
       "check": "unit:app|cmake.facts",
       "ref": "T-056.5",
       "note": "add_subdirectory with a ../ source directory is the cross-tree reference; the minimum materialization root follows from it"
-    },
-    {
-      "check": "not_unit:libs/sibling|cmake",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:libs/sibling/CMakeLists.txt",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:libs/sibling/sibling.c",
-      "ref": "T-056.5"
     },
     {
       "check": "assignment:libs/sibling/sibling.h",

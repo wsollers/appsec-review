@@ -36,9 +36,6 @@
         }
       ],
       "facts": {
-        "subdirectories": [
-          "tools"
-        ],
         "options": {
           "APP_BUILD_TOOLS": "OFF"
         },
@@ -46,7 +43,13 @@
           "app_tray": "WIN32",
           "app_mac": "APPLE",
           "app_gen": "APP_BUILD_TOOLS"
-        }
+        },
+        "drives": [
+          {
+            "path": "app/tools",
+            "via": "add_subdirectory"
+          }
+        ]
       }
     }
   ],
@@ -71,26 +74,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:app|cmake.build_point:app_gen|executable",
-      "ref": "T-056.5",
-      "note": "a target of a conditionally added subdirectory belongs to the adding unit"
-    },
-    {
       "check": "unit:app|cmake.facts",
       "ref": "T-056.6",
       "note": "options with defaults and the condition of each conditional build point"
-    },
-    {
-      "check": "not_unit:app/tools|cmake",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:app/tools/CMakeLists.txt",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:app/tools/gen.cpp",
-      "ref": "T-056.5"
     }
   ]
 }

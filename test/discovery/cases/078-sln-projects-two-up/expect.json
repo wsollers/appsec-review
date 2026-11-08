@@ -41,7 +41,7 @@
         {
           "name": "tools",
           "kind": "project",
-          "evidence": "tools/tools.vcxproj"
+          "evidence": "tools/tools.vcxproj:1"
         }
       ],
       "facts": {
@@ -60,24 +60,24 @@
       "root": "engine",
       "build_system": "msbuild",
       "marker": "engine/engine.vcxproj",
-      "role": "evidence_of:build/vs2022|msbuild",
+      "role": "evidence_of:build/vs2022|msbuild#engine",
       "reason": "listed by build/vs2022/all.sln two directories up"
     },
     {
       "root": "game",
       "build_system": "msbuild",
       "marker": "game/game.vcxproj",
-      "role": "evidence_of:build/vs2022|msbuild",
+      "role": "evidence_of:build/vs2022|msbuild#game",
       "reason": "listed by build/vs2022/all.sln two directories up"
     }
   ],
   "assignment": {
     "build/vs2022/README.md": "inert",
     "build/vs2022/all.sln": "evidence_of:build/vs2022|msbuild",
-    "engine/engine.vcxproj": "evidence_of:build/vs2022|msbuild",
+    "engine/engine.vcxproj": "evidence_of:build/vs2022|msbuild#engine",
     "engine/include/engine.h": "evidence_of:build/vs2022|msbuild#engine",
     "engine/src/engine.cpp": "evidence_of:build/vs2022|msbuild#engine",
-    "game/game.vcxproj": "evidence_of:build/vs2022|msbuild",
+    "game/game.vcxproj": "evidence_of:build/vs2022|msbuild#game",
     "game/src/main.cpp": "evidence_of:build/vs2022|msbuild#game",
     "tools/tools.vcxproj": "evidence_of:tools|msbuild",
     "tools/src/tool.cpp": "evidence_of:tools|msbuild#tools"
@@ -90,10 +90,6 @@
       "note": "a .sln is always concluded as a dotnet unit today"
     },
     {
-      "check": "unit:tools|msbuild.build_point:tools|project",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:tools|msbuild.facts",
       "ref": "T-056.5",
       "note": "a README's mention of ..\\..\\tools\\tools.vcxproj is prose, not a listing: the tool project's root is its own directory"
@@ -101,14 +97,6 @@
     {
       "check": "not_unit:build/vs2022|dotnet",
       "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:engine|msbuild",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "not_unit:game|msbuild",
-      "ref": "T-056.5"
     },
     {
       "check": "assignment:build/vs2022/all.sln",

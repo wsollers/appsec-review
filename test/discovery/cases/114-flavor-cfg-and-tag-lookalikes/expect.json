@@ -17,17 +17,20 @@
       "build_points": [
         {
           "name": "lib",
-          "kind": "module",
+          "kind": "project",
           "evidence": "jvm/settings.gradle:2"
         }
       ],
       "facts": {
-        "modules": [
-          "lib"
-        ],
         "product_flavors": {},
         "conditions": {},
-        "source_conditions": {}
+        "source_conditions": {},
+        "drives": [
+          {
+            "path": "jvm/lib",
+            "via": "settings_include"
+          }
+        ]
       }
     },
     {
@@ -120,27 +123,14 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:jvm|gradle.build_point:lib|module",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:jvm|gradle.facts",
       "ref": "T-056.6",
       "note": "a productFlavors block in a comment declares no flavors"
     },
     {
-      "check": "unit:crate|cargo.build_point:tool|bin",
-      "ref": "T-056.2",
-      "note": "a package without [[bin]] still has its implicit src/main.rs binary"
-    },
-    {
       "check": "unit:crate|cargo.facts",
       "ref": "T-056.6",
       "note": "a path dependency under [dependencies] has no condition; the cfg table in a comment is not a declaration"
-    },
-    {
-      "check": "unit:crate/shim|cargo.build_point:shim|lib",
-      "ref": "T-056.2"
     },
     {
       "check": "unit:gotool|go.build_point:example.local/gotool|main_package",
@@ -150,22 +140,6 @@
       "check": "unit:gotool|go.facts",
       "ref": "T-056.6",
       "note": "'// go:build' with a space and a //go:build after the package clause are not constraints"
-    },
-    {
-      "check": "assignment:jvm/lib/build.gradle",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:jvm/lib/src/main/java/lib/Lib.java",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:gotool/main.go",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:gotool/label.go",
-      "ref": "T-056.2"
     }
   ]
 }

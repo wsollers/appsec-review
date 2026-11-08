@@ -142,6 +142,21 @@
     {
       "check": "assignment:lib/build/lib.vcxproj",
       "ref": "T-056.4"
+    },
+    {
+      "check": "unit:lib|msbuild",
+      "ref": "T-056.4",
+      "note": "the .sln at the same root is a dotnet unit today and folds the listed .vcxproj; the solution family follows its projects (plan §2.1 decision 3)"
+    },
+    {
+      "check": "unit:lib|msbuild.family",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:lib|msbuild.profile",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
     }
   ]
 }

@@ -16,13 +16,19 @@
       ],
       "build_points": [
         {
-          "name": ":app",
-          "kind": "module",
+          "name": "app",
+          "kind": "project",
           "evidence": "settings.gradle:9"
         }
       ],
       "facts": {
-        "drives": [],
+        "drives": [
+          {
+            "path": "app",
+            "via": "settings_include",
+            "evidence": "settings.gradle:9"
+          }
+        ],
         "descriptor_facts": {
           "kind": "android-gradle-application",
           "plugin_id": "com.android.application"
@@ -43,6 +49,9 @@
           "kind": "shared_library",
           "evidence": "app/src/main/cpp/CMakeLists.txt:3"
         }
+      ],
+      "facts_absent": [
+        "driven_by"
       ]
     }
   ],
@@ -55,7 +64,7 @@
     "gradle/wrapper/gradle-wrapper.properties": "context:.|gradle",
     "app/build.gradle": "evidence_of:.|gradle",
     "app/src/main/AndroidManifest.xml": "context:.|gradle",
-    "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#:app",
+    "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#app",
     "app/src/main/cpp/CMakeLists.txt": "evidence_of:app/src/main/cpp|cmake",
     "app/src/main/cpp/meter.cpp": "evidence_of:app/src/main/cpp|cmake#meter"
   },
@@ -77,10 +86,6 @@
     {
       "check": "assignment:app/src/main/AndroidManifest.xml",
       "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app/src/main/java/com/example/meter/MainActivity.java",
-      "ref": "T-056.2"
     }
   ]
 }

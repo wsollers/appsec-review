@@ -26,13 +26,16 @@
         }
       ],
       "facts": {
-        "subdirectories": [
-          "tools"
-        ],
         "options": {
           "LIB_BUILD_TOOLS": "OFF"
         },
-        "conditions": {}
+        "conditions": {},
+        "drives": [
+          {
+            "path": "lib/tools",
+            "via": "add_subdirectory"
+          }
+        ]
       }
     }
   ],
@@ -55,25 +58,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:lib|cmake.build_point:lib_gen|executable",
-      "ref": "T-056.5"
-    },
-    {
       "check": "unit:lib|cmake.facts",
       "ref": "T-056.6",
       "note": "an option that gates nothing and if() blocks without targets yield an empty conditions map; the unconditional subdirectory is recorded"
-    },
-    {
-      "check": "not_unit:lib/tools|cmake",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:lib/tools/CMakeLists.txt",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:lib/tools/gen.cpp",
-      "ref": "T-056.5"
     }
   ]
 }

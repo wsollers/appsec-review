@@ -69,15 +69,6 @@
       "ref": "T-056.4"
     },
     {
-      "check": "not_unit:engine|msbuild",
-      "ref": "T-056.2",
-      "note": "a .vcxproj a solution lists is a build point of the solution"
-    },
-    {
-      "check": "not_unit:tools/packer|msbuild",
-      "ref": "T-056.2"
-    },
-    {
       "check": "assignment:engine.sln",
       "ref": "T-056.4"
     },

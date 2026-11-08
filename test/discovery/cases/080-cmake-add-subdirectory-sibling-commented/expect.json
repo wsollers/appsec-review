@@ -21,9 +21,11 @@
         }
       ],
       "facts": {
-        "subdirectories": [],
         "materialization_root": "app"
-      }
+      },
+      "facts_absent": [
+        "drives"
+      ]
     },
     {
       "root": "libs/sibling",
@@ -41,9 +43,11 @@
         }
       ],
       "facts": {
-        "subdirectories": [],
         "materialization_root": "libs/sibling"
-      }
+      },
+      "facts_absent": [
+        "drives"
+      ]
     }
   ],
   "not_units": [],

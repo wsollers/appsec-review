@@ -60,32 +60,5 @@
     "app/src/main/java/shop/app/Main.java": "evidence_of:.|gradle#app",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "unit:.|gradle.build_point:core|project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|gradle.build_point:app|project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:core/build.gradle",
-      "ref": "T-056.2",
-      "note": "a project's build file is the descriptor of that build point, not context of the root"
-    },
-    {
-      "check": "assignment:core/src/main/java/shop/core/Price.java",
-      "ref": "T-056.2",
-      "note": "src/main/java under a project binds to that project"
-    },
-    {
-      "check": "assignment:app/build.gradle",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:app/src/main/java/shop/app/Main.java",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

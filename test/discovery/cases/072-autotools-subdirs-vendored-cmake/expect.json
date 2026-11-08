@@ -17,7 +17,7 @@
       "build_points": [
         {
           "name": "all-local",
-          "kind": "rule",
+          "kind": "phony_or_aggregate",
           "evidence": "Makefile.am:2"
         },
         {
@@ -27,11 +27,17 @@
         }
       ],
       "facts": {
-        "subdirectories": [
-          "src"
-        ],
         "drives": [
-          "third_party/zlite"
+          {
+            "path": "src",
+            "via": "SUBDIRS",
+            "evidence": "Makefile.am:1"
+          },
+          {
+            "path": "third_party/zlite",
+            "via": "invokes:cmake",
+            "evidence": "Makefile.am:4"
+          }
         ]
       }
     },
@@ -53,6 +59,7 @@
       "facts": {
         "driven_by": {
           "unit": ".|autotools",
+          "via": "invokes:cmake",
           "evidence": "Makefile.am:4"
         }
       }
@@ -80,34 +87,12 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:.|autotools.build_point:all-local|rule",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|autotools.build_point:packer|program",
-      "ref": "T-056.5",
-      "note": "bin_PROGRAMS of a SUBDIRS Makefile.am is the configure root's build point"
-    },
-    {
       "check": "unit:.|autotools.facts",
       "ref": "T-056.5",
       "note": "SUBDIRS is the literal inclusion; the cmake line in the all-local rule is the literal drive"
     },
     {
       "check": "unit:third_party/zlite|cmake.facts",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "not_unit:src|autotools",
-      "ref": "T-056.5",
-      "note": "a Makefile.am under a configure root that lists it is not a second autotools unit"
-    },
-    {
-      "check": "assignment:src/Makefile.am",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:src/main.c",
       "ref": "T-056.5"
     },
     {

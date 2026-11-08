@@ -20,10 +20,9 @@
           "evidence": "host/CMakeLists.txt:3"
         }
       ],
-      "facts": {
-        "subdirectories": [],
-        "external_projects": []
-      }
+      "facts_absent": [
+        "drives"
+      ]
     },
     {
       "root": "host/external/tinylib",
@@ -71,11 +70,5 @@
     "host/external/fmtlite/src/fmtlite.c": "evidence_of:host/external/fmtlite|cmake#fmtlite"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:host|cmake.facts",
-      "ref": "T-056.5",
-      "note": "the inclusion facts are stated empty: directories below the root are not its subdirectories unless a line says so"
-    }
-  ]
+  "pending": []
 }

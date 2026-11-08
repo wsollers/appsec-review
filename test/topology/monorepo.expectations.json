@@ -6,10 +6,7 @@
     "live_target": "targets/topology-monorepo"
   },
   "reason_codes": {
-    "ownership-vendored": "A Make or CMake tree nested under a parent driver that builds it (a vendored library and its test tree) folds into its owner only on literal add_subdirectory or $(MAKE) -C evidence. A nested Makefile whose default goal compiles becomes an independent root and is dispatched standalone, where its ../ sources are absent.",
-    "ownership-nested-conditional": "An add_subdirectory guarded by an option() defaulting OFF leaves the child unresolved. The child has no project() and exactly one possible owner, so the contract records it as contained with the condition; it is never scheduled by default and never independent.",
-    "ownership-workspace": "Cargo, Go and npm workspace members are independent roots. The workspace root is not recognized as their owner even where the descriptor package already records membership (npm workspace inventory).",
-    "ownership-gradle-settings": "settings.gradle is build context, not a marker. A Gradle project whose root directory has no build.gradle yields one independent root per included module and no unit at the settings root, so a multi-module Android tree becomes two roots with two image profiles (android, java).",
+    "ownership-vendored": "A nested Make tree whose rules compile another directory's sources (tinylib/test) stays a unit of its own until a literal drive names it: the parent CMake tree adds third_party/tinylib (folded into the parent, plan §2.1 decision 1), not tinylib/test, so the test Makefile is an independent root and is dispatched standalone, where its ../ sources are absent.",
     "workspace-materialization": "A unit's build workspace is its own root plus named dependency_files. A driver that references ../ paths needs the common ancestor of every referenced path materialized, and validate_build_recipe cannot accept dependency paths outside the unit's descriptor package, so the requirement cannot even be expressed.",
     "deterministic-recipe": "Recipes are entirely model-inferred. Canonical build systems (CMake with project(), Make default goal, a Cargo workspace, go.work, an npm build script, composer) have no deterministic recipe path, so accepted plans carry null recipes and recipe_missing refinements.",
     "build-mode-disposition": "The plan records no per-component build mode. Components that cannot or must not be built (Unity with unity.enabled=false, an Xcode project without xcodebuild, Gradle without an offline plugin cache or SDK image, a PHP tree without composer) surface as per-unit BLOCKED gaps mid-build instead of a plan-time disposition.",
@@ -22,7 +19,7 @@
       "id": "A",
       "name": "parent-cmake-vendored",
       "paths": ["server"],
-      "summary": "A CMake application that vendors a library with its own CMakeLists.txt, a legacy standalone Makefile and a test/ Makefile whose sources are ../src/*.c. The parent is the only build driver.",
+      "summary": "A CMake application that vendors a library with its own CMakeLists.txt, a legacy standalone Makefile and a test/ Makefile whose sources are ../src/*.c. The parent is the only build driver. The vendored CMakeLists.txt is folded into the parent on the add_subdirectory evidence (plan §2.1 decision 1, 2026-11-08).",
       "components": [
         {
           "root": "server",
@@ -41,7 +38,7 @@
       ],
       "units": [
         {"root": "server", "build_system": "cmake", "disposition": "independent", "owner_root": "server", "dispatch_standalone": true},
-        {"root": "server/third_party/tinylib", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false},
+        {"root": "server/third_party/tinylib", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false, "may_be_absent": true},
         {"root": "server/third_party/tinylib/test", "build_system": "make", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false,
          "gaps": {"ownership": "ownership-vendored", "standalone": "ownership-vendored"}}
       ],
@@ -81,7 +78,7 @@
       "id": "C-cargo",
       "name": "cargo-workspace",
       "paths": ["rust"],
-      "summary": "A Cargo workspace with two crates; cli depends on core by path. The workspace root is the only build root and the recipe runs there.",
+      "summary": "A Cargo workspace with two crates; cli depends on core by path. The workspace root is the only build root and the recipe runs there. Members are folded into the workspace root as its build points (plan §2.1 decision 1, 2026-11-08): never units.",
       "components": [
         {
           "root": "rust",
@@ -100,10 +97,8 @@
       ],
       "units": [
         {"root": "rust", "build_system": "cargo", "disposition": "independent", "owner_root": "rust", "dispatch_standalone": true},
-        {"root": "rust/core", "build_system": "cargo", "disposition": "contained", "owner_root": "rust", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}},
-        {"root": "rust/cli", "build_system": "cargo", "disposition": "contained", "owner_root": "rust", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}}
+        {"root": "rust/core", "build_system": "cargo", "disposition": "contained", "owner_root": "rust", "dispatch_standalone": false, "may_be_absent": true},
+        {"root": "rust/cli", "build_system": "cargo", "disposition": "contained", "owner_root": "rust", "dispatch_standalone": false, "may_be_absent": true}
       ],
       "relationships": [
         {"consumer_root": "rust/cli", "producer_root": "rust/core", "kind": "requires_product", "scope": "intra-component", "interface": "topo-core",
@@ -114,7 +109,7 @@
       "id": "C-go",
       "name": "go-workspace",
       "paths": ["go"],
-      "summary": "A go.work workspace with two modules; svc imports shared through the workspace (and a replace directive for standalone builds). The workspace root is the only build root.",
+      "summary": "A go.work workspace with two modules; svc imports shared through the workspace (and a replace directive for standalone builds). The workspace root is the only build root. Members are folded into the workspace root as its build points (plan §2.1 decision 1, 2026-11-08): never units.",
       "components": [
         {
           "root": "go",
@@ -133,10 +128,8 @@
       ],
       "units": [
         {"root": "go", "build_system": "go", "disposition": "independent", "owner_root": "go", "dispatch_standalone": true},
-        {"root": "go/shared", "build_system": "go", "disposition": "contained", "owner_root": "go", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}},
-        {"root": "go/svc", "build_system": "go", "disposition": "contained", "owner_root": "go", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}}
+        {"root": "go/shared", "build_system": "go", "disposition": "contained", "owner_root": "go", "dispatch_standalone": false, "may_be_absent": true},
+        {"root": "go/svc", "build_system": "go", "disposition": "contained", "owner_root": "go", "dispatch_standalone": false, "may_be_absent": true}
       ],
       "relationships": [
         {"consumer_root": "go/svc", "producer_root": "go/shared", "kind": "requires_product", "scope": "intra-component", "interface": "example.com/topology/shared",
@@ -147,7 +140,7 @@
       "id": "C-npm",
       "name": "npm-workspace",
       "paths": ["web"],
-      "summary": "An npm workspace with two packages and no external dependencies; the root build script runs node build.js. The workspace root is the only build root.",
+      "summary": "An npm workspace with two packages and no external dependencies; the root build script runs node build.js. The workspace root is the only build root. Members are folded into the workspace root as its build points (plan §2.1 decision 1, 2026-11-08): never units.",
       "components": [
         {
           "root": "web",
@@ -166,10 +159,8 @@
       ],
       "units": [
         {"root": "web", "build_system": "node", "disposition": "independent", "owner_root": "web", "dispatch_standalone": true},
-        {"root": "web/packages/api", "build_system": "node", "disposition": "contained", "owner_root": "web", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}},
-        {"root": "web/packages/ui", "build_system": "node", "disposition": "contained", "owner_root": "web", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-workspace", "standalone": "ownership-workspace"}}
+        {"root": "web/packages/api", "build_system": "node", "disposition": "contained", "owner_root": "web", "dispatch_standalone": false, "may_be_absent": true},
+        {"root": "web/packages/ui", "build_system": "node", "disposition": "contained", "owner_root": "web", "dispatch_standalone": false, "may_be_absent": true}
       ],
       "relationships": [
         {"consumer_root": "web/packages/api", "producer_root": "web/packages/ui", "kind": "requires_product", "scope": "intra-component", "interface": "@topology/ui",
@@ -219,10 +210,7 @@
           "gaps": {"discovered": "swift-policy-disabled", "build_mode": "build-mode-disposition"}
         }
       ],
-      "absorbed_markers": [
-        {"path": "client-ios/App.xcodeproj/project.pbxproj",
-         "reason": "discovered as the swift/xcodebuild unit; the Swift policy removes it from planning while tools.enable_swift=false"}
-      ],
+      "absorbed_markers": [],
       "units": [
         {"root": "client-ios", "build_system": "xcodebuild", "disposition": "independent", "owner_root": "client-ios", "dispatch_standalone": true,
          "gaps": {"discovered": "swift-policy-disabled"}}
@@ -233,7 +221,7 @@
       "id": "F",
       "name": "android-gradle",
       "paths": ["client-android"],
-      "summary": "A multi-module Gradle project: settings.gradle includes :app (com.android.application) and :lib (com.android.library); no root build.gradle and no wrapper jar. One component rooted at the settings file.",
+      "summary": "A multi-module Gradle project: settings.gradle includes :app (com.android.application) and :lib (com.android.library); no root build.gradle and no wrapper jar. One component rooted at the settings file. The included projects are folded into the settings root as its build points (plan §2.1 decision 1, 2026-11-08).",
       "components": [
         {
           "root": "client-android",
@@ -250,10 +238,8 @@
       ],
       "units": [
         {"root": "client-android", "build_system": "gradle", "disposition": "independent", "owner_root": "client-android", "dispatch_standalone": true},
-        {"root": "client-android/app", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-gradle-settings", "standalone": "ownership-gradle-settings"}},
-        {"root": "client-android/lib", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false,
-         "gaps": {"ownership": "ownership-gradle-settings", "standalone": "ownership-gradle-settings"}}
+        {"root": "client-android/app", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false, "may_be_absent": true},
+        {"root": "client-android/lib", "build_system": "gradle", "disposition": "contained", "owner_root": "client-android", "dispatch_standalone": false, "may_be_absent": true}
       ],
       "relationships": [
         {"consumer_root": "client-android/app", "producer_root": "client-android/lib", "kind": "requires_product", "scope": "intra-component", "interface": ":lib",
@@ -301,12 +287,10 @@
       "id": "H",
       "name": "nested-conditional-root",
       "paths": ["server/examples/hello"],
-      "summary": "A CMakeLists.txt without project() that the parent includes only under option(SERVER_BUILD_EXAMPLES) defaulting OFF. It has exactly one possible owner and is never an independent root; contained (conditional) rather than unresolved, because unresolved invites standalone recipe inference for a tree that cannot build alone.",
+      "summary": "A CMakeLists.txt without project() that the parent includes only under option(SERVER_BUILD_EXAMPLES) defaulting OFF. It has exactly one possible owner and is never an independent root; contained (conditional) rather than unresolved, because unresolved invites standalone recipe inference for a tree that cannot build alone. Under plan §2.1 decision 1 the conditionally added directory is folded into the parent with the condition on the drive; it is never a unit.",
       "components": [],
       "units": [
-        {"root": "server/examples/hello", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false,
-         "condition": "SERVER_BUILD_EXAMPLES",
-         "gaps": {"ownership": "ownership-nested-conditional"}}
+        {"root": "server/examples/hello", "build_system": "cmake", "disposition": "contained", "owner_root": "server", "dispatch_standalone": false, "condition": "SERVER_BUILD_EXAMPLES", "may_be_absent": true}
       ],
       "relationships": []
     },

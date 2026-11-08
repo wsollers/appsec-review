@@ -14,8 +14,9 @@ every path has exactly one role —
 
 :func:`assign_paths` derives the assignment from an inventory and a discovery result
 (:func:`appsec_review.jobs.build_discovery.discover_build_inventory` plus the catalog's
-``source_only_scopes``). Until build points land (T-056.2) a source under a unit's root that the
-unit's family compiles is ``evidence_of:<unit>`` without a ``#<build point>`` suffix.
+``source_only_scopes``). A source a build point names is ``evidence_of:<unit>#<point>``; a source
+under a unit's root that the unit's family compiles but no point names is ``evidence_of:<unit>`` only
+while the unit's resolution is containment (its descriptors could not be read completely).
 """
 from __future__ import annotations
 
@@ -70,19 +71,31 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
     for unit in units:
         by_root.setdefault(str(unit["root"]), []).append(unit)
     marker_owner: dict[str, str] = {}
-    component_owner: dict[str, str] = {}
+    claims: dict[str, list[tuple[int, int, int, str]]] = {}
     included: dict[str, str] = {}
-    for unit in units:
+    for unit_index, unit in enumerate(units):
         label = _unit_label(unit)
+        root = str(unit["root"])
         for marker in unit.get("markers", ()):
             marker_owner.setdefault(str(marker["path"]), label)
-        for point in unit.get("build_points", ()):
+        for point_index, point in enumerate(unit.get("build_points", ())):
+            if point.get("descriptor"):
+                # A member's own build file (a listed project, an included Gradle project, a workspace
+                # member's manifest, a module POM) is evidence of that member point (§2.1 decision 1).
+                marker_owner.setdefault(str(point["descriptor"]), f"{label}#{point['name']}")
             for path in (*point.get("sources", ()), *point.get("headers", ())):
-                component_owner.setdefault(str(path), f"{label}#{point['name']}")
-        for component in unit.get("native_components", ()):
-            component_owner.setdefault(str(component["path"]), label)
+                # A path two units' points both name belongs to the unit whose root contains it (the
+                # innermost), then to the first point in descriptor order (§2.1 item 7): a header a
+                # consumer reaches through -I stays with the library that builds it.
+                depth = len(PurePosixPath(root).parts) if _under(PurePosixPath(str(path)), root) else -1
+                claims.setdefault(str(path), []).append((-depth, unit_index, point_index, f"{label}#{point['name']}"))
+        for path in unit.get("descriptors", ()):
+            # A folded member's descriptor that defines no member point of its own (a CMake
+            # subdirectory's CMakeLists.txt, a sub-make's Makefile) is evidence of the unit.
+            marker_owner.setdefault(str(path), label)
         for path in unit.get("includes", ()):
             included.setdefault(str(path), label)
+    component_owner = {path: min(options)[3] for path, options in claims.items()}
     demoted = {str(path) for item in discovery.get("demoted_markers") or [] for path in item.get("markers", ())}
     scopes = [(str(scope["root"]), str(scope.get("language") or "source")) for scope in source_only_scopes]
     assignment: dict[str, str] = {}

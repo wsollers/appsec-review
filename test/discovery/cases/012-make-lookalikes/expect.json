@@ -15,19 +15,19 @@
       ],
       "facts": {
         "drives": [
-          "core"
+          {
+            "path": "core",
+            "via": "recursive_make",
+            "evidence": "Makefile:3"
+          }
         ]
-      }
-    },
-    {
-      "root": "core",
-      "build_system": "make",
-      "family": "native",
-      "profile": "native",
-      "markers": [
-        "core/Makefile"
-      ],
+      },
       "build_points": [
+        {
+          "name": "all",
+          "kind": "delegating",
+          "evidence": "Makefile:3"
+        },
         {
           "name": "core",
           "kind": "rule",
@@ -37,6 +37,13 @@
     }
   ],
   "not_units": [
+    {
+      "root": "core",
+      "build_system": "make",
+      "marker": "core/Makefile",
+      "role": "evidence_of:.|make",
+      "reason": "the root Makefile's for-loop runs $(MAKE) -C core: core is driven, its Makefile is the root unit's descriptor and its rule the root unit's build point (plan §2.1 decision 1)"
+    },
     {
       "root": "docs",
       "build_system": "make",
@@ -54,8 +61,8 @@
   ],
   "assignment": {
     "Makefile": "evidence_of:.|make",
-    "core/Makefile": "evidence_of:core|make",
-    "core/core.c": "evidence_of:core|make#core",
+    "core/Makefile": "evidence_of:.|make",
+    "core/core.c": "evidence_of:.|make#core",
     "docs/Makefile": "inert",
     "docs/manual.md": "inert",
     "legacy/Makefile.am": "inert",
@@ -71,11 +78,6 @@
     }
   ],
   "pending": [
-    {
-      "check": "unit:.|make.facts",
-      "ref": "T-056.2",
-      "note": "a delegating-only Makefile records what it drives"
-    },
     {
       "check": "not_unit:docs|make",
       "ref": "T-056.4",

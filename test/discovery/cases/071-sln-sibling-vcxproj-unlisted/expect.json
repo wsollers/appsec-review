@@ -36,7 +36,7 @@
         {
           "name": "engine",
           "kind": "project",
-          "evidence": "engine/engine.vcxproj"
+          "evidence": "engine/engine.vcxproj:1"
         }
       ],
       "facts": {
@@ -55,7 +55,7 @@
       "root": "game",
       "build_system": "msbuild",
       "marker": "game/game.vcxproj",
-      "role": "evidence_of:build|msbuild",
+      "role": "evidence_of:build|msbuild#game",
       "reason": "listed by build/game.sln"
     }
   ],
@@ -65,7 +65,7 @@
     "engine/engine.vcxproj": "evidence_of:engine|msbuild",
     "engine/include/engine.h": "evidence_of:engine|msbuild#engine",
     "engine/src/engine.cpp": "evidence_of:engine|msbuild#engine",
-    "game/game.vcxproj": "evidence_of:build|msbuild",
+    "game/game.vcxproj": "evidence_of:build|msbuild#game",
     "game/src/main.cpp": "evidence_of:build|msbuild#game"
   },
   "orphaned_sources": [],
@@ -75,11 +75,6 @@
       "ref": "T-056.4"
     },
     {
-      "check": "unit:engine|msbuild.build_point:engine|project",
-      "ref": "T-056.2",
-      "note": "a lone .vcxproj is one project build point"
-    },
-    {
       "check": "unit:engine|msbuild.facts",
       "ref": "T-056.5",
       "note": "no reference leaves its own directory"
@@ -87,10 +82,6 @@
     {
       "check": "not_unit:build|dotnet",
       "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:game|msbuild",
-      "ref": "T-056.5"
     },
     {
       "check": "assignment:build/game.sln",

@@ -11,7 +11,6 @@
       "family": "native",
       "profile": "native",
       "markers": [
-        "win/app/app.vcxproj",
         "win/win.sln"
       ],
       "build_points": [
@@ -61,7 +60,7 @@
     "win/win.sln": "evidence_of:win|msbuild",
     "win/Directory.Build.props": "context:win|msbuild",
     "win/app/app.vcxproj": "evidence_of:win|msbuild#app",
-    "win/app/app.vcxproj.filters": "context:win|msbuild",
+    "win/app/app.vcxproj.filters": "inert",
     "win/app/src/main.cpp": "evidence_of:win|msbuild#app",
     "win/app/src/neon_path.cpp": "evidence_of:win|msbuild#app",
     "win/README.md": "inert"
@@ -75,10 +74,6 @@
     },
     {
       "check": "not_unit:win|dotnet",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:win/app|msbuild",
       "ref": "T-056.4"
     },
     {

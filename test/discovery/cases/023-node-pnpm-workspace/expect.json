@@ -36,15 +36,18 @@
         }
       ],
       "facts": {
-        "workspace": {
-          "manager": "pnpm",
-          "role": "root",
-          "root": ".",
-          "members": [
-            "packages/core",
-            "packages/ui"
-          ]
-        }
+        "drives": [
+          {
+            "path": "packages/core",
+            "via": "workspace_member",
+            "evidence": "pnpm-workspace.yaml:2"
+          },
+          {
+            "path": "packages/ui",
+            "via": "workspace_member",
+            "evidence": "pnpm-workspace.yaml:2"
+          }
+        ]
       }
     }
   ],
@@ -79,59 +82,9 @@
   },
   "pending": [
     {
-      "check": "unit:.|node.facts",
-      "ref": "T-056.4",
-      "note": "discovery states the npm/pnpm workspace fact on the unit (node_workspace computes it only for the descriptor package today)"
-    },
-    {
-      "check": "unit:.|node.build_point:mono|package",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|node.build_point:@mono/core|workspace_member",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|node.build_point:@mono/ui|workspace_member",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "not_unit:packages/core|node",
-      "ref": "T-056.4",
-      "note": "plan section 3: a package.json that is a workspace member is not a root"
-    },
-    {
-      "check": "not_unit:packages/ui|node",
-      "ref": "T-056.4"
-    },
-    {
       "check": "assignment:pnpm-workspace.yaml",
       "ref": "T-056.4",
       "note": "the workspace declaration is a descriptor of the unit, not a settings file it merely reads"
-    },
-    {
-      "check": "assignment:packages/core/package.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:packages/core/tsconfig.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:packages/core/src/index.ts",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:packages/ui/package.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:packages/ui/tsconfig.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:packages/ui/src/index.ts",
-      "ref": "T-056.2"
     }
   ]
 }

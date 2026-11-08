@@ -114,3 +114,18 @@ scheduling edges anywhere (none are expected); no unit the expectations do not d
 Focused unit tests and the local compile of every compiled shape are recorded in the commit that adds
 this task. The live review path (`prepare` -> `appsec-review start` -> `score`) has not been run; it is
 user-owned manual validation.
+
+## Update 2026-11-08: members fold into their driving root (T-056, plan §2.1 decision 1)
+
+Discovery now folds a driven directory into the unit that drives it: the Cargo and Go workspace
+members, the npm workspace packages, the Gradle projects `settings.gradle` includes, and the CMake
+directories `server/CMakeLists.txt` adds (`third_party/tinylib`, and `examples/hello` under its
+option) are build points of the root unit, never units. Their contract rows are `may_be_absent`
+("never a standalone root"), which the fold satisfies, and the reason codes that described them as
+independent roots — `ownership-workspace`, `ownership-gradle-settings`, `ownership-nested-conditional`
+— are retired. `ownership-vendored` now covers only `server/third_party/tinylib/test`, which nothing
+drives (the parent adds `tinylib`, not `tinylib/test`) and so stays a root of its own. The
+`workspace` facts named above are retired with the fold (the plan reads `drives`, T-035/T-056.4). The
+marker-claim test reads the catalog's units (markers, folded `descriptors`, member points' `descriptor`),
+so the Xcode project is claimed by its unit and is no longer listed as absorbed; the plan still
+excludes it under the Swift policy.

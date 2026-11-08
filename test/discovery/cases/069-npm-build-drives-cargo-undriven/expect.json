@@ -20,9 +20,9 @@
           "evidence": "web/package.json:6"
         }
       ],
-      "facts": {
-        "drives": []
-      }
+      "facts_absent": [
+        "drives"
+      ]
     },
     {
       "root": "wasm-core",
@@ -52,15 +52,5 @@
     "wasm-core/src/lib.rs": "evidence_of:wasm-core|cargo#wasm-core"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:web|node.facts",
-      "ref": "T-056.5",
-      "note": "an import of ../pkg in a source is not a build reference; only the script line would be"
-    },
-    {
-      "check": "unit:wasm-core|cargo.build_point:wasm-core|package",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

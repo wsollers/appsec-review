@@ -20,9 +20,10 @@
           "evidence": "server/CMakeLists.txt:3"
         }
       ],
-      "facts": {
-        "drives": []
-      }
+      "facts_absent": [
+        "drives",
+        "driven_by"
+      ]
     },
     {
       "root": "server/third_party/tinylib",
@@ -40,7 +41,7 @@
         },
         {
           "name": "check",
-          "kind": "rule",
+          "kind": "delegating",
           "evidence": "server/third_party/tinylib/Makefile:8"
         },
         {
@@ -50,7 +51,13 @@
         }
       ],
       "facts": {
-        "drives": []
+        "drives": [
+          {
+            "path": "server/third_party/tinylib/test",
+            "via": "recursive_make",
+            "evidence": "server/third_party/tinylib/Makefile:8"
+          }
+        ]
       }
     },
     {
@@ -68,9 +75,10 @@
           "evidence": "server/third_party/tinylib/gtest/CMakeLists.txt:3"
         }
       ],
-      "facts": {
-        "drives": []
-      }
+      "facts_absent": [
+        "drives",
+        "driven_by"
+      ]
     }
   ],
   "not_units": [
@@ -96,40 +104,5 @@
     "server/third_party/tinylib/gtest/src/gtest-all.cc": "evidence_of:server/third_party/tinylib/gtest|cmake#gtest"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:server|cmake.facts",
-      "ref": "T-056.5",
-      "note": "an independent root states that it drives nothing; the vendored library sits below it positionally only"
-    },
-    {
-      "check": "unit:server/third_party/tinylib|make.build_point:check|rule",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:server/third_party/tinylib|make.build_point:tiny_test|rule",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "unit:server/third_party/tinylib|make.facts",
-      "ref": "T-056.5",
-      "note": "no cmake line in the test Makefile: the gtest tree is not driven"
-    },
-    {
-      "check": "unit:server/third_party/tinylib/gtest|cmake.facts",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "not_unit:server/third_party/tinylib/test|make",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:server/third_party/tinylib/test/Makefile",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:server/third_party/tinylib/test/tiny_test.cc",
-      "ref": "T-056.5"
-    }
-  ]
+  "pending": []
 }

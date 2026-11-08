@@ -59,22 +59,33 @@ def test_the_catalog_of_a_monorepo_names_every_build_shape_once(tmp_path: Path) 
     assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome
     systems = _artifact(run_root, "build-systems.json")
     units = {(unit["root"], unit["build_system"]): unit for unit in systems["build_units"]}
-    # The settings-only Gradle root is one unit that names its modules; the modules stay units.
-    assert units[("client-android", "gradle")]["workspace"] == {
-        "manager": "gradle", "role": "root", "root": "client-android",
-        "members": ["client-android/app", "client-android/lib"]}
-    assert units[("client-android/app", "gradle")]["workspace"]["role"] == "member"
+    # A root that drives members is the unit and the members are its build points (plan §2.1
+    # decision 1): the settings-only Gradle root folds the projects it includes, the Cargo and Go
+    # workspace roots fold their members, the npm workspace root folds its packages, and CMake folds
+    # the subdirectories it adds. The folded directories are named, with the driving evidence.
+    android = units[("client-android", "gradle")]
+    assert [(p["name"], p["kind"], p["descriptor"]) for p in android["build_points"]] == [
+        ("app", "project", "client-android/app/build.gradle"), ("lib", "project", "client-android/lib/build.gradle")]
+    assert [(d["path"], d["via"]) for d in android["drives"]] == [
+        ("client-android/app", "settings_include"), ("client-android/lib", "settings_include")]
+    assert ("client-android/app", "gradle") not in units and "workspace" not in android
     # The Xcode project is a swift/xcodebuild unit under the Swift policy, rooted at the bundle's parent.
     ios = units[("client-ios", "xcodebuild")]
     assert ios["family"] == "swift" and ios["language"] == "swift" and ios["descriptor_facts"]["kind"] == "xcode-project"
-    # Cargo and Go workspaces are stated as facts on root and members.
-    assert units[("rust", "cargo")]["workspace"]["members"] == ["rust/cli", "rust/core"]
-    assert units[("go", "go")]["workspace"]["members"] == ["go/shared", "go/svc"]
-    assert units[("rust/cli", "cargo")]["workspace"] == {"manager": "cargo", "role": "member", "root": "rust"}
-    # A sibling source a Makefile names is that unit's component; no manufactured root for common/.
+    assert [(d["path"], d["via"]) for d in units[("rust", "cargo")]["drives"]] == [
+        ("rust/core", "workspace_member"), ("rust/cli", "workspace_member")]
+    assert [(d["path"], d["via"]) for d in units[("go", "go")]["drives"]] == [("go/shared", "go_work_use"), ("go/svc", "go_work_use")]
+    assert ("rust/cli", "cargo") not in units and ("go/svc", "go") not in units
+    folded = {(f["root"], f["folded_into"], f["via"]) for f in systems["folded_roots"]}
+    assert {("rust/cli", "rust|cargo", "workspace_member"), ("go/svc", "go|go", "go_work_use"),
+            ("client-android/app", "client-android|gradle", "settings_include"),
+            ("server/third_party/tinylib", "server|cmake", "add_subdirectory")} <= folded
+    # A sibling source a Makefile names is evidence of that unit's rule; no manufactured root for common/.
     assert ("common", "direct-native") not in units
-    assert [c["path"] for c in units[("tools/packer", "make")]["native_components"]] == ["common/src/util.c"]
-    # The vendored test Makefile that reaches ../src stays a unit (ownership is the plan's, T-035).
+    [packer] = [p for p in units[("tools/packer", "make")]["build_points"] if p["name"] == "packer"]
+    assert "common/src/util.c" in packer["sources"] and "native_components" not in units[("tools/packer", "make")]
+    # The vendored test Makefile that reaches ../src stays a unit: nothing drives it (the CMake tree
+    # adds tinylib, not tinylib/test).
     assert ("server/third_party/tinylib/test", "make") in units
     # Unity is an engine project, PHP without composer is a source-only scope.
     assert units[("client-unity", "unity")]["engine"]
@@ -82,7 +93,7 @@ def test_the_catalog_of_a_monorepo_names_every_build_shape_once(tmp_path: Path) 
     assert ("website/public", "composer") not in units and ("website/lib", "composer") in units
     # No compiled source in the fixture is orphaned (common/src/util.c is named by the packer Makefile);
     # the orphan list is present and empty, and the discovery event carries the counts.
-    assert systems["schema"] == "appsec-review/build-systems/3" and systems["orphaned_sources"] == []
+    assert systems["schema"] == "appsec-review/build-systems/4" and systems["orphaned_sources"] == []
     [discovered] = job_events(run_root, JOB_ID, "BUILD_SYSTEMS_DISCOVERED")
     assert discovered["orphaned_source_count"] == 0 and discovered["unit_count"] == len(units)
     # Every unit carries the profile it needs.

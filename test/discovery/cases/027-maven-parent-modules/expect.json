@@ -55,42 +55,9 @@
   },
   "pending": [
     {
-      "check": "unit:.|maven.build_point:core|module",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|maven.build_point:app|module",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "not_unit:core|maven",
-      "ref": "T-056.4",
-      "note": "a module POM under a parent that lists it is a build point of the parent"
-    },
-    {
-      "check": "not_unit:app|maven",
-      "ref": "T-056.4"
-    },
-    {
       "check": "assignment:mvnw",
       "ref": "T-056.4",
       "note": "the Maven wrapper script is context like gradlew"
-    },
-    {
-      "check": "assignment:core/pom.xml",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:core/src/main/java/shop/core/Price.java",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:app/pom.xml",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:app/src/main/java/shop/app/Main.java",
-      "ref": "T-056.2"
     }
   ]
 }

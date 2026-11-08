@@ -62,7 +62,7 @@
     },
     {
       "path": "sim/experimental/bridge.m",
-      "language": "objc",
+      "language": "objective-c",
       "reason": "no_build_point",
       "nearest_unit": "sim"
     }
@@ -72,21 +72,6 @@
       "check": "unit:sim|cmake.facts",
       "ref": "T-056.6",
       "note": "languages come from targets, not from project(); no CUDA target means no profile gap"
-    },
-    {
-      "check": "assignment:sim/experimental/kernels.cu",
-      "ref": "T-056.3",
-      "note": ".cu is not in the compiled-language tables: a loose CUDA source reads as inert instead of orphaned"
-    },
-    {
-      "check": "assignment:sim/experimental/bridge.m",
-      "ref": "T-056.2",
-      "note": "a .m under a native unit root is claimed by position today; nothing names it, so it is orphaned"
-    },
-    {
-      "check": "orphaned_sources",
-      "ref": "T-056.3",
-      "note": ".cu and .m are missing from the orphan language table"
     }
   ]
 }

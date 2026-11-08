@@ -113,11 +113,15 @@ def _marker_files() -> list[str]:
     return sorted(values)
 
 
-def test_every_marker_file_is_claimed_by_exactly_one_unit_or_deliberately_absorbed(plan: dict, expectations: dict) -> None:
+def test_every_marker_file_is_claimed_by_exactly_one_unit_or_deliberately_absorbed(expectations: dict) -> None:
+    # A marker is claimed by the unit it marks, or — for a folded member (plan §2.1 decision 1) — by
+    # the driving unit whose descriptor it has become (``descriptors``, or a member point's ``descriptor``).
     claimed: dict[str, list[str]] = {}
-    for action in plan["build_topology"]["build_actions"]:
-        for marker in action["markers"]:
-            claimed.setdefault(marker["path"], []).append(action["build_unit_id"])
+    for unit in topology.catalog_fixture(FIXTURE)["build_units"]:
+        paths = {marker["path"] for marker in unit["markers"]} | set(unit.get("descriptors", ()))
+        paths |= {point["descriptor"] for point in unit.get("build_points", ()) if point.get("descriptor")}
+        for path in sorted(paths):
+            claimed.setdefault(path, []).append(unit["build_unit_id"])
     absorbed = {item["path"] for shape in expectations["shapes"] for item in shape.get("absorbed_markers", ())}
     markers = _marker_files()
     assert len(markers) >= 18

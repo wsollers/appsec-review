@@ -17,14 +17,11 @@
       "build_points": [
         {
           "name": "app",
-          "kind": "module",
+          "kind": "project",
           "evidence": "android/settings.gradle:2"
         }
       ],
       "facts": {
-        "modules": [
-          "app"
-        ],
         "product_flavors": {
           "app": [
             "free",
@@ -35,7 +32,13 @@
         "source_conditions": {
           "android/app/src/free/java/demo/Flavor.java": "productFlavor == free",
           "android/app/src/paid/java/demo/Flavor.java": "productFlavor == paid"
-        }
+        },
+        "drives": [
+          {
+            "path": "android/app",
+            "via": "settings_include"
+          }
+        ]
       }
     },
     {
@@ -145,11 +148,6 @@
       "note": "an Android application module demands the android profile; the android descriptor facts are attached by the catalog, not by discovery, so the unit alone reads as java"
     },
     {
-      "check": "unit:android|gradle.build_point:app|module",
-      "ref": "T-056.2",
-      "note": "Gradle modules from settings.gradle"
-    },
-    {
       "check": "unit:android|gradle.facts",
       "ref": "T-056.6",
       "note": "product flavors and which source sets each flavor compiles"
@@ -171,44 +169,6 @@
       "check": "unit:gotool|go.facts",
       "ref": "T-056.6",
       "note": "//go:build lines and GOOS file-name suffixes are per-source conditions"
-    },
-    {
-      "check": "assignment:android/app/build.gradle",
-      "ref": "T-056.2",
-      "note": "the module's build file is evidence of the module build point, not context"
-    },
-    {
-      "check": "assignment:android/app/src/main/java/demo/Main.java",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:android/app/src/free/java/demo/Flavor.java",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:android/app/src/paid/java/demo/Flavor.java",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:gotool/main.go",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:gotool/sys_windows.go",
-      "ref": "T-056.6",
-      "note": "a GOOS-suffixed file is claimed by the main package with its condition, not dropped"
-    },
-    {
-      "check": "assignment:gotool/sys_unix.go",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:gotool/exp.go",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:gotool/exp_stub.go",
-      "ref": "T-056.6"
     }
   ]
 }

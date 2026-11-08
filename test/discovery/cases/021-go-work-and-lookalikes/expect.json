@@ -36,15 +36,18 @@
         }
       ],
       "facts": {
-        "workspace": {
-          "manager": "go",
-          "role": "root",
-          "root": ".",
-          "members": [
-            "lib",
-            "svc"
-          ]
-        }
+        "drives": [
+          {
+            "path": "svc",
+            "via": "go_work_use",
+            "evidence": "go.work:3"
+          },
+          {
+            "path": "lib",
+            "via": "go_work_use",
+            "evidence": "go.work:3"
+          }
+        ]
       }
     }
   ],
@@ -87,38 +90,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:.|go.build_point:example.test/svc|module",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|go.build_point:example.test/lib|module",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|go.build_point:svc|main_package",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "not_unit:svc|go",
-      "ref": "T-056.4",
-      "note": "workspace members are build points of the go.work root (plan section 2.1: a root that drives a set of build points is the unit)"
-    },
-    {
-      "check": "not_unit:lib|go",
-      "ref": "T-056.4"
-    },
-    {
       "check": "not_unit:lib/testdata/mod|go",
       "ref": "T-056.4",
       "note": "testdata is excluded from package resolution by the go tool"
-    },
-    {
-      "check": "assignment:svc/go.mod",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:svc/go.sum",
-      "ref": "T-056.4"
     },
     {
       "check": "assignment:svc/vendor/modules.txt",
@@ -129,10 +103,6 @@
       "check": "assignment:svc/vendor/example.test/dep/dep.go",
       "ref": "T-056.4",
       "note": "a vendored dependency package is read by the build, never evidence of a target build point"
-    },
-    {
-      "check": "assignment:lib/go.mod",
-      "ref": "T-056.4"
     },
     {
       "check": "assignment:lib/testdata/mod/go.mod",

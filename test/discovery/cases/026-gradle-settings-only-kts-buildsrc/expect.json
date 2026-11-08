@@ -26,15 +26,18 @@
         }
       ],
       "facts": {
-        "workspace": {
-          "manager": "gradle",
-          "role": "root",
-          "root": ".",
-          "members": [
-            "cli",
-            "lib"
-          ]
-        }
+        "drives": [
+          {
+            "path": "cli",
+            "via": "settings_include",
+            "evidence": "settings.gradle.kts:2"
+          },
+          {
+            "path": "lib",
+            "via": "settings_include",
+            "evidence": "settings.gradle.kts:3"
+          }
+        ]
       }
     }
   ],
@@ -75,28 +78,6 @@
   },
   "pending": [
     {
-      "check": "unit:.|gradle.facts",
-      "ref": "T-056.4",
-      "note": "buildSrc is listed as a workspace member today; members are the included projects only"
-    },
-    {
-      "check": "unit:.|gradle.build_point:cli|project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|gradle.build_point:lib|project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "not_unit:cli|gradle",
-      "ref": "T-056.4",
-      "note": "interim behaviour keeps settings-only modules as units with member facts; the contract makes them build points of the root"
-    },
-    {
-      "check": "not_unit:lib|gradle",
-      "ref": "T-056.4"
-    },
-    {
       "check": "not_unit:buildSrc|gradle",
       "ref": "T-056.4",
       "note": "a build.gradle(.kts) under buildSrc is never a unit"
@@ -109,22 +90,6 @@
       "check": "assignment:buildSrc/src/main/kotlin/tools-conventions.gradle.kts",
       "ref": "T-056.4",
       "note": "a precompiled script plugin is build logic the root reads, not a compiled product of the review"
-    },
-    {
-      "check": "assignment:cli/build.gradle.kts",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:cli/src/main/kotlin/tools/cli/Main.kt",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:lib/build.gradle.kts",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:lib/src/main/kotlin/tools/lib/Lib.kt",
-      "ref": "T-056.2"
     }
   ]
 }

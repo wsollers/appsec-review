@@ -493,14 +493,20 @@ until each is rewritten into the entry format when it is next touched.
   entries, the case matrix (A single systems and look-alikes, B nesting, C parallel systems, D
   cross-tree, E conditional, F multi-language, G scale/hostile) and the sub-items T-056.1–.7
   (harness; build points; loose sources become source-only scopes; the matrix in three tranches).
-  `native_components` from job pass 05 is interim and retired by T-056.2. Progress: T-056.1 done,
-  T-056.2 extractors done (`jobs/build_points.py`, 2026-11-08), T-056.3 done in discovery/catalog;
-  cases 010–120 written (73 cases) with strict `pending` entries; plan §2.1 (2026-11-08) records
-  the contract decisions the first tranche raised — a root that drives members is the unit and the
+  `native_components` from job pass 05 was interim and is retired (2026-11-08). Progress: T-056.1
+  done, T-056.2 done (`jobs/build_points.py`, 2026-11-08), T-056.3 done in discovery/catalog; cases
+  010–120 written (73 cases) with strict `pending` entries; plan §2.1 (2026-11-08) records the
+  contract decisions the first tranche raised — a root that drives members is the unit and the
   members are its build points (`drives`), parallel systems at one root both exist with a
   `capture_authority`, solution family follows the listed projects, generated trees are never
-  units, the context/evidence/inert name tables, the fact vocabulary — which T-056.4/.5/.6
-  implement next.
+  units, the context/evidence/inert name tables, the fact vocabulary. Decision 1 landed 2026-11-08
+  (members fold into the driving root: `.sln` projects, Gradle includes, Cargo/Go/npm workspace
+  members, Maven modules, `add_subdirectory`/`FetchContent`/`ExternalProject_Add`, `$(MAKE) -C`,
+  `subdir`, `SUBDIRS`; cross-system drives via `invokes:<tool>`/`externalNativeBuild` leave the
+  driven unit standing with `driven_by`; `build-systems/4`; vocabulary in plan §2.1 item 11;
+  pending 542 → 313). Next: decisions 2 (parallel systems, `capture_authority`, wrapper
+  Makefile = context), 3 (solution family), 4 (generated/installed trees), then the matrix-A
+  look-alike rules and T-056.5/.6 facts.
 - **Done when:** every case in the matrix has no `pending` entry and `build-systems.json` carries
   build points with evidence for every unit; the composite monorepo's xfails are re-expressed as
   `pending` entries or closed.

@@ -47,23 +47,5 @@
     "internal/util/util_test.go": "evidence_of:.|go#internal/util",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "unit:.|go.build_point:example.test/svc|module",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|go.build_point:cmd/server|main_package",
-      "ref": "T-056.2",
-      "note": "a directory whose files declare package main is a main package"
-    },
-    {
-      "check": "unit:.|go.build_point:cmd/cli|main_package",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|go.build_point:internal/util|package",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

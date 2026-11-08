@@ -82,10 +82,6 @@ _CONTEXT_NAMES = {
     "Gruntfile.js", "gulpfile.js",
     "Gemfile", "Gemfile.lock", "ReadMe.txt", "fbuild.bff", "build_ms.bat",
 }
-# Families whose own packaging tool drives a C/C++ compile inside the same build (node-gyp,
-# setuptools, phpize, clang --target=wasm32). C/C++ sources under such a root are the unit's
-# typed ``native_components``, not a second direct-native unit that would need its own build.
-NATIVE_COMPONENT_OWNER_FAMILIES = frozenset({"node", "python", "php", "wasm"})
 _BUILD_SCRIPT_NAMES = frozenset({"build.sh"})
 _WASM_SCRIPT = re.compile(r"--target[= ]wasm32|\bwasm32-|(?:^|\s)(?:emcc|em\+\+)(?:\s|$)", re.M)
 _NODE_ANCESTOR_CONTEXT_NAMES = {
@@ -159,14 +155,6 @@ def build_recipe_inference_policy(unit: Mapping[str, Any]) -> dict[str, Any]:
         authority = _node_build_authority(unit)
         if authority is not None:
             policy["descriptor_build_command"] = authority[0]
-    components = [str(item.get("path")) for item in unit.get("native_components", ())
-                  if isinstance(item, Mapping)]
-    if components:
-        policy["native_components"] = {
-            "sources": components,
-            "contract": ("these C/C++ sources are compiled by this unit's own build tool in the "
-                         "same container; do not plan a separate native build for them"),
-        }
     if profile == "android":
         policy["gradle"] = {
             "allowed_executables": ["gradle", "gradlew"],
@@ -236,41 +224,6 @@ def _marker_root(path: PurePosixPath) -> str:
     return path.parent.as_posix()
 
 
-_NATIVE_DESCRIPTOR_SYSTEMS = frozenset({"make", "cmake", "autotools", "meson"})
-_NATIVE_SOURCE_REFERENCE = re.compile(r"(?<![\w/.-])((?:\.\./|\./)?[\w./*-]+\.(?:c|cc|cpp|cxx))(?![\w.-])")
-
-
-def _descriptor_source_references(root: str, text: str) -> list[str]:
-    """Target-relative paths of the C/C++ sources a native build descriptor names literally.
-
-    ``../src/x.c`` in ``third_party/lib/test/Makefile`` resolves to ``third_party/lib/src/x.c``; a
-    ``*`` keeps its glob so ``$(wildcard ../src/*.c)`` still binds. References that escape the target
-    are dropped.
-    """
-    import posixpath
-    # A path in a comment is a mention, not a reference.
-    text = re.sub(r"#[^\n]*", "", text)
-    values = []
-    for token in _NATIVE_SOURCE_REFERENCE.findall(text):
-        joined = posixpath.normpath(posixpath.join(root, token)) if root != "." else posixpath.normpath(token)
-        if joined.startswith("../") or joined == "..":
-            continue
-        values.append(joined)
-    return values
-
-
-def _referenced_by_native_descriptor(path: PurePosixPath,
-                                     references: Sequence[tuple[tuple[str, str, str], list[str]]]) -> tuple[str, str, str] | None:
-    """The native unit whose descriptor names ``path`` (literally or by glob), nearest root first."""
-    import fnmatch
-    target = path.as_posix()
-    owners = [key for key, names in references
-              if any(name == target or ("*" in name and fnmatch.fnmatchcase(target, name)) for name in names)]
-    if not owners:
-        return None
-    return max(owners, key=lambda key: (len(PurePosixPath(key[0]).parts), key))
-
-
 def is_build_descriptor(path: PurePosixPath) -> bool:
     """Select project markers and build context before ordinary content-inventory limits."""
     engine_descriptor = (
@@ -297,83 +250,6 @@ def _wasm_build_script(path: PurePosixPath, read_text: Callable[[str], str | Non
     return bool(text) and bool(_WASM_SCRIPT.search(text or ""))
 
 
-def _component(item: Mapping[str, Any]) -> dict[str, Any]:
-    return {"path": item["path"], "sha256": item["sha256"], "size_bytes": item["size_bytes"]}
-
-
-_GO_WORK_USE = re.compile(r"^\s*use\s*(?:\(\s*([^)]*)\)|(\S+))", re.M | re.S)
-
-
-def _attach_workspace_facts(units: list[dict[str, Any]], read_text: Callable[[str], str | None] | None) -> None:
-    """Record Cargo and Go workspace membership on the units involved.
-
-    Discovery states the fact (``workspace`` with ``manager``, ``role``, ``root`` and, on the root,
-    ``members``); ownership — folding members into the root as ``contained`` — is the topology
-    compiler's decision in the plan. Node workspaces are described by :func:`node_workspace`.
-    """
-    import fnmatch
-    import tomllib
-    by_key = {(unit["root"], unit["family"], unit["build_system"]): unit for unit in units}
-    for unit in list(units):
-        root = str(unit["root"])
-        if unit["family"] == "rust" and unit["build_system"] == "cargo" and read_text is not None:
-            manifest = next((m for m in unit["markers"] if PurePosixPath(str(m["path"])).name == "Cargo.toml"), None)
-            text = read_text(str(manifest["path"])) if manifest else None
-            try:
-                document = tomllib.loads(text) if text else {}
-            except tomllib.TOMLDecodeError:
-                continue
-            workspace = document.get("workspace")
-            if not isinstance(workspace, Mapping):
-                continue
-            patterns = [str(p) for p in workspace.get("members", ()) if isinstance(p, str)]
-            excluded = [str(p) for p in workspace.get("exclude", ()) if isinstance(p, str)]
-            members = []
-            for candidate in units:
-                if candidate is unit or candidate["family"] != "rust":
-                    continue
-                relative = _relative_to(str(candidate["root"]), root)
-                if relative is None:
-                    continue
-                if any(fnmatch.fnmatchcase(relative, p) for p in patterns) and \
-                        not any(fnmatch.fnmatchcase(relative, p) for p in excluded):
-                    members.append(candidate)
-            unit["workspace"] = {"manager": "cargo", "role": "root", "root": root,
-                                 "members": sorted(str(m["root"]) for m in members)}
-            for member in members:
-                member["workspace"] = {"manager": "cargo", "role": "member", "root": root}
-        elif unit["family"] == "go" and read_text is not None and any(
-                PurePosixPath(str(m["path"])).name == "go.work" for m in unit["markers"]):
-            text = read_text(next(str(m["path"]) for m in unit["markers"]
-                                  if PurePosixPath(str(m["path"])).name == "go.work")) or ""
-            uses: list[str] = []
-            for block, single in _GO_WORK_USE.findall(text):
-                for token in (block.split() if block else [single]):
-                    token = token.split("//", 1)[0].strip().strip('"')
-                    if token and not token.startswith("//"):
-                        uses.append(token)
-            members = []
-            for token in uses:
-                import posixpath
-                member_root = posixpath.normpath(posixpath.join(root, token)) if root != "." else posixpath.normpath(token)
-                member = by_key.get((member_root, "go", "go"))
-                if member is not None and member is not unit:
-                    members.append(member)
-            unit["workspace"] = {"manager": "go", "role": "root", "root": root,
-                                 "members": sorted(str(m["root"]) for m in members)}
-            for member in members:
-                member["workspace"] = {"manager": "go", "role": "member", "root": root}
-
-
-def _relative_to(path: str, root: str) -> str | None:
-    if root == ".":
-        return path if path != "." else None
-    if path == root or not path.startswith(root + "/"):
-        return None
-    return path[len(root) + 1:]
-
-
-
 _ORPHAN_LANGUAGE = {".c": "c", ".cc": "c++", ".cpp": "c++", ".cxx": "c++", ".m": "objective-c", ".mm": "objective-c++",
                     ".java": "java", ".kt": "kotlin", ".kts": "kotlin", ".rs": "rust", ".go": "go", ".wat": "wat",
                     ".cs": "c#", ".swift": "swift", ".cu": "cuda"}
@@ -382,6 +258,9 @@ _ORPHAN_FAMILY = {**{suffix: family for suffix, (family, _system) in _SOURCE_MAR
                   ".m": "native", ".mm": "native", ".cu": "native", ".cs": "dotnet", ".swift": "swift"}
 
 
+# Build systems whose descriptors are read for build points; a unit of these with no build point,
+# nothing driven and nothing unresolved is not a unit (an include-only CMakeLists.txt, a Makefile of
+# variables). Manifest-driven systems (cargo, npm, go, ...) are units by their manifest.
 # Build systems whose descriptors are read for build points; a unit of these with no build point,
 # nothing driven and nothing unresolved is not a unit (an include-only CMakeLists.txt, a Makefile of
 # variables). Manifest-driven systems (cargo, npm, go, ...) are units by their manifest.
@@ -404,42 +283,128 @@ def _under_generated_dir(path: str) -> bool:
 
 def _family_of_system(system: str) -> str:
     return next((family for family, candidate in (*_MARKERS.values(), *_SUFFIX_MARKERS.values()) if candidate == system), "native")
+
+
+# Descriptor files read per unit beyond its markers and its folded members' descriptors; the markers
+# of a solution's listed projects, a workspace's members and a CMake tree's subdirectories are read
+# through the fold, bounded by _MEMBER_LIMIT.
 _DESCRIPTOR_READ_LIMIT = 48
+_MEMBER_LIMIT = 256
+_DESCRIPTOR_SUFFIXES = frozenset({".cmake", ".mk", ".am", ".ac", ".sln", ".vcxproj", ".csproj", ".vbproj", ".fsproj"})
+
+
+def unit_label(unit: Mapping[str, Any]) -> str:
+    """``<root>|<build system>``: how facts, the assignment and the cases name a unit."""
+    return f"{unit['root']}|{unit['build_system']}"
+
+
+def _is_under(path: str, root: str) -> bool:
+    return root == "." or path == root or path.startswith(root + "/")
+
+
+def _descriptor_candidates(unit: Mapping[str, Any], inventory_paths: Sequence[str], other_markers: set[str],
+                           nested_roots: Sequence[str]) -> list[str]:
+    """Paths under the unit's root (not under a nested unit, not another unit's marker) that describe its build."""
+    root = str(unit["root"])
+    candidates = []
+    for path in inventory_paths:
+        if not _is_under(path, root) or path in other_markers:
+            continue
+        parent = PurePosixPath(path).parent.as_posix()
+        if any(other != root and _is_under(parent, other) for other in nested_roots):
+            continue  # a nested unit's descriptors belong to it
+        posix = PurePosixPath(path)
+        if (is_build_descriptor(posix) or _is_context_name(posix.name) or posix.suffix.lower() in _DESCRIPTOR_SUFFIXES
+                or posix.name == "pnpm-workspace.yaml"
+                or (unit["build_system"] == "go" and posix.suffix == ".go")):
+            candidates.append(path)
+    return candidates
 
 
 def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[str],
-                         read_text: Callable[[str], str | None] | None) -> list[dict[str, Any]]:
-    """Read each unit's descriptors for build points; return the units demoted to non-units."""
-    from appsec_review.jobs.build_points import EXTRACTORS, extract_build_points
+                         read_text: Callable[[str], str | None] | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Read each unit's descriptors for build points; fold driven members; return (demoted, folded).
+
+    Plan §2.1 decision 1: a root that drives members is the unit and the members are its build points.
+    A unit's ``drives`` whose ``via`` is a folding construct (``add_subdirectory``, ``$(MAKE) -C``,
+    ``subdir``, ``SUBDIRS``, a solution's project, a Gradle ``include``, a workspace member, a Maven
+    module) and whose path is the root of a unit the driver's build system reads folds that unit into
+    the driver: its markers become the driver's ``descriptors``, its points the driver's points. The
+    fold is literal (only a named directory folds) and transitive (a folded member's own drives are
+    read). A drive to a unit of another build system (``invokes:cmake`` from a Makefile, Gradle's
+    ``externalNativeBuild``) leaves that unit standing and is recorded on it as ``driven_by``.
+    """
+    from appsec_review.jobs.build_points import EXTRACTORS, FOLDABLE_SYSTEMS, FOLDING_VIAS, extract_build_points
+
     demoted: list[dict[str, Any]] = []
-    roots = {str(unit["root"]) for unit in units}
+    folded: list[dict[str, Any]] = []
+    folded_ids: set[str] = set()
+    by_root: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for unit in units:
-        if unit["build_system"] not in EXTRACTORS:
-            unit["source_resolution"] = "containment"
+        by_root[str(unit["root"])].append(unit)
+    marker_paths = {str(m["path"]) for unit in units for m in unit.get("markers", ())}
+    texts: dict[str, str | None] = {}
+
+    def text_of(path: str) -> str | None:
+        if path not in texts:
+            texts[path] = read_text(path) if read_text is not None else None
+        return texts[path]
+
+    # Shallow roots first: a parent folds its members before a member would read its own descriptors.
+    for unit in sorted(units, key=lambda u: (len(PurePosixPath(str(u["root"])).parts), str(u["root"]), str(u["build_system"]))):
+        if unit["build_unit_id"] in folded_ids:
             continue
-        if read_text is None:
+        if unit["build_system"] not in EXTRACTORS or read_text is None:
             unit["source_resolution"] = "containment"
             continue
         root = str(unit["root"])
-        descriptors: dict[str, str] = {}
-        candidates = [str(m["path"]) for m in unit.get("markers", ())]
-        for path in inventory_paths:
-            if path in candidates or not (root == "." or path.startswith(root + "/")):
-                continue
-            # A nested unit's descriptors belong to it.
-            parent = PurePosixPath(path).parent.as_posix()
-            if any(other != root and (parent == other or parent.startswith(other + "/")) for other in roots):
-                continue
-            posix = PurePosixPath(path)
-            if is_build_descriptor(posix) or _is_context_name(posix.name) or posix.suffix.lower() in {".cmake", ".mk", ".am", ".ac", ".sln", ".vcxproj", ".csproj"} \
-                    or (unit["build_system"] == "go" and posix.suffix == ".go"):
-                candidates.append(path)
-        for path in sorted(set(candidates))[:_DESCRIPTOR_READ_LIMIT]:
-            text = read_text(path)
-            if text is not None:
-                descriptors[path] = text
-        extracted = extract_build_points(unit, descriptors, inventory_paths)
+        own_markers = [str(m["path"]) for m in unit.get("markers", ())]
+        members: list[dict[str, Any]] = []  # units folded into this one, in fold order
+        member_descriptors: list[str] = []
+        while True:
+            nested_roots = [str(other["root"]) for other in units
+                            if other is not unit and other["build_unit_id"] not in folded_ids and other not in members]
+            other_markers = marker_paths - set(own_markers) - set(member_descriptors)
+            candidates = _descriptor_candidates(unit, inventory_paths, other_markers, nested_roots)
+            # Member descriptors can sit outside the root (a solution's sibling project): add them explicitly.
+            extras = sorted(set(candidates) - set(own_markers) - set(member_descriptors))[:_DESCRIPTOR_READ_LIMIT]
+            descriptors: dict[str, str] = {}
+            for path in [*own_markers, *member_descriptors, *extras]:
+                text = text_of(path)
+                if text is not None:
+                    descriptors[path] = text
+            extracted = extract_build_points(unit, descriptors, inventory_paths)
+            new_member = None
+            for drive in extracted["drives"]:
+                if drive.get("via") not in FOLDING_VIAS or drive.get("unresolved"):
+                    continue
+                for candidate in by_root.get(str(drive["path"]), ()):
+                    if candidate is unit or candidate in members or candidate["build_unit_id"] in folded_ids:
+                        continue
+                    if candidate["build_system"] not in FOLDABLE_SYSTEMS.get(str(unit["build_system"]), frozenset()):
+                        continue
+                    if drive.get("project") and drive["project"] not in {str(m["path"]) for m in candidate.get("markers", ())}:
+                        continue  # a solution folds the project it lists, not another project in that directory
+                    if len(members) >= _MEMBER_LIMIT:
+                        extracted["unresolved"].append({"evidence": drive["evidence"], "reason": "member bound reached"})
+                        continue
+                    new_member = (candidate, drive)
+                    break
+                if new_member is not None:
+                    break
+            if new_member is None:
+                break
+            candidate, drive = new_member
+            members.append(candidate)
+            folded_ids.add(candidate["build_unit_id"])
+            member_descriptors.extend(str(m["path"]) for m in candidate.get("markers", ()))
+            folded.append({"build_unit_id": candidate["build_unit_id"], "root": str(candidate["root"]),
+                           "build_system": candidate["build_system"],
+                           "markers": [str(m["path"]) for m in candidate.get("markers", ())],
+                           "folded_into": unit_label(unit), "via": drive["via"], "evidence": drive["evidence"]})
         unit["build_points"] = extracted["build_points"]
+        if member_descriptors:
+            unit["descriptors"] = sorted(dict.fromkeys(member_descriptors))
         if extracted["drives"]:
             unit["drives"] = extracted["drives"]
         if extracted["includes"]:
@@ -452,12 +417,22 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
                                      and unit["build_system"] in {"cmake", "make", "meson", "autotools", "msbuild", "dotnet", "vcbuild"}
                                      else "containment")
         if (unit["build_system"] in _DEMOTABLE_SYSTEMS and not extracted["build_points"] and not extracted["drives"]
-                and not extracted["unresolved"] and not unit.get("native_components")):
+                and not extracted["unresolved"]):
             demoted.append({"build_unit_id": unit["build_unit_id"], "root": root, "build_system": unit["build_system"],
-                            "markers": [str(m["path"]) for m in unit.get("markers", ())],
+                            "markers": own_markers,
                             "reason": "no build point, nothing driven: the descriptor declares no build"})
-    return demoted
-
+    folded_set = {item["build_unit_id"] for item in folded}
+    # A drive to a standing unit of another build system: recorded on the driven unit.
+    standing = [unit for unit in units if unit["build_unit_id"] not in folded_set]
+    for unit in standing:
+        for drive in unit.get("drives", ()):
+            if drive.get("unresolved"):
+                continue
+            for driven in by_root.get(str(drive["path"]), ()):
+                if driven is unit or driven["build_unit_id"] in folded_set or "driven_by" in driven:
+                    continue
+                driven["driven_by"] = {"unit": unit_label(unit), "via": drive["via"], "evidence": drive["evidence"]}
+    return demoted, folded
 
 
 def discover_build_units(files: Sequence[Mapping[str, Any]], *,
@@ -470,17 +445,14 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
 def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                              read_text: Callable[[str], str | None] | None = None,
                              engine_discovery: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """Group accepted build descriptors into stable, repository-independent build units, and name
-    the compiled-language sources no build point claims.
+    """Group accepted build descriptors into stable, repository-independent build units, fold the
+    members a unit drives into it, and name the compiled-language sources no build point claims.
 
-    Returns ``{"units": [...], "orphaned_sources": [...]}``. ``read_text`` returns the bounded text
-    of a cataloged file; it lets a build script that targets wasm32 route its C sources to the wasm
-    family, and lets a native descriptor claim the sibling sources it names.
+    Returns ``{"units", "orphaned_sources", "demoted_markers", "folded_roots"}``. ``read_text`` returns
+    the bounded text of a cataloged file; without it no descriptor is read, so every unit is a marker
+    root with containment resolution and nothing folds.
     """
     from appsec_review.jobs.engine_discovery import discover_unity
-
-    orphans: list[dict[str, Any]] = []
-    loose: list[tuple[Mapping[str, Any], str, str]] = []
 
     engines = (engine_discovery if engine_discovery is not None else
                discover_unity(files, read_text=lambda descriptor, _limit:
@@ -491,7 +463,6 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                    key=lambda root: len(root.parts), default=None)
 
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
-    components: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for item in files:
         path = PurePosixPath(str(item["path"]))
         marker = _marker(path)
@@ -514,78 +485,6 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
         key for key in tuple(groups) if key[2] in {"cmake", "autotools", "meson"}
     ]:
         groups.pop((root, family, "make"), None)
-    _SETTINGS = {"settings.gradle", "settings.gradle.kts"}
-    _BUILD_FILES = {"build.gradle", "build.gradle.kts"}
-    gradle_roots = [PurePosixPath(root) for root, family, system in groups
-                    if family == "java" and system == "gradle" and any(
-                        PurePosixPath(str(item["path"])).parent == PurePosixPath(root) and
-                        PurePosixPath(str(item["path"])).name in _SETTINGS for item in files)]
-    gradle_members: dict[str, list[str]] = defaultdict(list)
-    for root, family, system in tuple(groups):
-        path = PurePosixPath(root)
-        owner = max((parent for parent in gradle_roots if parent != path and parent in path.parents),
-                    key=lambda value: len(value.parts), default=None)
-        if family != "java" or system != "gradle" or owner is None:
-            continue
-        if any(PurePosixPath(str(item["path"])).name in _BUILD_FILES for item in groups[(owner.as_posix(), "java", "gradle")]):
-            # The root build file drives the modules: one unit, as before.
-            groups.pop((root, family, system), None)
-        else:
-            # A settings-only root: the modules stay units and the membership is stated, so the
-            # topology compiler can fold them (T-035) without discovery deciding ownership.
-            gradle_members[owner.as_posix()].append(root)
-    descriptor_roots = [(PurePosixPath(root), family) for root, family, _system in groups]
-    # Sources a native descriptor names from another directory (``../src/x.c``) belong to that
-    # descriptor's build; they must never become a manufactured direct-native root of their own.
-    native_references: list[tuple[tuple[str, str, str], list[str]]] = []
-    if read_text is not None:
-        for key, markers in groups.items():
-            if key[1] != "native" or key[2] not in _NATIVE_DESCRIPTOR_SYSTEMS:
-                continue
-            names: list[str] = []
-            for marker in markers:
-                text = read_text(str(marker["path"]))
-                if text:
-                    names.extend(_descriptor_source_references(key[0], text))
-            if names:
-                native_references.append((key, names))
-    for item in files:
-        path = PurePosixPath(str(item["path"]))
-        orphan_family = _ORPHAN_FAMILY.get(path.suffix.lower())
-        if orphan_family is None or _under_generated_dir(str(path)):
-            continue
-        fallback = (orphan_family, _SOURCE_MARKERS.get(path.suffix.lower(), (orphan_family, "none"))[1])
-        if ".teamcity" in path.parts:
-            # TeamCity Kotlin DSL is CI configuration, not an independently compilable JVM
-            # source tree. It is cataloged and analyzed by the CI lanes instead.
-            continue
-        family, system = fallback
-        matching_roots = [root for root, existing_family in descriptor_roots
-                          if existing_family == family and
-                          (root.as_posix() == "." or path == root or root in path.parents)]
-        owner = unity_owner(path)
-        if (owner is not None and family == "native" and
-                not any(len(root.parts) >= len(owner.parts) for root in matching_roots)):
-            components[(owner.as_posix(), UNITY_LANGUAGE_FAMILY, UNITY_BUILD_SYSTEM)].append(item)
-            continue
-        if matching_roots:
-            continue
-        if family == "native":
-            owners = [key for key in groups if key[1] in NATIVE_COMPONENT_OWNER_FAMILIES and
-                      (key[0] == "." or PurePosixPath(key[0]) in path.parents)]
-            if owners:
-                # The nearest owning package root compiles this source in its own build.
-                owner = max(owners, key=lambda key: (len(PurePosixPath(key[0]).parts), key))
-                components[owner].append(item)
-                continue
-            referenced = _referenced_by_native_descriptor(path, native_references)
-            if referenced is not None:
-                components[referenced].append(item)
-                continue
-        # No descriptor root of this family above it and nothing names it: a candidate orphan.
-        # The decision is made after build points are read (a build point may still name it).
-        loose.append((item, family, "no_build_point"))
-    # A preset is context for the CMake project at the same root, never a second unit.
     values = []
     for (root, family, system), markers in sorted(groups.items()):
         ordered = sorted(markers, key=lambda item: str(item["path"]))
@@ -598,25 +497,11 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                          "size_bytes": item["size_bytes"]} for item in ordered],
             "provenance": "deterministic-marker",
         })
-        native = components.get((root, family, system))
-        if native:
-            values[-1]["native_components"] = [
-                _component(value) for value in sorted(native, key=lambda value: str(value["path"]))]
         if system == "xcodebuild":
             values[-1]["language"] = "swift"
             values[-1]["descriptor_facts"] = {"kind": "xcode-project", "platform": "apple",
                                               "bundles": sorted({PurePosixPath(str(item["path"])).parent.name
                                                                  for item in ordered})}
-    _attach_workspace_facts(values, read_text)
-    for unit in values:
-        if unit["family"] == "java" and unit["build_system"] == "gradle":
-            if unit["root"] in gradle_members:
-                unit["workspace"] = {"manager": "gradle", "role": "root", "root": unit["root"],
-                                     "members": sorted(gradle_members[unit["root"]])}
-            else:
-                owner = next((root for root, members in gradle_members.items() if unit["root"] in members), None)
-                if owner is not None:
-                    unit["workspace"] = {"manager": "gradle", "role": "member", "root": owner}
     for project in engines["projects"]:
         root = str(project["root"])
         values.append({
@@ -625,71 +510,58 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
             "engine": dict(project["engine"]), "markers": list(project["markers"]),
             "descriptor_facts": dict(project["descriptor_facts"]),
             "engine_project": project,
-            "native_components": sorted(
-                components.get((root, UNITY_LANGUAGE_FAMILY, UNITY_BUILD_SYSTEM), ()),
-                key=lambda value: str(value["path"])),
             "provenance": "deterministic-engine-descriptors",
         })
     values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
     inventory_paths = [str(item["path"]) for item in files]
     by_path = {str(item["path"]): item for item in files}
-    demoted = _attach_build_points(values, inventory_paths, read_text)
-    values = [unit for unit in values if unit["build_unit_id"] not in {d["build_unit_id"] for d in demoted}]
+    demoted, folded = _attach_build_points(values, inventory_paths, read_text)
+    removed = {d["build_unit_id"] for d in demoted} | {f["build_unit_id"] for f in folded}
+    values = [unit for unit in values if unit["build_unit_id"] not in removed]
     # Orphan decision: a compiled-language source is claimed when a build point names it (source or
-    # header through an include directory), or when it sits under a unit of its family whose build
-    # points could not be read completely (unresolved constructs, no extractor). Otherwise it is
-    # orphaned: a finding (dead code, build drift, an abandoned port, or a build we did not
-    # understand), reported with the nearest unit considered and why it did not claim it; never built,
-    # never attached to a neighbour (decision 2026-11-08, T-056.3).
+    # header through an include directory, or containment in a member directory), or when it sits
+    # under a unit of its family whose build points could not be read completely (unresolved
+    # constructs, no extractor). Otherwise it is orphaned: a finding (dead code, build drift, an
+    # abandoned port, or a build we did not understand), reported with the nearest unit considered and
+    # why it did not claim it; never built, never attached to a neighbour (decision 2026-11-08, T-056.3).
     claimed: set[str] = set()
     containment_units: list[dict[str, Any]] = []
     for unit in values:
         for point in unit.get("build_points", ()):
             claimed.update(point.get("sources", ()))
             claimed.update(point.get("headers", ()))
-        for component in unit.get("native_components", ()):
-            claimed.add(str(component["path"]))
         if unit.get("source_resolution") != "complete":
             containment_units.append(unit)
-    candidates = list(loose)
-    for item in demoted:
-        # Sources that sat under a descriptor that turned out to declare no build: nothing claims them.
-        root = str(item["root"])
-        for path in inventory_paths:
-            if not (root == "." or path.startswith(root + "/")):
-                continue
-            orphan_family = _ORPHAN_FAMILY.get(PurePosixPath(path).suffix.lower())
-            if orphan_family is None or orphan_family != _family_of_system(item["build_system"]):
-                continue
-            if any((str(u["root"]) == "." or path.startswith(str(u["root"]) + "/")) and u["family"] == orphan_family
-                   for u in values):
-                continue  # a surviving unit of the family covers it; decided below
-            candidates.append((by_path[path], orphan_family, "no_build_point"))
-    for unit in values:
-        if unit.get("source_resolution") != "complete" or unit["build_system"] == UNITY_BUILD_SYSTEM:
+    candidates: list[tuple[Mapping[str, Any], str, str]] = []
+    for path in inventory_paths:
+        posix = PurePosixPath(path)
+        orphan_family = _ORPHAN_FAMILY.get(posix.suffix.lower())
+        if orphan_family is None or _under_generated_dir(path) or path in claimed:
             continue
-        # Complete resolution: compiled sources under this root that no build point names are orphans.
-        root = str(unit["root"])
-        for path in inventory_paths:
-            if not (root == "." or path.startswith(root + "/")):
-                continue
-            suffix = PurePosixPath(path).suffix.lower()
-            orphan_family = _ORPHAN_FAMILY.get(suffix)
-            if orphan_family is None or orphan_family != unit["family"] or path in claimed or _under_generated_dir(path):
-                continue
-            if any(path.startswith(str(other["root"]) + "/") and len(str(other["root"])) > len(root) for other in values):
-                continue  # a nested unit owns the directory
-            candidates.append((by_path[path], orphan_family, "not_named_by_build_point"))
-    seen: set[str] = set()
+        if ".teamcity" in posix.parts:
+            # TeamCity Kotlin DSL is CI configuration, not an independently compilable JVM
+            # source tree. It is cataloged and analyzed by the CI lanes instead.
+            continue
+        nearest = max((unit for unit in values if _is_under(path, str(unit["root"]))),
+                      key=lambda unit: (len(PurePosixPath(str(unit["root"])).parts), str(unit["root"])), default=None)
+        if nearest is None:
+            candidates.append((by_path[path], orphan_family, "no_build_point"))
+            continue
+        same_family = [unit for unit in values if _is_under(path, str(unit["root"])) and unit["family"] == orphan_family]
+        if not same_family:
+            # Under a unit of another family (a .c under a node package, a .cs under a Gradle root):
+            # nothing of its family claims it.
+            candidates.append((by_path[path], orphan_family, "no_build_point"))
+            continue
+        innermost = max(same_family, key=lambda unit: (len(PurePosixPath(str(unit["root"])).parts), str(unit["root"])))
+        if innermost in containment_units or innermost["build_system"] == UNITY_BUILD_SYSTEM:
+            continue  # containment claims it: the unit's descriptors could not be read completely
+        candidates.append((by_path[path], orphan_family, "no_build_point"))
+    orphans: list[dict[str, Any]] = []
     for item, family, reason in candidates:
         path = PurePosixPath(str(item["path"]))
-        if str(path) in claimed or str(path) in seen:
-            continue
-        seen.add(str(path))
-        nearest = max((unit for unit in values if str(unit["root"]) == "." or PurePosixPath(str(unit["root"])) in path.parents),
+        nearest = max((unit for unit in values if _is_under(str(path), str(unit["root"]))),
                       key=lambda unit: (len(PurePosixPath(str(unit["root"])).parts), str(unit["root"])), default=None)
-        if nearest is not None and nearest in containment_units and nearest["family"] == family:
-            continue  # containment claims it: the unit's descriptors could not be read completely
         orphans.append({
             "path": str(path), "sha256": item["sha256"], "size_bytes": item["size_bytes"],
             "family": family, "language": _ORPHAN_LANGUAGE.get(path.suffix.lower(), family), "reason": reason,
@@ -699,7 +571,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                             "no build point of that unit names this source")},
         })
     orphans.sort(key=lambda value: value["path"])
-    return {"units": values, "orphaned_sources": orphans, "demoted_markers": demoted}
+    return {"units": values, "orphaned_sources": orphans, "demoted_markers": demoted, "folded_roots": folded}
 
 
 _INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}
@@ -978,9 +850,11 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
     root = str(unit["root"])
     candidates: list[Mapping[str, Any]] = []
     marker_paths = {str(item["path"]) for item in unit["markers"]}
-    # Native component sources are what the family build compiles; the planner needs them to
-    # write the compile command (for example a clang --target=wasm32 translation of build.sh).
-    component_paths = {str(item["path"]) for item in unit.get("native_components", ())}
+    # The descriptors of folded members (a solution's projects, a workspace's member manifests, a
+    # CMake tree's subdirectory lists) define the unit's build points: the planner reads them too.
+    marker_paths |= {str(path) for path in unit.get("descriptors", ())}
+    marker_paths |= {str(point["descriptor"]) for point in unit.get("build_points", ())
+                     if isinstance(point, Mapping) and point.get("descriptor")}
     workspace, gaps = node_workspace(target_root, unit, files)
     workspace_root = PurePosixPath(workspace["root"]) if workspace else None
     for item in files:
@@ -998,9 +872,9 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
         if workspace_root is not None and ancestor_context and path.name in NODE_LOCKFILES:
             # A workspace member's lockfile is the workspace root's, never a further ancestor's.
             ancestor_context = path.parent == workspace_root
-        if not under and not ancestor_context and not container_context:
-            continue
-        if (str(item["path"]) in marker_paths or str(item["path"]) in component_paths or
+        if not under and not ancestor_context and not container_context and str(item["path"]) not in marker_paths:
+            continue  # a member descriptor outside the root (a solution's sibling project) still belongs
+        if (str(item["path"]) in marker_paths or
                 _is_context_name(path.name) or
                 container_context or ancestor_context or
                 (unit.get("build_system") == "unity" and (

@@ -136,6 +136,21 @@
     {
       "check": "assignment:engine/src/main.cpp",
       "ref": "T-056.2"
+    },
+    {
+      "check": "unit:engine|msbuild",
+      "ref": "T-056.4",
+      "note": "the .sln at the same root is a dotnet unit today and folds the listed .vcxproj; the solution family follows its projects (plan §2.1 decision 3)"
+    },
+    {
+      "check": "unit:engine|msbuild.family",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
+    },
+    {
+      "check": "unit:engine|msbuild.profile",
+      "ref": "T-056.4",
+      "note": "sub-check of a unit not discovered yet; lands with it"
     }
   ]
 }

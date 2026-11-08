@@ -62,30 +62,13 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:go/svc|go.build_point:example.com/svc|main_package",
-      "ref": "T-056.2",
-      "note": "main packages are build points"
-    },
-    {
       "check": "unit:go/svc|go.facts",
       "ref": "T-056.5",
       "note": "one replacement (not the commented one) and the materialization root it implies"
     },
     {
-      "check": "unit:go/x|go.build_point:example.com/x|module",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:go/x|go.facts",
       "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:go/svc/main.go",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:go/x/x.go",
-      "ref": "T-056.2"
     }
   ]
 }

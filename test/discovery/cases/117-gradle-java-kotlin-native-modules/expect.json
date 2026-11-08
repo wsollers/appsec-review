@@ -17,20 +17,16 @@
       "build_points": [
         {
           "name": "core",
-          "kind": "module",
+          "kind": "project",
           "evidence": "mobile/settings.gradle:2"
         },
         {
           "name": "fast",
-          "kind": "module",
+          "kind": "project",
           "evidence": "mobile/settings.gradle:3"
         }
       ],
       "facts": {
-        "modules": [
-          "core",
-          "fast"
-        ],
         "languages": {
           "core": [
             "java",
@@ -42,7 +38,17 @@
         },
         "profile_gaps": {
           "fast": "c++"
-        }
+        },
+        "drives": [
+          {
+            "path": "mobile/core",
+            "via": "settings_include"
+          },
+          {
+            "path": "mobile/fast",
+            "via": "settings_include"
+          }
+        ]
       }
     }
   ],
@@ -78,47 +84,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:mobile|gradle.build_point:core|module",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:mobile|gradle.build_point:fast|module",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:mobile|gradle.facts",
       "ref": "T-056.6",
       "note": "module languages from the applied plugins; the java profile carries no C++ toolchain, so the native module is a named gap"
-    },
-    {
-      "check": "assignment:mobile/core/build.gradle",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:mobile/core/src/main/java/core/Core.java",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:mobile/core/src/main/kotlin/core/Ext.kt",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:mobile/fast/build.gradle",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:mobile/fast/src/main/cpp/fast.cpp",
-      "ref": "T-056.6",
-      "note": "a cpp-library module's source is reported as orphaned today (nearest unit 'different family')"
-    },
-    {
-      "check": "assignment:mobile/fast/src/main/public/fast.h",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "orphaned_sources",
-      "ref": "T-056.6",
-      "note": "no orphan: the Gradle build compiles the C++ module"
     }
   ]
 }

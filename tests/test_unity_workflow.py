@@ -9,7 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from appsec_review.jobs.build_discovery import discover_build_units, required_image_profile
+from appsec_review.jobs.discovery_assignment import assign_paths
+from appsec_review.jobs.build_discovery import discover_build_inventory, discover_build_units, required_image_profile
 from appsec_review.jobs.cataloging import Bounds, inventory
 from appsec_review.jobs.job_target_analysis_plan.planning import (
     ambiguity_reasons, deterministic_plan, summarize_catalog, validate_plan,
@@ -88,21 +89,33 @@ def test_assets_and_scene_names_do_not_establish_a_unity_project(tmp_path: Path)
 
 
 @pytest.mark.parametrize("nested", [False, True])
-def test_unity_native_components_do_not_override_explicit_plugin_projects(tmp_path: Path, nested: bool) -> None:
+def test_a_native_plugin_tree_under_assets_is_its_own_cmake_unit_and_a_loose_source_is_orphaned(tmp_path: Path, nested: bool) -> None:
+    """native_components is retired (T-056.2, plan §2.1 decision 1): a C++ source under a Unity
+    project is evidence of the build point that names it, or an orphan — never attached to the
+    Unity unit by position."""
     target = tmp_path / "game" if nested else tmp_path
     shutil.copytree(FIXTURE, target, dirs_exist_ok=True)
     if nested:
-        (tmp_path / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.20)\n")
+        (tmp_path / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.20)\nproject(outer C)\nadd_executable(outer outer.c)\n")
+        (tmp_path / "outer.c").write_text("int main(void) { return 0; }\n")
     plugin = target / "Assets" / "Plugins"
     plugin.mkdir()
-    (plugin / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.20)\n")
+    (plugin / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.20)\nproject(plugin CXX)\nadd_library(plugin SHARED plugin.cpp)\n")
     (plugin / "plugin.cpp").write_text("int plugin() { return 0; }\n")
     (target / "Assets" / "other.cpp").write_text("int other() { return 0; }\n")
-    units = discover_build_units(inventory(tmp_path)["files"], read_text=lambda path: (tmp_path / path).read_text())
+    inventory_files = inventory(tmp_path)["files"]
+    discovered = discover_build_inventory(inventory_files, read_text=lambda path: (tmp_path / path).read_text())
+    units = discovered["units"]
     unity = next(item for item in units if item["build_system"] == "unity")
     prefix = "game/" if nested else ""
-    assert [item["path"] for item in unity["native_components"]] == [prefix + "Assets/other.cpp"]
-    assert any(item["root"] == prefix + "Assets/Plugins" and item["build_system"] == "cmake" for item in units)
+    assert "native_components" not in unity
+    [plugin_unit] = [item for item in units if item["root"] == prefix + "Assets/Plugins" and item["build_system"] == "cmake"]
+    assert [(p["name"], p["sources"]) for p in plugin_unit["build_points"]] == [("plugin", [prefix + "Assets/Plugins/plugin.cpp"])]
+    [orphan] = [o for o in discovered["orphaned_sources"] if o["path"] == prefix + "Assets/other.cpp"]
+    assert orphan["reason"] == "no_build_point" and orphan["nearest_unit"]["build_system"] == "unity"
+    assignment = assign_paths(inventory_files, discovered)
+    assert assignment[prefix + "Assets/Plugins/plugin.cpp"] == f"evidence_of:{prefix}Assets/Plugins|cmake#plugin"
+    assert assignment[prefix + "Assets/other.cpp"] == "orphaned:no_build_point"
 
 
 def test_unity_plan_is_deterministic_without_inferred_generic_dotnet_recipe(tmp_path: Path) -> None:

@@ -54,40 +54,5 @@
     "src/Shop.Cli/Program.cs": "evidence_of:.|dotnet#Shop.Cli",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "unit:.|dotnet.build_point:Shop.Core|project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|dotnet.build_point:Shop.Cli|project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "not_unit:src/Shop.Core|dotnet",
-      "ref": "T-056.2",
-      "note": "a .csproj a solution lists is a build point of the solution"
-    },
-    {
-      "check": "not_unit:src/Shop.Cli|dotnet",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:src/Shop.Core/Shop.Core.csproj",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:src/Shop.Core/Price.cs",
-      "ref": "T-056.2",
-      "note": "SDK-style projects compile every .cs under their directory"
-    },
-    {
-      "check": "assignment:src/Shop.Cli/Shop.Cli.csproj",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:src/Shop.Cli/Program.cs",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

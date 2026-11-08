@@ -21,8 +21,11 @@
         }
       ],
       "facts": {
-        "unresolved_projects": [
-          "legacy/legacy.vcxproj"
+        "unresolved": [
+          {
+            "evidence": "app.sln:8",
+            "reason": "solution lists a project that is not in the target: legacy\\legacy.vcxproj"
+          }
         ]
       }
     }
@@ -70,10 +73,6 @@
     {
       "check": "not_unit:.|dotnet",
       "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:app|msbuild",
-      "ref": "T-056.2"
     },
     {
       "check": "assignment:app.sln",

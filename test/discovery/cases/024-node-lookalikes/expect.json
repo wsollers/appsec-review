@@ -63,10 +63,6 @@
   ],
   "pending": [
     {
-      "check": "unit:app|node.build_point:app|package",
-      "ref": "T-056.2"
-    },
-    {
       "check": "not_unit:app/node_modules/left-pad|node",
       "ref": "T-056.4",
       "note": "node_modules is an installed tree, not target source"

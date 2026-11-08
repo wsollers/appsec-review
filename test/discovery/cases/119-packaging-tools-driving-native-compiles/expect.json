@@ -146,15 +146,6 @@
       "ref": "T-056.6"
     },
     {
-      "check": "unit:crate|cargo.build_point:fasthash|lib",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:crate|cargo.build_point:build-script-build|build_script",
-      "ref": "T-056.6",
-      "note": "build = \"build.rs\" with a cc build-dependency is a build point that compiles C"
-    },
-    {
       "check": "unit:crate|cargo.facts",
       "ref": "T-056.6"
     },
@@ -174,10 +165,6 @@
     },
     {
       "check": "assignment:addon/src/addon.cc",
-      "ref": "T-056.6"
-    },
-    {
-      "check": "assignment:crate/build.rs",
       "ref": "T-056.6"
     },
     {

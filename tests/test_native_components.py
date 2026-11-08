@@ -17,7 +17,7 @@ from appsec_review.applicability import (
 )
 from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, GO_MOD_SUBCOMMANDS, GO_SUBCOMMANDS, build_recipe_inference_policy,
-    descriptor_package, discover_build_units, go_recipe_errors, source_only_scopes,
+    descriptor_package, discover_build_inventory, discover_build_units, go_recipe_errors, source_only_scopes,
     validate_build_recipe,
 )
 from appsec_review.jobs.job_language_build import go as go_adapter
@@ -28,12 +28,18 @@ def _file(path: str, content: str = "x") -> dict[str, object]:
     return {"path": path, "sha256": hashlib.sha256(value).hexdigest(), "size_bytes": len(value)}
 
 
-def test_mixed_c_sources_route_to_the_owning_package_family_without_native_duplicates() -> None:
+def test_mixed_c_sources_are_orphans_until_a_build_point_names_them_never_components_by_position() -> None:
     """A synthetic monorepo: several C-extension packages, a phpize extension, a node addon, a
-    wasm build script, a standalone C tree, and a CMake library next to a cargo crate."""
+    wasm build script, a standalone C tree, and a CMake library next to a cargo crate.
+
+    ``native_components`` (attachment of C sources to the nearest packaging unit by position) is
+    retired by T-056.2 / plan §2.1 decision 1: a C source is evidence of the build point that names
+    it (the CMake target here) or an orphan the review reports. Typed points for setuptools
+    extensions, node-gyp targets and cc build scripts are T-056.6."""
     scripts = {
         "web/wasm-codec/build.sh": "#!/bin/sh\nclang --target=wasm32 -nostdlib -o out.wasm src/codec.c\n",
         "tools/native-cli/build.sh": "#!/bin/sh\ncc -o cli main.c\n",
+        "libs/zstd/CMakeLists.txt": "project(zstd C)\nadd_library(zstd STATIC src/zstd.c)\n",
     }
     files = [
         _file("pkgs/alpha/pyproject.toml"), _file("pkgs/alpha/src/alpha/_speed.c"),
@@ -45,38 +51,37 @@ def test_mixed_c_sources_route_to_the_owning_package_family_without_native_dupli
         _file("web/wasm-codec/src/codec.c"),
         _file("tools/native-cli/build.sh", scripts["tools/native-cli/build.sh"]),
         _file("tools/native-cli/main.c"),
-        _file("libs/zstd/CMakeLists.txt"), _file("libs/zstd/src/zstd.c"),
+        _file("libs/zstd/CMakeLists.txt", scripts["libs/zstd/CMakeLists.txt"]), _file("libs/zstd/src/zstd.c"),
         _file("crates/zstd-sys/Cargo.toml"), _file("crates/zstd-sys/csrc/shim.c"),
     ]
-    units = discover_build_units(files, read_text=scripts.get)
+    inventory = discover_build_inventory(files, read_text=scripts.get)
+    units = inventory["units"]
     by_root = {item["root"]: item for item in units}
     assert sorted((item["root"], item["family"], item["build_system"]) for item in units) == [
         ("addons/fast", "node", "node"),
         ("crates/zstd-sys", "rust", "cargo"),
-        # Rust/Go/JVM builds do not own C sources: a standalone C tree stays direct-native.
-        ("crates/zstd-sys/csrc", "native", "direct-native"),
         ("ext/php-hash", "php", "phpize"),
         ("libs/zstd", "native", "cmake"),
         ("pkgs/alpha", "python", "python"),
         ("pkgs/beta", "python", "python"),
-        ("tools/native-cli", "native", "direct-native"),
         ("web/wasm-codec", "wasm", "clang"),
     ]
-    components = {root: [value["path"] for value in item.get("native_components", ())]
-                  for root, item in by_root.items()}
-    assert components["pkgs/alpha"] == ["pkgs/alpha/src/alpha/_speed.c"]
-    assert components["pkgs/beta"] == ["pkgs/beta/ext/beta.cc", "pkgs/beta/ext/nested/util.c"]
-    assert components["ext/php-hash"] == ["ext/php-hash/hash.c"]
-    assert components["addons/fast"] == ["addons/fast/src/fast.cc"]
-    assert components["web/wasm-codec"] == ["web/wasm-codec/src/codec.c"]
-    assert components["libs/zstd"] == [] and components["tools/native-cli"] == []
+    assert not any("native_components" in item for item in units)
+    assert [p["sources"] for p in by_root["libs/zstd"]["build_points"]] == [["libs/zstd/src/zstd.c"]]
+    orphans = {o["path"]: (o["nearest_unit"] or {}).get("root") for o in inventory["orphaned_sources"]}
+    assert orphans == {
+        "addons/fast/src/fast.cc": "addons/fast", "crates/zstd-sys/csrc/shim.c": "crates/zstd-sys",
+        "ext/php-hash/hash.c": "ext/php-hash", "pkgs/alpha/src/alpha/_speed.c": "pkgs/alpha",
+        "pkgs/beta/ext/beta.cc": "pkgs/beta", "pkgs/beta/ext/nested/util.c": "pkgs/beta",
+        "tools/native-cli/main.c": None, "web/wasm-codec/src/codec.c": "web/wasm-codec",
+    }
     assert [value["path"] for value in by_root["web/wasm-codec"]["markers"]] == ["web/wasm-codec/build.sh"]
-    # Without a bounded script reader the wasm intent is unknown and the C tree stays native.
+    # Without a bounded script reader the wasm intent is unknown: no wasm unit, and no native one either.
     plain = {(item["root"], item["family"]) for item in discover_build_units(files)}
-    assert ("web/wasm-codec", "native") in plain and ("web/wasm-codec", "wasm") not in plain
+    assert ("web/wasm-codec", "wasm") not in plain and ("web/wasm-codec", "native") not in plain
 
 
-def test_family_descriptor_package_carries_markers_requirements_and_native_components(tmp_path: Path) -> None:
+def test_family_descriptor_package_carries_markers_and_requirements_and_the_policy_has_no_native_components(tmp_path: Path) -> None:
     contents = {
         "pkg/pyproject.toml": "[build-system]\nrequires=['setuptools==75.6.0']\n",
         "pkg/setup.py": "from setuptools import Extension, setup\nsetup(ext_modules=[Extension('m', ['src/m.c'])])\n",
@@ -87,14 +92,17 @@ def test_family_descriptor_package_carries_markers_requirements_and_native_compo
         (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / relative).write_text(text, encoding="utf-8")
     files = [_file(path, text) for path, text in contents.items()]
-    units = discover_build_units(files)
+    inventory = discover_build_inventory(files, read_text=contents.get)
+    units = inventory["units"]
     assert [(item["root"], item["family"]) for item in units] == [("pkg", "python")]
     package = descriptor_package(tmp_path, units[0], files)
-    assert {item["path"] for item in package["documents"]} == set(contents)
+    assert {item["path"] for item in package["documents"]} == {"pkg/pyproject.toml", "pkg/setup.py", "pkg/requirements-build.txt"}
     policy = build_recipe_inference_policy({**units[0], "descriptor_package": package})
     assert policy["required_image_profile"] == "python"
     assert {"pip", "python"} <= set(policy["allowed_executables"])
-    assert policy["native_components"]["sources"] == ["pkg/src/m.c"]
+    assert "native_components" not in policy
+    # The extension source is an orphan until setup.py's ext_modules becomes a typed build point (T-056.6).
+    assert [(o["path"], o["nearest_unit"]["root"]) for o in inventory["orphaned_sources"]] == [("pkg/src/m.c", "pkg")]
 
 
 def test_source_only_scopes_are_recorded_not_applicable_for_build_processing() -> None:

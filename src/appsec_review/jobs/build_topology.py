@@ -539,7 +539,7 @@ OPERATIONS = frozenset({"managed_compile", "bytecode_transform", "native_aot",
 PROOF_KINDS = frozenset({"msbuild_selected_mapping", "compiler_explicit_target",
                         "compiler_pinned_default", "go_explicit_target"})
 _SOURCE_KEYS = ("build_unit_id", "root", "family", "build_system", "markers", "build_variant",
-                "project_type", "descriptor_facts", "engine", "engine_project", "native_components")
+                "project_type", "descriptor_facts", "engine", "engine_project")
 
 
 def topology_evidence_bundle(units, *, source_fingerprint, environment=None, profiles=None):
@@ -1421,11 +1421,6 @@ def _selected_operations(unit, graph, recipe, selected):
             kinds.add("unknown")
     if node_native:
         kinds.add("native_compile")
-    direct_native = commands and all(argv[0] in {"clang", "clang++", "gcc", "g++"} for argv in commands)
-    if (unit.get("native_components") and not direct_native
-            and (unit["family"] != "node" or node_native)):
-        kinds.add("unknown")
-        reasons.append("native_component_requested_stage_unresolved")
     if any(fact["predicate"] == "android:plugin" and fact["condition"] is None for fact in facts):
         kinds.add("bytecode_transform")
     if unit["build_system"] == "gradle":

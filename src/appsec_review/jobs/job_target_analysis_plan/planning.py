@@ -272,7 +272,6 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
                                "descriptor_facts": dict(item.get("descriptor_facts", {})),
                                "engine": dict(item.get("engine", {})),
                                "engine_project": dict(item.get("engine_project", {})),
-                               "native_components": [dict(value) for value in item.get("native_components", ())],
                                "required_image_profile": item.get("required_image_profile", item["family"]),
                                "build_variant": dict(item.get("build_variant", dict.fromkeys(VARIANT_FIELDS))),
                                "recipe": None, "requires_inference": item["build_system"] != "unity",
@@ -846,7 +845,6 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
                 action.get("engine", {}) != accepted_unit.get("engine", {}) or
                 action.get("engine_project", {}) != accepted_unit.get("engine_project", {}) or
                 action.get("descriptor_facts", {}) != accepted_unit.get("descriptor_facts", {}) or
-                action.get("native_components", []) != list(accepted_unit.get("native_components", ())) or
                 action.get("required_image_profile") != accepted_unit.get("required_image_profile", accepted_unit["family"]) or
                 action.get("build_variant") != accepted_unit.get("build_variant", dict.fromkeys(VARIANT_FIELDS)) or
                 action.get("root") != accepted_unit.get("root")):

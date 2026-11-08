@@ -82,7 +82,13 @@ def test_cmake_glob_and_conditions_and_subdirectories_are_recorded() -> None:
     assignment = assign_paths(files, inventory)
     assert assignment["cmake/flags.cmake"] == "context:.|cmake"
     assert assignment["cmake/unused.cmake"] == "inert", "a module nothing includes is inert"
-    assert assignment["vendor/lib/lib.c"] == "evidence_of:vendor/lib|cmake#lib"
+    # The added subdirectory is folded into the adding unit (plan §2.1 decision 1): its CMakeLists.txt
+    # is the unit's descriptor, its target the unit's build point, and it is not a unit of its own.
+    assert [unit["root"] for unit in inventory["units"]] == ["."]
+    assert app["descriptors"] == ["vendor/lib/CMakeLists.txt"]
+    assert [f["root"] for f in inventory["folded_roots"]] == ["vendor/lib"]
+    assert assignment["vendor/lib/CMakeLists.txt"] == "evidence_of:.|cmake"
+    assert assignment["vendor/lib/lib.c"] == "evidence_of:.|cmake#lib"
 
 
 def test_cmake_generator_expressions_leave_the_point_unresolved_not_orphaning_its_sources() -> None:
@@ -136,7 +142,10 @@ def test_make_rules_are_build_points_and_a_recursive_make_drives_the_subdirector
     assignment = assign_paths(files, inventory)
     assert assignment["main.c"] == "evidence_of:.|make#tool"
     assert assignment["include/util.h"] == "evidence_of:.|make#tool"
-    assert assignment["vendor/lib/lib.c"] == "evidence_of:vendor/lib|make#lib.a"
+    # $(MAKE) -C folds the sub-make into this unit (plan §2.1 decision 1): one unit, its rules ours.
+    assert [u["root"] for u in inventory["units"]] == ["."] and unit["descriptors"] == ["vendor/lib/Makefile"]
+    assert assignment["vendor/lib/Makefile"] == "evidence_of:.|make"
+    assert assignment["vendor/lib/lib.c"] == "evidence_of:.|make#lib.a"
     assert assignment["docs/notes.md"] == "inert"
     assert inventory["orphaned_sources"] == []
 
@@ -169,8 +178,10 @@ def test_a_makefile_with_only_a_delegating_rule_is_a_unit_that_drives_without_co
     core = "core: core.c\n\t$(CC) core.c -o core\n"
     files, inventory = _inventory({"Makefile": makefile, "core/Makefile": core}, "core/core.c", "tools/stray.c")
     root = _unit(inventory, ".", "make")
-    assert [p["kind"] for p in root["build_points"]] == ["delegating"]
+    # The delegating rule is the root's; core/Makefile is folded in, so its rule is the root's too.
+    assert [(p["name"], p["kind"]) for p in root["build_points"]] == [("all", "delegating"), ("core", "rule")]
     assert [(d["path"], d["via"]) for d in root["drives"]] == [("core", "recursive_make"), ("tools", "recursive_make")]
+    assert [u["root"] for u in inventory["units"]] == ["."]
     # tools/ has no Makefile: the delegation is unresolved at discovery time and the source is orphaned.
     assert [o["path"] for o in inventory["orphaned_sources"]] == ["tools/stray.c"]
 
@@ -195,9 +206,11 @@ def test_cargo_package_and_bins_are_build_points_with_their_sources() -> None:
     cargo = '[package]\nname = "tool"\nversion = "0.1.0"\n\n[[bin]]\nname = "tool-cli"\npath = "src/bin/cli.rs"\n\n[lib]\npath = "src/lib.rs"\n'
     files, inventory = _inventory({"Cargo.toml": cargo}, "src/lib.rs", "src/bin/cli.rs", "src/main.rs", "build.rs")
     points = _unit(inventory, ".", "cargo")["build_points"]
-    assert {(p["name"], p["kind"]) for p in points} == {("tool", "lib"), ("tool", "bin"), ("tool-cli", "bin"), ("build-script", "build_script")}
+    assert {(p["name"], p["kind"]) for p in points} == {("tool", "package"), ("tool", "lib"), ("tool", "bin"), ("tool-cli", "bin"),
+                                                        ("build-script-build", "build_script")}
     cli = next(p for p in points if p["name"] == "tool-cli")
     assert cli["sources"] == ["src/bin/cli.rs"] and cli["evidence"] == "Cargo.toml:5"
+    assert next(p for p in points if p["kind"] == "lib")["sources"] == ["src/lib.rs"], "bin sources are not the lib's"
 
 
 def test_go_main_packages_are_build_points_of_the_module() -> None:
@@ -231,14 +244,19 @@ def test_a_solution_lists_projects_as_build_points_and_a_vcxproj_names_its_sourc
            '  </ItemGroup>\n</Project>\n')
     files, inventory = _inventory({"win.sln": sln, "engine/engine.vcxproj": vcx}, "engine/src/engine.cpp", "engine/src/io.cpp",
                                   "engine/engine.vcxproj.filters")
-    msbuild = [u for u in inventory["units"] if u["build_system"] in {"msbuild", "dotnet"}]
-    all_points = [p for u in msbuild for p in u.get("build_points", ())]
-    assert ("engine", "solution_project", "win.sln:2") in {(p["name"], p["kind"], p["evidence"]) for p in all_points}
-    [sln] = [u for u in msbuild if any(str(m["path"]).endswith(".sln") for m in u["markers"])]
+    # The solution is the unit; the listed project is its build point, not a unit (plan §2.1 decision 1).
+    [sln] = [u for u in inventory["units"] if u["build_system"] in {"msbuild", "dotnet"}]
+    [engine] = sln["build_points"]
+    assert (engine["name"], engine["kind"], engine["evidence"]) == ("engine", "project", "win.sln:2")
+    assert engine["sources"] == ["engine/src/engine.cpp", "engine/src/io.cpp"], "ClCompile items are the project's sources"
+    assert engine["descriptor"] == "engine/engine.vcxproj" and engine["path"] == "engine"
     assert [u["reason"] for u in sln["unresolved"]] == ["solution lists a project that is not in the target: ghost\\ghost.vcxproj"]
     assert sln["source_resolution"] == "containment", "a solution with a missing project is not read completely"
-    vcx_points = [p for p in all_points if "engine/src/engine.cpp" in p.get("sources", ())]
-    assert vcx_points, "ClCompile items are the project's sources"
+    assert [(f["root"], f["via"]) for f in inventory["folded_roots"]] == [("engine", "solution_project")]
+    assignment = assign_paths(files, inventory)
+    label = f"{sln['root']}|{sln['build_system']}"
+    assert assignment["engine/engine.vcxproj"] == f"evidence_of:{label}#engine"
+    assert assignment["engine/src/io.cpp"] == f"evidence_of:{label}#engine"
     assert inventory["orphaned_sources"] == []
 
 

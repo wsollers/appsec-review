@@ -160,6 +160,42 @@ today's behaviour (the status table says what is implemented).
     pending now instead of surfacing when the unit lands. `exclusions` applies a named policy to a
     case. Implicit build points with no `file:line` (Unity `Assembly-CSharp`, Cargo's default bin,
     a Go package with no module line) carry the descriptor's path and line 1 as evidence.
+11. **Vocabulary fixed by the decision-1 landing (2026-11-08).** `drives[].via` names the literal
+    construct: `add_subdirectory`, `FetchContent`, `ExternalProject_Add`, `recursive_make`
+    (`$(MAKE) -C`, directly or through a `for d in …; do … -C $$d` shell loop), `subdir` (meson),
+    `SUBDIRS` / `AC_CONFIG_SUBDIRS` (automake), `solution_project`, `settings_include` (Gradle),
+    `externalNativeBuild`, `workspace_member` (Cargo, npm, pnpm), `go_work_use`, `pom_module`,
+    `plugin_importer` (Unity, T-056.5), and `invokes:<tool>` when a recipe, custom command or script
+    line runs another build system's tool on a directory holding that tool's descriptor (`cmake -S d`,
+    `meson setup b d`, `wasm-pack build d`, `cargo … --manifest-path d/Cargo.toml`, `npm --prefix d`,
+    `gradle -p d`; a `cd` earlier on the line moves the resolution directory). A drive whose `via` is a
+    folding construct and whose path is the root of a unit the driver's system reads *folds* that unit:
+    its markers become the driver's `descriptors`, its points the driver's points, and the catalog
+    names it under `folded_roots` with the evidence. `invokes:<tool>` and `externalNativeBuild` never
+    fold: the driven unit stands and carries `driven_by: {unit, via, evidence}` — the inverse relation,
+    kept on the standing unit (item 9 retires `hosted_by`; `driven_by` is the one name for the inverse).
+    One `drives` entry per `(path, via)`, at the first evidence. Evidence for a `recursive_make` is the
+    rule line; for an `invokes:*` it is the invoking recipe line. Member points: a `.sln` lists
+    `project` points (`path`, `descriptor`, `configurations`, sources from the project items; a
+    project no solution lists is a unit whose own file is its marker and whose point is `project` at
+    `<file>:1`); Gradle includes are `project` points named without the leading colon (`app`,
+    `lib:core`), with `descriptor` the project's build file and sources by containment (plus native
+    sources and `language` when the project applies a C++ plugin); Maven `<module>`s are `module`
+    points; Cargo packages are `package` points (evidence the `name =` line) beside their `lib`/`bin`/
+    `build-script-build`/`test` points, a workspace member's included from its own manifest; Go
+    modules are `module` points (`<go.mod>:<module line>`) and directories with Go files are
+    `package`/`main_package` points named by the directory relative to the unit root (the root's own
+    directory by its module path), evidence the first file of the directory at line 1; npm packages
+    are a `package` point (the `"name"` line) plus `script` points and `workspace_member` points
+    (`path`, `descriptor`, sources by containment); a member point's descriptor is
+    `evidence_of:<root>#<member>`, a folded CMake/Make/meson/automake descriptor (no member point)
+    is `evidence_of:<root>`. A path two points name belongs to the point of the unit whose root
+    contains it (innermost), then to the first point in descriptor order (item 7). The orphan reason
+    is `no_build_point` everywhere; the `nearest_unit.why_not` text carries the distinction between
+    "no unit of that family" and "no point of that unit names it". Make rule kinds are `rule`,
+    `delegating` (recipe is a sub-make), `phony_or_aggregate` (no recipe, no sources); languages are
+    spelled `c`, `c++`, `objective-c`, `objective-c++`, `cuda`, `java`, `kotlin`, `rust`, `go`, `c#`,
+    `swift`, `wat`. `native_components` and the `workspace` facts are gone from `build-systems/4`.
 
 ## 3. Fixture organisation
 
@@ -317,19 +353,22 @@ Seed cases 001–004 pass with build points (`CMakePresets.json` is context, an 
 it drives, `-I` headers bind, sources bind to build points); 004 keeps one pending check
 (`materialization_root`, T-056.5). The first fixture tranche (cases 010–120) is in with its pending
 entries pointing at §2.1; the rules land sub-item by sub-item and each landing removes the pending
-entries it satisfies (a pending check that passes fails the suite).
+entries it satisfies (a pending check that passes fails the suite). Decision 1 landed on 2026-11-08
+(313 pending entries remain, down from 542).
 
 | Sub-item | State | Notes |
 | --- | --- | --- |
 | T-056.1 harness | done (2026-11-08) | `test/discovery/`, `discovery-case/1` schema, `tests/test_discovery_cases.py`, `acceptance.discovery assign/check/new`, `jobs/discovery_assignment.py`; seed cases 001–004 (A1 positive, A1 negative, orphans, D1) |
-| T-056.2 build points | done for the extractors (2026-11-08) | `jobs/build_points.py`: CMake targets (`set`, `file(GLOB)`, `target_sources`, `target_include_directories` → headers, `add_subdirectory` → `drives`, `include`, `if/else` conditions, generator expressions → `unresolved`), Make rules (variables, substitution references, `$(wildcard)`, object → source, `-I` → headers, `$(MAKE) -C` → `drives`, `ifeq` conditions, `delegating`/`phony_or_aggregate` kinds), `.sln` projects + `.vcxproj`/`.csproj` items, Cargo lib/bins/build script, Go packages, npm scripts, Gradle modules, Maven, meson, automake, Xcode, package descriptors. `source_resolution` complete/containment; descriptor-only cmake/make/meson/autotools units demoted; orphan decision after points; `native_components` still attached for the Unity/package owners (retire with decision 1). `tests/test_build_points.py`. Open: `drives` for every member kind as the unit boundary (decision 1, under T-056.4/5), `materialization_root` (T-056.5), conditions/languages as unit facts (T-056.6) |
+| T-056.2 build points | done (2026-11-08) | `jobs/build_points.py`: CMake targets (`set`, `file(GLOB)`, `target_sources`, `target_include_directories` → headers, `add_subdirectory`/`FetchContent`/`ExternalProject_Add` → `drives`, custom target/command invocations → `drives`, `include`, `if/else` conditions, generator expressions → `unresolved`), Make rules (variables, substitution references, `$(wildcard)`, object → source, `-I` → headers, `$(MAKE) -C` and shell-loop sub-makes → `drives`, recipe invocations of other build tools → `invokes:<tool>` drives, `ifeq` conditions, `delegating`/`phony_or_aggregate` kinds), `.sln` → `project` points with the listed project's items, Cargo package/lib/bins/build script/tests (workspace members included), Go modules and packages (go.work members included), npm package/scripts/workspace members (npm `workspaces` and `pnpm-workspace.yaml`), Gradle `project` points from `settings` includes (+ `externalNativeBuild`), Maven `module` points, meson, automake (primaries, `SUBDIRS`, hand rules), Xcode, package descriptors. `source_resolution` complete/containment; descriptor-only cmake/make/meson/autotools units demoted; orphan decision after points; `native_components` retired. `tests/test_build_points.py`. |
+| decision 1 (members fold) | done (2026-11-08) | `build_discovery._attach_build_points` folds driven same-system units transitively (`FOLDING_VIAS`/`FOLDABLE_SYSTEMS`), records `descriptors`, `drives`, `driven_by`, returns `folded_roots`; `workspace` facts, the positional Gradle absorption and the make-drop-at-cmake-root rule's companions removed; `discovery_assignment` prefers the containing unit's point and maps member descriptors to `#<member>`; catalog emits `build-systems/4` with `folded_roots`/`demoted_markers`; the plan reader pins `/4`. Case vocabulary normalised (§2.1 item 11); 184 pending entries closed (542 → 313). Topology fixture: members `may_be_absent`, three reason codes retired. |
 | T-056.3 orphaned sources | done in discovery and catalog (2026-11-08); review surfacing open | `discover_build_inventory` returns `orphaned_sources`; `direct-native`/`javac`/`rustc`/`go` source fallbacks removed; `build-systems/3` lists orphans and the catalog counts them (`BUILD_SYSTEMS_DISCOVERED`); still to do: the finding class downstream (prioritization/report) |
-| T-056.4 matrix A | cases written (010–036), rules open | 27 cases; pending entries name what §2.1 decides and the code does not do yet (members as points, solution family, generated trees, context names) |
-| T-056.5 matrix B, D | cases written (060–080), rules open | `materialization_root`, cross-tree evidence, nesting |
-| T-056.6 matrix C, E, F | cases written (100–120), rules open | parallel authority, conditions, languages, `profile_gaps` |
+| T-056.4 matrix A | cases written (010–036); decision 1 landed, decisions 2–4 and the look-alike rules open | 27 cases; remaining pending entries name solution family (decision 3), generated/installed trees (decision 4), context names, roots that are not roots (item 8), package-manager authority (C3) |
+| T-056.5 matrix B, D | cases written (060–080); nesting and workspace folds landed, cross-tree open | `materialization_root`, `path_dependencies`/`replacements`, Unity `plugin_importer` drives |
+| T-056.6 matrix C, E, F | cases written (100–120); member folds landed, rest open | parallel authority (decision 2), conditions, languages, `profile_gaps`, typed packaging points (`c_extension`, `gyp_target`, cc build scripts) |
 | T-056.7 matrix G | open | |
 
-Discovery changes already made in job pass 05 (settings-only Gradle roots, the Xcode unit, workspace
-facts, no manufactured root for a referenced sibling source) stand as interim behaviour and become
-cases A8, A12, A5/A6/A7 and D1 under this program; the `native_components` attachment introduced
-there is explicitly interim and is retired by T-056.2.
+Discovery changes made in job pass 05 (settings-only Gradle roots, the Xcode unit, workspace facts,
+no manufactured root for a referenced sibling source) were interim: the Xcode unit stands (A12); the
+settings-only root now folds its projects and the workspace facts are replaced by `drives` (A8, A5/A6/A7,
+decision 1); the sibling source is the rule's evidence (D1); the `native_components` attachment is
+retired (2026-11-08).

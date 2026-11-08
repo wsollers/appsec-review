@@ -114,7 +114,7 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
     targets = _read_artifact(run_root, artifacts["build_discovery.catalog_build_targets"])
     expected_schemas = (
         (partition, "repository-partition/1"), (projects, "project-catalog/1"),
-        (components, "component-catalog/1"), (builds, "build-systems/3"),
+        (components, "component-catalog/1"), (builds, "build-systems/4"),
         (compile_databases, "compile-commands/1"), (targets, "build-targets/2"),
     )
     if any(value.get("schema") != "appsec-review/" + schema for value, schema in expected_schemas):

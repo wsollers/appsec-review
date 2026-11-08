@@ -44,11 +44,5 @@
     "tool/bin/Debug/net8.0/Tool.runtimeconfig.json": "inert"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:tool|dotnet.build_point:Tool|project",
-      "ref": "T-056.2",
-      "note": "a standalone SDK project is its own build point, named by the file stem"
-    }
-  ]
+  "pending": []
 }

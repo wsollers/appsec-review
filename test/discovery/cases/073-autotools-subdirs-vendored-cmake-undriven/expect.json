@@ -22,10 +22,13 @@
         }
       ],
       "facts": {
-        "subdirectories": [
-          "src"
-        ],
-        "drives": []
+        "drives": [
+          {
+            "path": "src",
+            "via": "SUBDIRS",
+            "evidence": "Makefile.am:1"
+          }
+        ]
       }
     },
     {
@@ -42,6 +45,9 @@
           "kind": "static_library",
           "evidence": "third_party/zlite/CMakeLists.txt:3"
         }
+      ],
+      "facts_absent": [
+        "driven_by"
       ]
     }
   ],
@@ -66,27 +72,6 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {
-      "check": "unit:.|autotools.build_point:packer|program",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "unit:.|autotools.facts",
-      "ref": "T-056.5",
-      "note": "an -I and an LDADD path into third_party/zlite are not a drive; only a rule that runs its build is"
-    },
-    {
-      "check": "not_unit:src|autotools",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:src/Makefile.am",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:src/main.c",
-      "ref": "T-056.5"
-    },
     {
       "check": "assignment:third_party/zlite/zlite.h",
       "ref": "T-056.2"

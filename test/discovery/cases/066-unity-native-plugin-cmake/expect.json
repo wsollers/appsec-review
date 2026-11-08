@@ -15,8 +15,12 @@
         "ProjectSettings/ProjectVersion.txt"
       ],
       "facts": {
-        "native_plugins": [
-          "Assets/Plugins/NativePlugin"
+        "drives": [
+          {
+            "path": "Assets/Plugins/NativePlugin",
+            "via": "plugin_importer",
+            "evidence": "Assets/Plugins/NativePlugin/x86_64/libnativeplugin.so.meta:3"
+          }
         ]
       }
     },
@@ -36,8 +40,9 @@
         }
       ],
       "facts": {
-        "hosted_by": {
+        "driven_by": {
           "unit": ".|unity",
+          "via": "plugin_importer",
           "evidence": "Assets/Plugins/NativePlugin/x86_64/libnativeplugin.so.meta:3"
         }
       }

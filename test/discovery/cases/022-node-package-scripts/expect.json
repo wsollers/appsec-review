@@ -39,10 +39,6 @@
   },
   "pending": [
     {
-      "check": "unit:web|node.build_point:web-app|package",
-      "ref": "T-056.2"
-    },
-    {
       "check": "assignment:web/src/index.ts",
       "ref": "T-056.2",
       "note": "tsconfig include: [src] binds the sources to the build script"

@@ -42,7 +42,7 @@
         {
           "name": "roundtrip",
           "kind": "test",
-          "evidence": "tests/roundtrip.rs"
+          "evidence": "tests/roundtrip.rs:1"
         }
       ]
     }
@@ -61,33 +61,7 @@
   },
   "pending": [
     {
-      "check": "unit:.|cargo.build_point:imgtool|package",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:.|cargo.build_point:build-script-build|build_script",
-      "ref": "T-056.2",
-      "note": "build.rs is compiled and run by cargo; cargo's own name for the target"
-    },
-    {
-      "check": "unit:.|cargo.build_point:roundtrip|test",
-      "ref": "T-056.2",
-      "note": "tests/*.rs are auto-discovered test targets"
-    },
-    {
-      "check": "assignment:build.rs",
-      "ref": "T-056.2"
-    },
-    {
       "check": "assignment:src/main.rs",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:src/bin/imginfo.rs",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:tests/roundtrip.rs",
       "ref": "T-056.2"
     }
   ]

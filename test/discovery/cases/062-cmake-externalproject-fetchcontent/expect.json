@@ -36,11 +36,17 @@
         }
       ],
       "facts": {
-        "subdirectories": [
-          "host/external/fmtlite"
-        ],
-        "external_projects": [
-          "host/external/tinylib"
+        "drives": [
+          {
+            "path": "host/external/tinylib",
+            "via": "ExternalProject_Add",
+            "evidence": "host/CMakeLists.txt:5"
+          },
+          {
+            "path": "host/external/fmtlite",
+            "via": "FetchContent",
+            "evidence": "host/CMakeLists.txt:8"
+          }
         ]
       }
     }
@@ -73,53 +79,5 @@
     "host/external/fmtlite/src/fmtlite.c": "evidence_of:host|cmake#fmtlite"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:host|cmake.build_point:tinylib|external_project",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "unit:host|cmake.build_point:tiny|static_library",
-      "ref": "T-056.5",
-      "note": "targets of a driven in-tree ExternalProject belong to the driving unit"
-    },
-    {
-      "check": "unit:host|cmake.build_point:fmtlite|static_library",
-      "ref": "T-056.5",
-      "note": "targets of a FetchContent subdirectory belong to the including unit"
-    },
-    {
-      "check": "unit:host|cmake.facts",
-      "ref": "T-056.5",
-      "note": "SOURCE_DIR arguments are literal in-tree references"
-    },
-    {
-      "check": "not_unit:host/external/tinylib|cmake",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "not_unit:host/external/fmtlite|cmake",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:host/external/tinylib/CMakeLists.txt",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:host/external/tinylib/src/tiny.c",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:host/external/fmtlite/CMakeLists.txt",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:host/external/fmtlite/include/fmtlite.h",
-      "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:host/external/fmtlite/src/fmtlite.c",
-      "ref": "T-056.5"
-    }
-  ]
+  "pending": []
 }

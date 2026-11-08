@@ -207,8 +207,12 @@ def build_job(*, fail_task: str | None = None) -> Job:
         if orphans:
             by_language = Counter(item["language"] for item in orphans)
             gaps.append("orphaned sources: " + ", ".join(f"{count} {language}" for language, count in sorted(by_language.items())))
-        doc = {"schema": "appsec-review/build-systems/3", "systems": systems, "build_units": units,
-               "orphaned_sources": orphans, "engine_discovery": engines,
+        # build-systems/4 (2026-11-08, plan §2.1 decision 1): units carry build points with member
+        # paths/descriptors, ``drives``/``driven_by`` and ``descriptors``; ``folded_roots`` and
+        # ``demoted_markers`` name every marker directory that is not a unit, with the reason.
+        doc = {"schema": "appsec-review/build-systems/4", "systems": systems, "build_units": units,
+               "orphaned_sources": orphans, "folded_roots": inventory["folded_roots"],
+               "demoted_markers": inventory["demoted_markers"], "engine_discovery": engines,
                "source_only_scopes": source_only_scopes(files, units),
                "gaps": gaps or ([] if units else ["no recognized build system"])}
         unit.job.events.write("BUILD_SYSTEMS_DISCOVERED", unit_id=unit.unit_id, unit_count=len(units),
