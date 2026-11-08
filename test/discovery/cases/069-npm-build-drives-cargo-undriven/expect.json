@@ -1,0 +1,34 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "069-npm-build-drives-cargo-undriven",
+  "matrix": "B5",
+  "polarity": "negative",
+  "mirrors": "the 068 tree with the wasm-pack step removed from the build script: the sibling crate is still there and the page still imports a pkg/ module, but no script names the crate, so the two units are independent and the package states that it drives nothing",
+  "units": [
+    {"root": "web", "build_system": "node", "family": "node", "profile": "node",
+     "markers": ["web/package.json"],
+     "build_points": [{"name": "build", "kind": "script", "evidence": "web/package.json:6"}],
+     "facts": {"drives": []}},
+    {"root": "wasm-core", "build_system": "cargo", "family": "rust", "profile": "rust",
+     "markers": ["wasm-core/Cargo.toml"],
+     "build_points": [{"name": "wasm-core", "kind": "package", "evidence": "wasm-core/Cargo.toml:2"}]}
+  ],
+  "not_units": [],
+  "assignment": {
+    "README.md": "inert",
+    "web/package.json": "evidence_of:web|node",
+    "web/package-lock.json": "context:web|node",
+    "web/src/index.js": "evidence_of:web|node",
+    "wasm-core/Cargo.toml": "evidence_of:wasm-core|cargo",
+    "wasm-core/Cargo.lock": "context:wasm-core|cargo",
+    "wasm-core/src/lib.rs": "evidence_of:wasm-core|cargo#wasm-core"
+  },
+  "orphaned_sources": [],
+  "pending": [
+    {"check": "unit:web|node.build_point:build", "ref": "T-056.2"},
+    {"check": "unit:web|node.facts", "ref": "T-056.5", "note": "an import of ../pkg in a source is not a build reference; only the script line would be"},
+    {"check": "unit:wasm-core|cargo.build_point:wasm-core", "ref": "T-056.2"},
+    {"check": "assignment:web/package-lock.json", "ref": "T-056.4"},
+    {"check": "assignment:wasm-core/src/lib.rs", "ref": "T-056.2"}
+  ]
+}

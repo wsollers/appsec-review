@@ -1,0 +1,11 @@
+{
+  "name": "web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "wasm-pack build ../wasm-core --target web --out-dir ../web/pkg && esbuild src/index.js --bundle --outfile=dist/index.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.21.5"
+  }
+}
