@@ -6,14 +6,17 @@ in it is executed by jobs or agents. Each step names the document that owns its 
 
 ## Decisions this runbook fixes
 
-- **The review host is WSL (Ubuntu) on HAL5000, and the Docker daemon is the in-WSL engine
-  (`default` context), the standard already decided for this host.** Images live in a daemon's store,
-  not in a shell: an image built against the `default` engine is invisible to Docker Desktop's
-  (`desktop-linux`) and the reverse, so a Windows-side `docker images` will not list them — that is
-  expected. Build, pin, sign and run against the one daemon, and check `docker context show` and
-  `docker images` after every reboot: the active context has changed silently before. Windows is the
-  editor; the Windows stack (`appsec-review-dagster-windows`, `docs/operations/signing.md`, "Windows
-  hosts") is not used for review runs.
+- **A review host is a WSL (Ubuntu) distribution with one Docker daemon, chosen once per machine
+  and never switched.** Images live in a daemon's store, not in a shell: an image built against the
+  in-WSL engine (`default` context) is invisible to Docker Desktop's engine (`desktop-linux`) and the
+  reverse. Which daemon is a per-machine fact — HAL5000 uses the in-WSL engine (`default`),
+  WSOLLERS1 uses Docker Desktop (`desktop-linux`) — declared to `run-readiness` with
+  `--docker-context`, which refuses to run against any other. Build, pin, sign and run against that
+  one daemon, and check `docker context show` after every reboot: the active context has changed
+  silently before. Each machine builds and keeps its own full image set (no image transfer between
+  hosts); T-051 makes the pins host-local so every such machine can run reviews. Windows is the
+  editor; the Windows stack (`appsec-review-dagster-windows`, `docs/operations/signing.md`,
+  "Windows hosts") is not used for review runs.
 - **The checkout the stack mounts lives on WSL ext4**, never under `/mnt/c` or `/mnt/f`
   (`docs/architecture/deployment-image-and-source-mount.md`, "Host requirements"): the application
   image mounts `src`, `scripts`, `containers`, configuration, rules and schemas read-only from it,
@@ -44,7 +47,9 @@ fails; `--from STEP` resumes, `--dry-run` prints every command
 ([`operator-scripts.md`](operator-scripts.md#run-readiness)). The steps below are what it does and
 why; steps 6–8 are run by hand.
 
-1. **Host and checkout.** In WSL: `docker context show` names the chosen daemon; the checkout is on
+1. **Host and checkout.** In WSL: `docker context show` names this machine's chosen daemon and
+   `docker info` answers from it (an engine that is installed but not running fails here: `sudo
+   systemctl start docker`, or `sudo service docker start` without systemd); the checkout is on
    ext4 (`df -T .` shows `ext4`, not `9p`/`drvfs`); `core.autocrlf` is off so signed bytes match
    (`.gitattributes` pins LF). Python 3.13 with this checkout's dependencies in `.venv`; OpenSSL 3 at
    `/usr/bin/openssl`.

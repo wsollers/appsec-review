@@ -42,7 +42,7 @@ def say(message: str = "") -> None:
 STEPS = ("host", "key", "images", "pin", "sign", "codeql")
 DEFAULT_PRIVATE_KEY = Path("~/.config/appsec-review/signing/private/operator.pem")
 TRUST_ANCHORS = Path("deploy/dagster/trusted-keys")
-REQUIRED_CONTEXT = "default"
+DEFAULT_CONTEXT = "default"          # the in-WSL engine; Docker Desktop's is "desktop-linux"
 EXT4 = "ext4"
 MIN_PYTHON = (3, 11)
 REPORT_PREFIX = "[run-readiness]"
@@ -103,10 +103,13 @@ def step_host(host: Host, args: argparse.Namespace) -> None:
     if host.which("docker") is None:
         raise ReadinessError("docker is not on PATH", REFUSED)
     context = host.output(["docker", "context", "show"], "host")
-    if context != REQUIRED_CONTEXT and not host.dry_run:
-        raise ReadinessError(f"docker context is {context!r}; the review host standard is {REQUIRED_CONTEXT!r} (the in-WSL "
-                       "engine). Images built on another daemon are invisible to the stack. `docker context use "
-                       f"{REQUIRED_CONTEXT}` and re-run.", REFUSED)
+    if context != args.docker_context and not host.dry_run:
+        raise ReadinessError(
+            f"docker context is {context!r} but this host's declared daemon is {args.docker_context!r}. One daemon per "
+            "machine, chosen once: images built on one daemon are invisible to the other, and pins and the stack follow "
+            f"the daemon. Either `docker context use {args.docker_context}` or, if {context!r} is the daemon this machine "
+            f"uses, re-run with --docker-context {context}.", REFUSED)
+    say(f"{REPORT_PREFIX} docker context: {context or args.docker_context}")
     say(f"{REPORT_PREFIX} docker: {host.output(['docker', 'info', '--format', '{{.ServerVersion}} {{.Driver}}'], 'host')}")
     if host.which("findmnt") is not None:
         fstype = host.output(["findmnt", "-no", "FSTYPE", "-T", str(root)], "host", check=False)
@@ -181,7 +184,7 @@ def step_pin(host: Host, args: argparse.Namespace) -> None:
     say(f"{REPORT_PREFIX} re-pinned files:\n{changed}")
     host.run(["git", "add", "-u"], "pin")  # tracked files only: untracked operator material stays out
     date = datetime.now(UTC).strftime("%Y-%m-%d")
-    host.run(["git", "commit", "-q", "-m", f"Host re-pin: {args.host_label}, {REQUIRED_CONTEXT} context, {date}\n\n"
+    host.run(["git", "commit", "-q", "-m", f"Host re-pin: {args.host_label}, {args.docker_context} context, {date}\n\n"
               "Image IDs observed on this host after a full build; no code change."], "pin")
     say(f"{REPORT_PREFIX} committed the re-pin as its own commit (push it yourself)")
 
@@ -238,6 +241,9 @@ def register(commands, add, root: Path) -> None:
                      help=f"start at this step and run the rest in order: {', '.join(STEPS)} (default: host)")
     sub.add_argument("--only", choices=STEPS, metavar="STEP", help="run just this one step")
     sub.add_argument("--jobs", type=int, default=4, help="parallel image builds (default %(default)s)")
+    sub.add_argument("--docker-context", default=DEFAULT_CONTEXT, metavar="NAME",
+                     help="the one Docker daemon this machine uses for the review: `default` for an engine installed "
+                          "inside WSL (HAL5000), `desktop-linux` for Docker Desktop's engine (default: %(default)s)")
     sub.add_argument("--private-key", type=Path, default=DEFAULT_PRIVATE_KEY,
                      help=f"operator signing key (default: {DEFAULT_PRIVATE_KEY}); created by the key step if absent")
     sub.add_argument("--host-label", default=os.uname().nodename if hasattr(os, "uname") else "host",

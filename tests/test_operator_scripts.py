@@ -1401,7 +1401,12 @@ def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_co
 def test_run_readiness_refuses_the_wrong_docker_context_a_non_ext4_checkout_and_a_dirty_tree(tmp_path: Path) -> None:
     code, host, out = _readiness(tmp_path, answers={**GOOD_HOST, "docker context show": "desktop-linux"})
     assert code == ops.REFUSED and "desktop-linux" in out and "docker context use default" in out
+    assert "--docker-context desktop-linux" in out
     assert not any("build.py" in " ".join(c) for c in host.commands)
+    # A Docker Desktop host declares its daemon; the same context then passes and names the re-pin commit.
+    code, host, out = _readiness(tmp_path, "--only", "host", "--docker-context", "desktop-linux",
+                                 answers={**GOOD_HOST, "docker context show": "desktop-linux"})
+    assert code == 0 and "docker context: desktop-linux" in out
     code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "findmnt": "9p"})
     assert code == ops.REFUSED and "9p" in out and "ext4" in out
     code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "git status --porcelain --untracked-files=no": " M src/x.py"})

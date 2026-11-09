@@ -16,6 +16,7 @@ param(
     [ValidateSet('host', 'key', 'images', 'pin', 'sign', 'codeql')][string]$From,
     [ValidateSet('host', 'key', 'images', 'pin', 'sign', 'codeql')][string]$Only,
     [ValidateRange(1, 64)][int]$Jobs,
+    [string]$DockerContext,
     [string]$PrivateKey,
     [string]$HostLabel,
     [switch]$DryRun,
@@ -34,6 +35,7 @@ if ($Help) {
     if ($From) { $arguments.Add('--from'); $arguments.Add($From) }
     if ($Only) { $arguments.Add('--only'); $arguments.Add($Only) }
     if ($Jobs) { $arguments.Add('--jobs'); $arguments.Add([string]$Jobs) }
+    if ($DockerContext) { $arguments.Add('--docker-context'); $arguments.Add($DockerContext) }
     if ($PrivateKey) { $arguments.Add('--private-key'); $arguments.Add($PrivateKey) }
     if ($HostLabel) { $arguments.Add('--host-label'); $arguments.Add($HostLabel) }
     if ($DryRun) { $arguments.Add('--dry-run') }
