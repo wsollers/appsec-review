@@ -413,6 +413,7 @@ def test_execute_build_writes_schema_2_summary_with_metrics_and_prints_the_repor
 
 
 BUILD_DRIVERS = {"autoconf": "2.71", "automake": "1.16.5", "cmake": "3.28.3", "libtool": "2.4.7",
+                 "libtool-bin": "2.4.7",  # Debian ships the `libtool` program apart from libtoolize
                  "meson": "1.3.2", "ninja-build": "1.11.1", "pkg-config": "1.8.1"}
 
 

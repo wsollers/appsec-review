@@ -1,6 +1,7 @@
 # appsec-review/native-toolchain-packages/1
 # The one C/C++ toolchain every language build environment compiles with, and the build drivers
-# every family may meet (T-058): Autotools, libtool, CMake, Ninja, Meson, pkg-config. A Go module
+# every family may meet (T-058): Autotools, libtool (+libtool-bin: Debian ships the `libtool` program
+# separately from libtoolize), CMake, Ninja, Meson, pkg-config. A Go module
 # with cgo + CMake, a Python package built with scikit-build or meson-python, a Rust crate using the
 # cc/cmake crates or a node-gyp addon finds its driver here rather than in a family image. Bazel is
 # not here: a JVM binary that fetches rules at build time belongs to a target that needs it (T-050).
@@ -23,6 +24,7 @@ gcc-13=13.3.0-6ubuntu2~24.04.1
 libc6-dev=2.39-0ubuntu8.9
 libclang-rt-18-dev=1:18.1.3-1ubuntu1
 libtool=2.4.7-7build1
+libtool-bin=2.4.7-7build1
 lld=1:18.0-59~exp2
 lld-18=1:18.1.3-1ubuntu1
 llvm-18=1:18.1.3-1ubuntu1

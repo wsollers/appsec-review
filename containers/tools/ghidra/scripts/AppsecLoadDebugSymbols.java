@@ -38,6 +38,7 @@ public class AppsecLoadDebugSymbols extends HeadlessScript {
 			throw new IllegalArgumentException("debug symbols are not a regular file");
 		}
 		PdbUniversalAnalyzer.setPdbFileOption(currentProgram, file);
-		PdbUniversalAnalyzer.setAllowRemoteOption(currentProgram, false);
+		// Ghidra 12.1: the remote-symbol-server switch is setAllowUntrustedOption (was setAllowRemoteOption).
+		PdbUniversalAnalyzer.setAllowUntrustedOption(currentProgram, false);
 	}
 }

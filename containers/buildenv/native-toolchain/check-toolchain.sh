@@ -34,5 +34,6 @@ expect "1.3.2" meson --version
 expect "2.71" autoconf --version
 expect "1.16.5" automake --version
 expect "2.4.7" libtool --version
+expect "2.4.7" libtoolize --version
 expect "Python 3.12.3" python3 --version
 expect "strace -- version 6.8" strace -V
