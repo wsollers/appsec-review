@@ -65,7 +65,10 @@ security commands; the application runtime always invokes `docker`.
 
 Before each build, external artifacts are downloaded over HTTPS into an ignored `downloads/`
 directory and verified against the declared byte size and SHA-256 in `assets.lock.json`. Docker build
-steps run with networking disabled. Logs and the machine-readable summary
+steps run with networking disabled, and every build passes `--provenance=false --sbom=false`: under
+Docker 29's containerd image store BuildKit otherwise wraps each export in a timestamped attestation,
+so an image whose layers were all cache hits still gets a new ID, everything `FROM` it rebuilds, and
+its pin moves on every run (seen on HAL5000, 2026-11-09: four full 25-minute builds of unchanged recipes). Logs and the machine-readable summary
 (`appsec-review/container-build-summary/2`) are written under `runs/container-builds/<run-id>/`.
 Each result records status, image id, tag, digest, log paths and the build's telemetry: `duration_seconds`
 split into `fetch_seconds` and `build_seconds`, `assets` (`current`/`fetched` counts and bytes),

@@ -332,6 +332,8 @@ def test_build_one_records_fetch_and_build_timings_steps_and_image_size(monkeypa
 
     def build(argv, log, timeout):
         assert "--progress=plain" in argv
+        # Deterministic exports: a cache-hit rebuild must yield the same image ID (HAL5000, Docker 29).
+        assert "--provenance=false" in argv and "--sbom=false" in argv
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(BUILDKIT_LOG, encoding="utf-8")
         return subprocess.CompletedProcess(argv, 0)

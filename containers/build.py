@@ -424,8 +424,11 @@ def build_one(item: dict[str, Any], run_dir: Path, *,
             result["assets"] = fetch_one(item, log)
         result["fetch_seconds"] = round(time.monotonic() - started, 3)
         build_started = time.monotonic()
+        # --provenance=false / --sbom=false: BuildKit under the containerd image store (Docker 29) otherwise
+        # wraps every export in an attestation carrying a timestamp, so an image whose layers were all cache
+        # hits still gets a new ID — and everything FROM it rebuilds, and its pin moves, on every run.
         argv = [docker_binary(), "build", f"--network={item.get('build_network', 'none')}",
-                "--pull=false", "--progress=plain", "--file",
+                "--pull=false", "--progress=plain", "--provenance=false", "--sbom=false", "--file",
                 str(context / item["dockerfile"]), "--tag", item["tag"]]
         for key, value in sorted(item.get("build_args", {}).items()):
             argv += ["--build-arg", f"{key}={value}"]
