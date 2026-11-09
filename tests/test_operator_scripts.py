@@ -1339,7 +1339,7 @@ class FakeHost(ops_readiness.Host):
         if isinstance(answer, tuple):
             answer, code = answer
         if check and code != 0:
-            raise ops.OpsError(f"{argv[0]} exited {code}")
+            raise ops_readiness.ReadinessError(f"{argv[0]} exited {code}")
         return subprocess.CompletedProcess(argv, code, stdout=str(answer) + "\n", stderr="")
 
     def which(self, name):
@@ -1358,18 +1358,15 @@ def _readiness(tmp_path: Path, *arguments: str, **host_kwargs) -> tuple[int, Fak
         return holder["host"]
 
     import io, contextlib
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out):
-        try:
-            code = ops_readiness.run(args, tmp_path, host_factory=factory)
-        except ops.OpsError as error:
-            code = error.code
-            out.write(f"error: {error}\n")
-    return code, holder["host"], out.getvalue()
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = ops_readiness.run(args, tmp_path, host_factory=factory)  # reports its own errors; never raises
+    return code, holder["host"], out.getvalue() + err.getvalue()
 
 
 GOOD_HOST = {"docker context show": "default", "docker info": "27.3.1 overlay2", "findmnt": "ext4",
-             "git status --porcelain": "", "git rev-parse --short HEAD": "abc1234", "openssl version": "OpenSSL 3.0.13"}
+             "git status --porcelain --untracked-files=no": "", "git status --porcelain --untracked-files=normal": "",
+             "git rev-parse --short HEAD": "abc1234", "openssl version": "OpenSSL 3.0.13"}
 
 
 def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_commits(tmp_path: Path) -> None:
@@ -1379,7 +1376,7 @@ def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_co
 
     class Host(FakeHost):
         def run(self, argv, step, **kwargs):
-            if argv[:3] == ["git", "status", "--porcelain"] and len(argv) == 3 and step == "pin":
+            if argv[:3] == ["git", "status", "--porcelain"] and step == "pin":
                 self.commands.append([str(a) for a in argv])
                 return subprocess.CompletedProcess(argv, 0, stdout=" M appsec-review.toml\n", stderr="")
             return super().run(argv, step, **kwargs)
@@ -1394,8 +1391,9 @@ def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_co
     order = [next(i for i, c in enumerate(joined) if marker in c) for marker in (
         "docker context show", "signing keygen", "export-trust-anchor", "git commit -q -m Trust anchor: HAL5000 WSL operator public key",
         "install-trust-anchors", "build.py validate", "build --all --jobs 3 --continue-on-error", "smoke --all", "build.py report",
-        "update-image-pins --write", "Host re-pin: HAL5000 WSL, default context", "sign-image --all-pinned", "compile-codeql-queries.sh")]
+        "update-image-pins --write", "git add -u", "Host re-pin: HAL5000 WSL, default context", "sign-image --all-pinned", "compile-codeql-queries.sh")]
     assert order == sorted(order), joined
+    assert not any(c == "git add -A" for c in joined), "untracked operator material must never be swept into the re-pin"
     assert not any("git push" in c for c in joined)
     assert "finished steps 1-5" in out.getvalue()
 
@@ -1406,8 +1404,12 @@ def test_run_readiness_refuses_the_wrong_docker_context_a_non_ext4_checkout_and_
     assert not any("build.py" in " ".join(c) for c in host.commands)
     code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "findmnt": "9p"})
     assert code == ops.REFUSED and "9p" in out and "ext4" in out
-    code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "git status --porcelain": " M src/x.py"})
+    code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "git status --porcelain --untracked-files=no": " M src/x.py"})
     assert code == ops.REFUSED and "uncommitted" in out
+    # Untracked paths (an operator's acceptance output, say) are reported and left alone, never a refusal.
+    code, _host, out = _readiness(tmp_path, "--only", "host",
+                                  answers={**GOOD_HOST, "git status --porcelain --untracked-files=normal": "?? test/acceptance/AcceptanceTest/"})
+    assert code == 0 and "left alone" in out and "AcceptanceTest" in out
 
 
 def test_run_readiness_stops_at_a_failed_image_build_after_printing_the_report(tmp_path: Path) -> None:
@@ -1438,3 +1440,15 @@ def test_run_readiness_dry_run_prints_every_command_and_changes_nothing(tmp_path
     for marker in ("docker context show", "signing keygen", "build --all", "update-image-pins --write", "sign-image", "compile-codeql"):
         assert marker in joined
     assert subprocess.run(["bash", str(SCRIPTS / "run-readiness.sh"), "--only", "bogus"], capture_output=True).returncode == 2
+
+
+def test_run_readiness_errors_reach_the_operator_as_exit_codes_not_tracebacks(tmp_path: Path, monkeypatch) -> None:
+    """ops.py runs as __main__; a failure must be reported by this module, never escape as a traceback."""
+    monkeypatch.setattr(ops_readiness, "Host", lambda root, log_dir, *, dry_run: FakeHost(
+        root, log_dir, dry_run=dry_run, answers={**GOOD_HOST, "docker context show": "desktop-linux"}))
+    monkeypatch.setattr(ops, "reject_native_environment", lambda: None)
+    import io, contextlib
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = ops.main(["run-readiness"])
+    assert code == ops.REFUSED and "desktop-linux" in err.getvalue() and "resume with --from host" in out.getvalue()

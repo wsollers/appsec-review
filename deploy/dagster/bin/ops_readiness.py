@@ -22,7 +22,22 @@ import shutil
 import subprocess
 import sys
 
-from ops import FAILED, REFUSED, USAGE, OpsError, say
+# ops.py runs as __main__, so a class imported from `ops` here would be a different object from the one
+# ops.main() catches; this module therefore owns its failure type and reports it itself.
+FAILED, REFUSED = 1, 3
+
+
+class ReadinessError(Exception):
+    """A failure the operator should read about; ``code`` becomes the exit status."""
+
+    def __init__(self, message: str, code: int = FAILED) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def say(message: str = "") -> None:
+    print(message, flush=True)
+
 
 STEPS = ("host", "key", "images", "pin", "sign", "codeql")
 DEFAULT_PRIVATE_KEY = Path("~/.config/appsec-review/signing/private/operator.pem")
@@ -61,7 +76,7 @@ class Host:
                                            stderr=subprocess.STDOUT, timeout=timeout, check=False)
             handle.write(f"exit {completed.returncode}\n")
         if check and completed.returncode != 0:
-            raise OpsError(f"{argv[0]} exited {completed.returncode}; see {log}")
+            raise ReadinessError(f"{argv[0]} exited {completed.returncode}; see {log}")
         return completed
 
     def output(self, argv: Sequence[str], step: str, **kwargs) -> str:
@@ -86,31 +101,35 @@ def appsec_review_cli(root: Path) -> list[str]:
 def step_host(host: Host, args: argparse.Namespace) -> None:
     root = host.root
     if host.which("docker") is None:
-        raise OpsError("docker is not on PATH", REFUSED)
+        raise ReadinessError("docker is not on PATH", REFUSED)
     context = host.output(["docker", "context", "show"], "host")
     if context != REQUIRED_CONTEXT and not host.dry_run:
-        raise OpsError(f"docker context is {context!r}; the review host standard is {REQUIRED_CONTEXT!r} (the in-WSL "
+        raise ReadinessError(f"docker context is {context!r}; the review host standard is {REQUIRED_CONTEXT!r} (the in-WSL "
                        "engine). Images built on another daemon are invisible to the stack. `docker context use "
                        f"{REQUIRED_CONTEXT}` and re-run.", REFUSED)
     say(f"{REPORT_PREFIX} docker: {host.output(['docker', 'info', '--format', '{{.ServerVersion}} {{.Driver}}'], 'host')}")
     if host.which("findmnt") is not None:
         fstype = host.output(["findmnt", "-no", "FSTYPE", "-T", str(root)], "host", check=False)
         if fstype and fstype != EXT4 and not host.dry_run:
-            raise OpsError(f"checkout {root} is on {fstype!r}, not {EXT4}; the mounted sources must live on WSL ext4, "
+            raise ReadinessError(f"checkout {root} is on {fstype!r}, not {EXT4}; the mounted sources must live on WSL ext4, "
                            "never under /mnt/c or /mnt/f (deployment-image-and-source-mount.md)", REFUSED)
         say(f"{REPORT_PREFIX} filesystem: {fstype or 'unknown'}")
-    dirty = host.output(["git", "status", "--porcelain"], "host")
+    dirty = host.output(["git", "status", "--porcelain", "--untracked-files=no"], "host")
     if dirty and not host.dry_run:
-        raise OpsError("the checkout has uncommitted changes; readiness makes its own commits (anchor, re-pin) and "
-                       "needs a clean tree to tell them apart:\n" + dirty, REFUSED)
+        raise ReadinessError("the checkout has uncommitted changes to tracked files; readiness makes its own commits "
+                             "(anchor, re-pin) and needs them separable:\n" + dirty, REFUSED)
+    untracked = host.output(["git", "status", "--porcelain", "--untracked-files=normal"], "host")
+    untracked = "\n".join(line for line in untracked.splitlines() if line.startswith("??"))
+    if untracked:
+        say(f"{REPORT_PREFIX} untracked paths present (left alone, never committed by this script):\n{untracked}")
     say(f"{REPORT_PREFIX} checkout: {host.output(['git', 'rev-parse', '--short', 'HEAD'], 'host')} clean")
     if sys.version_info < MIN_PYTHON:
-        raise OpsError(f"python {sys.version.split()[0]} is older than {'.'.join(map(str, MIN_PYTHON))}", REFUSED)
+        raise ReadinessError(f"python {sys.version.split()[0]} is older than {'.'.join(map(str, MIN_PYTHON))}", REFUSED)
     if host.which("openssl") is None:
-        raise OpsError("openssl is not on PATH (signing needs OpenSSL 3)", REFUSED)
+        raise ReadinessError("openssl is not on PATH (signing needs OpenSSL 3)", REFUSED)
     say(f"{REPORT_PREFIX} {host.output(['openssl', 'version'], 'host')}")
     if not host.exists(root / ".venv" / "bin" / "appsec-review") and not host.dry_run:
-        raise OpsError("no .venv with appsec-review installed: `python3 -m venv .venv && . .venv/bin/activate && "
+        raise ReadinessError("no .venv with appsec-review installed: `python3 -m venv .venv && . .venv/bin/activate && "
                        "python -m pip install -e \".[test]\"`", REFUSED)
 
 
@@ -143,7 +162,7 @@ def step_images(host: Host, args: argparse.Namespace) -> None:
                        check=False)
     if outcome.returncode != 0 and not host.dry_run:
         host.run([*build, "report"], "images", check=False)
-        raise OpsError("one or more images did not build; read the report above and runs/container-builds/<run>/"
+        raise ReadinessError("one or more images did not build; read the report above and runs/container-builds/<run>/"
                        "<image>/build.log. The runbook's rule: an image failing for a reason unrelated to the run is "
                        "disabled in the catalog and recorded, not fixed now. Re-run `--from images` afterwards.")
     host.run([*build, "smoke", "--all"], "images")
@@ -155,12 +174,12 @@ def step_pin(host: Host, args: argparse.Namespace) -> None:
     cli = appsec_review_cli(host.root)
     host.run([*cli, "update-image-pins"], "pin")
     host.run([*cli, "update-image-pins", "--write"], "pin")
-    changed = host.output(["git", "status", "--porcelain"], "pin")
+    changed = host.output(["git", "status", "--porcelain", "--untracked-files=no"], "pin")
     if not changed:
         say(f"{REPORT_PREFIX} pins already match this host; nothing to commit")
         return
     say(f"{REPORT_PREFIX} re-pinned files:\n{changed}")
-    host.run(["git", "add", "-A"], "pin")
+    host.run(["git", "add", "-u"], "pin")  # tracked files only: untracked operator material stays out
     date = datetime.now(UTC).strftime("%Y-%m-%d")
     host.run(["git", "commit", "-q", "-m", f"Host re-pin: {args.host_label}, {REQUIRED_CONTEXT} context, {date}\n\n"
               "Image IDs observed on this host after a full build; no code change."], "pin")
@@ -191,15 +210,20 @@ def selected_steps(args: argparse.Namespace) -> tuple[str, ...]:
     return STEPS[start:]
 
 
-def run(args: argparse.Namespace, root: Path, host_factory: Callable[..., Host] = Host) -> int:
+def run(args: argparse.Namespace, root: Path, host_factory: Callable[..., Host] | None = None) -> int:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     log_dir = root / "runs" / "run-readiness" / stamp
-    host = host_factory(root, log_dir, dry_run=args.dry_run)
+    host = (host_factory or Host)(root, log_dir, dry_run=args.dry_run)
     steps = selected_steps(args)
     say(f"{REPORT_PREFIX} steps: {' -> '.join(steps)}{' (dry run)' if args.dry_run else ''}; logs: {log_dir}")
     for step in steps:
         say(f"{REPORT_PREFIX} == {step}")
-        HANDLERS[step](host, args)
+        try:
+            HANDLERS[step](host, args)
+        except ReadinessError as error:
+            print(f"error: {error}", file=sys.stderr, flush=True)
+            say(f"{REPORT_PREFIX} == {step}: FAILED; fix it and resume with --from {step}")
+            return error.code
         say(f"{REPORT_PREFIX} == {step}: done")
     say(f"{REPORT_PREFIX} finished steps 1-5 of docs/operations/run-readiness.md; next: step 6 (target), "
         "7 (scripts/stack-rebuild then stack-start) and 8 (the gate run) by hand")
