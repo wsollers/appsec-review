@@ -20,12 +20,13 @@ from tests.operator_support import (
 
 import ops  # noqa: E402  (tests.operator_support puts deploy/dagster/bin on sys.path)
 import ops_clean  # noqa: E402
+import ops_readiness  # noqa: E402
 import ops_tests  # noqa: E402
 import review_run  # noqa: E402
 
 SCRIPTS = REPOSITORY / "scripts"
 NAMES = ("stack-start", "stack-stop", "stack-restart", "stack-rebuild", "stack-status", "stack-logs", "review-start",
-         "review-watch", "review-status", "review-stop", "review-stop-id", "clean-temp", "run-tests")
+         "review-watch", "review-status", "review-stop", "review-stop-id", "clean-temp", "run-tests", "run-readiness")
 APP_ID = "2026-10-21-0007"
 UUID_ONE = "11111111-1111-4111-8111-111111111111"
 UUID_TWO = "22222222-2222-4222-8222-222222222222"
@@ -1314,3 +1315,126 @@ def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, p
 def test_powershell_twins_take_a_profile_parameter(name: str) -> None:
     assert "[ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
     assert "--profile" in real(name, "--help").stdout
+
+
+# -- run-readiness --------------------------------------------------------------------------------
+class FakeHost(ops_readiness.Host):
+    """Records every command; answers from a table keyed on the command's first words."""
+
+    def __init__(self, root: Path, log_dir: Path, *, dry_run: bool, answers: dict[str, object] | None = None,
+                 present: set[str] | None = None) -> None:
+        super().__init__(root, log_dir, dry_run=dry_run)
+        self.commands: list[list[str]] = []
+        self.answers = answers or {}
+        self.present = present if present is not None else {".venv/bin/appsec-review"}
+        self.tools = {"docker", "findmnt", "openssl", "git", "sudo"}
+
+    def run(self, argv, step, *, capture=False, check=True, cwd=None, timeout=None):
+        argv = [str(a) for a in argv]
+        self.commands.append(argv)
+        matches = [k for k in self.answers if k in " ".join(argv)]
+        key = max(matches, key=len) if matches else None  # the most specific answer wins
+        answer = self.answers.get(key, "") if key else ""
+        code = 0
+        if isinstance(answer, tuple):
+            answer, code = answer
+        if check and code != 0:
+            raise ops.OpsError(f"{argv[0]} exited {code}")
+        return subprocess.CompletedProcess(argv, code, stdout=str(answer) + "\n", stderr="")
+
+    def which(self, name):
+        return f"/usr/bin/{name}" if name in self.tools else None
+
+    def exists(self, path):
+        return any(str(path).endswith(p) for p in self.present)
+
+
+def _readiness(tmp_path: Path, *arguments: str, **host_kwargs) -> tuple[int, FakeHost, str]:
+    args = ops.build_parser().parse_args(["run-readiness", *arguments])
+    holder: dict[str, FakeHost] = {}
+
+    def factory(root, log_dir, *, dry_run):
+        holder["host"] = FakeHost(root, log_dir, dry_run=dry_run, **host_kwargs)
+        return holder["host"]
+
+    import io, contextlib
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        try:
+            code = ops_readiness.run(args, tmp_path, host_factory=factory)
+        except ops.OpsError as error:
+            code = error.code
+            out.write(f"error: {error}\n")
+    return code, holder["host"], out.getvalue()
+
+
+GOOD_HOST = {"docker context show": "default", "docker info": "27.3.1 overlay2", "findmnt": "ext4",
+             "git status --porcelain": "", "git rev-parse --short HEAD": "abc1234", "openssl version": "OpenSSL 3.0.13"}
+
+
+def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_commits(tmp_path: Path) -> None:
+    answers = {**GOOD_HOST, "git status --porcelain -- deploy/dagster/trusted-keys": "?? deploy/dagster/trusted-keys/ab.pem"}
+    # After the re-pin, the tree is dirty once (the pin files), so the pin step commits.
+    calls = {"n": 0}
+
+    class Host(FakeHost):
+        def run(self, argv, step, **kwargs):
+            if argv[:3] == ["git", "status", "--porcelain"] and len(argv) == 3 and step == "pin":
+                self.commands.append([str(a) for a in argv])
+                return subprocess.CompletedProcess(argv, 0, stdout=" M appsec-review.toml\n", stderr="")
+            return super().run(argv, step, **kwargs)
+
+    args = ops.build_parser().parse_args(["run-readiness", "--host-label", "HAL5000 WSL", "--jobs", "3"])
+    host = Host(tmp_path, tmp_path / "logs", dry_run=False, answers=answers)
+    import io, contextlib
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert ops_readiness.run(args, tmp_path, host_factory=lambda *a, **k: host) == 0
+    joined = [" ".join(c) for c in host.commands]
+    order = [next(i for i, c in enumerate(joined) if marker in c) for marker in (
+        "docker context show", "signing keygen", "export-trust-anchor", "git commit -q -m Trust anchor: HAL5000 WSL operator public key",
+        "install-trust-anchors", "build.py validate", "build --all --jobs 3 --continue-on-error", "smoke --all", "build.py report",
+        "update-image-pins --write", "Host re-pin: HAL5000 WSL, default context", "sign-image --all-pinned", "compile-codeql-queries.sh")]
+    assert order == sorted(order), joined
+    assert not any("git push" in c for c in joined)
+    assert "finished steps 1-5" in out.getvalue()
+
+
+def test_run_readiness_refuses_the_wrong_docker_context_a_non_ext4_checkout_and_a_dirty_tree(tmp_path: Path) -> None:
+    code, host, out = _readiness(tmp_path, answers={**GOOD_HOST, "docker context show": "desktop-linux"})
+    assert code == ops.REFUSED and "desktop-linux" in out and "docker context use default" in out
+    assert not any("build.py" in " ".join(c) for c in host.commands)
+    code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "findmnt": "9p"})
+    assert code == ops.REFUSED and "9p" in out and "ext4" in out
+    code, _host, out = _readiness(tmp_path, answers={**GOOD_HOST, "git status --porcelain": " M src/x.py"})
+    assert code == ops.REFUSED and "uncommitted" in out
+
+
+def test_run_readiness_stops_at_a_failed_image_build_after_printing_the_report(tmp_path: Path) -> None:
+    code, host, out = _readiness(tmp_path, "--from", "images", answers={"build --all": ("", 1)})
+    assert code == ops.FAILED and "did not build" in out and "disabled in the catalog" in out
+    joined = [" ".join(c) for c in host.commands]
+    assert any("build.py report" in c for c in joined) and not any("smoke" in c for c in joined)
+    assert not any("update-image-pins" in c for c in joined)
+
+
+def test_run_readiness_key_step_never_overwrites_an_existing_key_and_skips_an_unchanged_anchor(tmp_path: Path) -> None:
+    code, host, out = _readiness(tmp_path, "--only", "key", answers={**GOOD_HOST},
+                                 present={".venv/bin/appsec-review", "operator.pem"})
+    assert code == 0
+    joined = [" ".join(c) for c in host.commands]
+    assert not any("keygen" in c for c in joined) and "never overwritten" in out
+    assert any("export-trust-anchor" in c for c in joined) and not any("git commit" in c for c in joined)
+    install = next(c for c in joined if "install-trust-anchors" in c)
+    # Root-owned trust directory: elevate unless this process already is root.
+    assert install.startswith("sudo ") == (os.geteuid() != 0)
+
+
+def test_run_readiness_dry_run_prints_every_command_and_changes_nothing(tmp_path: Path) -> None:
+    code, host, out = _readiness(tmp_path, "--dry-run", answers={})
+    assert code == 0 and "(dry run)" in out
+    assert not (tmp_path / "runs").exists()
+    joined = "\n".join(" ".join(c) for c in host.commands)
+    for marker in ("docker context show", "signing keygen", "build --all", "update-image-pins --write", "sign-image", "compile-codeql"):
+        assert marker in joined
+    assert subprocess.run(["bash", str(SCRIPTS / "run-readiness.sh"), "--only", "bogus"], capture_output=True).returncode == 2

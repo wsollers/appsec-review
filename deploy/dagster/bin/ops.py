@@ -1085,8 +1085,10 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "review-stop-id":
             sub.add_argument("id", help="Dagster run id (uuid) or application run id (YYYY-MM-DD-NNNN)")
     import ops_clean
+    import ops_readiness
     import ops_tests
     ops_clean.register(commands, add, ROOT)
+    ops_readiness.register(commands, add, ROOT)
     ops_tests.register(commands, add, ROOT)
     return parser
 

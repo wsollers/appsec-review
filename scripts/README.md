@@ -41,6 +41,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
+| `run-readiness.sh` / `.ps1` | One-time preparation of a review host (T-057 Phase 0, `run-readiness.md` steps 1–5): preconditions (`default` Docker context, ext4 checkout, clean tree, OpenSSL 3, `.venv`), operator key + committed trust anchor + host trust directory, validate/build/smoke/report every image, host re-pin as its own commit, sign every pinned image, compile the CodeQL packs. Stops at the first failing step; `--from STEP` / `--only STEP` resume; `--dry-run` prints every command. Never pushes. On Windows always runs in WSL. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-readiness). |
 | `compile-codeql-queries.sh` / `.ps1` | Compile, one pack at a time, the CodeQL packs that are not precompiled (the graph-export packs registered with `warm = true` in `rules/registry.toml`) into the shared compile-cache volume review runs mount. Skips the image's standard query packs and the CERT pack, which ship precompiled `.qlx`. Options: `--language`, `--ram` (default 7000 MB), `--threads` (default 8), `--dry-run`, `--allow-concurrent`. Run it after a CodeQL image/release change or any graph-export QL change, before review runs. Wraps `containers/build.py query-packs --warm`. Details: [`docs/operations/codeql-analysis.md`](../docs/operations/codeql-analysis.md#compiling-codeql-queries). |
 
 ## Development

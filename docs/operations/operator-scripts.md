@@ -467,6 +467,32 @@ scripts/run-tests.sh --parallel --test-workers 2 --baseline test/tmp/sweep-base.
 .\scripts\run-tests.ps1 -Parallel -TestWorkers 2 -Baseline test\tmp\sweep-base.txt
 ```
 
+## run-readiness
+
+`run-readiness` is the scripted form of [`run-readiness.md`](run-readiness.md) steps 1–5 (T-057 Phase 0);
+steps 6–8 (target, stack, gate run) stay manual. Logic: `deploy/dagster/bin/ops_readiness.py`. Steps, in
+order, each idempotent and each logged to `runs/run-readiness/<timestamp>/<step>.log`:
+
+| Step | Does | Refuses when |
+| --- | --- | --- |
+| `host` | `docker context show`, `docker info`, `findmnt` on the checkout, `git status`, Python ≥ 3.11, `openssl version`, `.venv/bin/appsec-review` | context is not `default`; checkout not on ext4; tree dirty; no venv |
+| `key` | `signing keygen` only if the key is absent (never overwritten); `signing export-trust-anchor --into deploy/dagster/trusted-keys`; commits a new anchor (`Trust anchor: <host> operator public key`); `sudo … signing install-trust-anchors` | — |
+| `images` | `containers/build.py validate`, `build --all --jobs N --continue-on-error`, `smoke --all`, `report` | any image failed to build: prints the report and stops before smoke, pin and sign (disable the image in the catalog, record it, `--from images`) |
+| `pin` | `update-image-pins` (plan), `--write`, commits the result alone (`Host re-pin: <host>, default context, <date>`) | — |
+| `sign` | `signing sign-image --all-pinned --private-key …` | — |
+| `codeql` | `scripts/compile-codeql-queries.sh` | — |
+
+Options: `--from STEP` (start there, run the rest), `--only STEP`, `--jobs N` (default 4),
+`--private-key PATH`, `--host-label NAME` (used in the two commit messages; default: the hostname),
+`--dry-run`. The script makes at most two commits and never pushes. The PowerShell twin always runs the
+bash twin inside WSL on Windows, because the review host is WSL.
+
+```bash
+scripts/run-readiness.sh --dry-run
+scripts/run-readiness.sh --host-label "HAL5000 WSL"          # hours: the image build
+scripts/run-readiness.sh --from pin                          # after disabling a failed image and rebuilding
+```
+
 ## Testing the scripts
 
 `tests/test_operator_scripts.py` runs every script against fakes: a `docker` first on `PATH`, a

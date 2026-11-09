@@ -38,6 +38,12 @@ The loop (`docs/operations/recovery-repair.md`) therefore contains no `docker bu
 
 ## Steps
 
+Steps 1–5 are scripted: `scripts/run-readiness.sh` (`.ps1` on Windows runs it in WSL) runs them in
+order, idempotently, logging each to `runs/run-readiness/<timestamp>/`, and stops at the first step that
+fails; `--from STEP` resumes, `--dry-run` prints every command
+([`operator-scripts.md`](operator-scripts.md#run-readiness)). The steps below are what it does and
+why; steps 6–8 are run by hand.
+
 1. **Host and checkout.** In WSL: `docker context show` names the chosen daemon; the checkout is on
    ext4 (`df -T .` shows `ext4`, not `9p`/`drvfs`); `core.autocrlf` is off so signed bytes match
    (`.gitattributes` pins LF). Python 3.13 with this checkout's dependencies in `.venv`; OpenSSL 3 at
