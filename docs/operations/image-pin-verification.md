@@ -104,7 +104,11 @@ rebuild moves tags on the shared daemon that a live run may be using.
    The command collects the same pins as the gate, inspects each tag, and for each pinned tag that
    moved replaces the one quoted image ID on the line that owns the pin in `containers/catalog.toml`
    or `appsec-review.toml`. Formatting, comments and line endings are untouched, and the edited file is
-   re-parsed to prove that only the planned values changed. A pinned tag that is missing or cannot be
+   re-parsed to prove that only the planned values changed. When CodeQL's `source_image_id` moves, the
+   `preinstalled_runtimes[].source_image_id` declarations that must equal it move with it (their
+   `build_image_id`/`runtime_image_id` are host-derived images, not pins, and stay as declared); a write
+   is kept only if the re-pinned configuration still loads through the typed loader, otherwise both
+   files are restored and the loader's refusal is the error. A pinned tag that is missing or cannot be
    inspected is `unresolved`, a pin whose line cannot be located unambiguously is `manual`, and an
    enabled unpinned catalog image that is missing is listed under `unpinned_missing`. The command
    exits non-zero in any of those cases. It never adds a pin to an unpinned catalog entry; that is a

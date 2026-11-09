@@ -14,12 +14,14 @@ reach Docker. Re-pinning turns each pin whose tag now resolves to a different lo
 exact, line-level edit of the catalog or the central configuration. It never reformats either file:
 each edit replaces one quoted image ID on the one line that owns the pin, and the edited document is
 re-parsed to prove that exactly the planned values changed. A pin that cannot be located
-unambiguously is reported for manual editing instead of guessed.
+unambiguously is reported for manual editing instead of guessed. Settings the typed loader requires
+to equal a pin (CodeQL's ``preinstalled_runtimes[].source_image_id``) move with it, and a write is kept
+only if the re-pinned configuration loads; otherwise both files are restored.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -207,13 +209,53 @@ def _settings_line(lines: Sequence[str], path: Sequence[str], old: str) -> int |
     return None
 
 
-def _lookup(document: Mapping[str, Any], path: Sequence[str]) -> Any:
+def _path_keys(source: str) -> list[str | int]:
+    """``a.b[2].c`` -> ``["a", "b", 2, "c"]`` (array-of-tables entries carry an index)."""
+
+    keys: list[str | int] = []
+    for part in source.split("."):
+        match = re.fullmatch(r"([^\[\]]+)\[(\d+)\]", part)
+        if match:
+            keys.extend((match.group(1), int(match.group(2))))
+        else:
+            keys.append(part)
+    return keys
+
+
+def _lookup(document: Any, path: Sequence[str | int]) -> Any:
     value: Any = document
     for key in path:
-        if not isinstance(value, Mapping) or key not in value:
+        if isinstance(key, int):
+            if not isinstance(value, list) or key >= len(value):
+                return None
+        elif not isinstance(value, Mapping) or key not in value:
             return None
         value = value[key]
     return value
+
+
+def _dependent_lines(lines: Sequence[str], path: Sequence[str], old: str) -> list[tuple[str, int]]:
+    """Settings that must equal a moved pin without being pins themselves.
+
+    CodeQL's ``preinstalled_runtimes`` entries each repeat the job's ``source_image_id`` and the typed
+    loader refuses a configuration where they differ, so a moved ``source_image_id`` carries them with
+    it; left behind, the written file would not load and every later command would fail.
+    """
+
+    if path[-1] != "source_image_id":
+        return []
+    table = ".".join([*path[:-1], "preinstalled_runtimes"])
+    headers = _headers(lines)
+    found, entry = [], 0
+    for position, (start, name) in enumerate(headers):
+        if name != table:
+            continue
+        end = headers[position + 1][0] if position + 1 < len(headers) else len(lines)
+        for index in range(start + 1, end):
+            if _assignment(lines[index], "source_image_id", old):
+                found.append((f"{table}[{entry}].source_image_id", index))
+        entry += 1
+    return found
 
 
 def _catalog_value(document: Mapping[str, Any], image: str, key: str) -> Any:
@@ -253,6 +295,10 @@ def plan_updates(results: Sequence[Mapping[str, Any]], *, config_path: Path,
                                  "the pin's line could not be located unambiguously; edit it by hand"))
         else:
             edits.append(PinEdit(source, file.as_posix(), tag, old, new, line + 1, "planned"))
+            if file == config_path:
+                for dependent, at in _dependent_lines(texts[file], source.split("."), old):
+                    edits.append(PinEdit(dependent, file.as_posix(), tag, old, new, at + 1, "planned",
+                                         f"follows {source}"))
     return edits
 
 
@@ -284,7 +330,7 @@ def apply_updates(edits: Sequence[PinEdit], *, config_path: Path, catalog_path: 
                     if item.get("id") == image:
                         item[key] = edit.new
             else:
-                keys = edit.source.split(".")
+                keys = _path_keys(edit.source)
                 if _lookup(after, keys) != edit.new:
                     raise PinUpdateError(f"{edit.source} did not change to {edit.new}")
                 parent = _lookup(expected, keys[:-1])
@@ -294,18 +340,38 @@ def apply_updates(edits: Sequence[PinEdit], *, config_path: Path, catalog_path: 
         path.write_bytes(updated.encode("utf-8"))
 
 
-def update_pins(*, config_path: Path, catalog_path: Path, write: bool, runner: Runner) -> dict[str, Any]:
-    """Re-pin every configured pin to the image its tag resolves to on the local daemon."""
+def _typed_load(config_path: Path) -> None:
+    from appsec_review.config.loader import load_config
+
+    load_config(config_path)
+
+
+def update_pins(*, config_path: Path, catalog_path: Path, write: bool, runner: Runner,
+                loader: Callable[[Path], object] | None = None) -> dict[str, Any]:
+    """Re-pin every configured pin to the image its tag resolves to on the local daemon.
+
+    A write is final only if the re-pinned configuration still loads through the typed loader
+    (``loader``; the real one by default): otherwise both files are restored byte for byte and the
+    refusal names what the loader rejected, so a half-usable configuration is never left behind.
+    """
 
     try:
-        document = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        images = tomllib.loads(catalog_path.read_text(encoding="utf-8")).get("images", [])
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+        originals = {path: path.read_bytes() for path in (config_path, catalog_path)}
+        document = tomllib.loads(originals[config_path].decode("utf-8"))
+        images = tomllib.loads(originals[catalog_path].decode("utf-8")).get("images", [])
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise PinUpdateError(f"cannot read the pins: {type(exc).__name__}: {exc}") from exc
     results = verify_pins(configured_pins(images, document), runner)
     edits = plan_updates(results, config_path=config_path, catalog_path=catalog_path)
     if write:
         apply_updates(edits, config_path=config_path, catalog_path=catalog_path)
+        try:
+            (loader or _typed_load)(config_path)
+        except Exception as exc:  # the loader's refusal is the message; any exception means "do not keep"
+            for path, content in originals.items():
+                path.write_bytes(content)
+            raise PinUpdateError(f"the re-pinned configuration does not load ({type(exc).__name__}: {exc}); "
+                                 "both files were restored unchanged") from exc
     rows = [{**edit.as_dict(), "status": "applied" if write and edit.status == "planned" else edit.status}
             for edit in edits]
     return {"written": write, "checked": len(results),

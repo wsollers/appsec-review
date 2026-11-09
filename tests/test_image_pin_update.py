@@ -52,6 +52,16 @@ image_id = "{OLD_P}"
 source_image_tag = "fixture/cpp:local"
 source_image_id = "{OLD_S}"
 
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "{OLD_S}"
+build_image_id = "{OLD_S}"
+runtime_image_id = "{OTHER}"
+
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "{OLD_S}"
+build_image_id = "{OLD_P}"
+runtime_image_id = "{OTHER}"
+
 [jobs.job_dossier_publication.settings]
 image_tag = "fixture/latex:1"
 image_id = "{OLD_D}"
@@ -92,6 +102,8 @@ def test_dry_run_plans_only_moved_pins_and_writes_nothing(tmp_path: Path) -> Non
     assert [(edit["source"], edit["status"], edit["new"]) for edit in report["edits"]] == [
         ("containers/catalog.toml images.tool-a.image_id", "planned", NEW_A),
         ("jobs.job_codeql_analysis.settings.source_image_id", "planned", NEW_S),
+        ("jobs.job_codeql_analysis.settings.preinstalled_runtimes[0].source_image_id", "planned", NEW_S),
+        ("jobs.job_codeql_analysis.settings.preinstalled_runtimes[1].source_image_id", "planned", NEW_S),
         ("jobs.job_dossier_publication.settings.image_id", "planned", NEW_D),
         ("jobs.job_project_build.settings.profiles.node.image_id", "planned", NEW_P)]
     assert report["checked"] == 7 and report["unpinned_missing"] == []
@@ -102,7 +114,8 @@ def test_dry_run_plans_only_moved_pins_and_writes_nothing(tmp_path: Path) -> Non
 def test_write_changes_exactly_the_owning_lines_and_keeps_line_endings(tmp_path: Path, crlf: bool) -> None:
     config, catalog = _files(tmp_path, crlf=crlf)
     newline = "\r\n" if crlf else "\n"
-    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=_runner(LOCAL))
+    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=_runner(LOCAL),
+                         loader=lambda _path: None)
     assert {edit["status"] for edit in report["edits"]} == {"applied"}
     # The same old ID pinned for another tag (tool-b, the wasm profile) is left alone, and comments stay.
     assert catalog.read_bytes().decode() == CATALOG.replace(
@@ -110,7 +123,13 @@ def test_write_changes_exactly_the_owning_lines_and_keeps_line_endings(tmp_path:
     parsed = tomllib.loads(config.read_bytes().decode())
     profiles = parsed["jobs"]["job_project_build"]["settings"]["profiles"]
     assert profiles["node"]["image_id"] == NEW_P and profiles["wasm"]["image_id"] == OLD_P
-    assert parsed["jobs"]["job_codeql_analysis"]["settings"]["source_image_id"] == NEW_S
+    codeql = parsed["jobs"]["job_codeql_analysis"]["settings"]
+    assert codeql["source_image_id"] == NEW_S
+    # The preinstalled runtimes repeat the source image and the loader requires them to agree (found on
+    # HAL5000: a written source_image_id with the declarations left behind made every command fail).
+    # Their build/runtime image IDs are host-derived images, not pins, and stay as declared.
+    assert [item["source_image_id"] for item in codeql["preinstalled_runtimes"]] == [NEW_S, NEW_S]
+    assert [item["build_image_id"] for item in codeql["preinstalled_runtimes"]] == [OLD_S, OLD_P]
     # The dossier renderer's image_tag/image_id pair (found on WSOLLERS1: signed but never re-pinned).
     assert parsed["jobs"]["job_dossier_publication"]["settings"]["image_id"] == NEW_D
     assert config.read_bytes().decode().startswith("# central configuration" + newline)
@@ -118,7 +137,7 @@ def test_write_changes_exactly_the_owning_lines_and_keeps_line_endings(tmp_path:
 
 def test_a_missing_pinned_image_is_unresolved_and_an_unpinned_one_is_reported(tmp_path: Path) -> None:
     config, catalog = _files(tmp_path)
-    report = update_pins(config_path=config, catalog_path=catalog, write=True,
+    report = update_pins(config_path=config, catalog_path=catalog, write=True, loader=lambda _path: None,
                          runner=_runner({**LOCAL, "fixture/node:local": None, "fixture/tool-c:1": None}))
     by_source = {edit["source"]: edit for edit in report["edits"]}
     node = by_source["jobs.job_project_build.settings.profiles.node.image_id"]
@@ -143,6 +162,19 @@ def test_each_tag_is_inspected_once(tmp_path: Path) -> None:
                            {"jobs": {"job_x": {"settings": {"tag": "t:1", "image_id": OLD_A}}}})
     assert [item["status"] for item in verify_pins(pins, runner)] == ["missing", "missing"]
     assert len(runner.calls) == 1
+
+
+def test_a_write_the_typed_loader_refuses_is_undone_and_reported(tmp_path: Path) -> None:
+    config, catalog = _files(tmp_path)
+
+    def loader(path: Path) -> None:
+        assert tomllib.loads(path.read_text())["jobs"]["job_codeql_analysis"]["settings"][
+            "source_image_id"] == NEW_S  # the loader sees the written file
+        raise ValueError("CodeQL preinstalled runtime source differs from configured source image")
+
+    with pytest.raises(PinUpdateError, match="does not load .*differs from configured source image.*restored"):
+        update_pins(config_path=config, catalog_path=catalog, write=True, runner=_runner(LOCAL), loader=loader)
+    assert config.read_text(encoding="utf-8") == CONFIG and catalog.read_text(encoding="utf-8") == CATALOG
 
 
 def test_unreadable_configuration_is_an_error(tmp_path: Path) -> None:

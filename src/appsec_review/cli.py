@@ -296,7 +296,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = image_pins.update_pins(
                 config_path=config_path,
                 catalog_path=config.runtime.repository_root / "containers" / "catalog.toml",
-                write=args.write, runner=_run)
+                write=args.write, runner=_run,
+                loader=lambda path: load_config(path, profile=args.profile))
         except image_pins.PinUpdateError as exc:
             print(json.dumps({"error": str(exc)}, sort_keys=True))
             return 1
