@@ -3,6 +3,14 @@
 **Reviewed 6 November 2026.** Local source: `wsollers/appsec-review` at
 `967a1072bc19feeb320ce4b44d6c056616c94d7b`.
 
+> **Status (2026-11-08).** This is the design review the "appsec implementation fleet" (packages
+> F00–F17, retired 2026-11-08) was dispatched from; it is kept as the rationale behind those goals.
+> The fleet's plan, ledger and integration log were deleted from `docs/plans/appsec-system-improvements/`
+> (history: `git log -- docs/plans/appsec-system-improvements`). What landed is in `main`'s ancestry;
+> every goal that did not land is registered in `docs/TODO.md` **T-059**, each gated on the first
+> scored review run (T-057). Section 14's implementation plan and the package boundaries are
+> historical; current sequencing is T-057 → T-059.
+
 ## Executive judgment
 
 **Keep the architecture; close its integration seams and complete the evidence loop.**

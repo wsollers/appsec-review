@@ -28,8 +28,9 @@ until each is rewritten into the entry format when it is next touched.
 | Id | Title | Area | State |
 | --- | --- | --- | --- |
 | T-057 | [First end-to-end review run and the break/fix loop](#t-057-first-end-to-end-review-run-and-the-breakfix-loop) | pipeline | in-progress |
-| T-058 | [Build drivers live in the shared toolchain base](#t-058-build-drivers-live-in-the-shared-toolchain-base) | containers | done (2026-11-08; measure on the next full build) |
-| T-035 | [Component layer between catalog and plan](#t-035-component-layer-between-catalog-and-plan) | topology | open |
+| T-058 | [Build drivers live in the shared toolchain base](#t-058-build-drivers-live-in-the-shared-toolchain-base) | images | done (2026-11-08, T-058 entry; measurement owed by the next full build) |
+| T-059 | [Register of the retired implementation fleet's goals](#t-059-register-of-the-retired-implementation-fleets-goals) | pipeline | blocked |
+| T-035 | [Component layer between catalog and plan](#t-035-component-layer-between-catalog-and-plan) | topology | blocked |
 | T-036 | [Build-mode disposition per component at plan time](#t-036-build-mode-disposition-per-component-at-plan-time) | topology | open |
 | T-037 | [Recipe provenance: declared, canonical, inferred](#t-037-recipe-provenance-declared-canonical-inferred) | build | open |
 | T-038 | [Declared builds: operator build plan file](#t-038-declared-builds-operator-build-plan-file) | build | open |
@@ -90,8 +91,9 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-057 — First end-to-end review run and the break/fix loop
 
-- **State:** in-progress (Phase 0 operator-run, Phase 1 agent-run, in parallel; 2026-11-08)
+- **State:** in-progress
 - **Area:** pipeline
+- **Since:** 2026-11-08 — Phase 0 operator-run and Phase 1 agent-run proceed in parallel
 - **Blocks:** T-035, T-036, T-037 (demoted to after the first scored run), T-045
 - **Why:** nothing has run end to end since the runtime's typed input contract, strict gap
   records and the mounted-source deployment landed. The job-by-job pass (task docs
@@ -162,9 +164,10 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-058 — Build drivers live in the shared toolchain base
 
-- **State:** done 2026-11-08 (before T-057 Phase 0's first `build --all`); the "done when" build
-  measurement is still owed by that build's `build.py report`
-- **Area:** containers
+- **State:** done (2026-11-08, T-058 entry; measurement owed by the next full build)
+- **Area:** images
+- **Note:** landed before T-057 Phase 0's first `build --all`; the "done when" build measurement
+  is still owed by that build's `build.py report`
 - **Why:** `buildenv-native-toolchain` (gcc 13.3, clang 18.1, make, pkg-config) is the base of six
   language build environments, but the build *drivers* are installed per language: `audit-buildenv-cpp`
   adds autoconf/automake/libtool/cmake/ninja, `audit-buildenv-php` adds autoconf/automake/libtool,
@@ -173,7 +176,7 @@ until each is rewritten into the entry format when it is next touched.
   using the `cc`/`cmake` crates, or a node-gyp addon lands in a build environment without the driver
   it needs, and the plan has no single capability table to consult. The same apt layer is also built
   and stored several times.
-- **Scope (done):** the drivers moved into `buildenv-native-toolchain` — autoconf 2.71, automake
+- **Scope:** (done) the drivers moved into `buildenv-native-toolchain` — autoconf 2.71, automake
   1.16.5, libtool 2.4.7, cmake 3.28.3, ninja-build 1.11.1, meson 1.3.2 (python3 was already there),
   pkg-config — pinned in its `packages.lock`, probed in `check-toolchain.sh` (which every family
   re-runs) and in the catalog `probe_expect`; `cpp` installs nothing of its own any more and `php`
@@ -197,11 +200,75 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** `containers/buildenv/native-toolchain/`, `containers/catalog.toml`, T-036, T-050,
   `docs/operations/run-readiness.md` ("What triggers a rebuild").
 
+### T-059 — Register of the retired implementation fleet's goals
+
+- **State:** blocked
+- **Area:** pipeline
+- **Blocked by:** T-057
+- **Why:** the "appsec implementation fleet" (coordinated agent sessions, packages F00–F17 plus
+  X-repairs, plan and ledger formerly under `docs/plans/appsec-system-improvements/`) was paused on
+  2026-11-07 and disposed of on 2026-11-08. Its plan was a second registry; this is the single one.
+  The design it implemented is kept at `docs/reviews/appsec-system-review-2026-11-06.md`. The
+  reconciliation assessment of 2026-11-08 established what landed and what did not; the carried
+  fragments (X07, the six language-build fixtures, X04's negative controls) are in T-057's
+  carry-forward list. This entry holds the *goals* that did not land, one line each, so nothing is
+  lost and nothing is started before the first run shows which of them matter.
+- **Landed (closed, in `main`'s ancestry):** F00 integration docs; F01 publication/inventory
+  repairs; F02 typed input and dispatch contracts (+ corrections; its consumption-authority policy
+  stands); F05 static deployment/service inventory core; F08 worker competence and stateful
+  guidance; F09 Glasswing quality metrics core; X01, X02, X03, X05, X06. F03 (shared readers) is
+  closed by decision: `runtime.consume.accepted_upstream` is the one reader; T-054 enforces it.
+  F04 (recoverability) became T-057 Phase 3.
+- **Scope:** the surviving goals below, each re-cut as job passes with typed inputs, gap records
+  and runner-driven tests when taken up; package boundaries are historical. Every row is gated on
+  T-057's first scored run.
+  - **F06 deployment/exposure jobs** — deployment-topology and imported service-observation
+    producers consuming F05's inventory; queryable topology/exposure evidence with freshness/drift;
+    build graph and deployment graph kept distinct; live collectors permission-gated.
+  - **F07 threat model** — an evidence-backed producer of assets/actors/boundaries/flows/threats/
+    obligations/unknowns consuming classification, applicability, deployment and build facts;
+    document-candidate routing into independent review; typed missing-evidence requests rather than
+    worker self-expansion; target-owned exclusions are untrusted context.
+  - **F10 operational telemetry** — per-job lifecycle/failure/metrics are now a checklist requirement
+    (done per pass); still open: queue/admission/scheduler/resource wait accounting, supplied/
+    retrieved/cited evidence views, offline dashboard rendering, optional bounded OTLP export with
+    durable position, cost/yield/marginal-role metrics, no source or secrets in telemetry.
+  - **F11 experiment planning** — engine-neutral experiment schemas, planner and admission over
+    accepted builds; exact source/build/harness/oracle/corpus/config identity and bounds; the
+    compile-only review contract preserved; no arbitrary shell or self-issued consent.
+  - **F12 downstream replay and campaigns** — appsec campaign lifecycle over the APS-owned DDNet
+    runner; deterministic replay first, then bounded coverage-guided campaigns; persisted inputs,
+    corpus snapshots, controls and partial outcomes; reduction with parentage; APS replay delivery
+    does not itself authorize campaigns.
+  - **F13 Lean/formal evidence bridge** — restricted observed-trace projection, pinned Lean
+    execution/result contract, assumption applicability and model-mismatch publication; kernel-only
+    checking per `docs/formal-verification/design-review-2026-11-07.md`; the APS Lean model only for
+    compatible trace work, not as the source-to-IR correspondence program.
+  - **F14 re-adjudication and final publication** — runtime evidence admitted as a new publication
+    version, never an edit; original vs repaired builds under one observation contract;
+    non-reproduction is not refutation; gate/report/dossier/OpenVEX snapshots.
+  - **F15 capability report, skills and MCP** — configured/installed/reachable/compatible/
+    commissioned/permitted reported separately; one CLI/runner, MCP only if justified; read-only
+    inspection without execution permission; no blanket installs or unrestricted endpoints.
+  - **F16 measured optimization** — representative performance fixtures; hash/copy/fsync/index/
+    lock/cache costs measured before any hot-path change; a native boundary only if evidence
+    supports it (T-048's `safe_path` measurement is the first data point).
+  - **F17 closeout** — docs, job/input/output inventories, release closure, test mappings and
+    supported-mode claims reconciled; known-failure and skip lists reviewed; implementation,
+    commissioning, live efficacy and deferred-by-evidence labelled separately. Largely subsumed by
+    T-057's done-when and the `docs-sync` skill.
+- **Done when:** after T-057 scores, each surviving goal above is either promoted to its own
+  `T-NNN` entry (with the job passes it needs) or struck here with the reason the first run gave;
+  this entry then closes.
+- **Refs:** `docs/reviews/appsec-system-review-2026-11-06.md`, T-057 (carry-forward list), T-054,
+  T-048, `docs/formal-verification/design-review-2026-11-07.md`.
+
 ### T-035 — Component layer between catalog and plan
 
-- **State:** open (after T-057's first scored run; design work that does not block a first run)
+- **State:** blocked
 - **Area:** topology
 - **Blocked by:** T-056, T-057
+- **Note:** design work that does not block a first run; resumes after T-057's first scored run
 - **Blocks:** T-036, T-037, T-040, T-045
 - **Why:** `job_target_catalog` emits one build unit per marker and one "component" per manifest,
   flat. `compile_build_topology` folds a unit into an owner only on literal CMake/Make evidence, so

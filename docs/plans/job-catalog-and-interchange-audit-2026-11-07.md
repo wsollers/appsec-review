@@ -94,7 +94,7 @@ Step/task declarations per job (from `appsec-review.toml`, identical to the code
 | `deploy/dagster/README.md:676` | "The optional `job_poc_generation` (shipped disabled)" — stale; it ships enabled (`appsec-review.toml:3199`). Line 387 brackets `[poc_generation]` "only when enabled", which is still true but misleading given the default. |
 | `review-process.html` (root) | Node `poc` is labelled "IMPLEMENTED / DEFAULT OFF"; nodes `remediate`, `validate`, `chains` are "PLANNED". Code: `job_poc_generation`, `job_remediation_planning`, `job_remediation_validation` ship enabled and `attack_chains` is an implemented step of `job_inference_security_review`. The footer pins the diagram to commit `444cff78`. |
 
-Jobs present in code but absent from a catalog: none (jobs-and-runtime is complete). Jobs in a catalog but absent from code: none in jobs-and-runtime; `job_target_documents` appears in `owasp_workbench/evidence.py:19` (`UPSTREAM_JOBS`) and is unregistered (already noted in `docs/plans/appsec-system-improvements/approved-review.md:121`); the Mermaid flow in `evidence-sources-and-dataflow-retrieval.md` draws planned `job_interface_contracts`, `job_deployment_topology`, `job_test_and_doc_indexing`, `job_reachability_linking` with dashed edges (labelled planned, acceptable).
+Jobs present in code but absent from a catalog: none (jobs-and-runtime is complete). Jobs in a catalog but absent from code: none in jobs-and-runtime; `job_target_documents` appears in `owasp_workbench/evidence.py:19` (`UPSTREAM_JOBS`) and is unregistered (already noted in `docs/reviews/appsec-system-review-2026-11-06.md:121`); the Mermaid flow in `evidence-sources-and-dataflow-retrieval.md` draws planned `job_interface_contracts`, `job_deployment_topology`, `job_test_and_doc_indexing`, `job_reachability_linking` with dashed edges (labelled planned, acceptable).
 
 ### 1.3 Per-job documentation table
 
@@ -249,7 +249,7 @@ Note: `job_review_data_indexing` depends only on leaves; the long chain `codeql 
 6. `docs/architecture/indexing-and-query-reuse.md:176, 471`: replace "126 declared datasets" / "All 38 currently registered jobs" with the registry-derived numbers or with "every registered job" and a pointer to the test that pins the count.
 7. `docs/architecture/jobs-and-runtime.md:114`: state that `job_svf_alias_analysis` ships `settings.enabled = false`.
 8. `docs/architecture/indexing-and-query-reuse.md` matrix: add a footnote that `graph` is not a `query_precomputed` set and that `job_review_package_assembly`, `job_document_issue_analysis` and `job_build_iteration` are deliberately outside the matrix.
-9. `src/appsec_review/owasp_workbench/evidence.py:19`: drop `job_target_documents` from `UPSTREAM_JOBS` (code edit, tracked in `docs/plans/appsec-system-improvements/approved-review.md:121`).
+9. `src/appsec_review/owasp_workbench/evidence.py:19`: drop `job_target_documents` from `UPSTREAM_JOBS` (code edit, tracked in `docs/reviews/appsec-system-review-2026-11-06.md:121`).
 
 ## 3 Interchange JSON
 
