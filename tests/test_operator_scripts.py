@@ -1348,6 +1348,9 @@ class FakeHost(ops_readiness.Host):
     def exists(self, path):
         return any(str(path).endswith(p) for p in self.present)
 
+    def writable(self, path):
+        return str(path) in self.present
+
 
 def _readiness(tmp_path: Path, *arguments: str, **host_kwargs) -> tuple[int, FakeHost, str]:
     args = ops.build_parser().parse_args(["run-readiness", *arguments])
@@ -1391,8 +1394,12 @@ def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_co
     order = [next(i for i, c in enumerate(joined) if marker in c) for marker in (
         "docker context show", "signing keygen", "export-trust-anchor", "git commit -q -m Trust anchor: HAL5000 WSL operator public key",
         "install-trust-anchors", "build.py validate", "build --all --jobs 3 --continue-on-error", "smoke --all", "build.py report",
-        "update-image-pins --write", "git add -u", "Host re-pin: HAL5000 WSL, default context", "sign-image --all-pinned", "compile-codeql-queries.sh")]
+        "update-image-pins --write", "git add -u", "Host re-pin: HAL5000 WSL, default context",
+        "sudo install -d -m 0755", "sign-image --all-pinned", "compile-codeql-queries.sh")]
     assert order == sorted(order), joined
+    # The envelope directory is made once for the operator (HAL5000: /var/lib "Permission denied"), never with -R.
+    mkdir = next(c for c in host.commands if c[:3] == ["sudo", "install", "-d"])
+    assert mkdir[-1] == "/var/lib/appsec-review/signing/images" and "-R" not in mkdir
     assert not any(c == "git add -A" for c in joined), "untracked operator material must never be swept into the re-pin"
     assert not any("git push" in c for c in joined)
     assert "finished steps 1-5" in out.getvalue()
@@ -1423,6 +1430,18 @@ def test_run_readiness_stops_at_a_failed_image_build_after_printing_the_report(t
     joined = [" ".join(c) for c in host.commands]
     assert any("build.py report" in c for c in joined) and not any("smoke" in c for c in joined)
     assert not any("update-image-pins" in c for c in joined)
+
+
+def test_run_readiness_sign_step_skips_the_sudo_mkdir_when_the_operator_already_owns_the_envelope_dir(
+        tmp_path: Path) -> None:
+    (tmp_path / "appsec-review.toml").write_text('[signing]\nimage_signatures_dir = "/srv/sigs"\n', encoding="utf-8")
+    code, host, _ = _readiness(tmp_path, "--only", "sign", answers=GOOD_HOST,
+                               present={".venv/bin/appsec-review", "/srv/sigs"})
+    assert code == 0
+    assert not any(c[:2] == ["sudo", "install"] for c in host.commands)
+    code, host, _ = _readiness(tmp_path, "--only", "sign", answers=GOOD_HOST)
+    assert code == 0
+    assert [c[-1] for c in host.commands if c[:2] == ["sudo", "install"]] == ["/srv/sigs"]
 
 
 def test_run_readiness_key_step_never_overwrites_an_existing_key_and_skips_an_unchanged_anchor(tmp_path: Path) -> None:

@@ -236,6 +236,37 @@ def test_sign_all_pinned_signs_matching_pins_and_never_a_mismatched_image(
     assert code == 0, report
 
 
+def test_sign_all_pinned_skips_a_declared_preinstalled_runtime_image_that_is_not_on_this_daemon(
+        tmp_path, capsys, key, config, local_images) -> None:
+    """HAL5000: the declared CodeQL build/runtime images were derived on another host and do not exist here.
+
+    They are host-derived images named only by ID, so an absent one is ``skipped_absent`` and the command
+    still succeeds; a tagged pin that is missing, and a bare ID the daemon cannot inspect for any other
+    reason, stay failures.
+    """
+    (config.runtime.repository_root / "containers" / "catalog.toml").write_text(CATALOG, encoding="utf-8")
+    config.resolved_json = json.dumps(DOCUMENT).encode()
+    local_images.update({"fixture/matched:1": IMAGE_A, "fixture/moved:1": IMAGE_B,
+                         "fixture/unpinned:1": IMAGE_B, "fixture/latex:1": IMAGE_C})
+    real_runner = signing_cli._inspect_runner
+
+    def runner(command, **kwargs):
+        # The runtime image is looked up by bare ID and is not on this daemon; the dossier *tag* resolves.
+        if command[-1] == IMAGE_C:
+            return subprocess.CompletedProcess(command, 1, b"", f"Error response from daemon: No such image: {IMAGE_C}".encode())
+        return real_runner(command, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(signing_cli, "_inspect_runner", runner)
+        code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private))
+    runtime = "jobs.job_codeql_analysis.settings.preinstalled_runtimes[0].runtime_image_id"
+    status = {row["source"]: row["status"] for row in report["images"]}
+    assert code == 0, status
+    assert status[runtime] == "skipped_absent"
+    assert "not on this daemon" in next(row["error"] for row in report["images"] if row["source"] == runtime)
+    assert status["jobs.job_dossier_publication.settings.image_id"] == "signed"
+
+
 CVE_SOURCE = "jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.settings.image_id"
 
 

@@ -12,6 +12,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import subprocess
@@ -31,6 +32,11 @@ COMMITTED_TRUST_ANCHORS = "deploy/dagster/trusted-keys"
 BOOTSTRAP_FILES = ("bootstrap.py", "core.py", "modules.py", "import_hook.py", "release_lib.py",
                    "sitecustomize_shim.py")
 PINNED_ID_SUFFIX = "image_id"
+# CodeQL's declared preinstalled runtimes are host-derived images named only by ID; one that is not on
+# this daemon is not used here (the job derives, or refuses, per preinstalled_undeclared) and cannot be
+# signed. docker's wording for an absent reference; anything else is an inspection failure.
+_PREINSTALLED_SOURCE = re.compile(r"\.preinstalled_runtimes\[\d+\]\.")
+_ABSENT_IMAGE = re.compile(r"no such (image|object)", re.IGNORECASE)
 
 # Replaced by tests so ``docker image inspect`` never runs; OpenSSL keeps using subprocess.run.
 _inspect_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
@@ -386,6 +392,11 @@ def _sign_all_pinned(openssl: OpenSSL, private_key: Path, signatures_dir: Path,
                 resolved[reference] = error
         local = resolved[reference]
         if isinstance(local, Exception):
+            if tag is None and _PREINSTALLED_SOURCE.search(pin["source"]) and _ABSENT_IMAGE.search(str(local)):
+                row["status"] = "skipped_absent"
+                row["error"] = ("declared preinstalled runtime image is not on this daemon; nothing to sign "
+                                "(the job derives or refuses it per preinstalled_undeclared)")
+                continue
             row["status"], row["error"] = "inspect_failed", str(local)
             continue
         row["resolved_image_id"] = local
@@ -419,7 +430,7 @@ def _sign_image(args: argparse.Namespace, config: Callable[[], Any]) -> tuple[di
                         for pin in builder_service_image_pins(path)]
         pins = configured_image_pins(config()) + builder_pins
         results = _sign_all_pinned(openssl, private_key, signatures_dir, pins)
-        ok = all(row["status"] in {"signed", "skipped_unpinned"} for row in results)
+        ok = all(row["status"] in {"signed", "skipped_unpinned", "skipped_absent"} for row in results)
         return {"signatures_dir": str(signatures_dir), "images": results}, ok
     results = []
     for reference in args.references:

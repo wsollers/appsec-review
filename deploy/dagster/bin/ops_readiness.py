@@ -21,6 +21,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tomllib
 
 # ops.py runs as __main__, so a class imported from `ops` here would be a different object from the one
 # ops.main() catches; this module therefore owns its failure type and reports it itself.
@@ -96,6 +97,11 @@ class Host:
 
     def exists(self, path: Path) -> bool:
         return path.exists()
+
+    def writable(self, path: Path) -> bool:
+        """True when the operator can already write ``path`` (an existing directory they own or can write)."""
+
+        return path.is_dir() and os.access(path, os.W_OK)
 
 
 def appsec_review_cli(root: Path) -> list[str]:
@@ -199,9 +205,29 @@ def step_pin(host: Host, args: argparse.Namespace) -> None:
     say(f"{REPORT_PREFIX} committed the re-pin as its own commit (push it yourself)")
 
 
+DEFAULT_SIGNATURES_DIR = "/var/lib/appsec-review/signing/images"
+
+
+def image_signatures_dir(root: Path) -> Path:
+    """``[signing].image_signatures_dir`` from the checkout's configuration (its documented default otherwise)."""
+
+    try:
+        document = tomllib.loads((root / "appsec-review.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return Path(DEFAULT_SIGNATURES_DIR)
+    value = (document.get("signing") or {}).get("image_signatures_dir")
+    return Path(value) if isinstance(value, str) and value else Path(DEFAULT_SIGNATURES_DIR)
+
+
 def step_sign(host: Host, args: argparse.Namespace) -> None:
     cli = appsec_review_cli(host.root)
     private_key = Path(os.path.expanduser(str(args.private_key)))
+    signatures = image_signatures_dir(host.root)
+    if os.name != "nt" and not host.writable(signatures):
+        # The envelope directory lives under /var/lib by default (HAL5000: "Permission denied"); make it
+        # once, owned by the operator who signs, like install-trust-anchors makes /etc/appsec-review.
+        host.run(["sudo", "install", "-d", "-m", "0755", "-o", str(os.getuid()), "-g", str(os.getgid()),
+                  str(signatures)], "sign")
     host.run([*cli, "signing", "sign-image", "--all-pinned", "--private-key", str(private_key)], "sign")
     say(f"{REPORT_PREFIX} image enforcement stays disabled for the first runs; the signatures are ready for when "
         "[signing] image_enforcement becomes \"required\"")

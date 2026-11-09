@@ -370,7 +370,11 @@ Run these steps on the review host from the repository checkout, never during a 
    enabled job or one of its steps whose tag resolves locally to exactly its pin. A mismatched or
    missing tag fails and is not signed. An
    unpinned catalog image is reported `skipped_unpinned`; sign it explicitly with
-   `sign-image REFERENCE`.
+   `sign-image REFERENCE`. CodeQL's declared `preinstalled_runtimes[]` build and runtime images are
+   host-derived images named only by ID: one that is not on this daemon is reported `skipped_absent`
+   (nothing to sign; the job derives or refuses it per `preinstalled_undeclared`) and does not fail the
+   command. The envelope directory (`image_signatures_dir`, under `/var/lib` by default) must be
+   writable by the operator; `run-readiness` creates it with `sudo install -d -o <uid> -g <gid>` once.
 
    On a bounded builder service host, add `--builder-service-config <operator service.toml>` (the
    file given to `image_builder_service --config`; repeat it for several services). `--all-pinned`
