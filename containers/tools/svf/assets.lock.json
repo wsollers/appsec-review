@@ -47,12 +47,12 @@
       "name": "svf-build-debs.tar",
       "url": "https://archive.ubuntu.com/ubuntu/",
       "path": "downloads/svf-build-debs.tar",
-      "sha256": "0f99153a6f7b4186a6b4ec343261460ea5afb87dc7129d3d21a297dc6ce0a334",
-      "bytes": 2816000,
+      "sha256": "1a878059974ece444905b2ccda31131ed247a94dbd4be986d6629e2243d5203c",
+      "bytes": 368640,
       "version": "ubuntu-24.04-2026-10-16",
       "license": "various; zlib, BSD-3-Clause and MIT per package copyright files",
       "license_source": "https://packages.ubuntu.com/noble/",
-      "provenance": "deterministic tar of the zlib1g-dev, libzstd-dev and libxml2-dev closure resolved inside tool-native-cpp by acquire_assets.sh; used by the build stage only; versions and SHA-256 in packages.manifest",
+      "provenance": "deterministic tar of the zlib1g-dev, libzstd-dev and libxml2-dev closure resolved inside tool-native-cpp by acquire_assets.sh (snapshot 20261016T235959Z); re-locked 2026-11-09 after tool-native-cpp's own closure came to carry zlib1g-dev, libxml2 and libxml2-dev, leaving libzstd-dev as the only package to download; used by the build stage only; versions and SHA-256 in packages.manifest",
       "signature_verification": {"status": "verified", "reason": "APT Release metadata signatures were verified during acquisition; bundle SHA-256 and byte size are enforced"}
     }
   ]
