@@ -72,8 +72,17 @@ class Host:
                 handle.write(completed.stdout)
                 handle.write(completed.stderr)
             else:
-                completed = subprocess.run([str(a) for a in argv], cwd=cwd or self.root, text=True, stdout=handle,
-                                           stderr=subprocess.STDOUT, timeout=timeout, check=False)
+                # Long steps (an image build is hours) stream to the console and the log at once, so the
+                # operator sees progress and the report without opening the log.
+                process = subprocess.Popen([str(a) for a in argv], cwd=cwd or self.root, text=True,
+                                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+                assert process.stdout is not None
+                for line in process.stdout:
+                    handle.write(line)
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                process.wait(timeout=timeout)
+                completed = subprocess.CompletedProcess(list(argv), process.returncode, stdout="", stderr="")
             handle.write(f"exit {completed.returncode}\n")
         if check and completed.returncode != 0:
             raise ReadinessError(f"{argv[0]} exited {completed.returncode}; see {log}")

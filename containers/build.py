@@ -505,16 +505,31 @@ def render_build_report(summary: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+BUILD_SUMMARY_SCHEMA_PREFIX = "appsec-review/container-build-summary/"
+
+
+def is_build_summary(path: Path) -> bool:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(document, dict) and str(document.get("schema", "")).startswith(BUILD_SUMMARY_SCHEMA_PREFIX)
+
+
 def latest_summary_path() -> Path:
-    candidates = sorted(RUN_ROOT.glob("*/summary.json"))
-    if not candidates:
-        raise FileNotFoundError(f"no build summary under {RUN_ROOT}")
-    return candidates[-1]
+    """The newest *build* summary: smoke/security/query-pack runs write other summaries beside it."""
+    for candidate in sorted(RUN_ROOT.glob("*/summary.json"), reverse=True):
+        if is_build_summary(candidate):
+            return candidate
+    raise FileNotFoundError(f"no build summary ({BUILD_SUMMARY_SCHEMA_PREFIX}*) under {RUN_ROOT}")
 
 
 def execute_report(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
     path = Path(args.summary) if args.summary else latest_summary_path()
     summary = json.loads(path.read_text(encoding="utf-8"))
+    if not str(summary.get("schema", "")).startswith(BUILD_SUMMARY_SCHEMA_PREFIX) or "results" not in summary:
+        print(f"error: {path} is not a container build summary (schema {summary.get('schema')!r})", file=sys.stderr)
+        return 2
     if "metrics" not in summary:  # a summary written before schema /2
         summary["metrics"] = build_metrics(summary, catalog)
     if args.json:

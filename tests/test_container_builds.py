@@ -400,6 +400,16 @@ def test_execute_build_writes_schema_2_summary_with_metrics_and_prints_the_repor
     (tmp_path / "old.json").write_text(json.dumps(old), encoding="utf-8")
     assert container_build.main(["report", str(tmp_path / "old.json")]) == 0
     assert "critical path 2.0s: base-ubuntu" in capsys.readouterr().out
+    # A newer non-build summary beside it (smoke, security, query packs) is never mistaken for the latest build.
+    later = tmp_path / "99999999T999999Z-1" / "summary.json"
+    later.parent.mkdir()
+    later.write_text(json.dumps({"schema": "appsec-review/container-security-summary/1", "results": []}), encoding="utf-8")
+    (tmp_path / "99999999T999999Z-2").mkdir()
+    (tmp_path / "99999999T999999Z-2" / "summary.json").write_text(json.dumps({"schema": "other/1"}), encoding="utf-8")
+    assert container_build.main(["report", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["images"] == 2
+    assert container_build.main(["report", str(later)]) == 2
+    assert "not a container build summary" in capsys.readouterr().err
 
 
 BUILD_DRIVERS = {"autoconf": "2.71", "automake": "1.16.5", "cmake": "3.28.3", "libtool": "2.4.7",
