@@ -90,9 +90,10 @@ the lock pins the result. The catalog names the helper as `acquire = "<script>"`
 when any locked local file under the image's `downloads/` is missing or does not match the lock —
 once per host, the first time the image is built there — then verifies the result; bytes that no
 longer match mean the upstream moved, and re-locking is a reviewed edit, not something the launcher
-does. Three images have one: `tool-native-cpp` and `tool-report-latex` (`.deb` closures resolved
-inside the pinned Ubuntu base by their `acquire_assets.sh`; the lock URL is the archive root, which
-marks the artifact as not fetchable) and `tool-tree-sitter` (`acquire_assets.sh` downloads the two
+does. Four images have one: `tool-native-cpp`, `tool-report-latex` and `tool-svf` (`.deb` closures
+resolved against the Ubuntu **snapshot** service inside a pinned image by their `acquire_assets.sh`,
+with the host's CA bundle lent read-only; the lock URL is the archive root, which marks the artifact
+as not fetchable) and `tool-tree-sitter` (`acquire_assets.sh` downloads the two
 hash-locked wheels and runs `acquire_assets.py` in the pinned base for the grammar libraries; its lock
 has no `artifacts` list, the wheels and grammars themselves are the local files). The helpers may use
 the network; builds still never do. `tool-sqlite-fts` has no asset lock.

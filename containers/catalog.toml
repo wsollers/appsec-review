@@ -851,6 +851,7 @@ dependencies = ["tool-native-cpp"]
 architectures = ["linux/amd64"]
 tool_manifest = "containers/tools/svf/tool.toml"
 assets_lock = "containers/tools/svf/assets.lock.json"
+acquire = "containers/tools/svf/acquire_assets.sh"
 build_args = { TOOL_VERSION = "3.3.0" }
 purpose = "Offline SVF-3.3 Andersen points-to and indirect-call analysis over clang-18 bitcode of accepted C/C++ scopes (AGPL-3.0-or-later; internal use, not redistributed)."
 

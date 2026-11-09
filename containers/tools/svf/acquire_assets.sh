@@ -19,10 +19,17 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$here/downloads"
 
+# Resolve against the Ubuntu snapshot service (lock version ubuntu-24.04-2026-10-16), not the live
+# archive whose exact versions move; lend the container the host's CA bundle for the HTTPS service.
+snapshot="20261016T235959Z"
+ca_bundle="${APPSEC_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+[[ -r "$ca_bundle" ]] || { echo "CA bundle not readable: $ca_bundle (set APPSEC_CA_BUNDLE)" >&2; exit 1; }
 if [[ ! -f "$here/downloads/svf-build-debs.tar" ]]; then
-  docker run --rm --network bridge --user 0 -e DEBIAN_FRONTEND=noninteractive \
+  docker run --rm --network bridge --user 0 -e DEBIAN_FRONTEND=noninteractive -e SNAPSHOT="$snapshot" \
+    -v "$ca_bundle:/etc/ssl/certs/ca-certificates.crt:ro" \
     -v "$here/downloads:/out" appsec-review/tool-native-cpp:1.0.0 bash -euo pipefail -c '
-      apt-get update -qq
+      printf "APT::Snapshot \"%s\";\n" "$SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+      apt-get -o APT::Update::Error-Mode=any update -qq
       apt-get install -y -qq --download-only zlib1g-dev libzstd-dev libxml2-dev >/dev/null
       cd /var/cache/apt/archives
       tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu \

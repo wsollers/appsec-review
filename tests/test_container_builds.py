@@ -503,6 +503,6 @@ def test_the_tree_sitter_lock_names_its_wheels_and_grammars_as_local_files() -> 
     assert sum(p.startswith("downloads/wheels/") and p.endswith(".whl") for p in paths) == 2
     assert sum(p.startswith("downloads/parsers-linux/") and p.endswith(".so") for p in paths) == len(lock["grammars"]) == 15
     catalog = container_build.load_catalog()["by_id"]
-    for image in ("tool-tree-sitter", "tool-native-cpp", "tool-report-latex"):
+    for image in ("tool-tree-sitter", "tool-native-cpp", "tool-report-latex", "tool-svf"):
         helper = ROOT / catalog[image]["acquire"]
         assert helper.is_file() and helper.stat().st_mode & 0o111, image
