@@ -24,11 +24,17 @@ python_version="3.12.3-0ubuntu2.1"
 packages="clang-18 cmake bear"
 packages+=" php8.3-cli=$php_version php8.3-dev=$php_version"
 packages+=" python3-dev=$python_version"
+# Resolve against the Ubuntu snapshot service, not the live archive: noble-updates and noble-security
+# supersede packages, and an exact version pinned below stops existing there within weeks (first seen
+# 2026-11-09, "Version ... was not found"). The snapshot is immutable, so the pinned versions always
+# resolve and the tar's hash stays what assets.lock.json records. The same snapshot buildenv-native-toolchain pins, so the closure and the toolchain agree.
+snapshot="20261015T070000Z"
 mkdir -p "$here/downloads"
 
-docker run --rm --pull=missing -e DEBIAN_FRONTEND=noninteractive -e PACKAGES="$packages" \
+docker run --rm --pull=missing -e DEBIAN_FRONTEND=noninteractive -e PACKAGES="$packages" -e SNAPSHOT="$snapshot" \
   -v "$here/downloads:/out" "$base" bash -euo pipefail -c '
-    apt-get update -qq
+    printf "APT::Snapshot \"%s\";\n" "$SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+    apt-get -o APT::Update::Error-Mode=any update -qq
     apt-get install -y -qq --download-only $PACKAGES >/dev/null
     cd /var/cache/apt/archives
     ls *.deb >/dev/null

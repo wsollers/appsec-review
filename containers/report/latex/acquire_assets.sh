@@ -20,11 +20,17 @@ base="$(sed -n 's/^FROM \(ubuntu:24.04@sha256:[0-9a-f]\{64\}\) AS build$/\1/p' "
 # pzdr font metrics that hyperref loads under XeTeX. The fonts-extra collection is not used.
 packages="texlive-xetex=2023.20240207-1 texlive-fonts-recommended=2023.20240207-1 fonts-inter=4.0+ds-1 fonts-jetbrains-mono=2.304+ds-4"
 packages+=" poppler-utils=24.02.0-1ubuntu9.10"
+# Resolve against the Ubuntu snapshot service, not the live archive: noble-updates and noble-security
+# supersede packages, and an exact version pinned below stops existing there within weeks (first seen
+# 2026-11-09, "Version ... was not found"). The snapshot is immutable, so the pinned versions always
+# resolve and the tar's hash stays what assets.lock.json records. The day the lock was acquired (lock version ubuntu-24.04-2026-10-21).
+snapshot="20261021T235959Z"
 mkdir -p "$here/downloads"
 
-docker run --rm --pull=missing -e DEBIAN_FRONTEND=noninteractive -e PACKAGES="$packages" \
+docker run --rm --pull=missing -e DEBIAN_FRONTEND=noninteractive -e PACKAGES="$packages" -e SNAPSHOT="$snapshot" \
   -v "$here/downloads:/out" "$base" bash -euo pipefail -c '
-    apt-get update -qq
+    printf "APT::Snapshot \"%s\";\n" "$SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+    apt-get -o APT::Update::Error-Mode=any update -qq
     apt-get install -y -qq --no-install-recommends --download-only $PACKAGES >/dev/null
     cd /var/cache/apt/archives
     ls *.deb >/dev/null
