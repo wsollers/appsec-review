@@ -15,6 +15,7 @@ from appsec_review.jobs.job_image_pin_verification.pins import (
 OLD_A, NEW_A = "sha256:" + "a" * 64, "sha256:" + "b" * 64
 OLD_P, NEW_P = "sha256:" + "c" * 64, "sha256:" + "d" * 64
 OLD_S, NEW_S = "sha256:" + "e" * 64, "sha256:" + "f" * 64
+OLD_D, NEW_D = "sha256:" + "1" * 64, "sha256:" + "2" * 64
 OTHER = "sha256:" + "9" * 64
 
 CATALOG = f'''schema = "fixture"
@@ -50,11 +51,16 @@ image_id = "{OLD_P}"
 [jobs.job_codeql_analysis.settings]
 source_image_tag = "fixture/cpp:local"
 source_image_id = "{OLD_S}"
+
+[jobs.job_dossier_publication.settings]
+image_tag = "fixture/latex:1"
+image_id = "{OLD_D}"
 '''
 
 # tool-b and the wasm profile still resolve to their pins; the others moved.
 LOCAL = {"fixture/tool-a:1": NEW_A, "fixture/tool-b:1": OLD_A, "fixture/tool-c:1": OTHER,
-         "fixture/node:local": NEW_P, "fixture/wasm:local": OLD_P, "fixture/cpp:local": NEW_S}
+         "fixture/node:local": NEW_P, "fixture/wasm:local": OLD_P, "fixture/cpp:local": NEW_S,
+         "fixture/latex:1": NEW_D}
 
 
 def _runner(images: dict[str, str | None]):
@@ -86,8 +92,9 @@ def test_dry_run_plans_only_moved_pins_and_writes_nothing(tmp_path: Path) -> Non
     assert [(edit["source"], edit["status"], edit["new"]) for edit in report["edits"]] == [
         ("containers/catalog.toml images.tool-a.image_id", "planned", NEW_A),
         ("jobs.job_codeql_analysis.settings.source_image_id", "planned", NEW_S),
+        ("jobs.job_dossier_publication.settings.image_id", "planned", NEW_D),
         ("jobs.job_project_build.settings.profiles.node.image_id", "planned", NEW_P)]
-    assert report["checked"] == 6 and report["unpinned_missing"] == []
+    assert report["checked"] == 7 and report["unpinned_missing"] == []
     assert config.read_text(encoding="utf-8") == CONFIG and catalog.read_text(encoding="utf-8") == CATALOG
 
 
@@ -104,6 +111,8 @@ def test_write_changes_exactly_the_owning_lines_and_keeps_line_endings(tmp_path:
     profiles = parsed["jobs"]["job_project_build"]["settings"]["profiles"]
     assert profiles["node"]["image_id"] == NEW_P and profiles["wasm"]["image_id"] == OLD_P
     assert parsed["jobs"]["job_codeql_analysis"]["settings"]["source_image_id"] == NEW_S
+    # The dossier renderer's image_tag/image_id pair (found on WSOLLERS1: signed but never re-pinned).
+    assert parsed["jobs"]["job_dossier_publication"]["settings"]["image_id"] == NEW_D
     assert config.read_bytes().decode().startswith("# central configuration" + newline)
 
 
@@ -161,7 +170,7 @@ def test_cli_command_reports_and_exits_nonzero_when_a_pin_cannot_be_updated(
     monkeypatch.setattr(build_executor, "_run", _runner({**LOCAL, "fixture/node:local": None}))
     assert cli.main(["--config", str(config), "update-image-pins"]) == 1
     report = json.loads(capsys.readouterr().out)
-    assert report["written"] is False and report["checked"] == 6
+    assert report["written"] is False and report["checked"] == 7
     monkeypatch.setattr(build_executor, "_run", _runner(LOCAL))
     assert cli.main(["--config", str(config), "update-image-pins", "--write"]) == 0
     assert tomllib.loads(config.read_text())["jobs"]["job_codeql_analysis"]["settings"]["source_image_id"] == NEW_S

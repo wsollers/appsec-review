@@ -36,7 +36,9 @@ CATALOG_PREFIX = f"{CATALOG.as_posix()} images."
 IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
 HEADER = re.compile(r"^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(?:#.*)?$")
 # Setting pairs that pin an image tag to an exact image ID in enabled jobs' configuration.
-PIN_PAIRS = (("tag", "image_id"), ("source_image_tag", "source_image_id"))
+# ``image_tag``/``image_id`` is the pair job_dossier_publication uses for the LaTeX renderer; without it
+# the dossier pin was signed (the signer walks every ``*image_id``) but never re-pinned.
+PIN_PAIRS = (("tag", "image_id"), ("image_tag", "image_id"), ("source_image_tag", "source_image_id"))
 INSPECT_TIMEOUT_SECONDS = 60
 # docker's message for an absent reference; any other failure is an inspection error, not "missing".
 _ABSENT = re.compile(r"no such (image|object)", re.IGNORECASE)
