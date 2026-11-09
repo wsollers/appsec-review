@@ -175,8 +175,9 @@ def step_images(host: Host, args: argparse.Namespace) -> None:
     if outcome.returncode != 0 and not host.dry_run:
         host.run([*build, "report"], "images", check=False)
         raise ReadinessError("one or more images did not build; read the report above and runs/container-builds/<run>/"
-                       "<image>/build.log. The runbook's rule: an image failing for a reason unrelated to the run is "
-                       "disabled in the catalog and recorded, not fixed now. Re-run `--from images` afterwards.")
+                             "logs/<image>.build.log (and .fetch.log). The runbook's rule: an image failing for a reason "
+                             "unrelated to the run is disabled in the catalog and recorded, not fixed now. Re-run "
+                             "`--from images` afterwards.")
     host.run([*build, "smoke", "--all"], "images")
     host.run([*build, "report"], "images")
     say(f"{REPORT_PREFIX} keep runs/container-builds/<run-id>/summary.json: it is the T-058 measurement")

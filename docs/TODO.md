@@ -104,9 +104,9 @@ until each is rewritten into the entry format when it is next touched.
   resumed re-running only what the fix invalidates — the loop `recovery-repair.md` designs but
   nobody has driven on a real break.
 - **Scope:** four phases.
-  0. **Run readiness** (operator, each review host — HAL5000 on the in-WSL engine, WSOLLERS1 on
-     Docker Desktop — `docs/operations/run-readiness.md`, `scripts/run-readiness.sh`): WSL host on
-     the machine's one declared Docker daemon, ext4 checkout, key + committed anchor
+  0. **Run readiness** (operator, each review host — HAL5000 and WSOLLERS1, both on the engine
+     inside their WSL distro — `docs/operations/run-readiness.md`, `scripts/run-readiness.sh`): WSL
+     host on the machine's one declared Docker daemon, ext4 checkout, key + committed anchor
      (`deploy/dagster/trusted-keys/`), build + smoke every enabled image, re-pin (own commit) and
      sign, compile the CodeQL packs, stack up on `targets/appsec-multi-vuln-c094`, gate run through
      `job_model_connectivity` and `job_image_pin_verification`. Image enforcement stays disabled for

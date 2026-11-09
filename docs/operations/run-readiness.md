@@ -9,9 +9,10 @@ in it is executed by jobs or agents. Each step names the document that owns its 
 - **A review host is a WSL (Ubuntu) distribution with one Docker daemon, chosen once per machine
   and never switched.** Images live in a daemon's store, not in a shell: an image built against the
   in-WSL engine (`default` context) is invisible to Docker Desktop's engine (`desktop-linux`) and the
-  reverse. Which daemon is a per-machine fact — HAL5000 uses the in-WSL engine (`default`),
-  WSOLLERS1 uses Docker Desktop (`desktop-linux`) — declared to `run-readiness` with
-  `--docker-context`, which refuses to run against any other. Build, pin, sign and run against that
+  reverse. Which daemon is a per-machine fact — HAL5000 and WSOLLERS1 both use the engine inside the
+  distro (`default`, `/var/run/docker.sock`); WSOLLERS1 also has Docker Desktop installed, which is
+  where the traps below come from — declared to `run-readiness` with `--docker-context`, which
+  refuses to run against any other. Build, pin, sign and run against that
   one daemon, and check `docker context show` after every reboot: the active context has changed
   silently before. Each machine builds and keeps its own full image set (no image transfer between
   hosts); T-051 makes the pins host-local so every such machine can run reviews. Windows is the
@@ -27,6 +28,23 @@ in it is executed by jobs or agents. Each step names the document that owns its 
   (`[signing] image_enforcement = "required"`) is turned on once the loop works, so a signing
   refusal is never mistaken for a run break. Sign the images anyway (step 4) so the switch is one
   configuration line later.
+
+### Docker Desktop on the same machine: three traps (WSOLLERS1, 2026-11-08)
+
+`docker context ls` is the first diagnostic when `docker info` fails with `Failed to initialize:
+protocol not available` inside WSL:
+
+- **A context with a `npipe:////./pipe/…` endpoint** is Docker Desktop's context for the *Windows*
+  CLI, leaked into the distro's `~/.docker/contexts`. A Linux client has no such protocol, so every
+  command fails until `docker context use default`; `docker context rm desktop-linux` keeps it from
+  being re-selected. The in-distro daemon is the `default` unix socket (`/var/run/docker.sock`,
+  `root:docker`; `id -nG` must list `docker`, else `sudo usermod -aG docker $USER` and `wsl --shutdown`).
+- **Resource Saver** (Settings → Resources → Advanced) pauses Desktop's VM after N seconds with no
+  running container. An image build is many short BuildKit steps with idle gaps, so a 30-second timer
+  pauses the daemon mid-session and the CLI fails intermittently. Turn it off on a review host.
+- **Container mode**: the tray menu entry "Switch to Linux containers…" means Desktop is in Windows
+  mode and every Linux image is offline. The Windows-container family (T-041+) will have to design
+  around this: one Desktop install cannot serve both families at once.
 
 ## What triggers a rebuild afterwards
 
