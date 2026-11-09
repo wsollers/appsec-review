@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import hashlib
+import io
 import json
 import os
 import re
@@ -17,6 +18,7 @@ import tomllib
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 
@@ -244,17 +246,106 @@ def fetch_artifact(artifact: dict[str, Any], context: Path, log, opener=urllib.r
     return "fetched"
 
 
+def is_fetchable(artifact: Mapping[str, Any]) -> bool:
+    """A lock artifact the launcher can download: a URL naming a file, not an archive root."""
+    url = str(artifact.get("url", ""))
+    return url.startswith(("https://", "http://")) and not url.endswith("/")
+
+
+def locked_local_files(lock: Mapping[str, Any]) -> list[tuple[str, str, int]]:
+    """Every host-local file a lock promises, as ``(relative path, sha256, bytes)``.
+
+    Two lock shapes exist: ``artifacts[]`` (``path``/``sha256``/``bytes``) and the tree-sitter lock,
+    which names two wheels under ``downloads/wheels/`` and one grammar library per entry under
+    ``downloads/parsers-linux/``.
+    """
+    files = [(str(a["path"]), str(a["sha256"]), int(a["bytes"])) for a in lock.get("artifacts", [])]
+    for key in ("tree_sitter", "language_pack"):
+        wheel = lock.get(key)
+        if isinstance(wheel, Mapping) and "artifact" in wheel:
+            files.append((f"downloads/wheels/{wheel['artifact']}", str(wheel["wheel_sha256"]), int(wheel["wheel_bytes"])))
+    for grammar in lock.get("grammars", []):
+        files.append((f"downloads/parsers-linux/{grammar['artifact']}", str(grammar["sha256"]), int(grammar["bytes"])))
+    return files
+
+
+def stale_local_files(context: Path, files: Sequence[tuple[str, str, int]]) -> list[str]:
+    stale = []
+    for relative, digest, size in files:
+        target = context / relative
+        if not (target.is_file() and target.stat().st_size == size and file_sha256(target) == digest):
+            stale.append(relative)
+    return stale
+
+
+def acquire_assets(item: Mapping[str, Any], context: Path, stale: Sequence[str], log,
+                   runner: Callable[..., subprocess.CompletedProcess] | None = None) -> None:
+    """Run the image's host-local acquisition helper (catalog ``acquire``) because ``stale`` is not empty.
+
+    The helper produces bytes the lock already pins (a deterministic .deb closure, the tree-sitter
+    wheels and grammars); the launcher never downloads them itself. The helper may use the network —
+    this is host-side acquisition, not a build step. Everything it prints goes to the fetch log.
+    """
+    runner = runner or subprocess.run  # resolved at call time so tests can substitute subprocess.run
+    script = safe_path(str(item["acquire"]))
+    log.write(f"ACQUIRE {item['id']} {item['acquire']} (stale: {', '.join(stale)})\n")
+    log.flush()
+    try:
+        log.fileno()
+        streamed = True
+    except (AttributeError, OSError, io.UnsupportedOperation):
+        streamed = False  # an in-memory log (tests): capture and append instead of streaming
+    if streamed:
+        completed = runner(["bash", str(script)], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=False,
+                           timeout=ACQUIRE_TIMEOUT_SECONDS)
+    else:
+        completed = runner(["bash", str(script)], cwd=ROOT, capture_output=True, text=True, check=False,
+                           timeout=ACQUIRE_TIMEOUT_SECONDS)
+        log.write(str(getattr(completed, "stdout", "") or ""))
+    log.write(f"ACQUIRE exit {completed.returncode}\n")
+    if completed.returncode != 0:
+        raise RuntimeError(f"asset acquisition failed: {item['acquire']} exited {completed.returncode}")
+    still = stale_local_files(context, [f for f in locked_local_files(json.loads(
+        safe_path(str(item["assets_lock"])).read_text(encoding="utf-8"))) if f[0] in set(stale)])
+    if still:
+        raise RuntimeError(f"acquired assets do not match the lock: {', '.join(still)} — the upstream bytes "
+                           "moved; re-locking is a reviewed edit (containers/README.md, 'Assets')")
+
+
+ACQUIRE_TIMEOUT_SECONDS = 3600
+
+
 def fetch_one(item: dict[str, Any], log) -> dict[str, int]:
-    """Fetch the image's locked assets; returns ``{"current", "fetched", "bytes"}`` counts."""
-    counts = {"current": 0, "fetched": 0, "bytes": 0}
+    """Fetch the image's locked assets; returns ``{"current", "fetched", "acquired", "bytes"}`` counts.
+
+    Fetchable artifacts are downloaded and verified. Host-local files (an artifact whose URL is an
+    archive root, or a lock with no artifacts at all) are produced by the catalog's ``acquire`` helper
+    when missing or mismatched, then verified against the lock.
+    """
+    counts = {"current": 0, "fetched": 0, "acquired": 0, "bytes": 0}
     lock_name = item.get("assets_lock")
     if not lock_name:
         return counts
     context = safe_path(item["context"])
     lock = json.loads(safe_path(lock_name).read_text(encoding="utf-8"))
-    for artifact in lock.get("artifacts", []):
+    fetchable = [a for a in lock.get("artifacts", []) if is_fetchable(a)]
+    local = [f for f in locked_local_files(lock)
+             if f[0] not in {str(a["path"]) for a in fetchable}]
+    for artifact in fetchable:
         counts[fetch_artifact(artifact, context, log)] += 1
         counts["bytes"] += int(artifact["bytes"])
+    stale = stale_local_files(context, local)
+    if stale:
+        if not item.get("acquire"):
+            raise RuntimeError(f"host-local assets missing and the catalog entry declares no `acquire` helper: "
+                               f"{', '.join(stale)}")
+        acquire_assets(item, context, stale, log)
+        counts["acquired"] += len(stale)
+    for relative, _digest, size in local:
+        if relative not in stale:
+            log.write(f"CURRENT {relative}\n")
+            counts["current"] += 1
+        counts["bytes"] += size
     return counts
 
 

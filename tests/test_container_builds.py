@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import importlib.util
 import json
 import re
@@ -439,3 +440,69 @@ def test_build_drivers_live_in_the_shared_toolchain_and_nowhere_else() -> None:
     catalog = container_build.load_catalog()["by_id"]
     assert "cmake version 3.28.3" in catalog["buildenv-native-toolchain"]["probe_expect"]
     assert "1.3.2" in catalog["buildenv-native-toolchain"]["probe_expect"]
+
+
+def _lock_with_local_tar(context: Path, payload: bytes) -> dict:
+    return {"artifacts": [{"name": "debs.tar", "url": "https://archive.ubuntu.com/ubuntu/", "path": "downloads/debs.tar",
+                           "sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)}]}
+
+
+def test_host_local_assets_are_acquired_by_the_catalog_helper_then_verified(tmp_path: Path, monkeypatch) -> None:
+    """An archive-root URL is not fetchable: the lock pins bytes a host-side helper produces (native-cpp, latex)."""
+    context = tmp_path / "ctx"
+    context.mkdir()
+    payload = b"deterministic deb closure"
+    (tmp_path / "assets.lock.json").write_text(json.dumps(_lock_with_local_tar(context, payload)), encoding="utf-8")
+    (tmp_path / "acquire.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(container_build, "safe_path", lambda rel: tmp_path / rel if not str(rel).startswith("/") else Path(rel))
+    item = {"id": "tool-x", "context": "ctx", "assets_lock": "assets.lock.json", "acquire": "acquire.sh"}
+    calls = []
+
+    def fake_runner(argv, **kwargs):
+        calls.append(argv)
+        (context / "downloads").mkdir(exist_ok=True)
+        (context / "downloads" / "debs.tar").write_bytes(payload)   # the helper writes the pinned bytes
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(container_build.subprocess, "run", fake_runner)
+    log = io.StringIO()
+    counts = container_build.fetch_one(item, log)
+    assert counts == {"current": 0, "fetched": 0, "acquired": 1, "bytes": len(payload)}
+    assert calls and calls[0][0] == "bash" and calls[0][1].endswith("acquire.sh")
+    assert "ACQUIRE tool-x acquire.sh (stale: downloads/debs.tar)" in log.getvalue()
+    # Second time: current, no acquisition, no download attempted (the URL is an archive root).
+    calls.clear()
+    counts = container_build.fetch_one(item, io.StringIO())
+    assert counts["current"] == 1 and counts["acquired"] == 0 and calls == []
+
+
+def test_an_acquisition_helper_that_produces_other_bytes_is_a_relock_not_a_pass(tmp_path: Path, monkeypatch) -> None:
+    context = tmp_path / "ctx"
+    context.mkdir()
+    (tmp_path / "assets.lock.json").write_text(json.dumps(_lock_with_local_tar(context, b"pinned")), encoding="utf-8")
+    (tmp_path / "acquire.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(container_build, "safe_path", lambda rel: tmp_path / rel if not str(rel).startswith("/") else Path(rel))
+
+    def fake_runner(argv, **kwargs):
+        (context / "downloads").mkdir(exist_ok=True)
+        (context / "downloads" / "debs.tar").write_bytes(b"the archive moved")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(container_build.subprocess, "run", fake_runner)
+    item = {"id": "tool-x", "context": "ctx", "assets_lock": "assets.lock.json", "acquire": "acquire.sh"}
+    with pytest.raises(RuntimeError, match="do not match the lock.*re-locking is a reviewed edit"):
+        container_build.fetch_one(item, io.StringIO())
+    with pytest.raises(RuntimeError, match="declares no `acquire` helper"):
+        container_build.fetch_one({**item, "acquire": None}, io.StringIO())
+
+
+def test_the_tree_sitter_lock_names_its_wheels_and_grammars_as_local_files() -> None:
+    lock = json.loads((ROOT / "containers" / "tools" / "tree-sitter" / "assets.lock.json").read_text(encoding="utf-8"))
+    files = container_build.locked_local_files(lock)
+    paths = [f[0] for f in files]
+    assert sum(p.startswith("downloads/wheels/") and p.endswith(".whl") for p in paths) == 2
+    assert sum(p.startswith("downloads/parsers-linux/") and p.endswith(".so") for p in paths) == len(lock["grammars"]) == 15
+    catalog = container_build.load_catalog()["by_id"]
+    for image in ("tool-tree-sitter", "tool-native-cpp", "tool-report-latex"):
+        helper = ROOT / catalog[image]["acquire"]
+        assert helper.is_file() and helper.stat().st_mode & 0o111, image

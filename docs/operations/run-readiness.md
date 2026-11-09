@@ -94,6 +94,9 @@ why; steps 6–8 are run by hand.
    and `slowest` are the evidence for any later catalog change meant to shorten builds (shared
    build-tool layers, cache export), and the second build's report is the measurement of it.
 
+   Three images (`tool-native-cpp`, `tool-report-latex`, `tool-tree-sitter`) carry host-local assets
+   that a catalog `acquire` helper produces on first build (`containers/README.md`, "Assets"); the
+   first build on a fresh host therefore runs those helpers, which take minutes and use the network.
    An image that fails for a reason unrelated to the run (a moved asset URL, say) is **disabled in
    configuration for the first run and recorded in the task doc**, not fixed now; T-050 is where
    catalog work lives. Readiness means a host that can start a run, not a complete catalog.

@@ -85,12 +85,17 @@ runs this builder: the operator rebuilds and re-pins images on the host, and eve
 exactly its pinned image; see
 [`../docs/operations/image-pin-verification.md`](../docs/operations/image-pin-verification.md).
 
-Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` before a
-build: the `tool-native-cpp` `.deb` closure produced with its `acquire_assets.sh` (its lock URL is
-the archive root; see [`tools/native-cpp/README.md`](tools/native-cpp/README.md)) and the
-`tool-tree-sitter` wheels and
-parsers produced with `acquire_assets.py` (its lock lists no fetchable artifacts; see
-[`tools/tree-sitter/README.md`](tools/tree-sitter/README.md)). `tool-sqlite-fts` has no asset lock.
+Some locked assets are **host-local**: the launcher cannot download them, a helper produces them, and
+the lock pins the result. The catalog names the helper as `acquire = "<script>"` and `build.py` runs it
+when any locked local file under the image's `downloads/` is missing or does not match the lock —
+once per host, the first time the image is built there — then verifies the result; bytes that no
+longer match mean the upstream moved, and re-locking is a reviewed edit, not something the launcher
+does. Three images have one: `tool-native-cpp` and `tool-report-latex` (`.deb` closures resolved
+inside the pinned Ubuntu base by their `acquire_assets.sh`; the lock URL is the archive root, which
+marks the artifact as not fetchable) and `tool-tree-sitter` (`acquire_assets.sh` downloads the two
+hash-locked wheels and runs `acquire_assets.py` in the pinned base for the grammar libraries; its lock
+has no `artifacts` list, the wheels and grammars themselves are the local files). The helpers may use
+the network; builds still never do. `tool-sqlite-fts` has no asset lock.
 
 ## Rule and query packs
 
