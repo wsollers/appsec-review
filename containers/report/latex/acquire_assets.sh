@@ -23,8 +23,11 @@ packages+=" poppler-utils=24.02.0-1ubuntu9.10"
 # Resolve against the Ubuntu snapshot service, not the live archive: noble-updates and noble-security
 # supersede packages, and an exact version pinned below stops existing there within weeks (first seen
 # 2026-11-09, "Version ... was not found"). The snapshot is immutable, so the pinned versions always
-# resolve and the tar's hash stays what assets.lock.json records. The day the lock was acquired (lock version ubuntu-24.04-2026-10-21).
-snapshot="20261021T235959Z"
+# resolve and the tar's hash stays what assets.lock.json records. The lock was acquired on 2026-10-21
+# (its version string); Launchpad records poppler-utils 24.02.0-1ubuntu9.10 superseded by 9.11 at
+# 17:17 UTC that day, so the acquisition came earlier: noon UTC has every pinned version in both
+# noble-security and noble-updates.
+snapshot="20261021T120000Z"
 mkdir -p "$here/downloads"
 
 # The bare base carries no CA bundle and the snapshot service is HTTPS only; lend it the host's trust
