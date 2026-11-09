@@ -31,7 +31,12 @@ packages+=" python3-dev=$python_version"
 snapshot="20261015T070000Z"
 mkdir -p "$here/downloads"
 
+# The bare base carries no CA bundle and the snapshot service is HTTPS only; lend it the host's trust
+# roots read-only (the toolchain Dockerfile does the same by copying the bundle from a pinned image).
+ca_bundle="${APPSEC_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+[[ -r "$ca_bundle" ]] || { echo "CA bundle not readable: $ca_bundle (set APPSEC_CA_BUNDLE)" >&2; exit 1; }
 docker run --rm --pull=missing -e DEBIAN_FRONTEND=noninteractive -e PACKAGES="$packages" -e SNAPSHOT="$snapshot" \
+  -v "$ca_bundle:/etc/ssl/certs/ca-certificates.crt:ro" \
   -v "$here/downloads:/out" "$base" bash -euo pipefail -c '
     printf "APT::Snapshot \"%s\";\n" "$SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
     apt-get -o APT::Update::Error-Mode=any update -qq
