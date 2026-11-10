@@ -7,6 +7,7 @@ file proves what the published catalog carries for a monorepo and how the job fa
 """
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 from pathlib import Path
 import shutil
@@ -18,6 +19,7 @@ from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_catalog.job import TOPOLOGY
+from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
@@ -166,7 +168,7 @@ def test_configured_topology_matches_the_job() -> None:
     assert not built.strict_gaps, "the catalog still publishes free-text index gaps (legacy list; T-055)"
 
 
-def test_catalog_keeps_postman_environment_as_source_not_collection(tmp_path: Path) -> None:
+def test_catalog_publishes_postman_requests_not_environments_and_keeps_real_parse_gaps(tmp_path: Path) -> None:
     config = _config(tmp_path)
     target = tmp_path / "target"
     postman = target / "tests/postman"
@@ -177,20 +179,53 @@ def test_catalog_keeps_postman_environment_as_source_not_collection(tmp_path: Pa
         "values": [{"key": "baseUrl", "value": "http://fixture.invalid", "enabled": True}],
         "_postman_variable_scope": "environment",
     }), encoding="utf-8")
-    collection = postman / "northwind.postman_collection.json"
-    collection.write_text(json.dumps({"item": [
-        {"request": {"method": "GET", "url": "{{baseUrl}}/api/v1/products"}},
-    ]}, indent=2), encoding="utf-8")
+    content = '''{"item": [{"name": "Products", "item": [
+  {"name": "same", "request": {"method": "GET",
+    "url": { "raw": "{{baseUrl}}/api/v1/products", "host": ["{{baseUrl}}"], "path": ["api", "v1", "products"] }
+  }},
+  {"name": "same", "request": {"method": "GET",
+    "url": { "raw": "{{baseUrl}}/api/v1/products", "host": ["{{baseUrl}}"], "path": ["api", "v1", "products"] }
+  }}
+]}]}
+'''
+    inline = postman / "northwind.postman_collection.json"
+    inline.write_text(content, encoding="utf-8")
+    compact = postman / "compact.postman_collection.json"
+    compact.write_text(json.dumps(json.loads(content), separators=(",", ":")), encoding="utf-8")
+    malformed = postman / "broken.postman_collection.json"
+    malformed.write_text('{"info":{"name":"broken collection"},"item":{}}', encoding="utf-8")
     outcome, run_root = _run(config, target, build_catalog())
     assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome
     partition = _artifact(run_root, "repository-partition.json")
     assert environment.relative_to(target).as_posix() in {entry["path"] for entry in partition["files"]}
     attempt = Path(outcome["jobs"][JOB_ID]["attempt_root"])
     result = json.loads((attempt / "steps/retrieval_indexes/tasks/build_target_documents/result.json").read_text())
-    assert result["item_count"] == 1
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    gap = f"{malformed.relative_to(target).as_posix()}: parse_error (invalid Postman collection)"
     assert result["gaps"] == [
         f"{kind}: no accepted target document"
         for kind in ("design", "dfd", "openapi", "threat_model", "unit_test")
-    ]
-    pointer = json.loads((run_root / "data/jobs" / JOB_ID / "latest.json").read_text())
-    assert (run_root / pointer["handoff_path"]).is_file()
+    ] + [gap]
+    assert result["item_count"] == 4
+    for collection, expected_lines in ((inline, [3, 6]), (compact, [1, 1])):
+        response = core.find(kind="document_record", indexes=("documents",),
+                             path=collection.relative_to(target).as_posix(), limit=10)
+        records = response["results"]
+        assert len(records) == len({record["identity"] for record in records}) == 2
+        assert sorted(record["location"]["start_line"] for record in records) == expected_lines
+        raw = collection.read_bytes()
+        for record in records:
+            assert record["payload"]["authority"] == "intent"
+            assert record["payload"]["fields"]["method"] == "GET"
+            assert record["payload"]["fields"]["route"] == "/api/v1/products"
+            location = record["location"]
+            assert location["file_sha256"] == sha256(raw).hexdigest()
+            assert location["start_line"] == location["end_line"]
+            excerpt = core.read_excerpt(identity=record["identity"], context_lines=0)["results"][0]["excerpt"]
+            assert excerpt.rstrip("\n") == raw[location["start_byte"]:location["end_byte"]].decode().rstrip("\n")
+            assert "{{baseUrl}}/api/v1/products" in excerpt
+    for source in (environment, malformed):
+        response = core.find(kind="document_record", indexes=("documents",),
+                             path=source.relative_to(target).as_posix(), limit=10)
+        assert not response["results"]
+        assert any(gap in reported for reported in response["coverage_gaps"])

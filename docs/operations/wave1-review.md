@@ -98,7 +98,9 @@ hash-pinned inventory. The resulting `documents` shard is published with the cat
 carried into review-data indexing. The bounds live in `[jobs.job_target_catalog.settings]`.
 Postman `*.postman_environment.json` exports remain in the source inventory but are not selected
 as collections: environment variables declare no requests. Malformed selected collections still
-produce explicit parse gaps.
+produce explicit parse gaps. Collection request spans resolve by JSON member path, including
+inline/compact URL objects and string URLs; repeated requests retain distinct identities even on
+the same source line. Ambiguous duplicate JSON keys and exceeded parsing bounds remain parse gaps.
 
 In both surfaces, the application handoff is the checkpoint of record; Dagster metadata links to
 it but does not replace it. Target content, target guidance, configuration values, and generated

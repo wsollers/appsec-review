@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
+import json
 import re
 from typing import Any
 
@@ -80,6 +82,57 @@ def _span(key: Node, value: Node) -> tuple[int, int]:
     line_start = buffer.rfind("\n", 0, mark.pointer) + 1
     end = mark.line + bool(buffer[line_start:mark.pointer].strip())
     return start, max(start, end)
+
+
+def json_member_spans(text: str, *, max_depth: int, max_nodes: int
+                      ) -> dict[tuple[str | int, ...], tuple[int, int]]:
+    """Locate members by structural path in JSON already validated by ``json.loads``."""
+    decoder = json.JSONDecoder()
+    line_starts = [0, *(match.end() for match in re.finditer(r"\r\n|\r|\n", text))]
+    spans: dict[tuple[str | int, ...], tuple[int, int]] = {}
+    count = 0
+
+    def whitespace(offset: int) -> int:
+        while offset < len(text) and text[offset] in " \t\r\n":
+            offset += 1
+        return offset
+
+    def visit(offset: int, path: tuple[str | int, ...], depth: int) -> int:
+        nonlocal count
+        count += 1
+        if depth > max_depth or count > max_nodes:
+            raise DocumentParseError("JSON source location parsing bound reached")
+        offset = whitespace(offset)
+        opening = text[offset]
+        if opening not in "{[":
+            return decoder.raw_decode(text, offset)[1]
+        closing = "}" if opening == "{" else "]"
+        offset = whitespace(offset + 1)
+        index = 0
+        while text[offset] != closing:
+            key_start = offset
+            if opening == "{":
+                key, offset = decoder.raw_decode(text, offset)
+                count += 1
+                member_path = (*path, key)
+                if member_path in spans:
+                    raise DocumentParseError("duplicate JSON member has ambiguous source location")
+                offset = whitespace(offset)
+                offset += 1  # The colon is known valid from json.loads.
+            else:
+                member_path = (*path, index)
+                index += 1
+            end = visit(offset, member_path, depth + 1)
+            if opening == "{":
+                spans[member_path] = (bisect_right(line_starts, key_start),
+                                      bisect_right(line_starts, end - 1))
+            offset = whitespace(end)
+            if text[offset] != closing:
+                offset = whitespace(offset + 1)
+        return offset + 1
+
+    visit(0, (), 0)
+    return spans
 
 
 def _operation(protocol: str, method: str, route: str, start: int, end: int,

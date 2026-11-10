@@ -17,11 +17,11 @@ from urllib.parse import urlsplit
 
 from appsec_review.retrieval.model import normalize_relative_path
 from appsec_review.indexing.document_interfaces import (
-    DocumentParseError, idl_operations, structured_operations,
+    DocumentParseError, idl_operations, json_member_spans, structured_operations,
 )
 
 
-PARSER_IDENTITY = "target-documents/2"
+PARSER_IDENTITY = "target-documents/3"
 ADDITIONAL_INTERFACE_KINDS = frozenset({"asyncapi", "protobuf", "graphql"})
 KINDS = frozenset({"design", "threat_model", "dfd", "openapi", "postman", "unit_test"}) | ADDITIONAL_INTERFACE_KINDS
 _TEXT_SUFFIXES = {".md", ".markdown", ".rst", ".adoc", ".asciidoc", ".org", ".txt"}
@@ -145,14 +145,17 @@ def collect_target_documents(
         gaps.append({"path": "", "reason": "file_limit", "detail": str(max_files)})
 
     def emit(path: str, sha: str, kind: str, subtype: str, line: int, text: str,
-             fields: Mapping[str, Any] | None = None, *, end_line: int | None = None) -> None:
+             fields: Mapping[str, Any] | None = None, *, end_line: int | None = None,
+             source_locator: tuple[str | int, ...] | None = None) -> None:
         if len(records) >= max_records:
             if not any(gap["reason"] == "record_limit" for gap in gaps):
                 gaps.append({"path": path, "reason": "record_limit", "detail": str(max_records)})
             return
         end_line = line if end_line is None else end_line
-        record_id = hashlib.sha256(json.dumps([target_snapshot, path, sha, kind, subtype, line, end_line, text],
-                                               ensure_ascii=False).encode()).hexdigest()
+        identity = [target_snapshot, path, sha, kind, subtype, line, end_line, text]
+        if source_locator is not None:
+            identity.append(source_locator)
+        record_id = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
         records.append({"id": record_id, "target_snapshot": target_snapshot, "path": path,
                         "file_sha256": sha, "kind": kind, "subtype": subtype,
                         "authority": "declared" if kind in {"openapi", "asyncapi", "protobuf", "graphql"} else "intent",
@@ -305,16 +308,22 @@ def collect_target_documents(
                 if not isinstance(document, dict) or not isinstance(document.get("item"), list):
                     gaps.append({"path": path, "reason": "parse_error", "detail": "invalid Postman collection"})
                     continue
-                url_occurrences: dict[str, int] = {}
-                def walk(items: list[Any], depth: int = 0) -> None:
+                try:
+                    spans = json_member_spans(content, max_depth=max_parse_depth, max_nodes=max_parse_nodes)
+                except DocumentParseError as exc:
+                    gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
+                    continue
+                def walk(items: list[Any], depth: int = 0,
+                         prefix: tuple[str | int, ...] = ("item",)) -> None:
                     if depth > 12:
                         gaps.append({"path": path, "reason": "depth_limit", "detail": "Postman nesting"})
                         return
-                    for item in items:
+                    for index, item in enumerate(items):
                         if not isinstance(item, dict):
                             continue
+                        item_path = (*prefix, index)
                         if isinstance(item.get("item"), list):
-                            walk(item["item"], depth + 1)
+                            walk(item["item"], depth + 1, (*item_path, "item"))
                         request = item.get("request")
                         if not isinstance(request, dict):
                             continue
@@ -324,19 +333,18 @@ def collect_target_documents(
                         if method not in METHODS or not isinstance(raw_url, str):
                             continue
                         route = _route(raw_url)
-                        key = "raw" if isinstance(url, dict) else "url"
-                        marker = json.dumps(key) + ": " + json.dumps(raw_url)
-                        matches = [i for i, value in enumerate(lines, 1) if value.lstrip().startswith(marker)]
-                        occurrence = url_occurrences.get(marker, 0)
-                        line = matches[occurrence] if occurrence < len(matches) else None
-                        url_occurrences[marker] = occurrence + 1
-                        if line is None:
+                        url_path = (*item_path, "request", "url")
+                        if isinstance(url, dict):
+                            url_path = (*url_path, "raw")
+                        span = spans.get(url_path)
+                        if span is None:
                             gaps.append({"path": path, "reason": "unresolved_span", "detail": f"{method} {route}"})
                             continue
-                        emit(path, sha, kind, "request", line, f"{method} {route}",
+                        emit(path, sha, kind, "request", span[0], f"{method} {route}",
                              {"method": method, "route": route, "name": str(item.get("name", ""))[:200],
                               "assertions": sum(len(event.get("script", {}).get("exec", []))
-                                                for event in item.get("event", []) if isinstance(event, dict))})
+                                                for event in item.get("event", []) if isinstance(event, dict))},
+                             end_line=span[1], source_locator=url_path)
                 walk(document["item"])
 
     operations = {(r["fields"].get("method"), r["fields"].get("route")): r for r in records
