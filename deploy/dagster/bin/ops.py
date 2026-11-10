@@ -156,7 +156,13 @@ def stack_containers(project: str) -> list[Container]:
 
 
 def by_service(containers: list[Container]) -> dict[str, Container]:
-    return {item.service: item for item in containers}
+    """One container per service; a running one wins over a stopped leftover of the same service."""
+    chosen: dict[str, Container] = {}
+    for item in containers:
+        current = chosen.get(item.service)
+        if current is None or (item.state == "running" and current.state != "running"):
+            chosen[item.service] = item
+    return chosen
 
 
 def overlay_name(profile: str = "dev") -> str:
@@ -316,10 +322,14 @@ def effective_settings(containers: list[Container], requested: dict[str, str]) -
     """Settings to export to compose: the running stack's non-empty values, then the requested ones.
 
     Compose lets the shell override ``.env``; carrying the running values over means a restart never
-    silently reverts a ``--target``/``--overlay``/``--recording`` choice. Returns (settings, changes_running).
+    silently reverts a ``--target``/``--overlay``/``--recording`` choice. An explicit empty value is a
+    choice too (``--overlay none`` exports ``APPSEC_REVIEW_CONFIG_OVERLAY=``) and is carried as empty:
+    dropping it would let a stale ``.env`` value back in on the next restart (HAL5000, 2026-11-10: a
+    reload rebound the code location to an old capacity overlay, and the open run refused it).
+    Returns (settings, changes_running).
     """
     current = by_service(containers).get("code-location")
-    carried = {key: value for key, value in (current.settings if current else {}).items() if value}
+    carried = dict(current.settings) if current else {}
     changes = bool(current) and any(running_value(current, key) != value for key, value in requested.items())
     return {**carried, **requested}, changes
 

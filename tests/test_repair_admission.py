@@ -384,6 +384,29 @@ def test_code_server_worker_status_asks_the_server_and_fails_closed():
         code_server_worker_status(SimpleNamespace(run_id="d1", tags={}), client_factory=client([]))
 
 
+def test_code_server_worker_status_behind_the_proxy_uses_can_cancel_execution():
+    """`dagster code-server start` fronts the server with a proxy that has no GetCurrentRuns (HAL5000:
+    UNIMPLEMENTED) but forwards CanCancelExecution, answered from the fronted server's executions table."""
+    from appsec_review.runtime.repair import code_server_worker_status
+    from dagster._core.errors import DagsterUserCodeUnreachableError
+    from dagster._grpc.types import CanCancelExecutionRequest, CanCancelExecutionResult
+    from dagster._serdes import serialize_value
+
+    def proxy(executing: set[str]):
+        def unimplemented():
+            raise DagsterUserCodeUnreachableError("Could not reach user code server. gRPC Error code: UNIMPLEMENTED")
+
+        def can_cancel(request):
+            assert isinstance(request, CanCancelExecutionRequest)
+            return serialize_value(CanCancelExecutionResult(can_cancel=request.run_id in executing))
+
+        return lambda: SimpleNamespace(get_current_runs=unimplemented, can_cancel_execution=can_cancel)
+
+    run = SimpleNamespace(run_id="d1", tags={".dagster/grpc_info": '{"host": "code-location", "port": 4000}'})
+    assert code_server_worker_status(run, client_factory=proxy(set())) == "NOT_FOUND"
+    assert code_server_worker_status(run, client_factory=proxy({"d1"})) == "RUNNING"
+
+
 def test_native_cancellation_is_not_silently_enabled(tmp_path, monkeypatch):
     from appsec_review.config import native_dagster
     config, (job,), _ = fixture(tmp_path)

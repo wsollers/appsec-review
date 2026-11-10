@@ -320,7 +320,9 @@ def test_stack_restart_stops_then_starts_and_carries_the_running_settings_over(b
     calls = box.lifecycle_calls()
     assert [call["argv"] for call in calls] == [["stop"], ["start"]]
     for call in calls:
-        assert call["env"] == {ops.TARGET_VARIABLE: "/opt/app/targets/demo", ops.RECORDING_VARIABLE: "record"}
+        # The explicit empty overlay travels too: exported empty, it keeps .env's old overlay out.
+        assert call["env"] == {ops.TARGET_VARIABLE: "/opt/app/targets/demo", ops.RECORDING_VARIABLE: "record",
+                               ops.OVERLAY_VARIABLE: ""}
     assert "carried over from the running stack" in result.stdout
 
 
@@ -1210,10 +1212,19 @@ def test_effective_settings_carry_running_values_and_report_changes() -> None:
     code = ops.Container("1", "n", "code-location", "running", "healthy", "i", (), {
         ops.TARGET_VARIABLE: "/a", ops.RECORDING_VARIABLE: ""})
     settings, changed = ops.effective_settings([code], {})
-    assert settings == {ops.TARGET_VARIABLE: "/a"} and not changed
+    # The explicit empty recording is carried as empty, so .env cannot resurrect an old value on restart.
+    assert settings == {ops.TARGET_VARIABLE: "/a", ops.RECORDING_VARIABLE: ""} and not changed
     settings, changed = ops.effective_settings([code], {ops.TARGET_VARIABLE: "/b"})
-    assert settings == {ops.TARGET_VARIABLE: "/b"} and changed
+    assert settings == {ops.TARGET_VARIABLE: "/b", ops.RECORDING_VARIABLE: ""} and changed
     assert ops.effective_settings([], {ops.TARGET_VARIABLE: "/b"}) == ({ops.TARGET_VARIABLE: "/b"}, False)
+
+
+def test_a_running_container_is_preferred_over_a_stopped_leftover_of_the_same_service() -> None:
+    stopped = ops.Container("1", "old", "code-location", "exited", "none", "i", (), {ops.OVERLAY_VARIABLE: "/old.toml"})
+    running = ops.Container("2", "new", "code-location", "running", "healthy", "i", (), {ops.OVERLAY_VARIABLE: ""})
+    assert ops.by_service([running, stopped])["code-location"] is running
+    assert ops.by_service([stopped, running])["code-location"] is running
+    assert ops.effective_settings([stopped, running], {})[0] == {ops.OVERLAY_VARIABLE: ""}
 
 
 def test_redact_hides_tokens_and_truncates() -> None:

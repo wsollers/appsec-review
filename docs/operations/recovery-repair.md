@@ -79,10 +79,13 @@ It runs inside the application container because it needs the configured Dagster
 host virtualenv has none); `DAGSTER_UUID` is the dispatch the failed attempt's `claim.json` names,
 also the suffix of `runs/metadata/stepwise/<run>/checks/<job>-<uuid>.json`. It uses the launcher's
 worker-health API, without cancellation. The stack's `DefaultRunLauncher` has no such API: its run
-workers are subprocesses of the code-location server, so the verifier asks that server (gRPC
-`GetCurrentRuns`, the address in the run's `.dagster/grpc_info` tag) whether it still lists the
-dispatch — a terminal run it no longer lists has a stopped worker (`NOT_FOUND`), one it still lists
-is refused, and an unreachable server is refused. The receipt lands in
+workers are subprocesses of the code-location server, so the verifier asks that server (the address
+in the run's `.dagster/grpc_info` tag) whether it still executes the dispatch — `GetCurrentRuns` on a
+plain server, `CanCancelExecution` through the `dagster code-server start` proxy the stack uses,
+which does not implement the former. A terminal run the server no longer holds has a stopped worker
+(`NOT_FOUND`), one it still holds is refused, and an unreachable server is refused. Not covered: a
+code-location reload from the Dagster UI between the failure and the check (the proxy then fronts a
+new server while the old one finishes); the stack's own `lifecycle reload` recreates the container. The receipt lands in
 `data/recovery/dispatches/<uuid>.json`. It refuses a missing/wrong/nonterminal run, a live/unknown
 worker, and any other launcher without health support. Retained resource leases and uncertain controller permits still block admission.
 Registered local workers are checked by process generation and PID namespace; foreign or

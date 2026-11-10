@@ -235,6 +235,13 @@ def code_server_worker_status(run: Any, *, client_factory=None) -> str:
     process has exited (``GetCurrentRuns`` lists exactly the workers still alive). So a terminal run that
     the server no longer lists has a stopped worker (``NOT_FOUND``); one it still lists is ``RUNNING``. An
     unreachable server or a dispatch without the server's address stays uncertain and is refused.
+
+    The stack runs the code location behind ``dagster code-server start``, a proxy that does not
+    implement ``GetCurrentRuns`` (``UNIMPLEMENTED``); it does forward ``CanCancelExecution`` to the
+    server it currently fronts, which answers from the same executions table. The one case that
+    forwarding does not cover is a code-location reload from the Dagster UI between the failure and this
+    check (the proxy then fronts a new server while the old one finishes its workers); the stack's own
+    ``lifecycle reload`` recreates the container, which ends every worker.
     """
     info = run.tags.get(CODE_SERVER_INFO_TAG)
     if not isinstance(info, str) or not info:
@@ -248,12 +255,20 @@ def code_server_worker_status(run: Any, *, client_factory=None) -> str:
         client_factory = lambda: DagsterGrpcClient(  # noqa: E731
             port=address.get("port"), socket=address.get("socket"), host=address.get("host"),
             use_ssl=bool(address.get("use_ssl", False)))
-    from dagster._grpc.types import GetCurrentRunsResult
+    from dagster._grpc.types import CanCancelExecutionRequest, CanCancelExecutionResult, GetCurrentRunsResult
     from dagster._serdes import deserialize_value
+    client = client_factory()
     try:
-        result = deserialize_value(client_factory().get_current_runs(), GetCurrentRunsResult)
+        result = deserialize_value(client.get_current_runs(), GetCurrentRunsResult)
     except Exception as exc:  # a gRPC failure of any kind: the server's answer is unknown, not "stopped"
-        raise ValueError(f"Dagster code server did not answer; worker stop cannot be verified ({type(exc).__name__})") from exc
+        if "UNIMPLEMENTED" not in str(exc):
+            raise ValueError(f"Dagster code server did not answer; worker stop cannot be verified ({type(exc).__name__})") from exc
+        try:  # the proxy: ask the fronted server whether it still executes (and could cancel) the run
+            answer = deserialize_value(client.can_cancel_execution(CanCancelExecutionRequest(run_id=run.run_id)),
+                                       CanCancelExecutionResult)
+        except Exception as inner:
+            raise ValueError(f"Dagster code server did not answer; worker stop cannot be verified ({type(inner).__name__})") from inner
+        return "RUNNING" if answer.can_cancel else "NOT_FOUND"
     if result.serializable_error_info is not None:
         raise ValueError("Dagster code server reported an error listing its runs; worker stop cannot be verified")
     return "RUNNING" if run.run_id in set(result.current_runs) else "NOT_FOUND"
