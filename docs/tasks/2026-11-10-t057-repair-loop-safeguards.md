@@ -190,3 +190,15 @@ The integration checkout's exact `tests/test_documentation.py` selector also pas
 `ops.py run-tests --strict --expect-tests 1 --parallel --test-workers 2 --shuffle-seed 11015 --
 tests/test_documentation.py`, one test in 1.56 s. Report:
 `test/tmp/reports/tests-custom-20261110-183250-584161-78955.json`.
+
+The user-directed 300 s revision was integrated as
+`ce396dca1182d12c7533a5fa2b0bf45bf86a283c` from
+`9e3b3e1518ce98140b635377e5d71dc0771ed7dc`, preserving the historical 120 s receipts above.
+The main-checkout command `ops.py run-tests --expect-tests 54 --parallel --test-workers 2
+--shuffle-seed 11016 -- tests/test_ops_test_guard.py` passed **54 tests in 10.03 s** with the
+300 s total / 30 s collection / 200-test defaults. The corresponding exact
+`--expect-tests 5 ... -- tests/test_todo_registry.py` run passed **5 tests in 1.93 s**.
+Neither run had a case over ten seconds. Reports end in
+`184356-897251-97895.json` and `184411-875308-97975.json`.
+The T-057 registry now explicitly carries the producer/key-normalization follow-up described
+in passes 01 and 04; no runtime normalization change is claimed.
