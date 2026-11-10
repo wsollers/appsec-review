@@ -87,3 +87,24 @@ Not run: parallel (`-n`), Dagster mount test's live half, integration/live.
   job rather than the CLI).
 - T-038 (declared builds) adds a `build` block to `[[target_acquisition.systems]].components`; the
   manifest's `spec` already carries the component list the plan will read.
+
+## WSOLLERS1 c094 criterion, 2026-11-10
+
+For run `2026-11-10-0003`, the deployed `requested_system()` returns `None`; this is an existing
+`--target` checkout, not a request to acquire a system. Before dispatch, target `HEAD` equals
+`appsec-multi-vuln-c094-v1` (`bd69bfe83fec49155366303604475512c98c4ce6`) with no tracked changes.
+The plan must say `requested: false`, `system_id: null`; the acquisition result must be
+`NOT_REQUESTED`, with unit disposition `NOT_APPLICABLE`; the handoff must retain that no-op status,
+no component/system manifest and no gaps. The job must succeed with complete lifecycle metrics,
+without acquisition start/completion events or target mutation. A check passing alone does not
+satisfy this criterion.
+
+The criterion held. Dispatch `91e12330-0334-4b2e-af4c-eaf3b093119c`, attempt 1, succeeded in
+39,415 ms; `stepwise check` reports zero gaps and audit findings. The real plan, result and handoff
+record the explicit no-op, lifecycle/status/metrics agree, no acquisition events were emitted,
+and target `HEAD`/tracked working files are unchanged. Accepted on `2026-11-10-0003`.
+Logs: `runs/c094-target-acquisition-{run,accept}.log`.
+
+No code defect, unit-test repair or turnaround occurred. Acceptance provenance records the
+pending criterion-document edit as a dirty checkout; deployed application sources were unchanged.
+Next: `job_review_intake`.

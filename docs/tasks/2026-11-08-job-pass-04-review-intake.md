@@ -113,3 +113,19 @@ Not run: parallel (`-n`), integration/live.
 - Parametrized configuration-layer corruption tests for `resolve_layers` (profile hash, keys,
   overlay) through the job.
 - T-054: undeclared consumption in `job_binary_evidence_indexing` and `job_artifact_indexing`.
+
+## WSOLLERS1 c094 criterion, 2026-11-10
+
+Before dispatch on `2026-11-10-0003`, the tagged target contains 348 tracked files, all bounded
+text, no untracked/ignored working files and no tracked modifications. Global `.gitignore`
+exclusion applies to four files (root, `projects/northwinds-v1`, `projects/php-extension/case-090`,
+`projects/polyglot/case-093`), leaving **344 inventoried files**. All eleven case-094 files,
+including its CMake descriptor and eight `.cpp` files plus `tool.h`/README, remain in scope.
+
+The intake must bind `/opt/app/targets/appsec-multi-vuln-c094` and its unchanged raw source
+fingerprint; record exactly 344 retained files, the four configured exclusions, complete
+descriptor discovery and no coverage gaps; freeze the base/profile/capacity-overlay/host-pins
+layers with matching hashes; verify both required Copilot models; and report zero configured,
+resolved or unavailable binary publications. No system acquisition record is expected.
+The handoff, model/binary events and lifecycle metrics must agree. These are intake criteria,
+not a claim that the fixture's seven defects have been found.
