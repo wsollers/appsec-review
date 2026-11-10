@@ -224,6 +224,41 @@ def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
     return tuple(sorted(set(reasons)))
 
 
+CODE_SERVER_INFO_TAG = ".dagster/grpc_info"  # DefaultRunLauncher's address of the code server that ran the dispatch
+
+
+def code_server_worker_status(run: Any, *, client_factory=None) -> str:
+    """The worker status of a terminal run launched by ``DefaultRunLauncher``, from the code server's own API.
+
+    That launcher has no ``check_run_worker_health``: each run worker is a subprocess of the code-location
+    gRPC server that launched it, and the server keeps the run in its executions table until the
+    process has exited (``GetCurrentRuns`` lists exactly the workers still alive). So a terminal run that
+    the server no longer lists has a stopped worker (``NOT_FOUND``); one it still lists is ``RUNNING``. An
+    unreachable server or a dispatch without the server's address stays uncertain and is refused.
+    """
+    info = run.tags.get(CODE_SERVER_INFO_TAG)
+    if not isinstance(info, str) or not info:
+        raise ValueError("Dagster dispatch carries no code-server address; worker stop cannot be verified")
+    try:
+        address = json.loads(info)
+    except ValueError as exc:
+        raise ValueError("Dagster dispatch code-server address is unreadable") from exc
+    if client_factory is None:
+        from dagster._grpc.client import DagsterGrpcClient
+        client_factory = lambda: DagsterGrpcClient(  # noqa: E731
+            port=address.get("port"), socket=address.get("socket"), host=address.get("host"),
+            use_ssl=bool(address.get("use_ssl", False)))
+    from dagster._grpc.types import GetCurrentRunsResult
+    from dagster._serdes import deserialize_value
+    try:
+        result = deserialize_value(client_factory().get_current_runs(), GetCurrentRunsResult)
+    except Exception as exc:  # a gRPC failure of any kind: the server's answer is unknown, not "stopped"
+        raise ValueError(f"Dagster code server did not answer; worker stop cannot be verified ({type(exc).__name__})") from exc
+    if result.serializable_error_info is not None:
+        raise ValueError("Dagster code server reported an error listing its runs; worker stop cannot be verified")
+    return "RUNNING" if run.run_id in set(result.current_runs) else "NOT_FOUND"
+
+
 def verify_dispatch_stop(config: AppConfig, run_root: Path, dispatch_id: str, *, instance=None) -> dict[str, Any]:
     """Use the launcher's health API, never a captured command or an operator boolean."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", dispatch_id):
@@ -239,10 +274,12 @@ def verify_dispatch_stop(config: AppConfig, run_root: Path, dispatch_id: str, *,
     if run is None or run.tags.get("appsec/application_run_id") != run_root.name or not run.is_finished:
         raise ValueError("Dagster dispatch is absent, belongs to another run, or is not terminal")
     launcher = instance.run_launcher
-    if not launcher.supports_check_run_worker_health:
+    if launcher.supports_check_run_worker_health:
+        status = launcher.check_run_worker_health(run).status.value
+    elif type(launcher).__name__ == "DefaultRunLauncher":
+        status = code_server_worker_status(run)
+    else:
         raise ValueError("Dagster launcher cannot verify stopped workers; cleanup remains uncertain")
-    health = launcher.check_run_worker_health(run)
-    status = health.status.value
     if status not in {"SUCCESS", "NOT_FOUND"}:
         raise ValueError(f"Dagster worker stop is unconfirmed: {status}")
     value = {"schema": "appsec-review/verified-dispatch-stop/1", "run_id": run_root.name,

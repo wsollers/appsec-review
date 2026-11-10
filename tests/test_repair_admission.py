@@ -339,6 +339,51 @@ def test_launcher_stop_must_be_verified_not_asserted(tmp_path, status):
     assert not (root / "data/recovery/dispatches/fixture-dispatch.json").exists()
 
 
+def test_default_run_launcher_workers_are_verified_through_the_code_server(tmp_path, monkeypatch):
+    """HAL5000, first gate run: DefaultRunLauncher has no check_run_worker_health, so every relaunch after a
+    failed attempt was refused. Its workers are subprocesses of the code server, whose GetCurrentRuns lists
+    exactly the ones still alive; a terminal run the server no longer lists has a stopped worker."""
+    from appsec_review.runtime import repair
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+
+    class DefaultRunLauncher:  # the class name is the launcher's identity; it has no health API
+        supports_check_run_worker_health = False
+
+    current_runs = ["other-dispatch"]
+    monkeypatch.setattr(repair, "code_server_worker_status",
+                        lambda run: "RUNNING" if run.run_id in current_runs else "NOT_FOUND")
+    run = SimpleNamespace(run_id="fixture-dispatch", is_finished=True,
+                          tags={"appsec/application_run_id": root.name, ".dagster/grpc_info": '{"host": "code-location", "port": 4000}'})
+    instance = SimpleNamespace(get_run_by_id=lambda run_id: run, run_launcher=DefaultRunLauncher())
+    receipt = repair.verify_dispatch_stop(config, root, "fixture-dispatch", instance=instance)
+    assert receipt["worker_status"] == "NOT_FOUND" and receipt["terminal"] is True
+    assert (root / "data/recovery/dispatches/fixture-dispatch.json").exists()
+    current_runs.append("fixture-dispatch")
+    with pytest.raises(ValueError, match="unconfirmed: RUNNING"):
+        repair.verify_dispatch_stop(config, root, "fixture-dispatch", instance=instance)
+
+
+def test_code_server_worker_status_asks_the_server_and_fails_closed():
+    from appsec_review.runtime.repair import code_server_worker_status
+    from dagster._grpc.types import GetCurrentRunsResult
+    from dagster._serdes import serialize_value
+
+    def client(current, error=None):
+        return lambda: SimpleNamespace(get_current_runs=lambda: serialize_value(
+            GetCurrentRunsResult(current_runs=current, serializable_error_info=error)))
+
+    run = SimpleNamespace(run_id="d1", tags={".dagster/grpc_info": '{"host": "code-location", "port": 4000}'})
+    assert code_server_worker_status(run, client_factory=client(["d2"])) == "NOT_FOUND"
+    assert code_server_worker_status(run, client_factory=client(["d1", "d2"])) == "RUNNING"
+    with pytest.raises(ValueError, match="did not answer"):
+        code_server_worker_status(run, client_factory=lambda: SimpleNamespace(
+            get_current_runs=lambda: (_ for _ in ()).throw(ConnectionError("refused"))))
+    with pytest.raises(ValueError, match="no code-server address"):
+        code_server_worker_status(SimpleNamespace(run_id="d1", tags={}), client_factory=client([]))
+
+
 def test_native_cancellation_is_not_silently_enabled(tmp_path, monkeypatch):
     from appsec_review.config import native_dagster
     config, (job,), _ = fixture(tmp_path)

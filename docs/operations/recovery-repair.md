@@ -71,12 +71,20 @@ first-error cancellation is **not commissioned** and is not enabled by these com
 For Dagster, a failed step alone is not proof that the run worker stopped:
 
 ```sh
-appsec-review verify-repair-stop --run-id RUN --dispatch-id DAGSTER_UUID
+docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.claude.yaml \
+  exec -T code-location python -m appsec_review verify-repair-stop --run-id RUN --dispatch-id DAGSTER_UUID
 ```
 
-This uses the configured Dagster instance and launcher's worker-health API, without cancellation.
-It refuses a missing/wrong/nonterminal run, a live/unknown worker, and a launcher without health
-support. Retained resource leases and uncertain controller permits still block admission.
+It runs inside the application container because it needs the configured Dagster instance (the
+host virtualenv has none); `DAGSTER_UUID` is the dispatch the failed attempt's `claim.json` names,
+also the suffix of `runs/metadata/stepwise/<run>/checks/<job>-<uuid>.json`. It uses the launcher's
+worker-health API, without cancellation. The stack's `DefaultRunLauncher` has no such API: its run
+workers are subprocesses of the code-location server, so the verifier asks that server (gRPC
+`GetCurrentRuns`, the address in the run's `.dagster/grpc_info` tag) whether it still lists the
+dispatch — a terminal run it no longer lists has a stopped worker (`NOT_FOUND`), one it still lists
+is refused, and an unreachable server is refused. The receipt lands in
+`data/recovery/dispatches/<uuid>.json`. It refuses a missing/wrong/nonterminal run, a live/unknown
+worker, and any other launcher without health support. Retained resource leases and uncertain controller permits still block admission.
 Registered local workers are checked by process generation and PID namespace; foreign or
 unverifiable workers fail closed. Historical receipts without worker identity are uncertainty,
 even when they say `FAILED` or `SUCCEEDED`: they do not prove that independent workers stopped.
