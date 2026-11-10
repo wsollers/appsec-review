@@ -107,8 +107,46 @@ script closure. Its existing surface uses the safe defaults; new count/time and 
 authorized heavy-mode controls use the Python `ops.py` CLI. Native Windows parity of those
 parameter declarations is a scoped limitation, not a new TODO allocation.
 
-No Docker, model, target or external-network execution; no integration, acceptance, live review,
-full-suite, native Windows, merge, push, deployment or reload was performed. Unit fixtures fake
+The implementation agent performed no Docker, model, target or external-network execution;
+no integration, acceptance, live review, full-suite, native Windows, merge, push, deployment
+or reload. Unit fixtures fake
 external Dagster/Git boundaries and use real guard, state, admission, publication and comparison
 behavior. Manual live commissioning remains with the parent after resolving source/operator
 freezes; these unit results are not evidence of a live run or its content quality.
+
+## Parent integration and operator verification
+
+The parent integrated the exact tested commit `b9134b6861b9aff3aeab51e527dd13f13f531c71`
+into local `main` as **`91f82894520db1337cc87f2425617bbf446dccc3`**. The mounted checkout had
+no nonterminal dispatches, and none of the changed paths belongs to its measured release
+inputs. Deployed release `9966930659bf5359aa3f1503192d4793de96a3dae5f00120c249d2700cc2fa3a`
+therefore remained unchanged; no reload, image rebuild or re-admission was needed.
+
+In the integration checkout, with production profile/overlay/Dagster-home variables unset:
+
+```sh
+.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 51 --parallel \
+  --test-workers 2 --shuffle-seed 11015 -- tests/test_ops_test_guard.py
+```
+
+The inspected collection and execution each contained exactly 51 tests: **51 passed in 9.19 s**,
+**14.317 s total**, no case over ten seconds, confirmed cleanup of both owned process trees.
+The declared bounds stayed at 200 tests / 30 s collection / 120 s total. Report:
+`test/tmp/reports/tests-custom-20261110-182826-739491-78630.json`.
+
+The parent also exercised the authorized existing walk's operator path:
+
+```sh
+.venv/bin/python deploy/dagster/bin/stepwise.py recover --app-run 2026-11-10-0003 \
+  --plan runs/c094-catalog-repair-plan.json
+```
+
+It verified all twelve recorded dispatches stopped, returned `ALREADY APPLIED`, launched no
+jobs, and left `state.json` byte-identical. Log: `runs/loop-safeguards-recover.log`; before/after
+hash receipts: `runs/loop-safeguards-state-{before,after}.sha256`. This verifies the idempotent
+operator path, not another review run or heavy-tier test. No changes were pushed.
+
+The integration checkout's exact `tests/test_documentation.py` selector also passed:
+`ops.py run-tests --strict --expect-tests 1 --parallel --test-workers 2 --shuffle-seed 11015 --
+tests/test_documentation.py`, one test in 1.56 s. Report:
+`test/tmp/reports/tests-custom-20261110-183250-584161-78955.json`.

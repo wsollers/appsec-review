@@ -161,6 +161,11 @@ until each is rewritten into the entry format when it is next touched.
   unintended broad test execution**, disclosed and not counted as authorized validation. This is
   one compound cycle toward the required three. See `docs/tasks/2026-11-08-job-pass-05-target-catalog.md`
   and `runs/c094-catalog-cycle-metrics.json` for the exact plan, outcomes and process failure.
+  Model-availability normalization follow-up (passes 01 and 04): preserve raw advertised-provider
+  inventory as diagnostic evidence outside compared content, including indirect artifact hashes.
+  Compared keys must retain configured/checked model identities, availability/results, transport,
+  errors/gaps and all other intake evidence. The approved operator-side inventory adjustment is
+  a temporary stopgap until that producer/key boundary is corrected, not a permanent equivalence rule.
 - **Done when:** (a) Phase 0's gate run accepts on HAL5000; (b) `stepwise.py system --tag
   appsec-multi-vuln-c094-v1` produces a score; (c) the edit → resumed-run turnaround of the loop is measured
   on at least three real breaks and recorded here with the REUSE/RUN decision each produced; (d)
