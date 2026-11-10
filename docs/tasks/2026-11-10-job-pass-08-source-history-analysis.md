@@ -32,3 +32,29 @@ vulnerability claims from commit messages. The target checkout must remain uncha
 No job code changed and no unit tests were rerun before this first live attempt. This receipt
 does not claim that all existing history unit tests pass. The next result determines whether
 a bounded repair and focused regressions are required.
+
+## Observed result
+
+Dispatch `3fc72d44-673e-4b39-af2c-d2e919e2e3a5`, attempt 1, completed in **394,018 ms** with
+`COMPLETED_WITH_GAPS`, zero audit findings, and was accepted after content verification.
+The direct-checkout policy documented in `docs/architecture/source-history-analysis.md` follows
+`main`, then `master`, then `HEAD`; it does not pretend a detached review tag is the mainline.
+Accordingly the output preserves the correct review HEAD (`bd69bfe8...`) but selects mainline
+`422845994f4e28fb93032efa704592d97ce498a0` and its **21** first-parent commits. The pre-dispatch
+20-commit count describes the review HEAD, not this selected mainline. The output explicitly
+records `head_differs_from_mainline` and partial binding.
+
+Independent comparison confirms 339 exact file bindings and five divergent files: root README,
+`scripts/build.ps1`, `scripts/build.sh`, `scripts/validate-matrix.py` and `support/project-matrix.json`.
+All eleven c094 files bind exactly. GitHub enrichment succeeded with 21 facts in 31 requests,
+zero indeterminate records and no acquisition gaps. Line history selected the configured 50-file
+bound. Symbol analysis covered 169 files; all nine c094 code files have complete symbol status
+and no parser gaps. Retained parser gaps are in macro-heavy native headers/extension/JNI sources;
+unsupported languages and the configured blame/line-history bounds remain explicit.
+
+The six published index hashes resolve, including history and its upstream catalog shards.
+Lifecycle, status and metrics agree. PR/deployment timing remains unavailable rather than inferred.
+The 21 unique gap summaries (39 occurrences) are preserved, not represented as complete coverage
+or vulnerability evidence. No code repair or unit-test change was needed for this documented
+partial result. Logs: `runs/c094-source-history-{run,accept}.log`.
+Next: `job_ci_configuration_analysis`.
